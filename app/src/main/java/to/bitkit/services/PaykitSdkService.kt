@@ -890,6 +890,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withPaykitKey { handle ->
+                requireNoActiveSubscriptions(handle)
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
                 val current = completeSdkCall { handle.fetchPaykitProfile(publicKey) }
                 completeSdkCall {

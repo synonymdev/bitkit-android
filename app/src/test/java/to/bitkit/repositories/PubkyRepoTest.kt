@@ -1845,6 +1845,25 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `subscription refusal at profile deletion preserves the session without contacts`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(emptyList())
+        val expected = PubkyContactError.ActiveProfileSubscriptions(null)
+        whenever(pubkyService.deletePaykitProfile(any(), any()))
+            .thenAnswer { throw IllegalStateException("Service operation failed", expected) }
+        clearInvocations(pubkyStore, settingsStore, keychain)
+
+        assertSame(expected, sut.deleteProfile().exceptionOrNull())
+
+        verify(pubkyService, never()).removeContactsForProfile(any())
+        verify(pubkyService, never()).signOut()
+        verify(pubkyService, never()).executeProfileLogout(any())
+        verify(keychain, never()).delete(any())
+        verify(pubkyStore, never()).update(any())
+        verify(settingsStore, never()).update(any())
+    }
+
+    @Test
     fun `partial contact cleanup preserves retained contacts and stops profile deletion`() = test {
         authenticateForTesting()
         val records = listOf(
