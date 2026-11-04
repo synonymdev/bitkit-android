@@ -22,6 +22,8 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.PrivatePaykitPaymentContext
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -36,6 +38,7 @@ class AddContactViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
+    private val privatePaykitRepo: PrivatePaykitRepo,
     private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -128,27 +131,33 @@ class AddContactViewModel @Inject constructor(
     fun payContact() {
         val profile = _uiState.value.fetchedProfile ?: return
         viewModelScope.launch {
-            publicPaykitRepo.beginPayment(profile.publicKey)
+            // A profile that is already a saved contact pays the way a saved contact does; others pay publicly.
+            privatePaykitRepo.beginSavedContactPayment(profile.publicKey)
                 .onSuccess { result ->
                     when (result) {
                         is PublicPaykitPaymentResult.Opened ->
                             _effects.emit(
-                                AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey, result.endpoints)
+                                AddContactEffect.OpenPayment(
+                                    paymentRequest = result.paymentRequest,
+                                    publicKey = profile.publicKey,
+                                    privatePaymentContext = result.privatePaymentContext,
+                                    endpoints = result.endpoints,
+                                )
                             )
                         PublicPaykitPaymentResult.NoEndpoint ->
                             showPayError(R.string.slashtags__error_pay_empty_msg)
                         PublicPaykitPaymentResult.NotOpened ->
                             showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.PrivateLinkPending,
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
-                        ->
+                        PublicPaykitPaymentResult.PrivateLinkPending ->
+                            showPayError(R.string.contacts__pay_private_link_pending)
+                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
                             showPayError(R.string.slashtags__error_pay_waiting_msg)
                     }
                 }
                 .onFailure {
                     val redactedPublicKey = PubkyPublicKeyFormat.redacted(profile.publicKey)
                     Logger.warn(
-                        "Failed to begin public Paykit payment for '$redactedPublicKey'",
+                        "Failed to begin Paykit payment for '$redactedPublicKey'",
                         it,
                         context = TAG,
                     )
@@ -202,6 +211,7 @@ sealed interface AddContactEffect {
     data class OpenPayment(
         val paymentRequest: String,
         val publicKey: String,
-        val endpoints: List<Endpoint> = emptyList()
+        val privatePaymentContext: PrivatePaykitPaymentContext? = null,
+        val endpoints: List<Endpoint> = emptyList(),
     ) : AddContactEffect
 }
