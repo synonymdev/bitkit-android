@@ -17154,6 +17154,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 )
                 assertNull(activeContactPaymentContext(), "$stored")
                 assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod, "$stored")
+                advanceUntilIdle()
+                // A payment that may still fail leaves the request to be presented again; a paid one completes it
+                val presented = if (stored == PaymentStatus.SUCCEEDED) times(1) else never()
+                verify(paykitPaymentRequestRepo, presented).markPresented(request)
             }
 
             whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(PaymentStatus.FAILED))

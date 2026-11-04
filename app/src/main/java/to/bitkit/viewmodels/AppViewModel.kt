@@ -3558,7 +3558,10 @@ class AppViewModel @Inject constructor(
 
     private fun rejectOnchainPayment(status: LightningPaymentStatus) {
         showOnchainPaymentRefusal(status)
-        clearActiveContactPaymentContext()
+        clearActiveContactPaymentContext(
+            failureReason = IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending,
+            retryIncomingRequest = status != LightningPaymentStatus.SUCCEEDED,
+        )
     }
 
     private suspend fun onchainPaymentRefusal(paymentHash: String?): OnchainPaymentRefusedError? {
