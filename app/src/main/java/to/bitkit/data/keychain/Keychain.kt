@@ -55,6 +55,10 @@ class Keychain @Inject constructor(
     fun loadString(key: String, walletIndex: Int): String? =
         loadIndexed(key, stringPreferencesKey("${key}_$walletIndex"))?.decodeToString()
 
+    /** Reads an entry that belongs to [scope], such as one hardware wallet, whatever the current wallet index is. */
+    fun loadScopedString(key: String, scope: String): String? =
+        loadIndexed(key, scopedKey(key, scope))?.decodeToString()
+
     fun load(key: String): ByteArray? = loadIndexed(key, key.indexed)
 
     private fun loadIndexed(key: String, indexedKey: Preferences.Key<String>): ByteArray? {
@@ -136,6 +140,9 @@ class Keychain @Inject constructor(
     suspend fun upsertString(key: String, value: String, walletIndex: Int) =
         upsertIndexed(key, value, stringPreferencesKey("${key}_$walletIndex"))
 
+    suspend fun upsertScopedString(key: String, value: String, scope: String) =
+        upsertIndexed(key, value, scopedKey(key, scope))
+
     private suspend fun upsertIndexed(key: String, value: String, indexedKey: Preferences.Key<String>) {
         try {
             val encryptedValue = keyStore.encrypt(value.toByteArray())
@@ -151,6 +158,10 @@ class Keychain @Inject constructor(
     suspend fun delete(key: String) = deleteIndexed(key, key.indexed)
 
     suspend fun delete(key: String, walletIndex: Int) = deleteIndexed(key, stringPreferencesKey("${key}_$walletIndex"))
+
+    suspend fun deleteScoped(key: String, scope: String) = deleteIndexed(key, scopedKey(key, scope))
+
+    private fun scopedKey(key: String, scope: String) = stringPreferencesKey("${key}_$scope")
 
     private suspend fun deleteIndexed(key: String, indexedKey: Preferences.Key<String>) {
         try {
@@ -252,6 +263,7 @@ class Keychain @Inject constructor(
         PAYKIT_ALLOWANCE_STATE,
         PUBKY_SECRET_KEY,
         SHARED_PUBKY_SOURCE,
+        HW_RETAINED_SEND,
     }
 }
 
