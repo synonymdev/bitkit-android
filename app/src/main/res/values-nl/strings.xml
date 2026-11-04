@@ -242,6 +242,7 @@
     <string name="lightning__conn_onboarding_title">Lightning\n&lt;accent&gt;betalingen&lt;/accent&gt;\ninschakelen</string>
     <string name="migration__description">Even geduld terwijl je oude wallet-gegevens migreren naar deze nieuwe Bitkit-versie. Dit duurt meestal minder dan een minuut.</string>
     <string name="migration__nav_title">Wallet-migratie</string>
+    <string name="migration__status_error">De migratiestatus van de wallet is niet beschikbaar. Probeer het opnieuw voordat je doorgaat.</string>
     <string name="migration__title">WALLET\n&lt;accent&gt;MIGREREN&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Notificatiekanaal voor Lightning node voorgrondservice</string>
     <string name="notification__channel_node__name">Lightning node notificatie</string>
@@ -389,10 +390,14 @@
     <string name="profile__add_link_label_placeholder">Bijvoorbeeld \'Website\'</string>
     <string name="profile__add_link_note">Let op: Iedere link die u toevoegt is openbaar beschikbaar.</string>
     <string name="profile__add_tag">Tag toevoegen</string>
+    <string name="profile__cleanup_pending">Het opschonen van het profiel is niet voltooid. Verbreek lokaal de verbinding om de toegang van dit apparaat te verwijderen zonder de verwijdering op afstand opnieuw te proberen.</string>
     <string name="profile__create_nav_title">Profiel aanmaken</string>
+    <string name="profile__delete_review_description">Sommige wijzigingen zijn mogelijk voltooid. Controleer de huidige status voordat je opnieuw bevestigt, of verbreek lokaal de verbinding.</string>
+    <string name="profile__disconnect_local_description">Verwijder de toegang van dit apparaat en voltooi de lokale opschoning. Dit brengt geen verdere wijzigingen aan in je profiel, abonnementen of toegang op de server.</string>
     <string name="profile__edit_nav_title">Profiel Bewerken</string>
     <string name="profile__nav_title">Profiel</string>
     <string name="profile__retry_load">Probeer opnieuw</string>
+    <string name="profile__review_removal">Controleren</string>
     <string name="profile__suggestions">Suggesties</string>
     <string name="profile__suggestions_to_add">Suggesties Om Toe Te Voegen</string>
     <string name="profile__unlink_confirm">Ja, ontkoppelen</string>
@@ -486,6 +491,8 @@
     <string name="security__reset_dialog_desc">Weet je zeker dat je je Bitkit-wallet wilt resetten? Heb je een backup van je herstelzin en wallet-gegevens?</string>
     <string name="security__reset_dialog_title">Bitkit resetten?</string>
     <string name="security__reset_graph_confirm">Ja, resetten</string>
+    <string name="security__reset_pending_text">De vorige walletreset is niet voltooid. Voltooi de reset voordat je een wallet aanmaakt of herstelt. Bewaar je herstelzin en walletback-up veilig.</string>
+    <string name="security__reset_read_error">De herstelstatus van de wallet kon niet worden gelezen. Probeer het opnieuw voordat je doorgaat.</string>
     <string name="security__reset_text">Maak eerst een back-up van je wallet om verlies van je geld en wallet-gegevens te voorkomen. Resetten overschrijft je huidige Bitkit-configuratie.</string>
     <string name="security__reset_title">Resetten en herstellen</string>
     <string name="security__success_bio">Je hebt succesvol een pincode en {biometricsName} ingesteld om de wallet-beveiliging te verbeteren.</string>
@@ -1359,6 +1366,7 @@
     <string name="profile__sign_out_description">Hiermee wordt uw Pubky-profiel ontkoppeld van Bitkit. U kunt op elk moment opnieuw verbinden.</string>
     <string name="profile__sign_out_title">Profiel ontkoppelen</string>
     <string name="profile__source_lost">Deze pubky is niet meer beschikbaar in Pubky Ring. Uw profiel is ontkoppeld.</string>
+    <string name="profile__wallet_recovery_pending">Het wallet-herstel moet worden voltooid voordat dit profiel kan worden losgekoppeld. Controleer het wallet-herstel in Instellingen.</string>
     <string name="profile__your_pubky">Uw pubky</string>
     <string name="pubky_auth__already_signed_in">Al ingelogd</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

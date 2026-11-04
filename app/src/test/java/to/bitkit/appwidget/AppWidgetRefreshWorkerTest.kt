@@ -1,5 +1,6 @@
 package to.bitkit.appwidget
 
+import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkerParameters
@@ -38,7 +39,7 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @OptIn(ExperimentalTime::class)
-@Config(sdk = [34])
+@Config(application = Application::class, sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     private val context = ApplicationProvider.getApplicationContext<Context>()

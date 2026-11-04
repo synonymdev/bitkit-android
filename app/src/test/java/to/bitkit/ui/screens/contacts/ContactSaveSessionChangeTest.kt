@@ -22,10 +22,12 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
@@ -33,16 +35,21 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTargetCheck
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyContactError
+import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.usecases.ProfileRemovalCoordinator
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -83,6 +90,7 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
     private var heldSave: CompletableDeferred<Unit>? = null
     private var heldSaveSucceeds = true
 
+    private val removalStore = ProfileRemovalStore.inMemoryForTesting()
     private lateinit var repo: PubkyRepo
 
     @Before
@@ -105,6 +113,10 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
         }
         whenever { pubkyService.contactRecords() }.thenReturn(emptyList())
         whenever { pubkyService.observedContactRecords(any()) }.doSuspendableAnswer { pubkyService.contactRecords() }
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            check(it.getArgument<() -> Boolean>(0).invoke())
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
         whenever { pubkyService.signOut() }.thenAnswer {
             sdkIdentity = null
             Unit
@@ -127,6 +139,7 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
             settingsStore = settingsStore,
             httpClient = mock<HttpClient>(),
             clock = clock,
+            profileRemovalStore = removalStore,
         )
     }
 
@@ -270,6 +283,22 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
             case,
         )
         assertTrue(repo.signOut().isSuccess)
+    }
+
+    private suspend fun PubkyRepo.signOut(): Result<Unit> = runSuspendCatching {
+        val privateRepo = mock<PrivatePaykitRepo>()
+        val sharing = mock<ContactPaymentSettingsRepo>()
+        whenever { sharing.withProfileRemoval<PubkyProfileOwner>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
+        }
+        whenever { privateRepo.withProfileDeletionPaused<Unit>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend (PrivatePaykitRepo.ProfileDeletionPause) -> Unit>(0)
+                .invoke(PrivatePaykitRepo.ProfileDeletionPause())
+        }
+        whenever { privateRepo.removePublishedEndpointsForCleanup(any(), eq(true)) }.thenReturn(Result.success(Unit))
+        whenever { privateRepo.finishProfileRemoval(any()) }.thenReturn(Result.success(Unit))
+        val coordinator = ProfileRemovalCoordinator(this, privateRepo, sharing, removalStore)
+        coordinator.remove(coordinator.prepareSignOut(profileOwner()).getOrThrow()).getOrThrow()
     }
 
     private suspend fun fakeSdkSave(

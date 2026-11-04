@@ -30,6 +30,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.receiptResolverFixture
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -58,7 +59,7 @@ class ActivityServiceTest : BaseUnitTest() {
             cacheStore = cacheStore,
             lightningService = lightningService,
             settingsStore = mock(),
-            privatePaykitContactResolver = mock(),
+            privatePaykitContactResolver = javax.inject.Provider { receiptResolverFixture(testDispatcher) },
         )
     }
 
@@ -249,7 +250,7 @@ class ActivityServiceTest : BaseUnitTest() {
             latestUpdateTimestamp = 100uL,
         )
         withOnchainActivities(transactionId) { saved ->
-            val syncing = async { sut.syncLdkNodePaymentsToActivities(listOf(payment)) }
+            val syncing = async { sut.syncLdkNodePaymentsToActivities({ listOf(payment) }) }
             syncPaused.await()
             sut.createSentOnchainActivityFromSendResult(
                 txid = transactionId,
@@ -268,12 +269,14 @@ class ActivityServiceTest : BaseUnitTest() {
             assertEquals(listOf(transactionId), saved.keys.toList())
             val confirmed = mock<ConfirmationStatus.Confirmed> { on { timestamp }.thenReturn(200uL) }
             sut.syncLdkNodePaymentsToActivities(
-                listOf(
-                    payment.copy(
-                        kind = PaymentKind.Onchain(transactionId, confirmed),
-                        latestUpdateTimestamp = 200uL,
-                    ),
-                ),
+                {
+                    listOf(
+                        payment.copy(
+                            kind = PaymentKind.Onchain(transactionId, confirmed),
+                            latestUpdateTimestamp = 200uL,
+                        ),
+                    )
+                },
             )
             val activity = saved.values.single().v1
             assertEquals(transactionId, activity.id)

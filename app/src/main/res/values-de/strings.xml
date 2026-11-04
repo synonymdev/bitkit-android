@@ -245,6 +245,7 @@
     <string name="lightning__conn_onboarding_title">Lightning\n&lt;accent&gt;Zahlungen&lt;/accent&gt;\naktivieren</string>
     <string name="migration__description">Bitte warte, während deine alten Wallet-Daten auf diese neue Bitkit-Version migriert werden. Das dauert normalerweise weniger als eine Minute.</string>
     <string name="migration__nav_title">Wallet-Migration</string>
+    <string name="migration__status_error">Der Status der Wallet-Migration ist nicht verfügbar. Versuche es erneut, bevor du fortfährst.</string>
     <string name="migration__title">WALLET\n&lt;accent&gt;MIGRATION&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Benachrichtigungskanal für den Lightning-Node-Vordergrunddienst</string>
     <string name="notification__channel_node__name">Lightning-Node-Benachrichtigung</string>
@@ -376,10 +377,14 @@
     <string name="profile__add_tag">Tag hinzufügen</string>
     <string name="profile__auth_approval_authorize">Autorisieren Sie</string>
     <string name="profile__auth_approval_title">Autorisieren Sie</string>
+    <string name="profile__cleanup_pending">Die Profilbereinigung ist unvollständig. Trenne die Verbindung lokal, um den Zugriff dieses Geräts zu entfernen, ohne die entfernte Löschung erneut zu versuchen.</string>
     <string name="profile__create_nav_title">Profil erstellen</string>
+    <string name="profile__delete_review_description">Einige Änderungen wurden möglicherweise abgeschlossen. Prüfe den aktuellen Stand vor einer erneuten Bestätigung oder trenne die Verbindung lokal.</string>
+    <string name="profile__disconnect_local_description">Entferne den Zugriff dieses Geräts und schließe die lokale Bereinigung ab. Dadurch werden keine weiteren Änderungen an deinem Profil, deinen Abonnements oder deinem Zugriff auf dem Server vorgenommen.</string>
     <string name="profile__edit_nav_title">Profil bearbeiten</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Erneut versuchen</string>
+    <string name="profile__review_removal">Prüfen</string>
     <string name="profile__suggestions">Vorschläge</string>
     <string name="profile__unlink_confirm">Ja, aufheben</string>
     <string name="profile__unlink_confirm_description">Dadurch werden deine Paykit-Daten gelöscht und die Verknüpfung dieses pubky mit Bitkit aufgehoben. In Pubky Ring bleibt er weiterhin verfügbar.</string>
@@ -471,6 +476,8 @@
     <string name="security__bio_ask">PIN-Code gesetzt. Möchtest du {biometricsName} anstelle deines PIN-Codes verwenden?</string>
     <string name="security__bio_use">Verwende {biometricsName}</string>
     <string name="security__bio_phone_settings">Telefoneinstellungen</string>
+    <string name="security__reset_pending_text">Das vorherige Zurücksetzen der Wallet wurde nicht abgeschlossen. Schließe es ab, bevor du eine Wallet erstellst oder wiederherstellst. Bewahre deine Wiederherstellungsphrase und dein Wallet-Backup sicher auf.</string>
+    <string name="security__reset_read_error">Der Wiederherstellungsstatus der Wallet konnte nicht gelesen werden. Versuche es erneut, bevor du fortfährst.</string>
     <string name="security__success_title">Wallet gesichert</string>
     <string name="security__success_bio">Du hast erfolgreich einen PIN-Code und {biometricsName} eingerichtet, um die Sicherheit deines Wallets zu verbessern.</string>
     <string name="security__success_no_bio">Du hast erfolgreich einen PIN-Code eingerichtet, um die Sicherheit deines Wallets zu verbessern.</string>
@@ -1360,6 +1367,7 @@
     <string name="profile__sign_out_title">Profil trennen</string>
     <string name="profile__source_lost">Dieser pubky ist in Pubky Ring nicht mehr verfügbar. Dein Profil wurde getrennt.</string>
     <string name="profile__suggestions_to_add">Vorschläge zum Hinzufügen</string>
+    <string name="profile__wallet_recovery_pending">Bevor dieses Profil getrennt werden kann, muss die Wallet-Wiederherstellung abgeschlossen werden. Prüfe die Wallet-Wiederherstellung in den Einstellungen.</string>
     <string name="profile__your_pubky">Dein Pubky</string>
     <string name="pubky_auth__already_signed_in">Bereits angemeldet</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

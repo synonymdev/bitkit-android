@@ -20,7 +20,9 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -61,6 +63,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
@@ -132,6 +135,7 @@ class LightningRepo @Inject constructor(
     private val vssClients: VssClientCoordinator,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
+    private val profileRemovalStore: ProfileRemovalStore,
 ) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -372,6 +376,8 @@ class LightningRepo @Inject constructor(
 
             val result = lifecycleMutex.withLock {
                 if (isWiping) return@withLock Result.failure(WipeInProgressError())
+                runSuspendCatching { profileRemovalStore.requireWalletAvailable() }
+                    .exceptionOrNull()?.let { return@withLock Result.failure(it) }
                 initialLifecycleState = _lightningState.value.nodeLifecycleState
                 if (initialLifecycleState.isRunningOrStarting()) {
                     return@withLock skipStartForRunningNode(
@@ -589,8 +595,16 @@ class LightningRepo @Inject constructor(
                 settledReceiveInvoice = invalidateSettledReceiveInvoice(event)
                 settledReceiveAddress = null
                 val paymentId = event.paymentId ?: event.paymentHash
-                runSuspendCatching { coreService.activity.handlePaymentEvent(paymentId) }
-                    .onFailure { Logger.error("Failed to record received payment '$paymentId'", it, context = TAG) }
+                runCatching { coreService.activity.handlePaymentEvent(paymentId) }
+                    .onFailure {
+                        if (it is CancellationException) {
+                            // Receipt admission can be revoked without cancelling the node listener.
+                            currentCoroutineContext().ensureActive()
+                            Logger.debug("Receipt admission ended for '$paymentId'", context = TAG)
+                        } else {
+                            Logger.error("Failed to record received payment '$paymentId'", it, context = TAG)
+                        }
+                    }
             }
 
             is Event.OnchainTransactionReceived -> {

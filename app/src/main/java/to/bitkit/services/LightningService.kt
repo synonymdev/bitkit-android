@@ -583,7 +583,9 @@ class LightningService internal constructor(
         if (node != null) throw ServiceError.NodeStillRunning()
         awaitNodeRelease()
         Logger.warn("Wiping LDK storage…", context = TAG)
-        Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
+        if (!Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()) {
+            throw WalletStorageDeleteError()
+        }
         Logger.info("LDK storage wiped", context = TAG)
     }
 
@@ -1556,6 +1558,8 @@ data class NetworkGraphInfo(
 )
 
 class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")
+
+class WalletStorageDeleteError : AppError("Failed to delete wallet node storage")
 
 /** Exact signed transaction inputs/prevouts, never an estimate or a backend-absence inference. */
 internal fun exactOriginalSendFee(

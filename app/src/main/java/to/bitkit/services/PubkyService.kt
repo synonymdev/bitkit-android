@@ -29,6 +29,10 @@ class PubkyService @Inject constructor(
         internal val AUTHORIZATION_TIMEOUT = 30.seconds
     }
 
+    internal suspend fun preparePublicProfileRecovery() = ServiceQueue.CORE.background {
+        paykitSdkService.preparePublicProfileRecovery()
+    }
+
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
     }
@@ -54,9 +58,43 @@ class PubkyService @Inject constructor(
         paykitSdkService.signOut()
     }
 
+    // Keep the initiating Job here, before ServiceQueue replaces it for individual native calls.
+    internal suspend fun <T> withProfileRemoval(isOwnerCurrent: () -> Boolean, operation: suspend () -> T): T =
+        paykitSdkService.withProfileRemoval(isOwnerCurrent, operation)
+
     suspend fun forgetSessionAccess() = ServiceQueue.CORE.background {
         paykitSdkService.forgetSessionAccess()
     }
+
+    internal suspend fun forgetLocalProfileAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.forgetLocalProfileAccess()
+    }
+
+    internal suspend fun captureProfileLogout(publicKey: String, isOwnerCurrent: () -> Boolean): PaykitProfileLogout {
+        var captured: PaykitProfileLogout? = null
+        return try {
+            ServiceQueue.CORE.background {
+                paykitSdkService.captureProfileLogout(publicKey, isOwnerCurrent).also { captured = it }
+            }
+        } catch (error: Throwable) {
+            // Queue cancellation can hide the successful native capture from its original caller.
+            captured?.revoke()
+            throw error
+        }
+    }
+
+    internal suspend fun executeProfileLogout(logout: PaykitProfileLogout) =
+        ServiceQueue.CORE.background { paykitSdkService.executeProfileLogout(logout) }
+
+    internal suspend fun validateProfileLogout(logout: PaykitProfileLogout) =
+        ServiceQueue.CORE.background { paykitSdkService.validateProfileLogout(logout) }
+
+    internal suspend fun eraseProfileLogoutCredentials(logout: PaykitProfileLogout, localOnly: Boolean) =
+        ServiceQueue.CORE.background { paykitSdkService.eraseProfileLogoutCredentials(logout, localOnly) }
+
+    internal fun revokeProfileLogout() = paykitSdkService.revokeProfileLogout()
+
+    internal suspend fun requireWalletWipe() = paykitSdkService.requireWalletWipe()
 
     suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
         paykitSdkService.clearSessionAccess()
@@ -73,6 +111,32 @@ class PubkyService @Inject constructor(
         val cleanupError = endpointError ?: appError
         if (endpointError != null && appError != null) endpointError.addSuppressed(appError)
         cleanupError?.let { throw it }
+    }
+
+    internal suspend fun removeBitkitPaymentEndpointsForRemoval(
+        endpointsAcknowledged: Boolean,
+        appAcknowledged: Boolean,
+        onEndpointsAcknowledged: () -> Unit,
+        onAppAcknowledged: () -> Unit,
+    ): Unit = ServiceQueue.CORE.background {
+        val endpointError = runSuspendCatching {
+            if (!endpointsAcknowledged) {
+                val report = paykitSdkService.syncPublicEndpoints(emptyList(), onEndpointsAcknowledged) { true }
+                check(report != null && report.failed.isEmpty()) { "Failed to remove Paykit payment endpoints" }
+            }
+        }.exceptionOrNull()
+        val appError = runSuspendCatching {
+            if (!appAcknowledged) {
+                paykitSdkService.syncPaykitApp(
+                    privatePaymentsEnabled = false,
+                    priority = PaykitSdkOperationLock.Priority.Ordered,
+                    canSync = { true },
+                    onAcknowledged = onAppAcknowledged,
+                )
+            }
+        }.exceptionOrNull()
+        if (endpointError != null && appError != null) endpointError.addSuppressed(appError)
+        (endpointError ?: appError)?.let { throw it }
     }
 
     // endregion
@@ -207,12 +271,26 @@ class PubkyService @Inject constructor(
         paykitSdkService.uploadProfileAvatar(bytes, contentType)
     }
 
-    suspend fun checkProfileDeletionAllowed() = ServiceQueue.CORE.background {
-        paykitSdkService.checkProfileDeletionAllowed()
+    internal suspend fun captureProfileDeletion(
+        publicKey: String,
+        isStillCurrent: () -> Boolean,
+    ): PaykitProfileDeletionSnapshot = ServiceQueue.CORE.background {
+        paykitSdkService.captureProfileDeletion(publicKey, isStillCurrent)
     }
 
-    suspend fun removeContactsForProfile(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
-        paykitSdkService.removeContactsForProfile(publicKeys)
+    internal suspend fun validateProfileDeletion(snapshot: PaykitProfileDeletionSnapshot) =
+        ServiceQueue.CORE.background {
+            paykitSdkService.validateProfileDeletion(snapshot)
+        }
+
+    internal suspend fun deletePaykitProfile(snapshot: PaykitProfileDeletionSnapshot) =
+        deletePaykitProfile(snapshot) {}
+
+    internal suspend fun deletePaykitProfile(
+        snapshot: PaykitProfileDeletionSnapshot,
+        onAcknowledged: () -> Unit,
+    ) = ServiceQueue.CORE.background {
+        paykitSdkService.deletePaykitProfile(snapshot, onAcknowledged)
     }
 
     suspend fun deletePaykitProfile() = ServiceQueue.CORE.background {
@@ -261,6 +339,10 @@ class PubkyService @Inject constructor(
 
     suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
         paykitSdkService.removeContacts(publicKeys)
+    }
+
+    suspend fun removeContactsForProfile(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.removeContactsForProfile(publicKeys)
     }
 
     suspend fun resolveContactProfile(

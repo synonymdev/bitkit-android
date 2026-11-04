@@ -239,6 +239,7 @@
     <string name="lightning__conn_onboarding_title">Ativar\nLightning\n&lt;accent&gt;pagamentos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor aguarde enquanto seus dados da carteira antiga migram para esta nova versão da Bitkit. Isso geralmente leva menos de um minuto.</string>
     <string name="migration__nav_title">Migração da Carteira</string>
+    <string name="migration__status_error">O estado da migração da carteira está indisponível. Tenta novamente antes de continuar.</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;CARTEIRA&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notificação para o serviço em primeiro plano do nó Lightning</string>
     <string name="notification__channel_node__name">Notificação do nó Lightning</string>
@@ -354,9 +355,13 @@
     <string name="other__update_title">Atualizar\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
     <string name="profile__add_tag">Adicionar Tag</string>
     <string name="profile__auth_approval_details">Detalhes</string>
+    <string name="profile__cleanup_pending">A limpeza do perfil está incompleta. Desligue-se localmente para remover o acesso deste dispositivo sem voltar a tentar a eliminação remota.</string>
     <string name="profile__create_nav_title">Criar Perfil</string>
+    <string name="profile__delete_review_description">Algumas alterações poderão ter sido concluídas. Reveja o estado atual antes de confirmar novamente ou desligue-se localmente.</string>
+    <string name="profile__disconnect_local_description">Remove o acesso deste dispositivo e conclui a limpeza local. Isto não faz mais alterações ao teu perfil, às subscrições ou ao acesso no servidor.</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Tente novamente</string>
+    <string name="profile__review_removal">Rever</string>
     <string name="profile__suggestions">Sugestões</string>
     <string name="other__update_text">Atualize a Bitkit para obter novos recursos e correções de bugs!</string>
     <string name="other__update_button">Atualizar</string>
@@ -452,6 +457,8 @@
     <string name="security__bio_ask">PIN configurado. Você gostaria de usar {biometricsName} em vez de seu código PIN?</string>
     <string name="security__bio_use">Usar {biometricsName}</string>
     <string name="security__bio_phone_settings">Configurações do Telefone</string>
+    <string name="security__reset_pending_text">A reposição anterior da carteira não foi concluída. Conclui-a antes de criar ou restaurar uma carteira. Guarda a frase de recuperação e a cópia de segurança num local seguro.</string>
+    <string name="security__reset_read_error">Não foi possível ler o estado de recuperação da carteira. Tenta novamente antes de continuar.</string>
     <string name="security__success_title">Carteira Protegida</string>
     <string name="security__success_bio">Você configurou com sucesso um código PIN e {biometricsName} para melhorar a segurança da sua carteira.</string>
     <string name="security__success_no_bio">Você configurou com êxito um código PIN para aumentar a segurança da sua carteira.</string>
@@ -1345,6 +1352,7 @@
     <string name="profile__unlink_error_title">Não foi possível desassociar o pubky</string>
     <string name="profile__unlink_pubky">Desassociar pubky</string>
     <string name="profile__unlink_success">Pubky desassociado</string>
+    <string name="profile__wallet_recovery_pending">É necessário concluir a recuperação da carteira antes de desligar este perfil. Consulte a recuperação da carteira nas Definições.</string>
     <string name="profile__your_name">O seu nome</string>
     <string name="profile__your_pubky">O seu pubky</string>
     <string name="pubky_auth__already_signed_in">Sessão já iniciada</string>

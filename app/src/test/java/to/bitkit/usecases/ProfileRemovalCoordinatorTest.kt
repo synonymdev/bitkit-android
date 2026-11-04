@@ -1,0 +1,918 @@
+package to.bitkit.usecases
+
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.mutablePreferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
+import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.PubkyGrantLogout
+import com.synonym.paykit.PubkyGrantLogoutReceipt
+import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import org.junit.Before
+import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import to.bitkit.data.ProfileRemovalState
+import to.bitkit.data.ProfileRemovalStore
+import to.bitkit.data.ReceiptAssociationsUnavailable
+import to.bitkit.data.keychain.ProfileCredentialStore
+import to.bitkit.ext.runSuspendCatching
+import to.bitkit.repositories.ContactPaymentSettingsRepo
+import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyProfileDeletion
+import to.bitkit.repositories.PubkyProfileOwner
+import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
+import to.bitkit.services.PaykitProfileDeletionSnapshot
+import to.bitkit.services.PaykitProfileLogout
+import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
+import java.io.IOException
+import java.util.UUID
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+
+class ProfileRemovalCoordinatorTest : BaseUnitTest() {
+    private val pubky = mock<PubkyRepo>()
+    private val privateRepo = mock<PrivatePaykitRepo>()
+    private val sharing = mock<ContactPaymentSettingsRepo>()
+    private var store = ProfileRemovalStore.inMemoryForTesting()
+    private val original = PubkyProfileOwner(PubkySignIn("identity", 1), 1)
+    private val ended = PubkyProfileOwner(null, 2)
+    private var current = original
+    private var rejectAdmission = false
+    private val pause = PrivatePaykitRepo.ProfileDeletionPause()
+    private val events = mutableListOf<String>()
+    private val deletion =
+        PubkyProfileDeletion(original, 1, PaykitProfileDeletionSnapshot("identity", "revision", emptyList()))
+    private val sut by lazy { ProfileRemovalCoordinator(pubky, privateRepo, sharing, store) }
+    private val logouts = mutableListOf<PaykitProfileLogout>()
+    private val binding = PubkyGrantLogoutReceipt("identity", "homeserver", "original-grant", "bitkit")
+
+    @Test
+    fun `retired credential read requires fresh local confirmation and preserves the original attempt`() = test {
+        val secret = stringPreferencesKey("PUBKY_SECRET_KEY_0")
+        val localStore = InMemoryDataStore<Preferences>(mutablePreferencesOf(secret to "original"))
+        var unreadable = false
+        val credentials = ProfileCredentialStore(localStore, { 0L }) {
+            if (unreadable) throw IOException("Keystore unavailable")
+            it.toByteArray()
+        }
+        val target = credentials.capture {}
+        val native = mock<PubkyGrantLogout> { on { binding() } doReturn binding }
+        val logout = PaykitProfileLogout(native, target) { current === original }
+        doReturn(Result.success(logout)).whenever(pubky).captureProfileLogout(original)
+        doSuspendableAnswer {
+            assertNotNull(store.pendingAttempt())
+            unreadable = true
+            try {
+                credentials.validate(target, logout::requireCurrent)
+            } finally {
+                logout.revoke()
+            }
+        }.whenever(pubky).executeProfileLogout(logout)
+        doSuspendableAnswer {
+            credentials.eraseAfterLocalConfirmation(target, logout::requireOriginalCredentials)
+            current = ended
+        }.whenever(pubky).finishProfileRemovalLocally(logout, true)
+        val originalConfirmation = sut.prepareDeletion(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(originalConfirmation).exceptionOrNull())
+        val pending = assertNotNull(store.pendingAttempt())
+        assertFalse(failure.canReview)
+        assertFalse(sut.canRetry(original))
+        unreadable = false
+        val cancelled = sut.prepareLocalDisconnect(failure).getOrThrow()
+        sut.discard(cancelled)
+        assertEquals("original", localStore.data.first()[secret])
+        assertEquals(pending, store.pendingAttempt())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+
+        val fresh = sut.prepareSignOut(original).getOrThrow()
+        assertTrue(fresh.localOnly)
+        assertEquals(pending, fresh.attemptId)
+        assertSame(originalConfirmation.intent, fresh.intent)
+        assertSame(ended, sut.remove(fresh).getOrThrow())
+        assertTrue(sut.remove(fresh).isFailure)
+        assertNull(localStore.data.first()[secret])
+        assertNull(store.pendingAttempt())
+        assertFalse(logout.isCurrent())
+        verify(pubky, times(1)).executeProfileLogout(logout)
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, never()).finishProfileRemovalLocally()
+    }
+
+    @Test
+    fun `review waits for original outer removal drainage`() = test {
+        val draining = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            try {
+                it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
+            } finally {
+                draining.complete(Unit)
+                release.await()
+            }
+        }.whenever(sharing).withProfileRemoval<PubkyProfileOwner>(any())
+        doSuspendableAnswer { throw IOException("response lost") }.whenever(pubky).executeProfileLogout(any())
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val removal = async { sut.remove(confirmation) }
+        draining.await()
+        val failure = assertNotNull(sut.failureFor(confirmation))
+        assertFalse(failure.canReview)
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        release.complete(Unit)
+        assertTrue(removal.await().isFailure)
+        assertTrue(failure.canReview)
+    }
+
+    @Test
+    fun `changed captured access after admission drain prevents even the first cleanup stage`() = test {
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val changed = IOException("Original credential snapshot changed")
+        whenever { pubky.validateProfileLogout(logouts.single()) }.doSuspendableAnswer { throw changed }
+
+        assertTrue(sut.remove(confirmation).isFailure)
+
+        verify(pubky, never()).validateProfileDeletion(any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+        verify(pubky, never()).finishProfileRemovalLocally(any(), any())
+        assertNull(store.pendingAttempt())
+        assertSame(original, current)
+    }
+
+    @Test
+    fun `an active logout cannot offer or mint retry confirmation until its unknown outcome has drained`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { pubky.executeProfileLogout(any()) }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            throw IOException("response lost")
+        }
+        val first = sut.prepareDeletion(original).getOrThrow()
+        val removal = async { sut.remove(first) }
+        entered.await()
+        assertFalse(sut.canRetry(original))
+        assertNull(sut.retryOwner.value)
+        assertTrue(sut.prepareRemoteRetry(original).isFailure)
+        assertSame(first, first.intent?.confirmation?.get())
+        release.complete(Unit)
+        assertIs<ProfileRemovalFailure>(removal.await().exceptionOrNull())
+        assertTrue(sut.canRetry(original))
+        assertTrue(sut.prepareRemoteRetry(original).isSuccess)
+        verify(pubky, times(1)).executeProfileLogout(logouts.single())
+    }
+
+    @Test
+    fun `fresh confirmation retries original grant without replaying acknowledged cleanup`() = test {
+        var executions = 0
+        whenever { pubky.executeProfileLogout(any()) }.doSuspendableAnswer {
+            executions++
+            if (executions == 1) throw IOException("logout response lost")
+            it.getArgument<PaykitProfileLogout>(0).retainAcknowledgement(binding)
+        }
+        val first = sut.prepareDeletion(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(first).exceptionOrNull())
+        assertTrue(sut.canRetry(original))
+        assertSame(original, sut.retryOwner.value)
+        assertEquals(first.attemptId, store.pendingAttempt())
+        verify(pubky, never()).finishProfileRemovalLocally(any(), any())
+
+        val second = sut.prepareRemoteRetry(original).getOrThrow()
+        assertFalse(second.used.get())
+        assertEquals(first.attemptId, second.attemptId)
+        assertEquals(1, executions)
+        assertSame(ended, sut.remove(second).getOrThrow())
+        assertEquals(2, executions)
+        verify(pubky, times(1)).captureProfileLogout(original)
+        verify(pubky, times(1)).prepareProfileDeletion(original)
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, times(1)).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubky, times(2)).executeProfileLogout(logouts.single())
+        assertNull(store.pendingAttempt())
+        assertFalse(sut.canRetry(original))
+        assertTrue(sut.reviewAgain(failure).isFailure)
+    }
+
+    @Test
+    fun `confirmed sign out resumes endpoint cleanup without repeating acknowledged private withdrawal`() = test {
+        var attempts = 0
+        whenever(pubky.removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                Result.failure<Unit>(IOException("public endpoint cleanup unavailable"))
+            } else {
+                it.getArgument<() -> Unit>(2).invoke()
+                it.getArgument<() -> Unit>(3).invoke()
+                Result.success(Unit)
+            }
+        }
+        val first = sut.prepareSignOut(original).getOrThrow()
+        assertIs<ProfileRemovalFailure>(sut.remove(first).exceptionOrNull())
+        assertEquals(first.attemptId, store.pendingAttempt())
+        assertTrue(sut.canRetry(original))
+        verify(pubky, never()).executeProfileLogout(any())
+
+        val canceled = sut.prepareRemoteRetry(original).getOrThrow()
+        sut.discard(canceled)
+        assertEquals(1, attempts)
+        val retry = sut.prepareRemoteRetry(original).getOrThrow()
+        assertEquals(first.attemptId, retry.attemptId)
+        assertSame(ended, sut.remove(retry).getOrThrow())
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, times(1)).captureProfileLogout(original)
+        verify(pubky, times(1)).executeProfileLogout(logouts.single())
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `sign out cannot retry remote cleanup without the original private withdrawal acknowledgement`() = test {
+        doReturn(Result.failure<Unit>(IOException("withdrawal unknown")))
+            .whenever(privateRepo).removePublishedEndpointsForProfileRemoval(any())
+        val confirmation = sut.prepareSignOut(original).getOrThrow()
+        assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        assertFalse(sut.canRetry(original))
+        assertTrue(sut.prepareRemoteRetry(original).isFailure)
+        verify(pubky, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+    }
+
+    @Test
+    fun `acknowledged logout hidden by cancellation allows only local completion`() = test {
+        whenever { pubky.executeProfileLogout(any()) }.doSuspendableAnswer {
+            it.getArgument<PaykitProfileLogout>(0).retainAcknowledgement(binding)
+            throw kotlinx.coroutines.CancellationException("caller left after acknowledgement")
+        }
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertIs<kotlinx.coroutines.CancellationException>(
+            runCatching { sut.remove(confirmation) }.exceptionOrNull(),
+        )
+        val failure = assertNotNull(sut.failureFor(confirmation))
+        assertFalse(sut.canRetry(original))
+        assertFalse(failure.canReview)
+        assertTrue(sut.prepareRemoteRetry(original).isFailure)
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        assertNotNull(store.pendingAttempt())
+        assertTrue(sut.remove(sut.prepareLocalDisconnect(failure).getOrThrow()).isSuccess)
+        verify(pubky, times(1)).executeProfileLogout(logouts.single())
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `restart and revoked same-owner handle cannot recreate remote logout from pending UUID`() = test {
+        whenever { pubky.executeProfileLogout(any()) }.doSuspendableAnswer { throw IOException("offline") }
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertTrue(sut.canRetry(original))
+        logouts.single().revoke()
+        assertFalse(sut.canRetry(original))
+        assertFalse(assertNotNull(sut.failureFor(confirmation)).canReview)
+        assertTrue(sut.prepareRemoteRetry(original).isFailure)
+
+        val restarted = ProfileRemovalCoordinator(pubky, privateRepo, sharing, store)
+        assertFalse(restarted.canRetry(original))
+        assertTrue(restarted.prepareRemoteRetry(original).isFailure)
+        val local = restarted.prepareSignOut(original).getOrThrow()
+        assertTrue(local.localOnly)
+        assertTrue(restarted.remove(local).isSuccess)
+        verify(pubky, times(1)).captureProfileLogout(original)
+        verify(pubky, times(1)).executeProfileLogout(logouts.single())
+    }
+
+    @Test
+    fun `discarding an unused confirmation revokes capture without starting durable removal`() = test {
+        val first = sut.prepareDeletion(original).getOrThrow()
+        val firstLogout = logouts.single()
+        sut.discard(first)
+        assertFalse(firstLogout.isCurrent())
+        assertNull(store.pendingAttempt())
+        assertTrue(events.isEmpty())
+        assertTrue(sut.prepareDeletion(original).isSuccess)
+        assertEquals(2, logouts.size)
+        assertTrue(logouts.last().isCurrent())
+    }
+
+    @Test
+    fun `failed local metadata teardown closes receipt admission before any observer can clear requests`() = test {
+        var receiptBlocked = false
+        doSuspendableAnswer {
+            current = ended
+            receiptBlocked = runCatching { store.withReceiptSnapshot { "partial maps" } }
+                .exceptionOrNull() is ReceiptAssociationsUnavailable
+            throw IOException("metadata unavailable after identity ended")
+        }.whenever(pubky).finishProfileRemovalLocally()
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertTrue(receiptBlocked)
+        assertNotNull(store.pendingAttempt())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+    }
+
+    @Before
+    fun setup() = test {
+        whenever(pubky.profileOwner()).thenAnswer { current }
+        whenever(pubky.isProfileOwnerCurrent(any())).thenAnswer { it.getArgument<PubkyProfileOwner>(0) === current }
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(deletion))
+        whenever { pubky.captureProfileLogout(original) }.doSuspendableAnswer {
+            val native = mock<PubkyGrantLogout> { on { binding() } doReturn binding }
+            Result.success(PaykitProfileLogout(native, mock()) { current === original }.also(logouts::add))
+        }
+        whenever { sharing.withProfileRemoval<PubkyProfileOwner>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
+        }
+        whenever { pubky.performProfileRemoval(any(), any(), any()) }.doSuspendableAnswer {
+            val owner = it.getArgument<PubkyProfileOwner>(0)
+            val id = it.getArgument<String>(1)
+            val operation = it.getArgument<suspend () -> Unit>(2)
+            runSuspendCatching {
+                check(!rejectAdmission) { "busy before operation admission" }
+                check(owner === current)
+                store.withAccess(id) { operation() }
+                current
+            }
+        }
+        whenever { privateRepo.withProfileDeletionPaused<Unit>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend (PrivatePaykitRepo.ProfileDeletionPause) -> Unit>(0).invoke(pause)
+        }
+        whenever { pubky.validateProfileDeletion(deletion) }.doSuspendableAnswer {
+            events += "validate"
+            Unit
+        }
+        whenever { privateRepo.removePublishedEndpointsForProfileRemoval(any()) }.doSuspendableAnswer {
+            assertNotNull(store.pendingAttempt())
+            events += "private endpoints"
+            it.getArgument<() -> Unit>(0).invoke()
+            Result.success(Unit)
+        }
+        whenever { pubky.removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any()) }.thenAnswer {
+            events += "public endpoints"
+            it.getArgument<() -> Unit>(2).invoke()
+            it.getArgument<() -> Unit>(3).invoke()
+            Result.success(Unit)
+        }
+        whenever { pubky.deleteProfile(any<PubkyProfileDeletion>(), any()) }.thenAnswer {
+            events += "profile"
+            it.getArgument<() -> Unit>(1).invoke()
+            Result.success(Unit)
+        }
+        whenever { pubky.executeProfileLogout(any()) }.thenAnswer {
+            events += "revoke"
+            it.getArgument<PaykitProfileLogout>(0).retainAcknowledgement(binding)
+            Unit
+        }
+        whenever { pubky.finishProfileRemovalLocally() }.doSuspendableAnswer {
+            assertNotNull(store.pendingAttempt())
+            events += "local credentials and metadata"
+            current = ended
+        }
+        whenever { pubky.finishProfileRemovalLocally(any(), any()) }.doSuspendableAnswer {
+            pubky.finishProfileRemovalLocally()
+        }
+        whenever { privateRepo.notifyProfileRemovalCompleted(pause) }.doSuspendableAnswer {
+            assertNull(store.pendingAttempt())
+            events += "wallet backup ready"
+            Unit
+        }
+        whenever { pubky.notifyProfileRemovalCompleted() }.doSuspendableAnswer {
+            assertNull(store.pendingAttempt())
+            events += "backup ready"
+            Unit
+        }
+        whenever { privateRepo.finishProfileRemoval(pause) }.doSuspendableAnswer {
+            assertNotNull(store.pendingAttempt())
+            events += "private local"
+            Result.success(Unit)
+        }
+    }
+
+    @Test
+    fun `missing private withdrawal receipt prevents every destructive profile stage`() = test {
+        val failure = IOException("withdrawal acknowledgement missing")
+        doReturn(Result.failure<Unit>(failure)).whenever(privateRepo).removePublishedEndpointsForProfileRemoval(any())
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+
+        val result = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+
+        assertTrue(generateSequence(result.cause) { it.cause }.any { it === failure })
+        assertFalse(result.canReview)
+        assertTrue(sut.reviewAgain(result).isFailure)
+        verify(pubky, times(1)).prepareProfileDeletion(original)
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        verify(pubky, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+        verify(pubky, never()).finishProfileRemovalLocally()
+        verify(privateRepo, never()).finishProfileRemoval(any())
+    }
+
+    @Test
+    fun `fresh local disconnect reads no remote state and clears only after confirmation`() = test {
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        assertTrue(confirmation.localOnly)
+        assertNull(confirmation.deletion)
+        assertNull(store.pendingAttempt())
+        assertTrue(events.isEmpty())
+        verify(pubky, never()).prepareProfileDeletion(any())
+        assertSame(ended, sut.remove(confirmation).getOrThrow())
+        assertEquals(
+            listOf("local credentials and metadata", "private local", "wallet backup ready", "backup ready"),
+            events,
+        )
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `fresh local disconnect retains private watermarks when credential forget fails`() = test {
+        doSuspendableAnswer {
+            throw IOException("credential store unavailable")
+        }.whenever(pubky).finishProfileRemovalLocally()
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertSame(confirmation, failure.confirmation)
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+        verify(privateRepo, never()).notifyProfileRemovalCompleted(any())
+        verify(pubky, never()).executeProfileLogout(any())
+    }
+
+    @Test
+    fun `fresh local disconnect cannot prepare when pending state is unreadable`() = test {
+        val failure = IOException("pending store unavailable")
+        store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = flow<ProfileRemovalState> { throw failure }
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState = error("Preparation must not write removal state")
+        })
+        assertSame(failure, sut.prepareLocalDisconnect(original).exceptionOrNull())
+        assertTrue(events.isEmpty())
+        verify(pubky, never()).performProfileRemoval(any(), any(), any())
+        verify(pubky, never()).finishProfileRemovalLocally()
+        verify(privateRepo, never()).finishProfileRemoval(any())
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+    }
+
+    @Test
+    fun `fresh local disconnect cannot clear credentials when durable begin fails`() = test {
+        val failure = IOException("pending marker not acknowledged")
+        var writes = 0
+        store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = MutableStateFlow(ProfileRemovalState())
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState {
+                writes++
+                throw failure
+            }
+        })
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        val result = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertSame(failure, result.cause)
+        assertEquals(1, writes)
+        assertNull(store.pendingAttempt())
+        assertTrue(events.isEmpty())
+        verify(pubky, never()).finishProfileRemovalLocally()
+        verify(privateRepo, never()).finishProfileRemoval(any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertEquals(1, writes)
+    }
+
+    @Test
+    fun `fresh local disconnect rejects replacement owner and unrelated pending cleanup`() = test {
+        current = PubkyProfileOwner(PubkySignIn("identity", 3), 3)
+        assertTrue(sut.prepareLocalDisconnect(original).isFailure)
+        current = original
+        val pending = UUID.randomUUID().toString()
+        store.withAccess(pending) { store.begin(pending) }
+        assertTrue(sut.prepareLocalDisconnect(original).isFailure)
+        assertEquals(pending, store.pendingAttempt())
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `fresh local confirmation cannot clear a replacement or another pending attempt`() = test {
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        current = PubkyProfileOwner(PubkySignIn("identity", 3), 3)
+        assertTrue(sut.remove(confirmation).isFailure)
+        current = original
+        val second = sut.prepareLocalDisconnect(original).getOrThrow()
+        val pending = UUID.randomUUID().toString()
+        store.withAccess(pending) { store.begin(pending) }
+        assertTrue(sut.remove(second).isFailure)
+        assertEquals(pending, store.pendingAttempt())
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `confirmed removal acknowledges credentials before clearing private state and clears marker last`() = test {
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertNull(store.pendingAttempt())
+        assertSame(ended, sut.remove(confirmation).getOrThrow())
+        assertEquals(
+            listOf(
+                "validate",
+                "private endpoints",
+                "public endpoints",
+                "profile",
+                "revoke",
+                "local credentials and metadata",
+                "private local",
+                "wallet backup ready",
+                "backup ready"
+            ),
+            events
+        )
+        assertNull(store.pendingAttempt())
+        assertFalse(sut.isCurrent(original))
+        assertTrue(sut.isCurrent(ended))
+    }
+
+    @Test
+    fun `backup readiness waits for delayed durable marker completion`() = test {
+        val data = MutableStateFlow(ProfileRemovalState())
+        val completing = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = data
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState {
+                val next = transform(data.value)
+                if (next.attemptId == null) {
+                    completing.complete(Unit)
+                    release.await()
+                }
+                data.value = next
+                return next
+            }
+        })
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val removal = async { sut.remove(confirmation) }
+        completing.await()
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        verify(privateRepo, never()).notifyProfileRemovalCompleted(any())
+        verify(pubky, never()).notifyProfileRemovalCompleted()
+        release.complete(Unit)
+        assertTrue(removal.await().isSuccess)
+        verify(privateRepo).notifyProfileRemovalCompleted(pause)
+        verify(pubky).notifyProfileRemovalCompleted()
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `one confirmation cannot repeat an uncertain profile mutation`() = test {
+        whenever(
+            pubky.deleteProfile(eq(deletion), any())
+        ).thenReturn(Result.failure(IllegalStateException("lost response")))
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertTrue(sut.remove(confirmation).isFailure)
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+        verify(pubky, never()).executeProfileLogout(any())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+    }
+
+    @Test
+    fun `review after uncertain deletion reads original owner and requires another confirmation`() = test {
+        whenever(
+            pubky.deleteProfile(eq(deletion), any())
+        ).thenReturn(Result.failure(IllegalStateException("lost response")))
+        val first = sut.prepareDeletion(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(first).exceptionOrNull())
+        val second = sut.reviewAgain(failure).getOrThrow()
+        assertEquals(first.attemptId, second.attemptId)
+        assertFalse(second.used.get())
+        verify(pubky, times(2)).prepareProfileDeletion(original)
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+        current = PubkyProfileOwner(PubkySignIn("replacement", 3), 3)
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        assertTrue(sut.prepareLocalDisconnect(failure).isFailure)
+    }
+
+    @Test
+    fun `successive confirmed reviews retain the original private withdrawal acknowledgement`() = test {
+        val firstFailure = failRemoval(deletion)
+        val second = sut.reviewAgain(firstFailure).getOrThrow()
+        val secondFailure = assertIs<ProfileRemovalFailure>(sut.remove(second).exceptionOrNull())
+        assertTrue(secondFailure.canReview)
+        assertEquals(firstFailure.confirmation.attemptId, second.attemptId)
+
+        val third = sut.reviewAgain(secondFailure).getOrThrow()
+        whenever(pubky.deleteProfile(eq(deletion), any())).thenAnswer {
+            it.getArgument<() -> Unit>(1).invoke()
+            Result.success(Unit)
+        }
+
+        assertSame(ended, sut.remove(third).getOrThrow())
+        assertEquals(second.attemptId, third.attemptId)
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, times(3)).prepareProfileDeletion(original)
+        verify(pubky, times(3)).deleteProfile(eq(deletion), any())
+        verify(pubky, times(1)).executeProfileLogout(any())
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `review rejects a later profile revision instead of replacing original intent`() = test {
+        val failure = failRemoval(deletion)
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(
+            Result.success(deletion.withSnapshot(deletion.snapshot.copy(profileRevision = "later-edit")))
+        )
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+    }
+
+    @Test
+    fun `review rejects added or edited contacts before another confirmation`() = test {
+        val alice = contact("alice")
+        val first = deletion.withSnapshot(deletion.snapshot.copy(contacts = listOf(alice)))
+        val failure = failRemoval(first)
+        for (records in listOf(listOf(alice, contact("bob")), listOf(alice.copy(label = "Later edit")))) {
+            whenever(pubky.prepareProfileDeletion(original)).thenReturn(
+                Result.success(first.withSnapshot(first.snapshot.copy(contacts = records)))
+            )
+            assertTrue(sut.reviewAgain(failure).isFailure)
+        }
+        verify(pubky, times(1)).deleteProfile(eq(first), any())
+    }
+
+    @Test
+    fun `review accepts only unchanged residuals and cannot restore a removed contact target`() = test {
+        val alice = contact("alice")
+        val bob = contact("bob")
+        val first = deletion.withSnapshot(deletion.snapshot.copy(contacts = listOf(alice, bob)))
+        val failure = failRemoval(first)
+        val residual = first.withSnapshot(first.snapshot.copy(profileRevision = null, contacts = listOf(bob)))
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(residual))
+        val second = sut.reviewAgain(failure).getOrThrow()
+        assertEquals(residual, second.deletion)
+        assertEquals(failure.confirmation.attemptId, second.attemptId)
+        verify(pubky, times(1)).deleteProfile(eq(first), any())
+        whenever(
+            pubky.deleteProfile(eq(residual), any())
+        ).thenReturn(Result.failure(IllegalStateException("lost response")))
+        val secondFailure = assertIs<ProfileRemovalFailure>(sut.remove(second).exceptionOrNull())
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(
+            Result.success(residual.withSnapshot(residual.snapshot.copy(contacts = listOf(alice, bob))))
+        )
+        assertTrue(sut.reviewAgain(secondFailure).isFailure)
+        verify(pubky, times(1)).deleteProfile(eq(residual), any())
+    }
+
+    @Test
+    fun `review rejects a profile recreated after an earlier review observed absence`() = test {
+        val failure = failRemoval(deletion)
+        val absent = deletion.withSnapshot(deletion.snapshot.copy(profileRevision = null))
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(absent))
+        val second = sut.reviewAgain(failure).getOrThrow()
+        whenever(pubky.deleteProfile(eq(absent), any())).thenReturn(Result.failure(IllegalStateException("unknown")))
+        val secondFailure = assertIs<ProfileRemovalFailure>(sut.remove(second).exceptionOrNull())
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(deletion))
+        assertTrue(sut.reviewAgain(secondFailure).isFailure)
+    }
+
+    @Test
+    fun `old failure cannot expand residuals after a confirmation admission failure`() = test {
+        val first = deletion.withSnapshot(deletion.snapshot.copy(contacts = listOf(contact("alice"), contact("bob"))))
+        val failure = failRemoval(first)
+        val remaining = first.withSnapshot(first.snapshot.copy(contacts = listOf(contact("bob"))))
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(remaining))
+        val second = sut.reviewAgain(failure).getOrThrow()
+        rejectAdmission = true
+        assertTrue(sut.remove(second).isFailure)
+        assertNull(sut.failureFor(second))
+        rejectAdmission = false
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(first))
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        verify(pubky, times(1)).deleteProfile(eq(first), any())
+        verify(pubky, never()).deleteProfile(eq(remaining), any())
+    }
+
+    @Test
+    fun `cancelled residual review cannot reintroduce an absent profile through an older failure`() = test {
+        val failure = failRemoval(deletion)
+        val remaining = deletion.withSnapshot(deletion.snapshot.copy(profileRevision = null))
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(remaining))
+        sut.reviewAgain(failure).getOrThrow()
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(deletion))
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+    }
+
+    @Test
+    fun `new residual review invalidates an outstanding wider confirmation before cleanup`() = test {
+        val first = deletion.withSnapshot(deletion.snapshot.copy(contacts = listOf(contact("alice"), contact("bob"))))
+        val failure = failRemoval(first)
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(first))
+        val wider = sut.reviewAgain(failure).getOrThrow()
+        val remaining = first.withSnapshot(first.snapshot.copy(contacts = listOf(contact("bob"))))
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(remaining))
+        sut.reviewAgain(failure).getOrThrow()
+        val eventsBefore = events.toList()
+        assertTrue(sut.remove(wider).isFailure)
+        assertEquals(eventsBefore, events)
+        verify(pubky, times(1)).deleteProfile(eq(first), any())
+    }
+
+    @Test
+    fun `review read failure retains original obligation without a mutation`() = test {
+        val failure = failRemoval(deletion)
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.failure(IllegalStateException("offline")))
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        assertEquals(failure.confirmation.attemptId, store.pendingAttempt())
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+    }
+
+    private fun PubkyProfileDeletion.withSnapshot(snapshot: PaykitProfileDeletionSnapshot) =
+        PubkyProfileDeletion(owner, profileWriteRevision, snapshot)
+
+    private suspend fun failRemoval(snapshot: PubkyProfileDeletion): ProfileRemovalFailure {
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(snapshot))
+        whenever(
+            pubky.deleteProfile(eq(snapshot), any())
+        ).thenReturn(Result.failure(IllegalStateException("lost response")))
+        return assertIs<ProfileRemovalFailure>(sut.remove(sut.prepareDeletion(original).getOrThrow()).exceptionOrNull())
+    }
+
+    private fun contact(key: String) = ContactRecord(
+        publicKey = key,
+        label = key,
+        profile = null,
+        profileFetchedAt = null,
+        createdAt = "2026-01-01T00:00:00Z",
+        updatedAt = "2026-01-01T00:00:00Z",
+        publicContactMarkerStatus = PublicationStatus.NOT_PUBLISHED,
+        publicContactPublishedAt = null,
+        publicContactRemovedAt = null,
+        publicContactLastError = null,
+    )
+
+    @Test
+    fun `later identity invalidates an unused confirmation before cleanup`() = test {
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        current = ended
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertNull(store.pendingAttempt())
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `changed snapshot fails before durable marker and destructive work`() = test {
+        whenever { pubky.validateProfileDeletion(deletion) }.thenAnswer { error("profile revision changed") }
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertNull(store.pendingAttempt())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
+    }
+
+    @Test
+    fun `changed confirmation before any cleanup permits a fresh deletion without uncertainty`() = test {
+        whenever { pubky.validateProfileDeletion(deletion) }.thenAnswer { error("profile changed") }
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val failure = sut.remove(confirmation).exceptionOrNull()
+        assertIs<IllegalStateException>(failure)
+        assertNull(sut.failureFor(confirmation))
+        assertNull(store.pendingAttempt())
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
+        assertTrue(sut.prepareDeletion(original).isSuccess)
+    }
+
+    @Test
+    fun `public cleanup failure retains marker and never revokes or clears private state`() = test {
+        whenever(
+            pubky.removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        ).thenReturn(Result.failure(IllegalStateException("unknown")))
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        assertFalse(sut.canRetry(original))
+        assertTrue(sut.prepareRemoteRetry(original).isFailure)
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+    }
+
+    @Test
+    fun `failed local completion retains ended owner for explicit local disconnect`() = test {
+        doReturn(Result.failure<Unit>(IllegalStateException("disk"))).whenever(privateRepo).finishProfileRemoval(pause)
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertTrue(failure.localCompletionStarted)
+        assertSame(ended, failure.recoveryOwner)
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        val recovery = sut.prepareLocalDisconnect(failure).getOrThrow()
+        doReturn(Result.success(Unit)).whenever(privateRepo).finishProfileRemoval(pause)
+        assertTrue(sut.remove(recovery).isSuccess)
+        assertNull(store.pendingAttempt())
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+        verify(pubky, times(1)).executeProfileLogout(any())
+    }
+
+    @Test
+    fun `restart pending disconnect is local only and rejects stale UUID confirmation`() = test {
+        current = PubkyProfileOwner(null, 0)
+        val id = UUID.randomUUID().toString()
+        store.withAccess(id) { store.begin(id) }
+        val confirmation = sut.prepareSignOut(current).getOrThrow()
+        assertTrue(confirmation.localOnly)
+        assertTrue(sut.remove(confirmation).isSuccess)
+        verify(pubky, never()).executeProfileLogout(any())
+        verify(pubky, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
+        val unusedOldConfirmation = sut.prepareSignOut(current).getOrThrow()
+        val newerId = UUID.randomUUID().toString()
+        store.withAccess(newerId) { store.begin(newerId) }
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertFalse(unusedOldConfirmation.used.get())
+        assertEquals(
+            "Another profile removal needs local recovery",
+            sut.remove(unusedOldConfirmation).exceptionOrNull()?.message,
+        )
+        assertEquals(newerId, store.pendingAttempt())
+    }
+
+    @Test
+    fun `failed final marker persistence retains local recovery without repeating remote work`() = test {
+        val data = MutableStateFlow(ProfileRemovalState())
+        var rejectCompletion = true
+        store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = data
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState {
+                val next = transform(data.value)
+                if (rejectCompletion && next.attemptId == null) error("marker write unavailable")
+                data.value = next
+                return next
+            }
+        })
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertSame(ended, failure.recoveryOwner)
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        verify(privateRepo, never()).notifyProfileRemovalCompleted(any())
+        verify(pubky, never()).notifyProfileRemovalCompleted()
+        rejectCompletion = false
+        assertTrue(sut.remove(sut.prepareLocalDisconnect(failure).getOrThrow()).isSuccess)
+        verify(privateRepo).notifyProfileRemovalCompleted(pause)
+        verify(pubky).notifyProfileRemovalCompleted()
+        assertNull(store.pendingAttempt())
+        verify(pubky, times(1)).deleteProfile(eq(deletion), any())
+        verify(pubky, times(1)).executeProfileLogout(any())
+    }
+
+    @Test
+    fun `cancellation during destructive work leaves obligation and does not clear watermarks`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val wait = CompletableDeferred<Unit>()
+        whenever { pubky.deleteProfile(eq(deletion), any()) }.doSuspendableAnswer {
+            entered.complete(Unit)
+            wait.await()
+            Result.success(Unit)
+        }
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val job = async { sut.remove(confirmation) }
+        entered.await()
+        job.cancelAndJoin()
+        assertTrue(job.isCancelled)
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+    }
+}

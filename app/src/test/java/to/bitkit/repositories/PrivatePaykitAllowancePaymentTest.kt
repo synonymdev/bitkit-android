@@ -21,6 +21,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.toHex
@@ -51,6 +52,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
     }
 
     private val paykitSdkService = mock<PaykitSdkService>()
+    private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
     private val cacheStore = mock<PrivatePaykitCacheStore>()
     private val settingsStore = mock<SettingsStore>()
     private val lightningRepo = mock<LightningRepo>()
@@ -90,6 +92,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
             usdtRepo = mock<UsdtRepo>(),
             coreService = coreService,
             clock = clock,
+            profileRemovalStore = profileRemovalStore,
         )
     }
 

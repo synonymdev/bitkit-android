@@ -405,6 +405,7 @@
     <string name="migration__nav_title">Wallet Migration</string>
     <string name="migration__network_required_msg">Please ensure you have a stable internet connection. Data may show incorrectly while trying to connect.</string>
     <string name="migration__network_required_title">Network Issues Detected</string>
+    <string name="migration__status_error">Wallet migration status is unavailable. Retry before continuing.</string>
     <string name="migration__title">MIGRATING\n&lt;accent&gt;WALLET&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Notification channel for Lightning node foreground service</string>
     <string name="notification__channel_node__name">Lightning node notification</string>
@@ -629,6 +630,7 @@
     <string name="profile__choice_description_ring">Use an existing pubky from Pubky Ring.</string>
     <string name="profile__choice_loading_profile">Loading your profile…</string>
     <string name="profile__choice_title">Enter the\n&lt;accent&gt;freedom web&lt;/accent&gt;</string>
+    <string name="profile__cleanup_pending">Profile cleanup is incomplete. Disconnect locally to remove this device’s access without retrying remote deletion.</string>
     <string name="profile__create_error">Failed to create profile</string>
     <string name="profile__create_nav_title">Create Profile</string>
     <string name="profile__delete_active_subscription">Active subscriptions prevent removing this profile.</string>
@@ -637,9 +639,11 @@
     <string name="profile__delete_error_description">We couldn\'t delete your profile data. Retry, or disconnect this pubky from Bitkit.</string>
     <string name="profile__delete_error_title">Unable to Delete Profile</string>
     <string name="profile__delete_profile">Delete Profile</string>
+    <string name="profile__delete_review_description">Some changes may have completed. Review the current state before confirming again, or disconnect locally.</string>
     <string name="profile__delete_success">Profile deleted</string>
     <string name="profile__deriving_keys">Deriving your keys…</string>
     <string name="profile__disconnect_error">Failed to disconnect profile</string>
+    <string name="profile__disconnect_local_description">Remove this device’s access and finish local cleanup. This makes no further changes to your profile, subscriptions or access on the server.</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Short note. Tell a bit about yourself.</string>
     <string name="profile__edit_delete_section">DELETE</string>
@@ -668,6 +672,7 @@
     <string name="profile__public_payments_toggle">Public payments</string>
     <string name="profile__restore_nav_title">Restore Profile</string>
     <string name="profile__retry_load">Try Again</string>
+    <string name="profile__review_removal">Review</string>
     <string name="profile__session_expired">Your profile session has expired. Please reconnect to restore your profile.</string>
     <string name="profile__sign_out">Disconnect</string>
     <string name="profile__sign_out_description">This will disconnect your Pubky profile from Bitkit. You can reconnect at any time.</string>
@@ -682,6 +687,7 @@
     <string name="profile__unlink_error_title">Unable to Unlink Pubky</string>
     <string name="profile__unlink_pubky">Unlink pubky</string>
     <string name="profile__unlink_success">Pubky unlinked</string>
+    <string name="profile__wallet_recovery_pending">Wallet recovery is required before this profile can be disconnected. Check wallet recovery in Settings.</string>
     <string name="profile__your_name">Your Name</string>
     <string name="profile__your_pubky">Your Pubky</string>
     <string name="pubky_auth__already_signed_in">Already signed in</string>
@@ -785,6 +791,8 @@
     <string name="security__reset_graph_error">Could not reset the network graph. Please try again.</string>
     <string name="security__reset_graph_success_description">Bitkit will restart in a few seconds to download a fresh network graph.</string>
     <string name="security__reset_graph_success_title">Network Graph Reset</string>
+    <string name="security__reset_pending_text">The previous wallet reset did not finish. Complete the reset before creating or restoring a wallet. Keep your recovery phrase and wallet backup safe.</string>
+    <string name="security__reset_read_error">Wallet recovery state could not be read. Retry before continuing.</string>
     <string name="security__reset_text">Back up your wallet first to avoid loss of your funds and wallet data. Resetting will overwrite your current Bitkit setup.</string>
     <string name="security__reset_title">Reset And Restore</string>
     <string name="security__success_bio">You have successfully set up a PIN code and {biometricsName} to improve wallet security.</string>

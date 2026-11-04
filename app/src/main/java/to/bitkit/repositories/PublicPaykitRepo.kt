@@ -328,24 +328,33 @@ class PublicPaykitRepo @Inject constructor(
     suspend fun refreshPublishedBolt11ForPayment(
         paymentHash: String,
         canPublish: () -> Boolean = { true },
-    ): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching {
-            val signIn = pubkyRepo.currentSignIn() ?: return@runSuspendCatching
-            val ownsPublication = { pubkyRepo.isCurrent(signIn) && canPublish() }
-            val settings = settingsStore.data.first()
-            if (!settings.sharesPublicPaykitEndpoints) return@runSuspendCatching
-            if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runSuspendCatching
+        admitPublication: suspend (suspend () -> Unit) -> Unit,
+    ): Result<Unit> {
+        val signIn = pubkyRepo.currentSignIn() ?: return Result.success(Unit)
+        return withContext(ioDispatcher) {
+            runSuspendCatching {
+                val ownsPublication = { pubkyRepo.isCurrent(signIn) && canPublish() }
+                val settings = settingsStore.data.first()
+                if (!settings.sharesPublicPaykitEndpoints) return@runSuspendCatching
+                if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runSuspendCatching
 
-            clearPublicBolt11Metadata(publicationPending = true, canClear = { pubkyRepo.isCurrent(signIn) })
-            if (!isAutomaticPublicationAllowed(ownsPublication)) return@runSuspendCatching
-            val desired = buildWalletEndpoints(signIn.publicKey, ownsPublication, refresh = true)
-            applyPublishedEndpoints(
-                desired,
-                beforePublish = { markPublicationPending(ownsPublication) },
-                acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, ownsPublication) },
-                canPublish = { isAutomaticPublicationAllowed(ownsPublication) },
-            )
-            Unit
+                // Keep the paid invoice invalidated even when preparation must wait for teardown or sharing.
+                clearPublicBolt11Metadata(
+                    publicationPending = true,
+                    canClear = { pubkyRepo.isCurrent(signIn) && it.publicPaykitBolt11PaymentHash == paymentHash },
+                )
+                admitPublication {
+                    if (isAutomaticPublicationAllowed(ownsPublication)) {
+                        val desired = buildWalletEndpoints(signIn.publicKey, ownsPublication, refresh = true)
+                        applyPublishedEndpoints(
+                            desired,
+                            beforePublish = { markPublicationPending(ownsPublication) },
+                            acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, ownsPublication) },
+                            canPublish = { isAutomaticPublicationAllowed(ownsPublication) },
+                        )
+                    }
+                }
+            }
         }
     }
 

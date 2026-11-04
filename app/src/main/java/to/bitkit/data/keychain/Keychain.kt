@@ -45,6 +45,28 @@ class Keychain @Inject constructor(
     @Suppress("MemberNameEqualsClassName")
     private val keychain = context.keychainDataStore
 
+    private val profileCredentials by lazy {
+        ProfileCredentialStore(
+            keychain,
+            walletIndex = { db.configDao().getAll().first().firstOrNull()?.walletIndex ?: 0 },
+            decrypt = { keyStore.decrypt(it.fromBase64()) },
+        )
+    }
+
+    internal suspend fun captureProfileCredentials(requireCurrent: () -> Unit): ProfileCredentials =
+        profileCredentials.capture(requireCurrent)
+
+    internal suspend fun eraseProfileCredentials(target: ProfileCredentials, requireCurrent: () -> Unit) =
+        profileCredentials.erase(target, requireCurrent)
+
+    internal suspend fun eraseProfileCredentialsAfterLocalConfirmation(
+        target: ProfileCredentials,
+        requireCurrent: () -> Unit,
+    ) = profileCredentials.eraseAfterLocalConfirmation(target, requireCurrent)
+
+    internal suspend fun validateProfileCredentials(target: ProfileCredentials, requireCurrent: () -> Unit) =
+        profileCredentials.validate(target, requireCurrent)
+
     private val loadDiagnosticsEmitted: MutableSet<String> =
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 

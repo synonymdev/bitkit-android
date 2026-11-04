@@ -90,6 +90,7 @@ fun ProfileEditForm(
     deleteLabel: String = "",
     deleteSectionLabel: String? = null,
     @DrawableRes deleteIcon: Int = R.drawable.ic_trash,
+    additionalActions: @Composable () -> Unit = {},
 ) {
     val isBusy = isSaving || isDeleting
     val resolvedPublicKeyLabel = publicKeyLabel ?: stringResource(R.string.profile__your_pubky)
@@ -263,6 +264,7 @@ fun ProfileEditForm(
                 }
             }
 
+            additionalActions()
             VerticalSpacer(footerHeight + 16.dp)
         }
 

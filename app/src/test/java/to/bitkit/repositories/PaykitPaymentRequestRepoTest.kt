@@ -3650,6 +3650,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ),
         acceptedEventId = null,
         acceptedOutboundStatus = null,
+        acceptanceRecordedAt = null,
         rejectedEventId = null,
         rejectedOutboundStatus = null,
         canceledEventId = null,
@@ -3662,6 +3663,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         lastEventAt = clock.now().toString(),
         invalidReason = null,
         proposalAppId = "bitkit",
+        proposalRecordedAt = null,
         payerAppId = null,
         executionClaimAppId = null,
     )

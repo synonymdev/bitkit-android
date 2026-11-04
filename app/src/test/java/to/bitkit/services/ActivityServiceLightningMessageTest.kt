@@ -26,6 +26,7 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.ext.create
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.receiptResolverFixture
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -71,7 +72,7 @@ class ActivityServiceLightningMessageTest : BaseUnitTest() {
     fun `payment sync creates the row with the pending comment and clears it`() = coreTest {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(pendingLightningMessages = mapOf(HASH to COMMENT))))
 
-        sut().syncLdkNodePaymentsToActivities(listOf(payment()))
+        sut().syncLdkNodePaymentsToActivities({ listOf(payment()) })
 
         val stored = (row as Activity.Lightning).v1
         assertEquals(COMMENT, stored.message)
@@ -84,7 +85,7 @@ class ActivityServiceLightningMessageTest : BaseUnitTest() {
         row = Activity.Lightning(sent(status = PaymentState.PENDING, message = DESCRIPTION_HASH))
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(pendingLightningMessages = mapOf(HASH to COMMENT))))
 
-        sut().syncLdkNodePaymentsToActivities(listOf(payment()))
+        sut().syncLdkNodePaymentsToActivities({ listOf(payment()) })
 
         val stored = (row as Activity.Lightning).v1
         assertEquals(COMMENT, stored.message)
@@ -101,7 +102,7 @@ class ActivityServiceLightningMessageTest : BaseUnitTest() {
         }
         whenever(cacheStore.data).thenReturn(commentStoredMeanwhile)
 
-        sut().syncLdkNodePaymentsToActivities(listOf(payment()))
+        sut().syncLdkNodePaymentsToActivities({ listOf(payment()) })
 
         val stored = (row as Activity.Lightning).v1
         assertEquals(COMMENT, stored.message)
@@ -130,7 +131,7 @@ class ActivityServiceLightningMessageTest : BaseUnitTest() {
         cacheStore = cacheStore,
         lightningService = lightningService,
         settingsStore = mock(),
-        privatePaykitContactResolver = mock(),
+        privatePaykitContactResolver = javax.inject.Provider { receiptResolverFixture(testDispatcher) },
     )
 
     private fun sent(

@@ -135,6 +135,7 @@ class PaykitIssuerInteropTest {
         ),
         acceptedEventId = null,
         acceptedOutboundStatus = null,
+        acceptanceRecordedAt = null,
         rejectedEventId = null,
         rejectedOutboundStatus = null,
         canceledEventId = null,
@@ -147,6 +148,7 @@ class PaykitIssuerInteropTest {
         lastEventAt = NOW.toString(),
         invalidReason = null,
         proposalAppId = "bitkit",
+        proposalRecordedAt = null,
         payerAppId = null,
         executionClaimAppId = null,
     )

@@ -242,6 +242,7 @@
     <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagaments&lt;/accent&gt;</string>
     <string name="migration__description">Si us plau, espera mentre les dades de la teva antiga cartera es migren a aquesta nova versió de Bitkit. Normalment triga menys d\'un minut.</string>
     <string name="migration__nav_title">Migració de cartera</string>
+    <string name="migration__status_error">L’estat de la migració de la cartera no està disponible. Torna-ho a provar abans de continuar.</string>
     <string name="migration__title">MIGRANT\n&lt;accent&gt;CARTERA&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notificació per al servei en primer pla del node Lightning</string>
     <string name="notification__channel_node__name">Notificació del node Lightning</string>
@@ -390,10 +391,14 @@
     <string name="profile__add_link_note">Nota: Qualsevol enllaç que afegiu serà visible públicament.</string>
     <string name="profile__add_tag">Afegeix etiqueta</string>
     <string name="profile__auth_approval_details">Detalls</string>
+    <string name="profile__cleanup_pending">La neteja del perfil és incompleta. Desconnecta localment per eliminar l’accés d’aquest dispositiu sense tornar a intentar la supressió remota.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
+    <string name="profile__delete_review_description">És possible que alguns canvis s’hagin completat. Revisa l’estat actual abans de tornar a confirmar, o desconnecta localment.</string>
+    <string name="profile__disconnect_local_description">Elimina l’accés d’aquest dispositiu i acaba la neteja local. Això no fa cap altre canvi al perfil, les subscripcions ni l’accés al servidor.</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Torna a intentar</string>
+    <string name="profile__review_removal">Revisa</string>
     <string name="profile__suggestions">Suggeriments</string>
     <string name="profile__unlink_confirm">Sí, desvincula</string>
     <string name="profile__unlink_confirm_description">Això eliminarà les teves dades de Paykit i desvincularà aquest pubky de Bitkit. Continuarà disponible a Pubky Ring.</string>
@@ -486,6 +491,8 @@
     <string name="security__reset_dialog_desc">Estàs segur que vols restablir la teva cartera Bitkit? Tens una còpia de seguretat de la teva frase de recuperació i les dades de la cartera?</string>
     <string name="security__reset_dialog_title">Reiniciar Bitkit?</string>
     <string name="security__reset_graph_confirm">Sí, reinicia</string>
+    <string name="security__reset_pending_text">El restabliment anterior de la cartera no es va completar. Completa el restabliment abans de crear o restaurar una cartera. Desa en un lloc segur la frase de recuperació i la còpia de seguretat.</string>
+    <string name="security__reset_read_error">No es pot llegir l’estat de recuperació de la cartera. Torna-ho a provar abans de continuar.</string>
     <string name="security__reset_text">Fes còpia de seguretat de la teva cartera primer per evitar la pèrdua dels teus fons i dades de la cartera. Restablir sobreescriurà la teva configuració actual de Bitkit.</string>
     <string name="security__reset_title">Restablir i restaurar</string>
     <string name="security__success_bio">Has configurat correctament un codi PIN i {biometricsName} per millorar la seguretat de la cartera.</string>
@@ -1360,6 +1367,7 @@
     <string name="profile__sign_out_title">Desconnectar el perfil</string>
     <string name="profile__source_lost">Aquest pubky ja no està disponible a Pubky Ring. El teu perfil s\'ha desconnectat.</string>
     <string name="profile__suggestions_to_add">Suggeriments per afegir</string>
+    <string name="profile__wallet_recovery_pending">Cal completar la recuperació de la cartera abans de desconnectar aquest perfil. Consulta la recuperació de la cartera a Configuració.</string>
     <string name="profile__your_pubky">El teu pubky</string>
     <string name="pubky_auth__already_signed_in">Ja has iniciat sessió</string>
     <string name="pubky_auth__homeserver">Homeserver</string>
