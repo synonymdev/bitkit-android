@@ -82,6 +82,8 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `passphrase-duplicate.xml` | Re-entering a watched passphrase reports "already added" and adds no tile |
 | `passphrase-settings-remove.xml` | Per-identity settings row, rename and delete; removing the hidden wallet keeps the device paired |
 
+Broadcast faults on an ordinary send are not a journey capability; the manual recipe is [broadcast-unknown-retry.md](broadcast-unknown-retry.md).
+
 Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletIntroCancel`, `HardwareWalletIntroContinue`,
 `HardwareWalletSearchingScreen`, `HardwareWalletSearchingCancel`,

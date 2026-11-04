@@ -157,6 +157,8 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwRetainedSend
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
@@ -272,6 +274,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val lightningRepo = mock<LightningRepo>()
     private val walletRepo = mock<WalletRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val hwRetainedSendRepo = mock<HwRetainedSendRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val currencyRepo = mock<CurrencyRepo>()
     private val connectivityRepo = mock<ConnectivityRepo>()
@@ -699,6 +702,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private var walletGeneration = 0L
 
     private fun stubRepositories() {
+        whenever { hwRetainedSendRepo.record(any()) }.thenReturn(Result.success(null))
         whenever(connectionRecovery.currentGeneration()).thenAnswer { walletGeneration }
         whenever(connectionRecovery.isCurrentGeneration(anyOrNull())).thenAnswer {
             it.getArgument<Long?>(0) == walletGeneration
@@ -931,6 +935,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaymentRepo = pendingPaymentRepo,
         walletRepo = walletRepo,
         hwWalletRepo = hwWalletRepo,
+        hwRetainedSendRepo = hwRetainedSendRepo,
         backupRepo = backupRepo,
         settingsStore = settingsStore,
         currencyRepo = currencyRepo,
@@ -7293,6 +7298,222 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `consent to discard a retained send is consumed by one abandon`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState())
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
+        advanceUntilIdle()
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToAbandon)
+
+        // Returning from the PIN screen reads the same record again, before anything was abandoned.
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToAbandon)
+
+        sut.consumeRetainedSendConsent()
+
+        assertNull(sut.sendUiState.value.retainedSendToAbandon)
+        assertFalse(SanityWarning.RETAINED_HARDWARE_SEND in sut.sendUiState.value.confirmedWarnings)
+        assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
+
+        setSendState(sut.sendUiState.value.copy(shouldConfirmPay = false, showSanityWarningDialog = null))
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        assertNull(sut.sendUiState.value.retainedSendToAbandon)
+        assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+        assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `a near-max retained payment reaches its review without composing`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        setSendState(nearMaxRetainedState())
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+
+        verify(hwWalletRepo, never()).estimateFundingMiningFee(any(), any(), any(), any())
+        val state = sut.sendUiState.value
+        assertTrue(state.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(RETAINED_RETRY.feeRate.toUInt()), state.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, RETAINED_RETRY.miningFeeSats.toLong()), state.onchainFeeUi)
+        assertFalse(state.isRetainedSendCheckPending)
+    }
+
+    @Test
+    fun `a payment that does not match the retained send still composes and can fail`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(amount = 40_000uL) },
+            { it.copy(address = "bcrt1qother", amount = 40_000uL) },
+        )
+        for (change in changes) {
+            clearInvocations(hwWalletRepo)
+            val state = change(nearMaxRetainedState())
+            setSendState(state)
+
+            sut.setSendEvent(SendEvent.AmountChange(state.amount))
+            advanceUntilIdle()
+            assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.AmountContinue)
+                advanceUntilIdle()
+                expectNoEvents()
+            }
+
+            verify(hwWalletRepo).estimateFundingMiningFee(any(), any(), any(), any())
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+        }
+
+        setSendState(nearMaxRetainedState())
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS - 1uL))
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+
+        setSendState(nearMaxRetainedState().copy(address = "bcrt1qother"))
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `a refused retained retry gets no amount or fee exception`() = test {
+        stubRetainedRecord(retryWasRefused = true)
+        setSendState(nearMaxRetainedState())
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        sut.refreshRetainedRetryAmount()
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+    }
+
+    @Test
+    fun `a shop payment never reads the retained send record`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        setSendState(
+            nearMaxRetainedState().copy(
+                incomingPaymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            )
+        )
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        sut.refreshRetainedRetryAmount()
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).estimateFundingMiningFee(any(), any(), any(), any())
+        verify(hwRetainedSendRepo, never()).record(any())
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+    }
+
+    @Test
+    fun `the amount input cap reaches only a retained amount for the same address`() = test {
+        stubRetainedRecord()
+        setSendState(nearMaxRetainedState())
+
+        sut.refreshRetainedRetryAmount()
+        assertEquals(RETAINED_AMOUNT_SATS, sut.sendUiState.value.retainedRetryAmountSats)
+
+        setSendState(nearMaxRetainedState().copy(address = "bcrt1qother"))
+        sut.refreshRetainedRetryAmount()
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+    }
+
+    @Test
+    fun `switching to the hardware wallet accepts the retained amount`() = test {
+        stubRetainedRecord()
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = RETAINED_AMOUNT_SATS))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any()))
+            .thenReturn(Result.success(RETAINED_AMOUNT_SATS - 500uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        setSendState(
+            SendUiState(address = REGTEST_ADDRESS, amount = RETAINED_AMOUNT_SATS, payMethod = SendMethod.ONCHAIN)
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Hardware(HARDWARE_WALLET_ID)))
+        advanceUntilIdle()
+
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `scanning a near-max amount passes the balance gate only for the retained payment`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any()))
+            .thenReturn(Result.success(RETAINED_AMOUNT_SATS - 500uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+        whenever(coreService.decode(any())).thenAnswer {
+            val sats = it.getArgument<String>(0).substringAfter("sats=").toULong()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, sats, null, null, null))
+        }
+        whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
+            ValidationResult(REGTEST_ADDRESS, NetworkType.REGTEST, AddressType.P2WPKH),
+        )
+        whenever(formatMoneyValue(any())).thenReturn("499 sats")
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        sut.onScanResult("bitcoin:$REGTEST_ADDRESS?sats=${RETAINED_AMOUNT_SATS - 1uL}")
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(check { assertEquals("InsufficientSavingsToast", it.testTag) })
+        clearInvocations(toastManager)
+
+        sut.onScanResult("bitcoin:$REGTEST_ADDRESS?sats=$RETAINED_AMOUNT_SATS")
+        advanceUntilIdle()
+
+        verify(toastManager, never()).enqueue(any())
+        assertEquals(RETAINED_AMOUNT_SATS, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `a stale retained lock is revalidated when the record has gone`() = test {
+        stubRetainedRecord()
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        setSendState(nearMaxRetainedState())
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+        whenever(hwRetainedSendRepo.record(any())).thenReturn(Result.success(null))
+        applyRetainedStatus(HwRetainedSendStatus.None)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
     fun `a retry status locks the original fee and the fee cannot be edited`() = test {
         setSendState(retainedReviewState())
         applyRetainedStatus(RETAINED_RETRY)
@@ -7422,6 +7643,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         payMethod = SendMethod.ONCHAIN,
         onchainFeeUi = OnchainFeeUi(sats = 100L),
     )
+
+    private fun nearMaxRetainedState() = retainedReviewState().copy(
+        amount = RETAINED_AMOUNT_SATS,
+        isAmountInputValid = false,
+        hardwareAvailableSats = RETAINED_AMOUNT_SATS - 500uL,
+        speed = TransactionSpeed.Fast,
+    )
+
+    private suspend fun stubRetainedRecord(retryWasRefused: Boolean = false) {
+        whenever(hwRetainedSendRepo.record(any())).thenReturn(
+            Result.success(
+                HwRetainedSend(
+                    walletId = HARDWARE_WALLET_ID,
+                    address = REGTEST_ADDRESS,
+                    amountSats = RETAINED_AMOUNT_SATS,
+                    serializedTx = "00",
+                    miningFeeSats = RETAINED_RETRY.miningFeeSats,
+                    feeRate = RETAINED_RETRY.feeRate,
+                    totalSpent = RETAINED_AMOUNT_SATS + RETAINED_RETRY.miningFeeSats,
+                    retryWasRefused = retryWasRefused,
+                )
+            )
+        )
+    }
 
     private suspend fun applyRetainedStatus(status: HwRetainedSendStatus) {
         val state = sut.sendUiState.value
@@ -18031,6 +18276,7 @@ private const val SAMROCK_SETUP_URL =
 private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private val RETAINED_RETRY = HwRetainedSendStatus.Retry(feeRate = 7uL, miningFeeSats = 300uL)
+private const val RETAINED_AMOUNT_SATS = 50_000uL
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
 private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"

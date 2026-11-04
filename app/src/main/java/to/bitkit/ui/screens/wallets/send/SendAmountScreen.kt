@@ -150,6 +150,10 @@ fun SendAmountScreen(
         app?.refreshPaykitRequestAmount()
     }
 
+    LaunchedEffect(uiState.hardwareWalletId, uiState.address, uiState.incomingPaymentRequestId) {
+        app?.refreshRetainedRetryAmount()
+    }
+
     LaunchedEffect(uiState.paykitUsesUsdt, uiState.payMethod, uiState.amount.takeIf { uiState.isPaymentRequest }) {
         if (!uiState.paykitUsesUsdt && uiState.amount > 0u) {
             amountInputViewModel.setSats(uiState.amount.toLong(), currencies)
@@ -299,7 +303,7 @@ private fun SendAmountNodeRunning(
 
         val maxAllowed = when (val lnurl = uiState.lnurl) {
             is LnurlParams.LnurlPay -> minOf(lnurl.data.maxSendableSat().toLong(), availableAmount)
-            else -> availableAmount
+            else -> maxOf(availableAmount, uiState.retainedRetryAmountSats?.toLong() ?: 0L)
         }
 
         LaunchedEffect(maxAllowed) {

@@ -304,7 +304,10 @@ fun SendSheet(
                                 ?.let { walletId -> hwSendViewModel.abandonRetainedPayment(walletId) }
                                 ?: Result.success(Unit)
                             abandoned
-                                .onSuccess { navController.navigateTo(SendRoute.HardwareSign) }
+                                .onSuccess {
+                                    appViewModel.consumeRetainedSendConsent()
+                                    navController.navigateTo(SendRoute.HardwareSign)
+                                }
                                 .onFailure { error ->
                                     appViewModel.toast(error)
                                     navController.currentBackStackEntry

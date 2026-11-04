@@ -171,6 +171,8 @@ import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwRetainedSend
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
@@ -294,6 +296,7 @@ class AppViewModel @Inject constructor(
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val hwRetainedSendRepo: HwRetainedSendRepo,
     private val backupRepo: BackupRepo,
     private val settingsStore: SettingsStore,
     private val currencyRepo: CurrencyRepo,
@@ -3323,7 +3326,12 @@ class AppViewModel @Inject constructor(
         val selectedMaxSendOnchain = hardwareWalletId?.let {
             hardwareMaxSpendable(it, invoice.address, _sendUiState.value.speed)
         } ?: walletRepo.balanceState.value.maxSendOnchainSats
-        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        val maxSendOnchain = maxSendOnchainWithRetainedRetry(
+            maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId),
+            hardwareWalletId,
+            invoice.address,
+            invoice.amountSatoshis,
+        )
 
         if (maxSendOnchain == 0uL) {
             if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
@@ -4429,6 +4437,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun selectHardwareFundingSource(walletId: String, current: SendUiState) {
         val initialAvailable = hardwareEstimatedAvailable(walletId, current.speed)
+        val retainedAmount = retainedRetry(walletId, current.address)?.amountSats
         val walletName = hwWalletRepo.wallets.value.find { it.id == walletId }?.name
         _sendUiState.update {
             it.copy(
@@ -4436,7 +4445,8 @@ class AppViewModel @Inject constructor(
                 hardwareWalletId = walletId,
                 hardwareWalletName = walletName,
                 hardwareAvailableSats = initialAvailable,
-                isAmountInputValid = it.amount > Defaults.dustLimit.toULong() && it.amount <= initialAvailable,
+                isAmountInputValid = it.amount > Defaults.dustLimit.toULong() &&
+                    (it.amount <= initialAvailable || it.amount == retainedAmount),
                 selectedUtxos = null,
                 confirmedWarnings = persistentListOf(),
                 onchainFeeUi = it.onchainFeeUi.copy(isLoading = true),
@@ -4595,6 +4605,11 @@ class AppViewModel @Inject constructor(
     private suspend fun prepareHardwareSendFee(): Boolean {
         val state = _sendUiState.value
         val walletId = state.hardwareWalletId ?: return true
+        retainedRetry(walletId, state.address)?.takeIf { it.amountSats == state.amount }?.let {
+            val status = HwRetainedSendStatus.Retry(it.feeRate, it.miningFeeSats)
+            applyRetainedSendStatus(walletId, state.address, state.amount, status)
+            return true
+        }
         val satsPerVByte = state.feeRates
             ?.getSatsPerVByteFor(state.speed)
             ?.toULong()
@@ -4681,12 +4696,43 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.ONCHAIN -> {
-                val maxSendable = _sendUiState.value.hardwareAvailableSats
-                    .takeIf { _sendUiState.value.hardwareWalletId != null }
+                val state = _sendUiState.value
+                val maxSendable = state.hardwareAvailableSats
+                    .takeIf { state.hardwareWalletId != null }
                     ?: walletRepo.balanceState.value.maxSendOnchainSats
-                amount > Defaults.dustLimit.toULong() && amount <= maxSendable
+                amount > Defaults.dustLimit.toULong() && (
+                    amount <= maxSendable ||
+                        state.hardwareWalletId?.let { retainedRetry(it, state.address)?.amountSats } == amount
+                    )
             }
         }
+    }
+
+    private suspend fun retainedRetry(walletId: String, address: String): HwRetainedSend? {
+        if (_sendUiState.value.incomingPaymentRequestId != null || activeIncomingPaymentRequest() != null) return null
+        val record = hwRetainedSendRepo.record(walletId).getOrElse {
+            Logger.warn("Failed to read retained hardware send for '$walletId'", it, context = TAG)
+            return null
+        }
+        return record?.takeIf { !it.retryWasRefused && it.address == address }
+    }
+
+    private suspend fun maxSendOnchainWithRetainedRetry(
+        maxSendOnchain: ULong,
+        hardwareWalletId: String?,
+        address: String,
+        invoiceAmountSats: ULong,
+    ): ULong {
+        val retainedAmount = hardwareWalletId?.let { retainedRetry(it, address)?.amountSats } ?: return maxSendOnchain
+        val isRetainedPayment = invoiceAmountSats == 0uL || invoiceAmountSats == retainedAmount
+        return if (isRetainedPayment) maxOf(maxSendOnchain, retainedAmount) else maxSendOnchain
+    }
+
+    /** Lets the amount input reach a retained amount above today's maximum. Validation reads the record itself. */
+    suspend fun refreshRetainedRetryAmount() {
+        val state = _sendUiState.value
+        val amount = state.hardwareWalletId?.let { retainedRetry(it, state.address)?.amountSats }
+        _sendUiState.update { it.copy(retainedRetryAmountSats = amount) }
     }
 
     private fun maxSendableLightningSats(): ULong {
@@ -5233,7 +5279,12 @@ class AppViewModel @Inject constructor(
         } else {
             walletRepo.balanceState.value.maxSendOnchainSats
         }
-        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        val maxSendOnchain = maxSendOnchainWithRetainedRetry(
+            maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId),
+            hardwareWalletId,
+            invoice.address,
+            invoice.amountSatoshis,
+        )
 
         val incomingPaymentRequest = activeIncomingPaymentRequest()
         val lnInvoice = if (hardwareWalletId == null) {
@@ -8079,7 +8130,19 @@ class AppViewModel @Inject constructor(
         if (isFeeLocked) cancelOnchainSendRefresh()
         if (isFeeLocked == wasFeeLocked) return
         updateCanSwitchWallet()
-        if (!isFeeLocked) refreshOnchainSendIfNeeded()
+        if (isFeeLocked) return
+        _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
+        refreshOnchainSendIfNeeded()
+    }
+
+    /** One consent discards one retained send: whatever is signed after it needs a new warning. */
+    fun consumeRetainedSendConsent() {
+        _sendUiState.update {
+            it.copy(
+                retainedSendCheck = it.retainedSendCheck?.takeUnless { check -> check.isBlocking },
+                confirmedWarnings = (it.confirmedWarnings - SanityWarning.RETAINED_HARDWARE_SEND).toImmutableList(),
+            )
+        }
     }
 
     fun onHardwareSignCancelled() {
@@ -8960,6 +9023,7 @@ data class SendUiState(
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
     val retainedSendCheck: RetainedSendCheck? = null,
+    val retainedRetryAmountSats: ULong? = null,
 ) {
     private val currentRetainedSendCheck: RetainedSendCheck?
         get() = retainedSendCheck?.takeIf {
