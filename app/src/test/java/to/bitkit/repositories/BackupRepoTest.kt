@@ -11,8 +11,10 @@ import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -24,6 +26,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -75,6 +78,7 @@ import to.bitkit.data.backup.UsdtRecoveryBackupStore
 import to.bitkit.data.backup.UsdtRecoveryBackupV1
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
@@ -114,6 +118,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Provider
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -132,6 +137,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
     private val vssBackupClient = mock<VssBackupClient>()
+    private val vssClients = VssClientCoordinator()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
     private val settingsStore = mock<SettingsStore>()
     private val widgetsStore = mock<WidgetsStore>()
@@ -249,6 +255,235 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `explicit first wallet backup does not wait for node observers`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.WALLET to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        sut.scheduleFullBackup()
+        advanceTimeBy(5_000)
+        runCurrent()
+        verify(vssBackupClient).setup()
+        verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.WALLET.name), any())
+        verify(vssBackupClient, never()).setupWithRetry(any(), any(), any())
+    }
+
+    @Test
+    fun `observer bootstrap requeues a required backup after a failed identity transition`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SETTINGS to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            verify(vssBackupClient, times(1)).setupWithRetry(any(), any(), any())
+            val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
+            assertFailsWith<BackupRepoTestError> {
+                recovery.withIdentityChange { throw BackupRepoTestError("credentials unchanged") }
+            }
+            runCurrent()
+            verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
+            verify(vssBackupClientLdk, times(2)).setup()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.SETTINGS.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `isolated cache failure preserves other listeners and owner rearm`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        var failNext = true
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            if (failNext) {
+                failNext = false
+                throw java.io.IOException("isolated cache read failure")
+            }
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            statuses.update { current -> transform(AppCacheData(backupStatuses = current)).backupStatuses }
+        }
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            settingsData.update { it.copy(selectedCurrency = "EUR") }
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+            connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange { }
+            runCurrent()
+            verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `explicit coalesced request survives observer cancellation before dispatch`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        var beforeDispatch: (() -> Unit)? = null
+        var intercepted = false
+        val delegate = StandardTestDispatcher(testScheduler)
+
+        @OptIn(InternalCoroutinesApi::class)
+        val dispatcher = object : CoroutineDispatcher(), Delay by (delegate as Delay) {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                val hook = beforeDispatch
+                beforeDispatch = null
+                hook?.invoke()
+                delegate.dispatch(context, block)
+            }
+        }
+        sut = createSut(dispatcher = dispatcher)
+        whenever(cacheStore.backupStatuses).thenReturn(
+            flow {
+                if (!intercepted) {
+                    beforeDispatch = {
+                        intercepted = true
+                        sut.scheduleFullBackup()
+                        sut.stopObservingBackups()
+                    }
+                }
+                emit(statuses.value)
+                beforeDispatch = null
+                awaitCancellation()
+            }
+        )
+        try {
+            sut.startObservingBackups()
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertTrue(intercepted)
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            beforeDispatch = null
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `retired queued full request cannot hide a new owner request`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        sut.scheduleFullBackup()
+        connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange { }
+        sut.scheduleFullBackup()
+        advanceTimeBy(5_000)
+        runCurrent()
+        verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+        assertFalse(statuses.value.getValue(category).isRequired)
+        sut.reset()
+    }
+
+    @Test
+    fun `retired detached retry cannot upload for a replacement wallet`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(emptyMap<BackupCategory, BackupItemStatus>())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }.thenReturn(
+            Result.failure(java.io.IOException("temporary transport failure")),
+        )
+        assertTrue(sut.triggerBackup(category).isFailure)
+        connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange { }
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }.thenReturn(
+            Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1)),
+        )
+        advanceTimeBy(120_000)
+        runCurrent()
+        verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+        assertTrue(statuses.value.getValue(category).isRequired)
+        sut.triggerBackup(category).getOrThrow()
+        verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+        assertFalse(statuses.value.getValue(category).isRequired)
+        sut.reset()
+    }
+
+    @Test
+    fun `replacement waits for consumed settings write before restarting observation`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        sut.startObservingBackups()
+        runCurrent()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var replaced = false
+        var crossed = false
+        var holdNext = true
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            if (holdNext) {
+                holdNext = false
+                entered.complete(Unit)
+                release.await()
+                crossed = replaced
+            }
+            statuses.update { current -> transform(AppCacheData(backupStatuses = current)).backupStatuses }
+        }
+        settingsData.update { it.copy(selectedCurrency = "EUR") }
+        entered.await()
+        val transition = async {
+            connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange { replaced = true }
+        }
+        try {
+            runCurrent()
+            assertFalse(transition.isCompleted)
+            assertFalse(replaced)
+            release.complete(Unit)
+            transition.await()
+            runCurrent()
+            assertFalse(crossed)
+            assertTrue(statuses.value.getValue(category).isRequired)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+            verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
+        } finally {
+            release.complete(Unit)
+            transition.join()
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `retiring explicit payload drains before credential change without upload`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var replaced = false
+        whenever { activityRepo.getActivities() }.doSuspendableAnswer {
+            entered.complete(Unit)
+            withContext(NonCancellable) { release.await() }
+            Result.success(emptyList())
+        }
+        val manual = async { sut.triggerBackup(BackupCategory.ACTIVITY) }
+        entered.await()
+        val transition = async {
+            connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange { replaced = true }
+        }
+        try {
+            runCurrent()
+            assertFalse(transition.isCompleted)
+            assertFalse(replaced)
+            release.complete(Unit)
+            transition.await()
+            assertTrue(manual.await().isFailure)
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            release.complete(Unit)
+            transition.join()
+            sut.reset()
+        }
+    }
+
+    @Test
     fun `cold explicit settings backup initializes its client without observation`() = test {
         val ready = CompletableDeferred<Unit>()
         whenever { vssBackupClient.setup(any()) }.doSuspendableAnswer {
@@ -339,12 +574,10 @@ class BackupRepoTest : BaseUnitTest() {
             val reset = async { sut.reset() }
             runCurrent()
             assertFalse(reset.isCompleted)
-            verify(vssBackupClient, never()).reset()
             release.complete(Unit)
             reset.await()
             assertTrue(backup.await().isFailure)
             verify(vssBackupClient, never()).putObject(any(), any())
-            verify(vssBackupClient).reset()
         } finally {
             release.complete(Unit)
             backup.cancelAndJoin()
@@ -2366,8 +2599,6 @@ class BackupRepoTest : BaseUnitTest() {
         reset.await()
         runCurrent()
 
-        verify(vssBackupClient).reset()
-        verify(vssBackupClientLdk).reset()
         verify(vssBackupClientLdk, never()).setup()
     }
 
@@ -2447,8 +2678,6 @@ class BackupRepoTest : BaseUnitTest() {
         try {
             runCurrent()
             assertFalse(reset.isCompleted)
-            verify(vssBackupClient, never()).reset()
-            verify(vssBackupClientLdk, never()).reset()
             verify(vssBackupClient, times(1)).setupWithRetry(any(), any(), any())
             reset.cancel()
             runCurrent()
@@ -2457,8 +2686,6 @@ class BackupRepoTest : BaseUnitTest() {
             release.complete(Unit)
             reset.join()
         }
-        verify(vssBackupClient).reset()
-        verify(vssBackupClientLdk).reset()
         verify(vssBackupClientLdk, never()).setup()
     }
 
@@ -2719,7 +2946,6 @@ class BackupRepoTest : BaseUnitTest() {
         try {
             runCurrent()
             assertFalse(reset.isCompleted)
-            verify(vssBackupClient, never()).reset()
         } finally {
             release.complete(Unit)
             reset.await()
@@ -3388,9 +3614,11 @@ class BackupRepoTest : BaseUnitTest() {
         runCurrent()
         exportQueued.await()
         val wipe = async {
-            sdkLock.withWalletWipe {
-                sut.setWiping(true)
-                sut.reset()
+            sut.setWiping(true)
+            connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange {
+                sdkLock.withWalletWipe {
+                    sut.reset()
+                }
             }
         }
         runCurrent()
@@ -3400,7 +3628,6 @@ class BackupRepoTest : BaseUnitTest() {
             blocker.await()
             assertFalse(exported)
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
-            verify(vssBackupClient).reset()
         } finally {
             release.complete(Unit)
             sut.reset()
@@ -4708,7 +4935,8 @@ class BackupRepoTest : BaseUnitTest() {
         lightningService = lightningService,
         clock = clock,
         db = db,
-        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
+        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
+        vssClients = vssClients,
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)

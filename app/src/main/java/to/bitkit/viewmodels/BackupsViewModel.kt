@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.CacheStore
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.NodeLifecycleState
@@ -25,6 +26,7 @@ class BackupsViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val backupRepo: BackupRepo,
     private val lightningRepo: LightningRepo,
+    private val vssClients: VssClientCoordinator,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupStatusUiState())
@@ -63,9 +65,12 @@ class BackupsViewModel @Inject constructor(
     }
 
     fun retryBackup(category: BackupCategory) {
+        val owner = runCatching { vssClients.captureOwner() }.getOrNull() ?: return
         viewModelScope.launch {
-            delay(500) // small delay for UX feedback
-            backupRepo.triggerBackup(category)
+            vssClients.withWallet(owner) {
+                delay(500) // small delay for UX feedback
+                backupRepo.triggerBackup(category)
+            }
         }
     }
 }
