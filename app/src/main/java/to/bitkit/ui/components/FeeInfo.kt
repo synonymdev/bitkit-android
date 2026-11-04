@@ -1,6 +1,7 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -17,6 +18,7 @@ fun RowScope.FeeInfo(
     label: String,
     amount: Long,
     modifier: Modifier = Modifier,
+    prefix: String? = null,
 ) {
     Column(
         modifier = modifier
@@ -29,7 +31,10 @@ fun RowScope.FeeInfo(
             color = Colors.White64,
         )
         Spacer(modifier = Modifier.height(8.dp))
-        MoneySSB(sats = amount, showSymbol = true)
+        Row {
+            prefix?.let { BodySSB(text = "$it ", color = Colors.White64) }
+            MoneySSB(sats = amount, showSymbol = true)
+        }
         Spacer(modifier = Modifier.weight(1f))
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
     }

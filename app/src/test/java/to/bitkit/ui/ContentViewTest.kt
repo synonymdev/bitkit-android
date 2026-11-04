@@ -270,6 +270,25 @@ class ContentViewTest {
         assertTrue(navController.currentDestination?.hasRoute<Routes.Funding>() == true)
     }
 
+    @Test
+    fun `spending start route uses intro until seen`() {
+        assertEquals(Routes.SpendingIntro, transferSpendingStartRoute(hasSeenSpendingIntro = false))
+        assertEquals(Routes.SparkFundingNav, transferSpendingStartRoute(hasSeenSpendingIntro = true))
+    }
+
+    @Test
+    fun `setting up removes spending confirmation from the back stack`() {
+        val navController = transferNavController()
+        navController.navigateTo(Routes.SparkFundingNav)
+        navController.navigateTo(Routes.SpendingConfirm)
+
+        navController.navigateToSettingUp()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SettingUp>() == true)
+
+        navController.popBackStack()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SpendingAmount>() == true)
+    }
+
     private fun transferNavController(): NavHostController =
         NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
             navigatorProvider.addNavigator(ComposeNavigator())
@@ -281,6 +300,11 @@ class ContentViewTest {
                     composable<Routes.SavingsAvailability> {}
                     composable<Routes.SavingsProgress> {}
                     composable<Routes.Funding> {}
+                }
+                navigation<Routes.SparkFundingNav>(startDestination = Routes.SpendingAmount) {
+                    composable<Routes.SpendingAmount> {}
+                    composable<Routes.SpendingConfirm> {}
+                    composable<Routes.SettingUp> {}
                 }
             }
         }

@@ -1,5 +1,10 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.ClaimDeferredReason
+import breez_sdk_spark.ClaimDepositOutcome
+import breez_sdk_spark.ClaimDepositQuote
+import breez_sdk_spark.DepositInfo
+import breez_sdk_spark.FetchClaimDepositQuoteResponse
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateResponse
 import breez_sdk_spark.Payment
@@ -12,7 +17,9 @@ import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -34,9 +41,11 @@ import java.io.File
 import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import com.synonym.bitkitcore.PaymentType as ActivityPaymentType
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SparkRepoTest : BaseUnitTest() {
     private val sparkService = mock<SparkService>()
     private val activityRepo = mock<ActivityRepo>()
@@ -145,6 +154,153 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(false, deposit.isClaimed)
         assertEquals(2_500uL, sut.state.value.pendingDepositSats)
     }
+
+    @Test
+    fun `instant claims early at once when the offer is within the ceiling`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(ClaimDepositOutcome.Submitted)
+        whenever { sparkService.listPayments() }.thenReturn(emptyList(), listOf(depositPayment()))
+        val sut = createSut()
+
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        verify(sparkService).claimDeposit("txid", 0u, 300uL)
+        assertEquals(SparkDepositClaim.Claimed, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `instant asks the user when the early fee is over the ceiling`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
+        val sut = createSut()
+
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        val claim = assertIs<SparkDepositClaim.Repriced>(sut.depositClaims.value["txid"])
+        assertEquals(900uL, claim.offer.earlyFeeSats)
+        verify(sparkService, never()).claimDeposit(any(), any(), any())
+    }
+
+    @Test
+    fun `paying a repriced claim claims at the new fee`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 900uL) }.thenReturn(ClaimDepositOutcome.Submitted)
+        val sut = createSut()
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        sut.payRepricedClaim("txid")
+        advanceUntilIdle()
+
+        verify(sparkService).claimDeposit("txid", 0u, 900uL)
+        assertEquals(SparkDepositClaim.Adding, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `instant shows the new price when the claim comes back repriced`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+            ClaimDepositOutcome.Deferred(
+                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 450uL, maxFeeSats = 300uL)
+            )
+        )
+        val sut = createSut()
+
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        val claim = assertIs<SparkDepositClaim.Repriced>(sut.depositClaims.value["txid"])
+        assertEquals(450uL, claim.offer.earlyFeeSats)
+    }
+
+    @Test
+    fun `instant is unavailable when Spark offers only the standard claim`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = null))
+        val sut = createSut()
+
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        assertEquals(SparkDepositClaim.Unavailable, sut.depositClaims.value["txid"])
+        verify(sparkService, never()).claimDeposit(any(), any(), any())
+    }
+
+    @Test
+    fun `instant is unavailable when the provider declines the early claim`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+            ClaimDepositOutcome.Deferred(ClaimDeferredReason.ProviderDeclined("no"))
+        )
+        val sut = createSut()
+
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        assertEquals(SparkDepositClaim.Unavailable, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `later leaves the deposit to the claim at maturity`() = test {
+        val sut = createSut()
+
+        sut.followDepositClaim("txid", SparkClaimSpeed.Later, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        assertEquals(SparkDepositClaim.Later, sut.depositClaims.value["txid"])
+        verify(sparkService, never()).listUnclaimedDeposits()
+        verify(sparkService, never()).claimDeposit(any(), any(), any())
+    }
+
+    @Test
+    fun `instant says Spark has not seen the deposit when it is never listed`() = test {
+        val sut = createSut()
+
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        assertEquals(SparkDepositClaim.NotSeen, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `claim step follows the offer and the ceiling`() {
+        val choice = SparkClaimOffer.Choice("txid", 0u, earlyFeeSats = 300uL, 0u, 198uL, 3u)
+
+        assertEquals(SparkClaimStep.KeepLooking, SparkClaimStep.of(null, 500uL))
+        assertEquals(SparkClaimStep.ClaimEarly(choice), SparkClaimStep.of(choice, 300uL))
+        assertEquals(SparkClaimStep.Ask(choice), SparkClaimStep.of(choice, 299uL))
+        assertEquals(
+            SparkClaimStep.Unavailable,
+            SparkClaimStep.of(SparkClaimOffer.Standard("txid", 0u, 198uL, 3u), 500uL)
+        )
+        assertEquals(SparkClaimStep.Adding, SparkClaimStep.of(SparkClaimOffer.Automatic("txid", 0u, 250uL, 0u), 500uL))
+    }
+
+    private fun listDeposit() {
+        whenever { sparkService.listUnclaimedDeposits() }.thenReturn(
+            listOf(DepositInfo("txid", 0u, 50_000uL, false, null, null, null, null, null, null))
+        )
+    }
+
+    private fun quote(earlyFee: ULong?) = FetchClaimDepositQuoteResponse(
+        amountSats = 50_000uL,
+        confirmations = 0u,
+        instant = earlyFee?.let { ClaimDepositQuote(0u, 50_000uL - it, it, 200uL, false) },
+        mature = ClaimDepositQuote(3u, 49_802uL, 198uL, null, true),
+    )
+
+    private fun depositPayment() = sentPayment(fees = 300).copy(
+        id = "deposit",
+        paymentType = PaymentType.RECEIVE,
+        method = PaymentMethod.DEPOSIT,
+        details = PaymentDetails.Deposit(txId = "txid", vout = 0u),
+    )
 
     private fun sentPayment(fees: Int) = Payment(
         id = "send",

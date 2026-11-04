@@ -21,4 +21,10 @@ class SparkServiceTest {
         assertEquals(302uL, SparkService.maxDepositClaimFeeSats(fastestFeeRate = 1uL, amountSats = 2_500uL))
         assertEquals(327uL, SparkService.maxDepositClaimFeeSats(fastestFeeRate = 1uL, amountSats = 15_000uL))
     }
+
+    @Test
+    fun `later claim fee prices the mature claim at the half-hour rate`() {
+        // Run 2 quoted the mature claim at 198 sats at 2 sat/vB.
+        assertEquals(198uL, SparkService.matureDepositClaimFeeSats(halfHourFeeRate = 2uL))
+    }
 }

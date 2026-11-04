@@ -6,6 +6,10 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -16,12 +20,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -38,6 +44,8 @@ fun FundingScreen(
     onBackClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val hasSavings = LocalBalances.current.maxSendOnchainSats > 0uL
+    var showNoFundsAlert by remember { mutableStateOf(false) }
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__funding__nav_title),
@@ -69,7 +77,7 @@ fun FundingScreen(
                 R.drawable.ic_transfer,
                 20.dp,
                 "FundTransfer",
-                onTransfer
+                { if (hasSavings) onTransfer() else showNoFundsAlert = true },
             )
             FundingOption(
                 R.string.lightning__funding__button2,
@@ -114,6 +122,19 @@ fun FundingScreen(
                 .testTag("FundLearnMore")
         )
         VerticalSpacer(16.dp)
+        if (showNoFundsAlert) {
+            AppAlertDialog(
+                title = stringResource(R.string.lightning__no_funds__title),
+                text = stringResource(R.string.lightning__no_funds__description),
+                confirmText = stringResource(R.string.lightning__no_funds__fund_wallet),
+                confirmTextColor = Colors.Purple,
+                onConfirm = {
+                    showNoFundsAlert = false
+                    onFund()
+                },
+                onDismiss = { showNoFundsAlert = false },
+            )
+        }
     }
 }
 

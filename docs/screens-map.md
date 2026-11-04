@@ -135,6 +135,12 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure) › Transfer all funds to savings review |
 | SavingsIntroScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings |
 | SavingsProgressScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings progress 2 |
+| SettingUpScreen.kt | Funds In Transfer › Transfer to Spending Progress 1 |
+| SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
+| SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm |
+| SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Intro |
+| TransferIntroScreen.kt | Lightning Onboarding From Suggestion Card › Lightning onboarding Intro |
+| TransferLearnMoreScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Receiving Capacity |
 
 ## ui/screens/transfer/external
 
@@ -145,14 +151,6 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | ExternalConnectionScreen.kt | Manual Setup › Lightning Manual Setup |
 | ExternalSuccessScreen.kt | Manual Setup › Lightning Manual Done |
 | LnurlChannelScreen.kt | Third-party LSP › LSP LNBIG |
-
-## ui/screens/transfer/spark
-
-| Android | Figma |
-| - | - |
-| SparkAmountScreen.kt | `todo` |
-| SparkConfirmScreen.kt | `todo` |
-| SparkDepositScreen.kt | `todo` |
 
 ## ui/screens/transfer/hardware
 

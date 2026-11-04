@@ -141,16 +141,19 @@ import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
 import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
 import to.bitkit.ui.screens.transfer.SavingsProgressScreen
+import to.bitkit.ui.screens.transfer.SettingUpScreen
+import to.bitkit.ui.screens.transfer.SparkFundingViewModel
+import to.bitkit.ui.screens.transfer.SpendingAmountScreen
+import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
+import to.bitkit.ui.screens.transfer.SpendingIntroScreen
+import to.bitkit.ui.screens.transfer.TransferIntroScreen
+import to.bitkit.ui.screens.transfer.TransferLearnMoreScreen
 import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
-import to.bitkit.ui.screens.transfer.spark.SparkAmountScreen
-import to.bitkit.ui.screens.transfer.spark.SparkConfirmScreen
-import to.bitkit.ui.screens.transfer.spark.SparkDepositScreen
-import to.bitkit.ui.screens.transfer.spark.SparkFundingViewModel
 import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HardwareWalletScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
@@ -1032,6 +1035,24 @@ private fun RootNavHost(
         navigationWithDefaultTransitions<Routes.TransferRoot>(
             startDestination = Routes.SavingsIntro,
         ) {
+            deepLinkableComposable<Routes.TransferIntro> {
+                TransferIntroScreen(
+                    onContinueClick = {
+                        navController.navigateToTransferFunding()
+                        settingsViewModel.setHasSeenTransferIntro(true)
+                    },
+                    onBackClick = { navController.popBackStack() },
+                )
+            }
+            deepLinkableComposable<Routes.SpendingIntro> {
+                SpendingIntroScreen(
+                    onContinueClick = {
+                        navController.navigateTo(Routes.SparkFundingNav)
+                        settingsViewModel.setHasSeenSpendingIntro(true)
+                    },
+                    onBackClick = { navController.popBackStack() },
+                )
+            }
             deepLinkableComposable<Routes.SavingsIntro> {
                 SavingsIntroScreen(
                     onContinueClick = {
@@ -1074,9 +1095,10 @@ private fun RootNavHost(
             }
             deepLinkableComposable<Routes.Funding> {
                 val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
+                val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 FundingScreen(
                     canFundWithSpark = sparkState.isReady,
-                    onTransfer = { navController.navigateTo(Routes.SparkFundingNav) },
+                    onTransfer = { navController.navigateToTransferSpendingStart(hasSeenSpendingIntro) },
                     onFund = {
                         scope.launch {
                             navController.navigateToHome()
@@ -1089,28 +1111,43 @@ private fun RootNavHost(
                 )
             }
             navigationWithDefaultTransitions<Routes.SparkFundingNav>(
-                startDestination = Routes.SparkAmount,
+                startDestination = Routes.SpendingAmount,
             ) {
-                composableWithDefaultTransitions<Routes.SparkAmount> {
+                deepLinkableComposable<Routes.SpendingAmount> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
-                    SparkAmountScreen(
+                    val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
+                    SpendingAmountScreen(
                         viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
-                        onContinue = { navController.navigateTo(Routes.SparkConfirm) },
+                        isOffline = connectivityState != ConnectivityState.CONNECTED,
                         onBackClick = { navController.popBackStack() },
+                        onQuoteReady = { navController.navigateTo(Routes.SpendingConfirm) },
                     )
                 }
-                composableWithDefaultTransitions<Routes.SparkConfirm> {
+                composableWithDefaultTransitions<Routes.SpendingConfirm> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
-                    SparkConfirmScreen(
+                    val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
+                    SpendingConfirmScreen(
                         viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
-                        onSent = { navController.navigateTo(Routes.SparkDeposit) },
+                        isOffline = connectivityState != ConnectivityState.CONNECTED,
                         onBackClick = { navController.popBackStack() },
+                        onLearnMoreClick = { navController.navigateTo(Routes.TransferLearnMore) },
+                        onSent = { navController.navigateToSettingUp() },
                     )
                 }
-                composableWithDefaultTransitions<Routes.SparkDeposit> {
+                composableWithDefaultTransitions<Routes.TransferLearnMore> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
+                    val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
+                    TransferLearnMoreScreen(
+                        viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
+                        spendingBalanceSats = sparkState.balanceSats.toLong(),
+                        onBackClick = { navController.popBackStack() },
+                        onContinueClick = { navController.popBackStack() },
+                    )
+                }
+                composableWithDefaultTransitions<Routes.SettingUp> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
                     BackHandler { navController.navigateToHome() }
-                    SparkDepositScreen(
+                    SettingUpScreen(
                         viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
                         onContinueClick = { navController.navigateToHome() },
                     )
@@ -1247,6 +1284,7 @@ private fun NavGraphBuilder.home(
     }
     deepLinkableComposable<Routes.Savings> {
         val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
         val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
@@ -1257,7 +1295,7 @@ private fun NavGraphBuilder.home(
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
                 if (sparkState.isReady) {
-                    navController.navigateTo(Routes.SparkFundingNav)
+                    navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
                 }
@@ -1268,6 +1306,7 @@ private fun NavGraphBuilder.home(
     }
     deepLinkableComposable<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
@@ -1288,7 +1327,7 @@ private fun NavGraphBuilder.home(
             },
             onTransferFromSavingsClick = {
                 if (sparkState.isReady) {
-                    navController.navigateTo(Routes.SparkFundingNav)
+                    navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
                 }
@@ -2185,6 +2224,21 @@ internal fun receiveSheetPresentationKey(sheet: Sheet.Receive): String = sheet.p
 
 fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
 
+fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
+
+fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
+    navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
+
+internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {
+    hasSeenSpendingIntro -> Routes.SparkFundingNav
+    else -> Routes.SpendingIntro
+}
+
+/** Shows the transfer's progress in place of its confirm screen, so going back cannot swipe it again. */
+fun NavController.navigateToSettingUp() = navigateTo(Routes.SettingUp) {
+    popUpTo<Routes.SpendingConfirm> { inclusive = true }
+}
+
 fun NavController.navToActivityDetail(activity: Activity) = navigateTo(
     Routes.ActivityDetail(
         id = activity.rawId(),
@@ -2377,6 +2431,12 @@ sealed interface Routes {
     data object TransferRoot : Routes.DeepLinkable
 
     @Serializable
+    data object TransferIntro : Routes.DeepLinkable
+
+    @Serializable
+    data object SpendingIntro : Routes.DeepLinkable
+
+    @Serializable
     data object SavingsIntro : Routes.DeepLinkable
 
     @Serializable
@@ -2401,13 +2461,16 @@ sealed interface Routes {
     data object SparkFundingNav : Routes.InternalOnly
 
     @Serializable
-    data object SparkAmount : Routes.InternalOnly
+    data object SpendingAmount : Routes.DeepLinkable
 
     @Serializable
-    data object SparkConfirm : Routes.InternalOnly
+    data object SpendingConfirm : Routes.InternalOnly
 
     @Serializable
-    data object SparkDeposit : Routes.InternalOnly
+    data object TransferLearnMore : Routes.InternalOnly
+
+    @Serializable
+    data object SettingUp : Routes.InternalOnly
 
     @Serializable
     data class ExternalConnection(val scannedNodeUri: String? = null) : Routes.DeepLinkable

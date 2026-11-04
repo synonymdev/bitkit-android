@@ -20,6 +20,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -46,6 +47,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 import breez_sdk_spark.PaymentType as SparkPaymentType
 
 /**
@@ -63,6 +65,12 @@ class SparkRepo @Inject constructor(
     companion object {
         private const val TAG = "SparkRepo"
         private const val MSATS_PER_SAT = 1_000uL
+
+        /** How often to look at a deposit until its Instant claim is decided. */
+        private val CLAIM_POLL_INTERVAL = 5.seconds
+
+        /** Looks for 5 minutes before telling the user Spark hasn't seen the deposit yet. */
+        private const val CLAIM_POLL_ATTEMPTS = 60
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -74,6 +82,14 @@ class SparkRepo @Inject constructor(
     private val sendsRecordedWithoutFee = ConcurrentHashMap.newKeySet<String>()
 
     private var eventsJob: Job? = null
+
+    /** Watchers of the claims of deposits this app sent, by txid; they outlive the screens that start them. */
+    private val claimJobs = ConcurrentHashMap<String, Job>()
+
+    private val _depositClaims = MutableStateFlow<Map<String, SparkDepositClaim>>(emptyMap())
+
+    /** Where the claim of each deposit sent from the transfer flow stands, by txid. */
+    val depositClaims: StateFlow<Map<String, SparkDepositClaim>> = _depositClaims.asStateFlow()
 
     private val _state = MutableStateFlow(SparkState(isSupported = sparkService.isSupported))
     val state: StateFlow<SparkState> = _state.asStateFlow()
@@ -143,9 +159,81 @@ class SparkRepo @Inject constructor(
         }
     }
 
-    /** Estimates what Spark keeps from a deposit to claim it, the way the SDK does before the provider quotes it. */
+    /** The most an Instant claim of a deposit of [amountSats] may cost: the ceiling the user accepts. */
     suspend fun estimateDepositClaimFeeSats(amountSats: ULong): Result<ULong> = withContext(bgDispatcher) {
         runSuspendCatching { SparkService.maxDepositClaimFeeSats(sparkService.fastestFeeRate(), amountSats) }
+    }
+
+    /** What Spark keeps to claim a deposit at 3 confirmations, at the current half-hour fee rate. */
+    suspend fun estimateMatureClaimFeeSats(): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching { SparkService.matureDepositClaimFeeSats(sparkService.halfHourFeeRate()) }
+    }
+
+    /**
+     * Follows the claim of the deposit in [txid] that the user sent at [speed]. Instant claims it early as soon as
+     * Spark offers that within [ceilingSats], and asks the user when it costs more; Later leaves it to the claim at
+     * maturity. Runs in the app scope, so leaving the transfer screens does not drop an Instant claim.
+     */
+    fun followDepositClaim(txid: String, speed: SparkClaimSpeed, ceilingSats: ULong) {
+        claimJobs.remove(txid)?.cancel()
+        when (speed) {
+            SparkClaimSpeed.Later -> setDepositClaim(txid, SparkDepositClaim.Later)
+            SparkClaimSpeed.Instant -> {
+                setDepositClaim(txid, SparkDepositClaim.Looking)
+                claimJobs[txid] = scope.launch { claimInstantly(txid, ceilingSats) }
+            }
+        }
+    }
+
+    /** Accepts the repriced Instant claim of [txid], at the fee the provider asks now. */
+    fun payRepricedClaim(txid: String) {
+        val repriced = _depositClaims.value[txid] as? SparkDepositClaim.Repriced ?: return
+        followDepositClaim(txid, SparkClaimSpeed.Instant, repriced.offer.earlyFeeSats)
+    }
+
+    /** Leaves the deposit in [txid] to the claim at 3 confirmations. */
+    fun waitForMatureClaim(txid: String) {
+        claimJobs.remove(txid)?.cancel()
+        setDepositClaim(txid, SparkDepositClaim.Later)
+    }
+
+    private suspend fun claimInstantly(txid: String, ceilingSats: ULong) {
+        var isSeen = false
+        repeat(CLAIM_POLL_ATTEMPTS) {
+            runSuspendCatching { refresh() }
+                .onFailure { Logger.warn("Failed to refresh Spark state", it, context = TAG) }
+            if (isClaimed(txid)) {
+                setDepositClaim(txid, SparkDepositClaim.Claimed)
+                return
+            }
+            if (_depositClaims.value[txid] != SparkDepositClaim.Adding) {
+                val offer = depositClaimOffer(txid)
+                    .onFailure { Logger.warn("Failed to quote Spark deposit '$txid'", it, context = TAG) }
+                    .getOrNull()
+                if (offer != null) isSeen = true
+                val claim = when (val step = SparkClaimStep.of(offer, ceilingSats)) {
+                    SparkClaimStep.KeepLooking -> null
+                    SparkClaimStep.Adding -> SparkDepositClaim.Adding
+                    SparkClaimStep.Unavailable -> SparkDepositClaim.Unavailable
+                    is SparkClaimStep.Ask -> SparkDepositClaim.Repriced(step.offer)
+                    is SparkClaimStep.ClaimEarly -> claimEarly(step.offer).getOrNull()?.toDepositClaim(step.offer)
+                }
+                if (claim != null) setDepositClaim(txid, claim)
+                if (claim?.isFinal == true) return
+            }
+            delay(CLAIM_POLL_INTERVAL)
+        }
+        if (_depositClaims.value[txid] == SparkDepositClaim.Adding) return
+        Logger.warn("Stopped looking for the Instant claim of Spark deposit '$txid'", context = TAG)
+        setDepositClaim(txid, if (isSeen) SparkDepositClaim.Unavailable else SparkDepositClaim.NotSeen)
+    }
+
+    private fun isClaimed(txid: String): Boolean =
+        _state.value.deposits.any { it.isClaimed && it.txid.equals(txid, ignoreCase = true) }
+
+    private fun setDepositClaim(txid: String, claim: SparkDepositClaim) {
+        Logger.debug("Set claim of Spark deposit '$txid' to '$claim'", context = TAG)
+        _depositClaims.update { it + (txid to claim) }
     }
 
     /** How the deposit in [txid] can be claimed, or null while Spark has not seen it yet. */
@@ -541,4 +629,76 @@ sealed interface SparkEarlyClaim {
             }
         }
     }
+}
+
+/** How fast the user wants a deposit in the spending balance. */
+enum class SparkClaimSpeed {
+    /** Pays the provider to add it before confirmations, up to the ceiling the user accepted. */
+    Instant,
+
+    /** Waits for 3 confirmations, at the lower fee of the claim at maturity. */
+    Later,
+}
+
+/** Where the claim of a deposit the user sent stands. */
+sealed interface SparkDepositClaim {
+    /** Spark has not listed the deposit yet, or offers no early claim at this depth. */
+    data object Looking : SparkDepositClaim
+
+    /** The early claim is under way and the deposit reaches the balance shortly. */
+    data object Adding : SparkDepositClaim
+
+    /** The deposit is in the spending balance. */
+    data object Claimed : SparkDepositClaim
+
+    /** The early claim now costs more than the user accepted; it waits for the user to pay it or wait. */
+    data class Repriced(val offer: SparkClaimOffer.Choice) : SparkDepositClaim
+
+    /** No early claim for this deposit, so Spark adds it after 3 confirmations. */
+    data object Unavailable : SparkDepositClaim
+
+    /** The user chose to wait for 3 confirmations. */
+    data object Later : SparkDepositClaim
+
+    /** Spark did not list the deposit in time; it still adds it after 3 confirmations. */
+    data object NotSeen : SparkDepositClaim
+
+    /** Whether nothing more is asked of the provider for this deposit. */
+    val isFinal: Boolean get() = this !is Looking && this !is Adding
+}
+
+/** What an Instant transfer does with the claim [SparkClaimOffer] Spark has for its deposit. */
+sealed interface SparkClaimStep {
+    /** Not listed yet: look again. */
+    data object KeepLooking : SparkClaimStep
+
+    /** The early claim fits the user's cap, so Spark makes it by itself. */
+    data object Adding : SparkClaimStep
+
+    /** No early claim on offer. */
+    data object Unavailable : SparkClaimStep
+
+    /** Within the ceiling the user accepted: claim it now. */
+    data class ClaimEarly(val offer: SparkClaimOffer.Choice) : SparkClaimStep
+
+    /** Above the ceiling: ask the user. */
+    data class Ask(val offer: SparkClaimOffer.Choice) : SparkClaimStep
+
+    companion object {
+        fun of(offer: SparkClaimOffer?, ceilingSats: ULong): SparkClaimStep = when (offer) {
+            null -> KeepLooking
+            is SparkClaimOffer.Automatic -> Adding
+            is SparkClaimOffer.Standard -> Unavailable
+            is SparkClaimOffer.Choice if offer.earlyFeeSats <= ceilingSats -> ClaimEarly(offer)
+            is SparkClaimOffer.Choice -> Ask(offer)
+        }
+    }
+}
+
+/** What accepting the early claim of [offer] leaves the deposit at. */
+fun SparkEarlyClaim.toDepositClaim(offer: SparkClaimOffer.Choice): SparkDepositClaim = when (this) {
+    SparkEarlyClaim.Claimed -> SparkDepositClaim.Adding
+    SparkEarlyClaim.Waiting -> SparkDepositClaim.Looking
+    is SparkEarlyClaim.Repriced -> SparkDepositClaim.Repriced(offer.copy(earlyFeeSats = requiredFeeSats))
+    SparkEarlyClaim.Declined -> SparkDepositClaim.Unavailable
 }

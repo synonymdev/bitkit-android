@@ -64,7 +64,7 @@ class SparkService @Inject constructor(
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
         private const val DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB = 2uL
 
-        /** Share of a deposit, in parts per million, that an automatic deposit claim may pay on top. */
+        /** Share of a deposit, in parts per million, that an Instant claim may pay on top of its on-chain fee. */
         private const val DEPOSIT_CLAIM_FEE_PPM = 2_000u
 
         private const val PPM_DIVISOR = 1_000_000uL
@@ -73,8 +73,9 @@ class SparkService @Inject constructor(
         private const val CLAIM_TX_SIZE_VBYTES = 99uL
 
         /**
-         * The most Spark may keep to claim a deposit of [amountSats] under this wallet's fee cap, at the fastest
-         * recommended fee rate [fastestFeeRate]. The provider quotes the real fee only once the deposit exists.
+         * The most an Instant claim of a deposit of [amountSats] may cost, at the fastest recommended fee rate
+         * [fastestFeeRate]: the ceiling the user accepts. The provider quotes the real fee only once the deposit
+         * exists.
          */
         fun maxDepositClaimFeeSats(fastestFeeRate: ULong, amountSats: ULong): ULong {
             val rate = fastestFeeRate.safe() + DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB.safe()
@@ -82,6 +83,10 @@ class SparkService @Inject constructor(
             val proportional = amountSats.safe() * DEPOSIT_CLAIM_FEE_PPM.toULong().safe() / PPM_DIVISOR
             return onchain.safe() + proportional.safe()
         }
+
+        /** What Spark keeps to claim a deposit at 3 confirmations, at the half-hour fee rate [halfHourFeeRate]. */
+        fun matureDepositClaimFeeSats(halfHourFeeRate: ULong): ULong =
+            halfHourFeeRate.safe() * CLAIM_TX_SIZE_VBYTES.safe()
 
         /**
          * Returns as soon as the payment starts, like ldk-node, so its completion reaches callers as an event they
@@ -121,9 +126,11 @@ class SparkService @Inject constructor(
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         val config = defaultConfig(network).apply {
             apiKey = Env.breezApiKey
+            // Lowering it below the spread keeps the deposit from being claimed early, and does not hold back its
+            // claim at maturity.
             maxDepositClaimFee = MaxFee(
                 onchain = MaxOnchainFee.NetworkRecommended(DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB),
-                proportionalPpm = DEPOSIT_CLAIM_FEE_PPM,
+                proportionalPpm = null,
             )
         }
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
@@ -197,6 +204,9 @@ class SparkService @Inject constructor(
 
     /** The fastest recommended fee rate, in sat/vB, from the SDK's own fee source. */
     suspend fun fastestFeeRate(): ULong = requireSdk().recommendedFees().fastestFee
+
+    /** The half-hour recommended fee rate, in sat/vB, from the SDK's own fee source. */
+    suspend fun halfHourFeeRate(): ULong = requireSdk().recommendedFees().halfHourFee
 
     suspend fun listUnclaimedDeposits(): List<DepositInfo> =
         requireSdk().listUnclaimedDeposits(ListUnclaimedDepositsRequest).deposits
