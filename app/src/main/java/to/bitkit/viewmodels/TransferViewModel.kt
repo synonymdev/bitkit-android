@@ -39,7 +39,6 @@ import to.bitkit.models.TransferType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
-import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -58,7 +57,6 @@ const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
 class TransferViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
-    private val walletRepo: WalletRepo,
     private val transferRepo: TransferRepo,
     private val boltzService: BoltzService,
     private val sparkRepo: SparkRepo,
@@ -118,8 +116,9 @@ class TransferViewModel @Inject constructor(
      * thing that unlocks the swap, so every failure simply leaves it null and the transfer
      * falls back to closing a channel.
      * Cancels any in-flight quote so a slower earlier request cannot overwrite a newer one.
+     * [channelSendableSat] is what the selected channels can send, so Spark's balance never sizes the swap.
      */
-    fun loadSavingsSwapQuote(requestedSat: ULong) {
+    fun loadSavingsSwapQuote(requestedSat: ULong, channelSendableSat: ULong) {
         if (!boltzService.isSwapSupported) return
         savingsSwapQuoteJob?.cancel()
         if (requestedSat == 0uL) {
@@ -150,7 +149,7 @@ class TransferViewModel @Inject constructor(
             // Reserve headroom for Lightning routing fees. Paying an invoice for 100% of
             // outbound capacity leaves nothing for fees and fails with RouteNotFound, so cap
             // the swap at outbound minus ~1% (with a small floor).
-            val spendable = walletRepo.balanceState.value.maxSendLightningSats.toLong()
+            val spendable = channelSendableSat.toLong()
             val routingReserve = (spendable / 100).coerceAtLeast(MIN_LN_ROUTING_FEE_RESERVE_SATS)
             val sendable = (spendable - routingReserve).coerceAtLeast(0).toULong()
             val maxSat = minOf(requestedSat, limits.maximalSat, sendable)
@@ -321,11 +320,10 @@ class TransferViewModel @Inject constructor(
     /** One Savings address for Spark's withdrawal, priced on the confirm screen and then paid to. */
     private suspend fun sparkWithdrawAddress(): String? {
         sparkAddress?.let { return it }
-        val address = walletRepo.getOnchainAddress().ifBlank { null }
-            ?: lightningRepo.newAddress()
-                .onFailure { Logger.error("Failed to get address for Spark withdrawal", it, context = TAG) }
-                .getOrNull()
-        return address?.also { sparkAddress = it }
+        return lightningRepo.newAddress()
+            .onFailure { Logger.error("Failed to get address for Spark withdrawal", it, context = TAG) }
+            .getOrNull()
+            ?.also { sparkAddress = it }
     }
 
     /**
@@ -363,7 +361,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun withdrawSparkToSavings() {
-        sparkFeeJob?.cancel()
+        sparkFeeJob?.join()
         val balance = sparkRepo.state.value.spendingSats
         if (balance == 0uL) return
         val address = sparkWithdrawAddress() ?: return

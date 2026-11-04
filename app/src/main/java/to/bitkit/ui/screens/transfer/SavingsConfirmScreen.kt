@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.filterOpen
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.safe
 import to.bitkit.ui.components.AmountSlider
 import to.bitkit.ui.components.ButtonSize
@@ -102,7 +103,7 @@ fun SavingsConfirmScreen(
     // Present the swap fee before the user commits. Recomputed when the amount changes.
     // A zero amount clears an earlier quote, so a Spark-only transfer never swaps channel funds.
     LaunchedEffect(channelsAmount) {
-        transfer.loadSavingsSwapQuote(channelsAmount)
+        transfer.loadSavingsSwapQuote(channelsAmount, channels.totalNextOutboundHtlcLimitSats())
     }
 
     LaunchedEffect(withdrawsSpark, sparkSats) {
