@@ -43,13 +43,17 @@ class OnchainInputSpendTest {
                 inputs = listOf(guarded),
                 outputAddresses = listOf("bcrt1qown", null),
                 isFinal = true,
+                confirmations = 6u,
             ),
-            onchainInputSpend(payment(PaymentStatus.SUCCEEDED, confirmed), details, listOf(guarded)),
+            onchainInputSpend(payment(PaymentStatus.SUCCEEDED, confirmed), details, listOf(guarded), 105u),
         )
-        val confirming = onchainInputSpend(payment(PaymentStatus.PENDING, confirmed), details, listOf(guarded))
+        val confirming = onchainInputSpend(payment(PaymentStatus.PENDING, confirmed), details, listOf(guarded), 101u)
         assertFalse(requireNotNull(confirming).isFinal)
+        assertEquals(2u, confirming.confirmations)
         val unconfirmed = payment(PaymentStatus.SUCCEEDED, ConfirmationStatus.Unconfirmed)
-        assertFalse(requireNotNull(onchainInputSpend(unconfirmed, details, listOf(guarded))).isFinal)
+        val pending = requireNotNull(onchainInputSpend(unconfirmed, details, listOf(guarded), 105u))
+        assertFalse(pending.isFinal)
+        assertEquals(0u, pending.confirmations)
     }
 
     @Test

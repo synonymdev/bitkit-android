@@ -532,35 +532,30 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     /**
-     * Removes the unproven Shop proof of an attempt a final wallet spend cancelled, so the request is not left started.
-     * Its candidates may have exposed the private address, so that payment list version stays consumed.
+     * Removes the proof of an attempt a final wallet spend cancelled, so the request is not left started. Every
+     * candidate spends a coin that spend took, so none can confirm, and a proof built from a candidate, even one
+     * already marked accepted, proves no payment. A proof naming another transaction or wallet may be a payment by
+     * another route, so it stays, and as the guard does not hold it, the release goes ahead. Its candidates may have
+     * exposed the private address, so that payment list version stays consumed. False only when the proofs cannot be
+     * saved.
      */
     internal suspend fun removeCancelledOnchainProof(attempt: OnchainSendAttempt): Boolean {
         if (attempt.requestId == null) return true
-        return runSuspendCatching { removeOriginalShopProofs(attempt) }
+        return runSuspendCatching { removeCandidateShopProofs(attempt) }
             .onFailure { Logger.warn("Failed to remove cancelled Shop proof", it, context = TAG) }
-            .getOrDefault(false)
+            .isSuccess
     }
 
-    private suspend fun removeOriginalShopProofs(attempt: OnchainSendAttempt): Boolean = operationMutex.withLock {
+    private suspend fun removeCandidateShopProofs(attempt: OnchainSendAttempt) = operationMutex.withLock {
         val proofs = loadProofs()
-        val original = proofs.filter {
-            it.kind == PaykitPaymentProofKind.Onchain && it.requestId == attempt.requestId &&
-                PubkyPublicKeyFormat.matches(it.identity, requireNotNull(attempt.payerIdentity))
-        }
-        val safe = original.all { proof ->
-            // A dispatched payment's proof may name one of its candidates; before dispatch no identifier is expected
+        val original = proofs.filter { proof ->
             val identifier = proof.paymentIdentifier
-            val namesOwnCandidate = identifier == null || attempt.initialDispatchAttempted &&
-                attempt.candidateTxids.any { it.equals(identifier, ignoreCase = true) }
-            val matchesPayment = !proof.paymentStarted ||
-                (proof.onchainAddress == attempt.address && proof.onchainAmountSats == attempt.amountSats)
-            proof.onchainWalletId == attempt.walletId && proof.proofData == null &&
-                !proof.onchainAcceptanceVerified && namesOwnCandidate && matchesPayment
+            proof.kind == PaykitPaymentProofKind.Onchain && proof.requestId == attempt.requestId &&
+                PubkyPublicKeyFormat.matches(proof.identity, requireNotNull(attempt.payerIdentity)) &&
+                proof.onchainWalletId == attempt.walletId &&
+                (identifier == null || attempt.candidateTxids.any { it.equals(identifier, ignoreCase = true) })
         }
-        if (!safe) return@withLock false
         if (original.isNotEmpty()) persist(proofs - original.toSet())
-        true
     }
 
     private suspend fun quoteDeadlinePassed(request: PaykitPaymentRequest, identity: String, now: Instant): Boolean {

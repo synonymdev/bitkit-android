@@ -75,6 +75,8 @@ data class OnchainInputSpend(
     val outputAddresses: List<String?>,
     /** Confirmed at the node's anti-reorg depth, so no conflicting candidate can replace it. */
     val isFinal: Boolean,
+    /** Blocks that include it, counting its own; 0 while unconfirmed. */
+    val confirmations: UInt = 0u,
 )
 
 @Serializable
@@ -115,6 +117,11 @@ data class OnchainSendAttempt(
     // app that predates them has neither.
     val releaseFeeRateSatsPerVByte: ULong? = null,
     val releaseMiningFeeSats: ULong? = null,
+    // The latest Cancel payment, saved before it is broadcast, and the highest fee rate and fee any of them paid, so
+    // a reopened Payment Pending neither retries beside it nor sends a replacement that pays less.
+    val cancellationTxid: String? = null,
+    val cancellationFeeRateSatsPerVByte: ULong? = null,
+    val cancellationMiningFeeSats: ULong? = null,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -150,6 +157,23 @@ data class OnchainSendAttempt(
     val highestCandidateFee: ULong
         get() = maxOf(candidateMiningFees.values.maxOrNull() ?: 0uL, verifiedWinningFeeSats ?: 0uL)
 
+    /** A recorded release or Cancel payment may have reached a mempool, so it may still confirm. */
+    val hasSentCancellation: Boolean
+        get() = releaseTxid != null || cancellationTxid != null
+
+    /** The highest fee rate a candidate, the release or a Cancel payment over these coins is known to pay. */
+    val highestSpendFeeRate: ULong
+        get() = listOfNotNull(
+            feeRateSatsPerVByte,
+            candidateFeeRates.values.maxOrNull(),
+            releaseFeeRateSatsPerVByte,
+            cancellationFeeRateSatsPerVByte,
+        ).max()
+
+    /** The highest absolute fee a candidate, the release or a Cancel payment over these coins is known to pay. */
+    val highestSpendFee: ULong
+        get() = listOfNotNull(highestCandidateFee, releaseMiningFeeSats, cancellationMiningFeeSats).max()
+
     /** A transfer to spending that pays a Blocktank order, which Bitkit no longer buys. */
     val isBlocktankFunding: Boolean
         get() = requestId == null && isTransfer && orderId != null
@@ -178,12 +202,13 @@ class OnchainSendAbandonSyncError : AppError("The on-chain wallet could not sync
 class OnchainSendAbandonPendingError : AppError("The release transaction was sent but is not confirmed yet.")
 
 /**
- * A Cancel payment spends only the original's coins, so after a release that added other coins it can pay a higher
- * rate and still too little in total. Nodes holding the release refuse a replacement that does not pay more than it
- * by at least its own size at 1 sat/vB. Any rate above [feeRate] pays enough.
+ * A Cancel payment replaces the candidates, and any release or earlier Cancel payment, a node may still hold. Nodes
+ * refuse a replacement that pays a lower fee rate than one of them, or that does not pay more than its fee by at
+ * least its own size at 1 sat/vB, which a Cancel payment over only the original's coins can miss at a higher rate.
+ * Any rate above [feeRate] pays enough.
  */
-class OnchainSendCancelUnderbidsReleaseError(val feeRate: ULong) :
-    AppError("A Cancel payment must pay a higher fee than this payment's release.")
+class OnchainSendCancelUnderbidsError(val feeRate: ULong) :
+    AppError("A Cancel payment must pay more than the transactions it replaces.")
 
 /**
  * A release must spend at least one of the original's coins and pay more than any candidate, so it replaces a
@@ -555,10 +580,15 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
-    /** Dispatch a spend of the guarded inputs back to this wallet only while no candidate has positive evidence. */
+    /**
+     * Dispatch a spend of the guarded inputs back to this wallet only while no candidate has positive evidence. It is
+     * saved first, so a restart cannot forget a cancellation that may have reached a mempool; only a refusal undoes
+     * that.
+     */
     suspend fun broadcastCancellation(
         attemptId: String,
         walletIndex: Int,
+        cancellation: OnchainPreparedReceipt,
         broadcast: suspend () -> OnchainSendOutcome,
     ): OnchainSendOutcome = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
@@ -567,10 +597,56 @@ class OnchainSendAttemptStore @Inject constructor(
                 throw OnchainSendBlockedError(current)
             }
             if (!current.isUnresolved || attemptId in inFlightPreparations) throw OnchainSendBlockedError(current)
+            val txid = cancellation.txid.lowercase()
+            require(txid.matches(Regex("[0-9a-f]{64}")) && txid !in current.candidateTxids)
+            persist(current.withCancellation(txid, cancellation.feeRateSatsPerVByte, cancellation.miningFeeSats))
             // Observation waits on this mutex, so no candidate gains positive evidence before dispatch.
-            broadcast()
+            val outcome = broadcast()
+            if (outcome is OnchainSendOutcome.Rejected) {
+                // A refused cancellation reached no mempool through this node, so the earlier record stands.
+                loadWithRetainedAccepted(walletIndex)?.takeIf { it.attemptId == attemptId }?.let {
+                    persist(
+                        it.copy(
+                            cancellationTxid = current.cancellationTxid,
+                            cancellationFeeRateSatsPerVByte = current.cancellationFeeRateSatsPerVByte,
+                            cancellationMiningFeeSats = current.cancellationMiningFeeSats,
+                        )
+                    )
+                }
+            }
+            outcome
         }
     }
+
+    /**
+     * Replaces the pending cancellation [txid] at [feeRate] through [bump], which keeps every output in this wallet,
+     * and saves the replacement as the cancellation.
+     */
+    suspend fun bumpCancellation(
+        attemptId: String,
+        walletIndex: Int,
+        feeRate: ULong,
+        bump: suspend () -> String,
+    ): String = withContext(ioDispatcher + NonCancellable) {
+        mutex.withLock {
+            val current = loadWithRetainedAccepted(walletIndex)
+            if (current?.attemptId != attemptId || walletIndex != lightningService.currentWalletIndex ||
+                !current.isUnresolved || attemptId in inFlightPreparations
+            ) {
+                throw OnchainSendBlockedError(current)
+            }
+            val txid = bump().lowercase()
+            require(txid.matches(Regex("[0-9a-f]{64}")) && txid !in current.candidateTxids)
+            persist(current.withCancellation(txid, feeRate, null))
+            txid
+        }
+    }
+
+    private fun OnchainSendAttempt.withCancellation(txid: String, feeRate: ULong?, fee: ULong?) = copy(
+        cancellationTxid = txid,
+        cancellationFeeRateSatsPerVByte = listOfNotNull(cancellationFeeRateSatsPerVByte, feeRate).maxOrNull(),
+        cancellationMiningFeeSats = listOfNotNull(cancellationMiningFeeSats, fee).maxOrNull(),
+    )
 
     /**
      * Release an unresolved guard only on positive evidence that no candidate can ever confirm: a final wallet
@@ -725,11 +801,14 @@ class OnchainSendAttemptStore @Inject constructor(
                     preparationPending = attempt.preparationPending,
                     verifiedWinningFeeSats = attempt.verifiedWinningFeeSats,
                     initialDispatchAttempted = attempt.initialDispatchAttempted,
-                    // A local release approval and its transaction are not part of the shared backup record.
+                    // A local release approval, its release and Cancel payments are not in the shared backup record.
                     releaseApproved = attempt.releaseApproved,
                     releaseTxid = attempt.releaseTxid,
                     releaseFeeRateSatsPerVByte = attempt.releaseFeeRateSatsPerVByte,
                     releaseMiningFeeSats = attempt.releaseMiningFeeSats,
+                    cancellationTxid = attempt.cancellationTxid,
+                    cancellationFeeRateSatsPerVByte = attempt.cancellationFeeRateSatsPerVByte,
+                    cancellationMiningFeeSats = attempt.cancellationMiningFeeSats,
                 ) == attempt
                 check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
                     "Cannot change a restored on-chain operation's original context"

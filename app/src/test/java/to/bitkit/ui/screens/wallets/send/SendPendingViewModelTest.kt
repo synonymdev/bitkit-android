@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -25,18 +26,20 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainInputSpend
 import to.bitkit.repositories.OnchainOriginalPaidError
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAbandonPendingError
 import to.bitkit.repositories.OnchainSendAbandonRefusedError
 import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendBlockedError
-import to.bitkit.repositories.OnchainSendCancelUnderbidsReleaseError
+import to.bitkit.repositories.OnchainSendCancelUnderbidsError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendOutcome
@@ -45,6 +48,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.SanityWarning
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -78,6 +82,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(Exception("not found")))
         whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         whenever { lightningRepo.findOnchainSendCancellation(any()) }.thenReturn(Result.success(null))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.failure(AppError("offline")))
         sut = createViewModel()
     }
 
@@ -477,9 +482,11 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.cancellationFailed)
         assertFalse(sut.uiState.value.isGuardReleased)
         assertEquals(original, sut.uiState.value.recoveryAttempt)
-        assertTrue(sut.uiState.value.canCancel)
+        // The sent cancellation holds the original's coins, so it is sped up rather than cancelled again
+        assertFalse(sut.uiState.value.canCancel)
+        assertTrue(sut.uiState.value.canSpeedUpCancellation)
         assertFalse(sut.uiState.value.canRetry)
-        assertEquals(5uL, sut.uiState.value.suggestedFeeRate(RecoveryAction.Cancel))
+        assertEquals(5uL, sut.uiState.value.suggestedFeeRate(RecoveryAction.SpeedUpCancellation))
 
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(null)
         attemptUpdates.value += 1
@@ -491,7 +498,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `reopened confirming cancellation stays replaceable over the original inputs and guarded`() = test {
+    fun `reopened confirming cancellation can be sped up and stays guarded`() = test {
         val original = pendingOriginal().copy(candidateFeeRates = mapOf("ab".repeat(32) to 3uL))
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
         val confirming = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false)
@@ -504,23 +511,25 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertEquals(cancelTxid, reopened.cancellationTxid)
         assertEquals(original, reopened.recoveryAttempt)
         assertFalse(reopened.isGuardReleased)
-        assertTrue(reopened.canCancel)
+        assertFalse(reopened.canCancel)
+        assertTrue(reopened.canSpeedUpCancellation)
+        assertFalse(reopened.isReleaseStalled)
         assertFalse(reopened.canRetry)
         assertFalse(reopened.canRetryWithoutChecking)
-        assertEquals(4uL, reopened.suggestedFeeRate(RecoveryAction.Cancel))
+        assertEquals(4uL, reopened.suggestedFeeRate(RecoveryAction.SpeedUpCancellation))
 
         val replacementTxid = "cd".repeat(32)
-        sut.cancelOriginal(6uL) { retained, fee ->
+        sut.speedUpCancellation(6uL) { retained, fee ->
             assertEquals(original, retained)
             assertEquals(6uL, fee)
-            Result.success(OnchainSendOutcome.Accepted(replacementTxid))
+            Result.success(replacementTxid)
         }
         advanceUntilIdle()
 
         val replaced = sut.uiState.value
         assertEquals(replacementTxid, replaced.cancellationTxid)
-        assertTrue(replaced.canCancel)
-        assertEquals(7uL, replaced.suggestedFeeRate(RecoveryAction.Cancel))
+        assertTrue(replaced.canSpeedUpCancellation)
+        assertEquals(7uL, replaced.suggestedFeeRate(RecoveryAction.SpeedUpCancellation))
         assertEquals(original, replaced.recoveryAttempt)
         assertFalse(replaced.isGuardReleased)
     }
@@ -538,7 +547,65 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertEquals(cancelTxid, sut.uiState.value.cancellationTxid)
         assertEquals(original, sut.uiState.value.recoveryAttempt)
         assertFalse(sut.uiState.value.canCancel)
+        assertFalse(sut.uiState.value.canSpeedUpCancellation)
         assertFalse(sut.uiState.value.canRetry)
+        // Final, yet the guard is still held, so Pending says the release is unfinished instead of waiting for 6
+        assertTrue(sut.uiState.value.isReleaseStalled)
+    }
+
+    @Test
+    fun `reopened payment with a saved Cancel payment never retries beside it and outbids it`() = test {
+        val original = requestOriginal().copy(
+            cancellationTxid = cancelTxid,
+            cancellationFeeRateSatsPerVByte = 8uL,
+            cancellationMiningFeeSats = 1_200uL,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+
+        val reopened = sut.uiState.value
+        assertFalse(reopened.canRetry)
+        assertFalse(reopened.canRetryWithoutChecking)
+        // The wallet does not hold it, so it may have dropped out and a replacement can still be built
+        assertTrue(reopened.canCancel)
+        assertEquals(9uL, reopened.suggestedFeeRate(RecoveryAction.Cancel))
+    }
+
+    @Test
+    fun `Cancel payment suggests at least the normal fee rate`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(lightningRepo.getFeeRateForSpeed(TransactionSpeed.Medium, null)).thenReturn(Result.success(12uL))
+
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+
+        assertEquals(12uL, sut.uiState.value.suggestedFeeRate(RecoveryAction.Cancel))
+        assertEquals(original.feeRateSatsPerVByte, sut.uiState.value.suggestedFeeRate(RecoveryAction.Retry))
+        val pricey = SendPendingUiState(recoveryAttempt = original, normalFeeRate = 5_000uL)
+        assertEquals(OnchainRecoveryFeeRate.maximum, pricey.suggestedFeeRate(RecoveryAction.Cancel))
+    }
+
+    @Test
+    fun `a failed speed-up says so and suggests a rate that outbids`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        val confirming = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false, 2u)
+        whenever(lightningRepo.findOnchainSendCancellation(original)).thenReturn(Result.success(confirming))
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        assertEquals(2u, sut.uiState.value.cancellationConfirmations)
+
+        sut.speedUpCancellation(3uL) { _, _ -> Result.failure(OnchainSendCancelUnderbidsError(9uL)) }
+        advanceUntilIdle()
+
+        val failed = sut.uiState.value
+        assertTrue(failed.speedUpFailed)
+        assertEquals(10uL, failed.suggestedFeeRate(RecoveryAction.SpeedUpCancellation))
+        assertEquals(cancelTxid, failed.cancellationTxid)
+        assertTrue(failed.canSpeedUpCancellation)
     }
 
     @Test
@@ -559,7 +626,8 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertTrue(failed.isEarlierCancellationPending)
         assertEquals(cancelTxid, failed.cancellationTxid)
         assertEquals(original, failed.recoveryAttempt)
-        assertTrue(failed.canCancel)
+        assertFalse(failed.canCancel)
+        assertTrue(failed.canSpeedUpCancellation)
         assertFalse(failed.isGuardReleased)
     }
 
@@ -752,7 +820,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         sut.initOnchain(released.txid, amount)
         advanceUntilIdle()
 
-        sut.cancelOriginal(6uL) { _, _ -> Result.failure(OnchainSendCancelUnderbidsReleaseError(feeRate = 8uL)) }
+        sut.cancelOriginal(6uL) { _, _ -> Result.failure(OnchainSendCancelUnderbidsError(feeRate = 8uL)) }
         advanceUntilIdle()
 
         val underbid = sut.uiState.value
@@ -780,7 +848,8 @@ class SendPendingViewModelTest : BaseUnitTest() {
         val failed = sut.uiState.value
         assertTrue(failed.isEarlierCancellationPending)
         assertEquals(release.txid, failed.cancellationTxid)
-        assertTrue(failed.canCancel)
+        assertFalse(failed.canCancel)
+        assertTrue(failed.canSpeedUpCancellation)
         assertFalse(failed.canRetry)
     }
 

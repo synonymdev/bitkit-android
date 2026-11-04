@@ -167,8 +167,9 @@ class OnchainSendCoordinator(
                 if (attempt.hasPositiveEvidence) {
                     return@withLock OnchainSendOutcome.Accepted(requireNotNull(attempt.txid))
                 }
+                // A release or Cancel payment that may be in a mempool can still confirm, so no payment goes beside it
                 if (!attempt.isUnresolved || attempt.originalInputs.isNullOrEmpty() ||
-                    attempt.candidateTxids.isEmpty()
+                    attempt.candidateTxids.isEmpty() || attempt.hasSentCancellation
                 ) {
                     throw OnchainSendBlockedError(attempt)
                 }
@@ -207,10 +208,10 @@ class OnchainSendCoordinator(
 
     /**
      * Spend the exact original inputs back to this wallet, conflicting with every candidate without paying anyone.
-     * The guard stays until that spend is final, through [OnchainSendAttemptStore.releaseCancelled]. A release that
-     * may be in a mempool is replaced only by one paying more in total, by at least its own size at the 1 sat/vB
-     * incremental relay fee (BIP125 rules 3 and 4), so a smaller one fails before approval with
-     * [OnchainSendCancelUnderbidsReleaseError].
+     * The guard stays until that spend is final, through [OnchainSendAttemptStore.releaseCancelled]. A candidate,
+     * release or earlier Cancel payment that may be in a mempool is replaced only by one paying a higher fee rate and
+     * more in total, by at least its own size at the 1 sat/vB incremental relay fee (BIP125 rules 3, 4 and 6), so a
+     * smaller one fails before approval with [OnchainSendCancelUnderbidsError].
      */
     suspend fun cancelOriginal(
         attemptId: String,
@@ -228,24 +229,56 @@ class OnchainSendCoordinator(
                 val inputs = attempt.originalInputs
                 if (inputs.isNullOrEmpty() || attempt.candidateTxids.isEmpty()) throw OnchainSendBlockedError(attempt)
                 require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
+                val rateFloor = attempt.highestSpendFeeRate
+                if (feeRateSatsPerVByte <= rateFloor) throw OnchainSendCancelUnderbidsError(rateFloor)
                 val prepared = prepareCancellation(attempt, feeRateSatsPerVByte)
                 val receipt = prepared.receipt.copy(feeRateSatsPerVByte = feeRateSatsPerVByte)
                 require(receipt.inputs.size == inputs.size && receipt.inputs.toSet() == inputs.toSet())
                 require(!receipt.address.equals(attempt.address, ignoreCase = true))
                 require(attempt.candidateTxids.none { it.equals(receipt.txid, ignoreCase = true) })
-                attempt.releaseMiningFeeSats?.let { releaseFee ->
+                attempt.highestSpendFee.takeIf { it > 0uL }?.let { replacedFee ->
                     val fee = requireNotNull(receipt.miningFeeSats)
-                    // The release's fee plus its own size at 1 sat/vB. Its fee is rounded up, so the fee over the
+                    // The replaced fee plus its own size at 1 sat/vB. Its fee is rounded up, so the fee over the
                     // rate, rounded up, is at least its size.
-                    val floor = releaseFee.safe() + divideRoundingUp(fee, feeRateSatsPerVByte).safe()
+                    val floor = replacedFee.safe() + divideRoundingUp(fee, feeRateSatsPerVByte).safe()
                     if (fee < floor) {
-                        throw OnchainSendCancelUnderbidsReleaseError(
-                            highestFeeRateNotAbove(floor.safe() - 1uL.safe(), fee, feeRateSatsPerVByte)
-                        )
+                        val payingRate = highestFeeRateNotAbove(floor.safe() - 1uL.safe(), fee, feeRateSatsPerVByte)
+                        throw OnchainSendCancelUnderbidsError(maxOf(payingRate, rateFloor))
                     }
                 }
                 approvePrepared(receipt)
-                store.broadcastCancellation(attempt.attemptId, attempt.walletIndex) { prepared.broadcast() }
+                store.broadcastCancellation(attempt.attemptId, attempt.walletIndex, receipt) { prepared.broadcast() }
+            }
+        }
+    }
+
+    /**
+     * Replace the pending Cancel payment or release [findPending] reports with one paying [feeRateSatsPerVByte],
+     * through [bump], which keeps every output in this wallet, so the replacement still cancels every candidate.
+     */
+    suspend fun speedUpCancellation(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        findPending: suspend (OnchainSendAttempt) -> OnchainInputSpend?,
+        approve: suspend () -> Unit,
+        bump: suspend (txid: String, feeRate: ULong) -> String,
+    ): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            mutex.withLock {
+                val attempt = store.current()
+                if (attempt?.attemptId != attemptId || attempt.walletId != walletId || !attempt.isUnresolved) {
+                    throw OnchainSendBlockedError(attempt)
+                }
+                val pending = findPending(attempt)?.takeIf { !it.isFinal && attempt.isCancelledBy(it) }
+                    ?: throw OnchainSendBlockedError(attempt)
+                require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
+                val rateFloor = attempt.highestSpendFeeRate
+                if (feeRateSatsPerVByte <= rateFloor) throw OnchainSendCancelUnderbidsError(rateFloor)
+                approve()
+                store.bumpCancellation(attempt.attemptId, attempt.walletIndex, feeRateSatsPerVByte) {
+                    bump(pending.txid, feeRateSatsPerVByte)
+                }
             }
         }
     }

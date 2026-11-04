@@ -1111,9 +1111,11 @@ class LightningService internal constructor(
         val originalNode = node ?: throw ServiceError.NodeNotSetup()
         return callOnchainSend {
             if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            val bestHeight = originalNode.status().currentBestBlock.height
             originalNode.listPayments().mapNotNull { payment ->
                 val kind = payment.kind as? PaymentKind.Onchain ?: return@mapNotNull null
-                originalNode.getTransactionDetails(kind.txid)?.let { onchainInputSpend(payment, it, inputs) }
+                val details = originalNode.getTransactionDetails(kind.txid) ?: return@mapNotNull null
+                onchainInputSpend(payment, details, inputs, bestHeight)
             }
         }
     }
@@ -1580,6 +1582,7 @@ internal fun onchainInputSpend(
     payment: PaymentDetails,
     details: TransactionDetails,
     inputs: List<OnchainSendInput>,
+    bestHeight: UInt = 0u,
 ): OnchainInputSpend? {
     val kind = payment.kind as? PaymentKind.Onchain ?: return null
     val guarded = inputs.map { it.copy(txid = it.txid.lowercase()) }.toSet()
@@ -1590,6 +1593,8 @@ internal fun onchainInputSpend(
         inputs = spent,
         outputAddresses = details.outputs.map { it.scriptpubkeyAddress },
         isFinal = kind.status is ConfirmationStatus.Confirmed && payment.status == PaymentStatus.SUCCEEDED,
+        confirmations = (kind.status as? ConfirmationStatus.Confirmed)
+            ?.let { if (bestHeight >= it.height) bestHeight - it.height + 1u else 1u } ?: 0u,
     )
 }
 

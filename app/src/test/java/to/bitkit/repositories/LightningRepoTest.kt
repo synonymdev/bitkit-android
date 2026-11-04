@@ -2190,7 +2190,7 @@ class LightningRepoTest : BaseUnitTest() {
             eq(original.walletIndex),
             isNull(),
         )
-        verify(onchainSendAttemptStore, never()).broadcastCancellation(any(), any(), any())
+        verify(onchainSendAttemptStore, never()).broadcastCancellation(any(), any(), any(), any())
     }
 
     @Test
@@ -2212,7 +2212,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
         verify(lightningService, never())
             .prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull())
-        verify(onchainSendAttemptStore, never()).broadcastCancellation(any(), any(), any())
+        verify(onchainSendAttemptStore, never()).broadcastCancellation(any(), any(), any(), any())
     }
 
     @Test
@@ -2249,7 +2249,8 @@ class LightningRepoTest : BaseUnitTest() {
         assertNull(sut.releaseCancelledOnchainSend { false }.getOrThrow())
         assertEquals(unresolved, store.current())
         // A failure before the release keeps the guard for a later sync
-        assertTrue(sut.releaseCancelledOnchainSend(beforeRelease = { error("ledger unavailable") }) { true }.isFailure)
+        val failingLedger: suspend (OnchainSendAttempt) -> Unit = { error("ledger unavailable") }
+        assertNull(sut.releaseCancelledOnchainSend(beforeRelease = failingLedger) { true }.getOrThrow())
         assertEquals(unresolved, store.current())
         val released = sut.releaseCancelledOnchainSend(beforeRelease = { notified++ }) {
             assertEquals(unresolved, it)
@@ -2261,6 +2262,41 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(unresolved, released)
         assertEquals(1, removals)
         assertNull(store.current())
+    }
+
+    @Test
+    fun `speeding up bumps the pending cancellation and saves its replacement`() = test {
+        val store = realAttemptStore()
+        startNodeForTesting()
+        val txid = "aa".repeat(32)
+        val inputs = listOf(OnchainSendInput("11".repeat(32), 0u))
+        val admitted = store.admit(
+            walletId = WalletScope.default, requestId = null, orderId = null, address = "bcrt1qrecipient",
+            amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), beforeSendAttempt = {},
+        )
+        store.retainPreparedReceipt(
+            admitted.attemptId,
+            0,
+            OnchainPreparedReceipt(txid, inputs, admitted.address, admitted.amountSats),
+            false,
+        )
+        store.broadcastPreparedCandidate(admitted.attemptId, 0, txid) { beforeDispatch ->
+            beforeDispatch()
+            OnchainSendOutcome.Unknown(txid)
+        }
+        store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown(txid), 0)
+        val cancellation = OnchainInputSpend("ef".repeat(32), inputs, listOf("bcrt1qown", "bcrt1qchange"), false)
+        whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(cancellation))
+        whenever(lightningService.bumpFeeByRbf(cancellation.txid, 9uL)).thenReturn("34".repeat(32))
+        var approvals = 0
+
+        val result = sut.speedUpOnchainCancellation(admitted.attemptId, admitted.walletId, 9uL) { approvals++ }
+
+        assertEquals("34".repeat(32), result.getOrThrow())
+        assertEquals(1, approvals)
+        assertEquals("34".repeat(32), store.current()?.cancellationTxid)
+        assertTrue(store.current()?.blocksNextSend == true)
     }
 
     @Test

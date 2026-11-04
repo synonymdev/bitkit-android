@@ -730,6 +730,7 @@ fun SendSheet(
                         refusalReason = route.refusalReason,
                         retryOriginal = appViewModel::retryOriginalOnchainSend,
                         cancelOriginal = appViewModel::cancelOriginalOnchainSend,
+                        speedUpCancellation = appViewModel::speedUpOnchainCancellation,
                         onRecoveredTransfer = appViewModel::onRecoveredTransfer,
                         onRecovered = { txid, originalAmount ->
                             appViewModel.onSendSuccess(

@@ -3452,7 +3452,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `cancelled attempt removes only its unproven proof and keeps the private list consumed`() = test {
+    fun `final cancellation removes this payment's proofs and never waits on another route's`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
@@ -3473,26 +3473,33 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)), candidateTxids = listOf(txid),
         )
 
-        storedProofs = listOf(startedProof.copy(paymentIdentifier = txid, proofData = txid))
-        assertFalse(repo.removeCancelledOnchainProof(cancelled))
-        storedProofs = listOf(startedProof.copy(onchainAmountSats = request.amount.atomic + 1uL))
-        assertFalse(repo.removeCancelledOnchainProof(cancelled))
-        // A dispatched payment's proof may name its own candidate, never another transaction
-        storedProofs = listOf(startedProof.copy(paymentIdentifier = "cd".repeat(32)))
-        assertFalse(repo.removeCancelledOnchainProof(cancelled))
-        storedProofs = listOf(startedProof.copy(paymentIdentifier = txid))
-        assertFalse(repo.removeCancelledOnchainProof(cancelled.copy(initialDispatchAttempted = false)))
+        // Every candidate spends a coin the final cancellation took, so none of their proofs proves a payment
+        for (ownProof in listOf(
+            startedProof,
+            startedProof.copy(paymentIdentifier = txid, proofData = txid),
+            startedProof.copy(paymentIdentifier = txid.uppercase(), onchainAcceptanceVerified = true),
+            startedProof.copy(onchainAmountSats = request.amount.atomic + 1uL),
+        )) {
+            storedProofs = listOf(ownProof)
+            assertTrue(repo.removeCancelledOnchainProof(cancelled))
+            assertTrue(storedProofs.isEmpty())
+        }
+        // A proof naming another transaction or wallet may be a payment by another route, so it stays
+        val otherRoutes = listOf(
+            startedProof.copy(paymentIdentifier = "cd".repeat(32), proofData = "cd".repeat(32)),
+            startedProof.copy(onchainWalletId = "trezor:wallet", paymentIdentifier = null),
+        )
+        storedProofs = otherRoutes + startedProof
         assertTrue(repo.removeCancelledOnchainProof(cancelled))
-        assertTrue(storedProofs.isEmpty())
-        storedProofs = listOf(startedProof)
-        assertTrue(repo.removeCancelledOnchainProof(cancelled))
+        assertEquals(otherRoutes, storedProofs)
 
-        assertTrue(storedProofs.isEmpty())
+        storedProofs = listOf(startedProof)
+        shouldFailNextSave = true
+        assertFalse(repo.removeCancelledOnchainProof(cancelled), "Only a proof that cannot be saved keeps the guard")
+        assertEquals(listOf(startedProof), storedProofs)
         assertTrue(repo.removeCancelledOnchainProof(cancelled.copy(requestId = null, payerIdentity = null)))
         verify(privatePaykitRepo, never())
             .releasePrivatePaymentListVersion(any(), anyOrNull(), anyOrNull(), anyOrNull())
-        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        assertFalse(storedProofs.single().paymentStarted)
     }
 
     @Test

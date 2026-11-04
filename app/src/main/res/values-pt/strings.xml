@@ -704,7 +704,7 @@
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Receber</string>
     <string name="wallet__send_bitcoin">Enviar Bitcoin</string>
-    <string name="wallet__send_pending__abandon_pending">O cancelamento foi enviado, mas ainda não está confirmado. Os outros pagamentos onchain são desbloqueados quando tiver 6 confirmações. Se não for confirmado, pode cancelar novamente.</string>
+    <string name="wallet__send_pending__abandon_pending">O cancelamento foi enviado, mas ainda não está confirmado. Os outros pagamentos onchain são desbloqueados quando tiver 6 confirmações, normalmente em cerca de uma hora. Se demorar a ser confirmado, pode acelerá-lo.</string>
     <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos já não estão disponíveis. A Bitkit verifica primeiro a rede e depois devolve as moedas desta transferência à sua carteira, para que a transferência original nunca seja confirmada. Isto tem uma taxa de rede.</string>
     <string name="wallet__send_to">Para</string>
     <string name="wallet__recipient_contact">Contato</string>
@@ -1609,11 +1609,16 @@
     <string name="wallet__send_from">De</string>
     <string name="wallet__send_pending__blocked_new_send">O novo pagamento não foi enviado. Conclua o pagamento anterior antes de tentar novamente.</string>
     <string name="wallet__send_pending__cancel_authorize">Autorizar cancelamento</string>
+    <string name="wallet__send_pending__cancel_confirmations">Confirmações: %1$d de 6</string>
     <string name="wallet__send_pending__cancel_description">Cancele enviando as entradas deste pagamento de volta para a sua carteira. Introduza a taxa que autoriza em sat/vB; use uma taxa mais alta do que a original para que o cancelamento o possa substituir. Um cancelamento anterior só pode ser substituído depois de sair da rede sem ser confirmado. Os outros pagamentos onchain continuam bloqueados até um cancelamento ter 6 confirmações.</string>
     <string name="wallet__send_pending__cancel_error">Não foi possível cancelar o pagamento. Os fundos continuam protegidos. Tente uma taxa mais alta ou verifique o estado da transação.</string>
     <string name="wallet__send_pending__cancel_hint">Se este pagamento já não puder ser concluído, pode cancelá-lo e manter os respetivos fundos na sua carteira.</string>
-    <string name="wallet__send_pending__cancel_pending">Cancelamento enviado. Os outros pagamentos onchain são desbloqueados quando tiver 6 confirmações. Se sair da rede sem ser confirmado, pode cancelar novamente.</string>
+    <string name="wallet__send_pending__cancel_pending">Cancelamento enviado. Os outros pagamentos onchain são desbloqueados quando tiver 6 confirmações, normalmente em cerca de uma hora. Se demorar a ser confirmado, pode acelerá-lo.</string>
     <string name="wallet__send_pending__cancel_pending_error">Um cancelamento anterior ainda está pendente, pelo que um novo ainda não o pode substituir. Os fundos do pagamento continuam protegidos. Aguarde que seja confirmado ou cancele novamente se sair da rede sem ser confirmado.</string>
+    <string name="wallet__send_pending__cancel_release_stalled">O cancelamento tem 6 confirmações e os fundos do pagamento voltaram à sua carteira, mas o Bitkit ainda não conseguiu concluir a libertação deste pagamento. Tentará novamente sempre que a carteira sincronizar.</string>
+    <string name="wallet__send_pending__cancel_speed_up_description">Substitua o cancelamento pendente por um que pague uma taxa mais alta, para ser confirmado mais cedo. Introduza a taxa que autoriza em sat/vB. Todos os seus fundos ficam na sua carteira.</string>
+    <string name="wallet__send_pending__cancel_speed_up_error">Não foi possível acelerar o cancelamento. Os fundos do pagamento continuam protegidos. Tente uma taxa mais alta, ou aguarde a sincronização da carteira e tente novamente.</string>
+    <string name="wallet__send_pending__cancel_speed_up_title">Acelerar cancelamento</string>
     <string name="wallet__send_pending__cancel_title">Cancelar pagamento</string>
     <string name="wallet__send_pending__cancelled_description">O cancelamento tem 6 confirmações. Os pagamentos onchain estão novamente disponíveis.</string>
     <string name="wallet__send_pending__cancelled_title">Pagamento cancelado</string>

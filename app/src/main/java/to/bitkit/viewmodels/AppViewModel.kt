@@ -6538,6 +6538,14 @@ class AppViewModel @Inject constructor(
         if (request?.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED) throw OnchainOriginalPaidError()
     }
 
+    /** Replace the pending cancellation of [original] with one paying [feeRateSatsPerVByte], after [approve]. */
+    suspend fun speedUpOnchainCancellation(
+        original: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+        approve: suspend () -> Unit,
+    ): Result<String> =
+        lightningRepo.speedUpOnchainCancellation(original.attemptId, original.walletId, feeRateSatsPerVByte, approve)
+
     /** Spend the original inputs back to this wallet. Other sends stay blocked until that spend is final. */
     suspend fun cancelOriginalOnchainSend(
         original: OnchainSendAttempt,

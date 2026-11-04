@@ -1834,19 +1834,55 @@ class LightningRepo @Inject constructor(
                 ?: return@runSuspendCatching null
             val spend = findOnchainSendCancellation(attempt).getOrThrow()?.takeIf { it.isFinal }
                 ?: return@runSuspendCatching null
-            beforeRelease(attempt)
-            val released = onchainSendAttemptStore.releaseCancelled(
-                attempt.attemptId,
-                attempt.walletIndex,
-                spend,
-                removeOriginalProof,
-            )
-            if (!released) return@runSuspendCatching null
+            // The original can never confirm now, so a guard still held here keeps every send blocked for nothing
+            val released = runSuspendCatching {
+                beforeRelease(attempt)
+                onchainSendAttemptStore.releaseCancelled(
+                    attempt.attemptId,
+                    attempt.walletIndex,
+                    spend,
+                    removeOriginalProof,
+                )
+            }.getOrElse {
+                Logger.error(
+                    "Failed to release on-chain send '${attempt.attemptId}' after final cancellation '${spend.txid}'",
+                    it,
+                    context = TAG,
+                )
+                false
+            }
+            if (!released) {
+                Logger.error(
+                    "Kept on-chain send '${attempt.attemptId}' after final cancellation '${spend.txid}'",
+                    context = TAG,
+                )
+                return@runSuspendCatching null
+            }
             Logger.info(
                 "Released on-chain send '${attempt.attemptId}' after final cancellation '${spend.txid}'",
                 context = TAG,
             )
             attempt
+        }
+    }
+
+    /** Replace a pending cancellation of [attemptId] with one paying [feeRateSatsPerVByte], after [approve]. */
+    suspend fun speedUpOnchainCancellation(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        approve: suspend () -> Unit,
+    ): Result<String> = executeWhenNodeRunning("speedUpOnchainCancellation") {
+        requireWalletRestoreComplete()
+        recoveryCoordinator.speedUpCancellation(
+            attemptId,
+            walletId,
+            feeRateSatsPerVByte,
+            findPending = { findOnchainSendCancellation(it).getOrThrow() },
+            approve = approve,
+        ) { txid, feeRate ->
+            requireWalletRestoreComplete()
+            lightningService.bumpFeeByRbf(txid, feeRate)
         }
     }
 

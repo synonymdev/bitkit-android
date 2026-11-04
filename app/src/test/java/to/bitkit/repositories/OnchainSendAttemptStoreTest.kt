@@ -27,6 +27,7 @@ import java.io.FileOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -1018,14 +1019,28 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             store.broadcastCancellation(
                 unresolved.attemptId,
                 0,
+                cancelReceipt,
                 cancel,
             )
         )
-        assertEquals(unresolved, store.current())
-        assertFailsWith<OnchainSendBlockedError> { store.broadcastCancellation(unresolved.attemptId, 1, cancel) }
-        assertFailsWith<OnchainSendBlockedError> { store.broadcastCancellation("other-attempt", 0, cancel) }
+        val sent = requireNotNull(store.current())
+        val expected = unresolved.copy(
+            cancellationTxid = finalCancellation.txid,
+            cancellationFeeRateSatsPerVByte = 3uL,
+            cancellationMiningFeeSats = 400uL,
+        )
+        assertEquals(expected, sent)
+        assertTrue(sent.blocksNextSend)
+        assertFailsWith<OnchainSendBlockedError> {
+            store.broadcastCancellation(unresolved.attemptId, 1, cancelReceipt, cancel)
+        }
+        assertFailsWith<OnchainSendBlockedError> {
+            store.broadcastCancellation("other-attempt", 0, cancelReceipt, cancel)
+        }
         store.observeExactTransaction(firstTxid)
-        assertFailsWith<OnchainSendBlockedError> { store.broadcastCancellation(unresolved.attemptId, 0, cancel) }
+        assertFailsWith<OnchainSendBlockedError> {
+            store.broadcastCancellation(unresolved.attemptId, 0, cancelReceipt, cancel)
+        }
         assertEquals(1, broadcasts)
 
         val liveStore = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
@@ -1036,11 +1051,95 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             OnchainPreparedReceipt(firstTxid, originalInputs, live.address, live.amountSats),
             false,
         )
-        assertFailsWith<OnchainSendBlockedError> { liveStore.broadcastCancellation(live.attemptId, 0, cancel) }
+        assertFailsWith<OnchainSendBlockedError> {
+            liveStore.broadcastCancellation(live.attemptId, 0, cancelReceipt, cancel)
+        }
         assertEquals(1, broadcasts)
     }
 
+    @Test
+    fun `a Cancel payment is saved before its broadcast and survives a restart`() = test {
+        val keychain = inMemoryKeychain()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+        val unresolved = store.dispatchedForTest(outcome = OnchainSendOutcome.Unknown(firstTxid))
+        var savedAtBroadcast: OnchainSendAttempt? = null
+
+        val outcome = store.broadcastCancellation(unresolved.attemptId, 0, cancelReceipt) {
+            savedAtBroadcast = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System).current()
+            OnchainSendOutcome.Unknown(finalCancellation.txid)
+        }
+
+        assertEquals(OnchainSendOutcome.Unknown(finalCancellation.txid), outcome)
+        val reopened = requireNotNull(OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System).current())
+        assertEquals(reopened, savedAtBroadcast)
+        assertEquals(finalCancellation.txid, reopened.cancellationTxid)
+        assertEquals(3uL, reopened.cancellationFeeRateSatsPerVByte)
+        assertEquals(400uL, reopened.cancellationMiningFeeSats)
+        assertTrue(reopened.hasSentCancellation)
+        assertEquals(400uL, reopened.highestSpendFee)
+        assertEquals(3uL, reopened.highestSpendFeeRate)
+    }
+
+    @Test
+    fun `a refused Cancel payment leaves the earlier one saved`() = test {
+        val store = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
+        val unresolved = store.dispatchedForTest(outcome = OnchainSendOutcome.Unknown(firstTxid))
+        store.broadcastCancellation(unresolved.attemptId, 0, cancelReceipt) {
+            OnchainSendOutcome.Accepted(finalCancellation.txid)
+        }
+        val accepted = requireNotNull(store.current())
+        val higher = cancelReceipt.copy(txid = "12".repeat(32), feeRateSatsPerVByte = 9uL, miningFeeSats = 900uL)
+
+        val refused = store.broadcastCancellation(unresolved.attemptId, 0, higher) {
+            OnchainSendOutcome.Rejected(higher.txid, "insufficient fee")
+        }
+        assertIs<OnchainSendOutcome.Rejected>(refused)
+        assertEquals(accepted, store.current())
+
+        // A failure that may have dispatched keeps the newer record, as it may be in a mempool
+        assertFailsWith<IllegalStateException> {
+            store.broadcastCancellation(unresolved.attemptId, 0, higher) { error("connection lost") }
+        }
+        assertEquals(higher.txid, store.current()?.cancellationTxid)
+        assertEquals(9uL, store.current()?.cancellationFeeRateSatsPerVByte)
+        assertFailsWith<IllegalArgumentException> {
+            store.broadcastCancellation(unresolved.attemptId, 0, cancelReceipt.copy(txid = firstTxid)) {
+                error("a candidate is not a cancellation")
+            }
+        }
+    }
+
+    @Test
+    fun `a sped up cancellation replaces the saved one and keeps the highest fee`() = test {
+        val store = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
+        val unresolved = store.dispatchedForTest(outcome = OnchainSendOutcome.Unknown(firstTxid))
+        store.broadcastCancellation(unresolved.attemptId, 0, cancelReceipt) {
+            OnchainSendOutcome.Accepted(finalCancellation.txid)
+        }
+        val bumped = "34".repeat(32)
+
+        assertEquals(bumped, store.bumpCancellation(unresolved.attemptId, 0, 7uL) { bumped.uppercase() })
+
+        val current = requireNotNull(store.current())
+        assertEquals(bumped, current.cancellationTxid)
+        assertEquals(7uL, current.cancellationFeeRateSatsPerVByte)
+        assertEquals(400uL, current.cancellationMiningFeeSats)
+        assertFailsWith<OnchainSendBlockedError> { store.bumpCancellation("other-attempt", 0, 8uL) { bumped } }
+        store.observeExactTransaction(firstTxid)
+        assertFailsWith<OnchainSendBlockedError> {
+            store.bumpCancellation(unresolved.attemptId, 0, 8uL) { error("a paid attempt is not bumped") }
+        }
+    }
+
     private val firstTxid = "ab".repeat(32)
+    private val cancelReceipt = OnchainPreparedReceipt(
+        txid = "ef".repeat(32),
+        inputs = listOf(OnchainSendInput("11".repeat(32), 0u), OnchainSendInput("22".repeat(32), 1u)),
+        address = "bcrt1qown",
+        amountSats = 546uL,
+        feeRateSatsPerVByte = 3uL,
+        miningFeeSats = 400uL,
+    )
     private val originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u), OnchainSendInput("22".repeat(32), 1u))
     private val finalCancellation = OnchainInputSpend(
         txid = "ef".repeat(32),
