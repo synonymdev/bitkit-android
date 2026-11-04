@@ -189,7 +189,9 @@ class BackupRepo @Inject constructor(
 
     private class BackupOwner(val generation: Long, val native: VssClientCoordinator.Owner)
 
-    private class PendingBackup(val owner: BackupOwner, val job: Job)
+    private class PendingBackup(val owner: BackupOwner, val job: Job) {
+        var admitted = false
+    }
 
     private class Observation(val scope: CoroutineScope, val generation: BackupOwner) {
         val ready = CompletableDeferred<Unit>()
@@ -366,14 +368,12 @@ class BackupRepo @Inject constructor(
 
         owner.scope.launch {
             BackupCategory.entries.forEach { category ->
-                if (category !in runningBackups) {
-                    updateBackupStatus(category, owner.generation) { status ->
-                        if (status.running && category !in runningBackups) {
-                            Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
-                            status.copy(running = false)
-                        } else {
-                            status
-                        }
+                updateBackupStatus(category, owner.generation) { status ->
+                    if (status.running && category !in runningBackups && backupJobs[category]?.admitted != true) {
+                        Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
+                        status.copy(running = false)
+                    } else {
+                        status
                     }
                 }
             }
@@ -617,6 +617,10 @@ class BackupRepo @Inject constructor(
                         ) { explicitBackups[category] = expectedGeneration.native.generation }
                     }
                     try {
+                        synchronized(lifecycleLock) {
+                            backupJobs[category]?.takeIf { it.job === scheduledJob }?.admitted = true
+                        }
+                        updateBackupStatus(category, expectedGeneration) { it.copy(running = true) }
                         owner?.ready?.await()
                         // Coalescing pending work must not delay an explicit recovery acknowledgement.
                         delay(BACKUP_DEBOUNCE)
@@ -642,6 +646,9 @@ class BackupRepo @Inject constructor(
                             if (backupJobs[category]?.job === scheduledJob) backupJobs.remove(category)
                         }
                         withContext(NonCancellable) {
+                            updateBackupStatus(category, expectedGeneration) {
+                                it.copy(running = category in runningBackups || backupJobs[category]?.admitted == true)
+                            }
                             schedulePendingBackup(category, expectedGeneration, owner)
                         }
                     }
