@@ -9530,6 +9530,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `main scanner onchain scan the hardware balance but not its spendable covers shows insufficient funds`() =
+        test {
+            val input = stubOnchainAmountScan(amountSats = 9_000u)
+            balanceState.value = BalanceState(maxSendOnchainSats = 0u)
+            hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 10_000uL))
+            whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(8_000uL))
+
+            sut.showScannerSheet()
+            sut.onScannerSheetResult(input)
+            advanceUntilIdle()
+
+            assertFalse(sut.currentSheet.value is Sheet.Send)
+            val toasts = argumentCaptor<Toast>()
+            verify(toastManager, atLeast(1)).enqueue(toasts.capture())
+            assertTrue(toasts.allValues.any { it.testTag == "InsufficientSavingsToast" })
+        }
+
+    @Test
     fun `speed change keeps a scanned hardware amount that equals the hardware maximum`() = test {
         val input = stubOnchainAmountScan(amountSats = 48_000u)
         stubHardwareFunding()

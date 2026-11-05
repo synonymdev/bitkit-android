@@ -5441,8 +5441,20 @@ class AppViewModel @Inject constructor(
             return true
         }
         // Savings cannot cover it but a hardware wallet can, so pay from that instead of opening Amount.
-        if (!validateAmount(amount) && _sendUiState.value.hardwareWalletId == null) {
-            selectHardwareFundingSourceForAmount(amount, walletGeneration)
+        // The balance check above counts raw hardware balances, so no wallet may cover it once fees are taken.
+        if (
+            !validateAmount(amount) &&
+            _sendUiState.value.hardwareWalletId == null &&
+            !selectHardwareFundingSourceForAmount(amount, walletGeneration)
+        ) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+                description = context.getString(R.string.other__pay_insufficient_savings_description),
+                testTag = "InsufficientSavingsToast",
+            )
+            clearActiveContactPaymentContext()
+            return true
         }
         if (!validateAmount(amount)) return false
         requireCurrentPaymentPreparation(walletGeneration)
