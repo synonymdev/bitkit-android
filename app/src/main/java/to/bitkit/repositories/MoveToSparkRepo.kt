@@ -67,7 +67,7 @@ class MoveToSparkRepo @Inject constructor(
             val limitSats = movableSats()
             val wantedSats = targetSats?.coerceAtMost(limitSats) ?: limitSats
             if (wantedSats < MoveToSparkMath.MIN_MOVE_SATS) throw MoveToSparkError.NothingToMove()
-            if (!sparkRepo.state.value.isReady) throw MoveToSparkError.SparkUnavailable()
+            if (!MoveToSparkMath.isSparkUsable(sparkRepo.state.value)) throw MoveToSparkError.SparkUnavailable()
 
             val invoice = sparkRepo.createInvoice(null, INVOICE_DESCRIPTION, INVOICE_EXPIRY_SECS).getOrThrow()
             var amountSats = MoveToSparkMath.firstCandidate(wantedSats, limitSats)
@@ -149,9 +149,12 @@ object MoveToSparkMath {
 
     fun movableSats(channels: List<ChannelDetails>?): ULong = channels.totalNextOutboundHtlcLimitSats()
 
+    /** Whether Spark can take a move; every Move to Spark check goes through here. */
+    fun isSparkUsable(spark: SparkState): Boolean = spark.isReady
+
     /** Whether the channels hold a balance worth moving to a usable Spark wallet. */
     fun canMove(channels: List<ChannelDetails>?, spark: SparkState): Boolean =
-        spark.isReady && movableSats(channels) >= MIN_MOVE_SATS
+        isSparkUsable(spark) && movableSats(channels) >= MIN_MOVE_SATS
 
     /** The first amount to quote: [wantedSats] when it leaves room for fees, else the limit less a guessed fee. */
     fun firstCandidate(wantedSats: ULong, limitSats: ULong): ULong {
