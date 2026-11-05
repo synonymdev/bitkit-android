@@ -117,10 +117,15 @@ internal fun SparkExitFundingAddress(
 
 /** A line of progress with the transaction it is about, whose id copies on tap. */
 @Composable
-internal fun SparkExitTxNote(text: String, txid: String, @StringRes txidRes: Int, testTag: String) {
+internal fun SparkExitTxNote(text: String?, txid: String, @StringRes txidRes: Int, testTag: String) {
     val context = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        BodyS(text = text, color = Colors.White64, modifier = Modifier.testTag(testTag))
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(testTag)
+    ) {
+        text?.let { BodyS(text = it, color = Colors.White64) }
         CaptionB(
             text = stringResource(txidRes).replace("{txid}", txid),
             maxLines = 1,

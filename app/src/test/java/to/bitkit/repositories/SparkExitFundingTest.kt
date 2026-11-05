@@ -9,6 +9,7 @@ import breez_sdk_spark.SkippedLeaf
 import breez_sdk_spark.SkippedLeafReason
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.models.FeeRate
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -507,5 +508,57 @@ class SparkExitFundingTest {
         }
         assertEquals(3, SparkExitQuote(prepared).fundedSteps)
         assertEquals(7_000uL, SparkExitQuote(prepared).fundingSats)
+    }
+
+    @Test
+    fun `a fee bump offers rates strictly above the exit's, normal only between it and fast`() {
+        val fees = SparkExitNetworkFees(fastest = 9uL, halfHour = 6uL)
+        assertEquals(listOf(FeeRate.FAST to 9uL, FeeRate.NORMAL to 6uL), SparkExitFeeBumpOption.rates(2uL, fees))
+        assertEquals(listOf(FeeRate.FAST to 9uL), SparkExitFeeBumpOption.rates(6uL, fees))
+        // The network asks no more than the exit pays, yet the mempool refuses it: one above, to replace it.
+        assertEquals(listOf(FeeRate.FAST to 10uL), SparkExitFeeBumpOption.rates(9uL, fees))
+    }
+
+    @Test
+    fun `pay a higher fee is offered while the exit runs underpriced or below the network`() {
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
+            .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
+        val rising = SparkExitNetworkFees(fastest = 9uL, halfHour = 6uL)
+        val calm = SparkExitNetworkFees(fastest = 2uL, halfHour = 1uL)
+        assertTrue(record.canPayHigherFee(1_000u, rising))
+        assertFalse(record.canPayHigherFee(1_000u, calm))
+        // Accepted, but unconfirmed for more than 6 blocks.
+        val slow = record.copy(
+            broadcastLog = listOf(
+                SparkExitRecord.BroadcastAttempt(
+                    record.generation,
+                    "n1",
+                    1,
+                    0,
+                    0L,
+                    "accepted",
+                    true,
+                    acceptedAtHeight = 990u
+                ),
+            ),
+        )
+        assertTrue(slow.canPayHigherFee(1_000u, calm))
+        assertFalse(slow.copy(isRebuilding = true).canPayHigherFee(1_000u, rising))
+        assertFalse(slow.copy(failedLeafRetrySince = 1_000u).canPayHigherFee(1_000u, rising))
+        assertFalse(SparkExitFixtures.record().canPayHigherFee(1_000u, rising))
+    }
+
+    @Test
+    fun `a new generation keeps the sweep that landed before it`() {
+        val swept = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP, status = ExitTransactionStatus.Confirmed(9u))
+            ),
+        )
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.Running).adopt(swept, 0L)
+        val retried = record.adopt(SparkExitFixtures.recovery(emptyList()), 1L)
+        assertEquals("s", retried.landedSweepTxid)
+        assertEquals("s", retried.adopt(SparkExitFixtures.recovery(emptyList()), 2L).landedSweepTxid)
+        assertEquals(retried, SparkExitJson.decode(SparkExitJson.encode(retried)))
     }
 }

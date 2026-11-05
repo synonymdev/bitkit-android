@@ -123,6 +123,8 @@ data class SparkExitRecord(
     val failedLeafRetriedAt: UInt? = null,
     /** The week of retries ended with [failedLeaves] still not recovered: the exit is done without them. */
     val isFailedLeavesReleased: Boolean = false,
+    /** The confirmed sweep of a replaced generation, so Done still names it after a retry of leaves replaced it. */
+    val landedSweepTxid: String? = null,
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -298,6 +300,10 @@ data class SparkExitRecord(
         earlierReceivedSats = earlierReceivedSats + recovery?.let { SparkExitMath.confirmedReceived(it, destination) }
             .orEmpty(),
         earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::fundingTxids).orEmpty()).distinct(),
+        landedSweepTxid = recovery?.transactions
+            ?.firstOrNull { it.kind == RecoveryTxKind.SWEEP && it.status is ExitTransactionStatus.Confirmed }
+            ?.txid
+            ?: landedSweepTxid,
         generation = generation + 1,
         recovery = built,
         broadcastLog = emptyList(),
@@ -309,6 +315,33 @@ data class SparkExitRecord(
         retriedAt = null,
         isRebuiltFromChain = false,
     )
+
+    /**
+     * Whether the user may raise the exit's fee rate: it runs on a built recovery, is not rebuilding or retrying leaves
+     * the operators moved, and the network finds its rate too low ([underpricedStep]) or asks more for the next block
+     * ([fees]).
+     */
+    fun canPayHigherFee(tip: UInt?, fees: SparkExitNetworkFees?): Boolean {
+        if (phase != Phase.Running || isRebuilding || recovery == null || isRetryingFailedLeaves) return false
+        return underpricedStep(tip) != null || isBelowNetwork(fees)
+    }
+
+    /** The network asks more for the next block than the exit's rate. */
+    fun isBelowNetwork(fees: SparkExitNetworkFees?): Boolean = fees != null && fees.fastest > feeRateSatPerVbyte
+
+    /**
+     * The exit at [rate]: with [extraSats] of funding paid in [paymentTxid], it waits for that payment as a top-up
+     * and then rebuilds; with nothing to pay, it rebuilds on the next tick. Either way what has not confirmed goes
+     * out again at the new rate and replaces what is in the mempool. Not a Redo, so it strikes nothing.
+     */
+    fun applyFeeBump(rate: ULong, extraSats: ULong, paymentTxid: String?): SparkExitRecord {
+        val bumped = copy(feeRateSatPerVbyte = rate, isRedoRebuild = false)
+        if (extraSats == 0uL) return bumped.copy(isRebuilding = true, lastBuildAt = null)
+        return bumped.copy(
+            phase = Phase.NeedsFunding(fundedSats.safe() + extraSats.safe()),
+            fundingPaymentTxid = paymentTxid,
+        )
+    }
 
     /** The exit retries cooperative leaves the operators moved on-chain but could not co-sign. */
     val isRetryingFailedLeaves: Boolean get() = isActive && failedLeafRetrySince != null
@@ -730,6 +763,7 @@ object SparkExitJson {
         r.failedLeafRetrySince?.let { put("failedLeafRetrySince", it.toLong()) }
         r.failedLeafRetriedAt?.let { put("failedLeafRetriedAt", it.toLong()) }
         if (r.isFailedLeavesReleased) put("isFailedLeavesReleased", true)
+        r.landedSweepTxid?.let { put("landedSweepTxid", it) }
         if (r.earlierReceivedSats.isNotEmpty()) {
             put(
                 "earlierReceivedSats",
@@ -832,6 +866,7 @@ object SparkExitJson {
         failedLeafRetrySince = o.ulongOrNull("failedLeafRetrySince")?.toUInt(),
         failedLeafRetriedAt = o.ulongOrNull("failedLeafRetriedAt")?.toUInt(),
         isFailedLeavesReleased = o.booleanOrNull("isFailedLeavesReleased") ?: false,
+        landedSweepTxid = o.stringOrNull("landedSweepTxid"),
         earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),

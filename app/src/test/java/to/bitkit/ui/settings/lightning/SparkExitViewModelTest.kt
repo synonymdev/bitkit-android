@@ -5,9 +5,12 @@ import org.junit.Test
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import to.bitkit.models.FeeRate
+import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.repositories.SparkExitFixtures
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitMath
+import to.bitkit.repositories.SparkExitNetworkFees
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
@@ -59,6 +62,32 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertTrue(paid.copy(fundingSeenSats = 20_000uL).canContinueFunding)
         // A second payment adds its input fee.
         assertFalse(paid.copy(fundingSeenSats = 20_000uL, fundingSeenCount = 2).canContinueFunding)
+    }
+
+    @Test
+    fun `progress hints at rising fees and offers a higher fee savings can pay for`() {
+        val running = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
+            .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
+        val rising = SparkExitUiState(
+            record = running,
+            tipHeight = 1_000u,
+            networkFees = SparkExitNetworkFees(9uL, 6uL)
+        )
+        assertTrue(rising.canPayHigherFee)
+        assertTrue(rising.showsFeeRose)
+        assertFalse(rising.copy(networkFees = SparkExitNetworkFees(2uL, 1uL)).canPayHigherFee)
+
+        val fast = SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 4_200uL, 4_620uL)
+        assertTrue(SparkExitFeeBumpUiState(spendableSats = 4_620uL).canPay(fast))
+        assertFalse(SparkExitFeeBumpUiState(spendableSats = 4_619uL).canPay(fast))
+        assertTrue(SparkExitFeeBumpUiState(spendableSats = 0uL).canPay(fast.copy(extraSats = 0uL, totalSats = 0uL)))
+    }
+
+    @Test
+    fun `done names the sweep that landed before a retry of leaves replaced it`() {
+        val done = SparkExitFixtures.record(SparkExitRecord.Phase.Done)
+            .copy(recovery = SparkExitFixtures.recovery(emptyList()), landedSweepTxid = "sweep")
+        assertEquals("sweep", SparkExitUiState(record = done).sweepTxid)
     }
 
     @Test

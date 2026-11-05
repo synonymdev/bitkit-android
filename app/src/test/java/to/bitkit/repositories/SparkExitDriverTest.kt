@@ -677,6 +677,78 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertFalse(record.isFailedLeavesReleased)
     }
 
+    private fun funded(record: SparkExitRecord) = record.copy(
+        funding = listOf(record.funding.single().copy(txid = "f0", vout = 0u, valueSats = 20_000uL)),
+    )
+
+    @Test
+    fun `a higher fee the funding covers needs nothing more`() = test {
+        val record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1b")))
+
+        assertEquals(0uL, driver().feeBumpShortfall(record, 9uL))
+
+        val request = sdk.prepareRequests.single()
+        assertEquals(9uL, request.feeRateSatPerVbyte)
+        assertEquals(listOf("leaf-1"), (request.selection as ExitLeafSelection.Specific).leafIds)
+        assertEquals(record.fundingInputs, sdk.recoverRequests.single().fundingInputs)
+        // Priced, not built: nothing is sent or saved.
+        assertTrue(chain.broadcasts.isEmpty())
+        assertTrue(saved.isEmpty())
+    }
+
+    @Test
+    fun `a higher fee asks for the sdk's shortfall less what the funding address holds, with one input's fee`() = test {
+        val record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
+        sdk.recoverError = SdkException.InsufficientCpfpFunds(26_000uL, "")
+        // Still at the address: the adopted input, unspent.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", value = 20_000uL))
+
+        // 26,000 needed, 20,000 held: 6,000, plus 68 vB at 9 sat/vB for the coin that pays it.
+        assertEquals(6_612uL, driver().feeBumpShortfall(record, 9uL))
+
+        sdk.recoverError = SdkException.InsufficientCpfpFunds(20_000uL, "")
+        assertEquals(SparkExitMath.FUNDING_DUST_SATS, driver().feeBumpShortfall(record, 9uL))
+    }
+
+    @Test
+    fun `a paid higher fee rebuilds at the new rate once its payment confirms`() = test {
+        var record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
+            .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
+        assertEquals(Phase.NeedsFunding(26_612uL), record.phase)
+        assertEquals(SparkExitFundingState.Paid("bump"), SparkExitMath.fundingState(record, utxos = null))
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(
+            SparkExitFixtures.utxo("f0", value = 20_000uL),
+            SparkExitFixtures.utxo("bump", value = 6_612uL),
+        )
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1b")))
+        record = driver().tick(record)
+
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(9uL, sdk.prepareRequests.single().feeRateSatPerVbyte)
+        assertEquals(
+            listOf("f0", "bump"),
+            sdk.recoverRequests.single().fundingInputs.map { (it as CpfpInput.P2wpkh).txid }
+        )
+        assertEquals(listOf("n1b"), chain.broadcasts.map { it.txid })
+    }
+
+    @Test
+    fun `a higher fee with nothing to pay rebuilds on the next tick`() = test {
+        val record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
+            .applyFeeBump(rate = 9uL, extraSats = 0uL, paymentTxid = null)
+        assertTrue(record.isRebuilding)
+        assertEquals(Phase.Running, record.phase)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1b")))
+
+        val rebuilt = driver().tick(record)
+
+        assertEquals(9uL, sdk.prepareRequests.single().feeRateSatPerVbyte)
+        assertEquals(record.generation + 1, rebuilt.generation)
+        assertEquals(listOf("n1b"), chain.broadcasts.map { it.txid })
+    }
+
     @Test
     fun `rebuild with nothing left ends the exit`() = test {
         val record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)

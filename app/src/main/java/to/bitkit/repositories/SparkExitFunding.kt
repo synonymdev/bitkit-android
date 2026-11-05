@@ -6,6 +6,7 @@ import breez_sdk_spark.RecoverFundsResponse
 import breez_sdk_spark.RecoveryTransaction
 import breez_sdk_spark.RecoveryTxKind
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.models.FeeRate
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import to.bitkit.utils.BlockTimeHelpers
@@ -487,6 +488,30 @@ sealed interface SparkExitFundingState {
 
 /** A funding payment short of the need: [receivedSats] of [requiredSats] arrived, [missingSats] (at least dust) due. */
 data class SparkExitPartialFunding(val receivedSats: ULong, val requiredSats: ULong, val missingSats: ULong)
+
+/**
+ * A higher rate a running exit can move to, at the send flow's [speed], with [extraSats] its funding address must
+ * still receive and [totalSats] what that costs from savings, the payment's own fee included.
+ */
+data class SparkExitFeeBumpOption(
+    val speed: FeeRate,
+    val rateSatPerVbyte: ULong,
+    val extraSats: ULong,
+    val totalSats: ULong,
+) {
+    companion object {
+        /**
+         * The rates to offer above [exitRate], each strictly above it so the rebuild replaces what is in the mempool:
+         * Fast at the next block's rate, or one above the exit's when the network asks no more; Normal at the half-hour
+         * rate, only between the two.
+         */
+        fun rates(exitRate: ULong, fees: SparkExitNetworkFees): List<Pair<FeeRate, ULong>> {
+            val fast = maxOf(fees.fastest, exitRate + 1uL)
+            val normal = fees.halfHour.takeIf { it > exitRate && it < fast }
+            return listOfNotNull(FeeRate.FAST to fast, normal?.let { FeeRate.NORMAL to it })
+        }
+    }
+}
 
 /** Whether the funding address covers the quote before the exit starts, and the hint while it does not. */
 data class SparkExitPrestartFunding(val isCovered: Boolean, val partial: SparkExitPartialFunding?)

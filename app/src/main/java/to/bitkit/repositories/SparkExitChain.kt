@@ -80,7 +80,13 @@ interface SparkExitChain {
 
     /** The rate for the next block, from `/fee-estimates`, rounded up. */
     suspend fun nextBlockFeeRate(): ULong
+
+    /** The rates for the next block and about half an hour, from `/fee-estimates` targets 1 and 3, rounded up. */
+    suspend fun networkFees(): SparkExitNetworkFees
 }
+
+/** What the network asks now, in sat/vB: for the next block, and for about half an hour. */
+data class SparkExitNetworkFees(val fastest: ULong, val halfHour: ULong)
 
 class SparkExitChainError(message: String) : AppError(message)
 
@@ -150,6 +156,12 @@ class EsploraSparkExitChain(
     override suspend fun nextBlockFeeRate(): ULong {
         val rate = json.parseToJsonElement(get("/fee-estimates")).jsonObject.getValue("1").jsonPrimitive.content
         return ceil(rate.toDouble()).toULong()
+    }
+
+    override suspend fun networkFees(): SparkExitNetworkFees {
+        val estimates = json.parseToJsonElement(get("/fee-estimates")).jsonObject
+        fun rate(target: String) = ceil(estimates.getValue(target).jsonPrimitive.content.toDouble()).toULong()
+        return SparkExitNetworkFees(fastest = rate("1"), halfHour = rate("3"))
     }
 
     override suspend fun isTxKnown(txid: String): Boolean {

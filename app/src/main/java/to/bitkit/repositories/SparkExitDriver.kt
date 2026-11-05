@@ -407,6 +407,28 @@ class SparkExitDriver(
     }
 
     /**
+     * What the exit's funding address must still receive to rebuild at [rate]: a build of the exit's leaves with the
+     * funding it holds, nothing broadcast. Zero when that funding covers it; otherwise the SDK's shortfall less what
+     * the address still holds, with one more input's fee for the payment, at least dust.
+     */
+    suspend fun feeBumpShortfall(record: SparkExitRecord, rate: ULong): ULong {
+        val sdk = checkNotNull(recovering) { "Spark is not connected" }
+        val atRate = record.copy(feeRateSatPerVbyte = rate)
+        val prepared = sdk.prepare(prepareRequest(atRate, ExitLeafSelection.Specific(atRate.exitLeafIds)))
+        if (prepared.funding == null) return 0uL
+        val built =
+            runSuspendCatching { sdk.recover(RecoverFundsRequest(prepared, atRate.fundingInputs), makeSigner()) }
+        val error = built.exceptionOrNull() ?: return 0uL
+        val required = (error as? SdkException.InsufficientCpfpFunds ?: throw error).requiredSats
+        val held = atRate.funding.firstOrNull()?.address?.let { address ->
+            runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, atRate) }
+        }
+        val needed = SparkExitMath.neededFunding(required, atRate.fundedSats, held, SparkExitMath.inputFeeSats(rate))
+        val extra = if (needed > atRate.fundedSats) needed - atRate.fundedSats else 0uL
+        return maxOf(extra, SparkExitMath.FUNDING_DUST_SATS)
+    }
+
+    /**
      * Builds a recovery of its own for [failedIds], the cooperative leaves a finished recovery could not get co-signed:
      * at once, then at doubling gaps from 6 blocks to a day, as long-waiting leaves are. After about a week the exit
      * is done without them. A recovery built for them is adopted as the next generation; what earlier ones landed

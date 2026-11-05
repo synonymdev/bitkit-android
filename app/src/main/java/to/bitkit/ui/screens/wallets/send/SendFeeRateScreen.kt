@@ -148,12 +148,14 @@ private fun Content(
     }
 }
 
+/** A speed row of the fee picker, also used by the Spark emergency exit's fee bump; [description] under its title. */
 @Composable
-private fun FeeItem(
+internal fun FeeItem(
     feeRate: FeeRate,
     sats: Long,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    description: String = stringResource(feeRate.description),
     isSelected: Boolean = false,
     isDisabled: Boolean = false,
     unit: PrimaryDisplay = LocalCurrencies.current.primaryDisplay,
@@ -186,7 +188,7 @@ private fun FeeItem(
             HorizontalSpacer(16.dp)
             Column {
                 BodyMSB(stringResource(feeRate.title), color = color)
-                BodySSB(stringResource(feeRate.description), color = accent)
+                BodySSB(description, color = accent)
             }
             FillWidth()
             if (sats != 0L) {

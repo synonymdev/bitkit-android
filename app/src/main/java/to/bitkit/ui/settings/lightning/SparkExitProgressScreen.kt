@@ -32,6 +32,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -43,6 +44,7 @@ fun SparkExitProgressScreen(
     viewModel: SparkExitViewModel,
     onBack: () -> Unit,
     onDone: () -> Unit,
+    onPayHigherFee: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -63,6 +65,7 @@ fun SparkExitProgressScreen(
         onCancel = viewModel::cancel,
         onDone = onDone,
         onNotificationSettings = context::openNotificationSettings,
+        onPayHigherFee = onPayHigherFee,
     )
 }
 
@@ -75,6 +78,7 @@ private fun Content(
     onCancel: () -> Unit = {},
     onDone: () -> Unit = {},
     onNotificationSettings: () -> Unit = {},
+    onPayHigherFee: () -> Unit = {},
 ) {
     val record = uiState.record
     ScreenColumn {
@@ -95,18 +99,19 @@ private fun Content(
                     .testTag("SparkExitProgress")
             ) {
                 VerticalSpacer(32.dp)
-                Display(text = progressTitle(record?.phase).withAccent())
+                Display(text = progressTitle(record?.phase, uiState.progressFunding).withAccent())
                 VerticalSpacer(8.dp)
                 BodyM(
                     text = progressText(
                         record = record,
+                        receivedSats = uiState.receivedSats,
                         progressFunding = uiState.progressFunding,
                         staysOnSparkSats = uiState.staysOnSparkSats,
                     ).withAccentBoldBright(),
                     color = Colors.White64,
                 )
                 VerticalSpacer(24.dp)
-                record?.let { ProgressDetails(it, uiState) }
+                record?.let { ProgressDetails(it, uiState, onPayHigherFee) }
                 if (record?.isActive == true) {
                     BackgroundNotes(
                         limits = uiState.backgroundLimits,
@@ -117,6 +122,14 @@ private fun Content(
             }
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            if (uiState.canPayHigherFee) {
+                SecondaryButton(
+                    text = stringResource(R.string.lightning__spark_exit__fee_bump_button),
+                    onClick = onPayHigherFee,
+                    testTag = "SparkExitPayHigherFee",
+                )
+                VerticalSpacer(16.dp)
+            }
             if (uiState.canCancel) {
                 SecondaryButton(
                     text = stringResource(R.string.lightning__spark_exit__cancel),
@@ -138,20 +151,16 @@ private fun Content(
 }
 
 @Composable
-private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) {
+private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onPayHigherFee: () -> Unit) {
     SparkExitSteps(record = record, tipHeight = uiState.tipHeight)
-    uiState.receivedSats?.let { sats ->
+    uiState.sweepTxid?.let {
         VerticalSpacer(24.dp)
-        val text = stringResource(R.string.lightning__spark_exit__done_received)
-            .replace("{amount}", sparkExitAmountText(sats))
-        uiState.sweepTxid?.let {
-            SparkExitTxNote(
-                text = text,
-                txid = it,
-                txidRes = R.string.lightning__spark_exit__sweep_txid,
-                testTag = "SparkExitReceived",
-            )
-        } ?: BodyS(text = text, color = Colors.White64, modifier = Modifier.testTag("SparkExitReceived"))
+        SparkExitTxNote(
+            text = null,
+            txid = it,
+            txidRes = R.string.lightning__spark_exit__sweep_txid,
+            testTag = "SparkExitSweepTxid",
+        )
     }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
@@ -217,6 +226,16 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
             text = stringResource(R.string.lightning__spark_exit__fee_low).replace("{rate}", "$it"),
             color = Colors.White64,
             modifier = Modifier.testTag("SparkExitFeeLow")
+        )
+    }
+    if (uiState.showsFeeRose) {
+        VerticalSpacer(16.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__fee_rose),
+            color = Colors.Yellow,
+            modifier = Modifier
+                .clickableAlpha(onClick = onPayHigherFee)
+                .testTag("SparkExitFeeRose")
         )
     }
     uiState.outsideExitSats?.let {
@@ -320,11 +339,13 @@ private fun BackgroundNotes(
 }
 
 @Composable
-private fun progressTitle(phase: SparkExitRecord.Phase?): String = stringResource(
+private fun progressTitle(phase: SparkExitRecord.Phase?, funding: SparkExitFundingState?): String = stringResource(
     when (phase) {
         SparkExitRecord.Phase.Done -> R.string.lightning__spark_exit__done_title
         is SparkExitRecord.Phase.Failed -> R.string.lightning__spark_exit__failed_title
-        is SparkExitRecord.Phase.NeedsFunding -> R.string.lightning__spark_exit__needs_funding_title
+        // A payment that covers it, such as a higher fee paid from savings, only waits to confirm.
+        is SparkExitRecord.Phase.NeedsFunding if funding is SparkExitFundingState.Ask ->
+            R.string.lightning__spark_exit__needs_funding_title
         else -> R.string.lightning__spark_exit__progress_title
     },
 )
@@ -332,11 +353,15 @@ private fun progressTitle(phase: SparkExitRecord.Phase?): String = stringResourc
 @Composable
 private fun progressText(
     record: SparkExitRecord?,
+    receivedSats: ULong?,
     progressFunding: SparkExitFundingState?,
     staysOnSparkSats: ULong?,
 ): String = when (record?.phase) {
     SparkExitRecord.Phase.Done -> listOfNotNull(
-        stringResource(R.string.lightning__spark_exit__done_text),
+        // What reached savings when it is known, else only that it did.
+        receivedSats?.let {
+            stringResource(R.string.lightning__spark_exit__done_received).replace("{amount}", sparkExitAmountText(it))
+        } ?: stringResource(R.string.lightning__spark_exit__done_text),
         record.skippedLeafCount.takeIf { it > 0 }?.let {
             stringResource(R.string.lightning__spark_exit__partial_text).replace("{count}", "$it")
         },

@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import breez_sdk_spark.RecoveryTxKind
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -16,10 +19,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.env.Env
+import to.bitkit.models.FeeRate
 import to.bitkit.repositories.SparkExitBackgroundLimits
+import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.repositories.SparkExitFundingKey
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitMath
+import to.bitkit.repositories.SparkExitNetworkFees
 import to.bitkit.repositories.SparkExitPrestartFunding
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
@@ -72,6 +78,7 @@ class SparkExitViewModel @Inject constructor(
                 outsideExitSats = exit.outsideExitSats,
                 staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
                 isSettling = exit.isSettling,
+                networkFees = exit.networkFees,
                 receivedSats = exit.record?.let(::receivedSats),
                 fundingPath = exit.record?.let { record ->
                     SparkExitFundingKey.path(record.fundingIndex.toInt(), Env.network)
@@ -161,6 +168,37 @@ class SparkExitViewModel @Inject constructor(
         }
     }
 
+    /** Prices the higher rates the running exit can move to, selecting the fastest. */
+    fun loadFeeBump() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(feeBump = SparkExitFeeBumpUiState(isLoading = true)) }
+            val spendable = sparkExitRepo.spendableSavingsSats().getOrNull()
+            sparkExitRepo.feeBumpOptions()
+                .onSuccess { options ->
+                    val bump = SparkExitFeeBumpUiState(options = options.toImmutableList(), spendableSats = spendable)
+                    // The fastest rate savings can pay for.
+                    val selected = (options.firstOrNull(bump::canPay) ?: options.firstOrNull())?.speed
+                    _uiState.update { it.copy(feeBump = bump.copy(selected = selected)) }
+                }
+                .onFailure { _uiState.update { it.copy(feeBump = SparkExitFeeBumpUiState(hasError = true)) } }
+        }
+    }
+
+    fun selectFeeBump(speed: FeeRate) {
+        _uiState.update { it.copy(feeBump = it.feeBump.copy(selected = speed)) }
+    }
+
+    fun payHigherFee() {
+        val option = _uiState.value.feeBump.selectedOption ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(feeBump = it.feeBump.copy(isPaying = true)) }
+            sparkExitRepo.payHigherFee(option)
+                .onSuccess { _effects.emit(SparkExitEffect.FeeBumped) }
+                .onFailure { ToastEventBus.send(it) }
+            _uiState.update { it.copy(feeBump = it.feeBump.copy(isPaying = false)) }
+        }
+    }
+
     /** Progress showed the result of an ended exit, so a later Emergency exit can start a new one. */
     fun onResultShown() {
         viewModelScope.launch { sparkExitRepo.markResultSeen() }
@@ -191,6 +229,7 @@ class SparkExitViewModel @Inject constructor(
 sealed interface SparkExitEffect {
     data object Started : SparkExitEffect
     data object Cancelled : SparkExitEffect
+    data object FeeBumped : SparkExitEffect
 }
 
 @Stable
@@ -225,7 +264,17 @@ data class SparkExitUiState(
     val receivedSats: ULong? = null,
     /** The derivation path of the exit's funding key, where a leftover that could not be sent stays. */
     val fundingPath: String? = null,
+    /** What the network asks now, for the fee bump and its hint. */
+    val networkFees: SparkExitNetworkFees? = null,
+    val feeBump: SparkExitFeeBumpUiState = SparkExitFeeBumpUiState(),
 ) {
+    /** Progress offers Pay a higher fee. */
+    val canPayHigherFee: Boolean get() = record?.canPayHigherFee(tipHeight, networkFees) == true
+
+    /** Progress hints that the network asks more than the exit pays, while it does not show the fee as too low. */
+    val showsFeeRose: Boolean
+        get() = canPayHigherFee && lowFeeRate == null && record?.isBelowNetwork(networkFees) == true
+
     val fundingSats: ULong get() = quote?.fundingSats ?: 0uL
 
     /** What the funding address holds against the quote before the exit starts. */
@@ -257,10 +306,13 @@ data class SparkExitUiState(
             return active.feeRateSatPerVbyte.takeIf { active.underpricedStep(tipHeight) != null }
         }
 
-    /** The SWEEP transaction of a finished exit. */
+    /** The SWEEP transaction of a finished exit, or the one that landed before a retry of leaves replaced it. */
     val sweepTxid: String?
-        get() = record?.takeIf { it.phase == SparkExitRecord.Phase.Done }
-            ?.recovery?.transactions?.firstOrNull { it.kind == RecoveryTxKind.SWEEP }?.txid
+        get() {
+            val done = record?.takeIf { it.phase == SparkExitRecord.Phase.Done } ?: return null
+            return done.recovery?.transactions?.firstOrNull { it.kind == RecoveryTxKind.SWEEP }?.txid
+                ?: done.landedSweepTxid
+        }
 
     /**
      * The fee funding progress shows, asking for the whole shortfall, at least the funding output's dust, until the
@@ -274,3 +326,20 @@ data class SparkExitUiState(
 }
 
 enum class SparkExitQuoteBlock { Error, Nothing, Uneconomic }
+
+/** The fee bump screen: the rates it offers, the one picked, and what savings can spend. */
+@Stable
+data class SparkExitFeeBumpUiState(
+    val isLoading: Boolean = false,
+    val hasError: Boolean = false,
+    val options: ImmutableList<SparkExitFeeBumpOption> = persistentListOf(),
+    val selected: FeeRate? = null,
+    val spendableSats: ULong? = null,
+    val isPaying: Boolean = false,
+) {
+    val selectedOption: SparkExitFeeBumpOption? get() = options.firstOrNull { it.speed == selected }
+
+    /** Savings covers [option]'s cost, or there is nothing to pay. */
+    fun canPay(option: SparkExitFeeBumpOption): Boolean =
+        option.totalSats == 0uL || (spendableSats ?: 0uL) >= option.totalSats
+}

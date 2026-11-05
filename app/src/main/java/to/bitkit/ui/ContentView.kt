@@ -207,6 +207,7 @@ import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.lightning.SparkDetailScreen
 import to.bitkit.ui.settings.lightning.SparkExitConfirmScreen
+import to.bitkit.ui.settings.lightning.SparkExitFeeBumpScreen
 import to.bitkit.ui.settings.lightning.SparkExitFundingScreen
 import to.bitkit.ui.settings.lightning.SparkExitIntroScreen
 import to.bitkit.ui.settings.lightning.SparkExitProgressScreen
@@ -2080,6 +2081,14 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
             viewModel = exitViewModel(it),
             onBack = { navController.popBackStack() },
             onDone = { leaveExit() },
+            onPayHigherFee = { navController.navigateTo(Routes.SparkExitFeeBump) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SparkExitFeeBump> {
+        SparkExitFeeBumpScreen(
+            viewModel = exitViewModel(it),
+            onBack = { navController.popBackStack() },
+            onDone = { navController.popBackStack() },
         )
     }
 }
@@ -2559,6 +2568,9 @@ sealed interface Routes {
 
     @Serializable
     data object SparkExitProgress : Routes.InternalOnly
+
+    @Serializable
+    data object SparkExitFeeBump : Routes.InternalOnly
 
     @Serializable
     data object DevSettings : Routes.DeepLinkable

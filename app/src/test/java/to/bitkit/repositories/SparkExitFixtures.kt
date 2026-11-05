@@ -178,6 +178,10 @@ class FakeSparkExitChain : SparkExitChain {
     var nextBlockRate: ULong? = 5uL
 
     override suspend fun nextBlockFeeRate(): ULong = nextBlockRate ?: throw SparkExitChainError("No fee estimates")
+
+    var fees = SparkExitNetworkFees(fastest = 5uL, halfHour = 3uL)
+
+    override suspend fun networkFees(): SparkExitNetworkFees = fees
 }
 
 class FakeSparkExitRecovering : SparkExitRecovering {

@@ -206,18 +206,11 @@ class SparkExitRepo @Inject constructor(
         val tip = runSuspendCatching { chain.tipHeight() }.getOrNull()
         _state.update { it.copy(tipHeight = tip ?: it.tipHeight) }
         tip?.let { height -> sparkExitTip.height.update { height } }
+        refreshNetworkFees(chain)
         refreshFundingSeen(chain, current)
         val store = store
         val recovering = sparkService.exitRecovering()
-        val driver = SparkExitDriver(
-            chain = chain,
-            recovering = recovering,
-            // The record's own funding key, also for exits started before each exit had an index of its own.
-            makeSigner = { signer(current.fundingIndex) },
-            save = store::save,
-            nowMillis = clock::nowMs,
-            tip = tip,
-        )
+        val driver = driver(chain, recovering, current, tip)
         // Read before this tick's losses are kept, so a leaf lost now is still reported once.
         val reportedLost = reportedLostLeafIds()
         val updated = driver.tick(current)
@@ -238,6 +231,21 @@ class SparkExitRepo @Inject constructor(
         afterTick(updated, current, isOnTrack, reportedLost)
         return updated
     }
+
+    private fun driver(
+        chain: SparkExitChain,
+        recovering: SparkExitRecovering?,
+        record: SparkExitRecord,
+        tip: UInt?,
+    ) = SparkExitDriver(
+        chain = chain,
+        recovering = recovering,
+        // The record's own funding key, also for exits started before each exit had an index of its own.
+        makeSigner = { signer(record.fundingIndex) },
+        save = store::save,
+        nowMillis = clock::nowMs,
+        tip = tip,
+    )
 
     private suspend fun afterTick(
         record: SparkExitRecord,
@@ -286,6 +294,19 @@ class SparkExitRepo @Inject constructor(
                 Logger.warn("Settling Spark exit transfer '${it.id}' with no running exit", context = TAG)
                 transferRepo.markSettled(it.id)
             }
+    }
+
+    /** The network's rates for the fee bump and its hint: the SDK's when Spark is connected, else the chain host's. */
+    private suspend fun refreshNetworkFees(chain: SparkExitChain) {
+        val fees = runSuspendCatching {
+            if (sparkService.isConnected) {
+                SparkExitNetworkFees(sparkService.fastestFeeRate(), sparkService.halfHourFeeRate())
+            } else {
+                chain.networkFees()
+            }
+        }.onFailure { Logger.warn("Failed to read the network fee rates for the Spark exit", it, context = TAG) }
+            .getOrNull()
+        _state.update { it.copy(networkFees = fees ?: it.networkFees) }
     }
 
     private suspend fun refreshFundingSeen(chain: SparkExitChain, record: SparkExitRecord) {
@@ -401,6 +422,66 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
+    /**
+     * The higher rates the running exit can move to, each with what its funding address must still receive and what
+     * that costs from savings, found by building the exit at each rate without broadcasting. Needs Spark connected.
+     */
+    suspend fun feeBumpOptions(): Result<List<SparkExitFeeBumpOption>> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
+            val chain = requireNotNull(chain) { "No chain host for this network" }
+            val recovering = sparkService.exitRecovering() ?: throw SparkError.NotConnected()
+            refreshNetworkFees(chain)
+            val fees = requireNotNull(_state.value.networkFees) { "No network fee rates" }
+            val driver = driver(chain, recovering, record, _state.value.tipHeight)
+            val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
+            SparkExitFeeBumpOption.rates(record.feeRateSatPerVbyte, fees).map { (speed, rate) ->
+                val extra = driver.feeBumpShortfall(record, rate)
+                val paymentFee = if (extra == 0uL) {
+                    0uL
+                } else {
+                    lightningRepo.calculateTotalFee(extra, address, TransactionSpeed.Fast).getOrThrow()
+                }
+                SparkExitFeeBumpOption(speed, rate, extra, extra.safe() + paymentFee.safe())
+            }
+        }.onFailure {
+            Logger.error("Failed to price a higher Spark exit fee", it, context = TAG)
+        }
+    }
+
+    /** What savings can spend now, for the fee bump's rows. */
+    suspend fun spendableSavingsSats(): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching { lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats }
+    }
+
+    /**
+     * Moves the running exit to [option]'s rate: pays what its funding address still needs from savings, like the
+     * first funding, then rebuilds what has not confirmed at that rate, which replaces it in the mempool.
+     */
+    suspend fun payHigherFee(option: SparkExitFeeBumpOption): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
+            val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
+            val txid = if (option.extraSats > 0uL) sendFunding(address, option.extraSats) else null
+            tickMutex.withLock {
+                val current = _state.value.record ?: return@withLock
+                val bumped = current.applyFeeBump(option.rateSatPerVbyte, option.extraSats, txid)
+                store.save(bumped)
+                _state.update {
+                    it.copy(record = bumped, fundingState = SparkExitMath.fundingState(bumped, utxos = null))
+                }
+            }
+            Logger.info(
+                "Raised the Spark exit fee to '${option.rateSatPerVbyte}' sat/vB, paying '${option.extraSats}' sats",
+                context = TAG,
+            )
+            scope.launch { tick() }
+            Unit
+        }.onFailure {
+            Logger.error("Failed to raise the Spark exit fee", it, context = TAG)
+        }
+    }
+
     /** The fee Savings pays to send the fee funding at the fast rate, or null when it cannot. */
     suspend fun savingsFundingFee(): Result<SparkExitSavingsFunding> = withContext(bgDispatcher) {
         runSuspendCatching {
@@ -485,8 +566,22 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
-    /** Pays the fee funding from savings as an ordinary payment: it is a fee, not a transfer to spending. */
+    /** Pays the fee funding from savings and keeps its txid, so progress waits for it instead of asking again. */
     private suspend fun payFunding(address: String, sats: ULong) {
+        val txid = sendFunding(address, sats)
+        // After the tick in flight, so its save cannot drop the txid.
+        tickMutex.withLock {
+            val record = _state.value.record ?: return@withLock
+            val paid = record.copy(fundingPaymentTxid = txid)
+            store.save(paid)
+            _state.update {
+                it.copy(record = paid, fundingState = SparkExitMath.fundingState(paid, utxos = null))
+            }
+        }
+    }
+
+    /** Sends [sats] from savings to the funding address as an ordinary payment: a fee, not a transfer to spending. */
+    private suspend fun sendFunding(address: String, sats: ULong): String {
         val outcome = lightningRepo.sendOnChain(
             address = address,
             sats = sats,
@@ -497,18 +592,10 @@ class SparkExitRepo @Inject constructor(
                 "Spark exit funding was not accepted: '$outcome'"
             )
         }
-        // After the tick in flight, so its save cannot drop the txid; progress then waits for it instead of asking.
-        tickMutex.withLock {
-            val record = _state.value.record ?: return@withLock
-            val paid = record.copy(fundingPaymentTxid = outcome.txid)
-            store.save(paid)
-            _state.update {
-                it.copy(record = paid, fundingState = SparkExitMath.fundingState(paid, utxos = null))
-            }
-        }
         runSuspendCatching { lightningRepo.completeAcceptedOrdinaryFollowup(outcome.txid) }
             .onFailure { Logger.warn("Failed to finish the Spark exit funding locally", it, context = TAG) }
         Logger.info("Funded the Spark exit with '$sats' sats in '${outcome.txid}'", context = TAG)
+        return outcome.txid
     }
 
     /**
@@ -610,6 +697,8 @@ data class SparkExitState(
     val sparkBalanceSats: ULong? = null,
     /** The quote waits for Spark to finish moving leaves, so value in flight is not left out of the exit. */
     val isSettling: Boolean = false,
+    /** What the network asks now, for the fee bump and its hint. */
+    val networkFees: SparkExitNetworkFees? = null,
 ) {
     val isExiting: Boolean get() = record?.isActive == true
 
