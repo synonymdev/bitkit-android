@@ -1145,7 +1145,7 @@
     <string name="contacts__add_error_fetch">Не удалось получить данные контакта. Проверьте публичный ключ и попробуйте снова.</string>
     <string name="contacts__add_error_invalid_key">Неверный формат ключа pubky. Проверьте и попробуйте снова.</string>
     <string name="contacts__add_error_self">Нельзя добавить свой собственный pubky в контакты.</string>
-    <string name="contacts__add_privacy_notice">Обратите внимание: чтобы платить друг другу приватно, вы и %1$s должны добавить друг друга в контакты. В противном случае платёж будет виден публично.</string>
+    <string name="contacts__add_privacy_notice">Обратите внимание: вы и %1$s должны добавить друг друга в контакты, прежде чем сможете платить друг другу приватно. Если вы заплатите без сохранения, платёж будет виден публично.</string>
     <string name="contacts__add_pay">Оплатить</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Вставьте pubky</string>
@@ -1174,6 +1174,7 @@
     <string name="contacts__import_title">Импорт</string>
     <string name="contacts__intro_description">Платите своим контактам одним касанием. Отправляйте платежи напрямую кому угодно и куда угодно.</string>
     <string name="contacts__my_profile">МОЙ ПРОФИЛЬ</string>
+    <string name="contacts__pay_private_link_pending">Bitkit всё ещё настраивает приватное соединение с этим контактом. Убедитесь, что контакт тоже добавил вас, или попросите его отправить вам запрос на оплату.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Вставить QR или Ссылку</string>
     <string name="contacts__scanner_status">СКАНИРОВАНИЕ QR И NFC</string>

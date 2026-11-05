@@ -27,6 +27,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
@@ -714,6 +715,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
             assertFalse(sut.uiState.value.showRequestOrPaySheet)
             expectNoEvents()
         }
+        verify(context).getString(R.string.contacts__pay_private_link_pending)
     }
 
     @Test

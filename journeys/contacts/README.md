@@ -12,6 +12,11 @@ contact again. It is mirrored on iOS. Deleted contact screens must not remain in
 `contact-payment-sharing.xml` checks disabling private sharing and keeping it off after returning to
 Settings. The same journey is available on iOS.
 
+`contact-pay-private-link-pending.xml` checks that a saved contact that supports private payments is
+only paid privately: while only one side has saved the other, Pay shows the private-connection toast
+and opens no payment, and Pay works once both sides have saved each other. It requires two
+disposable, request-capable identities with contact payment sharing enabled.
+
 Network and storage fault injection are outside journey-runner capabilities. With private contact sharing
 on, make one private-list withdrawal fail and let the following app-registry update fail as well.
 Turn off private contact payments. The app must report the failure, keep the private toggle off,
