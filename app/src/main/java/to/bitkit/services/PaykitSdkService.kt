@@ -1613,7 +1613,8 @@ class PaykitSdkService @Inject constructor(
                 backup = operationLock.withLock(priority) {
                     check(runtimeGeneration == generation) { "Paykit runtime changed before backup export" }
                     if (priority == Priority.Background && isPaymentSubmissionActive.value) return@withLock null
-                    val state = withPaykitKey { completeSdkCall { it.exportBackupString() } }
+                    // Export reads local SDK storage only; deriving the Paykit key would fetch the App Registry.
+                    val state = completeSdkCall { handle().exportBackupString() }
                     PaykitSdkBackupExport(state, backupStateVersion.value)
                 }
             } while (backup == null)

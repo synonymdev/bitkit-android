@@ -316,6 +316,21 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `backup export does not derive the paykit key from the app registry`() = runTest {
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(ByteArray(32) { 1 }.toHex())
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.paykitAppRegistry(any())).thenThrow(IllegalStateException("homeserver unreachable"))
+        whenever(sdk.exportBackupString()).thenReturn("backup")
+        val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { sdk }
+
+        assertEquals("backup", service.exportBackupState(Priority.Interactive).state)
+
+        verify(keychain, never()).loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        verify(sdk, never()).paykitAppRegistry(any())
+    }
+
+    @Test
     fun `state observation validates identity and propagates unavailable session failures`() = runTest {
         val observation = PaykitStateObservation(
             publicKey = "pubky$RING_PUBKY",
