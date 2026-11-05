@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import breez_sdk_spark.ConnectRequest
 import breez_sdk_spark.CpfpFundingKind
+import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.ExitLeafSelection
 import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.Seed
@@ -67,7 +68,13 @@ class SparkExitRegtestTest {
 
             val feeRate = maxOf(1uL, sdk.recommendedFees().fastestFee)
             val prepared = BreezSparkExitRecovering(sdk).prepare(
-                PrepareRecoverFundsRequest(feeRate, CpfpFundingKind.P2wpkh, address.address, ExitLeafSelection.All),
+                PrepareRecoverFundsRequest(
+                    feeRateSatPerVbyte = feeRate,
+                    fundingKind = CpfpFundingKind.P2wpkh,
+                    fundingStrategy = CpfpFundingStrategy.PER_NODE,
+                    destination = address.address,
+                    selection = ExitLeafSelection.All,
+                ),
             )
             assertTrue(prepared.leaves.isEmpty())
             assertFalse(SparkExitQuote(prepared).isWorthExiting)
