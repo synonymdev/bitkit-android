@@ -325,8 +325,9 @@ class SparkExitRepo @Inject constructor(
         }
         when (record.phase) {
             SparkExitRecord.Phase.Running -> {
-                if (!isOnTrack) return
                 val tip = _state.value.tipHeight
+                work.keepFeeLow(record.feeRateSatPerVbyte.takeIf { record.underpricedStep(tip) != null })
+                if (!isOnTrack) return
                 val untilMaturity = SparkExitMath.untilNextMaturity(record.recovery, tip, Env.network)
                 work.armDeadline(
                     SparkExitMath.deadline(untilMaturity, Env.network),

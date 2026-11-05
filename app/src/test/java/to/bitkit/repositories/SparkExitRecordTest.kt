@@ -279,13 +279,19 @@ class SparkExitRecordTest {
 
     @Test
     fun `a salvaged record that had ended stays ended and one with nothing to rebuild from is not salvaged`() {
-        val done = SparkExitJson.encode(SparkExitFixtures.record(SparkExitRecord.Phase.Done))
-            .replace("\"version\":1", "\"version\":9")
+        val leftover = listOf(SparkExitRecord.Leftover("change", 1u, 3_514uL))
+        val ended = SparkExitFixtures.record(SparkExitRecord.Phase.Done)
+            .copy(leftover = leftover, fundingStrategy = SparkExitRecord.PER_NODE)
+        val done = SparkExitJson.encode(ended).replace("\"version\":1", "\"version\":9")
 
         val salvaged = assertNotNull(SparkExitJson.salvage(done, nowMillis = 42L))
 
         assertEquals(SparkExitRecord.Phase.Done, salvaged.phase)
         assertFalse(salvaged.isRebuiltFromChain)
+        // It still sweeps what it left at its funding address.
+        assertEquals(leftover, salvaged.leftover)
+        assertTrue(salvaged.isLeftoverSweepPending)
+        assertEquals(SparkExitRecord.PER_NODE, salvaged.fundingStrategy)
         assertNull(SparkExitJson.salvage("{", nowMillis = 42L))
         assertNull(SparkExitJson.salvage("""{"version":2,"network":"regtest"}""", nowMillis = 42L))
     }

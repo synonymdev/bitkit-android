@@ -80,6 +80,7 @@ class SparkExitWork @Inject constructor(
         private const val PREFERENCES = "spark-exit-work"
         private const val KEY_WARN_AT = "warn-at"
         private const val KEY_DEADLINE_AT = "deadline-at"
+        private const val KEY_FEE_LOW_RATE = "fee-low-rate"
         private const val NOTIFICATION_ID = 7797
 
         /** The shortest period WorkManager runs periodic work at. */
@@ -156,6 +157,21 @@ class SparkExitWork @Inject constructor(
         preferences.edit {
             remove(KEY_WARN_AT)
             remove(KEY_DEADLINE_AT)
+            remove(KEY_FEE_LOW_RATE)
+        }
+    }
+
+    /**
+     * Keeps the exit's fee rate while the network finds it too low, or forgets it with null, so the deadline alarm
+     * names the fee even when the process that saw it is gone.
+     */
+    fun keepFeeLow(feeRateSatPerVbyte: ULong?) {
+        preferences.edit {
+            if (feeRateSatPerVbyte == null) {
+                remove(KEY_FEE_LOW_RATE)
+            } else {
+                putLong(KEY_FEE_LOW_RATE, feeRateSatPerVbyte.toLong())
+            }
         }
     }
 
@@ -180,7 +196,8 @@ class SparkExitWork @Inject constructor(
             return
         }
         val record = loaded.getOrNull()
-        val alert = SparkExitAlerts.reason(record, isOnline(), backgroundLimits())
+        val feeLowRate = preferences.getLong(KEY_FEE_LOW_RATE, 0L).takeIf { it > 0L }?.toULong()
+        val alert = SparkExitAlerts.reason(record, isOnline(), backgroundLimits(), feeLowRate)
         Logger.warn(
             "Spark exit deadline alarm fired with alert '$alert' (${context.logBatterySettings()})",
             context = TAG,
@@ -190,7 +207,7 @@ class SparkExitWork @Inject constructor(
             return
         }
         val deadlineAt = preferences.getLong(KEY_DEADLINE_AT, 0L).takeIf { it > clock.nowMs() }
-        notify(alert, deadlineAt)
+        notify(alert, deadlineAt, feeRateSatPerVbyte = feeLowRate)
         enqueueCatchUp()
         armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network))
     }
@@ -204,7 +221,12 @@ class SparkExitWork @Inject constructor(
     }
 
     /** Posts the exit's notification, unless Bitkit is on screen, where the progress screen says the same. */
-    fun notify(alert: SparkExitAlert, deadlineAtMillis: Long? = null, amountSats: ULong? = null) {
+    fun notify(
+        alert: SparkExitAlert,
+        deadlineAtMillis: Long? = null,
+        amountSats: ULong? = null,
+        feeRateSatPerVbyte: ULong? = null,
+    ) {
         // Losses are posted on screen too: the user may be anywhere in the app when an exit fails or loses a leaf.
         if (App.currentActivity?.value != null && alert !in ALWAYS_POSTED) return
         val time = deadlineAtMillis?.let { DateFormat.getTimeFormat(context).format(Date(it)) }
@@ -212,6 +234,7 @@ class SparkExitWork @Inject constructor(
         val text = context.getString(alert.textRes(hasDeadline = time != null))
             .replace("{time}", time.orEmpty())
             .replace("{amount}", amount.orEmpty())
+            .replace("{rate}", feeRateSatPerVbyte?.toString().orEmpty())
         context.pushNotification(
             title = context.getString(R.string.lightning__spark_exit__notification_title),
             text = text,
@@ -272,7 +295,7 @@ data class SparkExitBackgroundLimits(
 )
 
 /** Why the user is asked to open Bitkit. */
-enum class SparkExitAlert { Funding, Lost, Failed, Rejected, Offline, Restricted, Battery, Behind }
+enum class SparkExitAlert { Funding, Lost, Failed, Rejected, FeeLow, Offline, Restricted, Battery, Behind }
 
 private val ALWAYS_POSTED = setOf(SparkExitAlert.Lost, SparkExitAlert.Failed)
 
@@ -298,14 +321,23 @@ object SparkExitAlerts {
         )
     }
 
-    /** Why a running exit fell behind its deadline, or null when it needs nothing from the user. */
-    fun reason(record: SparkExitRecord?, isOnline: Boolean, limits: SparkExitBackgroundLimits): SparkExitAlert? {
+    /**
+     * Why a running exit fell behind its deadline, or null when it needs nothing from the user. [feeLowRate] is the
+     * exit's rate while the network finds it too low, which no background run changes.
+     */
+    fun reason(
+        record: SparkExitRecord?,
+        isOnline: Boolean,
+        limits: SparkExitBackgroundLimits,
+        feeLowRate: ULong? = null,
+    ): SparkExitAlert? {
         if (record?.isActive != true) return null
         return when {
             record.phase is SparkExitRecord.Phase.NeedsFunding -> SparkExitAlert.Funding
             record.phase != SparkExitRecord.Phase.Running -> null
             record.surfacedRejection != null ||
                 (record.stuckStep?.rejections ?: 0) >= SparkExitDriver.REJECTIONS_TO_SURFACE -> SparkExitAlert.Rejected
+            feeLowRate != null -> SparkExitAlert.FeeLow
             !isOnline -> SparkExitAlert.Offline
             limits.isRestricted -> SparkExitAlert.Restricted
             // Battery optimization alone is Android's default for nearly every app, so it names no cause.
@@ -319,6 +351,7 @@ private fun SparkExitAlert.textRes(hasDeadline: Boolean): Int = when (this) {
     SparkExitAlert.Funding -> R.string.lightning__spark_exit__notification_funding
     SparkExitAlert.Lost -> R.string.lightning__spark_exit__notification_lost
     SparkExitAlert.Failed -> R.string.lightning__spark_exit__notification_failed
+    SparkExitAlert.FeeLow -> R.string.lightning__spark_exit__fee_low
     SparkExitAlert.Rejected if hasDeadline -> R.string.lightning__spark_exit__notification_rejected
     SparkExitAlert.Offline if hasDeadline -> R.string.lightning__spark_exit__notification_offline
     SparkExitAlert.Restricted if hasDeadline -> R.string.lightning__spark_exit__notification_restricted

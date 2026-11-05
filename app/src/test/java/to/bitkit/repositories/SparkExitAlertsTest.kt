@@ -40,6 +40,12 @@ class SparkExitAlertsTest {
             SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isOptimized = true)),
         )
         assertEquals(SparkExitAlert.Behind, SparkExitAlerts.reason(running, isOnline = true, unlimited))
+        // An underpriced exit names its fee, which no background run fixes, before any cause of a missed run.
+        assertEquals(
+            SparkExitAlert.FeeLow,
+            SparkExitAlerts.reason(running, isOnline = false, unlimited.copy(isRestricted = true), feeLowRate = 2uL),
+        )
+        assertEquals(SparkExitAlert.Rejected, SparkExitAlerts.reason(refused, isOnline = true, unlimited, 2uL))
     }
 
     @Test

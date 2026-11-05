@@ -527,6 +527,13 @@ object SparkExitJson {
             isRebuiltFromChain = isActive,
             exitStateSnapshot = read { o.stringOrNull("exitStateSnapshot") },
             fundingStrategy = read { o.stringOrNull("fundingStrategy") },
+            // An exit that had ended still sweeps what it left at its funding address.
+            leftover = read {
+                o.arrayOrEmpty("leftover").map {
+                    val l = it.jsonObject
+                    SparkExitRecord.Leftover(l.string("txid"), l.ulong("vout").toUInt(), l.ulong("valueSats"))
+                }
+            }.orEmpty(),
         )
     }
 
