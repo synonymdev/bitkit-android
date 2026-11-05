@@ -302,8 +302,10 @@ data class SparkExitUiState(
     /** The exit's fee rate, while a step the network accepted does not confirm for longer than that rate needs. */
     val lowFeeRate: ULong?
         get() {
-            val active = record?.takeIf { it.isActive } ?: return null
-            return active.feeRateSatPerVbyte.takeIf { active.underpricedStep(tipHeight) != null }
+            // Not while a higher fee is paid and the exit waits to rebuild at it.
+            val running = record?.takeIf { it.phase == SparkExitRecord.Phase.Running && !it.isRebuilding }
+                ?: return null
+            return running.feeRateSatPerVbyte.takeIf { running.underpricedStep(tipHeight) != null }
         }
 
     /** The SWEEP transaction of a finished exit, or the one that landed before a retry of leaves replaced it. */

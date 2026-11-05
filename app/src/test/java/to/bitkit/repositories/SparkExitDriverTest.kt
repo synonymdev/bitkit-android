@@ -781,6 +781,8 @@ class SparkExitDriverTest : BaseUnitTest() {
             .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
         assertEquals(Phase.NeedsFunding(26_612uL), record.phase)
         assertEquals(SparkExitFundingState.Paid("bump"), SparkExitMath.fundingState(record, utxos = null))
+        // Savings' payment is on its way: nothing is asked for while it confirms.
+        assertTrue(record.isAwaitingOwnPayment)
 
         chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(
             SparkExitFixtures.utxo("f0", value = 20_000uL),
@@ -791,6 +793,7 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertEquals(Phase.Running, record.phase)
         assertEquals(9uL, sdk.prepareRequests.single().feeRateSatPerVbyte)
+        assertFalse(record.isAwaitingOwnPayment)
         assertEquals(
             listOf("f0", "bump"),
             sdk.recoverRequests.single().fundingInputs.map { (it as CpfpInput.P2wpkh).txid }

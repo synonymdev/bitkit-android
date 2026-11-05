@@ -87,6 +87,29 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a paid higher fee no longer shows the fee as too low`() {
+        val running = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
+            .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
+        val slow = running.copy(
+            broadcastLog = listOf(
+                SparkExitRecord.BroadcastAttempt(
+                    running.generation,
+                    "n1",
+                    1,
+                    0,
+                    0L,
+                    "ok",
+                    true,
+                    acceptedAtHeight = 990u
+                ),
+            ),
+        )
+        assertEquals(2uL, SparkExitUiState(record = slow, tipHeight = 1_000u).lowFeeRate)
+        val paid = slow.applyFeeBump(rate = 9uL, extraSats = 5_000uL, paymentTxid = "bump")
+        assertNull(SparkExitUiState(record = paid, tipHeight = 1_000u).lowFeeRate)
+    }
+
+    @Test
     fun `done names the sweep that landed before a retry of leaves replaced it`() {
         val done = SparkExitFixtures.record(SparkExitRecord.Phase.Done)
             .copy(recovery = SparkExitFixtures.recovery(emptyList()), landedSweepTxid = "sweep")

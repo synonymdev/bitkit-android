@@ -362,7 +362,10 @@ class SparkExitRepo @Inject constructor(
             }
             is SparkExitRecord.Phase.NeedsFunding -> {
                 work.cancelDeadline()
-                if (previous.phase !is SparkExitRecord.Phase.NeedsFunding) work.notify(SparkExitAlert.Funding)
+                // A payment from savings, such as a higher fee, is on its way: nothing to ask the user for.
+                if (previous.phase !is SparkExitRecord.Phase.NeedsFunding && !record.isAwaitingOwnPayment) {
+                    work.notify(SparkExitAlert.Funding)
+                }
             }
             else -> work.cancelDeadline()
         }

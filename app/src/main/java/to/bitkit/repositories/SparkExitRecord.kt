@@ -209,6 +209,11 @@ data class SparkExitRecord(
     /** The leftover waits for network fees to drop before it is worth sweeping. */
     val isLeftoverWaitingForFees: Boolean get() = leftover.isNotEmpty() && leftoverSweep?.isWaitingForFees == true
 
+    /** Savings paid funding the exit has not taken yet, such as a higher fee: nothing is asked while it confirms. */
+    val isAwaitingOwnPayment: Boolean
+        get() = fundingPaymentTxid != null && fundingShortfallSats != null &&
+            funding.none { it.txid == fundingPaymentTxid }
+
     /** A built sweep of the leftover, saved before it is sent; a null [txid] means it was dust and nothing went. */
     data class LeftoverSweep(
         val txid: String?,
