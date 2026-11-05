@@ -1539,6 +1539,18 @@ class LightningRepo @Inject constructor(
             context = TAG,
         )
 
+        // a drain spends everything spendable after the sync, so a send only drains while that still equals sats
+        val isDrain = isMaxAmount &&
+            (
+                isTransfer || sats == runSuspendCatching {
+                    val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+                    if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+                    val fee = lightningService.estimateSendAllFee(address, satsPerVByte)
+                    spendableSats.safe() - fee.safe()
+                }.getOrNull()
+                )
+
         // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
         val utxosForSend = when {
             isTransfer && isMaxAmount -> null
@@ -1555,7 +1567,7 @@ class LightningRepo @Inject constructor(
                 orderId = orderId,
                 address = address,
                 amountSats = sats,
-                isMaxAmount = isMaxAmount,
+                isMaxAmount = isDrain,
                 feeRateSatsPerVByte = satsPerVByte,
                 isTransfer = isTransfer,
                 channelId = channelId,
@@ -1581,13 +1593,20 @@ class LightningRepo @Inject constructor(
                     sats,
                     satsPerVByte,
                     utxosForSend,
-                    isMaxAmount,
+                    isDrain,
                     attempt.walletIndex,
                     paymentDeadlineAt,
                 )
                     .also { prepared ->
-                        if (!isMaxAmount && utxosForSend != null) {
-                            check(
+                        when {
+                            // a drain also sweeps coins synced after the recheck, so it must still match sats
+                            isDrain -> if (!isTransfer) {
+                                check(prepared.receipt.amountSats == sats) {
+                                    "Drain amount '${prepared.receipt.amountSats}' differs from confirmed '$sats'"
+                                }
+                            }
+
+                            utxosForSend != null -> check(
                                 prepared.receipt.inputs.toSet() == utxosForSend.map {
                                     OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
                                 }.toSet()
@@ -2057,6 +2076,21 @@ class LightningRepo @Inject constructor(
             val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
             val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
             lightningService.estimateSendAllFee(address = addressOrDefault, satsPerVByte = satsPerVByte)
+        }
+    }
+
+    /** Max onchain amount sendable at [speed], i.e. the spendable balance minus the send-all mining fee */
+    suspend fun estimateMaxSendOnchain(
+        address: Address? = null,
+        speed: TransactionSpeed? = null,
+        feeRates: FeeRates? = null,
+    ): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+            if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+            val fee = estimateSendAllFee(address = address, speed = speed, feeRates = feeRates).getOrThrow()
+            spendableSats.safe() - fee.safe()
         }
     }
 
