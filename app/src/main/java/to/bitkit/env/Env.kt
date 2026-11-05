@@ -139,6 +139,12 @@ internal object Env {
             Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
         }
 
+    /** Esplora REST that Spark reads the chain from; null keeps the SDK's default, on staging and regtest. */
+    fun sparkChainServiceUrl(network: Network): String? = when (network) {
+        Network.BITCOIN -> bitkitEsploraUrl
+        else -> null
+    }
+
     val blocktankBaseUrl
         get() = when (network) {
             Network.BITCOIN -> "https://api1.blocktank.to"
@@ -162,6 +168,7 @@ internal object Env {
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"
+    const val bitkitEsploraUrl = "https://bitkit.to/electrs"
     const val pricesWidgetBaseUrl = "https://feeds.synonym.to/price-feed/api"
 
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
