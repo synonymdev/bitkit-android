@@ -111,9 +111,9 @@ class HwSendViewModel @Inject constructor(
         beginPaymentSubmission: () -> (() -> Unit) = { {} },
     ) {
         if (isOperationInFlight) return
-        // Used by this attempt alone, whatever it ends in. A different request loses it too.
+        // A different request ends it. Otherwise it lasts until a new transaction is signed and retained.
         val consent = retainedSendConsent?.takeIf { request.paymentRequestId == null && it.matches(request) }
-        retainedSendConsent = null
+        retainedSendConsent = consent
         signingWalletId = request.walletId
         _uiState.update { it.copy(isSigning = true) }
         val attempt = ++signingAttempt
@@ -161,22 +161,16 @@ class HwSendViewModel @Inject constructor(
                         throw PaykitPaymentRequestError.OperationInProgress
                     }
                     if (pending == null && hwWalletRepo.needsPassphrase(request.walletId)) {
-                        retainedSendConsent = consent
                         _uiState.update { it.copy(isPassphraseRequired = true) }
                         return@runCatching
                     }
                     if (pending == null) {
-                        val signedTx = runSuspendCatching {
-                            prepareSignedTransaction(
-                                walletId = request.walletId,
-                                address = request.address,
-                                amountSats = request.amountSats,
-                                satsPerVByte = request.satsPerVByte,
-                            )
-                        }.onFailure {
-                            // The prompt restarts this attempt once the wallet reopens, before anything was signed.
-                            if (it.needsPassphrase() && signingAttempt == attempt) retainedSendConsent = consent
-                        }.getOrThrow()
+                        val signedTx = prepareSignedTransaction(
+                            walletId = request.walletId,
+                            address = request.address,
+                            amountSats = request.amountSats,
+                            satsPerVByte = request.satsPerVByte,
+                        )
                         pending = PendingHwSendBroadcast(request, signedTx, replacement = replacement)
                         pendingBroadcast = pending
                         _uiState.update { it.copy(hasPendingBroadcast = true) }
@@ -413,6 +407,8 @@ class HwSendViewModel @Inject constructor(
             ).getOrThrow().also { if (!sendContext.isActive) undoRetainBeforeDispatch(payment, it) }
         }
         sendContext.ensureActive()
+        // The new bytes hold the record now, so a Retry refers to them and another signature needs a new warning.
+        retainedSendConsent = null
         return outcome
     }
 
@@ -564,9 +560,10 @@ class HwSendViewModel @Inject constructor(
     }
 
     /**
-     * Lets one signing attempt for exactly this payment sign anew over the wallet's retained send. Only for a user who
-     * accepted a possible second payment. Held in memory only and ended by [cancel], so a restart or leaving the sign
-     * flow requires a new warning. Deletes nothing and does nothing while an operation is in flight.
+     * Lets exactly this payment sign anew over the wallet's retained send, until a new transaction is signed and
+     * retained. Only for a user who accepted a possible second payment. Held in memory only and ended by [cancel], so a
+     * restart or leaving the sign flow requires a new warning. Deletes nothing, so an attempt that signs nothing leaves
+     * the original guarded by its record and can ask the device again. Does nothing while an operation is in flight.
      */
     fun consentToNewSignature(walletId: String, address: String, amountSats: ULong) {
         if (isOperationInFlight) return
