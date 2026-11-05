@@ -11497,6 +11497,39 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hardware funded request keeps its amount when the speed changes`() = test {
+        val request = paymentRequest()
+        stubIncomingOnchainRequest(request)
+        val onchainInfo = mock<IBtInfoOnchain>()
+        val btInfo = mock<IBtInfo>()
+        whenever(onchainInfo.feeRates).thenReturn(FeeRates(fast = 5u, mid = 3u, slow = 1u))
+        whenever(btInfo.onchain).thenReturn(onchainInfo)
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(info = btInfo)))
+        balanceState.value = BalanceState(maxSendOnchainSats = 1_000u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        // A change-free exact payment spending every coin: balance minus its fee equals the amount.
+        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
+            .thenReturn(Result.success(50_000uL - request.amount.atomic))
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+            .thenReturn(Result.success(48_000uL))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        advanceUntilIdle()
+        assertEquals(request.amount.atomic, sut.sendUiState.value.hardwareAvailableSats)
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(request.amount.atomic, sut.sendUiState.value.amount)
+        assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
+    }
+
+    @Test
     fun `small incoming unified request remains payable over Lightning`() = test {
         val request = paymentRequest().copy(amount = PaykitAmount(PaykitAsset.BTC, 100uL))
         val uri = "bitcoin:$REGTEST_ADDRESS?lightning=lnbcrt1smallrequest"

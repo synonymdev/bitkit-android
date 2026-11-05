@@ -4220,8 +4220,10 @@ class AppViewModel @Inject constructor(
 
                 else -> false
             }
-            // A scanned amount is the payee's, even when it equals the hardware maximum.
-            val wasHardwareMax = previous.hardwareWalletId != null && previous.fixedOnchainAmount == null &&
+            // A scanned amount or a payment request's amount is the payee's, so it never follows the
+            // send-max amount, even when it equals what the wallet can spend.
+            val wasHardwareMax = activeIncomingPaymentRequest() == null &&
+                previous.hardwareWalletId != null && previous.fixedOnchainAmount == null &&
                 previous.amount > 0uL &&
                 previous.amount == previous.hardwareAvailableSats
             val hardwareAvailableSats = previous.hardwareWalletId?.let { walletId ->
