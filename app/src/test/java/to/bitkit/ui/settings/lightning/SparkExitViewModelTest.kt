@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
 import org.mockito.kotlin.doReturn
@@ -81,6 +82,8 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertTrue(SparkExitFeeBumpUiState(spendableSats = 4_620uL).canPay(fast))
         assertFalse(SparkExitFeeBumpUiState(spendableSats = 4_619uL).canPay(fast))
         assertTrue(SparkExitFeeBumpUiState(spendableSats = 0uL).canPay(fast.copy(extraSats = 0uL, totalSats = 0uL)))
+        assertTrue(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 1_000uL).isSavingsShort)
+        assertFalse(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 5_000uL).isSavingsShort)
     }
 
     @Test

@@ -176,8 +176,8 @@ class SparkExitViewModel @Inject constructor(
             sparkExitRepo.feeBumpOptions()
                 .onSuccess { options ->
                     val bump = SparkExitFeeBumpUiState(options = options.toImmutableList(), spendableSats = spendable)
-                    // The fastest rate savings can pay for.
-                    val selected = (options.firstOrNull(bump::canPay) ?: options.firstOrNull())?.speed
+                    // The fastest rate savings can pay for, or none when it covers no rate.
+                    val selected = options.firstOrNull(bump::canPay)?.speed
                     _uiState.update { it.copy(feeBump = bump.copy(selected = selected)) }
                 }
                 .onFailure { _uiState.update { it.copy(feeBump = SparkExitFeeBumpUiState(hasError = true)) } }
@@ -338,6 +338,9 @@ data class SparkExitFeeBumpUiState(
     val isPaying: Boolean = false,
 ) {
     val selectedOption: SparkExitFeeBumpOption? get() = options.firstOrNull { it.speed == selected }
+
+    /** Savings covers none of the rates offered. */
+    val isSavingsShort: Boolean get() = options.isNotEmpty() && options.none(::canPay)
 
     /** Savings covers [option]'s cost, or there is nothing to pay. */
     fun canPay(option: SparkExitFeeBumpOption): Boolean =

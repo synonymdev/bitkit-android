@@ -114,6 +114,7 @@ private fun Content(
                                     .replace("{rate}", "${option.rateSatPerVbyte}"),
                             isSelected = option == selected,
                             isDisabled = !bump.canPay(option),
+                            showsSymbols = true,
                             onClick = { if (bump.canPay(option)) onSelect(option.speed) },
                             modifier = Modifier.testTag("SparkExitFeeBump${option.speed.name}")
                         )
@@ -123,7 +124,7 @@ private fun Content(
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            if (selected != null && !bump.canPay(selected)) {
+            if (bump.isSavingsShort) {
                 CaptionM(
                     text = stringResource(R.string.lightning__spark_exit__fund_insufficient).withAccent(),
                     color = Colors.White64,
