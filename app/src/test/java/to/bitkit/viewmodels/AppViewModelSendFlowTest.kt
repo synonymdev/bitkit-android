@@ -13,6 +13,8 @@ import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtInfoOnchain
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAddressData
@@ -11452,6 +11454,79 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         assertNull(activeContactPaymentContext())
         verify(context, never()).getString(R.string.wallet__lnurl_pay__error_min__description)
+    }
+
+    @Test
+    fun `incoming onchain request funded by hardware composes the payment once`() = test {
+        val request = paymentRequest()
+        stubIncomingOnchainRequest(request)
+        val onchainInfo = mock<IBtInfoOnchain>()
+        val btInfo = mock<IBtInfo>()
+        whenever(onchainInfo.feeRates).thenReturn(FeeRates(fast = 5u, mid = 3u, slow = 1u))
+        whenever(btInfo.onchain).thenReturn(onchainInfo)
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(info = btInfo)))
+        balanceState.value = BalanceState(maxSendOnchainSats = 1_000u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
+            .thenReturn(Result.success(250uL))
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+            .thenReturn(Result.success(48_000uL))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(HARDWARE_WALLET_ID, state.hardwareWalletId)
+        assertEquals(SendMethod.ONCHAIN, state.payMethod)
+        assertEquals(49_750uL, state.hardwareAvailableSats)
+        assertFalse(state.onchainFeeUi.isLoading)
+        assertTrue(state.onchainFeeUi.estimates.isEmpty())
+        verify(hwWalletRepo, never()).maxSpendableFunding(any(), any(), any())
+        verify(hwWalletRepo, times(2)).estimateFundingMiningFee(
+            eq(HARDWARE_WALLET_ID),
+            eq(REGTEST_ADDRESS),
+            eq(request.amount.atomic),
+            any(),
+        )
+    }
+
+    @Test
+    fun `hardware funded request keeps its amount when the speed changes`() = test {
+        val request = paymentRequest()
+        stubIncomingOnchainRequest(request)
+        val onchainInfo = mock<IBtInfoOnchain>()
+        val btInfo = mock<IBtInfo>()
+        whenever(onchainInfo.feeRates).thenReturn(FeeRates(fast = 5u, mid = 3u, slow = 1u))
+        whenever(btInfo.onchain).thenReturn(onchainInfo)
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(info = btInfo)))
+        balanceState.value = BalanceState(maxSendOnchainSats = 1_000u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        // A change-free exact payment spending every coin: balance minus its fee equals the amount.
+        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
+            .thenReturn(Result.success(50_000uL - request.amount.atomic))
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+            .thenReturn(Result.success(48_000uL))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        advanceUntilIdle()
+        assertEquals(request.amount.atomic, sut.sendUiState.value.hardwareAvailableSats)
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(request.amount.atomic, sut.sendUiState.value.amount)
+        assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
     }
 
     @Test
