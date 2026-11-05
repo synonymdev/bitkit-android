@@ -31,6 +31,14 @@ internal object Env {
         ).filter { it.first in enabled }.map { it.second }
     }
 
+    val breezApiKey: String? get() = BuildConfig.BREEZ_API_KEY.takeIf { it.isNotBlank() }
+
+    /**
+     * Esplora endpoint for the node's chain source on regtest builds, set to put the wallet on Spark's regtest chain
+     * through `scripts/spark-regtest-esplora.py`; Electrum is used when unset.
+     */
+    val regtestEsploraUrl: String?
+        get() = BuildConfig.ESPLORA_URL.takeIf { it.isNotBlank() && network == Network.REGTEST }
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
@@ -225,6 +233,12 @@ internal object Env {
         }
 
     fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+
+    fun sparkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "spark")
+
+    /** A restored Spark exit data backup waiting to be imported once Spark connects; outside Spark's storage. */
+    fun sparkExitRestorePath(walletIndex: Int) =
+        Path(storagePathOf(walletIndex, network.name.lowercase(), "spark-restore"), "exit-state.json").toString()
 
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")

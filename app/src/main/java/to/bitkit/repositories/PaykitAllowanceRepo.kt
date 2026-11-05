@@ -171,12 +171,15 @@ class PaykitAllowanceRepo @Inject constructor(
                 .map { it.nodeLifecycleState.isRunning() }
                 .distinctUntilChanged()
                 .filter { it }
-                .collect {
-                    // Attempts recovery left open while the node could not list payments are settled now.
-                    executor.activeIdentity?.let { identity -> executor.recover(identity) }
-                    executor.settleOpenLightningAttempts()
-                }
+                .collect { settleAttemptsLeftOpen() }
         }
+        // Attempts recovery left open while the node or Spark could not list payments are settled once both can.
+        scope.launch { lightningRepo.isSparkSynced.filter { it }.collect { settleAttemptsLeftOpen() } }
+    }
+
+    private suspend fun settleAttemptsLeftOpen() {
+        executor.activeIdentity?.let { identity -> executor.recover(identity) }
+        executor.settleOpenLightningAttempts()
     }
 
     fun entry(id: String): PaykitAllowanceEntry? = _entries.value.firstOrNull { it.id == id }

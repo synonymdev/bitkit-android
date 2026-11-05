@@ -59,6 +59,26 @@ fun SavingsProgressScreen(
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
     val swapResult by transfer.savingsSwapResult.collectAsStateWithLifecycle()
 
+    // Spark's withdrawal failed: its balance stayed in Spending, so the transfer is not reported as done.
+    fun toastSparkFailure(movesChannels: Boolean) {
+        app.toast(
+            type = Toast.ToastType.ERROR,
+            title = resources.getString(R.string.common__error),
+            description = resources.getString(
+                if (movesChannels) {
+                    R.string.lightning__savings_spark_failed_channels
+                } else {
+                    R.string.lightning__savings_spark_failed
+                }
+            ),
+        )
+    }
+
+    fun showSparkFailure(movesChannels: Boolean) {
+        toastSparkFailure(movesChannels)
+        onTransferUnavailable()
+    }
+
     // Effect to execute the transfer & update UI
     LaunchedEffect(Unit) {
         when (transfer.savingsTransferMode.value) {
@@ -73,8 +93,17 @@ fun SavingsProgressScreen(
             SavingsTransferMode.CLOSE -> runChannelClose(
                 transfer = transfer,
                 wallet = wallet,
-                onSuccess = { progressState = SavingsProgressState.SUCCESS },
-                onInterrupted = { progressState = SavingsProgressState.INTERRUPTED },
+                onSuccess = {
+                    if (transfer.isSparkWithdrawFailed.value) {
+                        showSparkFailure(movesChannels = transfer.hasChannelsToClose())
+                    } else {
+                        progressState = SavingsProgressState.SUCCESS
+                    }
+                },
+                onInterrupted = {
+                    if (transfer.isSparkWithdrawFailed.value) toastSparkFailure(movesChannels = true)
+                    progressState = SavingsProgressState.INTERRUPTED
+                },
                 onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
             )
         }
@@ -82,6 +111,11 @@ fun SavingsProgressScreen(
 
     LaunchedEffect(swapResult) {
         when (val result = swapResult) {
+            is SavingsSwapResult.Success if transfer.isSparkWithdrawFailed.value -> {
+                wallet.refreshState()
+                showSparkFailure(movesChannels = true)
+            }
+
             is SavingsSwapResult.Success -> {
                 wallet.refreshState()
                 progressState = SavingsProgressState.SUCCESS
@@ -90,6 +124,11 @@ fun SavingsProgressScreen(
             // The hold invoice is paid but the on-chain claim has not landed within the wait
             // window. The claim is auto-broadcast once the lockup appears, so the transfer is
             // committed and settling; show that honestly instead of a completed success.
+            SavingsSwapResult.Pending if transfer.isSparkWithdrawFailed.value -> {
+                wallet.refreshState()
+                showSparkFailure(movesChannels = true)
+            }
+
             SavingsSwapResult.Pending -> {
                 wallet.refreshState()
                 progressState = SavingsProgressState.SETTLING
@@ -123,11 +162,12 @@ private suspend fun runChannelClose(
     onInterrupted: () -> Unit,
     onGiveUp: () -> Unit,
 ) {
+    val closesChannels = transfer.hasChannelsToClose()
     val channelsFailedToCoopClose = transfer.closeSelectedChannels()
 
     if (channelsFailedToCoopClose.isEmpty()) {
         wallet.refreshState()
-        delay(5000)
+        if (closesChannels) delay(5000)
         onSuccess()
         return
     }

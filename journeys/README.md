@@ -184,6 +184,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
+| `amount-limits/transfer-spending-preset-delete.xml` | not ported yet — the same fix shipped in synonymdev/bitkit-ios#289, so this one should port |
 | `app-update/critical-update-onboarding.xml` | not ported yet — iOS already blocks at the top level in `AppScene`, so the journey applies there once written |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `home/timed-reminders-do-not-interrupt.xml` | paired draft in synonymdev/bitkit-ios#1013; the journey name and actions match, but iOS device verification is incomplete. Android resumes Home after permission prompts and background/foreground; iOS uses primary-screen lifecycle callbacks and explicit rechecks. |
@@ -196,6 +197,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
+| `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; closing the received sheet re-sizes iOS's Spending Confirm, so the lower amounts can show before the swipe |
+| `transfer/savings-select-funds.xml` | same file and steps — iOS runs it as J8 on synonymdev/bitkit-ios#1128 |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS

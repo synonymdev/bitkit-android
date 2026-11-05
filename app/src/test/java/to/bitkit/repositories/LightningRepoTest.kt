@@ -89,6 +89,7 @@ import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
@@ -102,6 +103,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @OptIn(kotlin.time.ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class LightningRepoTest : BaseUnitTest() {
@@ -123,6 +125,7 @@ class LightningRepoTest : BaseUnitTest() {
     private lateinit var sut: LightningRepo
 
     private val lightningService = mock<LightningService>()
+    private val sparkRepo = idleSparkRepo()
     private val settingsStore = mock<SettingsStore>()
     private val coreService = mock<CoreService>()
     private val keychain = mock<Keychain>()
@@ -164,6 +167,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
     }
 
@@ -229,6 +233,7 @@ class LightningRepoTest : BaseUnitTest() {
             activityRepo = mock(),
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
+            sparkRepo = sparkRepo,
         )
     }
 
@@ -1096,6 +1101,50 @@ class LightningRepoTest : BaseUnitTest() {
         assertIs<WalletBackupRestorePendingError>(sut.sendOnChain("address", 1000uL).exceptionOrNull())
         verify(onchainSendAttemptStore, never()).current()
         verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `pending wallet recovery prevents spark payment dispatch`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        var beforeSend = false
+
+        val result = sut.payInvoice("invoice", 1_000uL, onBeforeSend = {
+            beforeSend = true
+            true
+        })
+
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        assertFalse(beforeSend)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `spark payment keeps the deadline and the fee limit`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Result.success("hash"))
+        val deadline = Instant.fromEpochSeconds(1_800_000_000)
+
+        val result = sut.payInvoice("invoice", 1_000uL, deadline, maxTotalRoutingFeeMsat = 10_000uL) { true }
+
+        assertEquals("hash", result.getOrThrow())
+        verify(sparkRepo).payInvoice("invoice", 1_000uL, deadline, 10_000uL)
+    }
+
+    @Test
+    fun `restore beginning during spark payment authorization prevents dispatch`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val result = sut.payInvoice("invoice", 1_000uL, onBeforeSend = {
+            whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            true
+        })
+
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -2085,6 +2134,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         whenever(coreService.activity).thenReturn(mock())
@@ -2510,6 +2560,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         val activityService = mock<ActivityService>()
@@ -2580,6 +2631,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         val activityService = mock<ActivityService>()
@@ -2661,6 +2713,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         val activityService = mock<ActivityService>()
@@ -3140,6 +3193,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = failingValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         sutWithFailingValidator.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())

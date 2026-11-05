@@ -325,6 +325,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ContactPaymentSettingsRepo(settingsStore, publicPaykitRepo, privatePaykitRepo, pubkyRepo, testDispatcher)
     }
     private val isRecoveryMode = MutableStateFlow(false)
+    private val isSparkReady = MutableStateFlow(false)
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
@@ -709,6 +710,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
+        whenever(lightningRepo.isSparkReady).thenReturn(isSparkReady)
         whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEventUpdates.map { it.event })
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
@@ -2628,6 +2630,36 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `manual request whose resolution fails stops loading at once`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.slashtags__error_pay_waiting_msg)).thenReturn("Try again")
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.failure(AppError("Pubky shared state remains locked; retry later"))
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(privatePaykitRepo, times(1)).beginPaymentRequest(request)
+        assertNull(sut.requestedPaymentRequestId.value)
+        val toast = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toast.capture())
+        assertEquals("Try again", toast.firstValue.description)
+    }
+
+    @Test
     fun `opened request with an invalid target returns to the request sheet`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
@@ -3239,7 +3271,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed request opened from the full screen does not replace it with the request sheet`() = test {
+    fun `failed request opened from the full screen stops loading in place`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
@@ -3262,16 +3294,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertNull(sut.currentSheet.value)
         verify(paykitPaymentRequestRepo).markPresented(request)
-        verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
-        verify(paykitPaymentRequestDiagnostics, times(15)).logPresentationRejection(
+        verify(privatePaykitRepo, times(1)).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics).logPresentationRejection(
             request.counterparty,
             IncomingPaykitPaymentRequestFailureReason.NoSupportedEndpoint,
         )
         val toastCaptor = argumentCaptor<Toast>()
-        verify(toastManager, times(2)).enqueue(toastCaptor.capture())
-        val (waitingToast, terminalToast) = toastCaptor.allValues
-        assertNull(waitingToast.testTag)
-        assertEquals("PaymentRequestUnavailableToast", terminalToast.testTag)
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestWaitingForDetailsToast", toastCaptor.firstValue.testTag)
     }
 
     @Test
@@ -14950,6 +14980,36 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark send that settled before the watch started completes without pending`() = test {
+        val bolt11 = "lnbcrt1sparktospark"
+        val paymentHash = "spark_hash"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = paymentHash,
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            ),
+        )
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceTimeBy(LightningRepo.SEND_LN_TIMEOUT.inWholeMilliseconds + 1_000)
+        runCurrent()
+
+        verify(pendingPaymentRepo, never()).track(paymentHash)
+    }
+
+    @Test
     fun `private lightning pending payment consumes private list`() = test {
         val bolt11 = "lnbcrt1pending"
         val paymentHash = "pending_hash"
@@ -15213,6 +15273,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
             verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
         }
+    }
+
+    @Test
+    fun `spark becoming ready republishes the paykit lightning endpoints`() = test {
+        enablePublicPaykitSharing()
+        advanceUntilIdle()
+        clearInvocations(publicPaykitRepo, privatePaykitRepo)
+
+        isSparkReady.value = true
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).requestLightningRefresh(anyOrNull(), anyOrNull())
+        verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(
+            eq("spark ready"),
+            eq(true),
+            any(),
+            anyOrNull(),
+        )
     }
 
     @Test
