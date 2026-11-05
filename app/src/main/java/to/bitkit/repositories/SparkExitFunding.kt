@@ -198,6 +198,13 @@ object SparkExitMath {
         return (quote.leftBehindSats.safe() + beyond.safe()).takeIf { it > 0uL }
     }
 
+    /**
+     * What Spark's [balanceSats] holds beyond [record]'s leaves, in any phase: what a stopped exit leaves on Spark,
+     * such as value it could not exit. Lost leaves stay in the leaf total, so they are never claimed to stay.
+     */
+    fun staysOnSparkSats(balanceSats: ULong?, record: SparkExitRecord?): ULong? =
+        record?.let { outsideExitSats(it.leafTotalSats, balanceSats) }
+
     /** Spark's balance beyond the exit's leaves while it still counts them, or null. */
     fun outsideExitSats(leafTotalSats: ULong?, balanceSats: ULong?): ULong? {
         if (leafTotalSats == null || balanceSats == null || balanceSats <= leafTotalSats) return null

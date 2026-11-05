@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -19,6 +20,8 @@ import to.bitkit.repositories.SparkExitMath
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
+import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.surfacedRejection
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
@@ -28,6 +31,7 @@ import kotlin.time.Duration.Companion.seconds
 @HiltViewModel
 class SparkExitViewModel @Inject constructor(
     private val sparkExitRepo: SparkExitRepo,
+    private val sparkRepo: SparkRepo,
 ) : ViewModel() {
     companion object {
         /** How often the funding screen looks at the funding address while the user pays from another wallet. */
@@ -44,20 +48,25 @@ class SparkExitViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            sparkExitRepo.state.collect { exit ->
-                _uiState.update {
-                    it.copy(
-                        record = exit.record,
-                        tipHeight = exit.tipHeight,
-                        fundingSeenSats = exit.fundingSeenSats,
-                        fundingState = exit.fundingState,
-                        fundingAddress = exit.fundingAddress,
-                        canCancel = sparkExitRepo.canCancel,
-                        outsideExitSats = exit.outsideExitSats,
-                        isSettling = exit.isSettling,
-                    )
-                }
-            }
+            // Spark's live balance, for what a stopped exit leaves on Spark after a relaunch too.
+            combine(sparkExitRepo.state, sparkRepo.state) { exit, spark -> exit to spark.balanceSats }
+                .collect { (exit, balanceSats) -> showExit(exit, balanceSats) }
+        }
+    }
+
+    private fun showExit(exit: SparkExitState, balanceSats: ULong) {
+        _uiState.update {
+            it.copy(
+                record = exit.record,
+                tipHeight = exit.tipHeight,
+                fundingSeenSats = exit.fundingSeenSats,
+                fundingState = exit.fundingState,
+                fundingAddress = exit.fundingAddress,
+                canCancel = sparkExitRepo.canCancel,
+                outsideExitSats = exit.outsideExitSats,
+                staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
+                isSettling = exit.isSettling,
+            )
         }
     }
 
@@ -189,6 +198,8 @@ data class SparkExitUiState(
     val canCancel: Boolean = false,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
     val outsideExitSats: ULong? = null,
+    /** Spark's balance beyond the exit's leaves in any phase: what a stopped exit leaves on Spark. */
+    val staysOnSparkSats: ULong? = null,
     /** The quote waits for Spark to finish moving leaves first. */
     val isSettling: Boolean = false,
 ) {

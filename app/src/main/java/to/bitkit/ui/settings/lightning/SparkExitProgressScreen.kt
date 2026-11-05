@@ -101,7 +101,7 @@ private fun Content(
                     text = progressText(
                         record = record,
                         progressFunding = uiState.progressFunding,
-                        outsideExitSats = uiState.outsideExitSats,
+                        staysOnSparkSats = uiState.staysOnSparkSats,
                     ).withAccentBoldBright(),
                     color = Colors.White64,
                 )
@@ -274,7 +274,7 @@ private fun progressTitle(phase: SparkExitRecord.Phase?): String = stringResourc
 private fun progressText(
     record: SparkExitRecord?,
     progressFunding: SparkExitFundingState?,
-    outsideExitSats: ULong?,
+    staysOnSparkSats: ULong?,
 ): String = when (record?.phase) {
     SparkExitRecord.Phase.Done -> listOfNotNull(
         stringResource(R.string.lightning__spark_exit__done_text),
@@ -288,7 +288,7 @@ private fun progressText(
     is SparkExitRecord.Phase.Failed -> sparkExitFailedText(
         nothingText = stringResource(R.string.lightning__spark_exit__failed_text),
         staysText = stringResource(R.string.lightning__spark_exit__failed_stays),
-        outsideAmount = outsideExitSats?.let { sparkExitAmountText(it) },
+        outsideAmount = staysOnSparkSats?.let { sparkExitAmountText(it) },
     )
     is SparkExitRecord.Phase.NeedsFunding -> when (val funding = progressFunding) {
         // A payment that covers it waits to confirm: nothing to ask for.
