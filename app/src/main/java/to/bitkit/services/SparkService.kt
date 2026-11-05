@@ -1,12 +1,12 @@
 package to.bitkit.services
 
 import breez_sdk_spark.BreezSdk
+import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.CheckRecoverFundsRequest
 import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.ClaimDepositRequest
 import breez_sdk_spark.Config
-import breez_sdk_spark.ConnectRequest
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.DepositInfo
 import breez_sdk_spark.EventListener
@@ -32,13 +32,13 @@ import breez_sdk_spark.ReceivePaymentMethod
 import breez_sdk_spark.ReceivePaymentRequest
 import breez_sdk_spark.RecoverFundsRequest
 import breez_sdk_spark.RecoverFundsResponse
+import breez_sdk_spark.SdkBuilder
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.Seed
 import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
-import breez_sdk_spark.connect
 import breez_sdk_spark.defaultConfig
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -156,7 +156,12 @@ class SparkService @Inject constructor(
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
-        val connected = connect(ConnectRequest(config, Seed.Mnemonic(mnemonic, passphrase), storageDir))
+        val chainServiceUrl = Env.sparkChainServiceUrl(Env.network)
+        val connected = SdkBuilder(config, Seed.Mnemonic(mnemonic, passphrase)).use { builder ->
+            builder.withDefaultStorage(storageDir)
+            chainServiceUrl?.let { builder.withRestChainService(it, ChainApiType.ESPLORA, null) }
+            builder.build()
+        }
         listenerId = connected.addEventListener(
             object : EventListener {
                 override suspend fun onEvent(event: SdkEvent) {
@@ -165,7 +170,8 @@ class SparkService @Inject constructor(
             },
         )
         sdk = connected
-        Logger.info("Connected Spark wallet on '$network' with exit '$isExiting'", context = TAG)
+        val chain = chainServiceUrl ?: "default"
+        Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
     }
 
     suspend fun disconnect() = mutex.withLock {
