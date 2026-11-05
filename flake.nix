@@ -1,5 +1,5 @@
 {
-  description = "Bitkit Android dev shell (JDK 17 + Android SDK 36/NDK r28b via androidenv)";
+  description = "Bitkit Android dev shell (JDK 17 + Android SDK 37/NDK r28b via androidenv)";
 
   # Provides the full toolchain to run: just compile / just build / just test / just lint
   #
