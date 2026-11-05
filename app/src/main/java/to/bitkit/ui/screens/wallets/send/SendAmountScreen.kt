@@ -151,6 +151,7 @@ fun SendAmountScreen(
     }
 
     LaunchedEffect(uiState.hardwareWalletId, uiState.address, uiState.incomingPaymentRequestId) {
+        app?.releaseRetainedFeeLock()
         app?.refreshRetainedRetryAmount()
     }
 

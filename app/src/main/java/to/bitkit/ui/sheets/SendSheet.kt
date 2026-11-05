@@ -300,20 +300,12 @@ fun SendSheet(
                         }
                         is SendEffect.NavigateToHardwareSign -> {
                             // The last step before signing: every warning and PIN check has passed by now.
-                            val abandoned = appViewModel.sendUiState.value.retainedSendToAbandon
-                                ?.let { walletId -> hwSendViewModel.abandonRetainedPayment(walletId) }
-                                ?: Result.success(Unit)
-                            abandoned
-                                .onSuccess {
-                                    appViewModel.consumeRetainedSendConsent()
-                                    navController.navigateTo(SendRoute.HardwareSign)
-                                }
-                                .onFailure { error ->
-                                    appViewModel.toast(error)
-                                    navController.currentBackStackEntry
-                                        ?.savedStateHandle
-                                        ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
-                                }
+                            val state = appViewModel.sendUiState.value
+                            state.retainedSendToReplace?.let { walletId ->
+                                hwSendViewModel.consentToNewSignature(walletId, state.address, state.amount)
+                            }
+                            appViewModel.consumeRetainedSendConsent()
+                            navController.navigateTo(SendRoute.HardwareSign)
                         }
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
@@ -600,6 +592,8 @@ fun SendSheet(
                                 ?.savedStateHandle
                                 ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
                             appViewModel.onHardwareSignCancelled()
+                            // The review reads the record as soon as it recomposes, before this screen is disposed.
+                            hwSendViewModel.cancel()
                             if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
                     )

@@ -1042,7 +1042,7 @@ class HwWalletRepo @Inject constructor(
                 }
             }
         }.onSuccess {
-            hwRetainedSendRepo.release(walletId)
+            hwRetainedSendRepo.abandon(walletId)
                 .onFailure { Logger.warn("Failed to release retained send of '$walletId'", it, context = TAG) }
         }.onFailure {
             watcherSyncRequests.tryEmit(Unit)

@@ -158,7 +158,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever { activityRepo.getTagMetadataForWallet(any()) }.thenReturn(Result.success(emptyList()))
         whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
-        whenever { hwRetainedSendRepo.release(any()) }.thenReturn(Result.success(Unit))
+        whenever { hwRetainedSendRepo.abandon(any()) }.thenReturn(Result.success(Unit))
         whenever { hwRetainedSendRepo.markObserved(any(), any()) }.thenReturn(Result.success(Unit))
     }
 
@@ -1893,14 +1893,14 @@ class HwWalletRepoTest : BaseUnitTest() {
         val result = sut.removeDevice(HARDWARE_WALLET_ID)
 
         assertTrue(result.isSuccess)
-        verify(hwRetainedSendRepo).release(HARDWARE_WALLET_ID)
+        verify(hwRetainedSendRepo).abandon(HARDWARE_WALLET_ID)
     }
 
     @Test
     fun `removeDevice succeeds when releasing the retained send fails`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
         whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
-        whenever(hwRetainedSendRepo.release(HARDWARE_WALLET_ID))
+        whenever(hwRetainedSendRepo.abandon(HARDWARE_WALLET_ID))
             .thenReturn(Result.failure(KeychainError.FailedToLoad("retained")))
         val sut = createRepo()
 
@@ -1914,7 +1914,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertTrue(sut.removeDevice("unknown-wallet").isFailure)
 
-        verify(hwRetainedSendRepo, never()).release(any())
+        verify(hwRetainedSendRepo, never()).abandon(any())
     }
 
     @Test

@@ -4603,13 +4603,16 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun prepareHardwareSendFee(): Boolean {
-        val state = _sendUiState.value
-        val walletId = state.hardwareWalletId ?: return true
-        retainedRetry(walletId, state.address)?.takeIf { it.amountSats == state.amount }?.let {
+        val payment = _sendUiState.value
+        val walletId = payment.hardwareWalletId ?: return true
+        retainedRetry(walletId, payment.address)?.takeIf { it.amountSats == payment.amount }?.let {
             val status = HwRetainedSendStatus.Retry(it.feeRate, it.miningFeeSats)
-            applyRetainedSendStatus(walletId, state.address, state.amount, status)
+            applyRetainedSendStatus(walletId, payment.address, payment.amount, status)
             return true
         }
+        // A lock kept from an earlier review must not price a payment that has no signed bytes to go out.
+        releaseRetainedFeeLock()
+        val state = _sendUiState.value
         val satsPerVByte = state.feeRates
             ?.getSatsPerVByteFor(state.speed)
             ?.toULong()
@@ -8135,7 +8138,20 @@ class AppViewModel @Inject constructor(
         refreshOnchainSendIfNeeded()
     }
 
-    /** One consent discards one retained send: whatever is signed after it needs a new warning. */
+    /**
+     * The original fee only holds on the review, so Amount can switch funding source and edit the payment. The review
+     * locks it again when it reads the record. A Shop payment keeps its own lock.
+     */
+    suspend fun releaseRetainedFeeLock() {
+        val state = _sendUiState.value
+        if (!state.isRetainedHardwarePayment || state.incomingPaymentRequestId != null) return
+        val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
+        _sendUiState.update { it.withoutRetainedFeeLock(defaultSpeed) }
+        _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
+        updateCanSwitchWallet()
+    }
+
+    /** One consent covers one signing attempt: the sign flow holds it from here, and the review asks again. */
     fun consumeRetainedSendConsent() {
         _sendUiState.update {
             it.copy(
@@ -9038,8 +9054,8 @@ data class SendUiState(
         get() = currentRetainedSendCheck?.isBlocking == true &&
             SanityWarning.RETAINED_HARDWARE_SEND !in confirmedWarnings
 
-    /** The wallet whose retained send the user accepted discarding for the payment on review. */
-    val retainedSendToAbandon: String?
+    /** The wallet whose retained send the user accepted replacing for the payment on review. */
+    val retainedSendToReplace: String?
         get() = currentRetainedSendCheck
             ?.takeIf { it.isBlocking && SanityWarning.RETAINED_HARDWARE_SEND in confirmedWarnings }
             ?.walletId
@@ -9127,17 +9143,16 @@ internal fun SendUiState.withRetainedSendStatus(
     )
     return when (status) {
         is HwRetainedSendStatus.Retry -> checked.withLockedRetainedFee(status.feeRate, status.miningFeeSats)
-        HwRetainedSendStatus.Blocking, HwRetainedSendStatus.None -> if (isRetainedHardwarePayment) {
-            checked.copy(
-                isRetainedHardwarePayment = false,
-                speed = defaultSpeed,
-                onchainFeeUi = OnchainFeeUi(rate = FeeRate.fromSpeed(defaultSpeed)),
-            )
-        } else {
-            checked
-        }
+        HwRetainedSendStatus.Blocking, HwRetainedSendStatus.None ->
+            if (isRetainedHardwarePayment) checked.withoutRetainedFeeLock(defaultSpeed) else checked
     }
 }
+
+private fun SendUiState.withoutRetainedFeeLock(defaultSpeed: TransactionSpeed): SendUiState = copy(
+    isRetainedHardwarePayment = false,
+    speed = defaultSpeed,
+    onchainFeeUi = OnchainFeeUi(rate = FeeRate.fromSpeed(defaultSpeed)),
+)
 
 enum class SanityWarning(
     @StringRes val message: Int,

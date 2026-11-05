@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HwFundingSignedTx
@@ -42,6 +43,25 @@ data class HwRetainedSend(
         "HwRetainedSend(walletId='$walletId', retryWasRefused='$retryWasRefused', observed='$observed')"
 }
 
+/** Which existing record [HwRetainedSendRepo.retain] may overwrite with different bytes. */
+enum class HwRetainedSendReplacement {
+    None,
+
+    /** Only a record the watcher has seen, because that payment is resolved. Checked again at write time. */
+    ObservedRecord,
+
+    /** The user accepted a second payment, so anything stored may go, including an entry that cannot be read. */
+    Consented,
+}
+
+/** What [HwRetainedSendRepo.retain] did to the wallet's entry, so a send that never goes out can undo exactly that. */
+sealed interface HwRetainOutcome {
+    data object Stored : HwRetainOutcome
+    data object AlreadyHeld : HwRetainOutcome
+    data class Replaced(val previous: HwRetainedSend) : HwRetainOutcome
+    data object ReplacedUnreadableEntry : HwRetainOutcome
+}
+
 sealed class HwRetainedSendError(message: String) : AppError(message) {
     class DifferentTransactionRetained : HwRetainedSendError("A different signed transaction is already retained")
 
@@ -66,29 +86,55 @@ class HwRetainedSendRepo @Inject constructor(
 
     private val mutex = Mutex()
 
-    /** Retaining the bytes already held keeps the existing record, including its `retryWasRefused`. */
+    /**
+     * Retaining the bytes already held keeps the existing record, including its `retryWasRefused`. A replacement is one
+     * write, so a failed one leaves the old record as it was.
+     */
     suspend fun retain(
         walletId: String,
         address: String,
         amountSats: ULong,
         signedTx: HwFundingSignedTx,
-    ): Result<Unit> = locked {
-        val existing = load(walletId)
-        if (existing == null) {
-            save(
-                HwRetainedSend(
-                    walletId = walletId,
-                    address = address,
-                    amountSats = amountSats,
-                    serializedTx = signedTx.serializedTx,
-                    miningFeeSats = signedTx.miningFeeSats,
-                    feeRate = signedTx.feeRate,
-                    totalSpent = signedTx.totalSpent,
-                )
-            )
-        } else if (!existing.serializedTx.equals(signedTx.serializedTx, ignoreCase = true)) {
-            throw HwRetainedSendError.DifferentTransactionRetained()
+        replacement: HwRetainedSendReplacement = HwRetainedSendReplacement.None,
+    ): Result<HwRetainOutcome> = locked {
+        val send = HwRetainedSend(
+            walletId = walletId,
+            address = address,
+            amountSats = amountSats,
+            serializedTx = signedTx.serializedTx,
+            miningFeeSats = signedTx.miningFeeSats,
+            feeRate = signedTx.feeRate,
+            totalSpent = signedTx.totalSpent,
+        )
+        val existing = runSuspendCatching { load(walletId) }.getOrElse {
+            // Keychain wraps decrypt failures as FailedToLoad, so an undecryptable entry looks like a read failure.
+            val isUnreadable = it is HwRetainedSendError.Undecodable || it is KeychainError.FailedToLoad
+            if (replacement != HwRetainedSendReplacement.Consented || !isUnreadable) throw it
+            save(send)
+            return@locked HwRetainOutcome.ReplacedUnreadableEntry
         }
+        when {
+            existing == null -> {
+                save(send)
+                HwRetainOutcome.Stored
+            }
+            existing.serializedTx.equals(send.serializedTx, ignoreCase = true) -> HwRetainOutcome.AlreadyHeld
+            replacement == HwRetainedSendReplacement.Consented ||
+                replacement == HwRetainedSendReplacement.ObservedRecord && existing.observed -> {
+                save(send)
+                HwRetainOutcome.Replaced(existing)
+            }
+            else -> throw HwRetainedSendError.DifferentTransactionRetained()
+        }
+    }
+
+    /**
+     * Puts back the record that [serializedTx] replaced, when those bytes never reached dispatch or settled as not
+     * sent. Bytes the watcher has seen did go out, so they stay as the record.
+     */
+    suspend fun restore(previous: HwRetainedSend, serializedTx: String): Result<Unit> = locked {
+        val current = load(previous.walletId)
+        if (current?.serializedTx.equals(serializedTx, ignoreCase = true) && current?.observed == false) save(previous)
     }
 
     suspend fun record(walletId: String): Result<HwRetainedSend?> = locked { load(walletId) }
@@ -114,8 +160,8 @@ class HwRetainedSendRepo @Inject constructor(
     }
 
     /**
-     * Only for a user who accepted a second payment. This is the one path that deletes an entry it cannot read,
-     * otherwise the wallet stays blocked until a full wipe.
+     * Only for a user who removed the wallet. This is the one path that deletes an entry it cannot read, otherwise
+     * re-pairing the wallet brings the warning back.
      */
     suspend fun abandon(walletId: String): Result<Unit> = locked {
         // Keychain wraps decrypt failures as FailedToLoad, so an undecryptable entry looks like a plain read failure.

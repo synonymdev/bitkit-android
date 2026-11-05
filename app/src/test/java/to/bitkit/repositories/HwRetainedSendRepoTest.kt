@@ -1,13 +1,18 @@
 package to.bitkit.repositories
 
+import android.content.Context
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.stringPreferencesKey
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.spy
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
@@ -16,6 +21,7 @@ import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.SignedTransactionId
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -295,6 +301,146 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         sut.abandon(WALLET).getOrThrow()
 
         assertNull(sut.record(WALLET).getOrThrow())
+    }
+
+    @Test
+    fun `plain retain refuses different bytes and leaves the record`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        val original = entries[WALLET]
+
+        val conflict = sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx("ab".repeat(100)))
+
+        assertIs<HwRetainedSendError.DifferentTransactionRetained>(conflict.exceptionOrNull())
+        assertEquals(original, entries[WALLET])
+    }
+
+    @Test
+    fun `an observed replacement overwrites only an observed record`() = test {
+        val different = signedTx("ab".repeat(100))
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        val original = assertNotNull(sut.record(WALLET).getOrThrow())
+
+        val refused = sut.retain(WALLET, "other", AMOUNT_SATS, different, HwRetainedSendReplacement.ObservedRecord)
+        assertIs<HwRetainedSendError.DifferentTransactionRetained>(refused.exceptionOrNull())
+
+        sut.markObserved(WALLET, listOf(SignedTransactionId.fromHex(hex))).getOrThrow()
+        val outcome = sut.retain(WALLET, "other", AMOUNT_SATS, different, HwRetainedSendReplacement.ObservedRecord)
+            .getOrThrow()
+
+        assertEquals(HwRetainOutcome.Replaced(original.copy(observed = true)), outcome)
+        assertEquals(different, sut.record(WALLET).getOrThrow()?.signedTx)
+    }
+
+    @Test
+    fun `a consented replacement overwrites any record in one write and reports what it replaced`() = test {
+        val different = signedTx("ab".repeat(100))
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        val original = assertNotNull(sut.record(WALLET).getOrThrow())
+        clearInvocations(keychain)
+
+        val outcome = sut.retain(WALLET, "other", 1uL, different, HwRetainedSendReplacement.Consented).getOrThrow()
+
+        assertEquals(HwRetainOutcome.Replaced(original), outcome)
+        assertEquals(different, sut.record(WALLET).getOrThrow()?.signedTx)
+        verify(keychain).upsertScopedString(eq(KEY), any(), eq(WALLET))
+        verify(keychain, never()).deleteScoped(any(), any())
+    }
+
+    @Test
+    fun `identical bytes are already held whatever the replacement and keep the flags`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        sut.markRetryRefused(WALLET).getOrThrow()
+
+        val outcome = sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx, HwRetainedSendReplacement.Consented)
+
+        assertEquals(HwRetainOutcome.AlreadyHeld, outcome.getOrThrow())
+        assertEquals(true, sut.record(WALLET).getOrThrow()?.retryWasRefused)
+    }
+
+    @Test
+    fun `a failed replace write leaves the old record`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        val original = entries[WALLET]
+        val failure = KeychainError.FailedToSave(KEY)
+        whenever(keychain.upsertScopedString(eq(KEY), any(), any())).doSuspendableAnswer { throw failure }
+
+        val result = sut.retain(WALLET, ADDRESS, 1uL, signedTx("ab".repeat(100)), HwRetainedSendReplacement.Consented)
+
+        assertEquals(failure, result.exceptionOrNull())
+        assertEquals(original, entries[WALLET])
+    }
+
+    @Test
+    fun `a corrupt entry is replaced only with consent`() = test {
+        entries[WALLET] = CORRUPT_ENTRY
+
+        for (replacement in listOf(HwRetainedSendReplacement.None, HwRetainedSendReplacement.ObservedRecord)) {
+            val refused = sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx, replacement)
+            assertIs<HwRetainedSendError.Undecodable>(refused.exceptionOrNull())
+            assertEquals(CORRUPT_ENTRY, entries[WALLET])
+        }
+
+        val outcome = sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx, HwRetainedSendReplacement.Consented)
+
+        assertEquals(HwRetainOutcome.ReplacedUnreadableEntry, outcome.getOrThrow())
+        assertEquals(signedTx, sut.record(WALLET).getOrThrow()?.signedTx)
+    }
+
+    @Test
+    fun `an undecryptable entry is overwritten only with consent`() = test {
+        val failure = KeychainError.FailedToLoad(KEY)
+        whenever(keychain.loadScopedString(KEY, WALLET)).thenAnswer { throw failure }
+
+        assertEquals(failure, sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).exceptionOrNull())
+        verify(keychain, never()).upsertScopedString(any(), any(), any())
+
+        val outcome = sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx, HwRetainedSendReplacement.Consented)
+
+        assertEquals(HwRetainOutcome.ReplacedUnreadableEntry, outcome.getOrThrow())
+        assertTrue(WALLET in entries)
+        verify(keychain, never()).deleteScoped(any(), any())
+    }
+
+    @Test
+    fun `restore puts the older record back only over the bytes that replaced it`() = test {
+        val different = "ab".repeat(100)
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx(different)).getOrThrow()
+        val previous = assertNotNull(sut.record(WALLET).getOrThrow())
+        sut.retain(WALLET, ADDRESS, 1uL, signedTx, HwRetainedSendReplacement.Consented).getOrThrow()
+        val current = entries[WALLET]
+
+        sut.restore(previous, "cd".repeat(100)).getOrThrow()
+        assertEquals(current, entries[WALLET])
+
+        sut.restore(previous, hex).getOrThrow()
+        assertEquals(previous, sut.record(WALLET).getOrThrow())
+    }
+
+    @Test
+    fun `restore keeps new bytes the watcher has seen`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx("ab".repeat(100))).getOrThrow()
+        val previous = assertNotNull(sut.record(WALLET).getOrThrow())
+        sut.retain(WALLET, ADDRESS, 1uL, signedTx, HwRetainedSendReplacement.Consented).getOrThrow()
+        sut.markObserved(WALLET, listOf(SignedTransactionId.fromHex(hex))).getOrThrow()
+
+        sut.restore(previous, hex).getOrThrow()
+
+        assertEquals(signedTx, sut.record(WALLET).getOrThrow()?.signedTx)
+    }
+
+    @Test
+    fun `keychain load diagnostics check the scoped preference key`() {
+        val scopedKey = stringPreferencesKey("${KEY}_$WALLET")
+        val preferences = mock<Preferences>()
+        whenever(preferences[scopedKey]).thenReturn("AAAA")
+        val context = mock<Context>()
+        whenever(context.applicationContext).thenReturn(context)
+        val realKeychain = spy(Keychain(mock(), context, testDispatcher))
+        doReturn(preferences).whenever(realKeychain).snapshot
+
+        assertFailsWith<KeychainError.FailedToLoad> { realKeychain.loadScopedString(KEY, WALLET) }
+
+        verify(preferences).contains(scopedKey)
     }
 
     @Test

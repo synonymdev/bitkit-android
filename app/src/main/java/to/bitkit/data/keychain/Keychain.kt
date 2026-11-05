@@ -69,7 +69,7 @@ class Keychain @Inject constructor(
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
-            emitLoadDiagnosticsOnce(key, t)
+            emitLoadDiagnosticsOnce(key, t) { indexedKey }
             throw KeychainError.FailedToLoad(key, cause = t)
         }
     }
@@ -216,11 +216,15 @@ class Keychain @Inject constructor(
             .map { string -> string?.toIntOrNull() }
     }
 
-    private fun emitLoadDiagnosticsOnce(key: String, cause: Throwable) {
+    private fun emitLoadDiagnosticsOnce(
+        key: String,
+        cause: Throwable,
+        preferenceKey: () -> Preferences.Key<String> = { key.indexed },
+    ) {
         if (!loadDiagnosticsEmitted.add(key)) return
 
         val aliasPresent = probe { keyStore.containsAlias() }
-        val entryPresent = probe { snapshot.contains(key.indexed) }
+        val entryPresent = probe { snapshot.contains(preferenceKey()) }
         val walletIndex = probe {
             runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0L
         }

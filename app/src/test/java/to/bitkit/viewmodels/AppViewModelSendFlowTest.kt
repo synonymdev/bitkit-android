@@ -7254,7 +7254,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             assertNull(sut.sendUiState.value.showSanityWarningDialog)
             assertFalse(sut.sendUiState.value.shouldConfirmPay)
-            assertNull(sut.sendUiState.value.retainedSendToAbandon)
+            assertNull(sut.sendUiState.value.retainedSendToReplace)
             assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
             expectNoEvents()
 
@@ -7266,7 +7266,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `consent to discard a retained send does not carry to another wallet address or amount`() = test {
+    fun `consent to replace a retained send does not carry to another wallet address or amount`() = test {
         stubRetainedReviewFiatValue()
         val changes = listOf<(SendUiState) -> SendUiState>(
             { it.copy(hardwareWalletId = "another-wallet") },
@@ -7280,16 +7280,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
             advanceUntilIdle()
-            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToAbandon)
+            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToReplace)
 
             setSendState(change(sut.sendUiState.value).copy(shouldConfirmPay = false))
 
-            assertNull(sut.sendUiState.value.retainedSendToAbandon)
+            assertNull(sut.sendUiState.value.retainedSendToReplace)
             assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
 
             applyRetainedStatus(HwRetainedSendStatus.Blocking)
 
-            assertNull(sut.sendUiState.value.retainedSendToAbandon)
+            assertNull(sut.sendUiState.value.retainedSendToReplace)
             assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
             sut.setSendEvent(SendEvent.SwipeToPay)
             advanceUntilIdle()
@@ -7298,7 +7298,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `consent to discard a retained send is consumed by one abandon`() = test {
+    fun `consent to replace a retained send is handed over once to the sign flow`() = test {
         stubRetainedReviewFiatValue()
         setSendState(retainedReviewState())
         applyRetainedStatus(HwRetainedSendStatus.Blocking)
@@ -7306,22 +7306,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
         advanceUntilIdle()
-        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToAbandon)
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToReplace)
 
-        // Returning from the PIN screen reads the same record again, before anything was abandoned.
+        // Returning from the PIN screen reads the same record again, before anything was signed.
         applyRetainedStatus(HwRetainedSendStatus.Blocking)
-        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToAbandon)
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToReplace)
 
         sut.consumeRetainedSendConsent()
 
-        assertNull(sut.sendUiState.value.retainedSendToAbandon)
+        assertNull(sut.sendUiState.value.retainedSendToReplace)
         assertFalse(SanityWarning.RETAINED_HARDWARE_SEND in sut.sendUiState.value.confirmedWarnings)
         assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
 
         setSendState(sut.sendUiState.value.copy(shouldConfirmPay = false, showSanityWarningDialog = null))
         applyRetainedStatus(HwRetainedSendStatus.Blocking)
 
-        assertNull(sut.sendUiState.value.retainedSendToAbandon)
+        assertNull(sut.sendUiState.value.retainedSendToReplace)
         assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
         sut.setSendEvent(SendEvent.SwipeToPay)
         advanceUntilIdle()
@@ -7515,6 +7515,92 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(toastManager, never()).enqueue(any())
         assertEquals(RETAINED_AMOUNT_SATS, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `going back to amount releases the ordinary fee lock and the review locks it again`() = test {
+        stubRetainedRecord()
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Fast)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = RETAINED_AMOUNT_SATS))
+        setSendState(nearMaxRetainedState())
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertFalse(sut.sendUiState.value.canSwitchFundingSource)
+
+        sut.releaseRetainedFeeLock()
+
+        val released = sut.sendUiState.value
+        assertFalse(released.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Fast, released.speed)
+        assertEquals(OnchainFeeUi(FeeRate.fromSpeed(TransactionSpeed.Fast)), released.onchainFeeUi)
+        assertTrue(released.isAmountInputValid)
+        assertTrue(released.canSwitchFundingSource)
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        val relocked = sut.sendUiState.value
+        assertTrue(relocked.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(RETAINED_RETRY.feeRate.toUInt()), relocked.speed)
+    }
+
+    @Test
+    fun `an edited payment is estimated at the default speed instead of the locked rate`() = test {
+        stubRetainedRecord()
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Slow)
+        val feeRates = FeeRates(fast = 30u, mid = 20u, slow = 10u)
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(111uL))
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(amount = RETAINED_AMOUNT_SATS - 1uL) },
+            { it.copy(address = "bcrt1qother") },
+        )
+        for (change in changes) {
+            clearInvocations(hwWalletRepo)
+            setSendState(nearMaxRetainedState().copy(feeRates = feeRates, hardwareAvailableSats = 100_000uL))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+
+            setSendState(change(sut.sendUiState.value))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+            assertEquals(TransactionSpeed.Slow, sut.sendUiState.value.speed)
+            verify(hwWalletRepo, atLeast(1)).estimateFundingMiningFee(any(), any(), any(), eq(10uL))
+            verify(hwWalletRepo, never()).estimateFundingMiningFee(any(), any(), any(), eq(RETAINED_RETRY.feeRate))
+        }
+    }
+
+    @Test
+    fun `a Shop payment keeps its lock when going back to amount`() = test {
+        reopenRetainedHardwareRequest(balanceSats = 1_000_000uL, amountSats = 30_000uL)
+        val state = sut.sendUiState.value
+        assertTrue(state.isRetainedHardwarePayment)
+        clearInvocations(settingsStore)
+
+        sut.releaseRetainedFeeLock()
+
+        assertEquals(state, sut.sendUiState.value)
+        verify(settingsStore, never()).data
+    }
+
+    @Test
+    fun `a blocking answer clears the fee lock before the warning so yes send signs the shown fee`() = test {
+        stubRetainedReviewFiatValue()
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Fast)
+        setSendState(retainedReviewState())
+        applyRetainedStatus(RETAINED_RETRY)
+        assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertFalse(sut.sendUiState.value.needsRetainedSendWarning)
+
+        // The watcher marked the record while the review was open: the next read answers Blocking.
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+        assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
     }
 
     @Test
