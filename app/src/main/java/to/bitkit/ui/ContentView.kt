@@ -38,6 +38,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
@@ -205,6 +206,12 @@ import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.lightning.SparkDetailScreen
+import to.bitkit.ui.settings.lightning.SparkExitConfirmScreen
+import to.bitkit.ui.settings.lightning.SparkExitFundingScreen
+import to.bitkit.ui.settings.lightning.SparkExitIntroScreen
+import to.bitkit.ui.settings.lightning.SparkExitProgressScreen
+import to.bitkit.ui.settings.lightning.SparkExitQuoteScreen
+import to.bitkit.ui.settings.lightning.SparkExitViewModel
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
@@ -330,10 +337,12 @@ fun ContentView(
                     appViewModel.checkAdoptedPubkySource()
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()
+                    appViewModel.startSparkExitDriving()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
                     appViewModel.stopPaykitPaymentRequestPolling()
+                    appViewModel.stopSparkExitDriving()
                     val keptAliveByService = notificationsGranted &&
                         keepActiveInBackground &&
                         appViewModel.isForegroundServiceRunning()
@@ -1109,7 +1118,7 @@ private fun RootNavHost(
                 val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 FundingScreen(
-                    canFundWithSpark = sparkState.isReady,
+                    canFundWithSpark = sparkState.isUsable,
                     onTransfer = { navController.navigateToTransferSpendingStart(hasSeenSpendingIntro) },
                     onFund = {
                         scope.launch {
@@ -1191,7 +1200,7 @@ private fun RootNavHost(
                     val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
                     TransferLearnMoreScreen(
                         viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
-                        spendingBalanceSats = sparkState.balanceSats.toLong(),
+                        spendingBalanceSats = sparkState.spendingSats.toLong(),
                         onBackClick = { navController.popBackStack() },
                         onContinueClick = { navController.popBackStack() },
                     )
@@ -1346,7 +1355,7 @@ private fun NavGraphBuilder.home(
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
-                if (sparkState.isReady) {
+                if (sparkState.isUsable) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -1365,7 +1374,7 @@ private fun NavGraphBuilder.home(
 
         SpendingWalletScreen(
             channels = lightningState.channels,
-            hasSparkBalance = sparkState.balanceSats > 0uL,
+            hasSparkBalance = sparkState.spendingSats > 0uL,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
@@ -1378,7 +1387,7 @@ private fun NavGraphBuilder.home(
                 }
             },
             onTransferFromSavingsClick = {
-                if (sparkState.isReady) {
+                if (sparkState.isUsable) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -1395,7 +1404,7 @@ private fun NavGraphBuilder.home(
             walletId = walletId,
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onTransferToSpendingClick = { walletId ->
-                if (sparkState.isReady) {
+                if (sparkState.isUsable) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, walletId)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -2001,8 +2010,12 @@ private fun NavGraphBuilder.lightningConnections(
                         navController.navigateToTransferSavingsIntro()
                     }
                 },
+                onEmergencyExit = { showsResult ->
+                    navController.navigateTo(if (showsResult) Routes.SparkExitProgress else Routes.SparkExitIntro)
+                },
             )
         }
+        sparkExit(navController)
         deepLinkableComposable<Routes.CloseConnection> {
             val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
@@ -2010,6 +2023,54 @@ private fun NavGraphBuilder.lightningConnections(
                 navController = navController,
             )
         }
+    }
+}
+
+private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
+    @Composable
+    fun exitViewModel(entry: NavBackStackEntry): SparkExitViewModel {
+        val parentEntry = remember(entry) { navController.getBackStackEntry(Routes.ConnectionsNav) }
+        return hiltViewModel<SparkExitViewModel>(parentEntry)
+    }
+    val leaveExit = { navController.popBackStack<Routes.SparkDetail>(inclusive = false) }
+    composableWithDefaultTransitions<Routes.SparkExitIntro> {
+        SparkExitIntroScreen(
+            onBack = { navController.popBackStack() },
+            onContinue = { navController.navigateTo(Routes.SparkExitQuote) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SparkExitQuote> {
+        SparkExitQuoteScreen(
+            viewModel = exitViewModel(it),
+            onBack = { navController.popBackStack() },
+            onContinue = { needsFunding ->
+                navController.navigateTo(if (needsFunding) Routes.SparkExitFunding else Routes.SparkExitConfirm)
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SparkExitFunding> {
+        SparkExitFundingScreen(
+            viewModel = exitViewModel(it),
+            onBack = { navController.popBackStack() },
+            onContinue = { navController.navigateTo(Routes.SparkExitConfirm) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SparkExitConfirm> {
+        SparkExitConfirmScreen(
+            viewModel = exitViewModel(it),
+            onBack = { navController.popBackStack() },
+            onStart = {
+                leaveExit()
+                navController.navigateTo(Routes.SparkExitProgress)
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SparkExitProgress> {
+        SparkExitProgressScreen(
+            viewModel = exitViewModel(it),
+            onBack = { navController.popBackStack() },
+            onDone = { leaveExit() },
+        )
     }
 }
 
@@ -2473,6 +2534,21 @@ sealed interface Routes {
 
     @Serializable
     data class CloseConnection(val channelId: String) : Routes.DeepLinkable
+
+    @Serializable
+    data object SparkExitIntro : Routes.InternalOnly
+
+    @Serializable
+    data object SparkExitQuote : Routes.InternalOnly
+
+    @Serializable
+    data object SparkExitFunding : Routes.InternalOnly
+
+    @Serializable
+    data object SparkExitConfirm : Routes.InternalOnly
+
+    @Serializable
+    data object SparkExitProgress : Routes.InternalOnly
 
     @Serializable
     data object DevSettings : Routes.DeepLinkable

@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.AutoOptimizationEvent
 import breez_sdk_spark.BitcoinAddressDetails
 import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.ClaimDeferredReason
@@ -26,9 +27,13 @@ import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -106,6 +111,10 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.networkName).thenReturn("regtest")
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.update(transform)
+        }
     }
 
     @Test
@@ -122,6 +131,28 @@ class SparkRepoTest : BaseUnitTest() {
 
         verify(sparkService).importExitState("state")
         assertFalse(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `an exit quote waits for a leaf optimization and the counter-swap of one cut short`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        sparkEvents.emit(SdkEvent.AutoOptimization(AutoOptimizationEvent.Started(3u)))
+
+        val settled = async { sut.settleForExit() }
+        runCurrent()
+        verify(sparkService, never()).syncWallet()
+
+        // Cut short: the SDK claims its counter-swap on a sync only after a 300 s grace.
+        sparkEvents.emit(SdkEvent.AutoOptimization(AutoOptimizationEvent.Cancelled))
+        advanceTimeBy(5.minutes)
+        runCurrent()
+        verify(sparkService, never()).syncWallet()
+
+        advanceTimeBy(1.minutes)
+        settled.await().getOrThrow()
+        verify(sparkService).syncWallet()
     }
 
     @Test

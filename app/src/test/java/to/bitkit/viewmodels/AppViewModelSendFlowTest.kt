@@ -971,6 +971,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
         timeSource = testDispatcher.scheduler.timeSource,
+        sparkExitRepo = mock(),
     )
 
     private suspend fun emitNodeEvent(

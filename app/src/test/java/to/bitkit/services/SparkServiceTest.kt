@@ -63,7 +63,7 @@ class SparkServiceTest {
     @Test
     fun `config turns off breez data sync and the lightning address server on every network`() {
         Network.entries.forEach { network ->
-            val config = SparkService.configure(defaults(network), apiKey = "key")
+            val config = SparkService.configure(defaults(network), apiKey = "key", isExiting = false)
 
             assertNull(config.realTimeSyncServerUrl, "$network")
             assertNull(config.lnurlDomain, "$network")
