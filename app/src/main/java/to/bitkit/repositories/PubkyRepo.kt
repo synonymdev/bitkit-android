@@ -303,12 +303,16 @@ class PubkyRepo @Inject constructor(
         private val labelOnly = contacts.filter { it.showsLabelOnly }.associateBy { it.profile.publicKey }
 
         val job = SupervisorJob(scope.coroutineContext.job)
+
+        val refreshScope = CoroutineScope(scope.coroutineContext + job)
         val pendingResults = mutableMapOf<String, RefreshedContact>()
         var scheduledApply: Job? = null
         private val bulkLookups = contacts.associate {
-            it.profile.publicKey to scope.launch(job, CoroutineStart.LAZY) { lookUp(this@ContactProfileRefresh, it) }
+            it.profile.publicKey to refreshScope.launch(start = CoroutineStart.LAZY) {
+                lookUp(this@ContactProfileRefresh, it)
+            }
         }
-        private val finish = scope.launch(job, CoroutineStart.LAZY) {
+        private val finish = refreshScope.launch(start = CoroutineStart.LAZY) {
             bulkLookups.values.joinAll()
             onFinished(this@ContactProfileRefresh)
         }
@@ -1926,7 +1930,7 @@ class PubkyRepo @Inject constructor(
     private fun queueRefreshedContact(refresh: ContactProfileRefresh, refreshed: RefreshedContact) {
         refresh.pendingResults[refreshed.contact.profile.publicKey] = refreshed
         if (refresh.scheduledApply != null) return
-        refresh.scheduledApply = scope.launch(refresh.job) {
+        refresh.scheduledApply = refresh.refreshScope.launch {
             delay(CONTACT_REFRESH_BATCH_WINDOW)
             synchronized(contactsLock) { applyRefreshResults(refresh) }
         }

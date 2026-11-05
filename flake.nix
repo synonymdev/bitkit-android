@@ -53,7 +53,7 @@
           androidSdk = pkgs.androidenv.composeAndroidPackages {
             cmdLineToolsVersion = "latest";
             platformToolsVersion = "latest";
-            platformVersions = [ "36" ]; # compileSdk/targetSdk
+            platformVersions = [ "37.0" ]; # compileSdk
             buildToolsVersions = [ buildToolsVersion ];
             includeNDK = true;
             ndkVersions = [ ndkVersion ];
@@ -68,7 +68,7 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              jdk17 # AGP 9.3 / Gradle 9.5 require JDK 17+
+              jdk17 # AGP 9.3 / Gradle 9.8 require JDK 17+
               just
               git
             ];

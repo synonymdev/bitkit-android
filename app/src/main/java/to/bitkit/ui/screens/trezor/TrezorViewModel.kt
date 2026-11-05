@@ -812,7 +812,6 @@ class TrezorViewModel @Inject constructor(
     override fun onCleared() {
         isCleared = true
         _uiState.value.activeWatcherId?.let { trezorRepo.stopWatcherOnCleared(it) }
-        super.onCleared()
     }
 
     fun clearError() {

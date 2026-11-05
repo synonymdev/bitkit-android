@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.bitkit.ext.bluetoothManager
+import to.bitkit.ext.connectGattDirect
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
@@ -927,7 +928,12 @@ class TrezorTransport @Inject constructor(
         if (bondError != null) return bondError
 
         val connectionLatch = CountDownLatch(1)
-        val gatt = device.connectGatt(context, false, bleGattCallback)
+        val gatt = device.connectGattDirect(context, bleGattCallback, BluetoothDevice.TRANSPORT_AUTO)
+            ?: return TrezorTransportWriteResult(
+                success = false,
+                error = "BLE connection could not be opened: $path",
+                errorCode = null,
+            )
 
         val connection = BleConnection(
             gatt = gatt,
