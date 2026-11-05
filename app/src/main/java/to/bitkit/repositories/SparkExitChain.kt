@@ -329,6 +329,17 @@ object SparkExitBroadcastClassifier {
     fun isUnpaid(outcome: SparkExitBroadcastOutcome): Boolean =
         outcome is SparkExitBroadcastOutcome.Rejected && unpaid.containsMatchIn(outcome.reason)
 
+    private val feeTooLow = Regex("""min relay fee not met,\s*[1-9]|mempool min fee not met""")
+
+    /**
+     * A node refused a step whose fee it found too low: a nonzero fee under its relay floor, or under the mempool's
+     * floor. A rebuild at the same rate cannot help. An unpaid step and a lost replacement race are not this.
+     */
+    fun isFeeTooLow(text: String): Boolean = feeTooLow.containsMatchIn(text)
+
+    fun isFeeTooLow(outcome: SparkExitBroadcastOutcome): Boolean =
+        outcome is SparkExitBroadcastOutcome.Rejected && isFeeTooLow(outcome.reason)
+
     fun classify(text: String): SparkExitBroadcastOutcome = when {
         knownMessages.any { it in text } || hasRpcCode(-27, text) -> SparkExitBroadcastOutcome.Accepted
         notMatureMessages.any { it in text } -> SparkExitBroadcastOutcome.NotMature(text)

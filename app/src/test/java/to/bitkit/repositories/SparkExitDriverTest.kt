@@ -248,6 +248,46 @@ class SparkExitDriverTest : BaseUnitTest() {
         }
 
     @Test
+    fun `a step refused for a fee under the network's floor reads as underpriced at once and never rebuilds`() = test {
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1", cpfp = "03c")))
+        var record = running(recovery, builtAt = now - interval)
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 5 < 17")
+        repeat(4) { sdk.checks += check(recovery, RecoveryVerdict.Valid) }
+
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals("n1", record.underpricedStep(null)?.txid)
+        repeat(3) {
+            now += interval
+            record = driver(tip = 1_001u).tick(record)
+        }
+
+        assertEquals(0, record.broadcastLog.single().rejections)
+        assertNull(record.stuckStep)
+        assertEquals(1, record.generation)
+        assertTrue(sdk.prepareRequests.isEmpty())
+        assertNull(record.surfacedRejection)
+        assertEquals("n1", record.underpricedStep(1_001u)?.txid)
+        assertEquals(
+            2uL,
+            SparkExitUiState(record = record, tipHeight = 1_001u).lowFeeRate,
+        )
+    }
+
+    @Test
+    fun `a mempool floor refusal reads as underpriced and a lost replacement race does not`() = test {
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1", cpfp = "03c")))
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("mempool min fee not met, 300 < 400")
+        assertNotNull(driver(tip = 1_000u).tick(running(recovery)).underpricedStep(1_000u))
+
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("insufficient fee, rejecting replacement")
+        val raced = driver(tip = 1_000u).tick(running(recovery))
+        assertNull(raced.underpricedStep(1_000u))
+        assertEquals(1, raced.broadcastLog.single().rejections)
+    }
+
+    @Test
     fun `a unilateral step the sdk could not read is not sent and rebuilds once a block`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(

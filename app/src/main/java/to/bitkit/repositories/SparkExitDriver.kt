@@ -722,8 +722,10 @@ class SparkExitDriver(
         val isStuck = parentsConfirmed && (isUnpaid || outcome is SparkExitBroadcastOutcome.InputsMissing)
         Logger.info("Broadcast Spark exit '${tx.kind}' '${tx.txid}': '${outcome.summary}'", context = TAG)
         val isAccepted = outcome == SparkExitBroadcastOutcome.Accepted
-        // An unpaid step is a broken fee chain, never a rejection.
-        val isRejected = outcome is SparkExitBroadcastOutcome.Rejected && !isUnpaid
+        // An unpaid step is a broken fee chain, and a fee under the network's floor an underpriced exit: neither is a
+        // rejection a rebuild could fix.
+        val isRejected = outcome is SparkExitBroadcastOutcome.Rejected && !isUnpaid &&
+            !SparkExitBroadcastClassifier.isFeeTooLow(outcome)
         val rejection = if (isRejected) 1 else 0
         val existing = record.broadcastLog.firstOrNull { it.generation == record.generation && it.txid == tx.txid }
         val entry = existing?.copy(

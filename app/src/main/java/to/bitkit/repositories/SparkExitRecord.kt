@@ -303,16 +303,16 @@ data class SparkExitRecord(
     val isStalled: Boolean get() = stallRebuilds >= SparkExitDriver.STALL_REBUILDS_TO_SURFACE
 
     /**
-     * A step a node accepted that has not confirmed for more blocks than a fair fee rate needs at [tip]: the network
-     * is busier than the exit's rate, which a rebuild at the same rate does not change.
+     * A step whose fee the network finds too low: a node refused it for its fee, or accepted it and it has not
+     * confirmed for more blocks than a fair fee rate needs at [tip]. A rebuild at the same rate does not change that.
      */
     fun underpricedStep(tip: UInt?): BroadcastAttempt? {
-        tip ?: return null
         val confirmed = confirmedTxids
         return broadcastLog.firstOrNull {
+            if (it.generation != generation || it.txid in confirmed) return@firstOrNull false
+            if (!it.isAccepted) return@firstOrNull SparkExitBroadcastClassifier.isFeeTooLow(it.lastOutcome)
             val height = it.acceptedAtHeight ?: return@firstOrNull false
-            it.generation == generation && it.isAccepted && it.txid !in confirmed &&
-                tip > height && tip - height > UNCONFIRMED_BLOCKS_TO_SURFACE
+            tip != null && tip > height && tip - height > UNCONFIRMED_BLOCKS_TO_SURFACE
         }
     }
 

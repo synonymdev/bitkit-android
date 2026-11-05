@@ -215,6 +215,19 @@ class SparkExitChainTest : BaseUnitTest() {
     }
 
     @Test
+    fun `only a nonzero fee under a node's floor reads as a fee too low`() {
+        val classifier = SparkExitBroadcastClassifier
+        assertTrue(classifier.isFeeTooLow(SparkExitBroadcastOutcome.Rejected("min relay fee not met, 5 < 17")))
+        assertTrue(classifier.isFeeTooLow(SparkExitBroadcastOutcome.Rejected("mempool min fee not met, 300 < 400")))
+        // A dead parent or child, and the lost replacement race, stay on the broken-chain path.
+        assertFalse(classifier.isFeeTooLow(SparkExitBroadcastOutcome.Rejected("min relay fee not met, 0 < 17")))
+        assertFalse(
+            classifier.isFeeTooLow(SparkExitBroadcastOutcome.Rejected("insufficient fee, rejecting replacement")),
+        )
+        assertFalse(classifier.isFeeTooLow(SparkExitBroadcastOutcome.RetryLater("min relay fee not met, 5 < 17")))
+    }
+
+    @Test
     fun `a transaction is unknown only when every host says so`() = test {
         val unknown = Route("a.example/api/tx/t/hex", 404, "Transaction not found")
         assertFalse(chain(unknown).isTxKnown("t"))
