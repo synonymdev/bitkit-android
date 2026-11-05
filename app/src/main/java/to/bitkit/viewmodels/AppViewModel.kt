@@ -236,6 +236,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
+import to.bitkit.services.SparkError
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
@@ -6698,6 +6699,9 @@ class AppViewModel @Inject constructor(
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
+                is SparkError.InvoiceExpired ->
+                    PaymentFailureReason.PAYMENT_EXPIRED.toSendFailureDetails(context, decodedInvoice.bolt11)
+                        .copy(message = context.getString(R.string.other__scan__error__expired))
                 else -> error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
             }
             setSendEffect(SendEffect.NavigateToError(failure))
