@@ -43,6 +43,7 @@ import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwRetainedSend
 import to.bitkit.repositories.HwRetainedSendRepo
@@ -2686,7 +2687,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a Shop request cannot use the consent and a passphrase prompt keeps it until dismissed`() = test {
+    fun `dismissing the passphrase prompt keeps the consent and a submitted passphrase signs anew`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         val replacement = stubReplacementPayment()
@@ -2702,14 +2703,11 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertFalse(sut.offersRetry(replacementRequest()))
 
         sut.dismissPassphrase()
-        assertEquals(
-            HwRetainedSendStatus.Blocking,
-            sut.retainedSendStatus(OTHER_ADDRESS, AMOUNT_SATS, WALLET_ID, false),
-        )
+        assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(OTHER_ADDRESS, AMOUNT_SATS, WALLET_ID, false))
 
-        sut.consentToNewSignature(WALLET_ID, OTHER_ADDRESS, AMOUNT_SATS)
         sut.signAndBroadcast(replacementRequest())
         advanceUntilIdle()
+        assertTrue(sut.uiState.value.isPassphraseRequired)
         whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
         whenever(hwWalletRepo.reconnectWithPassphrase(WALLET_ID, "secret")).thenReturn(Result.success(Unit))
         assertEquals(original, retainedEntries[WALLET_ID])
@@ -2719,6 +2717,97 @@ class HwSendViewModelTest : BaseUnitTest() {
 
         verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, replacement.funding)
         assertEquals(replacement.broadcast.txId, sut.results.first().txId)
+    }
+
+    @Test
+    fun `dismissing the passphrase prompt on a repeat of an observed payment prompts again and signs anew`() = test {
+        val (fixture, newBytes) = stubRepeatOfObservedPayment()
+        val original = retainedEntries[WALLET_ID]
+        whenever(hwWalletRepo.broadcastFunding(newBytes.signedTx)).thenReturn(Result.success(newBytes.broadcast))
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(true)
+
+        sut.consentToNewSignature(WALLET_ID, ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isPassphraseRequired)
+
+        sut.dismissPassphrase()
+        assertFalse(sut.uiState.value.isPassphraseRequired)
+        assertFalse(sut.offersRetry(request()))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isPassphraseRequired)
+        assertFalse(sut.offersRetry(request()))
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.completeReconciledBroadcast(WALLET_ID, fixture.broadcast.txId))
+        verify(hwWalletRepo, never()).broadcastFunding(any(), anyOrNull())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        assertEquals(original, retainedEntries[WALLET_ID])
+
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.reconnectWithPassphrase(WALLET_ID, "secret")).thenReturn(Result.success(Unit))
+        sut.submitPassphrase(WALLET_ID, "secret") { sut.signAndBroadcast(request()) }
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(1)).broadcastFunding(newBytes.signedTx)
+        assertEquals(newBytes.broadcast.txId, sut.results.first().txId)
+    }
+
+    @Test
+    fun `a cancel after dismissing the passphrase prompt ends the consent and the status warns again`() = test {
+        stubRepeatOfObservedPayment()
+        val original = retainedEntries[WALLET_ID]
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(true)
+        whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
+
+        sut.consentToNewSignature(WALLET_ID, ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.dismissPassphrase()
+        assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+
+        sut.cancel()
+        advanceUntilIdle()
+
+        assertEquals(HwRetainedSendStatus.Blocking, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        assertEquals(original, retainedEntries[WALLET_ID])
+    }
+
+    @Test
+    fun `a failed passphrase submit keeps the consent and the next submit signs anew`() = test {
+        val (fixture, newBytes) = stubRepeatOfObservedPayment()
+        whenever(hwWalletRepo.broadcastFunding(newBytes.signedTx)).thenReturn(Result.success(newBytes.broadcast))
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(true)
+        whenever(hwWalletRepo.reconnectWithPassphrase(WALLET_ID, "secret")).thenReturn(
+            Result.failure(HwPassphraseMismatchError()),
+            Result.failure(AppError("reconnect failed")),
+            Result.success(Unit),
+        )
+
+        sut.consentToNewSignature(WALLET_ID, ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        repeat(2) {
+            sut.submitPassphrase(WALLET_ID, "secret") { sut.signAndBroadcast(request()) }
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.isPassphraseRequired)
+            assertFalse(sut.offersRetry(request()))
+            assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+        }
+
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        sut.submitPassphrase(WALLET_ID, "secret") { sut.signAndBroadcast(request()) }
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        assertEquals(newBytes.broadcast.txId, sut.results.first().txId)
     }
 
     @Test

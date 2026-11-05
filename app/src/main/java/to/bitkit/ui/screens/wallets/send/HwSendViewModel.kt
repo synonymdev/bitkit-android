@@ -462,7 +462,7 @@ class HwSendViewModel @Inject constructor(
     }
 
     fun dismissPassphrase() {
-        endRetainedSendConsent()
+        // The sign screen stays open, so consent stands: without it the next tap would rebroadcast the old bytes.
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
