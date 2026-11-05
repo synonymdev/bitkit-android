@@ -79,13 +79,6 @@ private const val CONSCRYPT_PROVIDER = "Conscrypt"
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ElectrumProbeServiceTest : BaseUnitTest() {
-    private var socketFactory: SSLSocketFactory =
-        SSLContext.getInstance("TLS", JSSE_PROVIDER).apply { init(null, null, null) }.socketFactory
-
-    private val sut get() = ElectrumProbeService(ioDispatcher = Dispatchers.IO, sslSocketFactory = socketFactory)
-
-    private var server: ServerSocket? = null
-
     companion object {
         private var detachedConscrypt: Pair<Provider, Int>? = null
 
@@ -112,6 +105,13 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
             detachedConscrypt = null
         }
     }
+
+    private var socketFactory: SSLSocketFactory =
+        SSLContext.getInstance("TLS", JSSE_PROVIDER).apply { init(null, null, null) }.socketFactory
+
+    private val sut get() = ElectrumProbeService(ioDispatcher = Dispatchers.IO, sslSocketFactory = socketFactory)
+
+    private var server: ServerSocket? = null
 
     @After
     fun tearDown() {
