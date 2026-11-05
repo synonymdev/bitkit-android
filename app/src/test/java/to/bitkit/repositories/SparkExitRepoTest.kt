@@ -1,7 +1,9 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.CheckRecoverFundsResponse
+import breez_sdk_spark.RecoveryRedoReason
 import breez_sdk_spark.RecoveryVerdict
+import breez_sdk_spark.SdkException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -43,6 +45,7 @@ import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -231,6 +234,50 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals(0, attempt?.rejections)
         assertEquals(3, attempt?.feeChainFailures)
         verify(work, times(2)).armDeadline(any(), any())
+    }
+
+    @Test
+    fun `a tick that leaves the exit short of fees asks for at least dust at once`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        val funded = "f0".repeat(32)
+        store.save(
+            SparkExitFixtures.record(Phase.Running).adopt(recovery, 0L).copy(
+                funding = listOf(
+                    SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", funded, 0u, 9_035uL)
+                ),
+            ),
+        )
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val utxo = """[{"txid":"$funded","vout":0,"value":9035,"status":{"confirmed":true,"block_height":900}}]"""
+        val mempool = HttpClient(
+            MockEngine { request ->
+                val url = request.url.toString()
+                when {
+                    request.method == HttpMethod.Post && url.endsWith("/api/tx") -> respond("n1")
+                    url.endsWith("/address/${SparkExitFixtures.FUNDING_ADDRESS}/utxo") -> respond(utxo)
+                    url.endsWith("/blocks/tip/height") -> respond("1000")
+                    url.endsWith("/status") -> respond("""{"confirmed":false}""")
+                    else -> throw IOException("unreachable '$url'")
+                }
+            },
+        ) { defaultRequest { contentType(ContentType.Application.Json) } }
+        // The qa-03 run: the rebuild needs 68 sats more than the address holds.
+        val sdk = FakeSparkExitRecovering().apply {
+            val redo = RecoveryVerdict.Redo(RecoveryRedoReason.ON_CHAIN_STATE_DIVERGED)
+            checks += CheckRecoverFundsResponse(recovery, redo)
+            preparedResponse = SparkExitFixtures.prepared(funding = null)
+            recoverError = SdkException.InsufficientCpfpFunds(9_103uL, "")
+        }
+        val sut = createSut(coldSpark(sdk), mempool)
+
+        sut.runInBackground().getOrThrow()
+
+        assertEquals(Phase.NeedsFunding(9_103uL), sut.state.value.record?.phase)
+        val ask = assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+        assertEquals(SparkExitMath.FUNDING_DUST_SATS, ask.sats)
     }
 
     @Test

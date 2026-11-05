@@ -202,6 +202,8 @@ class SparkExitRepo @Inject constructor(
         )
         val updated = driver.tick(current)
         _state.update { it.copy(record = updated, lastError = null) }
+        // A tick that changed the phase, such as a build short of fees, needs the funding state of the new phase.
+        if (updated.phase != current.phase) refreshFundingSeen(chain, updated)
         // Spark's balance next to the exit's leaves shows value outside the exit.
         if (recovering != null) _state.update { it.copy(sparkBalanceSats = sparkRepo.state.value.balanceSats) }
         // A rebuild needs the SDK; every other running step can go out from the stored recovery without it. Steps

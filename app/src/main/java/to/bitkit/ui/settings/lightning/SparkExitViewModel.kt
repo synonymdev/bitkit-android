@@ -15,6 +15,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitFundingState
+import to.bitkit.repositories.SparkExitMath
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
@@ -208,11 +209,14 @@ data class SparkExitUiState(
 
     val rejection: String? get() = record?.surfacedRejection
 
-    /** The fee funding progress shows, asking for the whole shortfall until the funding address was read. */
+    /**
+     * The fee funding progress shows, asking for the whole shortfall, at least the funding output's dust, until the
+     * funding address was read.
+     */
     val progressFunding: SparkExitFundingState?
         get() {
             val shortfall = record?.fundingShortfallSats ?: return null
-            return fundingState ?: SparkExitFundingState.Ask(shortfall)
+            return fundingState ?: SparkExitFundingState.Ask(maxOf(shortfall, SparkExitMath.FUNDING_DUST_SATS))
         }
 }
 

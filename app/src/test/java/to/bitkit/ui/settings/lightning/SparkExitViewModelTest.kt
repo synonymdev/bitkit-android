@@ -6,7 +6,10 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.repositories.SparkExitFixtures
+import to.bitkit.repositories.SparkExitFundingState
+import to.bitkit.repositories.SparkExitMath
 import to.bitkit.repositories.SparkExitQuote
+import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.test.BaseUnitTest
@@ -47,6 +50,16 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertFalse(SparkExitUiState().canContinueFunding)
         assertFalse(SparkExitUiState(quote = quote, fundingSeenSats = 8_000uL).canContinueFunding)
         assertTrue(SparkExitUiState(quote = quote, fundingSeenSats = 20_000uL).canContinueFunding)
+    }
+
+    @Test
+    fun `progress asks for at least dust before the funding address was read`() {
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(68uL))
+
+        assertEquals(
+            SparkExitFundingState.Ask(SparkExitMath.FUNDING_DUST_SATS),
+            SparkExitUiState(record = record).progressFunding,
+        )
     }
 
     @Test
