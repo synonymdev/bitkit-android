@@ -2373,6 +2373,45 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `estimateFundingMiningFee composes again when a cancelled caller's compose fails`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val finishFirst = CompletableDeferred<Unit>()
+        var calls = 0
+        whenever {
+            trezorRepo.composeTransactionOffline(
+                extendedKey = any(),
+                outputs = any(),
+                feeRates = any(),
+                network = any(),
+                accountType = anyOrNull(),
+                coinSelection = any(),
+                fingerprint = anyOrNull(),
+            )
+        }.doSuspendableAnswer {
+            calls++
+            if (calls == 1) {
+                finishFirst.await()
+                Result.failure(Exception("electrum unavailable"))
+            } else {
+                Result.success(
+                    listOf(ComposeResult.Success(psbt = "psbt", fee = 1_250uL, feeRate = 2.0f, totalSpent = 26_250uL))
+                )
+            }
+        }
+        val sut = createRepo()
+
+        val first = launch { sut.estimateFundingMiningFee(HARDWARE_WALLET_ID, "bc1qtest", 25_000uL, 2uL) }
+        runCurrent()
+        first.cancel()
+        finishFirst.complete(Unit)
+        runCurrent()
+        val second = sut.estimateFundingMiningFee(HARDWARE_WALLET_ID, "bc1qtest", 25_000uL, 2uL)
+
+        assertEquals(1_250uL, second.getOrThrow())
+        assertEquals(2, calls)
+    }
+
+    @Test
     fun `composeFundingTransaction does not sign when compose fails`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         whenever(

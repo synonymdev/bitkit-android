@@ -15,7 +15,9 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -785,27 +788,33 @@ class HwWalletRepo @Inject constructor(
         val estimate = synchronized(feeEstimatesLock) {
             feeEstimates.keys.removeAll { it.walletId == walletId && it.fundingBalanceSats != key.fundingBalanceSats }
             if (feeEstimates.size >= MAX_FEE_ESTIMATES && key !in feeEstimates) feeEstimates.clear()
-            feeEstimates.getOrPut(key) {
+            feeEstimates[key] ?: run {
                 // Owned by the repository scope, so a caller that is cancelled mid-compose leaves
                 // the result for the next caller instead of discarding it.
-                scope.async(ioDispatcher) {
+                // Started only once stored, so a compose that ends at once can still drop itself.
+                val created = scope.async(ioDispatcher, start = CoroutineStart.LAZY) {
                     runSuspendCatching {
                         composeFundingOffline(
                             walletId = walletId,
                             output = ComposeOutput.Payment(address = address, amountSats = sats),
                             satsPerVByte = satsPerVByte,
                         ).fee
+                    }.also { result ->
+                        // Dropped by the compose itself, not by a waiting caller, which may be gone.
+                        if (result.isFailure) forgetFeeEstimate(key, coroutineContext.job)
                     }
                 }
+                feeEstimates[key] = created
+                created.invokeOnCompletion { cause -> if (cause != null) forgetFeeEstimate(key, created) }
+                created.start()
+                created
             }
         }
-        val result = estimate.await()
-        if (result.isFailure) {
-            synchronized(feeEstimatesLock) {
-                if (feeEstimates[key] === estimate) feeEstimates.remove(key)
-            }
-        }
-        return result
+        return estimate.await()
+    }
+
+    private fun forgetFeeEstimate(key: FeeEstimateKey, estimate: Job) = synchronized(feeEstimatesLock) {
+        if (feeEstimates[key] === estimate) feeEstimates.remove(key)
     }
 
     /** Exact amount available after the coin-selection fee, computed offline from the account xpub. */
