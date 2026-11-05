@@ -18,6 +18,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import to.bitkit.repositories.SparkExitRecord.Phase
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.settings.lightning.SparkExitQuoteBlock
+import to.bitkit.ui.settings.lightning.SparkExitUiState
 import to.bitkit.utils.SignedTransactionId
 import java.io.File
 import kotlin.test.assertEquals
@@ -806,6 +808,69 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(SparkExitUnexitable.NOT_RECOVERABLE, record.leftBehindLeaves.single().reason)
         assertEquals(listOf("leaf-1"), record.exitLeafIds)
         assertEquals(2, record.generation)
+    }
+
+    @Test
+    fun `a refusal fallback that lists a leaf outside the exit prepares only the exit's leaves`() = test {
+        val start = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))))
+            .copy(leafIds = listOf("leaf-1", "leaf-2"), isRebuilding = true, lastBuildAt = null)
+        sdk.prepareErrors += SdkException.SparkException("Leaf cannot be exited")
+        // The operators still list a leaf an older state claimed, and recoverable-only picks it up.
+        sdk.preparedResponses += SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1", "lost-1"))
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1"))
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2")))
+
+        val record = driver().tick(start)
+
+        val selection = assertIs<ExitLeafSelection.Specific>(sdk.prepareRequests.last().selection)
+        assertEquals(listOf("leaf-1"), selection.leafIds)
+        assertEquals(listOf("leaf-1"), sdk.recoverRequests.single().prepared.leaves.map { it.leafId })
+        assertEquals(listOf("leaf-2"), record.leftBehindLeaves.map { it.leafId })
+    }
+
+    @Test
+    fun `a quote leaves out lost leaves the operators still list`() = test {
+        val lostSkip = SkippedLeaf("lost-2", 65_536uL, SkippedLeafReason.Unverified)
+        val dust = SkippedLeaf("dust", 300uL, SkippedLeafReason.FeeExceedsValue)
+        sdk.preparedResponses += SparkExitFixtures.prepared(
+            leaves = listOf("leaf-1", "lost-1"),
+            skipped = listOf(dust, lostSkip),
+            totalFeeSats = 18_000uL,
+        )
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-1"), skipped = emptyList())
+
+        val prepared = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1", "lost-2"))
+
+        assertEquals(ExitLeafSelection.All, sdk.prepareRequests.first().selection)
+        val selection = assertIs<ExitLeafSelection.Specific>(sdk.prepareRequests.last().selection)
+        assertEquals(listOf("leaf-1"), selection.leafIds)
+        assertEquals(listOf("leaf-1"), prepared.leaves.map { it.leafId })
+        assertEquals(9_000uL, prepared.totalFeeSats)
+        assertEquals(listOf(dust), prepared.skipped)
+    }
+
+    @Test
+    fun `a quote with no lost leaf listed is the operators' own`() = test {
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-1"))
+
+        val prepared = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1"))
+
+        assertEquals(listOf<ExitLeafSelection>(ExitLeafSelection.All), sdk.prepareRequests.map { it.selection })
+        assertEquals(sdk.preparedResponse, prepared)
+    }
+
+    @Test
+    fun `a quote whose every leaf is lost shows nothing to exit`() = test {
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("lost-1"))
+
+        val prepared = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1"))
+
+        assertEquals(1, sdk.prepareRequests.size)
+        assertTrue(prepared.leaves.isEmpty())
+        assertEquals(0uL, prepared.recoverableValueSats)
+        assertEquals(0uL, prepared.totalFeeSats)
+        assertNull(prepared.funding)
+        assertEquals(SparkExitQuoteBlock.Nothing, SparkExitUiState(quote = SparkExitQuote(prepared)).quoteBlock)
     }
 
     @Test

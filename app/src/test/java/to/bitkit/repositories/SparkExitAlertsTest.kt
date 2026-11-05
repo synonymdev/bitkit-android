@@ -77,4 +77,18 @@ class SparkExitAlertsTest {
         assertEquals(emptyList(), SparkExitAlerts.losses(stopped, stopped))
         assertEquals(emptyList(), SparkExitAlerts.losses(SparkExitFixtures.record(Phase.Done), running))
     }
+
+    @Test
+    fun `posts no second loss for a leaf an earlier exit already reported`() {
+        val lost = running.copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 65_536uL)))
+        val claimed = lost.copy(phase = Phase.Failed(SparkExitDriver.LOST_REASON))
+
+        assertEquals(emptyList(), SparkExitAlerts.losses(lost, running, reportedLost = setOf("leaf-1")))
+        assertEquals(emptyList(), SparkExitAlerts.losses(claimed, running, reportedLost = setOf("leaf-1")))
+        val another = lost.copy(lostLeaves = lost.lostLeaves + SparkExitRecord.LostLeaf("leaf-2", 4_000uL))
+        assertEquals(
+            listOf(SparkExitAlert.Lost),
+            SparkExitAlerts.losses(another, running, reportedLost = setOf("leaf-1")),
+        )
+    }
 }

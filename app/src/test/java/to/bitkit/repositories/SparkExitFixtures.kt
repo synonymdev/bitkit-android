@@ -2,9 +2,11 @@ package to.bitkit.repositories
 
 import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.CooperativeRecoveryFailure
+import breez_sdk_spark.CpfpFundingKind
 import breez_sdk_spark.CpfpInput
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitChainState
+import breez_sdk_spark.ExitLeafSelection
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.PrepareRecoverFundsResponse
@@ -84,6 +86,13 @@ object SparkExitFixtures {
         feeRateSatPerVbyte = 2uL,
         destination = "bcrt1qdestination",
         exitChainState = ExitChainState(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
+    )
+
+    fun prepareRequest() = PrepareRecoverFundsRequest(
+        feeRateSatPerVbyte = 2uL,
+        fundingKind = CpfpFundingKind.P2wpkh,
+        destination = "bcrt1qdestination",
+        selection = ExitLeafSelection.All,
     )
 
     fun record(phase: SparkExitRecord.Phase = SparkExitRecord.Phase.AwaitingFunding(20_000uL)) = SparkExitRecord(
@@ -178,10 +187,13 @@ class FakeSparkExitRecovering : SparkExitRecovering {
     /** Errors the next prepares throw, in order, before [preparedResponse] is returned. */
     val prepareErrors = ArrayDeque<Throwable>()
 
+    /** Responses the next prepares return, in order, before [preparedResponse]. */
+    val preparedResponses = ArrayDeque<PrepareRecoverFundsResponse>()
+
     override suspend fun prepare(request: PrepareRecoverFundsRequest): PrepareRecoverFundsResponse {
         prepareRequests += request
         prepareErrors.removeFirstOrNull()?.let { throw it }
-        return preparedResponse
+        return preparedResponses.removeFirstOrNull() ?: preparedResponse
     }
 
     override suspend fun recover(request: RecoverFundsRequest, signer: CpfpSigner?): RecoverFundsResponse {

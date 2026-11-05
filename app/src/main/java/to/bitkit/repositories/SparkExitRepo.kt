@@ -101,6 +101,8 @@ class SparkExitRepo @Inject constructor(
 
     private val store get() = SparkExitStore(File(Env.sparkExitRecordPath(walletIndex)))
 
+    private val lostLeafStore get() = SparkExitLostLeafStore(File(Env.sparkExitLostLeavesPath(walletIndex)))
+
     private val chain: SparkExitChain?
         get() = EsploraSparkExitChain.defaultHosts(sparkService.networkName)
             .takeIf { it.isNotEmpty() }
@@ -121,6 +123,7 @@ class SparkExitRepo @Inject constructor(
             }
             isLoaded = true
             _state.update { it.copy(record = record) }
+            rememberLostLeaves(record)
             record?.let { settleIfFinished(it) }
             settleOrphanedTransfers(record)
             if (record?.needsDriving == true) work.schedulePeriodic()
@@ -200,7 +203,10 @@ class SparkExitRepo @Inject constructor(
             save = store::save,
             nowMillis = clock::nowMs,
         )
+        // Read before this tick's losses are kept, so a leaf lost now is still reported once.
+        val reportedLost = reportedLostLeafIds()
         val updated = driver.tick(current)
+        rememberLostLeaves(updated)
         _state.update { it.copy(record = updated, lastError = null) }
         // A tick that changed the phase, such as a build short of fees, needs the funding state of the new phase.
         if (updated.phase != current.phase) refreshFundingSeen(chain, updated)
@@ -210,14 +216,19 @@ class SparkExitRepo @Inject constructor(
         // refused again and again keep the exit from moving, however often it runs.
         val canMove = recovering != null || !updated.isRebuilding
         val isOnTrack = tip != null && canMove && updated.surfacedRejection == null && !updated.isFeeChainStuck
-        afterTick(updated, current, isOnTrack)
+        afterTick(updated, current, isOnTrack, reportedLost)
         return updated
     }
 
-    private suspend fun afterTick(record: SparkExitRecord, previous: SparkExitRecord, isOnTrack: Boolean) {
+    private suspend fun afterTick(
+        record: SparkExitRecord,
+        previous: SparkExitRecord,
+        isOnTrack: Boolean,
+        reportedLost: Set<String>,
+    ) {
         record.transferId?.let { transferRepo.updateClaimableAtHeight(it, record.claimableAtHeight) }
         settleIfFinished(record)
-        updateAlerts(record, previous, isOnTrack)
+        updateAlerts(record, previous, isOnTrack, reportedLost)
         if (!record.isActive && previous.isActive) {
             Logger.info("Ended Spark exit with phase '${record.phase}'", context = TAG)
             sparkRepo.setExiting(false)
@@ -284,8 +295,13 @@ class SparkExitRepo @Inject constructor(
      * be published. Only a run that kept the exit on track pushes it; a stalled exit lets it fire. Needing more fee
      * funding is notified once, at once.
      */
-    private fun updateAlerts(record: SparkExitRecord, previous: SparkExitRecord, isOnTrack: Boolean) {
-        SparkExitAlerts.losses(record, previous).forEach {
+    private fun updateAlerts(
+        record: SparkExitRecord,
+        previous: SparkExitRecord,
+        isOnTrack: Boolean,
+        reportedLost: Set<String>,
+    ) {
+        SparkExitAlerts.losses(record, previous, reportedLost).forEach {
             work.notify(it, amountSats = record.lostSats.takeIf { _ -> it == SparkExitAlert.Lost })
         }
         when (record.phase) {
@@ -306,6 +322,16 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
+    private fun reportedLostLeafIds(): Set<String> = runCatching { lostLeafStore.load() }
+        .onFailure { Logger.warn("Failed to read the lost Spark exit leaves", it, context = TAG) }
+        .getOrDefault(emptySet())
+
+    private fun rememberLostLeaves(record: SparkExitRecord?) {
+        val ids = record?.lostLeaves?.map { it.leafId }?.takeIf { it.isNotEmpty() } ?: return
+        runCatching { lostLeafStore.add(ids) }
+            .onFailure { Logger.warn("Failed to keep the lost Spark exit leaves '$ids'", it, context = TAG) }
+    }
+
     /** What Android lets the exit do while Bitkit is closed, for the progress screen. */
     fun backgroundLimits(): SparkExitBackgroundLimits = work.backgroundLimits()
 
@@ -321,13 +347,16 @@ class SparkExitRepo @Inject constructor(
             sparkRepo.settleForExit().also { _state.update { it.copy(isSettling = false) } }.getOrThrow()
             val feeRate = maxOf(1uL, sparkService.fastestFeeRate())
             val destination = _state.value.pending?.destination ?: lightningRepo.newAddress().getOrThrow()
-            val prepared = recovering.prepare(
+            // Leaves an earlier exit lost to an older state stay listed by the operators, but cannot be exited.
+            val lost = reportedLostLeafIds() + _state.value.record?.lostLeaves?.map { it.leafId }.orEmpty()
+            val prepared = recovering.prepareAll(
                 PrepareRecoverFundsRequest(
                     feeRateSatPerVbyte = feeRate,
                     fundingKind = CpfpFundingKind.P2wpkh,
                     destination = destination,
                     selection = ExitLeafSelection.All,
                 ),
+                lost,
             )
             val quote = SparkExitQuote(prepared, sparkRepo.state.value.balanceSats)
             // Chosen here, so the funding screen, the fee estimate and the record all use one address.

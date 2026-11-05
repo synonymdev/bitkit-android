@@ -127,6 +127,24 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals(false, file.exists())
     }
 
+    @Test
+    fun `leaves lost to an older state outlive the exit record that found them`() = test {
+        val recordFile = File(Env.sparkExitRecordPath(0))
+        val lost = SparkExitRecord.LostLeaf("leaf-1", 65_536uL)
+        SparkExitStore(recordFile).save(
+            SparkExitFixtures.record(Phase.Failed(SparkExitDriver.LOST_REASON)).copy(lostLeaves = listOf(lost)),
+        )
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(true))
+        createSut().load(0).getOrThrow()
+
+        // A new exit replaces the record.
+        SparkExitStore(recordFile).save(SparkExitFixtures.record().copy(leafIds = listOf("leaf-2")))
+        createSut().load(0).getOrThrow()
+
+        assertEquals(setOf("leaf-1"), SparkExitLostLeafStore(File(Env.sparkExitLostLeavesPath(0))).load())
+    }
+
     /** Spark's regtest mempool, where nothing is confirmed yet and every single transaction is accepted. */
     private fun regtestMempool(posts: MutableList<String>, refusal: String? = null) = HttpClient(
         MockEngine { request ->

@@ -293,6 +293,32 @@ class SparkExitStore(private val file: File) {
     }
 }
 
+/**
+ * The ids of the leaves an older state of one wallet claimed on-chain. The operators keep listing such a leaf, so it
+ * outlives the exit record that found it: a later exit neither quotes nor builds it again. Not backed up; a restored
+ * wallet finds a lost leaf again in one rebuild.
+ */
+class SparkExitLostLeafStore(private val file: File) {
+    fun load(): Set<String> {
+        if (!file.exists()) return emptySet()
+        return Json.parseToJsonElement(file.readText()).jsonArray.map { it.jsonPrimitive.content }.toSet()
+    }
+
+    /** Adds [leafIds], writing only when one is new; an unreadable file is written anew. */
+    fun add(leafIds: Collection<String>) {
+        val known = runCatching { load() }.getOrDefault(emptySet())
+        if (known.containsAll(leafIds)) return
+        file.parentFile?.mkdirs()
+        val temp = File(file.parentFile, "${file.name}.tmp")
+        temp.writeText(JsonArray((known + leafIds).sorted().map(::JsonPrimitive)).toString())
+        Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    }
+
+    fun delete() {
+        file.delete()
+    }
+}
+
 class SparkExitFormatError(message: String) : AppError(message)
 
 class SparkExitUnsupportedVersion(val version: Int) : AppError("Unsupported Spark exit record version '$version'")

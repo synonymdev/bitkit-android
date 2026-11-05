@@ -246,6 +246,13 @@ internal object Env {
         return Path(appStoragePath, network.name.lowercase(), "wallet$walletIndex", "spark-exit.json").toString()
     }
 
+    /** Leaves an older state of the wallet claimed on-chain, kept past the exit record that found them. */
+    fun sparkExitLostLeavesPath(walletIndex: Int): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val wallet = "wallet$walletIndex"
+        return Path(appStoragePath, network.name.lowercase(), wallet, "spark-exit-lost-leaves.json").toString()
+    }
+
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }

@@ -177,6 +177,8 @@ class SparkRepo @Inject constructor(
             .onFailure { Logger.error("Failed to wipe Spark wallet", it, context = TAG) }
         runSuspendCatching { exitStore(walletIndex).delete() }
             .onFailure { Logger.error("Failed to wipe Spark exit record", it, context = TAG) }
+        runSuspendCatching { SparkExitLostLeafStore(File(Env.sparkExitLostLeavesPath(walletIndex))).delete() }
+            .onFailure { Logger.error("Failed to wipe the lost Spark exit leaves", it, context = TAG) }
         _state.update { SparkState(isSupported = sparkService.isSupported) }
         _walletWiped.emit(walletIndex)
     }

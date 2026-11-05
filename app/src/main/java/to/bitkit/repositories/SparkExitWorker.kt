@@ -248,12 +248,18 @@ private val ALWAYS_POSTED = setOf(SparkExitAlert.Lost, SparkExitAlert.Failed)
 object SparkExitAlerts {
     /**
      * What a tick that moved the exit from [previous] to [record] lost, each posted once: leaves an older owner
-     * claimed, and the exit failing, unless it failed because every leaf was claimed, which the lost leaves say.
+     * claimed, and the exit failing, unless it failed because every leaf was claimed, which the lost leaves say. A leaf
+     * in [reportedLost] was already reported by an earlier exit.
      */
-    fun losses(record: SparkExitRecord, previous: SparkExitRecord): List<SparkExitAlert> {
+    fun losses(
+        record: SparkExitRecord,
+        previous: SparkExitRecord,
+        reportedLost: Set<String> = emptySet(),
+    ): List<SparkExitAlert> {
         val phase = record.phase
+        val known = previous.lostLeaves.map { it.leafId }.toSet() + reportedLost
         return listOfNotNull(
-            SparkExitAlert.Lost.takeIf { record.lostLeaves.size > previous.lostLeaves.size },
+            SparkExitAlert.Lost.takeIf { record.lostLeaves.any { it.leafId !in known } },
             SparkExitAlert.Failed.takeIf {
                 phase is SparkExitRecord.Phase.Failed && !record.isEveryLeafLost &&
                     previous.phase !is SparkExitRecord.Phase.Failed

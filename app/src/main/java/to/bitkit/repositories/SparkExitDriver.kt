@@ -27,6 +27,42 @@ interface SparkExitRecovering {
 }
 
 /**
+ * Prepares every leaf the operators list less [lost], the leaves an older state of this wallet claimed on-chain, which
+ * the operators keep listing. A quote that lists one is prepared again for the rest, so its amount, fees and funding
+ * leave it out, dropping a leaf the SDK refuses to exit; nothing is left to exit when every listed leaf is lost.
+ */
+suspend fun SparkExitRecovering.prepareAll(
+    request: PrepareRecoverFundsRequest,
+    lost: Set<String>,
+): PrepareRecoverFundsResponse {
+    val all = prepare(request.copy(selection = ExitLeafSelection.All))
+    val skipped = all.skipped.filter { it.leafId !in lost }
+    if (all.leaves.none { it.leafId in lost }) return all.copy(skipped = skipped)
+    var ids = all.leaves.map { it.leafId }.filter { it !in lost }
+    while (ids.isNotEmpty()) {
+        val result = runSuspendCatching { prepare(request.copy(selection = ExitLeafSelection.Specific(ids))) }
+        result.getOrNull()?.let { prepared ->
+            return prepared.copy(skipped = (prepared.skipped + skipped).distinctBy { it.leafId })
+        }
+        val error = requireNotNull(result.exceptionOrNull())
+        val refusal = SparkExitUnexitable.parse(error)?.takeIf { it.leafId in ids } ?: throw error
+        ids = ids - refusal.leafId
+    }
+    return all.copy(
+        leaves = emptyList(),
+        skipped = skipped,
+        recoverableValueSats = 0uL,
+        totalFeeSats = 0uL,
+        cooperativeFeeSats = 0uL,
+        cpfpFeeSats = 0uL,
+        fanoutFeeSats = 0uL,
+        refundFeeSats = 0uL,
+        sweepFeeSats = 0uL,
+        funding = null,
+    )
+}
+
+/**
  * Moves an exit one step forward each tick: builds it once its fee funding confirms, broadcasts what is ready,
  * rebuilds when the chain diverged or its fee chain lost a race, and finishes when everything confirmed. Without the
  * SDK (a background start, or operators down at connect) it still broadcasts the stored, already signed transactions
@@ -204,7 +240,11 @@ class SparkExitDriver(
             ids.filter { it !in listed }.forEach {
                 record = record.leaveBehind(it, SparkExitUnexitable.NOT_RECOVERABLE)
             }
-            return record to prepared
+            if (listed.all { it in ids }) return record to prepared
+            // It also lists leaves outside the exit, such as one an older state claimed: only the exit's are built.
+            val remaining = record.exitLeafIds
+            if (remaining.isEmpty()) return record to null
+            return record to sdk.prepare(prepareRequest(record, ExitLeafSelection.Specific(remaining)))
         }
     }
 
