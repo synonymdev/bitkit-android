@@ -152,7 +152,6 @@ class ContactDetailViewModel @Inject constructor(
 
     override fun onCleared() {
         paymentScanJob?.cancel()
-        super.onCleared()
     }
 
     private fun cancelPendingPayment() {

@@ -7895,7 +7895,6 @@ class AppViewModel @Inject constructor(
 
     override fun onCleared() {
         isSubmittingPaymentRequest = false
-        super.onCleared()
     }
 
     fun beginHardwarePaymentSubmission(): () -> Unit = beginPaymentSubmission()
