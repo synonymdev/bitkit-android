@@ -180,7 +180,7 @@ val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
 
 android {
     namespace = "to.bitkit"
-    compileSdk = 36
+    compileSdk = 37
     requestedNdkVersion?.let { ndkVersion = it }
     defaultConfig {
         applicationId = "to.bitkit"
