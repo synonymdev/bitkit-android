@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.CooperativeRecoveryError
 import breez_sdk_spark.CooperativeRecoveryFailure
+import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.CpfpInput
 import breez_sdk_spark.ExitChainState
 import breez_sdk_spark.ExitLeafSelection
@@ -685,6 +686,19 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertEquals(Phase.Running, ticked.phase)
         assertTrue(ticked.isRebuilding)
+    }
+
+    @Test
+    fun `every prepare resumes with the strategy the exit was quoted with`() = test {
+        val perBranch = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(isRebuilding = true)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2")))
+
+        driver().tick(perBranch)
+        driver().tick(perBranch.copy(fundingStrategy = SparkExitRecord.PER_NODE))
+
+        assertEquals(listOf(null, CpfpFundingStrategy.PER_NODE), sdk.prepareRequests.map { it.fundingStrategy })
     }
 
     @Test

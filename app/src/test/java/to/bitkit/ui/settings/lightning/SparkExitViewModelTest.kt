@@ -54,8 +54,11 @@ class SparkExitViewModelTest : BaseUnitTest() {
     fun `funding from another wallet continues only once the address holds what the quote asks`() {
         val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
         assertFalse(SparkExitUiState().canContinueFunding)
-        assertFalse(SparkExitUiState(quote = quote, fundingSeenSats = 8_000uL).canContinueFunding)
-        assertTrue(SparkExitUiState(quote = quote, fundingSeenSats = 20_000uL).canContinueFunding)
+        val paid = SparkExitUiState(quote = quote, fundingSeenCount = 1, fundingFeeRate = 2uL)
+        assertFalse(paid.copy(fundingSeenSats = 8_000uL).canContinueFunding)
+        assertTrue(paid.copy(fundingSeenSats = 20_000uL).canContinueFunding)
+        // A second payment adds its input fee.
+        assertFalse(paid.copy(fundingSeenSats = 20_000uL, fundingSeenCount = 2).canContinueFunding)
     }
 
     @Test

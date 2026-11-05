@@ -257,6 +257,7 @@
     <string name="lightning__spark_exit__fund_savings">Pay from savings</string>
     <string name="lightning__spark_exit__fund_seen">Payment seen.</string>
     <string name="lightning__spark_exit__funding">Fee funding needed</string>
+    <string name="lightning__spark_exit__funding_split">Bitkit splits it into {count} parts, one for each step, so one stuck step can\'t hold up the others.</string>
     <string name="lightning__spark_exit__funding_text">The exit pays its fees from a separate on-chain payment of &lt;accent&gt;{amount}&lt;/accent&gt;. What it doesn\'t spend comes back to savings at the end.</string>
     <string name="lightning__spark_exit__funding_title">Fund the\n&lt;accent&gt;fees&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__funding_txid">Transaction ID: {txid}</string>

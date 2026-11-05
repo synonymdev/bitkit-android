@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.CpfpFundingKind
+import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitLeafSelection
 import breez_sdk_spark.PrepareRecoverFundsRequest
@@ -371,6 +372,9 @@ class SparkExitRepo @Inject constructor(
                 PrepareRecoverFundsRequest(
                     feeRateSatPerVbyte = feeRate,
                     fundingKind = CpfpFundingKind.P2wpkh,
+                    // Each fee-bumped transaction gets a UTXO of its own, so one lost fee race strands one step's
+                    // funding, not the chain after it.
+                    fundingStrategy = CpfpFundingStrategy.PER_NODE,
                     destination = destination,
                     selection = ExitLeafSelection.All,
                 ),
@@ -411,8 +415,9 @@ class SparkExitRepo @Inject constructor(
         runSuspendCatching {
             val chain = requireNotNull(chain) { "No chain host for this network" }
             val address = requireNotNull(_state.value.fundingAddress) { "No Spark exit funding address" }
-            val seen = chain.utxos(address).fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
-            _state.update { it.copy(fundingSeenSats = seen) }
+            val utxos = chain.utxos(address)
+            val seen = utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+            _state.update { it.copy(fundingSeenSats = seen, fundingSeenCount = utxos.size) }
             seen
         }
     }
@@ -440,6 +445,7 @@ class SparkExitRepo @Inject constructor(
                 ),
                 expectedSats = quote.incomingSats,
                 skippedLeafCount = quote.prepared.skipped.size,
+                fundingStrategy = SparkExitRecord.PER_NODE,
                 leafTotalSats = quote.prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() },
             )
             // Saved before the transfer exists, so a failed save never leaves a transfer counted with no exit behind.
@@ -588,6 +594,8 @@ data class SparkExitState(
     val tipHeight: UInt? = null,
     /** Confirmed or not, what reached the funding address. */
     val fundingSeenSats: ULong = 0uL,
+    /** How many payments make up [fundingSeenSats] before the exit starts: each adds its own input fee. */
+    val fundingSeenCount: Int = 0,
     /** What progress shows while the exit needs fee funding. */
     val fundingState: SparkExitFundingState? = null,
     val fundingAddress: String? = null,

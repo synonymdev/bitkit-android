@@ -304,6 +304,7 @@ class SparkExitDriver(
     private fun prepareRequest(record: SparkExitRecord, selection: ExitLeafSelection) = PrepareRecoverFundsRequest(
         feeRateSatPerVbyte = record.feeRateSatPerVbyte,
         fundingKind = CpfpFundingKind.P2wpkh,
+        fundingStrategy = record.cpfpFundingStrategy,
         destination = record.destination,
         selection = selection,
     )
@@ -785,12 +786,16 @@ val SparkExitRecord.isFeeChainStuck: Boolean
         it.generation == generation && it.feeChainFailures >= SparkExitDriver.FEE_CHAIN_FAILURES_TO_REBUILD
     }
 
-/** Transaction ids of the CPFP children, which the SDK returns as hex only. */
+/** Transaction ids of what the exit's funding became, which the SDK returns as hex only for the CPFP children. */
 object SparkExitTxids {
     fun cpfpChildTxids(recovery: RecoverFundsResponse): List<String> =
         recovery.transactions.mapNotNull { tx ->
             tx.cpfpTxHex?.let { runCatching { SignedTransactionId.fromHex(it) }.getOrNull() }
         }
+
+    /** The CPFP children and the fan-out: their outputs at the funding address are the exit's own, not new funding. */
+    fun fundingTxids(recovery: RecoverFundsResponse): List<String> =
+        cpfpChildTxids(recovery) + recovery.transactions.filter { it.kind == RecoveryTxKind.FAN_OUT }.map { it.txid }
 }
 
 /** How the exit's CPFP children chain: each spends its node's anchor and the change of the child before it. */

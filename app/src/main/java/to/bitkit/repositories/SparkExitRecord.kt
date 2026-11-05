@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import breez_sdk_spark.CooperativeRecoveryError
 import breez_sdk_spark.CooperativeRecoveryFailure
+import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.CpfpInput
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.RecoverFundsLeaf
@@ -63,7 +64,10 @@ data class SparkExitRecord(
     val lastBuildAt: Long? = null,
     /** The value of the quote's leaves, to show what Spark holds outside the exit. */
     val leafTotalSats: ULong? = null,
-    /** The CPFP child txids of replaced generations, whose change at the funding address is not new funding. */
+    /**
+     * The CPFP child and fan-out txids of replaced generations, whose outputs at the funding address are not new
+     * funding. The name predates the fan-out ids, kept so stored records read the same.
+     */
     val earlierCpfpTxids: List<String> = emptyList(),
     /** The sweep of [leftover] to [destination] once the exit ended. */
     val leftoverSweep: LeftoverSweep? = null,
@@ -103,6 +107,11 @@ data class SparkExitRecord(
     val isRedoRebuild: Boolean = false,
     /** What confirmed SWEEP and COOPERATIVE steps of replaced generations paid to [destination], by txid. */
     val earlierReceivedSats: Map<String, ULong> = emptyMap(),
+    /**
+     * How the funding pays the CPFP children, [PER_NODE] for exits started on SDK 0.28 and later; null funds one UTXO
+     * per branch, as exits started before did. Every prepare of the exit resumes with it.
+     */
+    val fundingStrategy: String? = null,
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -112,6 +121,9 @@ data class SparkExitRecord(
 
         /** Blocks a step a node accepted may go unconfirmed before the exit's fee rate counts as too low. */
         const val UNCONFIRMED_BLOCKS_TO_SURFACE = 6u
+
+        /** [fundingStrategy] of an exit that funds each fee-bumped transaction from a UTXO of its own. */
+        const val PER_NODE = "perNode"
     }
 
     sealed interface Phase {
@@ -229,6 +241,10 @@ data class SparkExitRecord(
 
     val fundingInputs: List<CpfpInput> get() = funding.mapNotNull { it.input }
 
+    /** The strategy every prepare of this exit passes; null is the SDK's default, one UTXO per branch. */
+    val cpfpFundingStrategy: CpfpFundingStrategy?
+        get() = CpfpFundingStrategy.PER_NODE.takeIf { fundingStrategy == PER_NODE }
+
     /** The funding key index of this exit; records from before exits had their own index hold 0. */
     val fundingIndex: UInt get() = funding.firstOrNull()?.index ?: 0u
 
@@ -267,7 +283,7 @@ data class SparkExitRecord(
         isRedoRebuild = false,
         earlierReceivedSats = earlierReceivedSats + recovery?.let { SparkExitMath.confirmedReceived(it, destination) }
             .orEmpty(),
-        earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty()).distinct(),
+        earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::fundingTxids).orEmpty()).distinct(),
         generation = generation + 1,
         recovery = built,
         broadcastLog = emptyList(),
@@ -510,6 +526,7 @@ object SparkExitJson {
             isRebuilding = phase == SparkExitRecord.Phase.Running,
             isRebuiltFromChain = isActive,
             exitStateSnapshot = read { o.stringOrNull("exitStateSnapshot") },
+            fundingStrategy = read { o.stringOrNull("fundingStrategy") },
         )
     }
 
@@ -664,6 +681,7 @@ object SparkExitJson {
         r.exitStateSnapshot?.let { put("exitStateSnapshot", it) }
         if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
         if (r.isRedoRebuild) put("isRedoRebuild", true)
+        r.fundingStrategy?.let { put("fundingStrategy", it) }
         if (r.earlierReceivedSats.isNotEmpty()) {
             put(
                 "earlierReceivedSats",
@@ -758,6 +776,7 @@ object SparkExitJson {
         exitStateSnapshot = o.stringOrNull("exitStateSnapshot"),
         isRebuiltFromChain = o.booleanOrNull("isRebuiltFromChain") ?: false,
         isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,
+        fundingStrategy = o.stringOrNull("fundingStrategy"),
         earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),

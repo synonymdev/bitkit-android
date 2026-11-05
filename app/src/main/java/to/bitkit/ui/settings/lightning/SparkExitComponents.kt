@@ -69,6 +69,7 @@ internal fun SparkExitFundingAddress(
     seenSats: ULong,
     modifier: Modifier = Modifier,
     partial: SparkExitPartialFunding? = SparkExitMath.partialFunding(seenSats, requiredSats),
+    isCovered: Boolean = requiredSats > 0uL && seenSats >= requiredSats,
 ) {
     val context = LocalContext.current
     Column(
@@ -104,7 +105,7 @@ internal fun SparkExitFundingAddress(
                     .testTag("SparkExitFundingPartial")
             )
         }
-        if (requiredSats > 0uL && seenSats >= requiredSats) {
+        if (isCovered) {
             CaptionM(
                 text = stringResource(R.string.lightning__spark_exit__fund_seen).withAccent(),
                 color = Colors.Green,

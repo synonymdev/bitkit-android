@@ -112,6 +112,12 @@ data class SparkExitQuote(
             return beyond?.let { SparkExitMath.beyondLostLeaves(it, lostLeafSats) }?.takeIf { it > 0uL }
         }
 
+    /**
+     * How many UTXOs the SDK splits the fee funding into, one per transaction it fee-bumps under per-node funding: the
+     * funding screen names it when more than one.
+     */
+    val fundedSteps: Int get() = prepared.funding?.perBranch?.size ?: 0
+
     /** Breez's rule: only exit when the value is more than its fees. */
     val isWorthExiting: Boolean get() = prepared.leaves.isNotEmpty() && exitSats > networkFeeSats
 }
@@ -240,12 +246,12 @@ object SparkExitMath {
         recovery.transactions.count { it.status is ExitTransactionStatus.Confirmed }
 
     /**
-     * UTXOs at the funding address that are new funding: neither an adopted input nor change a CPFP child of this or
-     * an earlier generation chained there.
+     * UTXOs at the funding address that are new funding: neither an adopted input nor an output a CPFP child or the
+     * fan-out of this or an earlier generation paid there.
      */
     fun newFunding(utxos: List<EsploraUtxo>, record: SparkExitRecord): List<EsploraUtxo> {
         val adopted = record.funding.mapNotNull { f -> f.txid?.let { "$it:${f.vout ?: 0u}" } }.toSet()
-        val chained = (record.recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty() + record.earlierCpfpTxids).toSet()
+        val chained = (record.recovery?.let(SparkExitTxids::fundingTxids).orEmpty() + record.earlierCpfpTxids).toSet()
         return utxos.filter { "${it.txid}:${it.vout}" !in adopted && it.txid !in chained }
     }
 
@@ -327,6 +333,24 @@ object SparkExitMath {
         // limit, so a smaller remainder is asked as the funding output's dust.
         val required = if (fresh.isEmpty()) shortfall else shortfall.safe() + inputFee.safe()
         return SparkExitFundingState.Ask(maxOf(required - seen, FUNDING_DUST_SATS), seen, required)
+    }
+
+    /**
+     * The pre-start funding screen's reading of the funding address: [receivedSats] in [payments] UTXOs against the
+     * quote's [fundingSats] at [feeRateSatPerVbyte]. Each payment beyond the first adds its input's fee to what the
+     * exit needs, and a payment still to send adds one more, as the progress screen's ask does.
+     */
+    fun prestartFunding(
+        fundingSats: ULong,
+        payments: Int,
+        receivedSats: ULong,
+        feeRateSatPerVbyte: ULong,
+    ): SparkExitPrestartFunding {
+        val inputFee = inputFeeSats(feeRateSatPerVbyte)
+        val covered = fundingSats.safe() + (inputFee.safe() * maxOf(payments - 1, 0).toULong().safe()).safe()
+        val isCovered = fundingSats > 0uL && payments > 0 && receivedSats >= covered
+        val partial = if (isCovered || receivedSats == 0uL) null else partialFunding(receivedSats, covered + inputFee)
+        return SparkExitPrestartFunding(isCovered, partial)
     }
 
     /** What reached the funding address against [requiredSats], once some but not all of it did; else null. */
@@ -463,6 +487,9 @@ sealed interface SparkExitFundingState {
 
 /** A funding payment short of the need: [receivedSats] of [requiredSats] arrived, [missingSats] (at least dust) due. */
 data class SparkExitPartialFunding(val receivedSats: ULong, val requiredSats: ULong, val missingSats: ULong)
+
+/** Whether the funding address covers the quote before the exit starts, and the hint while it does not. */
+data class SparkExitPrestartFunding(val isCovered: Boolean, val partial: SparkExitPartialFunding?)
 
 /** When to warn that the exit fell behind, and when its next step's operator window closes, both from now. */
 data class SparkExitDeadline(val warnIn: Duration, val deadlineIn: Duration)

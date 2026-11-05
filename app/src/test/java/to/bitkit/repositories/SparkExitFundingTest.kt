@@ -1,6 +1,9 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.ExitTransactionStatus
+import breez_sdk_spark.PerBranchFunding
+import breez_sdk_spark.RecoveryFunding
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.SkippedLeaf
 import breez_sdk_spark.SkippedLeafReason
@@ -447,5 +450,62 @@ class SparkExitFundingTest {
             SparkExitPartialFunding(19_932uL, 20_000uL, 294uL),
             SparkExitMath.partialFunding(19_932uL, 20_000uL)
         )
+    }
+
+    @Test
+    fun `before the start each payment beyond the first adds its input fee`() {
+        // 2 sat/vB: 136 sats per extra input.
+        val one = SparkExitMath.prestartFunding(
+            20_000uL,
+            payments = 1,
+            receivedSats = 20_000uL,
+            feeRateSatPerVbyte = 2uL
+        )
+        assertEquals(SparkExitPrestartFunding(isCovered = true, partial = null), one)
+        // Short after one payment: the hint names the funding plus the fee of the coin still to send.
+        val short = SparkExitMath.prestartFunding(
+            20_000uL,
+            payments = 1,
+            receivedSats = 8_000uL,
+            feeRateSatPerVbyte = 2uL
+        )
+        assertEquals(SparkExitPartialFunding(8_000uL, 20_136uL, 12_136uL), short.partial)
+        assertFalse(short.isCovered)
+        // Two payments that reach the funding still miss the second one's input fee.
+        val two = SparkExitMath.prestartFunding(
+            20_000uL,
+            payments = 2,
+            receivedSats = 20_000uL,
+            feeRateSatPerVbyte = 2uL
+        )
+        assertFalse(two.isCovered)
+        assertEquals(SparkExitPartialFunding(20_000uL, 20_272uL, 294uL), two.partial)
+        assertTrue(SparkExitMath.prestartFunding(20_000uL, 2, 20_136uL, 2uL).isCovered)
+        assertEquals(SparkExitPrestartFunding(false, null), SparkExitMath.prestartFunding(20_000uL, 0, 0uL, 2uL))
+    }
+
+    @Test
+    fun `the fan-out's outputs at the funding address are not new funding`() {
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("fan", kind = RecoveryTxKind.FAN_OUT)))
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(30_000uL)).copy(recovery = recovery)
+        val utxos = listOf(
+            SparkExitFixtures.utxo("fan", value = 5_000uL),
+            SparkExitFixtures.utxo("ext", value = 9_000uL)
+        )
+
+        assertEquals(listOf("ext"), SparkExitMath.newFunding(utxos, record).map { it.txid })
+        // Kept for the generations after it too.
+        val next = record.adopt(SparkExitFixtures.recovery(emptyList()), 1L)
+        assertEquals(listOf("ext"), SparkExitMath.newFunding(utxos, next).map { it.txid })
+    }
+
+    @Test
+    fun `a per-node quote names how many parts the funding is split into`() {
+        val entries = List(3) { PerBranchFunding("leaf-$it", 2_000uL) }
+        val prepared = SparkExitFixtures.prepared().let {
+            it.copy(funding = RecoveryFunding(7_000uL, entries, CpfpFundingStrategy.PER_NODE))
+        }
+        assertEquals(3, SparkExitQuote(prepared).fundedSteps)
+        assertEquals(7_000uL, SparkExitQuote(prepared).fundingSats)
     }
 }

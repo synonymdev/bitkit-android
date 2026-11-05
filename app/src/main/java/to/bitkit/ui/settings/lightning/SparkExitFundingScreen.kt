@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -83,13 +84,23 @@ private fun Content(
                     .withAccentBoldBright(),
                 color = Colors.White64,
             )
+            uiState.quote?.fundedSteps?.takeIf { it > 1 }?.let {
+                VerticalSpacer(16.dp)
+                BodyS(
+                    text = stringResource(R.string.lightning__spark_exit__funding_split).replace("{count}", "$it"),
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("SparkExitFundingSplit")
+                )
+            }
             val address = uiState.fundingAddress
             if (uiState.showsFundingAddress && address != null) {
                 VerticalSpacer(24.dp)
                 SparkExitFundingAddress(
                     address = address,
                     requiredSats = fundingSats,
-                    seenSats = uiState.fundingSeenSats
+                    seenSats = uiState.fundingSeenSats,
+                    partial = uiState.prestartFunding.partial,
+                    isCovered = uiState.canContinueFunding,
                 )
             }
             VerticalSpacer(32.dp)

@@ -20,6 +20,7 @@ import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitFundingKey
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitMath
+import to.bitkit.repositories.SparkExitPrestartFunding
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
@@ -63,6 +64,8 @@ class SparkExitViewModel @Inject constructor(
                 record = exit.record,
                 tipHeight = exit.tipHeight,
                 fundingSeenSats = exit.fundingSeenSats,
+                fundingSeenCount = exit.fundingSeenCount,
+                fundingFeeRate = exit.pending?.feeRate,
                 fundingState = exit.fundingState,
                 fundingAddress = exit.fundingAddress,
                 canCancel = sparkExitRepo.canCancel,
@@ -205,6 +208,9 @@ data class SparkExitUiState(
     val record: SparkExitRecord? = null,
     val tipHeight: UInt? = null,
     val fundingSeenSats: ULong = 0uL,
+    val fundingSeenCount: Int = 0,
+    /** The quote's fee rate, which prices each extra payment to the funding address. */
+    val fundingFeeRate: ULong? = null,
     /** What progress shows while the exit needs fee funding. */
     val fundingState: SparkExitFundingState? = null,
     val fundingAddress: String? = null,
@@ -222,8 +228,15 @@ data class SparkExitUiState(
 ) {
     val fundingSats: ULong get() = quote?.fundingSats ?: 0uL
 
-    /** Continue after funding from another wallet: once the funding address holds what the quote asks for. */
-    val canContinueFunding: Boolean get() = fundingSats > 0uL && fundingSeenSats >= fundingSats
+    /** What the funding address holds against the quote before the exit starts. */
+    val prestartFunding: SparkExitPrestartFunding
+        get() = SparkExitMath.prestartFunding(fundingSats, fundingSeenCount, fundingSeenSats, fundingFeeRate ?: 0uL)
+
+    /**
+     * Continue after funding from another wallet: once the funding address holds what the quote asks for, plus the
+     * input fee of each payment beyond the first.
+     */
+    val canContinueFunding: Boolean get() = prestartFunding.isCovered
 
     /** Why the quote cannot continue, or null when it can. */
     val quoteBlock: SparkExitQuoteBlock?
