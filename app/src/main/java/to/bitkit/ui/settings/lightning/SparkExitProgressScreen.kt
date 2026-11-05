@@ -140,6 +140,19 @@ private fun Content(
 @Composable
 private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) {
     SparkExitSteps(record = record, tipHeight = uiState.tipHeight)
+    uiState.receivedSats?.let { sats ->
+        VerticalSpacer(24.dp)
+        val text = stringResource(R.string.lightning__spark_exit__done_received)
+            .replace("{amount}", sparkExitAmountText(sats))
+        uiState.sweepTxid?.let {
+            SparkExitTxNote(
+                text = text,
+                txid = it,
+                txidRes = R.string.lightning__spark_exit__sweep_txid,
+                testTag = "SparkExitReceived",
+            )
+        } ?: BodyS(text = text, color = Colors.White64, modifier = Modifier.testTag("SparkExitReceived"))
+    }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
     if (funding != null && address != null) {
@@ -165,9 +178,37 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
             )
         }
     }
+    if (record.isRebuiltFromChain && record.isActive) {
+        VerticalSpacer(16.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__rebuilt_from_chain),
+            color = Colors.White64,
+            modifier = Modifier.testTag("SparkExitRebuiltFromChain")
+        )
+    }
+    if (record.isWaitingForLeaves && record.isActive) {
+        VerticalSpacer(16.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__waiting_leaves),
+            color = Colors.White64,
+            modifier = Modifier.testTag("SparkExitWaitingLeaves")
+        )
+    }
     uiState.rejection?.let {
         VerticalSpacer(16.dp)
-        BodyS(text = stringResource(R.string.lightning__spark_exit__errors).replace("{error}", it), color = Colors.Red)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__not_moving).replace("{error}", it),
+            color = Colors.Red,
+            modifier = Modifier.testTag("SparkExitNotMoving")
+        )
+    }
+    uiState.lowFeeRate?.let {
+        VerticalSpacer(16.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__fee_low).replace("{rate}", "$it"),
+            color = Colors.White64,
+            modifier = Modifier.testTag("SparkExitFeeLow")
+        )
     }
     uiState.outsideExitSats?.let {
         VerticalSpacer(16.dp)
@@ -195,12 +236,12 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
             modifier = Modifier.testTag("SparkExitLeftBehindLeaves")
         )
     }
-    if (!record.isActive && address != null) LeftoverNote(record, address)
+    if (!record.isActive && address != null) LeftoverNote(record, address, uiState.fundingPath)
 }
 
 /** Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. */
 @Composable
-private fun LeftoverNote(record: SparkExitRecord, address: String) {
+private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?) {
     if (record.leftover.isEmpty()) return
     val total = record.leftover.fold(0uL) { sum, leftover -> sum + leftover.valueSats }
     val sweep = record.leftoverSweep
@@ -219,10 +260,19 @@ private fun LeftoverNote(record: SparkExitRecord, address: String) {
             txidRes = R.string.lightning__spark_exit__leftover_txid,
             testTag = "SparkExitLeftoverSwept",
         )
-        sweep?.txid != null && sweep.rejection == null -> BodyS(
+        sweep?.txid != null && (sweep.rejection == null || sweep.isFeeRejection) -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover_sending)
                 .replace("{amount}", sparkExitAmountText(sweep.valueSats)),
             color = Colors.White64,
+        )
+        // Refused for good: where the leftover stays, with the path a wallet needs to find it.
+        sweep?.rejection != null && path != null -> BodyS(
+            text = stringResource(R.string.lightning__spark_exit__leftover_rejected)
+                .replace("{amount}", sparkExitAmountText(total))
+                .replace("{address}", address)
+                .replace("{path}", path),
+            color = Colors.White64,
+            modifier = Modifier.testTag("SparkExitLeftoverRejected")
         )
         else -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover)

@@ -46,6 +46,8 @@ import to.bitkit.test.BaseUnitTest
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -125,6 +127,27 @@ class SparkExitRepoTest : BaseUnitTest() {
         verify(transferRepo).markSettled("transfer-1")
         verify(work, never()).schedulePeriodic()
         assertEquals(false, file.exists())
+    }
+
+    @Test
+    fun `load keeps a running exit whose record has an unknown version, to rebuild it from chain`() = test {
+        val file = File(Env.sparkExitRecordPath(0))
+        SparkExitStore(file).save(SparkExitFixtures.record(Phase.Running))
+        val original = file.readText().replace("\"version\":1", "\"version\":2")
+        file.writeText(original)
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+
+        val record = assertNotNull(createSut().load(0).getOrThrow())
+
+        assertTrue(record.isActive)
+        assertTrue(record.isRebuiltFromChain)
+        assertTrue(record.isRebuilding)
+        assertEquals("transfer-1", record.transferId)
+        verify(transferRepo, never()).markSettled(any())
+        verify(work).schedulePeriodic()
+        assertEquals(record, SparkExitStore(file).load())
+        assertEquals(original, File(file.parentFile, "spark-exit.unreadable-1800000000000.json").readText())
     }
 
     @Test
@@ -293,7 +316,7 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         sut.runInBackground().getOrThrow()
 
-        assertEquals(Phase.NeedsFunding(9_103uL), sut.state.value.record?.phase)
+        assertEquals(Phase.NeedsFunding(9_239uL), sut.state.value.record?.phase)
         val ask = assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
         assertEquals(SparkExitMath.FUNDING_DUST_SATS, ask.sats)
     }

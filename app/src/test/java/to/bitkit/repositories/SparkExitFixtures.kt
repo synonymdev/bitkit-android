@@ -173,6 +173,10 @@ class FakeSparkExitChain : SparkExitChain {
     }
 
     val rawBroadcasts = mutableListOf<String>()
+
+    var nextBlockRate: ULong? = 5uL
+
+    override suspend fun nextBlockFeeRate(): ULong = nextBlockRate ?: throw SparkExitChainError("No fee estimates")
 }
 
 class FakeSparkExitRecovering : SparkExitRecovering {
@@ -205,6 +209,19 @@ class FakeSparkExitRecovering : SparkExitRecovering {
     override suspend fun check(recovery: RecoverFundsResponse): CheckRecoverFundsResponse {
         checkedRecoveries += recovery
         return checks.removeFirst()
+    }
+
+    var exitState = "exit-state-1"
+    var exports = 0
+    val imports = mutableListOf<String>()
+
+    override suspend fun exportExitState(): String {
+        exports++
+        return exitState
+    }
+
+    override suspend fun importExitState(exitState: String) {
+        imports += exitState
     }
 }
 

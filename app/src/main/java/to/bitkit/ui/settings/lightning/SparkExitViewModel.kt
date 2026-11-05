@@ -3,6 +3,7 @@ package to.bitkit.ui.settings.lightning
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import breez_sdk_spark.RecoveryTxKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -14,7 +15,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import to.bitkit.env.Env
 import to.bitkit.repositories.SparkExitBackgroundLimits
+import to.bitkit.repositories.SparkExitFundingKey
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitMath
 import to.bitkit.repositories.SparkExitQuote
@@ -66,8 +69,18 @@ class SparkExitViewModel @Inject constructor(
                 outsideExitSats = exit.outsideExitSats,
                 staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
                 isSettling = exit.isSettling,
+                receivedSats = exit.record?.let(::receivedSats),
+                fundingPath = exit.record?.let { record ->
+                    SparkExitFundingKey.path(record.fundingIndex.toInt(), Env.network)
+                },
             )
         }
+    }
+
+    /** What the ended exit paid to savings, read from its sweep and cooperative transactions. */
+    private fun receivedSats(record: SparkExitRecord): ULong? {
+        if (record.phase != SparkExitRecord.Phase.Done) return null
+        return SparkExitMath.receivedSats(record)?.takeIf { it > 0uL }
     }
 
     fun loadQuote() {
@@ -202,6 +215,10 @@ data class SparkExitUiState(
     val staysOnSparkSats: ULong? = null,
     /** The quote waits for Spark to finish moving leaves first. */
     val isSettling: Boolean = false,
+    /** What a finished exit paid to savings. */
+    val receivedSats: ULong? = null,
+    /** The derivation path of the exit's funding key, where a leftover that could not be sent stays. */
+    val fundingPath: String? = null,
 ) {
     val fundingSats: ULong get() = quote?.fundingSats ?: 0uL
 
@@ -219,6 +236,18 @@ data class SparkExitUiState(
         }
 
     val rejection: String? get() = record?.surfacedRejection
+
+    /** The exit's fee rate, while a step the network accepted does not confirm for longer than that rate needs. */
+    val lowFeeRate: ULong?
+        get() {
+            val active = record?.takeIf { it.isActive } ?: return null
+            return active.feeRateSatPerVbyte.takeIf { active.underpricedStep(tipHeight) != null }
+        }
+
+    /** The SWEEP transaction of a finished exit. */
+    val sweepTxid: String?
+        get() = record?.takeIf { it.phase == SparkExitRecord.Phase.Done }
+            ?.recovery?.transactions?.firstOrNull { it.kind == RecoveryTxKind.SWEEP }?.txid
 
     /**
      * The fee funding progress shows, asking for the whole shortfall, at least the funding output's dust, until the

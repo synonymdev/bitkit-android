@@ -24,6 +24,7 @@ import kotlinx.serialization.json.longOrNull
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
+import kotlin.math.ceil
 
 data class EsploraTxStatus(val confirmed: Boolean, val blockHeight: UInt? = null)
 
@@ -76,6 +77,9 @@ interface SparkExitChain {
 
     /** A transaction of the app's own, such as the sweep of leftover fee funding, as a single `/tx`. */
     suspend fun broadcastHex(hex: String): SparkExitBroadcastOutcome
+
+    /** The rate for the next block, from `/fee-estimates`, rounded up. */
+    suspend fun nextBlockFeeRate(): ULong
 }
 
 class SparkExitChainError(message: String) : AppError(message)
@@ -142,6 +146,11 @@ class EsploraSparkExitChain(
 
     override suspend fun txStatus(txid: String): EsploraTxStatus =
         status(json.parseToJsonElement(get("/tx/$txid/status")).jsonObject)
+
+    override suspend fun nextBlockFeeRate(): ULong {
+        val rate = json.parseToJsonElement(get("/fee-estimates")).jsonObject.getValue("1").jsonPrimitive.content
+        return ceil(rate.toDouble()).toULong()
+    }
 
     override suspend fun isTxKnown(txid: String): Boolean {
         if (hosts.reads.isEmpty()) throw SparkExitChainError("No chain host configured")

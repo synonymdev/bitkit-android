@@ -122,10 +122,80 @@ object SparkExitMath {
 
     private val BLOCK_TIME = 10.minutes
 
-    /** The countdown target: the latest block at which a timelocked step of the exit can confirm. */
-    fun claimableAtHeight(recovery: RecoverFundsResponse): UInt? = recovery.transactions
-        .mapNotNull { (it.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight }
-        .maxOrNull()
+    /**
+     * The countdown target: [tip] plus [blocksToFinish], so it does not jump as steps confirm. Without a tip, the
+     * latest block at which a step already waiting for its timelock can confirm.
+     */
+    fun claimableAtHeight(recovery: RecoverFundsResponse, tip: UInt? = null): UInt? {
+        if (tip != null) return blocksToFinish(recovery.transactions, tip)?.let { tip + it }
+        return recovery.transactions
+            .mapNotNull { (it.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight }
+            .maxOrNull()
+    }
+
+    /**
+     * Blocks until the last step can confirm: the longest dependency path left, each step costing its remaining
+     * timelock plus a block to confirm in. A ready step's timelock is behind it; one waiting for its timelock counts
+     * down from the height the SDK gave; one not started yet waits its whole relative timelock after its parents.
+     * Null once every step confirmed.
+     */
+    fun blocksToFinish(transactions: List<RecoveryTransaction>, tip: UInt): UInt? {
+        val byTxid = transactions.associateBy { it.txid }
+        val memo = mutableMapOf<String, UInt>()
+        fun after(tx: RecoveryTransaction, depth: Int): UInt = memo.getOrPut(tx.txid) {
+            val status = tx.status
+            if (status is ExitTransactionStatus.Confirmed || depth > transactions.size) return@getOrPut 0u
+            val timelock = when (status) {
+                ExitTransactionStatus.Ready -> 0u
+                is ExitTransactionStatus.WaitingForTimelock ->
+                    status.spendableAtHeight?.let { if (it > tip) it - tip else 0u } ?: tx.csvTimelockBlocks ?: 0u
+                else -> tx.csvTimelockBlocks ?: 0u
+            }
+            val waits = tx.dependsOn.mapNotNull { byTxid[it] }.maxOfOrNull { after(it, depth + 1) } ?: 0u
+            waits + timelock + 1u
+        }
+        return transactions.filter { it.status !is ExitTransactionStatus.Confirmed }.maxOfOrNull { after(it, 0) }
+    }
+
+    /** The fee one more P2WPKH funding input adds to a build at [feeRateSatPerVbyte]. */
+    fun inputFeeSats(feeRateSatPerVbyte: ULong): ULong = P2WPKH_INPUT_VBYTES.safe() * feeRateSatPerVbyte.safe()
+
+    /**
+     * What reached savings: what the SWEEP and COOPERATIVE steps of [record]'s recovery pay its destination, with
+     * those of replaced generations that had confirmed. Null when the destination cannot be read.
+     */
+    fun receivedSats(record: SparkExitRecord): ULong? {
+        val script = runCatching { AddressScript.of(record.destination) }.getOrNull() ?: return null
+        val current = record.recovery?.let { paidTo(it.transactions, script) }.orEmpty()
+        return (record.earlierReceivedSats + current).values.fold(0uL) { sum, sats -> sum.safe() + sats.safe() }
+    }
+
+    /** What the confirmed SWEEP and COOPERATIVE steps of [recovery] paid [destination], by txid. */
+    fun confirmedReceived(recovery: RecoverFundsResponse, destination: String): Map<String, ULong> {
+        val script = runCatching { AddressScript.of(destination) }.getOrNull() ?: return emptyMap()
+        return paidTo(recovery.transactions.filter { it.status is ExitTransactionStatus.Confirmed }, script)
+    }
+
+    private fun paidTo(transactions: List<RecoveryTransaction>, script: ByteArray): Map<String, ULong> = transactions
+        .filter { it.kind == RecoveryTxKind.SWEEP || it.kind == RecoveryTxKind.COOPERATIVE }
+        .associate { tx ->
+            val outputs = SparkExitTxOutputs.decode(tx.txHex).orEmpty().filter { it.script.contentEquals(script) }
+            tx.txid to outputs.fold(0uL) { sum, output -> sum.safe() + output.valueSats.safe() }
+        }
+        .filterValues { it > 0uL }
+
+    /**
+     * Whether a build that waits for a leaf that may still move tries again at [tip]: six blocks after it started
+     * waiting at [since], then at doubling gaps up to a day.
+     */
+    fun isRetryDue(since: UInt, retriedAt: UInt?, tip: UInt): Boolean {
+        val last = maxOf(since, retriedAt ?: since)
+        val gap = (last - since).coerceIn(RETRY_BLOCKS, RETRY_MAX_BLOCKS)
+        return tip >= last && tip - last >= gap
+    }
+
+    /** A wait that started at [since] has lasted about a week by [tip]: what is still stuck is let go. */
+    fun isRetryReleased(since: UInt, tip: UInt): Boolean = tip >= since && tip - since >= RELEASE_BLOCKS
 
     /** The next height above [tip] at which a timelocked step matures, for the reminder. */
     fun nextMaturityHeight(recovery: RecoverFundsResponse, tip: UInt): UInt? = recovery.transactions
@@ -190,11 +260,14 @@ object SparkExitMath {
     /**
      * The funding a rebuild needs in all, from the SDK's [requiredSats]: the total its inputs must hold, not the extra.
      * What is still [held] at the address counts, so the shortfall is `requiredSats - held`, at least 1; without a
-     * reading of the address, `max(requiredSats, fundedSats)`, right for a first build where nothing is spent yet.
+     * reading of the address, `max(requiredSats, fundedSats)`, right for a first build where nothing is spent yet. The
+     * SDK sized [requiredSats] on the inputs it had, so a missing amount adds [inputFeeSats] for the coin that pays it.
      */
-    fun neededFunding(requiredSats: ULong, fundedSats: ULong, held: ULong?): ULong {
-        if (held == null) return maxOf(requiredSats, fundedSats)
-        val missing = if (requiredSats > held) requiredSats - held else 0uL
+    fun neededFunding(requiredSats: ULong, fundedSats: ULong, held: ULong?, inputFeeSats: ULong = 0uL): ULong {
+        if (held == null) {
+            return if (requiredSats > fundedSats) requiredSats.safe() + inputFeeSats.safe() else fundedSats
+        }
+        val missing = if (requiredSats > held) (requiredSats - held).safe() + inputFeeSats.safe() else 0uL
         return fundedSats.safe() + maxOf(missing, 1uL).safe()
     }
 
@@ -234,7 +307,7 @@ object SparkExitMath {
      * covering the shortfall that has not, is waited for; only what is still missing is asked for, at least dust.
      */
     fun fundingState(record: SparkExitRecord, utxos: List<EsploraUtxo>?): SparkExitFundingState? {
-        val shortfall = record.fundingShortfallSats ?: return null
+        val needed = record.fundingShortfallSats ?: return null
         record.fundingPaymentTxid?.let { txid ->
             val isAdopted = record.funding.any { it.txid == txid }
             val isConfirmed = utxos?.any { it.txid == txid && it.status.confirmed } == true
@@ -242,13 +315,18 @@ object SparkExitMath {
         }
         val fresh = utxos?.let { newFunding(it, record) }.orEmpty()
         val seen = fresh.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+        // The shortfall counts the coin that pays it; each coin more adds its own input fee.
+        val inputFee = inputFeeSats(record.feeRateSatPerVbyte)
+        val shortfall = needed.safe() + (inputFee.safe() * maxOf(fresh.size - 1, 0).toULong().safe()).safe()
         if (fresh.isNotEmpty() && seen >= shortfall) {
             // Covered: waiting for it to confirm, or for the next tick to take it once it has.
             val txid = (fresh.firstOrNull { !it.status.confirmed } ?: fresh.first()).txid
             return SparkExitFundingState.Seen(txid)
         }
-        // Nodes refuse an output under its dust limit, so a smaller remainder is asked as the funding output's dust.
-        return SparkExitFundingState.Ask(maxOf(shortfall - seen, FUNDING_DUST_SATS), seen, shortfall)
+        // A partial payment leaves another coin to send, with its own input fee. Nodes refuse an output under its dust
+        // limit, so a smaller remainder is asked as the funding output's dust.
+        val required = if (fresh.isEmpty()) shortfall else shortfall.safe() + inputFee.safe()
+        return SparkExitFundingState.Ask(maxOf(required - seen, FUNDING_DUST_SATS), seen, required)
     }
 
     /** What reached the funding address against [requiredSats], once some but not all of it did; else null. */
@@ -261,12 +339,16 @@ object SparkExitMath {
         )
     }
 
-    /** Every confirmed UTXO of new funding, the largest first, once together they cover [requiredSats]. */
-    fun fundingTopUp(utxos: List<EsploraUtxo>, requiredSats: ULong): List<EsploraUtxo>? {
+    /**
+     * Every confirmed UTXO of new funding, the largest first, once together they cover [requiredSats] plus
+     * [inputFeeSats] for each coin beyond the first: the SDK spends every input it is given.
+     */
+    fun fundingTopUp(utxos: List<EsploraUtxo>, requiredSats: ULong, inputFeeSats: ULong = 0uL): List<EsploraUtxo>? {
         val confirmed = utxos.filter { it.status.confirmed }.sortedByDescending { it.value }
         if (confirmed.isEmpty()) return null
         val total = confirmed.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
-        return confirmed.takeIf { total >= requiredSats }
+        val needed = requiredSats.safe() + (inputFeeSats.safe() * (confirmed.size - 1).toULong().safe()).safe()
+        return confirmed.takeIf { total >= needed }
     }
 
     /** About how long until [height]. */
@@ -277,6 +359,21 @@ object SparkExitMath {
 
     /** The dust limit of the funding address's P2WPKH output, the least a top-up can pay. */
     const val FUNDING_DUST_SATS = 294uL
+
+    /** A signed P2WPKH input's size: each funding coin adds this much to the CPFP children it pays for. */
+    private const val P2WPKH_INPUT_VBYTES = 68uL
+
+    /** Blocks before a build that waits for a leaf that may still move tries again; gaps double from here. */
+    private const val RETRY_BLOCKS = 6u
+
+    /** The longest gap between those tries, about a day. */
+    private const val RETRY_MAX_BLOCKS = 144u
+
+    /** About a week: what is still stuck after it is let go, so the exit can finish. */
+    const val RELEASE_BLOCKS = 1_008u
+
+    /** Blocks a leaf the operators' watchtower stopped may stay so before it is let go. */
+    const val STOPPED_BLOCKS = 6u
 
     /** About how many blocks after a step matures the operators may publish their own version of it. */
     private const val OPERATOR_WINDOW_BLOCKS = 50

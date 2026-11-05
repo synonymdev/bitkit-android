@@ -20,6 +20,7 @@ import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -88,6 +89,7 @@ class SparkExitRecordTest {
                         false,
                         isInputSpent = true,
                         feeChainFailures = 2,
+                        acceptedAtHeight = 1_000u,
                     ),
                 ),
                 claimableAtHeight = 2_100u,
@@ -95,12 +97,30 @@ class SparkExitRecordTest {
                 isRebuilding = true,
                 leafTotalSats = 90_112uL,
                 earlierCpfpTxids = listOf("child"),
-                leftoverSweep = SparkExitRecord.LeftoverSweep("sweep", "02sweep", 5_035uL, true, isConfirmed = true),
+                leftoverSweep = SparkExitRecord.LeftoverSweep(
+                    "sweep",
+                    "02sweep",
+                    5_035uL,
+                    true,
+                    isConfirmed = true,
+                    feeRateSatPerVbyte = 7uL,
+                    sentAtHeight = 1_010u,
+                    replacedTxids = listOf("sweep-0"),
+                ),
                 fundingPaymentTxid = "paid",
                 spentStepStrikes = mapOf("refund" to 1),
                 lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)),
                 leftBehindLeaves = listOf(SparkExitRecord.LeftBehindLeaf("leaf-2", 8_192uL, "its refund cannot pay")),
-                feeChainRebuildTxids = listOf("refund"),
+                stallRebuilds = 2,
+                stallConfirmedCount = 3,
+                unverifiedRebuiltAtHeight = 1_001u,
+                stoppedLeafSince = mapOf("leaf-2" to 1_002u),
+                retrySince = 1_003u,
+                retriedAt = 1_009u,
+                exitStateSnapshot = "exit-state",
+                isRebuiltFromChain = true,
+                isRedoRebuild = true,
+                earlierReceivedSats = mapOf("sweep-0" to 90_000uL),
             )
 
             assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
@@ -195,7 +215,18 @@ class SparkExitRecordTest {
         assertFalse("fundingPaymentTxid" in json)
         assertFalse("spentStepStrikes" in json)
         assertFalse("lostLeaves" in json)
-        assertFalse("feeChainRebuildTxids" in json)
+        listOf(
+            "stallRebuilds",
+            "stallConfirmedCount",
+            "unverifiedRebuiltAtHeight",
+            "stoppedLeafSince",
+            "retrySince",
+            "retriedAt",
+            "exitStateSnapshot",
+            "isRebuiltFromChain",
+            "isRedoRebuild",
+            "earlierReceivedSats",
+        ).forEach { assertFalse(it in json, it) }
         assertEquals(
             JsonPrimitive(20_000),
             json.getValue("phase").jsonObject.getValue("awaitingFunding").jsonObject["requiredSats"]
@@ -213,6 +244,53 @@ class SparkExitRecordTest {
     }
 
     @Test
+    fun `a record of an unknown version is salvaged to rebuild from chain with its funding`() {
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.Running).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(3u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+            ),
+            recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))),
+            leafTotalSats = 100_000uL,
+            exitStateSnapshot = "exit-state",
+        )
+        val text = SparkExitJson.encode(record)
+            .replace("\"version\":1", "\"version\":2")
+            .replace("\"phase\":{\"running\":{}}", "\"phase\":{\"runningV2\":{}}")
+        assertFailsWith<SparkExitUnsupportedVersion> { SparkExitJson.decode(text) }
+
+        val salvaged = assertNotNull(SparkExitJson.salvage(text, nowMillis = 42L))
+
+        assertEquals(SparkExitRecord.Phase.Running, salvaged.phase)
+        assertTrue(salvaged.isRebuilding)
+        assertTrue(salvaged.isRebuiltFromChain)
+        assertTrue(salvaged.isActive)
+        assertNull(salvaged.recovery)
+        assertNull(salvaged.lastBuildAt)
+        assertEquals(record.funding, salvaged.funding)
+        assertEquals(record.fundingInputs, salvaged.fundingInputs)
+        assertEquals(record.leafIds, salvaged.leafIds)
+        assertEquals(record.transferId, salvaged.transferId)
+        assertEquals(record.createdAt, salvaged.createdAt)
+        assertEquals(100_000uL, salvaged.leafTotalSats)
+        assertEquals("exit-state", salvaged.exitStateSnapshot)
+        assertEquals(salvaged, SparkExitJson.decode(SparkExitJson.encode(salvaged)))
+        assertFalse(salvaged.adopt(SparkExitFixtures.recovery(emptyList()), 1L).isRebuiltFromChain)
+    }
+
+    @Test
+    fun `a salvaged record that had ended stays ended and one with nothing to rebuild from is not salvaged`() {
+        val done = SparkExitJson.encode(SparkExitFixtures.record(SparkExitRecord.Phase.Done))
+            .replace("\"version\":1", "\"version\":9")
+
+        val salvaged = assertNotNull(SparkExitJson.salvage(done, nowMillis = 42L))
+
+        assertEquals(SparkExitRecord.Phase.Done, salvaged.phase)
+        assertFalse(salvaged.isRebuiltFromChain)
+        assertNull(SparkExitJson.salvage("{", nowMillis = 42L))
+        assertNull(SparkExitJson.salvage("""{"version":2,"network":"regtest"}""", nowMillis = 42L))
+    }
+
+    @Test
     fun `store saves loads and sets an unreadable record aside`() {
         val file = File(tempFolder.root, "regtest/wallet0/spark-exit.json")
         val store = SparkExitStore(file)
@@ -225,8 +303,10 @@ class SparkExitRecordTest {
         assertTrue(store.isActive())
         assertFalse(File(file.parentFile, "spark-exit.json.tmp").exists())
 
+        // An unreadable record counts as running until the repo salvages it, so an exit never disappears over it.
         file.writeText("{")
-        assertFalse(store.isActive())
+        assertTrue(store.isActive())
+        assertEquals("{", store.loadText())
         store.setAside(42L)
         assertFalse(file.exists())
         assertTrue(File(file.parentFile, "spark-exit.unreadable-42.json").exists())

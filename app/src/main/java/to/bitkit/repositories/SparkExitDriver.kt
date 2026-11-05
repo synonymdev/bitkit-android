@@ -10,8 +10,10 @@ import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.RecoverFundsRequest
 import breez_sdk_spark.RecoverFundsResponse
 import breez_sdk_spark.RecoveryTransaction
+import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.RecoveryVerdict
 import breez_sdk_spark.SdkException
+import breez_sdk_spark.SkippedLeaf
 import breez_sdk_spark.SkippedLeafReason
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.safe
@@ -24,6 +26,12 @@ interface SparkExitRecovering {
     suspend fun prepare(request: PrepareRecoverFundsRequest): PrepareRecoverFundsResponse
     suspend fun recover(request: RecoverFundsRequest, signer: CpfpSigner?): RecoverFundsResponse
     suspend fun check(recovery: RecoverFundsResponse): CheckRecoverFundsResponse
+
+    /** The SDK's exit data, as `exportUnilateralExitState` gives it. */
+    suspend fun exportExitState(): String
+
+    /** Merges exit data from [exportExitState] back in; an older one never costs the wallet a leaf. */
+    suspend fun importExitState(exitState: String)
 }
 
 /**
@@ -82,6 +90,8 @@ class SparkExitDriver(
     private val makeSigner: suspend () -> CpfpSigner,
     private val save: (SparkExitRecord) -> Unit,
     private val nowMillis: () -> Long,
+    /** The chain tip this tick, null when it could not be read. */
+    private val tip: UInt? = null,
 ) {
     companion object {
         private const val TAG = "SparkExitDriver"
@@ -89,11 +99,17 @@ class SparkExitDriver(
         /** A ready transaction accepted in this generation is sent again after this long, in case a node dropped it. */
         val REBROADCAST_INTERVAL = 10.minutes
 
-        /** After this many rejections of one transaction the progress screen shows the error. */
+        /** After this many rejections of one transaction the exit rebuilds over it, as over a broken chain. */
         const val REJECTIONS_TO_SURFACE = 3
 
-        /** After this many unpaid sends in a row of a step whose parents confirmed, the exit rebuilds once for it. */
+        /** After this many unpaid sends in a row of a step whose parents confirmed, the exit rebuilds over it. */
         const val FEE_CHAIN_FAILURES_TO_REBUILD = 3
+
+        /** Rebuilds over a broken chain with no step confirming in between, before the exit says it is not moving. */
+        const val STALL_REBUILDS_TO_SURFACE = 3
+
+        /** Blocks an unconfirmed leftover sweep waits before it is replaced at a higher rate, about a day. */
+        const val SWEEP_REPLACE_BLOCKS = 144u
 
         /** The least time between two builds, so a divergence that persists does not rebuild every tick. */
         val REBUILD_INTERVAL = 10.minutes
@@ -129,7 +145,10 @@ class SparkExitDriver(
                 record = recovering?.let { check(record, it) } ?: broadcastWithoutSdk(record)
             }
         }
-        record = record.copy(claimableAtHeight = record.recovery?.let(SparkExitMath::claimableAtHeight))
+        // Without a tip the countdown keeps its last value rather than jump to another rule.
+        if (tip != null) {
+            record = record.copy(claimableAtHeight = record.recovery?.let { SparkExitMath.claimableAtHeight(it, tip) })
+        }
         // The tick that ends the exit also sends its leftover fee funding to savings.
         if (record.isLeftoverSweepPending) record = sweepLeftover(record)
         save(record)
@@ -143,14 +162,24 @@ class SparkExitDriver(
     private suspend fun adoptFunding(record: SparkExitRecord, requiredSats: ULong): SparkExitRecord? {
         val first = record.funding.firstOrNull() ?: return null
         val candidates = SparkExitMath.newFunding(chain.utxos(first.address), record)
-        val utxos = SparkExitMath.fundingTopUp(candidates, requiredSats) ?: return null
+        val inputFee = SparkExitMath.inputFeeSats(record.feeRateSatPerVbyte)
+        val utxos = SparkExitMath.fundingTopUp(candidates, requiredSats, inputFee) ?: return null
         val adopted = utxos.map { first.copy(txid = it.txid, vout = it.vout, valueSats = it.value) }
         val funding = if (record.funding.size == 1 && first.txid == null) adopted else record.funding + adopted
         return record.copy(funding = funding)
     }
 
     private suspend fun build(start: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
-        val (record, prepared) = prepare(start, sdk)
+        // A build waiting for a leaf that may still move tries again only at its paced heights, or once its wait ends.
+        val since = start.retrySince
+        if (since != null && tip != null && !SparkExitMath.isRetryDue(since, start.retriedAt, tip) &&
+            !SparkExitMath.isRetryReleased(since, tip)
+        ) {
+            return start
+        }
+        val (preparedRecord, prepared) = prepare(withExitState(start, sdk), sdk)
+        val stopped = prepared?.exitChainState?.stoppedLeafIds.orEmpty().toSet()
+        val record = preparedRecord.seeStopped(stopped)
         if (prepared == null) {
             // The last leaf lost on a tick that could not read the funding address ends here, still as lost.
             val reason = if (record.isEveryLeafLost) LOST_REASON else NO_LEAF_REASON
@@ -158,8 +187,12 @@ class SparkExitDriver(
             return end(failed, record)
         }
         if (prepared.leaves.isEmpty()) {
-            // A leaf the chain could not be read for comes back on a later tick; finished leaves are not listed.
-            if (prepared.skipped.any { it.reason == SkippedLeafReason.Unverified }) return record
+            // A leaf that may still move, such as one the chain could not be read for, is waited for, about a week at
+            // most; finished leaves are not listed.
+            if (isWaiting(record, prepared.skipped, stopped)) {
+                Logger.info("Waiting for Spark exit leaves that may still move", context = TAG)
+                return record.copy(retrySince = record.retrySince ?: tip, retriedAt = tip ?: record.retriedAt)
+            }
             val ended = record.copy(
                 skippedLeafCount = maxOf(record.skippedLeafCount, prepared.skipped.size),
                 phase = if (record.recovery == null) {
@@ -190,7 +223,8 @@ class SparkExitDriver(
             val held = record.funding.firstOrNull()?.address?.let { address ->
                 runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, record) }
             }
-            val needed = SparkExitMath.neededFunding(it.requiredSats, record.fundedSats, held)
+            val inputFee = SparkExitMath.inputFeeSats(record.feeRateSatPerVbyte)
+            val needed = SparkExitMath.neededFunding(it.requiredSats, record.fundedSats, held, inputFee)
             return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(needed))
         }
         if (built.transactions.isEmpty()) {
@@ -198,7 +232,8 @@ class SparkExitDriver(
             if (built.failed.isNotEmpty()) return record.copy(failedLeafCount = built.failed.size)
             return end(record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover")), record)
         }
-        val lost = record.lostLeaves(built)
+        // A leaf the operators' watchtower stopped is waited for, not struck, until its wait is over.
+        val lost = record.lostLeaves(built).filter { !isStoppedWaiting(record, it.leafId, stopped) }
         if (lost.isNotEmpty()) return loseLeaves(record, lost)
         val adopted = record.adopt(built, nowMillis())
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
@@ -208,6 +243,59 @@ class SparkExitDriver(
             context = TAG,
         )
         return broadcastReady(adopted)
+    }
+
+    /**
+     * Before the first build, keeps the SDK's exit data as it is now, which still holds every leaf of the exit; before
+     * every later build, imports it again, so a backup or sync since cannot have dropped a leaf the rebuild needs.
+     * A failure is logged and the build goes on.
+     */
+    private suspend fun withExitState(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+        record.exitStateSnapshot?.let { snapshot ->
+            runSuspendCatching { sdk.importExitState(snapshot) }
+                .onFailure { Logger.warn("Failed to import the Spark exit data snapshot", it, context = TAG) }
+            return record
+        }
+        // A salvaged record rebuilds from what the SDK holds now; a fresh export would not hold more.
+        if (record.recovery != null || record.generation > 0 || record.isRebuiltFromChain) return record
+        val exported = runSuspendCatching { sdk.exportExitState() }
+            .onFailure { Logger.warn("Failed to export the Spark exit data snapshot", it, context = TAG) }
+            .getOrNull()
+            ?: return record
+        return record.copy(exitStateSnapshot = exported)
+    }
+
+    /** Dates at this tip each of the exit's leaves the operators' watchtower stopped that was not seen stopped yet. */
+    private fun SparkExitRecord.seeStopped(stopped: Set<String>): SparkExitRecord {
+        val height = tip ?: return this
+        val fresh = stopped.filter { it in leafIds && it !in stoppedLeafSince }
+        if (fresh.isEmpty()) return this
+        return copy(stoppedLeafSince = stoppedLeafSince + fresh.associateWith { height })
+    }
+
+    /** [leafId] was stopped by the operators' watchtower fewer than six blocks ago, or its age is unknown. */
+    private fun isStoppedWaiting(record: SparkExitRecord, leafId: String, stopped: Set<String>): Boolean {
+        if (leafId !in stopped) return false
+        val since = record.stoppedLeafSince[leafId] ?: return true
+        val height = tip ?: return true
+        return height < since || height - since < SparkExitMath.STOPPED_BLOCKS
+    }
+
+    /**
+     * An empty build waits while one of the exit's leaves was skipped for a reason that may yet change: the chain
+     * could not be read for it, its funds were not found yet, or the operators' watchtower stopped it a short while
+     * ago. Not after about a week of waiting.
+     */
+    private fun isWaiting(record: SparkExitRecord, skipped: List<SkippedLeaf>, stopped: Set<String>): Boolean {
+        val since = record.retrySince
+        if (since != null && tip != null && SparkExitMath.isRetryReleased(since, tip)) return false
+        return skipped.any {
+            it.leafId in record.exitLeafIds && when (it.reason) {
+                SkippedLeafReason.Unverified, SkippedLeafReason.FundsNotFound -> true
+                is SkippedLeafReason.NotRecoverable -> isStoppedWaiting(record, it.leafId, stopped)
+                SkippedLeafReason.FeeExceedsValue -> false
+            }
+        }
     }
 
     private fun prepareRequest(record: SparkExitRecord, selection: ExitLeafSelection) = PrepareRecoverFundsRequest(
@@ -268,23 +356,33 @@ class SparkExitDriver(
         val stored = record.recovery ?: return record.copy(phase = SparkExitRecord.Phase.AwaitingFunding(0uL))
         val checked = sdk.check(withConfirmations(stored))
         Logger.debug("Checked Spark exit generation '${record.generation}': '${checked.verdict}'", context = TAG)
-        val updated = record.copy(recovery = checked.recovery)
+        val updated = record.copy(recovery = checked.recovery).withProgress(checked.recovery)
         return when (checked.verdict) {
             RecoveryVerdict.Valid -> {
                 val confirmed = checked.recovery.transactions
                     .filter { it.status is ExitTransactionStatus.Confirmed }
                     .map { it.txid }
                     .toSet()
-                val dead = deadChildren(stored) { it in confirmed }
-                if (dead.isNotEmpty()) {
-                    // The SDK still calls it valid, but the steps that spend a dead child's change can never confirm.
-                    Logger.warn("Rebuilding Spark exit whose CPFP children '$dead' lost a race", context = TAG)
-                    return rebuild(updated, sdk)
+                if (!updated.isStalled) {
+                    val dead = deadChildren(stored) { it in confirmed }
+                    if (dead.isNotEmpty()) {
+                        // The SDK still calls it valid, but the steps that spend a dead child's change never confirm.
+                        Logger.warn("Rebuilding Spark exit whose CPFP children '$dead' lost a race", context = TAG)
+                        return stallRebuild(updated, sdk)
+                    }
                 }
                 val sent = broadcastReady(updated)
-                val stuck = stuckStep(sent) ?: return sent
-                Logger.warn("Rebuilding Spark exit once for step '$stuck' whose fee went unpaid", context = TAG)
-                rebuild(sent.copy(feeChainRebuildTxids = sent.feeChainRebuildTxids + stuck), sdk)
+                val stuck = sent.stuckStep
+                if (stuck != null && !sent.isStalled) {
+                    Logger.warn("Rebuilding Spark exit over step '${stuck.txid}' that keeps failing", context = TAG)
+                    return stallRebuild(sent, sdk)
+                }
+                if (!needsUnverifiedRebuild(sent)) return sent
+                // A check cannot settle a step the SDK could not read; a fresh build reads the chain again.
+                Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
+                val rebuilding = sent.copy(isRebuilding = true, unverifiedRebuiltAtHeight = tip, isRedoRebuild = false)
+                save(rebuilding)
+                build(rebuilding, sdk)
             }
             RecoveryVerdict.Done -> end(updated.copy(phase = SparkExitRecord.Phase.Done), updated)
             is RecoveryVerdict.Redo -> {
@@ -292,7 +390,8 @@ class SparkExitDriver(
                     "Rebuilding Spark exit diverged on-chain as generation '${record.generation + 1}'",
                     context = TAG,
                 )
-                rebuild(updated, sdk)
+                // Only a rebuild over a diverged chain can find a leaf an older state claimed.
+                rebuild(updated.copy(isRedoRebuild = true), sdk)
             }
         }
     }
@@ -308,12 +407,38 @@ class SparkExitDriver(
         return build(rebuilding, sdk)
     }
 
-    /** A step of this generation whose fee went unpaid too many times in a row, and that has not rebuilt yet. */
-    private fun stuckStep(record: SparkExitRecord): String? = record.broadcastLog.firstOrNull {
-        it.generation == record.generation &&
-            it.feeChainFailures >= FEE_CHAIN_FAILURES_TO_REBUILD &&
-            it.txid !in record.feeChainRebuildTxids
-    }?.txid
+    /**
+     * Rebuilds over a broken chain, counting the rebuild: one more with no step confirmed since the last, and at
+     * [STALL_REBUILDS_TO_SURFACE] the exit stops rebuilding and says it is not moving.
+     */
+    private suspend fun stallRebuild(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+        val confirmed = record.recovery?.let(SparkExitMath::confirmedCount) ?: 0
+        val counted = record.copy(
+            stallRebuilds = record.stallRebuilds + 1,
+            stallConfirmedCount = confirmed,
+            isRedoRebuild = false,
+        )
+        return rebuild(counted, sdk)
+    }
+
+    /** A step confirmed since the last rebuild over a broken chain: the exit moves, so the count starts over. */
+    private fun SparkExitRecord.withProgress(checked: RecoverFundsResponse): SparkExitRecord {
+        val since = stallConfirmedCount ?: return this
+        if (SparkExitMath.confirmedCount(checked) <= since) return this
+        return copy(stallRebuilds = 0, stallConfirmedCount = null)
+    }
+
+    /**
+     * A unilateral step the SDK could not read waits for a rebuild, once a block, and only once no unilateral step is
+     * ready: a rebuild then would conflict with what is in the mempool at the same rate.
+     */
+    private fun needsUnverifiedRebuild(record: SparkExitRecord): Boolean {
+        val height = tip ?: return false
+        if (record.unverifiedRebuiltAtHeight == height) return false
+        val transactions = record.recovery?.transactions.orEmpty().filter { it.kind != RecoveryTxKind.COOPERATIVE }
+        return transactions.any { it.status == ExitTransactionStatus.Unverified } &&
+            transactions.none { it.status == ExitTransactionStatus.Ready }
+    }
 
     /**
      * Our CPFP children that can never confirm, and every child that spends their change. A wallet whose leaves share
@@ -365,14 +490,20 @@ class SparkExitDriver(
     /**
      * Sends what the ended exit left at its funding address to [SparkExitRecord.destination] in one transaction, once
      * every UTXO there confirmed, at the exit's fee rate. Built and saved before it is sent, then sent again each tick
-     * until a node accepts it; not after a rejection. Dust is not sent.
+     * until it confirms. A refusal for its fee builds it again at the next block's rate, as does a day unconfirmed,
+     * which replaces it; any other refusal is final. Dust is not sent.
      */
     private suspend fun sweepLeftover(record: SparkExitRecord): SparkExitRecord {
         val built = record.leftoverSweep
         if (built?.txHex != null) {
-            if (built.isAccepted) {
-                val status = runSuspendCatching { chain.txStatus(requireNotNull(built.txid)) }.getOrNull()
-                if (status?.confirmed == true) return record.copy(leftoverSweep = built.copy(isConfirmed = true))
+            // The sweep, or a version it replaced, confirmed.
+            val sent = listOfNotNull(built.txid.takeIf { built.isAccepted }) + built.replacedTxids
+            if (sent.any { isConfirmed(it) }) return record.copy(leftoverSweep = built.copy(isConfirmed = true))
+            val sentAt = built.sentAtHeight
+            val isOverdue = built.isAccepted && sentAt != null && tip != null && tip >= sentAt + SWEEP_REPLACE_BLOCKS
+            if (isOverdue || built.isFeeRejection) {
+                val replaced = replaceSweep(record, built)
+                if (replaced != null || built.isFeeRejection) return replaced ?: record
             }
             // Sent again until it confirms; a node that already has it accepts it again.
             return sendSweep(record, built, built.txHex)
@@ -382,17 +513,64 @@ class SparkExitDriver(
         if (utxos.isEmpty()) return record.copy(leftover = emptyList())
         if (utxos.any { !it.status.confirmed }) return record
         val inputs = utxos.map { SparkExitSweep.Input(it.txid, it.vout, it.value) }
-        val total = utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
-        val plan = runSuspendCatching { SparkExitSweep.plan(inputs, record.destination, record.feeRateSatPerVbyte) }
+        val current = record.copy(leftover = utxos.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) })
+        return buildSweep(current, inputs, record.feeRateSatPerVbyte)
+    }
+
+    /**
+     * [old] built again from the same inputs at the next block's rate, at least one above its own so nodes take it
+     * as a replacement; null while the rate or the inputs cannot be read.
+     */
+    private suspend fun replaceSweep(record: SparkExitRecord, old: SparkExitRecord.LeftoverSweep): SparkExitRecord? {
+        val hex = old.txHex ?: return null
+        val nextBlock = runSuspendCatching { chain.nextBlockFeeRate() }
+            .onFailure { Logger.warn("Failed to read the Spark exit leftover sweep fee rate", it, context = TAG) }
+            .getOrNull()
+            ?: return null
+        val rate = maxOf(nextBlock, (old.feeRateSatPerVbyte ?: record.feeRateSatPerVbyte) + 1uL)
+        val values = record.leftover.associate { "${it.txid}:${it.vout}" to it.valueSats }
+        val inputs = SparkExitTxInputs.decode(hex)?.map {
+            SparkExitSweep.Input(it.prevTxid, it.vout, values["${it.prevTxid}:${it.vout}"] ?: return null)
+        } ?: return null
+        Logger.info("Replacing Spark exit leftover sweep '${old.txid}' at '$rate' sat/vB", context = TAG)
+        // A sweep a node accepted may still confirm, so its txid is kept to look for.
+        val replaced = old.replacedTxids + listOfNotNull(old.txid.takeIf { old.isAccepted })
+        return buildSweep(record, inputs, rate, replaced)
+    }
+
+    private fun dustSweep(totalSats: ULong) = SparkExitRecord.LeftoverSweep(null, null, totalSats)
+
+    private suspend fun isConfirmed(txid: String): Boolean =
+        runSuspendCatching { chain.txStatus(txid) }.getOrNull()?.confirmed == true
+
+    /**
+     * Builds, saves and sends the sweep of [inputs] at [feeRate]. A replacement of a sweep a node accepted, the [replaced]
+     * txids given, that would be dust is not built: the earlier one stays.
+     */
+    private suspend fun buildSweep(
+        record: SparkExitRecord,
+        inputs: List<SparkExitSweep.Input>,
+        feeRate: ULong,
+        replaced: List<String>? = null,
+    ): SparkExitRecord {
+        val address = record.funding.firstOrNull()?.address ?: return record
+        val total = inputs.fold(0uL) { sum, input -> sum.safe() + input.valueSats.safe() }
+        val plan = runSuspendCatching { SparkExitSweep.plan(inputs, record.destination, feeRate) }
             .getOrElse {
                 Logger.error("Failed to plan the Spark exit leftover sweep", it, context = TAG)
                 return record
             }
-            ?: return record.copy(leftoverSweep = SparkExitRecord.LeftoverSweep(null, null, total))
+            ?: return if (!replaced.isNullOrEmpty()) record else record.copy(leftoverSweep = dustSweep(total))
         val sweep = runSuspendCatching {
             val signed = makeSigner().signPsbt(SparkExitSweep.psbt(plan, address))
             val hex = SparkExitSweep.signedTxHex(plan, signed)
-            SparkExitRecord.LeftoverSweep(SignedTransactionId.fromHex(hex), hex, plan.amountSats)
+            SparkExitRecord.LeftoverSweep(
+                txid = SignedTransactionId.fromHex(hex),
+                txHex = hex,
+                valueSats = plan.amountSats,
+                feeRateSatPerVbyte = feeRate.takeIf { it != record.feeRateSatPerVbyte },
+                replacedTxids = replaced.orEmpty(),
+            )
         }.getOrElse {
             Logger.error("Failed to build the Spark exit leftover sweep", it, context = TAG)
             return record
@@ -411,11 +589,19 @@ class SparkExitDriver(
         val outcome = chain.broadcastHex(hex)
         Logger.info("Broadcast Spark exit leftover sweep '${sweep.txid}': '${outcome.summary}'", context = TAG)
         return when (outcome) {
-            SparkExitBroadcastOutcome.Accepted -> record.copy(leftoverSweep = sweep.copy(isAccepted = true))
-            is SparkExitBroadcastOutcome.Rejected -> record.copy(leftoverSweep = sweep.copy(rejection = outcome.reason))
+            SparkExitBroadcastOutcome.Accepted -> record.copy(
+                leftoverSweep = sweep.copy(
+                    isAccepted = true,
+                    rejection = null,
+                    sentAtHeight = sweep.sentAtHeight ?: tip
+                ),
+            )
+            is SparkExitBroadcastOutcome.Rejected -> record.copy(
+                leftoverSweep = sweep.copy(isAccepted = false, rejection = outcome.reason),
+            )
+            is SparkExitBroadcastOutcome.InputsMissing,
             is SparkExitBroadcastOutcome.RetryLater,
             is SparkExitBroadcastOutcome.NotMature,
-            is SparkExitBroadcastOutcome.InputsMissing,
             -> record
         }
     }
@@ -444,9 +630,10 @@ class SparkExitDriver(
     private suspend fun broadcastReady(record: SparkExitRecord): SparkExitRecord {
         var current = record
         val recovery = current.recovery ?: return current
-        // Unverified: the SDK could not read its parent from the chain; nodes refuse it harmlessly if it is not final.
+        // A cooperative step the SDK could not read goes out too: nodes refuse it if its funds already moved. A
+        // unilateral one waits for a rebuild.
         recovery.transactions
-            .filter { it.status == ExitTransactionStatus.Ready || it.status == ExitTransactionStatus.Unverified }
+            .filter { it.status == ExitTransactionStatus.Ready || it.isCooperativeUnverified }
             .filter { isDue(it.txid, current) }
             // A ready step's parents are confirmed, as the SDK saw them.
             .forEach {
@@ -535,9 +722,8 @@ class SparkExitDriver(
         val isStuck = parentsConfirmed && (isUnpaid || outcome is SparkExitBroadcastOutcome.InputsMissing)
         Logger.info("Broadcast Spark exit '${tx.kind}' '${tx.txid}': '${outcome.summary}'", context = TAG)
         val isAccepted = outcome == SparkExitBroadcastOutcome.Accepted
-        // Unpaid counts as a rejection only once the step had its rebuild, so an underpriced exit still surfaces.
-        val isRejected = outcome is SparkExitBroadcastOutcome.Rejected &&
-            (!isUnpaid || tx.txid in record.feeChainRebuildTxids)
+        // An unpaid step is a broken fee chain, never a rejection.
+        val isRejected = outcome is SparkExitBroadcastOutcome.Rejected && !isUnpaid
         val rejection = if (isRejected) 1 else 0
         val existing = record.broadcastLog.firstOrNull { it.generation == record.generation && it.txid == tx.txid }
         val entry = existing?.copy(
@@ -548,6 +734,7 @@ class SparkExitDriver(
             isAccepted = isAccepted,
             isInputSpent = existing.isInputSpent || isInputSpent,
             feeChainFailures = if (isStuck) existing.feeChainFailures + 1 else 0,
+            acceptedAtHeight = if (isAccepted) existing.acceptedAtHeight ?: tip else null,
         ) ?: SparkExitRecord.BroadcastAttempt(
             generation = record.generation,
             txid = tx.txid,
@@ -558,6 +745,7 @@ class SparkExitDriver(
             isAccepted = isAccepted,
             isInputSpent = isInputSpent,
             feeChainFailures = if (isStuck) 1 else 0,
+            acceptedAtHeight = if (isAccepted) tip else null,
         )
         val log = if (existing == null) {
             record.broadcastLog + entry
@@ -568,11 +756,20 @@ class SparkExitDriver(
     }
 }
 
-/** The rejection to show on the progress screen once a transaction was refused several times. */
+/**
+ * What the progress screen shows once rebuilding over a broken chain stopped moving the exit: the last answer of the
+ * step that keeps failing, else of any step of the generation, else empty. Null while the exit moves or still rebuilds.
+ */
 val SparkExitRecord.surfacedRejection: String?
-    get() = broadcastLog.firstOrNull {
-        it.generation == generation && it.rejections >= SparkExitDriver.REJECTIONS_TO_SURFACE && !it.isAccepted
-    }?.lastOutcome
+    get() {
+        if (!isStalled) return null
+        val refused = broadcastLog.lastOrNull { it.generation == generation && !it.isAccepted }
+        val last = broadcastLog.lastOrNull { it.generation == generation }
+        return (stuckStep ?: refused ?: last)?.lastOutcome.orEmpty()
+    }
+
+private val RecoveryTransaction.isCooperativeUnverified: Boolean
+    get() = status == ExitTransactionStatus.Unverified && kind == RecoveryTxKind.COOPERATIVE
 
 /**
  * A step of this generation went unpaid too many times in a row. Without the SDK nothing rebuilds it and it counts no
@@ -683,5 +880,37 @@ object SparkExitTxInputs {
             val sequence = le(4)
             Input(prevTxid, vout, if (version >= 2) sequence else DISABLE_FLAG)
         }
+    }.getOrNull()
+}
+
+/** The outputs of a raw transaction, for what an exit paid to savings. */
+object SparkExitTxOutputs {
+    class Output(val valueSats: ULong, val script: ByteArray)
+
+    /** The outputs, or null when [hex] is not a transaction. */
+    fun decode(hex: String): List<Output>? = runCatching {
+        val bytes = hex.hexToByteArray()
+        var offset = 0
+        fun take(length: Int): ByteArray {
+            require(length >= 0 && offset + length <= bytes.size)
+            return bytes.copyOfRange(offset, offset + length).also { offset += length }
+        }
+        fun le(
+            length: Int
+        ): Long = take(length).foldIndexed(0L) { i, sum, b -> sum or ((b.toLong() and 0xff) shl (8 * i)) }
+        fun compactSize(): Int = when (val prefix = le(1).toInt()) {
+            0xfd -> le(2).toInt()
+            0xfe -> le(4).toInt()
+            0xff -> error("Too many items")
+            else -> prefix
+        }
+        take(4)
+        if (bytes[offset] == 0.toByte()) take(2)
+        repeat(compactSize()) {
+            take(36)
+            take(compactSize())
+            take(4)
+        }
+        List(compactSize()) { Output(le(8).toULong(), take(compactSize())) }
     }.getOrNull()
 }

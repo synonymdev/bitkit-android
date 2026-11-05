@@ -4,6 +4,7 @@ import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.CooperativeRecoveryError
 import breez_sdk_spark.CooperativeRecoveryFailure
 import breez_sdk_spark.CpfpInput
+import breez_sdk_spark.ExitChainState
 import breez_sdk_spark.ExitLeafSelection
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.RecoverFundsResponse
@@ -45,13 +46,20 @@ class SparkExitDriverTest : BaseUnitTest() {
     private val saved = mutableListOf<SparkExitRecord>()
     private var now = 1_800_000_000_000L
 
-    private fun driver(withSdk: Boolean = true, save: (SparkExitRecord) -> Unit = { saved += it }) = SparkExitDriver(
+    private fun driver(
+        withSdk: Boolean = true,
+        tip: UInt? = null,
+        save: (SparkExitRecord) -> Unit = { saved += it },
+    ) = SparkExitDriver(
         chain = chain,
         recovering = sdk.takeIf { withSdk },
         makeSigner = { StubCpfpSigner() },
         save = save,
         nowMillis = { now },
+        tip = tip,
     )
+
+    private val interval = SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds
 
     private fun running(recovery: RecoverFundsResponse, builtAt: Long = now) =
         SparkExitFixtures.record(Phase.Running).adopt(recovery, builtAt)
@@ -124,11 +132,12 @@ class SparkExitDriverTest : BaseUnitTest() {
         record = driver().tick(record)
         record = driver().tick(record)
         now += SparkExitDriver.REBROADCAST_INTERVAL.inWholeMilliseconds
-        record = driver().tick(record)
+        record = driver(tip = 2_000u).tick(record)
 
         assertEquals(listOf("n2", "n2"), chain.broadcasts.map { it.txid })
         assertEquals(2, record.broadcastLog.single().attempts)
-        assertEquals(3_000u, record.claimableAtHeight)
+        // The longest path left: n2's block, then r1's 1,000 blocks of timelock and its own block.
+        assertEquals(3_002u, record.claimableAtHeight)
         assertEquals(checked, record.recovery)
     }
 
@@ -168,18 +177,144 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
-    fun `retries a rejected step and surfaces it after repeated rejections`() = test {
+    fun `a refused step rebuilds until three rebuilds did not move the exit, then says it is not moving`() = test {
         val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1", cpfp = "03c")))
-        var record = running(recovery)
+        var record = running(recovery, builtAt = now - interval)
         chain.outcome = SparkExitBroadcastOutcome.Rejected("insufficient fee, rejecting replacement")
-        repeat(3) { sdk.checks += check(recovery, RecoveryVerdict.Valid) }
+        repeat(20) { sdk.checks += check(recovery, RecoveryVerdict.Valid) }
+        repeat(SparkExitDriver.STALL_REBUILDS_TO_SURFACE) { sdk.builds += recovery }
 
-        record = driver().tick(record)
-        assertNull(record.surfacedRejection)
-        repeat(2) { record = driver().tick(record) }
+        var ticks = 0
+        while (record.stallRebuilds < SparkExitDriver.STALL_REBUILDS_TO_SURFACE && ticks++ < 12) {
+            assertNull(record.surfacedRejection)
+            record = driver().tick(record)
+            now += interval
+        }
+        assertEquals(4, record.generation)
+        // Stalled: the step is still sent, but nothing rebuilds over it again.
+        repeat(3) {
+            record = driver().tick(record)
+            now += interval
+        }
 
-        assertEquals(3, chain.broadcasts.size)
+        assertEquals(4, record.generation)
+        assertEquals(SparkExitDriver.STALL_REBUILDS_TO_SURFACE, sdk.recoverRequests.size)
         assertEquals("rejected: insufficient fee, rejecting replacement", record.surfacedRejection)
+    }
+
+    @Test
+    fun `a step confirming after a rebuild over a broken chain starts the count over`() = test {
+        val record = running(unpaidRecovery).copy(stallRebuilds = 3, stallConfirmedCount = 1)
+        assertTrue(record.isStalled)
+        val moved = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(11_600u)),
+                SparkExitFixtures.tx(
+                    "n2",
+                    cpfp = "03c2",
+                    dependsOn = listOf("n1"),
+                    status = ExitTransactionStatus.Confirmed(11_601u)
+                ),
+            ),
+        )
+        sdk.checks += check(moved, RecoveryVerdict.Valid)
+
+        val ticked = driver().tick(record)
+
+        assertEquals(0, ticked.stallRebuilds)
+        assertNull(ticked.stallConfirmedCount)
+        assertNull(ticked.surfacedRejection)
+    }
+
+    @Test
+    fun `a step accepted but not confirming for more than six blocks reads as underpriced and does not rebuild`() =
+        test {
+            val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1", cpfp = "03c")))
+            var record = running(recovery)
+            repeat(2) { sdk.checks += check(recovery, RecoveryVerdict.Valid) }
+
+            record = driver(tip = 1_000u).tick(record)
+            assertEquals(1_000u, record.broadcastLog.single().acceptedAtHeight)
+            assertNull(record.underpricedStep(1_006u))
+            now += SparkExitDriver.REBROADCAST_INTERVAL.inWholeMilliseconds
+            record = driver(tip = 1_007u).tick(record)
+
+            assertEquals(2, chain.broadcasts.size)
+            assertEquals(1_000u, record.broadcastLog.single().acceptedAtHeight)
+            assertEquals("n1", record.underpricedStep(1_007u)?.txid)
+            assertEquals(1, record.generation)
+            assertTrue(sdk.prepareRequests.isEmpty())
+            assertNull(record.surfacedRejection)
+        }
+
+    @Test
+    fun `a unilateral step the sdk could not read is not sent and rebuilds once a block`() = test {
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx(
+                    "n2",
+                    cpfp = "03c2",
+                    dependsOn = listOf("n1"),
+                    status = ExitTransactionStatus.Unverified,
+                ),
+                SparkExitFixtures.tx(
+                    "co",
+                    kind = RecoveryTxKind.COOPERATIVE,
+                    status = ExitTransactionStatus.Unverified
+                ),
+            ),
+        )
+        var record = running(unverified)
+        repeat(2) { sdk.checks += check(unverified, RecoveryVerdict.Valid) }
+        sdk.builds += unverified
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertTrue(chain.broadcasts.none { it.txid == "n2" })
+        assertTrue(chain.broadcasts.any { it.txid == "co" })
+        assertEquals(2, record.generation)
+        assertEquals(1_000u, record.unverifiedRebuiltAtHeight)
+        assertEquals(0, record.stallRebuilds)
+        assertEquals(record.fundingInputs, sdk.recoverRequests.single().fundingInputs)
+        assertEquals(2uL, sdk.prepareRequests.single().feeRateSatPerVbyte)
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(2, record.generation)
+        assertEquals(1, sdk.recoverRequests.size)
+    }
+
+    @Test
+    fun `an unverified unilateral step waits while another unilateral step is ready`() = test {
+        val recovery = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Unverified),
+                SparkExitFixtures.tx("n2"),
+            ),
+        )
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+
+        val record = driver(tip = 1_000u).tick(running(recovery))
+
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertEquals(1, record.generation)
+        assertTrue(sdk.prepareRequests.isEmpty())
+    }
+
+    @Test
+    fun `without the sdk an unverified step whose parents confirmed is still sent`() = test {
+        val recovery = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+
+        driver(withSdk = false).tick(running(recovery))
+
+        // Only the SDK can rebuild over it; without it the step would never go out.
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
     }
 
     @Test
@@ -262,9 +397,10 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         record = driver().tick(record)
 
-        assertEquals(Phase.NeedsFunding(3_000uL), record.phase)
+        // The coin that pays it adds its own input fee, 68 vB at 2 sat/vB.
+        assertEquals(Phase.NeedsFunding(3_136uL), record.phase)
         assertTrue(record.isActive)
-        assertEquals(3_000uL, record.fundingShortfallSats)
+        assertEquals(3_136uL, record.fundingShortfallSats)
     }
 
     @Test
@@ -283,12 +419,19 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         record = driver().tick(record)
 
-        assertEquals(Phase.NeedsFunding(9_085uL), record.phase)
-        assertEquals(50uL, record.fundingShortfallSats)
+        // 50 short, plus the input fee of the coin that pays it.
+        assertEquals(Phase.NeedsFunding(9_221uL), record.phase)
+        assertEquals(186uL, record.fundingShortfallSats)
 
+        // Two coins: the second adds its own input fee too.
         chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = funded.map {
             SparkExitFixtures.utxo(requireNotNull(it.txid), value = requireNotNull(it.valueSats))
-        } + listOf(SparkExitFixtures.utxo("t1", value = 30uL), SparkExitFixtures.utxo("t2", value = 20uL))
+        } + listOf(SparkExitFixtures.utxo("t1", value = 200uL), SparkExitFixtures.utxo("t2", value = 121uL))
+        record = driver().tick(record)
+        assertEquals(Phase.NeedsFunding(9_221uL), record.phase)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = funded.map {
+            SparkExitFixtures.utxo(requireNotNull(it.txid), value = requireNotNull(it.valueSats))
+        } + listOf(SparkExitFixtures.utxo("t1", value = 200uL), SparkExitFixtures.utxo("t2", value = 122uL))
         sdk.recoverError = null
         sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2")))
         record = driver().tick(record)
@@ -313,7 +456,7 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         record = driver().tick(record)
 
-        assertEquals(2_000uL, record.fundingShortfallSats)
+        assertEquals(2_136uL, record.fundingShortfallSats)
     }
 
     @Test
@@ -429,6 +572,64 @@ class SparkExitDriverTest : BaseUnitTest() {
         sdk.preparedResponse = SparkExitFixtures.prepared(leaves = emptyList())
 
         assertEquals(Phase.Done, driver().tick(record).phase)
+    }
+
+    private fun waiting(reason: SkippedLeafReason, stopped: List<String> = emptyList()) =
+        SparkExitFixtures.prepared(
+            leaves = emptyList(),
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, reason)),
+        ).copy(exitChainState = ExitChainState(emptyList(), emptyList(), stopped, emptyList(), emptyList()))
+
+    @Test
+    fun `an empty rebuild waits for a leaf whose funds were not found yet, at doubling gaps`() = test {
+        var record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(isRebuilding = true)
+        sdk.preparedResponse = waiting(SkippedLeafReason.FundsNotFound)
+        val tries = mutableListOf<UInt>()
+        for (tip in 1_000u..1_030u) {
+            val before = sdk.prepareRequests.size
+            record = driver(tip = tip).tick(record)
+            if (sdk.prepareRequests.size > before) tries += tip
+        }
+
+        assertEquals(listOf(1_000u, 1_006u, 1_012u, 1_024u), tries)
+        assertEquals(Phase.Running, record.phase)
+        assertTrue(record.isWaitingForLeaves)
+        assertEquals(1_000u, record.retrySince)
+        assertEquals(1_024u, record.retriedAt)
+    }
+
+    @Test
+    fun `a leaf still waited for after about a week is let go and the exit ends`() = test {
+        val record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(isRebuilding = true, retrySince = 1_000u, retriedAt = 2_000u)
+        sdk.preparedResponse = waiting(SkippedLeafReason.Unverified)
+
+        assertEquals(Phase.Running, driver(tip = 2_007u).tick(record).phase)
+        assertEquals(Phase.Done, driver(tip = 2_008u).tick(record).phase)
+    }
+
+    @Test
+    fun `a leaf the operators' watchtower stopped is waited for six blocks, then let go`() = test {
+        var record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(isRebuilding = true)
+        sdk.preparedResponse = waiting(SkippedLeafReason.NotRecoverable("stopped"), stopped = listOf("leaf-1"))
+
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(mapOf("leaf-1" to 1_000u), record.stoppedLeafSince)
+        assertTrue(record.isWaitingForLeaves)
+        record = driver(tip = 1_006u).tick(record)
+
+        assertEquals(Phase.Done, record.phase)
+    }
+
+    @Test
+    fun `an unrecoverable leaf the watchtower did not stop ends the exit at once`() = test {
+        val record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(isRebuilding = true)
+        sdk.preparedResponse = waiting(SkippedLeafReason.NotRecoverable("gone"))
+
+        assertEquals(Phase.Done, driver(tip = 1_000u).tick(record).phase)
     }
 
     @Test
@@ -693,6 +894,153 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a refund reproduced spent is not struck while the watchtower stopped its leaf a short while ago`() = test {
+        val recovery = lostLeafRecovery()
+        var record = running(recovery)
+        chain.outcome = SparkExitBroadcastOutcome.InputsMissing("""sendrawtransaction RPC error: {"code":-25}""")
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null)
+            .copy(exitChainState = ExitChainState(emptyList(), emptyList(), listOf("leaf-1"), emptyList(), emptyList()))
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        repeat(2) {
+            sdk.checks += check(recovery, redo)
+            sdk.builds += recovery
+        }
+
+        record = driver(tip = 1_000u).tick(record)
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+        now += interval
+        record = driver(tip = 1_002u).tick(record)
+
+        assertEquals(3, record.generation)
+        assertEquals(mapOf("refund" to 2), record.spentStepStrikes)
+        assertTrue(record.lostLeaves.isEmpty())
+        assertEquals(Phase.Running, record.phase)
+    }
+
+    @Test
+    fun `the first build keeps the sdk's exit data and every rebuild imports it first`() = test {
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 25_000uL))
+        val built = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        sdk.builds += built
+        sdk.builds += built
+
+        var record = driver().tick(SparkExitFixtures.record())
+
+        assertEquals("exit-state-1", record.exitStateSnapshot)
+        assertEquals(1, sdk.exports)
+        assertTrue(sdk.imports.isEmpty())
+
+        sdk.exitState = "exit-state-2"
+        sdk.checks += check(built, redo)
+        now += interval
+        record = driver().tick(record)
+
+        assertEquals(2, record.generation)
+        assertEquals(1, sdk.exports)
+        assertEquals(listOf("exit-state-1"), sdk.imports)
+        assertEquals("exit-state-1", record.exitStateSnapshot)
+    }
+
+    private fun sweepDone(): SparkExitRecord {
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0".repeat(32), 1u, 25_000uL))
+        return SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            leftover = listOf(SparkExitRecord.Leftover("f0".repeat(32), 1u, 25_000uL)),
+        )
+    }
+
+    @Test
+    fun `a leftover sweep refused for its fee is built again at the next block's rate`() = test {
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 300 < 400")
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        val refused = assertNotNull(record.leftoverSweep)
+        assertTrue(refused.isFeeRejection)
+        assertTrue(record.isLeftoverSweepPending)
+
+        chain.nextBlockRate = 10uL
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        record = driver(tip = 1_001u).tick(record)
+
+        val rebuilt = assertNotNull(record.leftoverSweep)
+        assertTrue(rebuilt.txid != refused.txid)
+        assertEquals(10uL, rebuilt.feeRateSatPerVbyte)
+        assertTrue(rebuilt.valueSats < refused.valueSats)
+        assertTrue(rebuilt.isAccepted)
+        assertNull(rebuilt.rejection)
+        assertEquals(1_001u, rebuilt.sentAtHeight)
+        assertEquals(rebuilt.txHex, chain.rawBroadcasts.last())
+    }
+
+    @Test
+    fun `a leftover sweep refused for another reason is final`() = test {
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("bad-txns-nonstandard-inputs")
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        assertFalse(record.isLeftoverSweepPending)
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(1, chain.rawBroadcasts.size)
+        assertFalse(record.needsDriving)
+    }
+
+    @Test
+    fun `a leftover sweep a day unconfirmed is replaced at a higher rate`() = test {
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        val first = assertNotNull(record.leftoverSweep)
+        assertEquals(1_000u, first.sentAtHeight)
+
+        record = driver(tip = 1_143u).tick(record)
+        assertEquals(first.txid, record.leftoverSweep?.txid)
+        record = driver(tip = 1_144u).tick(record)
+
+        val replaced = assertNotNull(record.leftoverSweep)
+        assertTrue(replaced.txid != first.txid)
+        assertEquals(5uL, replaced.feeRateSatPerVbyte)
+        assertEquals(1_144u, replaced.sentAtHeight)
+    }
+
+    @Test
+    fun `a sweep whose replaced version confirmed ends`() = test {
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        val first = requireNotNull(record.leftoverSweep?.txid)
+        record = driver(tip = 1_144u).tick(record)
+        assertEquals(listOf(first), record.leftoverSweep?.replacedTxids)
+        chain.outcome = SparkExitBroadcastOutcome.InputsMissing("missingorspent")
+        chain.confirmedTxids = setOf(first)
+
+        record = driver(tip = 1_145u).tick(record)
+
+        assertTrue(assertNotNull(record.leftoverSweep).isConfirmed)
+        assertFalse(record.needsDriving)
+    }
+
+    @Test
+    fun `a sweep refused for its fee that only dust is left of at the next block's rate is kept as dust`() = test {
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 300 < 400")
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        chain.nextBlockRate = 1_000uL
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(SparkExitRecord.LeftoverSweep(null, null, 25_000uL), record.leftoverSweep)
+        assertFalse(record.needsDriving)
+    }
+
+    @Test
+    fun `a replacement that would be dust keeps the accepted sweep`() = test {
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        val first = assertNotNull(record.leftoverSweep)
+        chain.nextBlockRate = 1_000uL
+
+        record = driver(tip = 1_144u).tick(record)
+
+        assertEquals(first.txid, record.leftoverSweep?.txid)
+        assertTrue(assertNotNull(record.leftoverSweep).isAccepted)
+    }
+
+    @Test
     fun `a single leaf lost while the funding address cannot be read ends lost through the no-leaf path`() = test {
         val recovery = lostLeafRecovery()
         var record = running(recovery)
@@ -732,6 +1080,7 @@ class SparkExitDriverTest : BaseUnitTest() {
             ),
             isRebuilding = true,
             lastBuildAt = null,
+            isRedoRebuild = true,
         )
         sdk.preparedResponse = SparkExitFixtures.prepared(funding = null)
         sdk.builds += recovery
@@ -1008,10 +1357,10 @@ class SparkExitDriverTest : BaseUnitTest() {
     )
 
     @Test
-    fun `a step unpaid three times in a row rebuilds once, then surfaces`() = test {
-        var record = running(unpaidRecovery, builtAt = now - SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds)
+    fun `a step unpaid three times in a row rebuilds and never counts as a rejection`() = test {
+        var record = running(unpaidRecovery, builtAt = now - interval)
         chain.outcome = UNPAID
-        repeat(5) { sdk.checks += check(unpaidRecovery, RecoveryVerdict.Valid) }
+        repeat(3) { sdk.checks += check(unpaidRecovery, RecoveryVerdict.Valid) }
         sdk.builds += unpaidRecovery
 
         repeat(2) { record = driver().tick(record) }
@@ -1019,18 +1368,12 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(0, record.broadcastLog.single().rejections)
         assertTrue(sdk.prepareRequests.isEmpty())
         record = driver().tick(record)
-        assertEquals(1, sdk.prepareRequests.size)
-        assertEquals(2, record.generation)
-        assertEquals(listOf("n2"), record.feeChainRebuildTxids)
-        // The rebuild reproduced the same step, which stays unpaid: it never rebuilds again, and now counts.
-        record = driver().tick(record)
-        assertNull(record.surfacedRejection)
-        record = driver().tick(record)
 
         assertEquals(1, sdk.prepareRequests.size)
         assertEquals(2, record.generation)
-        assertEquals(3, record.broadcastLog.single().rejections)
-        assertEquals("rejected: min relay fee not met, 0 < 17", record.surfacedRejection)
+        assertEquals(1, record.stallRebuilds)
+        assertEquals(0, record.broadcastLog.single().rejections)
+        assertNull(record.surfacedRejection)
         assertTrue(record.lostLeaves.isEmpty())
     }
 

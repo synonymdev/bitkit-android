@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -79,14 +80,38 @@ data class SparkExitRecord(
     val isResultSeen: Boolean = false,
     /** Leaves a rebuild could not exit, such as a fee-ladder leaf whose refund cannot pay its fee; left on Spark. */
     val leftBehindLeaves: List<LeftBehindLeaf> = emptyList(),
-    /** Steps that already started a rebuild after their fee went unpaid several times in a row; each starts one. */
-    val feeChainRebuildTxids: List<String> = emptyList(),
+    /**
+     * Rebuilds in a row over steps that keep being refused or a fee chain that lost a race, with no step confirming in
+     * between. At [SparkExitDriver.STALL_REBUILDS_TO_SURFACE] the exit stops rebuilding and says it is not moving.
+     */
+    val stallRebuilds: Int = 0,
+    /** How many steps were confirmed when the last of those rebuilds started; more since then resets the count. */
+    val stallConfirmedCount: Int? = null,
+    /** The tip of the last rebuild over a step the SDK could not read, so it rebuilds at most once a block. */
+    val unverifiedRebuiltAtHeight: UInt? = null,
+    /** The tip at which each of the exit's leaves was first seen stopped by the operators' watchtower. */
+    val stoppedLeafSince: Map<String, UInt> = emptyMap(),
+    /** The tip at which a build first found nothing to build while a leaf may still move. */
+    val retrySince: UInt? = null,
+    /** The tip of the last of those builds. */
+    val retriedAt: UInt? = null,
+    /** The SDK's exit data from just before the first build, imported again before every rebuild. */
+    val exitStateSnapshot: String? = null,
+    /** The stored record could not be read, so the exit rebuilds from the chain with the funding it kept. */
+    val isRebuiltFromChain: Boolean = false,
+    /** The rebuild in progress started from a Redo verdict, the only one whose reproduced spent steps strike. */
+    val isRedoRebuild: Boolean = false,
+    /** What confirmed SWEEP and COOPERATIVE steps of replaced generations paid to [destination], by txid. */
+    val earlierReceivedSats: Map<String, ULong> = emptyMap(),
 ) {
     companion object {
         const val CURRENT_VERSION = 1
 
         /** Rebuilds in a row that reproduce a spent step before its leaf counts as claimed by an older state. */
         const val LOST_AFTER_STRIKES = 2
+
+        /** Blocks a step a node accepted may go unconfirmed before the exit's fee rate counts as too low. */
+        const val UNCONFIRMED_BLOCKS_TO_SURFACE = 6u
     }
 
     sealed interface Phase {
@@ -139,6 +164,8 @@ data class SparkExitRecord(
         val isInputSpent: Boolean = false,
         /** Sends in a row, parents confirmed, that came back unpaid or with missing inputs; other outcomes reset it. */
         val feeChainFailures: Int = 0,
+        /** The tip when a node first accepted it, kept while it stays accepted. */
+        val acceptedAtHeight: UInt? = null,
     )
 
     data class Leftover(
@@ -159,14 +186,23 @@ data class SparkExitRecord(
         val isAccepted: Boolean = false,
         val rejection: String? = null,
         val isConfirmed: Boolean = false,
-    )
+        /** The rate it was built at; null for the exit's own rate. */
+        val feeRateSatPerVbyte: ULong? = null,
+        /** The tip when a node first accepted it, so one that does not confirm is replaced at a higher rate. */
+        val sentAtHeight: UInt? = null,
+        /** Earlier versions a node accepted that this one replaced; any of them confirming ends the sweep. */
+        val replacedTxids: List<String> = emptyList(),
+    ) {
+        /** A refusal for its fee is not final: the sweep is built again at the network's current rate. */
+        val isFeeRejection: Boolean get() = rejection?.contains("fee", ignoreCase = true) == true
+    }
 
-    /** The leftover still has to be swept: not built yet, or built and neither confirmed nor rejected. */
+    /** The leftover still has to be swept: not built yet, or built and neither confirmed nor finally rejected. */
     val isLeftoverSweepPending: Boolean
         get() {
             if (leftover.isEmpty()) return false
             val sweep = leftoverSweep ?: return true
-            return sweep.txid != null && sweep.rejection == null && !sweep.isConfirmed
+            return sweep.txid != null && (sweep.rejection == null || sweep.isFeeRejection) && !sweep.isConfirmed
         }
 
     /**
@@ -227,7 +263,10 @@ data class SparkExitRecord(
 
     /** Starts a new generation from a fresh build, forgetting what was broadcast for the previous one. */
     fun adopt(built: RecoverFundsResponse, atMillis: Long): SparkExitRecord = copy(
-        spentStepStrikes = spentStepStrikes(built),
+        spentStepStrikes = if (isRedoRebuild) spentStepStrikes(built) else spentStepStrikes,
+        isRedoRebuild = false,
+        earlierReceivedSats = earlierReceivedSats + recovery?.let { SparkExitMath.confirmedReceived(it, destination) }
+            .orEmpty(),
         earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty()).distinct(),
         generation = generation + 1,
         recovery = built,
@@ -236,7 +275,52 @@ data class SparkExitRecord(
         isRebuilding = false,
         lastBuildAt = atMillis,
         failedLeafCount = built.failed.size,
+        retrySince = null,
+        retriedAt = null,
+        isRebuiltFromChain = false,
     )
+
+    /** A build found nothing to build while a leaf may still move, and waits for it. */
+    val isWaitingForLeaves: Boolean get() = retrySince != null
+
+    /**
+     * A step of this generation that keeps being refused, or whose fee chain keeps failing, and has not confirmed:
+     * the chain is broken, so the exit rebuilds over it.
+     */
+    val stuckStep: BroadcastAttempt?
+        get() {
+            val confirmed = confirmedTxids
+            return broadcastLog.firstOrNull {
+                it.generation == generation && !it.isAccepted && it.txid !in confirmed &&
+                    (
+                        it.rejections >= SparkExitDriver.REJECTIONS_TO_SURFACE ||
+                            it.feeChainFailures >= SparkExitDriver.FEE_CHAIN_FAILURES_TO_REBUILD
+                        )
+            }
+        }
+
+    /** Rebuilding over a broken chain failed to move the exit often enough to stop and say so. */
+    val isStalled: Boolean get() = stallRebuilds >= SparkExitDriver.STALL_REBUILDS_TO_SURFACE
+
+    /**
+     * A step a node accepted that has not confirmed for more blocks than a fair fee rate needs at [tip]: the network
+     * is busier than the exit's rate, which a rebuild at the same rate does not change.
+     */
+    fun underpricedStep(tip: UInt?): BroadcastAttempt? {
+        tip ?: return null
+        val confirmed = confirmedTxids
+        return broadcastLog.firstOrNull {
+            val height = it.acceptedAtHeight ?: return@firstOrNull false
+            it.generation == generation && it.isAccepted && it.txid !in confirmed &&
+                tip > height && tip - height > UNCONFIRMED_BLOCKS_TO_SURFACE
+        }
+    }
+
+    private val confirmedTxids: Set<String>
+        get() = recovery?.transactions.orEmpty()
+            .filter { it.status is ExitTransactionStatus.Confirmed }
+            .map { it.txid }
+            .toSet()
 
     /**
      * The strikes after adopting [built]: a step of it that had its input spent in the generation it replaces gets one
@@ -249,8 +333,12 @@ data class SparkExitRecord(
             .associate { it.txid to (spentStepStrikes[it.txid] ?: 0) + 1 }
     }
 
-    /** The leaves [built] would lose again: a refund of an exiting leaf reproduced with its input spent twice. */
+    /**
+     * The leaves [built] would lose again: a refund of an exiting leaf that Redo rebuilds reproduced with its input
+     * spent twice. Other rebuilds never strike.
+     */
     fun lostLeaves(built: RecoverFundsResponse): List<LostLeaf> {
+        if (!isRedoRebuild) return emptyList()
         val strikes = spentStepStrikes(built)
         val values = (recovery?.leaves.orEmpty() + built.leaves).associate { it.leafId to it.valueSats }
         return built.transactions
@@ -272,8 +360,14 @@ class SparkExitStore(private val file: File) {
         return SparkExitJson.decode(file.readText())
     }
 
-    /** Whether an exit runs, false when the record is missing or unreadable. */
-    fun isActive(): Boolean = runCatching { load()?.isActive }.getOrNull() == true
+    /**
+     * Whether an exit runs, false when the record is missing. A record that cannot be read counts as running until it
+     * is salvaged, so an exit never disappears over it.
+     */
+    fun isActive(): Boolean = runCatching { load()?.isActive == true }.getOrElse { file.exists() }
+
+    /** The record's raw text, for salvaging one that cannot be read; null when there is none. */
+    fun loadText(): String? = file.takeIf { it.exists() }?.readText()
 
     /** Moves an unreadable record out of the way, keeping it for support. */
     fun setAside(nowMillis: Long) {
@@ -321,6 +415,14 @@ class SparkExitLostLeafStore(private val file: File) {
 
 class SparkExitFormatError(message: String) : AppError(message)
 
+/**
+ * Converters from older record versions, each to the next version up, applied in turn by [SparkExitJson.decode]. Add
+ * one here before raising [SparkExitRecord.CURRENT_VERSION], so an exit written by an earlier Bitkit keeps running.
+ */
+object SparkExitRecordMigration {
+    val converters: Map<Int, (JsonObject) -> JsonObject> = emptyMap()
+}
+
 class SparkExitUnsupportedVersion(val version: Int) : AppError("Unsupported Spark exit record version '$version'")
 
 /**
@@ -336,10 +438,79 @@ object SparkExitJson {
     fun encode(record: SparkExitRecord): String = recordToJson(record).toString()
 
     fun decode(text: String): SparkExitRecord {
-        val root = json.parseToJsonElement(text).jsonObject
-        val version = root.int("version")
-        if (version != SparkExitRecord.CURRENT_VERSION) throw SparkExitUnsupportedVersion(version)
+        var root = json.parseToJsonElement(text).jsonObject
+        var version = root.int("version")
+        while (version != SparkExitRecord.CURRENT_VERSION) {
+            val convert = SparkExitRecordMigration.converters[version] ?: throw SparkExitUnsupportedVersion(version)
+            root = convert(root)
+            version = root.int("version")
+        }
         return recordFromJson(root)
+    }
+
+    /**
+     * What can be read of a record [decode] refused, as a record that rebuilds from the chain: the exit's leaves, rate,
+     * destination and the funding it kept, with no recovery or broadcasts. An exit that had ended stays ended. Null
+     * when not even the leaves, rate and destination can be read.
+     */
+    fun salvage(text: String, nowMillis: Long): SparkExitRecord? {
+        val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
+        fun <T> read(block: () -> T): T? = runCatching(block).getOrNull()
+        val network = read { o.string("network") } ?: return null
+        val feeRate = read { o.ulong("feeRateSatPerVbyte") } ?: return null
+        val destination = read { o.string("destination") } ?: return null
+        val leafIds = read { o.array("leafIds").map { it.jsonPrimitive.content } }?.takeIf { it.isNotEmpty() }
+            ?: return null
+        val funding = read { o.array("funding") }.orEmpty().mapNotNull {
+            read {
+                val f = it.jsonObject
+                SparkExitRecord.Funding(
+                    index = f.ulong("index").toUInt(),
+                    address = f.string("address"),
+                    pubkey = f.string("pubkey"),
+                    txid = f.stringOrNull("txid"),
+                    vout = f.ulongOrNull("vout")?.toUInt(),
+                    valueSats = f.ulongOrNull("valueSats"),
+                )
+            }
+        }
+        val stored = o["phase"]?.let { read { phaseFromJson(it) } }
+        val phase = when (stored) {
+            is SparkExitRecord.Phase.AwaitingFunding,
+            is SparkExitRecord.Phase.NeedsFunding,
+            SparkExitRecord.Phase.Done,
+            is SparkExitRecord.Phase.Failed,
+            -> stored
+            SparkExitRecord.Phase.Running, null -> SparkExitRecord.Phase.Running
+        }
+        val isActive = phase !is SparkExitRecord.Phase.Done && phase !is SparkExitRecord.Phase.Failed
+        return SparkExitRecord(
+            network = network,
+            createdAt = read { o.millis("createdAt") } ?: nowMillis,
+            phase = phase,
+            feeRateSatPerVbyte = feeRate,
+            destination = destination,
+            leafIds = leafIds,
+            funding = funding,
+            transferId = read { o.stringOrNull("transferId") },
+            expectedSats = read { o.ulong("expectedSats") } ?: 0uL,
+            leafTotalSats = read { o.ulongOrNull("leafTotalSats") },
+            lostLeaves = read {
+                o.arrayOrEmpty("lostLeaves").map {
+                    val l = it.jsonObject
+                    SparkExitRecord.LostLeaf(l.string("leafId"), l.ulong("valueSats"))
+                }
+            }.orEmpty(),
+            leftBehindLeaves = read {
+                o.arrayOrEmpty("leftBehindLeaves").map {
+                    val l = it.jsonObject
+                    SparkExitRecord.LeftBehindLeaf(l.string("leafId"), l.ulong("valueSats"), l.string("reason"))
+                }
+            }.orEmpty(),
+            isRebuilding = phase == SparkExitRecord.Phase.Running,
+            isRebuiltFromChain = isActive,
+            exitStateSnapshot = read { o.stringOrNull("exitStateSnapshot") },
+        )
     }
 
     fun encodeRecovery(recovery: RecoverFundsResponse): String = recoveryToJson(recovery).toString()
@@ -389,6 +560,7 @@ object SparkExitJson {
                             put("isAccepted", it.isAccepted)
                             if (it.isInputSpent) put("isInputSpent", true)
                             if (it.feeChainFailures > 0) put("feeChainFailures", it.feeChainFailures)
+                            it.acceptedAtHeight?.let { height -> put("acceptedAtHeight", height.toLong()) }
                         },
                     )
                 }
@@ -419,19 +591,7 @@ object SparkExitJson {
         if (r.earlierCpfpTxids.isNotEmpty()) {
             put("earlierCpfpTxids", buildJsonArray { r.earlierCpfpTxids.forEach { add(JsonPrimitive(it)) } })
         }
-        r.leftoverSweep?.let { sweep ->
-            put(
-                "leftoverSweep",
-                buildJsonObject {
-                    sweep.txid?.let { put("txid", it) }
-                    sweep.txHex?.let { put("txHex", it) }
-                    put("valueSats", sweep.valueSats.toLong())
-                    put("isAccepted", sweep.isAccepted)
-                    sweep.rejection?.let { put("rejection", it) }
-                    if (sweep.isConfirmed) put("isConfirmed", true)
-                },
-            )
-        }
+        r.leftoverSweep?.let { put("leftoverSweep", sweepToJson(it)) }
         r.fundingPaymentTxid?.let { put("fundingPaymentTxid", it) }
         if (r.isResultSeen) put("isResultSeen", true)
         if (r.spentStepStrikes.isNotEmpty()) {
@@ -440,9 +600,7 @@ object SparkExitJson {
                 buildJsonObject { r.spentStepStrikes.forEach { (txid, strikes) -> put(txid, strikes) } },
             )
         }
-        if (r.feeChainRebuildTxids.isNotEmpty()) {
-            put("feeChainRebuildTxids", buildJsonArray { r.feeChainRebuildTxids.forEach { add(JsonPrimitive(it)) } })
-        }
+        putRebuildState(r)
         if (r.leftBehindLeaves.isNotEmpty()) {
             put(
                 "leftBehindLeaves",
@@ -472,6 +630,44 @@ object SparkExitJson {
                         )
                     }
                 },
+            )
+        }
+    }
+
+    private fun sweepToJson(sweep: SparkExitRecord.LeftoverSweep) = buildJsonObject {
+        sweep.txid?.let { put("txid", it) }
+        sweep.txHex?.let { put("txHex", it) }
+        put("valueSats", sweep.valueSats.toLong())
+        put("isAccepted", sweep.isAccepted)
+        sweep.rejection?.let { put("rejection", it) }
+        if (sweep.isConfirmed) put("isConfirmed", true)
+        sweep.feeRateSatPerVbyte?.let { put("feeRateSatPerVbyte", it.toLong()) }
+        sweep.sentAtHeight?.let { put("sentAtHeight", it.toLong()) }
+        if (sweep.replacedTxids.isNotEmpty()) {
+            put("replacedTxids", buildJsonArray { sweep.replacedTxids.forEach { add(JsonPrimitive(it)) } })
+        }
+    }
+
+    /** What the exit keeps to pace and bound its rebuilds and waits, each left out at its default. */
+    private fun JsonObjectBuilder.putRebuildState(r: SparkExitRecord) {
+        if (r.stallRebuilds > 0) put("stallRebuilds", r.stallRebuilds)
+        r.stallConfirmedCount?.let { put("stallConfirmedCount", it) }
+        r.unverifiedRebuiltAtHeight?.let { put("unverifiedRebuiltAtHeight", it.toLong()) }
+        if (r.stoppedLeafSince.isNotEmpty()) {
+            put(
+                "stoppedLeafSince",
+                buildJsonObject { r.stoppedLeafSince.forEach { (leafId, height) -> put(leafId, height.toLong()) } },
+            )
+        }
+        r.retrySince?.let { put("retrySince", it.toLong()) }
+        r.retriedAt?.let { put("retriedAt", it.toLong()) }
+        r.exitStateSnapshot?.let { put("exitStateSnapshot", it) }
+        if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
+        if (r.isRedoRebuild) put("isRedoRebuild", true)
+        if (r.earlierReceivedSats.isNotEmpty()) {
+            put(
+                "earlierReceivedSats",
+                buildJsonObject { r.earlierReceivedSats.forEach { (txid, sats) -> put(txid, sats.toLong()) } },
             )
         }
     }
@@ -509,6 +705,7 @@ object SparkExitJson {
                 isAccepted = b.booleanOrNull("isAccepted") ?: false,
                 isInputSpent = b.booleanOrNull("isInputSpent") ?: false,
                 feeChainFailures = b.intOrNull("feeChainFailures") ?: 0,
+                acceptedAtHeight = b.ulongOrNull("acceptedAtHeight")?.toUInt(),
             )
         },
         transferId = o.stringOrNull("transferId"),
@@ -532,6 +729,9 @@ object SparkExitJson {
                 isAccepted = it.booleanOrNull("isAccepted") ?: false,
                 rejection = it.stringOrNull("rejection"),
                 isConfirmed = it.booleanOrNull("isConfirmed") ?: false,
+                feeRateSatPerVbyte = it.ulongOrNull("feeRateSatPerVbyte"),
+                sentAtHeight = it.ulongOrNull("sentAtHeight")?.toUInt(),
+                replacedTxids = it.arrayOrEmpty("replacedTxids").map { txid -> txid.jsonPrimitive.content },
             )
         },
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),
@@ -547,7 +747,20 @@ object SparkExitJson {
             val l = it.jsonObject
             SparkExitRecord.LeftBehindLeaf(l.string("leafId"), l.ulong("valueSats"), l.string("reason"))
         },
-        feeChainRebuildTxids = o.arrayOrEmpty("feeChainRebuildTxids").map { it.jsonPrimitive.content },
+        stallRebuilds = o.intOrNull("stallRebuilds") ?: 0,
+        stallConfirmedCount = o.intOrNull("stallConfirmedCount"),
+        unverifiedRebuiltAtHeight = o.ulongOrNull("unverifiedRebuiltAtHeight")?.toUInt(),
+        stoppedLeafSince = o.objectOrNull("stoppedLeafSince")
+            ?.mapValues { it.value.jsonPrimitive.content.toUInt() }
+            .orEmpty(),
+        retrySince = o.ulongOrNull("retrySince")?.toUInt(),
+        retriedAt = o.ulongOrNull("retriedAt")?.toUInt(),
+        exitStateSnapshot = o.stringOrNull("exitStateSnapshot"),
+        isRebuiltFromChain = o.booleanOrNull("isRebuiltFromChain") ?: false,
+        isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,
+        earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
+            ?.mapValues { it.value.jsonPrimitive.content.toULong() }
+            .orEmpty(),
     )
 
     private fun phaseToJson(phase: SparkExitRecord.Phase): JsonObject = when (phase) {

@@ -72,6 +72,111 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a top up adds the input fee of each coin beyond the ones the sdk sized it on`() {
+        val inputFee = SparkExitMath.inputFeeSats(2uL)
+        assertEquals(136uL, inputFee)
+        // The qa-03 run at 2 sat/vB: 9,035 held, the SDK wants 9,085, and the coin that pays the 50 adds its own input.
+        assertEquals(9_221uL, SparkExitMath.neededFunding(9_085uL, fundedSats = 9_035uL, held = 9_035uL, inputFee))
+        assertEquals(15_136uL, SparkExitMath.neededFunding(15_000uL, fundedSats = 0uL, held = null, inputFee))
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(9_221uL)).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 9_035uL)
+            ),
+        )
+        assertEquals(SparkExitFundingState.Ask(294uL, 0uL, 186uL), SparkExitMath.fundingState(record, emptyList()))
+        // Two coins of 1,000 cover a 1,999 shortfall only with the second coin's input fee on top.
+        val coins = listOf(SparkExitFixtures.utxo("a", value = 1_000uL), SparkExitFixtures.utxo("b", value = 1_000uL))
+        assertNull(SparkExitMath.fundingTopUp(coins, requiredSats = 1_999uL, inputFeeSats = inputFee))
+        assertEquals(2, SparkExitMath.fundingTopUp(coins, requiredSats = 1_864uL, inputFeeSats = inputFee)?.size)
+    }
+
+    @Test
+    fun `the countdown follows the longest path of timelocks and blocks left`() {
+        val transactions = listOf(
+            SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(990u)),
+            SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            SparkExitFixtures.tx(
+                "r1",
+                kind = RecoveryTxKind.REFUND,
+                dependsOn = listOf("n2"),
+                status = ExitTransactionStatus.WaitingForDependencies,
+                csv = 100u,
+            ),
+            SparkExitFixtures.tx(
+                "r2",
+                kind = RecoveryTxKind.REFUND,
+                dependsOn = listOf("n1"),
+                status = ExitTransactionStatus.WaitingForTimelock(1_050u),
+            ),
+            SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP, dependsOn = listOf("r1", "r2")),
+        )
+
+        // n2 (1) then r1 (100 + 1) then the sweep (1); r2's path is shorter.
+        assertEquals(103u, SparkExitMath.blocksToFinish(transactions, tip = 1_000u))
+        assertEquals(1_103u, SparkExitMath.claimableAtHeight(SparkExitFixtures.recovery(transactions), tip = 1_000u))
+        // n2 confirmed: one block less, not a jump.
+        val moved = transactions.map {
+            if (it.txid == "n2") it.copy(status = ExitTransactionStatus.Confirmed(1_001u)) else it
+        }
+        assertEquals(1_103u, SparkExitMath.claimableAtHeight(SparkExitFixtures.recovery(moved), tip = 1_001u))
+        assertNull(SparkExitMath.blocksToFinish(listOf(transactions.first()), tip = 1_000u))
+    }
+
+    @Test
+    fun `what reached savings is what the sweep and cooperative steps of every generation pay the destination`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val destination = AddressScript.of(address)
+        val other = AddressScript.of("bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6")
+        fun paying(vararg outputs: Pair<Long, ByteArray>): String {
+            fun le(
+                value: Long,
+                size: Int
+            ) = (0 until size).joinToString("") { "%02x".format((value shr (8 * it)) and 0xff) }
+            val body = outputs.joinToString("") { (value, script) ->
+                le(value, 8) + "%02x".format(script.size) + script.toHexString()
+            }
+            return "02000000" + "01" + "11".repeat(32) + le(0, 4) + "00" + "ffffffff" +
+                "%02x".format(outputs.size) + body + le(0, 4)
+        }
+        val cooperative = SparkExitFixtures.tx(
+            "c",
+            kind = RecoveryTxKind.COOPERATIVE,
+            status = ExitTransactionStatus.Confirmed(900u),
+        ).copy(txHex = paying(5_000L to destination, 700L to other))
+        val first = SparkExitFixtures.recovery(
+            listOf(
+                cooperative,
+                SparkExitFixtures.tx("n", kind = RecoveryTxKind.NODE).copy(txHex = paying(1_000L to destination)),
+            ),
+        )
+        // A Redo after the cooperative leaf landed: the new generation no longer lists it.
+        val rebuilt = SparkExitFixtures.recovery(
+            listOf(SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP).copy(txHex = paying(90_000L to destination))),
+        )
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.Running).copy(destination = address)
+            .adopt(first, 1L)
+            .adopt(rebuilt, 2L)
+
+        assertEquals(mapOf("c" to 5_000uL), record.earlierReceivedSats)
+        assertEquals(95_000uL, SparkExitMath.receivedSats(record))
+        // Listed again, it counts once.
+        val relisted = SparkExitFixtures.recovery(listOf(cooperative) + rebuilt.transactions)
+        assertEquals(95_000uL, SparkExitMath.receivedSats(record.copy(recovery = relisted)))
+    }
+
+    @Test
+    fun `a wait for a leaf that may still move tries again at doubling gaps up to a day and ends after a week`() {
+        assertFalse(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_000u, tip = 1_005u))
+        assertTrue(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_000u, tip = 1_006u))
+        assertFalse(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_024u, tip = 1_047u))
+        assertTrue(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_024u, tip = 1_048u))
+        assertFalse(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_500u, tip = 1_643u))
+        assertTrue(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_500u, tip = 1_644u))
+        assertFalse(SparkExitMath.isRetryReleased(since = 1_000u, tip = 2_007u))
+        assertTrue(SparkExitMath.isRetryReleased(since = 1_000u, tip = 2_008u))
+    }
+
+    @Test
     fun `spark's balance beyond the exit's leaves is outside the exit`() {
         assertEquals(17_097uL, SparkExitMath.outsideExitSats(leafTotalSats = 32_768uL, balanceSats = 49_865uL))
         assertNull(SparkExitMath.outsideExitSats(leafTotalSats = 90_112uL, balanceSats = 9_789uL))
@@ -235,10 +340,10 @@ class SparkExitFundingTest {
         val paidPending = listOf(SparkExitFixtures.utxo("paid", value = 20_000uL, confirmed = false))
         assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, paidPending))
         assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, utxos = null))
-        // Confirmed but short: only the rest is asked for.
+        // Confirmed but short: only the rest is asked for, with the input fee of the coin that pays it.
         val paidShort = listOf(SparkExitFixtures.utxo("paid", value = 15_000uL))
         assertEquals(
-            SparkExitFundingState.Ask(5_000uL, 15_000uL, 20_000uL),
+            SparkExitFundingState.Ask(5_136uL, 15_000uL, 20_136uL),
             SparkExitMath.fundingState(record, paidShort)
         )
         // Once adopted, a later shortfall no longer reads as paid.
@@ -256,7 +361,7 @@ class SparkExitFundingTest {
         assertEquals(SparkExitFundingState.Seen("ext"), SparkExitMath.fundingState(record, seen))
         val partial = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
         assertEquals(
-            SparkExitFundingState.Ask(12_000uL, 8_000uL, 20_000uL),
+            SparkExitFundingState.Ask(12_136uL, 8_000uL, 20_136uL),
             SparkExitMath.fundingState(record, partial)
         )
         assertNull(SparkExitMath.fundingState(record.copy(phase = SparkExitRecord.Phase.Running), seen))
@@ -321,11 +426,12 @@ class SparkExitFundingTest {
         assertNull(SparkExitMath.partialFunding(0uL, 20_000uL))
         assertNull(SparkExitMath.partialFunding(20_000uL, 20_000uL))
 
-        // On Progress the top-up counts only new funding, unconfirmed included, against the shortfall.
+        // On Progress the top-up counts only new funding, unconfirmed included, against the shortfall and the input
+        // fee of the coin still to send.
         val record = SparkExitFixtures.record()
         val seen = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
         val ask = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(record, seen))
-        assertEquals(partial, ask.partial)
+        assertEquals(SparkExitPartialFunding(8_000uL, 20_136uL, 12_136uL), ask.partial)
         assertNull(SparkExitFundingState.Ask(20_000uL).partial)
     }
 
@@ -333,10 +439,10 @@ class SparkExitFundingTest {
     fun `a top up under dust is asked as the funding output's dust limit`() {
         val record = SparkExitFixtures.record()
         val almost = listOf(SparkExitFixtures.utxo("ext", value = 19_932uL))
-        val ask = SparkExitFundingState.Ask(294uL, 19_932uL, 20_000uL)
+        val ask = SparkExitFundingState.Ask(294uL, 19_932uL, 20_136uL)
         assertEquals(ask, SparkExitMath.fundingState(record, almost))
         // The hint names the shortfall as it is and asks for dust at least.
-        assertEquals(SparkExitPartialFunding(19_932uL, 20_000uL, 294uL), ask.partial)
+        assertEquals(SparkExitPartialFunding(19_932uL, 20_136uL, 294uL), ask.partial)
         assertEquals(
             SparkExitPartialFunding(19_932uL, 20_000uL, 294uL),
             SparkExitMath.partialFunding(19_932uL, 20_000uL)

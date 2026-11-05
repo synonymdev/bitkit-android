@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.NetworkCapabilities
 import android.text.format.DateFormat
 import androidx.core.content.edit
+import androidx.core.os.bundleOf
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -26,17 +27,21 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.async.appScope
+import to.bitkit.data.AppDb
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.alarmManager
 import to.bitkit.ext.connectivityManager
 import to.bitkit.ext.nowMs
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.ui.EXTRA_SPARK_EXIT
 import to.bitkit.ui.areNotificationsEnabled
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
@@ -65,6 +70,7 @@ class SparkExitWork @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val clock: Clock,
+    private val db: AppDb,
 ) {
     companion object {
         private const val TAG = "SparkExitWork"
@@ -78,9 +84,15 @@ class SparkExitWork @Inject constructor(
 
         /** The shortest period WorkManager runs periodic work at. */
         val PERIOD = 15.minutes
+    }
 
-        /** The exit of the wallet Bitkit runs, read before the wallet graph exists. */
-        private fun store() = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+    /** The exit of the wallet Bitkit runs, read before the wallet graph exists. */
+    private suspend fun store(): SparkExitStore {
+        val index = runSuspendCatching { db.configDao().getAll().first().firstOrNull()?.walletIndex }
+            .onFailure { Logger.warn("Failed to read the active wallet for the Spark exit", it, context = TAG) }
+            .getOrNull()
+            ?: 0L
+        return SparkExitStore(File(Env.sparkExitRecordPath(index.toInt())))
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -101,7 +113,14 @@ class SparkExitWork @Inject constructor(
      */
     fun ensureScheduled() {
         scope.launch {
-            val record = runCatching { store().load() }.getOrNull()
+            val loaded = runCatching { store().load() }
+            // A record that cannot be read is salvaged by the next run, which the alarm and the work stay set for.
+            if (loaded.isFailure) {
+                Logger.warn("Failed to read the Spark exit record; keeping its background work", context = TAG)
+                schedulePeriodic()
+                return@launch
+            }
+            val record = loaded.getOrNull()
             if (record?.needsDriving != true) {
                 if (preferences.contains(KEY_WARN_AT)) cancelAll()
                 return@launch
@@ -153,7 +172,14 @@ class SparkExitWork @Inject constructor(
      * run now, and warns again later if it stays behind.
      */
     suspend fun onDeadline() {
-        val record = runCatching { store().load() }.getOrNull()
+        val loaded = runCatching { store().load() }
+        if (loaded.isFailure) {
+            Logger.warn("Failed to read the Spark exit record at its deadline; running it now", context = TAG)
+            enqueueCatchUp()
+            armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network))
+            return
+        }
+        val record = loaded.getOrNull()
         val alert = SparkExitAlerts.reason(record, isOnline(), backgroundLimits())
         Logger.warn(
             "Spark exit deadline alarm fired with alert '$alert' (${context.logBatterySettings()})",
@@ -165,12 +191,16 @@ class SparkExitWork @Inject constructor(
         }
         val deadlineAt = preferences.getLong(KEY_DEADLINE_AT, 0L).takeIf { it > clock.nowMs() }
         notify(alert, deadlineAt)
+        enqueueCatchUp()
+        armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network))
+    }
+
+    private fun enqueueCatchUp() {
         WorkManager.getInstance(context).enqueueUniqueWork(
             CATCH_UP_WORK,
             ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<SparkExitWorker>().setConstraints(constraints).build(),
         )
-        armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network))
     }
 
     /** Posts the exit's notification, unless Bitkit is on screen, where the progress screen says the same. */
@@ -185,6 +215,7 @@ class SparkExitWork @Inject constructor(
         context.pushNotification(
             title = context.getString(R.string.lightning__spark_exit__notification_title),
             text = text,
+            extras = bundleOf(EXTRA_SPARK_EXIT to true),
             bigText = text,
             id = NOTIFICATION_ID,
         )
@@ -273,7 +304,8 @@ object SparkExitAlerts {
         return when {
             record.phase is SparkExitRecord.Phase.NeedsFunding -> SparkExitAlert.Funding
             record.phase != SparkExitRecord.Phase.Running -> null
-            record.surfacedRejection != null -> SparkExitAlert.Rejected
+            record.surfacedRejection != null ||
+                (record.stuckStep?.rejections ?: 0) >= SparkExitDriver.REJECTIONS_TO_SURFACE -> SparkExitAlert.Rejected
             !isOnline -> SparkExitAlert.Offline
             limits.isRestricted -> SparkExitAlert.Restricted
             // Battery optimization alone is Android's default for nearly every app, so it names no cause.

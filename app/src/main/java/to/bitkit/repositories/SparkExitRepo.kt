@@ -115,10 +115,8 @@ class SparkExitRepo @Inject constructor(
             if (isLoaded && this@SparkExitRepo.walletIndex == walletIndex) return@runSuspendCatching _state.value.record
             this@SparkExitRepo.walletIndex = walletIndex
             val record = runSuspendCatching { store.load() }.getOrElse {
-                // Kept aside for support, so a new exit never overwrites it; a new exit prepares from chain state.
                 Logger.error("Failed to read the Spark exit record", it, context = TAG)
-                runSuspendCatching { store.setAside(clock.nowMs()) }
-                null
+                salvage()
             }
             isLoaded = true
             _state.update { it.copy(record = record) }
@@ -128,6 +126,22 @@ class SparkExitRepo @Inject constructor(
             if (record?.needsDriving == true) work.schedulePeriodic()
             record
         }
+    }
+
+    /**
+     * A record that cannot be read, such as one of an unknown version, is kept aside unchanged for support, and what
+     * can be read of it carries on as an exit that rebuilds from the chain, so a running exit never disappears.
+     */
+    private fun salvage(): SparkExitRecord? {
+        val store = store
+        val text = runCatching { store.loadText() }.getOrNull()
+        runCatching { store.setAside(clock.nowMs()) }
+            .onFailure { Logger.warn("Failed to set the unreadable Spark exit record aside", it, context = TAG) }
+        val salvaged = text?.let { SparkExitJson.salvage(it, clock.nowMs()) } ?: return null
+        runCatching { store.save(salvaged) }
+            .onFailure { Logger.error("Failed to save the salvaged Spark exit record", it, context = TAG) }
+        Logger.warn("Salvaged the Spark exit record in phase '${salvaged.phase}' to rebuild from chain", context = TAG)
+        return salvaged
     }
 
     /** Drives the exit every minute while Bitkit is in the foreground. */
@@ -201,6 +215,7 @@ class SparkExitRepo @Inject constructor(
             makeSigner = { signer(current.fundingIndex) },
             save = store::save,
             nowMillis = clock::nowMs,
+            tip = tip,
         )
         // Read before this tick's losses are kept, so a leaf lost now is still reported once.
         val reportedLost = reportedLostLeafIds()
@@ -214,7 +229,11 @@ class SparkExitRepo @Inject constructor(
         // A rebuild needs the SDK; every other running step can go out from the stored recovery without it. Steps
         // refused again and again keep the exit from moving, however often it runs.
         val canMove = recovering != null || !updated.isRebuilding
-        val isOnTrack = tip != null && canMove && updated.surfacedRejection == null && !updated.isFeeChainStuck
+        // Without the SDK nothing rebuilds over a step that keeps failing. A step the network holds but does not
+        // confirm is underpriced, which no run changes. Either way the alarm may fire.
+        val isStuckWithoutSdk = recovering == null && updated.stuckStep != null
+        val isOnTrack = tip != null && canMove && updated.surfacedRejection == null && !updated.isFeeChainStuck &&
+            !isStuckWithoutSdk && updated.underpricedStep(tip) == null
         afterTick(updated, current, isOnTrack, reportedLost)
         return updated
     }
