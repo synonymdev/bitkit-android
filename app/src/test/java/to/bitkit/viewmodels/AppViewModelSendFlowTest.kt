@@ -9538,6 +9538,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             balanceState.value = BalanceState(maxSendOnchainSats = 0u)
             hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 10_000uL))
             whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(8_000uL))
+            whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+                .thenReturn(Result.failure(Exception("insufficient funds for amount and fee")))
 
             sut.showScannerSheet()
             sut.onScannerSheetResult(input)
