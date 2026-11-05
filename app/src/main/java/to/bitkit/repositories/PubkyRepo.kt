@@ -62,6 +62,7 @@ import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyAuthRequestError
+import to.bitkit.models.PubkyModerationBot
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
@@ -1461,8 +1462,9 @@ class PubkyRepo @Inject constructor(
     }
 
     /**
-     * Looks up the signed-in identity's follows for the import overview, leaving out its own key, resolving each
-     * follow's profile once and keeping a follow it cannot resolve as a placeholder. Its lookups use the interactive
+     * Looks up the signed-in identity's follows for the import overview, leaving out its own key and the pubky.app
+     * moderation account, resolving each follow's profile once and keeping a follow it cannot resolve as a
+     * placeholder. Its lookups use the interactive
      * read lane, since the user waits on the Pubky Ring choice row until it returns, and each one still running
      * [IMPORT_FOLLOW_LOOKUP_TIMEOUT] after it got its read slot is cancelled and treated as failed; waiting for a read
      * slot does not count.
@@ -1473,7 +1475,8 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val canonicalOwnKey = PubkyPublicKeyFormat.canonicalized(pk)
             val contactKeys = pubkyService.getContacts(pk).filterNot {
-                canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey
+                (canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey) ||
+                    PubkyModerationBot.matches(it)
             }
             Logger.debug("Discovered '${contactKeys.size}' contacts for import", context = TAG)
 
