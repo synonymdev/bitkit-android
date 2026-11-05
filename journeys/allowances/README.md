@@ -61,7 +61,8 @@ killed right after handing the payment to the node never paid twice after relaun
 - Detail sheet: `AllowanceDetail`, `AllowancePaidSoFar`, `AllowanceDetailStatus`
 - Payments tab: `Tab-payments`, `PaymentRequestCreate`, `PaymentRequestRow-<paymentRequestId>`
   whose subtitle ends with "· Auto-paid" for an automatic payment
-- Incoming request: `PaymentRequestsBell`, `PaymentRequestsSheet`
+- Incoming request: `PaymentRequestsBell`, `PaymentRequestsSheet`, or `PaymentRequestConfirm`
+  when the request opens straight on its confirm screen
 
 A payer who requires a PIN for payments sees the PIN pad (or biometrics) over the sheet when saving or ending
 an allowance, and when accepting an allowance a payee asked for; the payee's answers and automatic payments never
