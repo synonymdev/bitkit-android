@@ -295,9 +295,8 @@ class BreezSparkExitRecovering(private val sdk: BreezSdk) : SparkExitRecovering 
 
     override suspend fun exportExitState(): String = sdk.exportUnilateralExitState().exitState
 
-    override suspend fun importExitState(exitState: String) {
+    override suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse =
         sdk.importUnilateralExitState(ImportUnilateralExitStateRequest(exitState))
-    }
 }
 
 sealed class SparkError(message: String, cause: Throwable? = null) : AppError(message, cause) {

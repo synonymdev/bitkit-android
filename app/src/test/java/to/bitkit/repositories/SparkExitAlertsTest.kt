@@ -3,7 +3,9 @@ package to.bitkit.repositories
 import org.junit.Test
 import to.bitkit.repositories.SparkExitRecord.Phase
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SparkExitAlertsTest {
     private val running = SparkExitFixtures.record(Phase.Running)
@@ -96,5 +98,13 @@ class SparkExitAlertsTest {
             listOf(SparkExitAlert.Lost),
             SparkExitAlerts.losses(another, running, reportedLost = setOf("leaf-1")),
         )
+    }
+
+    @Test
+    fun `an exit that starts saying it is not moving is posted at once`() {
+        val stalled = running.copy(stallRebuilds = SparkExitDriver.STALL_REBUILDS_TO_SURFACE)
+        assertTrue(SparkExitAlerts.isNewlyStalled(stalled, running))
+        assertFalse(SparkExitAlerts.isNewlyStalled(stalled, stalled))
+        assertFalse(SparkExitAlerts.isNewlyStalled(running, running))
     }
 }

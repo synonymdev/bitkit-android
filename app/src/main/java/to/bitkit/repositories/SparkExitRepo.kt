@@ -344,6 +344,15 @@ class SparkExitRepo @Inject constructor(
         SparkExitAlerts.losses(record, previous, reportedLost).forEach {
             work.notify(it, amountSats = record.lostSats.takeIf { _ -> it == SparkExitAlert.Lost })
         }
+        // The exit stopped rebuilding and says it is not moving: no later run fixes that, so the user hears now.
+        if (SparkExitAlerts.isNewlyStalled(record, previous)) {
+            val untilMaturity = SparkExitMath.untilNextMaturity(record.recovery, _state.value.tipHeight, Env.network)
+            val deadline = SparkExitMath.deadline(untilMaturity, Env.network)
+            work.notify(
+                SparkExitAlert.Rejected,
+                deadlineAtMillis = clock.nowMs() + deadline.deadlineIn.inWholeMilliseconds
+            )
+        }
         when (record.phase) {
             // Waiting on the operators for a week needs nothing from the user, so nothing reminds them.
             SparkExitRecord.Phase.Running if record.isWaitingForOperators -> {

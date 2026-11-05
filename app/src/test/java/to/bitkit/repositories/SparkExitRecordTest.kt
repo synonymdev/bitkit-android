@@ -274,7 +274,11 @@ class SparkExitRecordTest {
         assertEquals(100_000uL, salvaged.leafTotalSats)
         assertEquals("exit-state", salvaged.exitStateSnapshot)
         assertEquals(salvaged, SparkExitJson.decode(SparkExitJson.encode(salvaged)))
-        assertFalse(salvaged.adopt(SparkExitFixtures.recovery(emptyList()), 1L).isRebuiltFromChain)
+        // The note stays until a step of the rebuild confirms.
+        val rebuilt = salvaged.adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 1L)
+        assertTrue(rebuilt.isRebuiltFromChain)
+        assertEquals(0, rebuilt.rebuiltFromChainConfirmedCount)
+        assertEquals(rebuilt, SparkExitJson.decode(SparkExitJson.encode(rebuilt)))
     }
 
     @Test

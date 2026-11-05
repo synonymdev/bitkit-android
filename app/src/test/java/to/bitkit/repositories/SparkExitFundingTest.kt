@@ -581,4 +581,22 @@ class SparkExitFundingTest {
         assertEquals(listOf("c"), SparkExitSweep.worthSweeping(coins, 5uL).map { it.txid })
         assertEquals(listOf("a", "b", "c"), SparkExitSweep.worthSweeping(coins, 4uL).map { it.txid })
     }
+
+    /** The local regtest rerun's case 4: an exit asking for 2,283 at 2 sat/vB, so 136 sats per extra input. */
+    @Test
+    fun `the pre-start hint and the progress top-up name the same total with every extra input's fee`() {
+        val one = SparkExitMath.prestartFunding(2_283uL, payments = 1, receivedSats = 1_283uL, feeRateSatPerVbyte = 2uL)
+        assertEquals(SparkExitPartialFunding(1_283uL, 2_419uL, 1_136uL), one.partial)
+        val two = SparkExitMath.prestartFunding(2_283uL, payments = 2, receivedSats = 2_283uL, feeRateSatPerVbyte = 2uL)
+        assertEquals(SparkExitPartialFunding(2_283uL, 2_555uL, 294uL), two.partial)
+        assertTrue(SparkExitMath.prestartFunding(2_283uL, 2, 2_419uL, 2uL).isCovered)
+
+        val topUp = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(2_283uL))
+        val first = listOf(SparkExitFixtures.utxo("a", value = 1_283uL))
+        val ask = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(topUp, first))
+        assertEquals(SparkExitPartialFunding(1_283uL, 2_419uL, 1_136uL), ask.partial)
+        val second = first + SparkExitFixtures.utxo("b", value = 1_000uL)
+        val again = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(topUp, second))
+        assertEquals(SparkExitPartialFunding(2_283uL, 2_555uL, 294uL), again.partial)
+    }
 }

@@ -817,6 +817,24 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a rebuild from the chain keeps its note until one of its steps confirms`() = test {
+        val built = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        val record = SparkExitFixtures.record(Phase.Running)
+            .copy(isRebuilding = true, isRebuiltFromChain = true)
+            .adopt(built, 0L)
+        sdk.checks += check(built, RecoveryVerdict.Valid)
+        assertTrue(driver(tip = 1_000u).tick(record).isRebuiltFromChain)
+
+        val landed = SparkExitFixtures.recovery(
+            listOf(SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(1_000u)))
+        )
+        sdk.checks += check(landed, RecoveryVerdict.Valid)
+        val ticked = driver(tip = 1_001u).tick(record)
+        assertFalse(ticked.isRebuiltFromChain)
+        assertNull(ticked.rebuiltFromChainConfirmedCount)
+    }
+
+    @Test
     fun `rebuild with nothing left ends the exit`() = test {
         val record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
             .copy(isRebuilding = true)

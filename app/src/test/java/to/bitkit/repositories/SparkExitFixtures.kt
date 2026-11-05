@@ -9,6 +9,7 @@ import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitChainState
 import breez_sdk_spark.ExitLeafSelection
 import breez_sdk_spark.ExitTransactionStatus
+import breez_sdk_spark.ImportUnilateralExitStateResponse
 import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.RecoverFundsLeaf
@@ -229,8 +230,9 @@ class FakeSparkExitRecovering : SparkExitRecovering {
         return exitState
     }
 
-    override suspend fun importExitState(exitState: String) {
+    override suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse {
         imports += exitState
+        return ImportUnilateralExitStateResponse(0u, 0u, 0u, 17u)
     }
 }
 

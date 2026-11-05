@@ -321,6 +321,10 @@ object SparkExitAlerts {
         )
     }
 
+    /** [record] started saying it is not moving on the tick from [previous]. */
+    fun isNewlyStalled(record: SparkExitRecord, previous: SparkExitRecord): Boolean =
+        record.isActive && record.isStalled && !previous.isStalled
+
     /**
      * Why a running exit fell behind its deadline, or null when it needs nothing from the user. [feeLowRate] is the
      * exit's rate while the network finds it too low, which no background run changes.

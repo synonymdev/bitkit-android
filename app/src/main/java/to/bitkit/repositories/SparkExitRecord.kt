@@ -125,6 +125,8 @@ data class SparkExitRecord(
     val isFailedLeavesReleased: Boolean = false,
     /** The confirmed sweep of a replaced generation, so Done still names it after a retry of leaves replaced it. */
     val landedSweepTxid: String? = null,
+    /** Steps confirmed when the rebuild from the chain was adopted; one more clears [isRebuiltFromChain]. */
+    val rebuiltFromChainConfirmedCount: Int? = null,
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -331,7 +333,12 @@ data class SparkExitRecord(
         failedLeafCount = built.failed.size,
         retrySince = null,
         retriedAt = null,
-        isRebuiltFromChain = false,
+        // A rebuild from the chain keeps saying so until one of its steps confirms.
+        rebuiltFromChainConfirmedCount = if (isRebuiltFromChain) {
+            rebuiltFromChainConfirmedCount ?: SparkExitMath.confirmedCount(built)
+        } else {
+            null
+        },
     )
 
     /**
@@ -785,6 +792,7 @@ object SparkExitJson {
         r.failedLeafRetriedAt?.let { put("failedLeafRetriedAt", it.toLong()) }
         if (r.isFailedLeavesReleased) put("isFailedLeavesReleased", true)
         r.landedSweepTxid?.let { put("landedSweepTxid", it) }
+        r.rebuiltFromChainConfirmedCount?.let { put("rebuiltFromChainConfirmedCount", it) }
         if (r.earlierReceivedSats.isNotEmpty()) {
             put(
                 "earlierReceivedSats",
@@ -891,6 +899,7 @@ object SparkExitJson {
         failedLeafRetriedAt = o.ulongOrNull("failedLeafRetriedAt")?.toUInt(),
         isFailedLeavesReleased = o.booleanOrNull("isFailedLeavesReleased") ?: false,
         landedSweepTxid = o.stringOrNull("landedSweepTxid"),
+        rebuiltFromChainConfirmedCount = o.intOrNull("rebuiltFromChainConfirmedCount"),
         earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),

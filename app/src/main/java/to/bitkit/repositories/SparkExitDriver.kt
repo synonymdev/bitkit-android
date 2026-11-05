@@ -5,6 +5,7 @@ import breez_sdk_spark.CpfpFundingKind
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitLeafSelection
 import breez_sdk_spark.ExitTransactionStatus
+import breez_sdk_spark.ImportUnilateralExitStateResponse
 import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.RecoverFundsRequest
@@ -31,7 +32,7 @@ interface SparkExitRecovering {
     suspend fun exportExitState(): String
 
     /** Merges exit data from [exportExitState] back in; an older one never costs the wallet a leaf. */
-    suspend fun importExitState(exitState: String)
+    suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse
 }
 
 /**
@@ -259,6 +260,14 @@ class SparkExitDriver(
     private suspend fun withExitState(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
         record.exitStateSnapshot?.let { snapshot ->
             runSuspendCatching { sdk.importExitState(snapshot) }
+                .onSuccess {
+                    Logger.info(
+                        "Imported the Spark exit's own exit data: '${it.importedLeaves}' leaves imported, " +
+                            "'${it.skippedChains}' already held, '${it.skippedForeignLeaves}' foreign, " +
+                            "'${it.skippedConflictingLeaves}' conflicting",
+                        context = TAG,
+                    )
+                }
                 .onFailure { Logger.warn("Failed to import the Spark exit data snapshot", it, context = TAG) }
             return record
         }
@@ -366,7 +375,9 @@ class SparkExitDriver(
         val stored = record.recovery ?: return record.copy(phase = SparkExitRecord.Phase.AwaitingFunding(0uL))
         val checked = sdk.check(withConfirmations(stored))
         Logger.debug("Checked Spark exit generation '${record.generation}': '${checked.verdict}'", context = TAG)
-        val updated = record.copy(recovery = checked.recovery).withProgress(checked.recovery)
+        val updated = record.copy(
+            recovery = checked.recovery
+        ).withProgress(checked.recovery).withRebuildLanded(checked.recovery)
         return when (checked.verdict) {
             RecoveryVerdict.Valid -> {
                 val confirmed = checked.recovery.transactions
@@ -502,6 +513,13 @@ class SparkExitDriver(
             isRedoRebuild = false,
         )
         return rebuild(counted, sdk)
+    }
+
+    /** A step of the rebuild from the chain confirmed: the note that the record could not be read has served. */
+    private fun SparkExitRecord.withRebuildLanded(checked: RecoverFundsResponse): SparkExitRecord {
+        val since = rebuiltFromChainConfirmedCount ?: return this
+        if (SparkExitMath.confirmedCount(checked) <= since) return this
+        return copy(isRebuiltFromChain = false, rebuiltFromChainConfirmedCount = null)
     }
 
     /** A step confirmed since the last rebuild over a broken chain: the exit moves, so the count starts over. */
