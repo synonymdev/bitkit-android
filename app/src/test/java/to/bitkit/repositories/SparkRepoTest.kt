@@ -100,7 +100,7 @@ class SparkRepoTest : BaseUnitTest() {
     @Before
     fun setUp() {
         Env.initAppStoragePath(tempFolder.root.absolutePath)
-        whenever { sparkService.getInfo() }.thenReturn(GetInfoResponse("pubkey", 0uL, emptyMap(), 0uL))
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL))
         whenever { sparkService.listUnclaimedDeposits() }.thenReturn(emptyList())
         whenever { sparkService.listPayments() }.thenReturn(emptyList())
         whenever(sparkService.events).thenReturn(sparkEvents)
@@ -159,7 +159,7 @@ class SparkRepoTest : BaseUnitTest() {
             .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
         val sent = sentPayment(fees = 1_470).copy(
             method = PaymentMethod.WITHDRAW,
-            details = PaymentDetails.Withdraw("withdrawal"),
+            details = PaymentDetails.Withdraw("withdrawal", 0u, ADDRESS),
         )
         whenever { sparkService.send(any()) }.thenReturn(sent)
         val sut = createSut()
@@ -189,7 +189,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { activityRepo.updateActivity(any(), any(), any()) }.thenReturn(Result.success(Unit))
         val withdrawal = sentPayment(fees = 1_470).copy(
             method = PaymentMethod.WITHDRAW,
-            details = PaymentDetails.Withdraw("withdrawal"),
+            details = PaymentDetails.Withdraw("withdrawal", 0u, ADDRESS),
         )
         whenever { sparkService.listPayments() }.thenReturn(listOf(withdrawal))
         whenever(sparkService.isConnected).thenReturn(true)
@@ -232,7 +232,7 @@ class SparkRepoTest : BaseUnitTest() {
     private val contactEndpoint = PaykitEndpoint(methodId = "btc-regtest-p2wpkh", value = "bcrt1qcontact")
 
     private suspend fun readySpark(balanceSats: ULong): SparkRepo {
-        whenever { sparkService.getInfo() }.thenReturn(GetInfoResponse("pubkey", balanceSats, emptyMap(), 0uL))
+        whenever { sparkService.getInfo() }.thenReturn(info(balanceSats))
         val speed = SendOnchainSpeedFeeQuote(userFeeSat = 300uL, l1BroadcastFeeSat = 200uL)
         val prepared = mock<PrepareSendPaymentResponse>()
         whenever(prepared.paymentMethod).thenReturn(
@@ -457,6 +457,21 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an expired invoice spark refuses is a typed refusal`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val expired = SdkException.InvalidInput("Invoice has expired")
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenAnswer { throw expired }
+        val sut = createSut()
+
+        assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw expired }
+        assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+    }
+
+    @Test
     fun `a spark send over the fee limit is refused before it leaves`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = prepared(feeSats = 2uL)
@@ -531,7 +546,7 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `can send leaves room for spark's service fee`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
-        whenever { sparkService.getInfo() }.thenReturn(GetInfoResponse("pubkey", 100_000uL, emptyMap(), 0uL))
+        whenever { sparkService.getInfo() }.thenReturn(info(100_000uL))
         val sut = createSut()
         sut.start(0).getOrThrow()
 
@@ -548,6 +563,15 @@ class SparkRepoTest : BaseUnitTest() {
             assertTrue(sendable + 1uL + SparkFees.serviceFeeSats(sendable + 1uL) > balance, "$balance leaves room")
         }
     }
+
+    private fun info(balanceSats: ULong) = GetInfoResponse(
+        identityPubkey = "pubkey",
+        balanceSats = balanceSats,
+        tokenBalances = emptyMap(),
+        recoverableFundsSats = 0uL,
+        lastSyncError = null,
+        lastSyncedAt = null,
+    )
 
     private fun prepared(feeSats: ULong): PrepareSendPaymentResponse {
         val details = mock<Bolt11InvoiceDetails> { on { paymentHash } doReturn "hash" }
