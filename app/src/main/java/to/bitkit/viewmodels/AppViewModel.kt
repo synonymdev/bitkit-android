@@ -1412,6 +1412,20 @@ class AppViewModel @Inject constructor(
         isPaymentRequestPollingStopped.value || privatePaykitRepo.isProfileDeletionInProgress.value
 
     /** Drives a Spark emergency exit every minute while Bitkit is in the foreground. */
+    private val _isSparkExitRequested = MutableStateFlow(false)
+
+    /** An emergency exit notification was tapped; kept until the UI opens the exit, so a cold start keeps it. */
+    val isSparkExitRequested = _isSparkExitRequested.asStateFlow()
+
+    fun onSparkExitNotificationTapped() = _isSparkExitRequested.update { true }
+
+    /** Clears the tapped notification and says whether the exit opens on its progress rather than a new exit. */
+    suspend fun onSparkExitOpened(): Boolean {
+        _isSparkExitRequested.update { false }
+        sparkExitRepo.load()
+        return sparkExitRepo.state.value.showsResult
+    }
+
     fun startSparkExitDriving() = sparkExitRepo.onAppForegrounded()
 
     fun stopSparkExitDriving() = sparkExitRepo.onAppBackgrounded()

@@ -393,6 +393,16 @@ fun ContentView(
         }
     }
 
+    val isSparkExitRequested by appViewModel.isSparkExitRequested.collectAsStateWithLifecycle()
+    LaunchedEffect(isSparkExitRequested) {
+        if (!isSparkExitRequested) return@LaunchedEffect
+        // Waits for the navigation graph, which a cold start from the notification sets up only after this runs.
+        navController.currentBackStackEntryFlow.first()
+        val showsResult = appViewModel.onSparkExitOpened()
+        // Inside the connections graph, so the exit screens find their shared view model and Done goes back to Spark.
+        navController.navigateTo(Routes.SparkDetail)
+        if (showsResult) navController.navigateTo(Routes.SparkExitProgress)
+    }
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
