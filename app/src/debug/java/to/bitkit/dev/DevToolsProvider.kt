@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
 import android.os.Process
-import androidx.core.os.bundleOf
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -273,7 +272,7 @@ private sealed interface DevResult {
 
     @Serializable data class Error(val message: String? = null) : DevResult
 
-    fun toBundle() = bundleOf(KEY_RESULT to DEV_JSON.encodeToString(this))
+    fun toBundle() = Bundle().apply { putString(KEY_RESULT, DEV_JSON.encodeToString(this@DevResult)) }
 }
 
 private fun ProbeOutcome.toDevResult(paymentIds: Set<String>): DevResult = when (this) {
