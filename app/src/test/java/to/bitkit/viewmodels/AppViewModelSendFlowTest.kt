@@ -327,6 +327,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
     private val isRecoveryMode = MutableStateFlow(false)
     private val isPaykitEnabled = MutableStateFlow(false)
+    private val areAllowancesEnabled = MutableStateFlow(true)
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
@@ -905,7 +906,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun stubSettingsStore() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
-        whenever(settingsStore.areAllowancesEnabled).thenReturn(flowOf(true))
+        whenever(settingsStore.areAllowancesEnabled).thenReturn(areAllowancesEnabled)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)
@@ -3273,6 +3274,57 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val (waitingToast, terminalToast) = toastCaptor.allValues
         assertNull(waitingToast.testTag)
         assertEquals("PaymentRequestUnavailableToast", terminalToast.testTag)
+    }
+
+    @Test
+    fun `contact activation cannot reopen allowances after switching off`() = test {
+        val activationStarted = CompletableDeferred<Unit>()
+        val finishActivation = CompletableDeferred<Unit>()
+        whenever(paykitPaymentRequestRepo.activate(testPublicKey)).doSuspendableAnswer {
+            activationStarted.complete(Unit)
+            finishActivation.await()
+        }
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        activationStarted.await()
+
+        areAllowancesEnabled.value = false
+        runCurrent()
+        verify(paykitAllowanceRepo).pause()
+        clearInvocations(paykitAllowanceRepo)
+
+        finishActivation.complete(Unit)
+        runCurrent()
+
+        verify(paykitAllowanceRepo, never()).activate(anyOrNull(), any())
+    }
+
+    @Test
+    fun `allowance admission rechecks deletion after the settings read`() = test {
+        val settingsReadStarted = CompletableDeferred<Unit>()
+        val finishSettingsRead = CompletableDeferred<Unit>()
+        var admitted: Boolean? = null
+        whenever { paykitAllowanceRepo.activate(anyOrNull(), any()) }.doSuspendableAnswer {
+            val admission = it.getArgument<suspend () -> Boolean>(1)
+            whenever(settingsStore.areAllowancesEnabled).thenReturn(
+                flow {
+                    settingsReadStarted.complete(Unit)
+                    finishSettingsRead.await()
+                    emit(true)
+                }
+            )
+            admitted = admission()
+        }
+        pubkyPublicKey.value = testPublicKey
+        isPaykitEnabled.value = true
+        pubkyContactsLoadVersion.value = 1L
+        runCurrent()
+        settingsReadStarted.await()
+        isProfileDeletionInProgress.value = true
+        finishSettingsRead.complete(Unit)
+        runCurrent()
+
+        assertEquals(false, admitted)
     }
 
     @Test
@@ -15097,6 +15149,76 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(lightningRepo, never()).retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
         assertEquals(Sheet.TransferUnavailable, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `ordinary lightning failure is shown while unrelated proof cleanup is unavailable`() = test {
+        val bolt11 = "lnbcrt1ordinaryfailure"
+        val cleanup = CompletableDeferred<Unit>()
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
+            .thenReturn(Result.failure(NodeException.PaymentSendingFailed("no route")))
+        whenever(paykitPaymentProofRepo.failLightningPayment(any())).doSuspendableAnswer {
+            cleanup.await()
+            Result.success(Unit)
+        }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+        try {
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.PayConfirmed)
+                advanceUntilIdle()
+                assertTrue(awaitItem() is SendEffect.NavigateToError)
+                verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
+                verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+            }
+        } finally {
+            cleanup.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `ordinary lightning pending state is shown while unrelated proof reconciliation is unavailable`() = test {
+        val bolt11 = "lnbcrt1ordinarypending"
+        val paymentHash = "pending_hash"
+        val reconciliation = CompletableDeferred<Unit>()
+        var submitted = false
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).doSuspendableAnswer {
+            submitted = true
+            Result.failure(PaymentPendingException(paymentHash))
+        }
+        whenever(paykitPaymentProofRepo.reconcile()).doSuspendableAnswer {
+            if (submitted) reconciliation.await()
+        }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+        try {
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.PayConfirmed)
+                advanceUntilIdle()
+                assertEquals(SendEffect.NavigateToPending(paymentHash, 1000), awaitItem())
+                verify(pendingPaymentRepo).track(paymentHash)
+                verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+            }
+        } finally {
+            reconciliation.complete(Unit)
+        }
     }
 
     @Test

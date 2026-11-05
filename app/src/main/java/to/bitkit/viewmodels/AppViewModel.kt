@@ -991,7 +991,10 @@ class AppViewModel @Inject constructor(
         isPaymentRequestIdentityActivating = true
         val requestRefresh = try {
             paykitPaymentRequestRepo.activate(state.publicKey)
-            if (state.areAllowancesEnabled) paykitAllowanceRepo.activate(state.publicKey)
+            if (!isStillCurrent()) return
+            if (state.areAllowancesEnabled && areAllowancesEnabled()) {
+                paykitAllowanceRepo.activate(state.publicKey) { areAllowancesEnabled() && isStillCurrent() }
+            }
             // Allowances may have turned off while this activated, before the activation took effect.
             if (!state.areAllowancesEnabled || !areAllowancesEnabled()) paykitAllowanceRepo.pause(state.publicKey)
             if (!pubkyRepo.isCurrent(signIn)) return
@@ -6676,7 +6679,7 @@ class AppViewModel @Inject constructor(
                 Logger.info("Lightning payment pending", context = TAG)
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
-                refreshIncomingPaykitPaymentRequests()
+                if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
@@ -6709,11 +6712,8 @@ class AppViewModel @Inject constructor(
         isPaymentRequest: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
+        else if !isPaymentRequest -> true
         is LightningPaymentFailedError -> {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
-            true
-        }
-        else if !isPaymentRequest -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }
