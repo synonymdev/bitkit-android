@@ -18,6 +18,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import to.bitkit.repositories.SparkExitRecord.Phase
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.SignedTransactionId
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -31,6 +32,7 @@ class SparkExitDriverTest : BaseUnitTest() {
     private companion object {
         const val SWEEP_DESTINATION = "bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6"
         const val SWEEP_FUNDING = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val UNPAID = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 0 < 17")
     }
 
     @get:Rule
@@ -167,7 +169,7 @@ class SparkExitDriverTest : BaseUnitTest() {
     fun `retries a rejected step and surfaces it after repeated rejections`() = test {
         val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1", cpfp = "03c")))
         var record = running(recovery)
-        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met")
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("insufficient fee, rejecting replacement")
         repeat(3) { sdk.checks += check(recovery, RecoveryVerdict.Valid) }
 
         record = driver().tick(record)
@@ -175,7 +177,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         repeat(2) { record = driver().tick(record) }
 
         assertEquals(3, chain.broadcasts.size)
-        assertEquals("rejected: min relay fee not met", record.surfacedRejection)
+        assertEquals("rejected: insufficient fee, rejecting replacement", record.surfacedRejection)
     }
 
     @Test
@@ -828,6 +830,154 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertEquals(listOf("leaf-2"), (sdk.prepareRequests.last().selection as ExitLeafSelection.Specific).leafIds)
         assertEquals(2, record.generation)
+    }
+
+    /**
+     * The qa-03 shared-ancestor race: our first node's package lost to another wallet's, so the node confirmed with
+     * their child and ours ([first] spends [FUNDING_TXID]) is gone; the next node's child spends its change.
+     */
+    private object Race {
+        val NODE_1 = "a1".repeat(32)
+        val NODE_2 = "a2".repeat(32)
+        val FUNDING_TXID = "f0".repeat(32)
+        val first = SparkExitFixtures.childTxHex(NODE_1, FUNDING_TXID)
+        val firstTxid = SignedTransactionId.fromHex(first)
+        val second = SparkExitFixtures.childTxHex(NODE_2, firstTxid)
+        val rebuiltSecond = SparkExitFixtures.childTxHex(NODE_2, FUNDING_TXID)
+
+        fun recovery(node1: ExitTransactionStatus = ExitTransactionStatus.Ready) = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx(NODE_1, cpfp = first, status = node1),
+                SparkExitFixtures.tx(
+                    NODE_2,
+                    cpfp = second,
+                    dependsOn = listOf(NODE_1),
+                    status = if (node1 is ExitTransactionStatus.Confirmed) {
+                        ExitTransactionStatus.Ready
+                    } else {
+                        ExitTransactionStatus.WaitingForDependencies
+                    },
+                ),
+            ),
+        )
+
+        val rebuilt = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx(NODE_1, status = ExitTransactionStatus.Confirmed(11_600u)),
+                SparkExitFixtures.tx(NODE_2, cpfp = rebuiltSecond, dependsOn = listOf(NODE_1)),
+            ),
+        )
+    }
+
+    @Test
+    fun `a fee chain that lost a race to another wallet's package rebuilds without sending its dead txids`() = test {
+        var record = running(Race.recovery()).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", Race.FUNDING_TXID, 0u, 20_000uL)
+            ),
+        )
+        sdk.checks += check(Race.recovery(), RecoveryVerdict.Valid)
+        sdk.checks += check(Race.recovery(ExitTransactionStatus.Confirmed(11_600u)), RecoveryVerdict.Valid)
+        sdk.builds += Race.rebuilt
+
+        // Both wallets sent a package for the shared node; ours was refused as a replacement.
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("insufficient fee, rejecting replacement")
+        record = driver().tick(record)
+        // Theirs confirmed the node; our child is in neither a block nor the mempool.
+        chain.confirmedTxids = setOf(Race.NODE_1)
+        chain.unknownTxids = setOf(Race.firstTxid)
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        now += SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds
+        record = driver().tick(record)
+
+        assertEquals(2, record.generation)
+        assertEquals(listOf(Race.NODE_1, Race.NODE_2), chain.broadcasts.map { it.txid })
+        assertEquals(listOf(Race.first, Race.rebuiltSecond), chain.broadcasts.map { it.cpfpTxHex })
+        assertTrue(saved.any { it.isRebuilding && it.generation == 1 })
+        assertEquals(record.fundingInputs, sdk.recoverRequests.single().fundingInputs)
+        assertEquals(listOf("leaf-1"), (sdk.prepareRequests.single().selection as ExitLeafSelection.Specific).leafIds)
+        assertTrue(record.lostLeaves.isEmpty())
+        assertTrue(record.spentStepStrikes.isEmpty())
+        assertNull(record.surfacedRejection)
+    }
+
+    @Test
+    fun `a dead fee chain waits for the rebuild interval and sends nothing meanwhile`() = test {
+        val recovery = Race.recovery(ExitTransactionStatus.Confirmed(11_600u))
+        var record = running(recovery)
+        chain.unknownTxids = setOf(Race.firstTxid)
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+
+        record = driver().tick(record)
+        record = driver().tick(record)
+
+        assertTrue(record.isRebuilding)
+        assertEquals(1, record.generation)
+        assertTrue(chain.broadcasts.isEmpty())
+        assertTrue(sdk.prepareRequests.isEmpty())
+    }
+
+    @Test
+    fun `a child still in the mempool of a confirmed node is not dead`() = test {
+        val recovery = Race.recovery(ExitTransactionStatus.Confirmed(11_600u))
+        var record = running(recovery)
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+
+        record = driver().tick(record)
+
+        assertEquals(listOf(Race.firstTxid), chain.knownLookups)
+        assertEquals(1, record.generation)
+        assertEquals(listOf(Race.NODE_2), chain.broadcasts.map { it.txid })
+    }
+
+    private val unpaidRecovery = SparkExitFixtures.recovery(
+        listOf(
+            SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(11_600u)),
+            SparkExitFixtures.tx("n2", cpfp = "03c2", dependsOn = listOf("n1")),
+        ),
+    )
+
+    @Test
+    fun `a step unpaid three times in a row rebuilds once, then surfaces`() = test {
+        var record = running(unpaidRecovery, builtAt = now - SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds)
+        chain.outcome = UNPAID
+        repeat(5) { sdk.checks += check(unpaidRecovery, RecoveryVerdict.Valid) }
+        sdk.builds += unpaidRecovery
+
+        repeat(2) { record = driver().tick(record) }
+        assertEquals(2, record.broadcastLog.single().feeChainFailures)
+        assertEquals(0, record.broadcastLog.single().rejections)
+        assertTrue(sdk.prepareRequests.isEmpty())
+        record = driver().tick(record)
+        assertEquals(1, sdk.prepareRequests.size)
+        assertEquals(2, record.generation)
+        assertEquals(listOf("n2"), record.feeChainRebuildTxids)
+        // The rebuild reproduced the same step, which stays unpaid: it never rebuilds again, and now counts.
+        record = driver().tick(record)
+        assertNull(record.surfacedRejection)
+        record = driver().tick(record)
+
+        assertEquals(1, sdk.prepareRequests.size)
+        assertEquals(2, record.generation)
+        assertEquals(3, record.broadcastLog.single().rejections)
+        assertEquals("rejected: min relay fee not met, 0 < 17", record.surfacedRejection)
+        assertTrue(record.lostLeaves.isEmpty())
+    }
+
+    @Test
+    fun `any other outcome resets the unpaid streak`() = test {
+        var record = running(unpaidRecovery)
+        repeat(4) { sdk.checks += check(unpaidRecovery, RecoveryVerdict.Valid) }
+
+        chain.outcome = UNPAID
+        repeat(2) { record = driver().tick(record) }
+        chain.outcome = SparkExitBroadcastOutcome.RetryLater("HTTP 503")
+        record = driver().tick(record)
+        chain.outcome = UNPAID
+        record = driver().tick(record)
+
+        assertEquals(1, record.broadcastLog.single().feeChainFailures)
+        assertTrue(sdk.prepareRequests.isEmpty())
     }
 
     @Test

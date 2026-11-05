@@ -28,8 +28,9 @@ interface SparkExitRecovering {
 
 /**
  * Moves an exit one step forward each tick: builds it once its fee funding confirms, broadcasts what is ready,
- * rebuilds when the chain diverged, and finishes when everything confirmed. Without the SDK (a background start, or
- * operators down at connect) it still broadcasts the stored, already signed transactions whose parents confirmed.
+ * rebuilds when the chain diverged or its fee chain lost a race, and finishes when everything confirmed. Without the
+ * SDK (a background start, or operators down at connect) it still broadcasts the stored, already signed transactions
+ * whose parents confirmed.
  * Every built recovery is saved before anything of it is broadcast, and each broadcast as it happens, so a run killed
  * partway, as background runs can be, never sends the same transactions again before they are due.
  */
@@ -49,6 +50,9 @@ class SparkExitDriver(
 
         /** After this many rejections of one transaction the progress screen shows the error. */
         const val REJECTIONS_TO_SURFACE = 3
+
+        /** After this many unpaid sends in a row of a step whose parents confirmed, the exit rebuilds once for it. */
+        const val FEE_CHAIN_FAILURES_TO_REBUILD = 3
 
         /** The least time between two builds, so a divergence that persists does not rebuild every tick. */
         val REBUILD_INTERVAL = 10.minutes
@@ -221,20 +225,77 @@ class SparkExitDriver(
         Logger.debug("Checked Spark exit generation '${record.generation}': '${checked.verdict}'", context = TAG)
         val updated = record.copy(recovery = checked.recovery)
         return when (checked.verdict) {
-            RecoveryVerdict.Valid -> broadcastReady(updated)
+            RecoveryVerdict.Valid -> {
+                val confirmed = checked.recovery.transactions
+                    .filter { it.status is ExitTransactionStatus.Confirmed }
+                    .map { it.txid }
+                    .toSet()
+                val dead = deadChildren(stored) { it in confirmed }
+                if (dead.isNotEmpty()) {
+                    // The SDK still calls it valid, but the steps that spend a dead child's change can never confirm.
+                    Logger.warn("Rebuilding Spark exit whose CPFP children '$dead' lost a race", context = TAG)
+                    return rebuild(updated, sdk)
+                }
+                val sent = broadcastReady(updated)
+                val stuck = stuckStep(sent) ?: return sent
+                Logger.warn("Rebuilding Spark exit once for step '$stuck' whose fee went unpaid", context = TAG)
+                rebuild(sent.copy(feeChainRebuildTxids = sent.feeChainRebuildTxids + stuck), sdk)
+            }
             RecoveryVerdict.Done -> end(updated.copy(phase = SparkExitRecord.Phase.Done), updated)
             is RecoveryVerdict.Redo -> {
                 Logger.warn(
                     "Rebuilding Spark exit diverged on-chain as generation '${record.generation + 1}'",
                     context = TAG,
                 )
-                val rebuilding = updated.copy(isRebuilding = true)
-                save(rebuilding)
-                if (!isRebuildDue(rebuilding)) return rebuilding
-                build(rebuilding, sdk)
+                rebuild(updated, sdk)
             }
         }
     }
+
+    /**
+     * Saves the exit as rebuilding, so nothing of this generation goes out again, and rebuilds it once the last build
+     * is old enough, so a rebuild that reproduces the same problem cannot loop every tick.
+     */
+    private suspend fun rebuild(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+        val rebuilding = record.copy(isRebuilding = true)
+        save(rebuilding)
+        if (!isRebuildDue(rebuilding)) return rebuilding
+        return build(rebuilding, sdk)
+    }
+
+    /** A step of this generation whose fee went unpaid too many times in a row, and that has not rebuilt yet. */
+    private fun stuckStep(record: SparkExitRecord): String? = record.broadcastLog.firstOrNull {
+        it.generation == record.generation &&
+            it.feeChainFailures >= FEE_CHAIN_FAILURES_TO_REBUILD &&
+            it.txid !in record.feeChainRebuildTxids
+    }?.txid
+
+    /**
+     * Our CPFP children that can never confirm, and every child that spends their change. A wallet whose leaves share
+     * a node with ours broadcast its own package for it and won: the node is in a block, and our child for it is in
+     * neither a block nor the mempool. Only children whose change a pending step's child spends are looked up; a dead
+     * child nothing builds on harms nothing, and its funding ends up in the leftover sweep.
+     */
+    private suspend fun deadChildren(
+        recovery: RecoverFundsResponse,
+        isConfirmed: (String) -> Boolean,
+    ): Set<String> {
+        val children = SparkExitFeeChain.children(recovery)
+        val spends = SparkExitFeeChain.spends(recovery)
+        val stepOf = children.entries.associate { (step, child) -> child to step }
+        val suspects = children
+            .filterKeys { !isConfirmed(it) }
+            .values
+            .flatMap { spends[it].orEmpty() }
+            .filter { spent -> stepOf[spent]?.let(isConfirmed) == true }
+            .distinct()
+        val lost = suspects.filter { isUnknownToChain(it) }.toSet()
+        return SparkExitFeeChain.withDescendants(spends, lost)
+    }
+
+    /** Every host answered it does not know [txid]; a host that failed otherwise leaves it alive for this tick. */
+    private suspend fun isUnknownToChain(txid: String): Boolean =
+        runSuspendCatching { !chain.isTxKnown(txid) }.getOrDefault(false)
 
     /**
      * Marks the next steps the chain host shows in a block as confirmed. The SDK asks the chain about a step only once
@@ -352,7 +413,8 @@ class SparkExitDriver(
     /**
      * Without the SDK: each unconfirmed transaction whose parents are confirmed on the chain host and whose relative
      * timelock has matured, by the SDK's own rule. A stale one is refused by nodes as a conflict, and only the current
-     * generation is stored. A step whose input someone else spent is not sent again; the next SDK check rebuilds.
+     * generation is stored. A step whose input someone else spent is not sent again; the next SDK check rebuilds. A fee
+     * chain that lost a race is left to that check too, since only the SDK can rebuild it.
      */
     private suspend fun broadcastWithoutSdk(record: SparkExitRecord): SparkExitRecord {
         val recovery = record.recovery ?: return record
@@ -424,9 +486,14 @@ class SparkExitDriver(
     ): SparkExitRecord {
         val outcome = chain.broadcast(tx)
         val isInputSpent = parentsConfirmed && outcome is SparkExitBroadcastOutcome.InputsMissing
+        val isUnpaid = SparkExitBroadcastClassifier.isUnpaid(outcome)
+        val isStuck = parentsConfirmed && (isUnpaid || outcome is SparkExitBroadcastOutcome.InputsMissing)
         Logger.info("Broadcast Spark exit '${tx.kind}' '${tx.txid}': '${outcome.summary}'", context = TAG)
         val isAccepted = outcome == SparkExitBroadcastOutcome.Accepted
-        val rejection = if (outcome is SparkExitBroadcastOutcome.Rejected) 1 else 0
+        // Unpaid counts as a rejection only once the step had its rebuild, so an underpriced exit still surfaces.
+        val isRejected = outcome is SparkExitBroadcastOutcome.Rejected &&
+            (!isUnpaid || tx.txid in record.feeChainRebuildTxids)
+        val rejection = if (isRejected) 1 else 0
         val existing = record.broadcastLog.firstOrNull { it.generation == record.generation && it.txid == tx.txid }
         val entry = existing?.copy(
             attempts = existing.attempts + 1,
@@ -435,6 +502,7 @@ class SparkExitDriver(
             lastOutcome = outcome.summary,
             isAccepted = isAccepted,
             isInputSpent = existing.isInputSpent || isInputSpent,
+            feeChainFailures = if (isStuck) existing.feeChainFailures + 1 else 0,
         ) ?: SparkExitRecord.BroadcastAttempt(
             generation = record.generation,
             txid = tx.txid,
@@ -444,6 +512,7 @@ class SparkExitDriver(
             lastOutcome = outcome.summary,
             isAccepted = isAccepted,
             isInputSpent = isInputSpent,
+            feeChainFailures = if (isStuck) 1 else 0,
         )
         val log = if (existing == null) {
             record.broadcastLog + entry
@@ -466,6 +535,35 @@ object SparkExitTxids {
         recovery.transactions.mapNotNull { tx ->
             tx.cpfpTxHex?.let { runCatching { SignedTransactionId.fromHex(it) }.getOrNull() }
         }
+}
+
+/** How the exit's CPFP children chain: each spends its node's anchor and the change of the child before it. */
+object SparkExitFeeChain {
+    /** Each step's CPFP child txid, by the step's txid. */
+    fun children(recovery: RecoverFundsResponse): Map<String, String> =
+        recovery.transactions.mapNotNull { tx ->
+            val child = tx.cpfpTxHex?.let { runCatching { SignedTransactionId.fromHex(it) }.getOrNull() }
+            child?.let { tx.txid to it }
+        }.toMap()
+
+    /** The txids each CPFP child spends outputs of, by the child's txid. */
+    fun spends(recovery: RecoverFundsResponse): Map<String, Set<String>> =
+        recovery.transactions.mapNotNull { tx ->
+            val hex = tx.cpfpTxHex ?: return@mapNotNull null
+            val child = runCatching { SignedTransactionId.fromHex(hex) }.getOrNull() ?: return@mapNotNull null
+            val inputs = SparkExitTxInputs.decode(hex) ?: return@mapNotNull null
+            child to inputs.map { it.prevTxid }.toSet()
+        }.toMap()
+
+    /** [dead] and every child that spends one of their outputs, directly or through other children. */
+    fun withDescendants(spends: Map<String, Set<String>>, dead: Set<String>): Set<String> {
+        val all = dead.toMutableSet()
+        while (true) {
+            val added = spends.filter { (child, inputs) -> child !in all && inputs.any { it in all } }.keys
+            if (added.isEmpty()) return all
+            all += added
+        }
+    }
 }
 
 /** A leaf the SDK refused to exit, read from its untyped `SparkError`: `Leaf {id} cannot be exited: {reason}`. */

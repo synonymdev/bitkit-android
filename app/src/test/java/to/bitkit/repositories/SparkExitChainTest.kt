@@ -16,7 +16,10 @@ import io.ktor.utils.io.errors.IOException
 import org.junit.Test
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class SparkExitChainTest : BaseUnitTest() {
     private val hostA = "https://a.example/api"
@@ -194,5 +197,30 @@ class SparkExitChainTest : BaseUnitTest() {
         assertIs<SparkExitBroadcastOutcome.InputsMissing>(classifier.pkg(200, childFirst, parentTxid = "parent"))
         val lowFee = failedPackage + """{"w1":{"txid":"a","error":"min relay fee not met"}}}"""
         assertIs<SparkExitBroadcastOutcome.Rejected>(classifier.pkg(200, lowFee))
+    }
+
+    @Test
+    fun `only a step that paid no fee at all is unpaid`() {
+        val classifier = SparkExitBroadcastClassifier
+        // The qa-03 shared-ancestor race: the node pays nothing, and its child's chained change is gone.
+        val lostChain = """{"package_msg":"transaction failed","tx-results":""" +
+            """{"w1":{"txid":"parent","error":"min relay fee not met, 0 < 17"},""" +
+            """"w2":{"txid":"child","error":"bad-txns-inputs-missingorspent"}}}"""
+        assertTrue(classifier.isUnpaid(classifier.pkg(200, lostChain, parentTxid = "parent")))
+        assertFalse(classifier.isUnpaid(SparkExitBroadcastOutcome.Rejected("min relay fee not met, 100 < 110")))
+        assertFalse(classifier.isUnpaid(SparkExitBroadcastOutcome.RetryLater("min relay fee not met, 0 < 17")))
+    }
+
+    @Test
+    fun `a transaction is unknown only when every host says so`() = test {
+        val unknown = Route("a.example/api/tx/t/hex", 404, "Transaction not found")
+        assertFalse(chain(unknown).isTxKnown("t"))
+
+        val known = Route("b.example/api/tx/t/hex", 200, "02aa")
+        assertTrue(chain(unknown, known, hosts = listOf(hostA, hostB)).isTxKnown("t"))
+
+        val down = Route("b.example/api/tx/t/hex", 503, "")
+        assertFailsWith<SparkExitChainError> { chain(unknown, down, hosts = listOf(hostA, hostB)).isTxKnown("t") }
+        assertFailsWith<Exception> { chain(hosts = listOf(hostA)).isTxKnown("t") }
     }
 }

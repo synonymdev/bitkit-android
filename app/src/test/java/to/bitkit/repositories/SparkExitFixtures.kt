@@ -109,6 +109,14 @@ object SparkExitFixtures {
             "01" + "e803000000000000" + "00" + le32(0)
     }
 
+    /** A version 3 CPFP child spending output 0 of each of [spends]: its node's anchor and the change it chains on. */
+    fun childTxHex(vararg spends: String): String {
+        val inputs = spends.joinToString("") { parent ->
+            parent.chunked(2).reversed().joinToString("") + "00000000" + "00" + "ffffffff"
+        }
+        return "03000000" + "%02x".format(spends.size) + inputs + "01" + "e803000000000000" + "00" + "00000000"
+    }
+
     fun utxo(txid: String, vout: UInt = 0u, value: ULong, confirmed: Boolean = true) =
         EsploraUtxo(txid, vout, value, EsploraTxStatus(confirmed, if (confirmed) 100u else null))
 }
@@ -118,6 +126,10 @@ class FakeSparkExitChain : SparkExitChain {
     val utxosByAddress = mutableMapOf<String, List<EsploraUtxo>>()
     var utxosError: Throwable? = null
     var confirmedTxids = setOf<String>()
+
+    /** Txids no host knows: in neither a block nor the mempool. */
+    var unknownTxids = setOf<String>()
+    val knownLookups = mutableListOf<String>()
 
     /** Block heights of confirmed transactions; 900 for any other. */
     val heights = mutableMapOf<String, UInt>()
@@ -134,6 +146,11 @@ class FakeSparkExitChain : SparkExitChain {
 
     override suspend fun txStatus(txid: String) =
         EsploraTxStatus(txid in confirmedTxids, if (txid in confirmedTxids) heights[txid] ?: 900u else null)
+
+    override suspend fun isTxKnown(txid: String): Boolean {
+        knownLookups += txid
+        return txid !in unknownTxids
+    }
 
     override suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome {
         onBroadcast()

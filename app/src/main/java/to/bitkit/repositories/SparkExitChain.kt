@@ -65,6 +65,12 @@ interface SparkExitChain {
     suspend fun tipHeight(): UInt
     suspend fun utxos(address: String): List<EsploraUtxo>
     suspend fun txStatus(txid: String): EsploraTxStatus
+
+    /**
+     * Whether a host has [txid] in a block or its mempool, from `/tx/{txid}/hex`: false only when every host answers
+     * 404. Throws when a host fails otherwise, since that host may know it.
+     */
+    suspend fun isTxKnown(txid: String): Boolean
     suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome
 
     /** A transaction of the app's own, such as the sweep of leftover fee funding, as a single `/tx`. */
@@ -92,6 +98,8 @@ class EsploraSparkExitChain(
         }
 
         private val NOT_HERE = setOf(404, 405)
+
+        private const val NOT_FOUND = 404
     }
 
     override suspend fun tipHeight(): UInt = get("/blocks/tip/height").trim().toUInt()
@@ -109,6 +117,22 @@ class EsploraSparkExitChain(
 
     override suspend fun txStatus(txid: String): EsploraTxStatus =
         status(json.parseToJsonElement(get("/tx/$txid/status")).jsonObject)
+
+    override suspend fun isTxKnown(txid: String): Boolean {
+        if (hosts.isEmpty()) throw SparkExitChainError("No chain host configured")
+        val path = "/tx/$txid/hex"
+        var lastError: Throwable? = null
+        for (host in hosts) {
+            val status = runSuspendCatching { client.get("$host$path").status }
+                .onFailure { lastError = it }
+                .getOrNull()
+                ?: continue
+            if (status.isSuccess()) return true
+            if (status.value != NOT_FOUND) lastError = SparkExitChainError("HTTP '${status.value}' for '$path'")
+        }
+        lastError?.let { throw it }
+        return false
+    }
 
     /** Tries each host until one accepts. Otherwise a node's refusal wins over a host that was only unavailable. */
     override suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome {
@@ -261,6 +285,15 @@ object SparkExitBroadcastClassifier {
         } else {
             null
         }
+
+    private val unpaid = Regex("""min relay fee not met,\s*0\s*<""")
+
+    /**
+     * A step refused for paying no fee at all, with no child paying for it: the child's chained change is gone, as
+     * when an earlier child of the exit lost a race. Read by the driver; a nonzero fee stays a plain rejection.
+     */
+    fun isUnpaid(outcome: SparkExitBroadcastOutcome): Boolean =
+        outcome is SparkExitBroadcastOutcome.Rejected && unpaid.containsMatchIn(outcome.reason)
 
     fun classify(text: String): SparkExitBroadcastOutcome = when {
         knownMessages.any { it in text } || hasRpcCode(-27, text) -> SparkExitBroadcastOutcome.Accepted

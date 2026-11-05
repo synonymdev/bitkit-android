@@ -86,7 +86,8 @@ class SparkExitRecordTest {
                         1L,
                         "inputs missing",
                         false,
-                        isInputSpent = true
+                        isInputSpent = true,
+                        feeChainFailures = 2,
                     ),
                 ),
                 claimableAtHeight = 2_100u,
@@ -99,6 +100,7 @@ class SparkExitRecordTest {
                 spentStepStrikes = mapOf("refund" to 1),
                 lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)),
                 leftBehindLeaves = listOf(SparkExitRecord.LeftBehindLeaf("leaf-2", 8_192uL, "its refund cannot pay")),
+                feeChainRebuildTxids = listOf("refund"),
             )
 
             assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
@@ -193,6 +195,7 @@ class SparkExitRecordTest {
         assertFalse("fundingPaymentTxid" in json)
         assertFalse("spentStepStrikes" in json)
         assertFalse("lostLeaves" in json)
+        assertFalse("feeChainRebuildTxids" in json)
         assertEquals(
             JsonPrimitive(20_000),
             json.getValue("phase").jsonObject.getValue("awaitingFunding").jsonObject["requiredSats"]

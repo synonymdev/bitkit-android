@@ -79,6 +79,8 @@ data class SparkExitRecord(
     val isResultSeen: Boolean = false,
     /** Leaves a rebuild could not exit, such as a fee-ladder leaf whose refund cannot pay its fee; left on Spark. */
     val leftBehindLeaves: List<LeftBehindLeaf> = emptyList(),
+    /** Steps that already started a rebuild after their fee went unpaid several times in a row; each starts one. */
+    val feeChainRebuildTxids: List<String> = emptyList(),
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -135,6 +137,8 @@ data class SparkExitRecord(
         val isAccepted: Boolean,
         /** Its parents confirmed but an input was already spent: the keyless pass stops sending it. */
         val isInputSpent: Boolean = false,
+        /** Sends in a row, parents confirmed, that came back unpaid or with missing inputs; other outcomes reset it. */
+        val feeChainFailures: Int = 0,
     )
 
     data class Leftover(
@@ -358,6 +362,7 @@ object SparkExitJson {
                             put("lastOutcome", it.lastOutcome)
                             put("isAccepted", it.isAccepted)
                             if (it.isInputSpent) put("isInputSpent", true)
+                            if (it.feeChainFailures > 0) put("feeChainFailures", it.feeChainFailures)
                         },
                     )
                 }
@@ -408,6 +413,9 @@ object SparkExitJson {
                 "spentStepStrikes",
                 buildJsonObject { r.spentStepStrikes.forEach { (txid, strikes) -> put(txid, strikes) } },
             )
+        }
+        if (r.feeChainRebuildTxids.isNotEmpty()) {
+            put("feeChainRebuildTxids", buildJsonArray { r.feeChainRebuildTxids.forEach { add(JsonPrimitive(it)) } })
         }
         if (r.leftBehindLeaves.isNotEmpty()) {
             put(
@@ -474,6 +482,7 @@ object SparkExitJson {
                 lastOutcome = b.string("lastOutcome"),
                 isAccepted = b.booleanOrNull("isAccepted") ?: false,
                 isInputSpent = b.booleanOrNull("isInputSpent") ?: false,
+                feeChainFailures = b.intOrNull("feeChainFailures") ?: 0,
             )
         },
         transferId = o.stringOrNull("transferId"),
@@ -512,6 +521,7 @@ object SparkExitJson {
             val l = it.jsonObject
             SparkExitRecord.LeftBehindLeaf(l.string("leafId"), l.ulong("valueSats"), l.string("reason"))
         },
+        feeChainRebuildTxids = o.arrayOrEmpty("feeChainRebuildTxids").map { it.jsonPrimitive.content },
     )
 
     private fun phaseToJson(phase: SparkExitRecord.Phase): JsonObject = when (phase) {
