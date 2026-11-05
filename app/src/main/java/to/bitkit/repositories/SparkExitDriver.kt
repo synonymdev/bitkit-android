@@ -111,6 +111,12 @@ class SparkExitDriver(
         /** Blocks an unconfirmed leftover sweep waits before it is replaced at a higher rate, about a day. */
         const val SWEEP_REPLACE_BLOCKS = 144u
 
+        /** Blocks between two reads of the rate while the leftover waits for cheaper fees, about a day. */
+        const val SWEEP_RECHECK_BLOCKS = 144u
+
+        /** Blocks the leftover waits for cheaper fees before it is kept as dust, about four weeks. */
+        const val SWEEP_RELEASE_BLOCKS = 4_032u
+
         /** The least time between two builds, so a divergence that persists does not rebuild every tick. */
         val REBUILD_INTERVAL = 10.minutes
 
@@ -585,13 +591,51 @@ class SparkExitDriver(
             // Sent again until it confirms; a node that already has it accepts it again.
             return sendSweep(record, built, built.txHex)
         }
+        if (built?.isWaitingForFees == true) {
+            val height = tip ?: return record
+            val since = requireNotNull(built.waitingSince)
+            if (height >= since + SWEEP_RELEASE_BLOCKS) {
+                Logger.info("Keeping the Spark exit leftover as dust after waiting for cheaper fees", context = TAG)
+                return record.copy(leftoverSweep = built.copy(isDustKept = true))
+            }
+            if (height < (built.checkedAtHeight ?: since) + SWEEP_RECHECK_BLOCKS) return record
+        }
         val address = record.funding.firstOrNull()?.address ?: return record
         val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull() ?: return record
         if (utxos.isEmpty()) return record.copy(leftover = emptyList())
         if (utxos.any { !it.status.confirmed }) return record
-        val inputs = utxos.map { SparkExitSweep.Input(it.txid, it.vout, it.value) }
         val current = record.copy(leftover = utxos.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) })
-        return buildSweep(current, inputs, record.feeRateSatPerVbyte)
+        val rate = SparkExitMath.sweepFeeRate(economyRate(), record.feeRateSatPerVbyte)
+        val inputs = SparkExitSweep.worthSweeping(
+            utxos.map { SparkExitSweep.Input(it.txid, it.vout, it.value) },
+            rate,
+        )
+        return buildSweep(current, inputs, rate)
+    }
+
+    /** The network's cheapest rate, null when it cannot be read. */
+    private suspend fun economyRate(): ULong? = runSuspendCatching { chain.economyFeeRate() }
+        .onFailure { Logger.warn("Failed to read the economy fee rate for the leftover sweep", it, context = TAG) }
+        .getOrNull()
+
+    /**
+     * The leftover waits for fees to drop, from [tip] or from when it started waiting; while the tip is unknown it
+     * stays as it is and the next tick tries again.
+     */
+    private fun waitForFees(record: SparkExitRecord): SparkExitRecord {
+        val totalSats = record.leftover.fold(0uL) { sum, leftover -> sum.safe() + leftover.valueSats.safe() }
+        val height = tip ?: return record
+        Logger.info("Waiting for cheaper fees to sweep the Spark exit leftover", context = TAG)
+        val since = record.leftoverSweep?.takeIf { it.isWaitingForFees }?.waitingSince ?: height
+        return record.copy(
+            leftoverSweep = SparkExitRecord.LeftoverSweep(
+                null,
+                null,
+                totalSats,
+                waitingSince = since,
+                checkedAtHeight = height,
+            ),
+        )
     }
 
     /**
@@ -608,14 +652,12 @@ class SparkExitDriver(
         val values = record.leftover.associate { "${it.txid}:${it.vout}" to it.valueSats }
         val inputs = SparkExitTxInputs.decode(hex)?.map {
             SparkExitSweep.Input(it.prevTxid, it.vout, values["${it.prevTxid}:${it.vout}"] ?: return null)
-        } ?: return null
+        }?.let { SparkExitSweep.worthSweeping(it, rate) } ?: return null
         Logger.info("Replacing Spark exit leftover sweep '${old.txid}' at '$rate' sat/vB", context = TAG)
         // A sweep a node accepted may still confirm, so its txid is kept to look for.
         val replaced = old.replacedTxids + listOfNotNull(old.txid.takeIf { old.isAccepted })
         return buildSweep(record, inputs, rate, replaced)
     }
-
-    private fun dustSweep(totalSats: ULong) = SparkExitRecord.LeftoverSweep(null, null, totalSats)
 
     private suspend fun isConfirmed(txid: String): Boolean =
         runSuspendCatching { chain.txStatus(txid) }.getOrNull()?.confirmed == true
@@ -631,13 +673,13 @@ class SparkExitDriver(
         replaced: List<String>? = null,
     ): SparkExitRecord {
         val address = record.funding.firstOrNull()?.address ?: return record
-        val total = inputs.fold(0uL) { sum, input -> sum.safe() + input.valueSats.safe() }
         val plan = runSuspendCatching { SparkExitSweep.plan(inputs, record.destination, feeRate) }
             .getOrElse {
                 Logger.error("Failed to plan the Spark exit leftover sweep", it, context = TAG)
                 return record
             }
-            ?: return if (!replaced.isNullOrEmpty()) record else record.copy(leftoverSweep = dustSweep(total))
+            // A replacement of an accepted sweep keeps that one; otherwise the leftover waits for cheaper fees.
+            ?: return if (!replaced.isNullOrEmpty()) record else waitForFees(record)
         val sweep = runSuspendCatching {
             val signed = makeSigner().signPsbt(SparkExitSweep.psbt(plan, address))
             val hex = SparkExitSweep.signedTxHex(plan, signed)

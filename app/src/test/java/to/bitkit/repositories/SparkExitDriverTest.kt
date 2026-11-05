@@ -546,7 +546,7 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a leftover under dust is not swept`() = test {
+    fun `a leftover worth less than its fees waits for cheaper fees, then is kept as dust after four weeks`() = test {
         chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 400uL))
         val done = SparkExitFixtures.record(Phase.Done).copy(
             destination = SWEEP_DESTINATION,
@@ -554,12 +554,76 @@ class SparkExitDriverTest : BaseUnitTest() {
             leftover = listOf(SparkExitRecord.Leftover("f0", 1u, 400uL)),
         )
 
-        val record = driver().tick(done)
+        // At 1 sat/vB the sweep's fee leaves less than dust: it waits, and the exit is still driven.
+        var record = driver(tip = 1_000u).tick(done)
+        assertTrue(record.isLeftoverWaitingForFees)
+        assertTrue(record.needsDriving)
+        assertEquals(1_000u, assertNotNull(record.leftoverSweep).waitingSince)
 
-        assertEquals(SparkExitRecord.LeftoverSweep(null, null, 400uL), record.leftoverSweep)
+        // The rate is read again about once a day.
+        chain.utxosByAddress[SWEEP_FUNDING] = emptyList()
+        record = driver(tip = 1_143u).tick(record)
+        assertTrue(record.isLeftoverWaitingForFees)
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 400uL))
+        record = driver(tip = 1_144u).tick(record)
+        assertEquals(1_144u, assertNotNull(record.leftoverSweep).checkedAtHeight)
+        assertEquals(1_000u, assertNotNull(record.leftoverSweep).waitingSince)
+
+        record = driver(tip = 5_032u).tick(record)
+        assertTrue(assertNotNull(record.leftoverSweep).isDustKept)
+        assertFalse(record.isLeftoverWaitingForFees)
+        assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
         assertTrue(chain.rawBroadcasts.isEmpty())
         assertFalse(record.needsDriving)
     }
+
+    @Test
+    fun `a waiting leftover is swept once fees drop`() = test {
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0".repeat(32), 1u, 25_000uL))
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        val waiting = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            leftover = listOf(SparkExitRecord.Leftover("f0".repeat(32), 1u, 25_000uL)),
+            leftoverSweep = SparkExitRecord.LeftoverSweep(
+                null,
+                null,
+                25_000uL,
+                waitingSince = 1_000u,
+                checkedAtHeight = 1_000u
+            ),
+        )
+
+        val record = driver(tip = 1_144u).tick(waiting)
+
+        assertTrue(assertNotNull(record.leftoverSweep).isAccepted)
+        assertFalse(record.isLeftoverWaitingForFees)
+    }
+
+    @Test
+    fun `the leftover sweeps at the cheapest rate up to the exit's, leaving coins not worth their fee`() =
+        test {
+            val coin = "f0".repeat(32)
+            chain.utxosByAddress[SWEEP_FUNDING] = listOf(
+                SparkExitFixtures.utxo(coin, 1u, 25_000uL),
+                SparkExitFixtures.utxo("f1".repeat(32), 0u, 60uL),
+            )
+            chain.outcome = SparkExitBroadcastOutcome.Accepted
+            val done = SparkExitFixtures.record(Phase.Done).copy(
+                destination = SWEEP_DESTINATION,
+                funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+                feeRateSatPerVbyte = 5uL,
+                leftover = listOf(SparkExitRecord.Leftover(coin, 1u, 25_000uL)),
+            )
+
+            val cheap = assertNotNull(driver(tip = 1_000u).tick(done).leftoverSweep)
+            assertEquals(1uL, cheap.feeRateSatPerVbyte)
+            // The 60-sat coin costs 68 sats to add: only the other one is swept.
+            assertEquals(listOf(coin), SparkExitTxInputs.decode(requireNotNull(cheap.txHex))?.map { it.prevTxid })
+
+            chain.economyRate = 9uL
+            assertNull(assertNotNull(driver(tip = 1_000u).tick(done).leftoverSweep).feeRateSatPerVbyte)
+        }
 
     @Test
     fun `top up ignores cpfp change chained to the funding address`() = test {
@@ -1226,16 +1290,18 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a sweep refused for its fee that only dust is left of at the next block's rate is kept as dust`() = test {
-        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 300 < 400")
-        var record = driver(tip = 1_000u).tick(sweepDone())
-        chain.nextBlockRate = 1_000uL
+    fun `a sweep refused for its fee that only dust is left of at the next block's rate waits for cheaper fees`() =
+        test {
+            chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 300 < 400")
+            var record = driver(tip = 1_000u).tick(sweepDone())
+            chain.nextBlockRate = 1_000uL
 
-        record = driver(tip = 1_001u).tick(record)
+            record = driver(tip = 1_001u).tick(record)
 
-        assertEquals(SparkExitRecord.LeftoverSweep(null, null, 25_000uL), record.leftoverSweep)
-        assertFalse(record.needsDriving)
-    }
+            assertTrue(record.isLeftoverWaitingForFees)
+            assertEquals(1_001u, assertNotNull(record.leftoverSweep).waitingSince)
+            assertTrue(record.needsDriving)
+        }
 
     @Test
     fun `a replacement that would be dust keeps the accepted sweep`() = test {

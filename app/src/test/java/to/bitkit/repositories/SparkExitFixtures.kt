@@ -182,6 +182,10 @@ class FakeSparkExitChain : SparkExitChain {
     var fees = SparkExitNetworkFees(fastest = 5uL, halfHour = 3uL)
 
     override suspend fun networkFees(): SparkExitNetworkFees = fees
+
+    var economyRate: ULong? = 1uL
+
+    override suspend fun economyFeeRate(): ULong = economyRate ?: throw SparkExitChainError("No fee estimates")
 }
 
 class FakeSparkExitRecovering : SparkExitRecovering {

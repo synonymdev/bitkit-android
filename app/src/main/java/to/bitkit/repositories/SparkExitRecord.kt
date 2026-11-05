@@ -206,6 +206,9 @@ data class SparkExitRecord(
     /** A cooperative leaf the operators moved on-chain; [valueSats] is 0 until a retry's quote names it. */
     data class FailedLeaf(val leafId: String, val valueSats: ULong)
 
+    /** The leftover waits for network fees to drop before it is worth sweeping. */
+    val isLeftoverWaitingForFees: Boolean get() = leftover.isNotEmpty() && leftoverSweep?.isWaitingForFees == true
+
     /** A built sweep of the leftover, saved before it is sent; a null [txid] means it was dust and nothing went. */
     data class LeftoverSweep(
         val txid: String?,
@@ -220,7 +223,16 @@ data class SparkExitRecord(
         val sentAtHeight: UInt? = null,
         /** Earlier versions a node accepted that this one replaced; any of them confirming ends the sweep. */
         val replacedTxids: List<String> = emptyList(),
+        /** With no [txid]: the tip from which the leftover waits for fees low enough to make it worth sending. */
+        val waitingSince: UInt? = null,
+        /** The tip at which the waiting leftover's rate was last read. */
+        val checkedAtHeight: UInt? = null,
+        /** The wait ran out: the leftover stays at its funding address as dust. */
+        val isDustKept: Boolean = false,
     ) {
+        /** Not built, waiting for fees to drop. A sweep with no [txid] and no wait is dust kept, as before waits. */
+        val isWaitingForFees: Boolean get() = txid == null && waitingSince != null && !isDustKept
+
         /** A refusal for its fee is not final: the sweep is built again at the network's current rate. */
         val isFeeRejection: Boolean get() = rejection?.contains("fee", ignoreCase = true) == true
     }
@@ -230,6 +242,7 @@ data class SparkExitRecord(
         get() {
             if (leftover.isEmpty()) return false
             val sweep = leftoverSweep ?: return true
+            if (sweep.isWaitingForFees) return true
             return sweep.txid != null && (sweep.rejection == null || sweep.isFeeRejection) && !sweep.isConfirmed
         }
 
@@ -726,6 +739,9 @@ object SparkExitJson {
         if (sweep.replacedTxids.isNotEmpty()) {
             put("replacedTxids", buildJsonArray { sweep.replacedTxids.forEach { add(JsonPrimitive(it)) } })
         }
+        sweep.waitingSince?.let { put("waitingSince", it.toLong()) }
+        sweep.checkedAtHeight?.let { put("checkedAtHeight", it.toLong()) }
+        if (sweep.isDustKept) put("isDustKept", true)
     }
 
     /** What the exit keeps to pace and bound its rebuilds and waits, each left out at its default. */
@@ -832,6 +848,9 @@ object SparkExitJson {
                 feeRateSatPerVbyte = it.ulongOrNull("feeRateSatPerVbyte"),
                 sentAtHeight = it.ulongOrNull("sentAtHeight")?.toUInt(),
                 replacedTxids = it.arrayOrEmpty("replacedTxids").map { txid -> txid.jsonPrimitive.content },
+                waitingSince = it.ulongOrNull("waitingSince")?.toUInt(),
+                checkedAtHeight = it.ulongOrNull("checkedAtHeight")?.toUInt(),
+                isDustKept = it.booleanOrNull("isDustKept") ?: false,
             )
         },
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),

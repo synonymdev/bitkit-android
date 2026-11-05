@@ -561,4 +561,24 @@ class SparkExitFundingTest {
         assertEquals("s", retried.adopt(SparkExitFixtures.recovery(emptyList()), 2L).landedSweepTxid)
         assertEquals(retried, SparkExitJson.decode(SparkExitJson.encode(retried)))
     }
+
+    @Test
+    fun `the leftover sweeps at the network's cheapest rate, never above the exit's, at least 1 sat per vbyte`() {
+        assertEquals(2uL, SparkExitMath.sweepFeeRate(economy = 2uL, exitRate = 9uL))
+        assertEquals(9uL, SparkExitMath.sweepFeeRate(economy = 20uL, exitRate = 9uL))
+        assertEquals(9uL, SparkExitMath.sweepFeeRate(economy = null, exitRate = 9uL))
+        assertEquals(1uL, SparkExitMath.sweepFeeRate(economy = 0uL, exitRate = 9uL))
+    }
+
+    @Test
+    fun `a leftover sweep takes only coins worth more than their input fee`() {
+        val coins = listOf(
+            SparkExitSweep.Input("a", 0u, 294uL),
+            SparkExitSweep.Input("b", 0u, 340uL),
+            SparkExitSweep.Input("c", 0u, 341uL),
+        )
+        // 68 vB at 5 sat/vB is 340 sats.
+        assertEquals(listOf("c"), SparkExitSweep.worthSweeping(coins, 5uL).map { it.txid })
+        assertEquals(listOf("a", "b", "c"), SparkExitSweep.worthSweeping(coins, 4uL).map { it.txid })
+    }
 }

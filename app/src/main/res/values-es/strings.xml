@@ -215,11 +215,12 @@
     <string name="lightning__spark_exit__left_behind">Stays on Spark</string>
     <string name="lightning__spark_exit__left_behind_leaves">{amount} can\'t be exited at this fee rate and stays on Spark.</string>
     <string name="lightning__spark_exit__leftover">{amount} of fee funding is still at {address}.</string>
-    <string name="lightning__spark_exit__leftover_dust">{amount} of leftover fee funding is too small to send and stays at {address}.</string>
+    <string name="lightning__spark_exit__leftover_dust">{amount} of leftover fee funding is too small to send and stays at {address}, derivation path {path}.</string>
     <string name="lightning__spark_exit__leftover_rejected">{amount} of leftover fee funding could not be sent and stays at {address}, derivation path {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Sending {amount} of leftover fee funding to savings.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} of leftover fee funding was sent to savings.</string>
     <string name="lightning__spark_exit__leftover_txid">Transaction ID: {txid}</string>
+    <string name="lightning__spark_exit__leftover_waiting">{amount} of fee change will reach your savings when network fees drop.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} was claimed on-chain by an older owner of these funds and can\'t be recovered.</string>
     <string name="lightning__spark_exit__nav_title">Emergency Exit</string>
     <string name="lightning__spark_exit__needs_funding_text">The exit needs &lt;accent&gt;{amount}&lt;/accent&gt; more to pay its fees. Fund it to continue.</string>

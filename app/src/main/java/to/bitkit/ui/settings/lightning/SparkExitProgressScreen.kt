@@ -275,10 +275,17 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
     val sweep = record.leftoverSweep
     VerticalSpacer(16.dp)
     when {
+        record.isLeftoverWaitingForFees -> BodyS(
+            text = stringResource(R.string.lightning__spark_exit__leftover_waiting)
+                .replace("{amount}", sparkExitAmountText(total)),
+            color = Colors.White64,
+            modifier = Modifier.testTag("SparkExitLeftoverWaiting")
+        )
         sweep != null && sweep.txid == null -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover_dust)
                 .replace("{amount}", sparkExitAmountText(total))
-                .replace("{address}", address),
+                .replace("{address}", address)
+                .replace("{path}", path.orEmpty()),
             color = Colors.White64,
         )
         sweep?.txid != null && sweep.isAccepted -> SparkExitTxNote(

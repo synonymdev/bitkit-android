@@ -22,6 +22,12 @@ object SparkExitSweep {
     /** An unsigned sweep of [inputs] to [destination], or null when what it pays would be under the dust limit. */
     class Plan(val inputs: List<Input>, val destinationScript: ByteArray, val amountSats: ULong, val feeSats: ULong)
 
+    /** The inputs worth more than the fee each adds to a sweep at [feeRateSatPerVbyte]: the rest cost more to send. */
+    fun worthSweeping(inputs: List<Input>, feeRateSatPerVbyte: ULong): List<Input> {
+        val inputFee = SparkExitMath.inputFeeSats(maxOf(1uL, feeRateSatPerVbyte))
+        return inputs.filter { it.valueSats > inputFee }
+    }
+
     fun plan(inputs: List<Input>, destination: String, feeRateSatPerVbyte: ULong): Plan? {
         if (inputs.isEmpty()) return null
         val script = AddressScript.of(destination)

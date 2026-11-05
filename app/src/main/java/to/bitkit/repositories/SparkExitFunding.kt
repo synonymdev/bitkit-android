@@ -164,6 +164,12 @@ object SparkExitMath {
         return transactions.filter { it.status !is ExitTransactionStatus.Confirmed }.maxOfOrNull { after(it, 0) }
     }
 
+    /**
+     * The rate the leftover is swept at: the network's cheapest ([economy]), so as little of it as possible goes to
+     * fees, never above the exit's own rate, at least 1 sat/vB. The exit's rate when the network's cannot be read.
+     */
+    fun sweepFeeRate(economy: ULong?, exitRate: ULong): ULong = maxOf(1uL, minOf(economy ?: exitRate, exitRate))
+
     /** The fee one more P2WPKH funding input adds to a build at [feeRateSatPerVbyte]. */
     fun inputFeeSats(feeRateSatPerVbyte: ULong): ULong = P2WPKH_INPUT_VBYTES.safe() * feeRateSatPerVbyte.safe()
 

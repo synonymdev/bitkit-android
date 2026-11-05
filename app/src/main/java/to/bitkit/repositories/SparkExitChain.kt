@@ -83,6 +83,9 @@ interface SparkExitChain {
 
     /** The rates for the next block and about half an hour, from `/fee-estimates` targets 1 and 3, rounded up. */
     suspend fun networkFees(): SparkExitNetworkFees
+
+    /** The network's cheapest rate, `/fee-estimates` at its farthest target, rounded up and at least 1 sat/vB. */
+    suspend fun economyFeeRate(): ULong
 }
 
 /** What the network asks now, in sat/vB: for the next block, and for about half an hour. */
@@ -156,6 +159,13 @@ class EsploraSparkExitChain(
     override suspend fun nextBlockFeeRate(): ULong {
         val rate = json.parseToJsonElement(get("/fee-estimates")).jsonObject.getValue("1").jsonPrimitive.content
         return ceil(rate.toDouble()).toULong()
+    }
+
+    override suspend fun economyFeeRate(): ULong {
+        val estimates = json.parseToJsonElement(get("/fee-estimates")).jsonObject
+        val farthest = estimates.keys.maxByOrNull { it.toIntOrNull() ?: 0 }
+            ?: throw SparkExitChainError("No fee estimates")
+        return maxOf(1uL, ceil(estimates.getValue(farthest).jsonPrimitive.content.toDouble()).toULong())
     }
 
     override suspend fun networkFees(): SparkExitNetworkFees {
