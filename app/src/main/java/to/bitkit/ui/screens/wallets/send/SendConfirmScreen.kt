@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.commentAllowed
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PaykitAsset
@@ -108,6 +109,9 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
+
+/** Characters of a swap provider's pubky shown on the confirm screen. */
+private const val PROVIDER_KEY_LENGTH = 12
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
 @Composable
@@ -865,6 +869,25 @@ private fun LightningDetails(
                         BodySSB(text = invoiceExpiryText)
                     }
                 }
+            }
+        }
+
+        uiState.paykitSwapRoute?.let { route ->
+            val text = when {
+                route.serviceLeg != null -> stringResource(R.string.wallet__send_swap_route_spark)
+                route.quote != null -> stringResource(
+                    R.string.wallet__send_swap_route_provider,
+                    route.providerName?.takeIf { it.isNotBlank() }
+                        ?: route.quote.providerPubky.ellipsisMiddle(PROVIDER_KEY_LENGTH),
+                )
+                else -> return@let
+            }
+            SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
+                BodySSB(
+                    text = text,
+                    maxLines = 1,
+                    modifier = Modifier.testTag("ReviewSwapRoute")
+                )
             }
         }
 
