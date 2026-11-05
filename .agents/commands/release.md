@@ -158,7 +158,7 @@ gh release create v{newVersionName} \
 
 ### 6. Generate Store Release Notes
 
-Before drafting, apply the shared [store release-note checks](https://github.com/synonymdev/bitkit-e2e-tests/blob/main/docs/store-release-notes.md) for **Google Play**. Load the guide from one resolved `bitkit-e2e-tests` default-branch revision, check the current official policy links and record the guide revision/check date in `.ai/store-notes-check-{newVersionName}.md`. If a required source is unavailable, record the missing check; branch/build preparation may continue, but do not claim store notes are verified or submit until it is resolved.
+Before drafting, apply the shared [store release-note checks](https://github.com/synonymdev/bitkit/blob/master/docs/store-release-notes.md) for **Google Play**. Load the guide from one resolved `bitkit` default-branch revision, check the current official policy links and record the guide revision/check date in `.ai/store-notes-check-{newVersionName}.md`. If a required source is unavailable, record the missing check; branch/build preparation may continue, but do not claim store notes are verified or submit until it is resolved.
 
 Read the `## [{newVersionName}]` section from `CHANGELOG.md` as the primary source for release content. If that section is empty or was not created in Step 2c, fall back to fetching auto-generated release notes:
 
@@ -393,7 +393,7 @@ Next steps:
 - Share the release notes doc with Jacobo for review (if domain share is still pending, apply it first)
 - QA the APK
 - If patching the release branch: increment only versionCode, re-tag, rebuild, and re-upload
-- Submit to Play Store when QA passes; before each authorized submission/resubmission, complete the shared [store release-note checks](https://github.com/synonymdev/bitkit-e2e-tests/blob/main/docs/store-release-notes.md), verify every configured console locale against approved notes, and resolve pending content/policy checks. Record the selected build/release policy and actual readback in `.ai/store-notes-check-{newVersionName}.md`
+- Submit to Play Store when QA passes; before each authorized submission/resubmission, complete the shared [store release-note checks](https://github.com/synonymdev/bitkit/blob/master/docs/store-release-notes.md), verify every configured console locale against approved notes, and resolve pending content/policy checks. Record the selected build/release policy and actual readback in `.ai/store-notes-check-{newVersionName}.md`
 - Publish the draft release on GitHub after store release
 - Merge release branch PR into master
 - After staging/migration is green: run `/archive-release {newVersionName}` from `bitkit-e2e-tests`, then update its migration baseline and checksum
