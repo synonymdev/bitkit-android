@@ -138,7 +138,8 @@ internal fun SparkExitSteps(record: SparkExitRecord, tipHeight: UInt?) {
     val recovery: RecoverFundsResponse? = record.recovery
     val transactions = recovery?.transactions.orEmpty()
     val isFunded = record.phase !is SparkExitRecord.Phase.AwaitingFunding
-    val isDone = record.phase == SparkExitRecord.Phase.Done
+    // Retrying leaves the operators moved on-chain, every step of the exit itself is done.
+    val isDone = record.phase == SparkExitRecord.Phase.Done || record.isRetryingFailedLeaves
     val remaining = record.claimableAtHeight?.let { target ->
         tipHeight?.let { BlockTimeHelpers.blocksRemaining(target, it) }
     }?.takeIf { it > 0 }?.let(BlockTimeHelpers::getDurationForBlocks)

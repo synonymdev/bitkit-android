@@ -388,7 +388,13 @@ class SparkExitDriver(
                 save(rebuilding)
                 build(rebuilding, sdk)
             }
-            RecoveryVerdict.Done -> end(updated.copy(phase = SparkExitRecord.Phase.Done), updated)
+            RecoveryVerdict.Done -> {
+                // Leaves the operators moved on-chain but could not co-sign stay part of the exit, retried for a week.
+                if (checked.recovery.failed.isNotEmpty() && !updated.isFailedLeavesReleased) {
+                    return retryFailedLeaves(updated, checked.recovery.failed.map { it.leafId }, sdk)
+                }
+                end(updated.copy(phase = SparkExitRecord.Phase.Done, failedLeaves = emptyList()), updated)
+            }
             is RecoveryVerdict.Redo -> {
                 Logger.warn(
                     "Rebuilding Spark exit diverged on-chain as generation '${record.generation + 1}'",
@@ -398,6 +404,51 @@ class SparkExitDriver(
                 rebuild(updated.copy(isRedoRebuild = true), sdk)
             }
         }
+    }
+
+    /**
+     * Builds a recovery of its own for [failedIds], the cooperative leaves a finished recovery could not get co-signed:
+     * at once, then at doubling gaps from 6 blocks to a day, as long-waiting leaves are. After about a week the exit
+     * is done without them. A recovery built for them is adopted as the next generation; what earlier ones landed
+     * still counts.
+     */
+    private suspend fun retryFailedLeaves(
+        start: SparkExitRecord,
+        failedIds: List<String>,
+        sdk: SparkExitRecovering,
+    ): SparkExitRecord {
+        val known = start.failedLeaves.associate { it.leafId to it.valueSats }
+        var record = start.copy(failedLeaves = failedIds.map { SparkExitRecord.FailedLeaf(it, known[it] ?: 0uL) })
+        val height = tip ?: return record
+        val since = record.failedLeafRetrySince
+        if (since != null && SparkExitMath.isRetryReleased(since, height)) {
+            Logger.warn("Releasing Spark exit leaves '$failedIds' the operators did not co-sign", context = TAG)
+            val released = record.copy(phase = SparkExitRecord.Phase.Done, isFailedLeavesReleased = true)
+            return end(released, record)
+        }
+        if (since != null && !SparkExitMath.isRetryDue(since, record.failedLeafRetriedAt, height)) return record
+        record = record.copy(failedLeafRetrySince = since ?: height, failedLeafRetriedAt = height)
+        val retried = runSuspendCatching {
+            val prepared = sdk.prepare(prepareRequest(record, ExitLeafSelection.Specific(failedIds)))
+            val values = (
+                prepared.leaves.map { it.leafId to it.valueSats } +
+                    prepared.skipped.map { it.leafId to it.valueSats }
+                ).toMap()
+            record = record.copy(
+                failedLeaves = record.failedLeaves.map { it.copy(valueSats = values[it.leafId] ?: it.valueSats) },
+            )
+            if (prepared.leaves.isEmpty()) return@runSuspendCatching null
+            val needsFunding = prepared.funding != null
+            sdk.recover(
+                RecoverFundsRequest(prepared, if (needsFunding) record.fundingInputs else emptyList()),
+                if (needsFunding) makeSigner() else null,
+            )
+        }.onFailure { Logger.warn("Failed to retry Spark exit leaves '$failedIds'", it, context = TAG) }.getOrNull()
+        if (retried == null || retried.transactions.isEmpty()) return record
+        val adopted = record.adopt(retried, nowMillis())
+        save(adopted)
+        Logger.info("Built a recovery of Spark exit leaves '$failedIds' as '${adopted.generation}'", context = TAG)
+        return broadcastReady(adopted)
     }
 
     /**

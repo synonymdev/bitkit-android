@@ -186,6 +186,15 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
             modifier = Modifier.testTag("SparkExitRebuiltFromChain")
         )
     }
+    if (record.isWaitingForOperators) {
+        VerticalSpacer(16.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__waiting_operators)
+                .replace("{amount}", sparkExitAmountText(record.failedLeafSats)),
+            color = Colors.White64,
+            modifier = Modifier.testTag("SparkExitWaitingOperators")
+        )
+    }
     if (record.isWaitingForLeaves && record.isActive) {
         VerticalSpacer(16.dp)
         BodyS(
@@ -331,8 +340,8 @@ private fun progressText(
         record.skippedLeafCount.takeIf { it > 0 }?.let {
             stringResource(R.string.lightning__spark_exit__partial_text).replace("{count}", "$it")
         },
-        record.failedLeafCount.takeIf { it > 0 }?.let {
-            stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{count}", "$it")
+        record.failedLeafSats.takeIf { record.isFailedLeavesReleased && it > 0uL }?.let {
+            stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{amount}", sparkExitAmountText(it))
         },
     ).joinToString(" ")
     is SparkExitRecord.Phase.Failed -> sparkExitFailedText(

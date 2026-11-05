@@ -112,6 +112,17 @@ data class SparkExitRecord(
      * per branch, as exits started before did. Every prepare of the exit resumes with it.
      */
     val fundingStrategy: String? = null,
+    /**
+     * Cooperative leaves the operators moved on-chain but could not co-sign the recovery of, listed by a Done verdict.
+     * They stay part of the exit and are retried as their own recovery until [isFailedLeavesReleased].
+     */
+    val failedLeaves: List<FailedLeaf> = emptyList(),
+    /** The tip at which a Done verdict first listed [failedLeaves]; they are let go about a week later. */
+    val failedLeafRetrySince: UInt? = null,
+    /** The tip of the last retry of [failedLeaves]. */
+    val failedLeafRetriedAt: UInt? = null,
+    /** The week of retries ended with [failedLeaves] still not recovered: the exit is done without them. */
+    val isFailedLeavesReleased: Boolean = false,
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -189,6 +200,9 @@ data class SparkExitRecord(
     data class LostLeaf(val leafId: String, val valueSats: ULong)
 
     data class LeftBehindLeaf(val leafId: String, val valueSats: ULong, val reason: String)
+
+    /** A cooperative leaf the operators moved on-chain; [valueSats] is 0 until a retry's quote names it. */
+    data class FailedLeaf(val leafId: String, val valueSats: ULong)
 
     /** A built sweep of the leftover, saved before it is sent; a null [txid] means it was dust and nothing went. */
     data class LeftoverSweep(
@@ -295,6 +309,15 @@ data class SparkExitRecord(
         retriedAt = null,
         isRebuiltFromChain = false,
     )
+
+    /** The exit retries cooperative leaves the operators moved on-chain but could not co-sign. */
+    val isRetryingFailedLeaves: Boolean get() = isActive && failedLeafRetrySince != null
+
+    /** While retrying, the current recovery still lists leaves the operators have not co-signed. */
+    val isWaitingForOperators: Boolean
+        get() = isRetryingFailedLeaves && recovery?.failed?.isNotEmpty() == true
+
+    val failedLeafSats: ULong get() = failedLeaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
 
     /** A build found nothing to build while a leaf may still move, and waits for it. */
     val isWaitingForLeaves: Boolean get() = retrySince != null
@@ -689,6 +712,24 @@ object SparkExitJson {
         if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
         if (r.isRedoRebuild) put("isRedoRebuild", true)
         r.fundingStrategy?.let { put("fundingStrategy", it) }
+        if (r.failedLeaves.isNotEmpty()) {
+            put(
+                "failedLeaves",
+                buildJsonArray {
+                    r.failedLeaves.forEach {
+                        add(
+                            buildJsonObject {
+                                put("leafId", it.leafId)
+                                put("valueSats", it.valueSats.toLong())
+                            },
+                        )
+                    }
+                },
+            )
+        }
+        r.failedLeafRetrySince?.let { put("failedLeafRetrySince", it.toLong()) }
+        r.failedLeafRetriedAt?.let { put("failedLeafRetriedAt", it.toLong()) }
+        if (r.isFailedLeavesReleased) put("isFailedLeavesReleased", true)
         if (r.earlierReceivedSats.isNotEmpty()) {
             put(
                 "earlierReceivedSats",
@@ -784,6 +825,13 @@ object SparkExitJson {
         isRebuiltFromChain = o.booleanOrNull("isRebuiltFromChain") ?: false,
         isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,
         fundingStrategy = o.stringOrNull("fundingStrategy"),
+        failedLeaves = o.arrayOrEmpty("failedLeaves").map {
+            val l = it.jsonObject
+            SparkExitRecord.FailedLeaf(l.string("leafId"), l.ulong("valueSats"))
+        },
+        failedLeafRetrySince = o.ulongOrNull("failedLeafRetrySince")?.toUInt(),
+        failedLeafRetriedAt = o.ulongOrNull("failedLeafRetriedAt")?.toUInt(),
+        isFailedLeavesReleased = o.booleanOrNull("isFailedLeavesReleased") ?: false,
         earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),

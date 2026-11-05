@@ -324,6 +324,11 @@ class SparkExitRepo @Inject constructor(
             work.notify(it, amountSats = record.lostSats.takeIf { _ -> it == SparkExitAlert.Lost })
         }
         when (record.phase) {
+            // Waiting on the operators for a week needs nothing from the user, so nothing reminds them.
+            SparkExitRecord.Phase.Running if record.isWaitingForOperators -> {
+                work.keepFeeLow(null)
+                work.cancelDeadline()
+            }
             SparkExitRecord.Phase.Running -> {
                 val tip = _state.value.tipHeight
                 work.keepFeeLow(record.feeRateSatPerVbyte.takeIf { record.underpricedStep(tip) != null })

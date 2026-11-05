@@ -8,7 +8,9 @@ import breez_sdk_spark.CpfpInput
 import breez_sdk_spark.ExitChainState
 import breez_sdk_spark.ExitLeafSelection
 import breez_sdk_spark.ExitTransactionStatus
+import breez_sdk_spark.RecoverFundsLeaf
 import breez_sdk_spark.RecoverFundsResponse
+import breez_sdk_spark.RecoveryMethod
 import breez_sdk_spark.RecoveryRedoReason
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.RecoveryVerdict
@@ -604,6 +606,75 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(Phase.AwaitingFunding(0uL), record.phase)
         assertEquals(1, record.failedLeafCount)
         assertNull(record.recovery)
+    }
+
+    private val operatorsDown = CooperativeRecoveryFailure(
+        "coop-1",
+        "o",
+        0u,
+        CooperativeRecoveryError.OperatorsUnavailable("down"),
+    )
+
+    private fun coopLeaf(valueSats: ULong) = SparkExitFixtures.prepared(funding = null, leaves = emptyList()).copy(
+        leaves = listOf(RecoverFundsLeaf("coop-1", valueSats, RecoveryMethod.COOPERATIVE)),
+    )
+
+    @Test
+    fun `leaves the operators moved on-chain are retried at doubling gaps, then let go after a week`() = test {
+        val done = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP, status = ExitTransactionStatus.Confirmed(9u))
+            ),
+            failed = listOf(operatorsDown),
+        )
+        var record = running(done)
+        repeat(6) { sdk.checks += check(done, RecoveryVerdict.Done) }
+        sdk.preparedResponse = coopLeaf(16_384uL)
+        // The operators still cannot co-sign: the retry builds nothing.
+        repeat(3) { sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(operatorsDown)) }
+
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.Running, record.phase)
+        assertTrue(record.isWaitingForOperators)
+        assertEquals(listOf(SparkExitRecord.FailedLeaf("coop-1", 16_384uL)), record.failedLeaves)
+        assertEquals(16_384uL, record.failedLeafSats)
+        assertEquals(listOf("coop-1"), (sdk.prepareRequests.single().selection as ExitLeafSelection.Specific).leafIds)
+
+        record = driver(tip = 1_005u).tick(record)
+        assertEquals(1, sdk.prepareRequests.size)
+        record = driver(tip = 1_006u).tick(record)
+        assertEquals(2, sdk.prepareRequests.size)
+        assertEquals(1_006u, record.failedLeafRetriedAt)
+
+        record = driver(tip = 2_007u).tick(record)
+        assertEquals(Phase.Running, record.phase)
+        record = driver(tip = 2_008u).tick(record)
+        assertEquals(Phase.Done, record.phase)
+        assertTrue(record.isFailedLeavesReleased)
+        assertEquals(16_384uL, record.failedLeafSats)
+        assertFalse(record.isWaitingForOperators)
+    }
+
+    @Test
+    fun `a retry the operators co-sign becomes the next generation and the exit ends once it confirms`() = test {
+        val done = SparkExitFixtures.recovery(emptyList(), failed = listOf(operatorsDown))
+        var record = running(done)
+        sdk.checks += check(done, RecoveryVerdict.Done)
+        sdk.preparedResponse = coopLeaf(16_384uL)
+        val coop = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("coop", kind = RecoveryTxKind.COOPERATIVE)))
+        sdk.builds += coop
+
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(2, record.generation)
+        assertEquals(listOf("coop"), chain.broadcasts.map { it.txid })
+        assertFalse(record.isWaitingForOperators)
+        assertTrue(record.isRetryingFailedLeaves)
+
+        sdk.checks += check(coop, RecoveryVerdict.Done)
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(Phase.Done, record.phase)
+        assertTrue(record.failedLeaves.isEmpty())
+        assertFalse(record.isFailedLeavesReleased)
     }
 
     @Test

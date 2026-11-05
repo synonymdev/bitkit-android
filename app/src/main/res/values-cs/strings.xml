@@ -243,7 +243,7 @@
     <string name="lightning__spark_exit__done_received">{amount} reached your savings.</string>
     <string name="lightning__spark_exit__done_text">Your funds are in savings.</string>
     <string name="lightning__spark_exit__done_title">Exit\n&lt;accent&gt;complete&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__failed_leaves">{count} amounts the Spark operators could not sign for stayed on Spark.</string>
+    <string name="lightning__spark_exit__failed_leaves">{amount} was moved on-chain by the Spark operators and is not on Spark. They can still be asked to release it.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} stays on Spark.</string>
     <string name="lightning__spark_exit__failed_text">Nothing could be recovered.</string>
     <string name="lightning__spark_exit__failed_title">Exit\n&lt;accent&gt;stopped&lt;/accent&gt;</string>
@@ -313,6 +313,7 @@
     <string name="lightning__spark_exit__swipe">Swipe To Exit</string>
     <string name="lightning__spark_exit__uneconomic">The fees are higher than what you would receive.</string>
     <string name="lightning__spark_exit__waiting_leaves">Part of this exit can\'t be read on-chain right now. Bitkit tries again for up to a week.</string>
+    <string name="lightning__spark_exit__waiting_operators">{amount} that the Spark operators moved on-chain waits for them to release it. Bitkit asks again for up to a week.</string>
     <string name="lightning__spark_provider">Poskytovatel</string>
     <string name="lightning__spark_provider_value">Spark přes Breez</string>
     <string name="lightning__spark_receiving_unlimited">Bez limitu</string>
