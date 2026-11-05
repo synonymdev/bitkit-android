@@ -95,6 +95,7 @@ class HwSendViewModel @Inject constructor(
     private var signingAttempt = 0
     private var passphraseJob: Job? = null
     private var retainedSendConsent: RetainedSendConsent? = null
+    private var isRetainedSendConsentEnded = false
 
     private val isOperationInFlight: Boolean
         get() = pendingResult.value != null || _uiState.value.isSigning || signingJob?.isActive == true
@@ -383,9 +384,19 @@ class HwSendViewModel @Inject constructor(
                         )
                 } ?: !payment.hasAttemptedBroadcast
                 val unresolved = payment.hasAttemptedBroadcast || !cleared
-                if (request.paymentRequestId == null && !unresolved) undoRetainBeforeDispatch(payment, retainOutcome)
-                pendingBroadcast = payment.copy(hasAttemptedBroadcast = unresolved)
-                _uiState.update { it.copy(isBroadcastUnresolved = unresolved && !payment.isRefusedForNavigation) }
+                val isConsentRegranted = if (request.paymentRequestId == null && !unresolved) {
+                    undoRetainBeforeDispatch(payment, retainOutcome)
+                    regrantConsentIfRestored(payment, retainOutcome)
+                } else {
+                    false
+                }
+                pendingBroadcast = if (isConsentRegranted) null else payment.copy(hasAttemptedBroadcast = unresolved)
+                _uiState.update {
+                    it.copy(
+                        hasPendingBroadcast = pendingBroadcast != null,
+                        isBroadcastUnresolved = unresolved && !payment.isRefusedForNavigation,
+                    )
+                }
                 onPaymentDeadlineExpired(unresolved)
                 return null
             }
@@ -407,7 +418,7 @@ class HwSendViewModel @Inject constructor(
             ).getOrThrow().also { if (!sendContext.isActive) undoRetainBeforeDispatch(payment, it) }
         }
         sendContext.ensureActive()
-        // The new bytes hold the record now, so a Retry refers to them and another signature needs a new warning.
+        // The new bytes hold the record now, so a Retry refers to them. Only restoring the old record gives it back.
         retainedSendConsent = null
         return outcome
     }
@@ -451,14 +462,14 @@ class HwSendViewModel @Inject constructor(
     }
 
     fun dismissPassphrase() {
-        retainedSendConsent = null
+        endRetainedSendConsent()
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
     }
 
     fun cancel() {
-        retainedSendConsent = null
+        endRetainedSendConsent()
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
@@ -563,12 +574,31 @@ class HwSendViewModel @Inject constructor(
      * Lets exactly this payment sign anew over the wallet's retained send, until a new transaction is signed and
      * retained. Only for a user who accepted a possible second payment. Held in memory only and ended by [cancel], so a
      * restart or leaving the sign flow requires a new warning. Deletes nothing, so an attempt that signs nothing leaves
-     * the original guarded by its record and can ask the device again. Does nothing while an operation is in flight.
+     * the original guarded by its record and can ask the device again. A consented payment that settles without going
+     * out and puts the old record back gets the same consent again. Does nothing while an operation is in flight.
      */
     fun consentToNewSignature(walletId: String, address: String, amountSats: ULong) {
         if (isOperationInFlight) return
         retainedSendConsent = RetainedSendConsent(walletId, address, amountSats)
+        isRetainedSendConsentEnded = false
         if (pendingBroadcast?.request?.paymentRequestId == null) clearPendingBroadcast()
+    }
+
+    private fun endRetainedSendConsent() {
+        retainedSendConsent = null
+        isRetainedSendConsentEnded = true
+    }
+
+    private suspend fun regrantConsentIfRestored(payment: PendingHwSendBroadcast, outcome: HwRetainOutcome?): Boolean {
+        if (payment.replacement != HwRetainedSendReplacement.Consented) return false
+        val previous = (outcome as? HwRetainOutcome.Replaced)?.previous ?: return false
+        // New bytes the watcher saw, or a failed restore, stay as the record, and then a Retry refers to them.
+        val record = hwRetainedSendRepo.record(previous.walletId).getOrNull() ?: return false
+        if (!record.serializedTx.equals(previous.serializedTx, ignoreCase = true)) return false
+        if (isRetainedSendConsentEnded) return false
+        val request = payment.request
+        retainedSendConsent = RetainedSendConsent(request.walletId, request.address, request.amountSats)
+        return true
     }
 
     private fun holdsRetainedSendConsent(walletId: String, address: String, amountSats: ULong): Boolean {
@@ -685,6 +715,7 @@ class HwSendViewModel @Inject constructor(
         when {
             error.isHardwareBroadcastRefusalForNavigation() && isFirstAttempt -> {
                 releaseOrRestoreRetainedSend(settled)
+                regrantConsentIfRestored(settled, settled.retainOutcome)
                 clearPendingBroadcast()
                 handleFailure(error, walletId)
             }
