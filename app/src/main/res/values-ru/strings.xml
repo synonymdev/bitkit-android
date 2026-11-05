@@ -1477,6 +1477,7 @@
     <string name="subscriptions__allowances_empty_description">Вы можете задать лимиты расходов, чтобы автоматически оплачивать запросы на оплату от доверенных контактов.</string>
     <string name="subscriptions__allowances_empty_headline">Настройте\n&lt;accent&gt;бюджеты&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Данные ваших бюджетов старше тех, что этот кошелёк уже использовал. Запросы будут ждать вашего подтверждения, пока вы не возобновите платежи.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Этот кошелёк был восстановлен из резервной копии. Запросы будут ждать вашего подтверждения, пока вы не возобновите платежи.</string>
     <string name="subscriptions__allowances_paused_resume">Возобновить</string>
     <string name="subscriptions__allowances_paused_title">Автоматические платежи приостановлены</string>
     <string name="subscriptions__cancel_subscription">Отменить Подписку</string>

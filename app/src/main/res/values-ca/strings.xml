@@ -1460,6 +1460,7 @@
     <string name="subscriptions__allowances_empty_description">Pots establir límits de despesa per pagar automàticament les sol·licituds de pagament de contactes de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configura\n&lt;accent&gt;assignacions&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Els teus registres d\'assignacions són més antics que altres que aquest moneder ja ha fet servir. Les sol·licituds demanaran la teva aprovació fins que reprenguis.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Aquest moneder s\'ha restaurat des d\'una còpia de seguretat. Les sol·licituds demanaran la teva aprovació fins que reprenguis.</string>
     <string name="subscriptions__allowances_paused_resume">Reprèn</string>
     <string name="subscriptions__allowances_paused_title">Pagaments automàtics en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancel·lar subscripció</string>

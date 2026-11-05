@@ -82,6 +82,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.events).thenReturn(executorEvents)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.isLedgerBehind(any())).thenReturn(false)
+        whenever(executor.isLedgerBehindOrThrow(any())).thenReturn(false)
         whenever(executor.rememberEnding(any(), any(), any())).doSuspendableAnswer {
             it.getArgument<suspend () -> Unit>(2).invoke()
         }
@@ -215,6 +216,92 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertEquals(emptyList(), sut.entries.value)
         assertTrue(sut.refresh().isSuccess)
         verify(sdk, times(2)).listAllowances(any())
+    }
+
+    @Test
+    fun `a restored wallet pauses automatic payments while it pays an allowance`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a restored wallet shows no pause without an allowance it pays`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(
+            fixtures.record(localRole = AllowanceLocalRole.ALLOWEE),
+            fixtures.record(allowanceId = "allowance-ended", state = AllowanceLifecycleState.ENDED),
+        )
+
+        sut.activate(identity)
+
+        assertEquals(2, sut.entries.value.size)
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a ledger behind this wallet explains the pause before a restore does`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehind(identity)).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.LEDGER_BEHIND, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming ends the pause after a restore`() = test {
+        var isPaused = true
+        whenever(executor.isPausedAfterRestore()).thenAnswer { isPaused }
+        whenever(executor.resumeAfterRestore()).doSuspendableAnswer { isPaused = false }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+
+        sut.resumeAutomaticPayments().getOrThrow()
+
+        verify(executor).acceptCurrentLedger(identity)
+        verify(executor).resumeAfterRestore()
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming from the restore notice keeps a ledger behind this wallet paused with its own notice`() = test {
+        var isLedgerBehind = false
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehind(identity)).thenAnswer { isLedgerBehind }
+        whenever(executor.isLedgerBehindOrThrow(identity)).thenAnswer { isLedgerBehind }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+        isLedgerBehind = true
+
+        sut.resumeAutomaticPayments().getOrThrow()
+
+        verify(executor, never()).acceptCurrentLedger(any())
+        verify(executor, never()).resumeAfterRestore()
+        assertEquals(PaykitAllowancePause.LEDGER_BEHIND, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming from the restore notice fails without accepting a ledger that cannot be read`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehindOrThrow(identity)).doSuspendableAnswer {
+            throw PaykitAllowanceError.Unavailable
+        }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+
+        val result = sut.resumeAutomaticPayments()
+
+        assertEquals(PaykitAllowanceError.Unavailable, result.exceptionOrNull())
+        verify(executor, never()).acceptCurrentLedger(any())
+        verify(executor, never()).resumeAfterRestore()
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
     }
 
     @Test

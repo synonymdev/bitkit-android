@@ -1116,6 +1116,8 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
+        // Automatic allowance payments wait for the user to resume them before any restored state is written.
+        paykitAllowanceStore.pauseAfterRestore()
         keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, String(dataBytes))
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         var restoredAttempt: OnchainSendAttempt? = null
