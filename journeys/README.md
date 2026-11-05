@@ -151,6 +151,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `cjit-notifications/non-cjit-channel-no-payment-notification.xml` | not ported — iOS dropped its CJIT notification suite with the Blocktank sunset; this one checks Android's channel-ready notification on a Manual Setup channel |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
+| `hardware-wallet/scan-onchain-amount-over-spendable.xml` | not ported — iOS checks the same raw hardware balance at scan time, but opens Confirm, switches to the hardware wallet there and fails its fee preview with a Try again toast instead of showing Insufficient Savings; port the journey with that fix |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
 | `coin-selection/manual-wallet-switch.xml` | same file, journey name and actions; iOS can open the picker on the wallet switch, Android on the next swipe. The iOS picker has no accessibility identifiers, so assert its visible "Coin Selection" title. |
