@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.RecoveryTxKind
+import breez_sdk_spark.SkippedLeaf
+import breez_sdk_spark.SkippedLeafReason
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import kotlin.test.assertContentEquals
@@ -258,6 +260,37 @@ class SparkExitFundingTest {
             SparkExitMath.fundingState(record, partial)
         )
         assertNull(SparkExitMath.fundingState(record.copy(phase = SparkExitRecord.Phase.Running), seen))
+    }
+
+    /**
+     * The qa-03 rerun: right after an exit lost a leaf, Spark's balance still counted it for about 10 minutes, and a
+     * record from before the lost-leaf list also held a leaf the balance had dropped already.
+     */
+    @Test
+    fun `lost leaves stay out of what stays on spark whether the balance counts them or not`() {
+        val failed = SparkExitFixtures.record(SparkExitRecord.Phase.Failed("Claimed by an older state"))
+        val record = failed.copy(
+            leafTotalSats = 65_536uL,
+            lostLeaves = listOf(SparkExitRecord.LostLeaf("lost", 65_536uL)),
+        )
+        assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(68_928uL, record), "balance still counts it")
+        assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(3_392uL, record), "balance synced")
+
+        val older = failed.copy(
+            leafTotalSats = 131_072uL,
+            lostLeaves = listOf(
+                SparkExitRecord.LostLeaf("lost-before", 65_536uL),
+                SparkExitRecord.LostLeaf("lost", 65_536uL),
+            ),
+        )
+        assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(68_928uL, older))
+        assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(3_392uL, older))
+
+        val small = SkippedLeaf("small", 3_392uL, SkippedLeafReason.FeeExceedsValue)
+        val prepared = SparkExitFixtures.prepared(leaves = emptyList(), skipped = listOf(small))
+        val quote = SparkExitQuote(prepared, lostLeafSats = listOf(65_536uL, 65_536uL))
+        assertEquals(3_392uL, quote.copy(sparkBalanceSats = 68_928uL).unexitableSats)
+        assertEquals(3_392uL, quote.copy(sparkBalanceSats = 3_392uL).unexitableSats)
     }
 
     @Test

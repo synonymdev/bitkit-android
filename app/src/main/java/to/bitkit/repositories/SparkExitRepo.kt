@@ -348,7 +348,7 @@ class SparkExitRepo @Inject constructor(
             val destination = _state.value.pending?.destination ?: lightningRepo.newAddress().getOrThrow()
             // Leaves an earlier exit lost to an older state stay listed by the operators, but cannot be exited.
             val lost = reportedLostLeafIds() + _state.value.record?.lostLeaves?.map { it.leafId }.orEmpty()
-            val prepared = recovering.prepareAll(
+            val quote = recovering.prepareAll(
                 PrepareRecoverFundsRequest(
                     feeRateSatPerVbyte = feeRate,
                     fundingKind = CpfpFundingKind.P2wpkh,
@@ -356,8 +356,7 @@ class SparkExitRepo @Inject constructor(
                     selection = ExitLeafSelection.All,
                 ),
                 lost,
-            )
-            val quote = SparkExitQuote(prepared, sparkRepo.state.value.balanceSats)
+            ).copy(sparkBalanceSats = sparkRepo.state.value.balanceSats)
             // Chosen here, so the funding screen, the fee estimate and the record all use one address.
             val fundingIndex = nextFundingIndex()
             val fundingAddress = fundingKey(fundingIndex).address

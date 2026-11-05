@@ -69,9 +69,14 @@ object SparkExitFundingKey {
 
 /**
  * What an exit costs and returns, from a `prepareRecoverFunds` quote, next to Spark's balance when it was taken
- * ([sparkBalanceSats]), so value the quote cannot exit is named rather than silently left out.
+ * ([sparkBalanceSats]), so value the quote cannot exit is named rather than silently left out. [lostLeafSats] are the
+ * values of the leaves an older state claimed that the operators still list, which the quote leaves out.
  */
-data class SparkExitQuote(val prepared: PrepareRecoverFundsResponse, val sparkBalanceSats: ULong? = null) {
+data class SparkExitQuote(
+    val prepared: PrepareRecoverFundsResponse,
+    val sparkBalanceSats: ULong? = null,
+    val lostLeafSats: List<ULong> = emptyList(),
+) {
     /** The value of the leaves the exit takes on-chain. */
     val exitSats: ULong get() = prepared.recoverableValueSats
 
@@ -99,11 +104,12 @@ data class SparkExitQuote(val prepared: PrepareRecoverFundsResponse, val sparkBa
      */
     val unexitableSats: ULong? get() = SparkExitMath.unexitableSats(sparkBalanceSats, this)
 
-    /** Spark's balance beyond every leaf the quote lists, skipped ones included. */
+    /** Spark's balance beyond every leaf the quote lists, skipped ones included, less the lost leaves it holds. */
     val beyondLeavesSats: ULong?
         get() {
             val leaves = prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
-            return SparkExitMath.outsideExitSats(leaves.safe() + leftBehindSats.safe(), sparkBalanceSats)
+            val beyond = SparkExitMath.outsideExitSats(leaves.safe() + leftBehindSats.safe(), sparkBalanceSats)
+            return beyond?.let { SparkExitMath.beyondLostLeaves(it, lostLeafSats) }?.takeIf { it > 0uL }
         }
 
     /** Breez's rule: only exit when the value is more than its fees. */
@@ -200,10 +206,21 @@ object SparkExitMath {
 
     /**
      * What Spark's [balanceSats] holds beyond [record]'s leaves, in any phase: what a stopped exit leaves on Spark,
-     * such as value it could not exit. Lost leaves stay in the leaf total, so they are never claimed to stay.
+     * such as value it could not exit. Lost leaves count only while the balance still holds them ([beyondLostLeaves]).
      */
-    fun staysOnSparkSats(balanceSats: ULong?, record: SparkExitRecord?): ULong? =
-        record?.let { outsideExitSats(it.leafTotalSats, balanceSats) }
+    fun staysOnSparkSats(balanceSats: ULong?, record: SparkExitRecord?): ULong? {
+        val leafTotal = record?.leafTotalSats ?: return null
+        val liveLeafTotal = if (leafTotal > record.lostSats) leafTotal - record.lostSats else 0uL
+        val beyond = outsideExitSats(liveLeafTotal, balanceSats) ?: return null
+        return beyondLostLeaves(beyond, record.lostLeaves.map { it.valueSats }).takeIf { it > 0uL }
+    }
+
+    /**
+     * [sats] less the lost leaves it still holds. Spark's balance keeps a leaf an older state claimed until a later
+     * sync drops it, so each lost leaf, largest first, is taken out only while what is left still covers it.
+     */
+    fun beyondLostLeaves(sats: ULong, lostLeafSats: List<ULong>): ULong =
+        lostLeafSats.sortedDescending().fold(sats) { left, lost -> if (left >= lost) left - lost else left }
 
     /** Spark's balance beyond the exit's leaves while it still counts them, or null. */
     fun outsideExitSats(leafTotalSats: ULong?, balanceSats: ULong?): ULong? {

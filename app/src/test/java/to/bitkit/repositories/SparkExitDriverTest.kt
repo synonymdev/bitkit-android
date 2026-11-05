@@ -839,7 +839,8 @@ class SparkExitDriverTest : BaseUnitTest() {
         )
         sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-1"), skipped = emptyList())
 
-        val prepared = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1", "lost-2"))
+        val quote = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1", "lost-2"))
+        val prepared = quote.prepared
 
         assertEquals(ExitLeafSelection.All, sdk.prepareRequests.first().selection)
         val selection = assertIs<ExitLeafSelection.Specific>(sdk.prepareRequests.last().selection)
@@ -847,30 +848,34 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(listOf("leaf-1"), prepared.leaves.map { it.leafId })
         assertEquals(9_000uL, prepared.totalFeeSats)
         assertEquals(listOf(dust), prepared.skipped)
+        assertEquals(listOf(100_000uL, 65_536uL), quote.lostLeafSats)
     }
 
     @Test
     fun `a quote with no lost leaf listed is the operators' own`() = test {
         sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-1"))
 
-        val prepared = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1"))
+        val quote = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1"))
 
         assertEquals(listOf<ExitLeafSelection>(ExitLeafSelection.All), sdk.prepareRequests.map { it.selection })
-        assertEquals(sdk.preparedResponse, prepared)
+        assertEquals(sdk.preparedResponse, quote.prepared)
+        assertEquals(emptyList(), quote.lostLeafSats)
     }
 
     @Test
     fun `a quote whose every leaf is lost shows nothing to exit`() = test {
         sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("lost-1"))
 
-        val prepared = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1"))
+        val quote = sdk.prepareAll(SparkExitFixtures.prepareRequest(), lost = setOf("lost-1"))
+        val prepared = quote.prepared
 
         assertEquals(1, sdk.prepareRequests.size)
         assertTrue(prepared.leaves.isEmpty())
         assertEquals(0uL, prepared.recoverableValueSats)
         assertEquals(0uL, prepared.totalFeeSats)
         assertNull(prepared.funding)
-        assertEquals(SparkExitQuoteBlock.Nothing, SparkExitUiState(quote = SparkExitQuote(prepared)).quoteBlock)
+        assertEquals(SparkExitQuoteBlock.Nothing, SparkExitUiState(quote = quote).quoteBlock)
+        assertEquals(listOf(100_000uL), quote.lostLeafSats)
     }
 
     @Test

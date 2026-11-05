@@ -29,26 +29,30 @@ interface SparkExitRecovering {
 /**
  * Prepares every leaf the operators list less [lost], the leaves an older state of this wallet claimed on-chain, which
  * the operators keep listing. A quote that lists one is prepared again for the rest, so its amount, fees and funding
- * leave it out, dropping a leaf the SDK refuses to exit; nothing is left to exit when every listed leaf is lost.
+ * leave it out, dropping a leaf the SDK refuses to exit; nothing is left to exit when every listed leaf is lost. The
+ * quote carries the values of the lost leaves the operators still list.
  */
 suspend fun SparkExitRecovering.prepareAll(
     request: PrepareRecoverFundsRequest,
     lost: Set<String>,
-): PrepareRecoverFundsResponse {
+): SparkExitQuote {
     val all = prepare(request.copy(selection = ExitLeafSelection.All))
+    val lostLeafSats = all.leaves.filter { it.leafId in lost }.map { it.valueSats } +
+        all.skipped.filter { it.leafId in lost }.map { it.valueSats }
     val skipped = all.skipped.filter { it.leafId !in lost }
-    if (all.leaves.none { it.leafId in lost }) return all.copy(skipped = skipped)
+    if (all.leaves.none { it.leafId in lost }) return SparkExitQuote(all.copy(skipped = skipped), null, lostLeafSats)
     var ids = all.leaves.map { it.leafId }.filter { it !in lost }
     while (ids.isNotEmpty()) {
         val result = runSuspendCatching { prepare(request.copy(selection = ExitLeafSelection.Specific(ids))) }
         result.getOrNull()?.let { prepared ->
-            return prepared.copy(skipped = (prepared.skipped + skipped).distinctBy { it.leafId })
+            val withSkipped = prepared.copy(skipped = (prepared.skipped + skipped).distinctBy { it.leafId })
+            return SparkExitQuote(withSkipped, null, lostLeafSats)
         }
         val error = requireNotNull(result.exceptionOrNull())
         val refusal = SparkExitUnexitable.parse(error)?.takeIf { it.leafId in ids } ?: throw error
         ids = ids - refusal.leafId
     }
-    return all.copy(
+    val nothing = all.copy(
         leaves = emptyList(),
         skipped = skipped,
         recoverableValueSats = 0uL,
@@ -60,6 +64,7 @@ suspend fun SparkExitRecovering.prepareAll(
         sweepFeeSats = 0uL,
         funding = null,
     )
+    return SparkExitQuote(nothing, null, lostLeafSats)
 }
 
 /**
