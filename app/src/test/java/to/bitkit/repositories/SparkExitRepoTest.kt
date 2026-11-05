@@ -211,6 +211,29 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a background run whose step keeps going unpaid lets the deadline alarm fire`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        store.save(SparkExitFixtures.record(Phase.Running).adopt(recovery, 0L))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val posts = mutableListOf<String>()
+        val refusal = """sendrawtransaction RPC error: {"code":-26,"message":"min relay fee not met, 0 < 17"}"""
+
+        repeat(SparkExitDriver.FEE_CHAIN_FAILURES_TO_REBUILD) {
+            // Only the SDK can rebuild the fee chain, and Spark does not connect.
+            val spark = coldSpark(FakeSparkExitRecovering(), connects = false)
+            createSut(spark, regtestMempool(posts, refusal)).runInBackground().getOrThrow()
+        }
+
+        val attempt = store.load()?.broadcastLog?.single()
+        assertEquals(0, attempt?.rejections)
+        assertEquals(3, attempt?.feeChainFailures)
+        verify(work, times(2)).armDeadline(any(), any())
+    }
+
+    @Test
     fun `a background run of an ended exit with leftover to sweep keeps going without starting spark`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(

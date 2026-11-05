@@ -207,7 +207,7 @@ class SparkExitRepo @Inject constructor(
         // A rebuild needs the SDK; every other running step can go out from the stored recovery without it. Steps
         // refused again and again keep the exit from moving, however often it runs.
         val canMove = recovering != null || !updated.isRebuilding
-        val isOnTrack = tip != null && canMove && updated.surfacedRejection == null
+        val isOnTrack = tip != null && canMove && updated.surfacedRejection == null && !updated.isFeeChainStuck
         afterTick(updated, current, isOnTrack)
         return updated
     }

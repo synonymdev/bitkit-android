@@ -529,6 +529,15 @@ val SparkExitRecord.surfacedRejection: String?
         it.generation == generation && it.rejections >= SparkExitDriver.REJECTIONS_TO_SURFACE && !it.isAccepted
     }?.lastOutcome
 
+/**
+ * A step of this generation went unpaid too many times in a row. Without the SDK nothing rebuilds it and it counts no
+ * rejection, so the exit is not keeping up: the deadline alarm must be left to fire.
+ */
+val SparkExitRecord.isFeeChainStuck: Boolean
+    get() = broadcastLog.any {
+        it.generation == generation && it.feeChainFailures >= SparkExitDriver.FEE_CHAIN_FAILURES_TO_REBUILD
+    }
+
 /** Transaction ids of the CPFP children, which the SDK returns as hex only. */
 object SparkExitTxids {
     fun cpfpChildTxids(recovery: RecoverFundsResponse): List<String> =
