@@ -233,6 +233,18 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keeps the exit data backup from before an exit while it runs`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.exportExitState() }.thenReturn("state")
+        val sut = createSut()
+        assertEquals("state", sut.exitBackup().getOrThrow()?.exitState)
+
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(SparkExitFixtures.record())
+
+        assertNull(sut.exitBackup().getOrThrow())
+    }
+
+    @Test
     fun `skips an exit backup from another network`() = test {
         val sut = createSut()
 

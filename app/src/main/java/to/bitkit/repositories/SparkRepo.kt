@@ -488,11 +488,18 @@ class SparkRepo @Inject constructor(
         )
     }
 
-    /** The exit data backup, or null while Spark is not connected and there is nothing to back up. */
+    /**
+     * The exit data backup, or null while Spark is not connected and there is nothing to back up. Also null while an
+     * emergency exit runs: the operators stop reporting the leaves it moves, so the backup from before it is kept.
+     */
     suspend fun exitBackup(): Result<SparkExitBackupV1?> = withContext(bgDispatcher) {
         runSuspendCatching {
             val network = sparkService.networkName
             if (!sparkService.isConnected || network == null) return@runSuspendCatching null
+            if (_state.value.isExiting || exitStore(walletIndex).isActive()) {
+                Logger.info("Skipped the Spark exit data backup while an exit runs", context = TAG)
+                return@runSuspendCatching null
+            }
             SparkExitBackupV1(createdAt = nowMillis(), network = network, exitState = sparkService.exportExitState())
         }
     }
