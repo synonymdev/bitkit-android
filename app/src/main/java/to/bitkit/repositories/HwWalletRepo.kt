@@ -127,7 +127,8 @@ class HwWalletRepo @Inject constructor(
      * Exact-amount fee composes, shared by every caller asking for the same payment. A compose runs
      * on the single core queue and takes seconds, so choosing a funding source, the confirm screen
      * and a refresh that replaces a cancelled one all reuse one result. Keyed by the funding
-     * balance, which stands in for the UTXO set; a failed compose is not kept.
+     * account's state (balance and transactions), so any change to its coins composes again; a
+     * failed compose is not kept.
      */
     private val feeEstimates = mutableMapOf<FeeEstimateKey, Deferred<Result<ULong>>>()
     private val feeEstimatesLock = Any()
@@ -137,7 +138,7 @@ class HwWalletRepo @Inject constructor(
         val address: String,
         val sats: ULong,
         val satsPerVByte: ULong,
-        val fundingBalanceSats: ULong,
+        val fundingState: Int,
     )
     private val watcherMutex = Mutex()
     private val sessionMutex = Mutex()
@@ -783,10 +784,10 @@ class HwWalletRepo @Inject constructor(
             address = address,
             sats = sats,
             satsPerVByte = satsPerVByte,
-            fundingBalanceSats = wallets.value.find { it.id == walletId }?.fundingBalanceSats ?: 0uL,
+            fundingState = fundingState(walletId),
         )
         val estimate = synchronized(feeEstimatesLock) {
-            feeEstimates.keys.removeAll { it.walletId == walletId && it.fundingBalanceSats != key.fundingBalanceSats }
+            feeEstimates.keys.removeAll { it.walletId == walletId && it.fundingState != key.fundingState }
             if (feeEstimates.size >= MAX_FEE_ESTIMATES && key !in feeEstimates) feeEstimates.clear()
             feeEstimates[key] ?: run {
                 // Owned by the repository scope, so a caller that is cancelled mid-compose leaves
@@ -815,6 +816,21 @@ class HwWalletRepo @Inject constructor(
 
     private fun forgetFeeEstimate(key: FeeEstimateKey, estimate: Job) = synchronized(feeEstimatesLock) {
         if (feeEstimates[key] === estimate) feeEstimates.remove(key)
+    }
+
+    /**
+     * Changes whenever the funding account's coins can have changed: any transaction added, replaced
+     * or dropped, or a balance change. The balance alone can return to the same total over other coins.
+     */
+    private fun fundingState(walletId: String): Int {
+        val funding = _watcherData.value.values.filter {
+            it.walletId == walletId && it.addressType == HwFundingAddressType.DEFAULT
+        }
+        val balance = funding.fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
+        val txIds = funding.flatMap { watcher ->
+            watcher.activities.filterIsInstance<Activity.Onchain>().map { it.v1.txId }
+        }.sorted()
+        return (listOf(balance.toString()) + txIds).hashCode()
     }
 
     /** Exact amount available after the coin-selection fee, computed offline from the account xpub. */

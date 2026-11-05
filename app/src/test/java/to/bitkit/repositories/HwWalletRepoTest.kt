@@ -2341,6 +2341,58 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `estimateFundingMiningFee composes again when coins change at the same balance`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever(
+            trezorRepo.composeTransactionOffline(
+                extendedKey = any(),
+                outputs = any(),
+                feeRates = any(),
+                network = any(),
+                accountType = anyOrNull(),
+                coinSelection = any(),
+                fingerprint = anyOrNull(),
+            )
+        ).thenReturn(
+            Result.success(
+                listOf(ComposeResult.Success(psbt = "psbt", fee = 1_250uL, feeRate = 2.0f, totalSpent = 26_250uL))
+            )
+        )
+        val sut = createRepo()
+        suspend fun emitFunding(vararg txIds: String) = watcherEvents.emit(
+            "$HARDWARE_WALLET_ID|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 50_000uL),
+                activities = txIds.map { watcherActivity(amount = 1uL, txid = it) },
+                transactionDetails = emptyList(),
+                txCount = txIds.size.toUInt(),
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
+            )
+        )
+
+        emitFunding("a")
+        runCurrent()
+        sut.estimateFundingMiningFee(HARDWARE_WALLET_ID, "bc1qtest", 25_000uL, 2uL)
+        emitFunding("a")
+        runCurrent()
+        sut.estimateFundingMiningFee(HARDWARE_WALLET_ID, "bc1qtest", 25_000uL, 2uL)
+        emitFunding("a", "b", "c")
+        runCurrent()
+        sut.estimateFundingMiningFee(HARDWARE_WALLET_ID, "bc1qtest", 25_000uL, 2uL)
+
+        verify(trezorRepo, times(2)).composeTransactionOffline(
+            extendedKey = any(),
+            outputs = any(),
+            feeRates = any(),
+            network = any(),
+            accountType = anyOrNull(),
+            coinSelection = any(),
+            fingerprint = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `estimateFundingMiningFee composes again after a failure`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         whenever(
