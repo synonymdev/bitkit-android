@@ -242,7 +242,11 @@ class HwSendViewModel @Inject constructor(
             return HwRetainedSendReplacement.None
         }
         if (record?.observed == false) {
-            showOperationInProgress()
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.hardware__send_broadcast_uncertain_title),
+                description = context.getString(R.string.hardware__send_broadcast_uncertain_text),
+            )
             return null
         }
         _uiState.update { it.copy(hasPendingBroadcast = pendingBroadcast != null) }

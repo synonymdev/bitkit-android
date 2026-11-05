@@ -2279,6 +2279,39 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a second tap after a device refusal with consent warns with no device contact`() = test {
+        val fixture = stubSuccessfulPayment()
+        val replacement = stubReplacementPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        val original = retainedEntries[WALLET_ID]
+        whenever(hwWalletRepo.signFunding(WALLET_ID, replacement.funding))
+            .thenReturn(Result.failure(TrezorException.UserCancelled()))
+        whenever(context.getString(R.string.hardware__send_broadcast_uncertain_title))
+            .thenReturn(BROADCAST_UNCERTAIN_TITLE)
+        whenever(context.getString(R.string.hardware__send_broadcast_uncertain_text))
+            .thenReturn(BROADCAST_UNCERTAIN_TEXT)
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.consentToNewSignature(WALLET_ID, OTHER_ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(replacementRequest())
+        advanceUntilIdle()
+        assertTrue(toasts.isEmpty())
+        clearInvocations(hwWalletRepo)
+
+        sut.signAndBroadcast(replacementRequest())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        verifyNoInteractions(hwWalletRepo)
+        assertEquals(original, retainedEntries[WALLET_ID])
+        assertEquals(Toast.ToastType.WARNING, toasts.single().type)
+        assertEquals(BROADCAST_UNCERTAIN_TITLE, toasts.single().title)
+        assertEquals(BROADCAST_UNCERTAIN_TEXT, toasts.single().description)
+        assertTrue(sut.uiState.value.canLeave)
+    }
+
+    @Test
     fun `consent is stale after cancel, after a different request and after a restart`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
