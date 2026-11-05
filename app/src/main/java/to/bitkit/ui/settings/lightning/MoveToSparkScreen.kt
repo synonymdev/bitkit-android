@@ -34,6 +34,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
@@ -207,7 +208,7 @@ private fun ColumnScope.TooLarge(
     onBack: () -> Unit,
     onRetry: (ULong?) -> Unit,
 ) {
-    val amount = sparkExitAmountText(uiState.amountSats)
+    val amount = amountText(uiState.amountSats)
     Header(
         title = stringResource(R.string.lightning__move_to_spark__too_large_title),
         text = stringResource(R.string.lightning__move_to_spark__too_large_text, amount) + " " + stringResource(
@@ -257,6 +258,10 @@ private fun ColumnScope.Failed(failure: MoveToSparkFailure, onBack: () -> Unit, 
         primaryTestTag = "MoveToSparkRetry",
     )
 }
+
+@Composable
+private fun amountText(sats: ULong): String =
+    rememberMoneyText(sats.toLong(), showSymbol = true)?.replace(Regex("</?accent>"), "") ?: sats.toString()
 
 @Composable
 private fun Buttons(
