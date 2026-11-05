@@ -11,7 +11,7 @@
   <actions>
     <action>On the first device, open Contacts and add the second identity by its Pubky key</action>
     <action>Verify the Add Contact notice reads "Please note that you and &lt;name&gt; must add each other as contacts before you can pay each other privately. If you pay without saving, the payment is visible publicly."</action>
-    <action>Save the contact and verify Contact Saved shows the second identity's name</action>
+    <action>Save the contact and verify the contact's detail screen opens with the second identity's name and Pay (testTag "ContactPay")</action>
     <action>Open the saved contact from Contacts and tap Pay (testTag "ContactPay")</action>
     <action>Verify the send amount screen (testTag "send_amount_screen") does not open and a toast titled "Unable To Pay Contact" reads "Bitkit is still setting up a private connection with this contact. Make sure they've added you as a contact too, or ask them to send you a payment request."</action>
     <action>Open Send and choose Contact, tap the second identity's row and verify the same toast appears, no amount screen opens and contact selection becomes available again</action>
