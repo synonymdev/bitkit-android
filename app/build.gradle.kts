@@ -508,7 +508,7 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
-val nativeDebugSymbols by configurations.creating {
+val nativeDebugSymbols = configurations.create("nativeDebugSymbols") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
@@ -525,7 +525,7 @@ fun Provider<MinimalExternalModuleDependency>.nativeDebugSymbolsArtifact(): Stri
     return "${dependency.module.group}:${dependency.module.name}:$version:native-debug-symbols@zip"
 }
 
-val syncNativeDebugSymbolArtifacts by tasks.registering(Sync::class) {
+tasks.register<Sync>("syncNativeDebugSymbolArtifacts") {
     group = "build"
     description = "Downloads native debug symbol archives for release native dependencies."
 
