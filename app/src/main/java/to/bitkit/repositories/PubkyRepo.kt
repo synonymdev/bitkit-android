@@ -304,7 +304,6 @@ class PubkyRepo @Inject constructor(
 
         val job = SupervisorJob(scope.coroutineContext.job)
 
-        /** Runs this refresh's work as children of [job], which is itself a child of the repo scope. */
         val refreshScope = CoroutineScope(scope.coroutineContext + job)
         val pendingResults = mutableMapOf<String, RefreshedContact>()
         var scheduledApply: Job? = null

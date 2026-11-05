@@ -10,7 +10,6 @@ import android.os.Build
 import androidx.annotation.RequiresPermission
 import java.util.concurrent.Executor
 
-/** Delivers GATT callbacks on the Binder thread that reports them, as the handler-less `connectGatt` overloads do. */
 private val directExecutor = Executor(Runnable::run)
 
 /**
