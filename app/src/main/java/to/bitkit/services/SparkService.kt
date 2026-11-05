@@ -196,7 +196,14 @@ class SparkService @Inject constructor(
     suspend fun getInfo(): GetInfoResponse = requireSdk().getInfo(GetInfoRequest(ensureSynced = false))
 
     suspend fun receiveBolt11(amountSats: ULong?, description: String, expirySecs: UInt): String {
-        val method = ReceivePaymentMethod.Bolt11Invoice(description, amountSats, expirySecs, null, null)
+        val method = ReceivePaymentMethod.Bolt11Invoice(
+            description = description,
+            amountSats = amountSats,
+            expirySecs = expirySecs,
+            paymentHash = null,
+            receiverIdentityPublicKey = null,
+            preimage = null,
+        )
         return requireSdk().receivePayment(ReceivePaymentRequest(method)).paymentRequest
     }
 
@@ -301,5 +308,8 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
      * payment, or its fee was over the caller's limit. A Paykit request or allowance attempt can then end as failed.
      */
-    class SendRefused(message: String, cause: Throwable? = null) : SparkError(message, cause)
+    open class SendRefused(message: String, cause: Throwable? = null) : SparkError(message, cause)
+
+    /** Spark refused to pay an expired Lightning invoice, before anything left the wallet. */
+    class InvoiceExpired(cause: Throwable? = null) : SendRefused("The Lightning invoice has expired", cause)
 }

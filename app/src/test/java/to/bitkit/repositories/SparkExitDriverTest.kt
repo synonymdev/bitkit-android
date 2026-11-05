@@ -688,6 +688,18 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `rebuild waits while the operators could not be reached for a leaf`() = test {
+        val record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(isRebuilding = true)
+        sdk.preparedResponse = waiting(SkippedLeafReason.OperatorsUnavailable)
+
+        val ticked = driver(tip = 1_000u).tick(record)
+
+        assertEquals(Phase.Running, ticked.phase)
+        assertTrue(ticked.isWaitingForLeaves)
+    }
+
+    @Test
     fun `resumes after a restart mid-exit without repeating broadcasts`() = test {
         val store = SparkExitStore(File(tempFolder.root, "spark-exit.json"))
         chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", value = 20_000uL))

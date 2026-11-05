@@ -283,15 +283,18 @@ class SparkExitDriver(
 
     /**
      * An empty build waits while one of the exit's leaves was skipped for a reason that may yet change: the chain
-     * could not be read for it, its funds were not found yet, or the operators' watchtower stopped it a short while
-     * ago. Not after about a week of waiting.
+     * could not be read for it, its funds were not found yet, the operators could not be reached to find them, or the
+     * operators' watchtower stopped it a short while ago. Not after about a week of waiting.
      */
     private fun isWaiting(record: SparkExitRecord, skipped: List<SkippedLeaf>, stopped: Set<String>): Boolean {
         val since = record.retrySince
         if (since != null && tip != null && SparkExitMath.isRetryReleased(since, tip)) return false
         return skipped.any {
             it.leafId in record.exitLeafIds && when (it.reason) {
-                SkippedLeafReason.Unverified, SkippedLeafReason.FundsNotFound -> true
+                SkippedLeafReason.Unverified,
+                SkippedLeafReason.FundsNotFound,
+                SkippedLeafReason.OperatorsUnavailable,
+                -> true
                 is SkippedLeafReason.NotRecoverable -> isStoppedWaiting(record, it.leafId, stopped)
                 SkippedLeafReason.FeeExceedsValue -> false
             }

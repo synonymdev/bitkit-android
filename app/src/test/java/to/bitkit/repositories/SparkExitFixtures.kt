@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.CooperativeRecoveryFailure
 import breez_sdk_spark.CpfpFundingKind
+import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.CpfpInput
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitChainState
@@ -82,7 +83,7 @@ object SparkExitFixtures {
         fanoutFeeSats = 500uL,
         refundFeeSats = 1_000uL,
         sweepFeeSats = 500uL,
-        funding = funding?.let { RecoveryFunding(it, emptyList()) },
+        funding = funding?.let { RecoveryFunding(it, emptyList(), CpfpFundingStrategy.PER_BRANCH) },
         feeRateSatPerVbyte = 2uL,
         destination = "bcrt1qdestination",
         exitChainState = ExitChainState(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),

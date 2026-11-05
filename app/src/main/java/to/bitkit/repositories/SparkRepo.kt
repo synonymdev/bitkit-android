@@ -282,8 +282,9 @@ class SparkRepo @Inject constructor(
     /**
      * Pays [bolt11] and returns its payment hash, the id ldk-node payments use, so the send flow can match it.
      * Fails with [SparkError.SendRefused] when nothing left the wallet: Spark was not connected, could not prepare the
-     * payment, or its fee was over [maxTotalFeeMsat]; and with [ServiceError.PaymentDeadlineExpired] past
-     * [paymentDeadlineAt]. A failure inside the send itself stays uncertain, as the payment may have been dispatched.
+     * payment, or its fee was over [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a [SparkError.SendRefused],
+     * when Spark refuses an expired invoice at prepare or send; and with [ServiceError.PaymentDeadlineExpired] past
+     * [paymentDeadlineAt]. Any other failure inside the send stays uncertain, as the payment may have been dispatched.
      */
     suspend fun payInvoice(
         bolt11: String,
@@ -295,8 +296,10 @@ class SparkRepo @Inject constructor(
             ensurePaymentDeadline(paymentDeadlineAt)
             if (!sparkService.isConnected) throw SparkError.SendRefused("Spark is not connected")
             if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
-            val prepared = runSuspendCatching { sparkService.prepareSend(bolt11, amountSats) }
-                .getOrElse { throw SparkError.SendRefused("Spark could not prepare the payment", it) }
+            val prepared = runSuspendCatching { sparkService.prepareSend(bolt11, amountSats) }.getOrElse {
+                if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
+                throw SparkError.SendRefused("Spark could not prepare the payment", it)
+            }
             val method = prepared.paymentMethod as? SendPaymentMethod.Bolt11Invoice
                 ?: throw SparkError.SendRefused("Unexpected Spark payment method '${prepared.paymentMethod}'")
             val feeSats = method.feeSats()
@@ -304,7 +307,10 @@ class SparkRepo @Inject constructor(
                 throw SparkError.SendRefused("Spark fee '$feeSats' sats is over the limit '$maxTotalFeeMsat' msat")
             }
             ensurePaymentDeadline(paymentDeadlineAt)
-            val payment = sparkService.send(prepared)
+            val payment = runSuspendCatching { sparkService.send(prepared) }.getOrElse {
+                if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
+                throw it
+            }
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
             method.invoiceDetails.paymentHash
         }.onFailure {
@@ -542,6 +548,7 @@ class SparkRepo @Inject constructor(
 
     private suspend fun refresh() {
         val info = sparkService.getInfo()
+        info.lastSyncError?.let { Logger.warn("Failed to sync Spark, balances may be stale: '$it'", context = TAG) }
         val pending = sparkService.listUnclaimedDeposits().map {
             SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false)
         }
@@ -991,6 +998,10 @@ sealed interface SparkClaimStep {
 }
 
 /** What accepting the early claim of [offer] leaves the deposit at. */
+/** Spark refuses an expired Lightning invoice with this input error, at prepare and again at send. */
+internal fun Throwable.isInvoiceExpired(): Boolean =
+    this is SdkException.InvalidInput && v1.contains("invoice has expired", ignoreCase = true)
+
 fun SparkEarlyClaim.toDepositClaim(offer: SparkClaimOffer.Choice): SparkDepositClaim = when (this) {
     SparkEarlyClaim.Claimed -> SparkDepositClaim.Adding
     SparkEarlyClaim.Waiting -> SparkDepositClaim.Looking
