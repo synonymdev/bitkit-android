@@ -77,6 +77,7 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, rename sheet, Add button sheet/back dismiss, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
 | `send-onchain.xml` | Normal Send flow funded by Trezor: source selection, guarded preparation, device signing, broadcast, success, and activity |
+| `scan-onchain-amount-over-spendable.xml` | Scanned on-chain amount the Trezor balance covers but not after fees: Insufficient Savings toast instead of a locked Amount screen |
 | `receive-onchain.xml` | Trezor Receive tab: current address and QR display plus exact on-device address verification |
 | `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |
 | `passphrase-duplicate.xml` | Re-entering a watched passphrase reports "already added" and adds no tile |
