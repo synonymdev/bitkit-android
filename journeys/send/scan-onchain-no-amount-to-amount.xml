@@ -1,0 +1,18 @@
+<journey name="scan onchain no amount to amount">
+  <description>
+    Verifies that an on-chain BIP21 request without an amount, or with a zero amount, still opens
+    the Send Amount screen with an empty amount, so the user enters one before Confirm.
+    Precondition: an onboarded dev wallet with confirmed sats in Savings, funded through the lsp
+    regtest deposit and mine (see ../README.md), and a regtest address the wallet does not own.
+    Start on the wallet home screen. Nothing is broadcast.
+  </description>
+  <actions>
+    <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;regtest address&gt;" to.bitkit.dev</action>
+    <action>Verify the Send Amount screen (testTag "SendNumberField") is visible with an amount of 0</action>
+    <action>Enter 10000 with the number pad keys (testTags "N1", "N0") and tap Continue (testTag "ContinueAmount")</action>
+    <action>Verify the Confirm screen opens with the amount (testTag "ReviewAmount") showing 10 000</action>
+    <action>Tap Back (testTag "NavigationBack") and verify the Send Amount screen shows 10 000, then close the sheet without sending</action>
+    <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;regtest address&gt;?amount=0" to.bitkit.dev</action>
+    <action>Verify the Send Amount screen (testTag "SendNumberField") is visible with an amount of 0, then close the sheet without sending</action>
+  </actions>
+</journey>

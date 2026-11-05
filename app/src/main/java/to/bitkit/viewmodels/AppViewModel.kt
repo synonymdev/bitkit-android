@@ -4161,7 +4161,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountChange(amount: ULong) {
-        if (_sendUiState.value.paykitUsesUsdt || _sendUiState.value.fixedLightningAmount != null) return
+        if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -4216,7 +4216,8 @@ class AppViewModel @Inject constructor(
 
                 else -> false
             }
-            val wasHardwareMax = previous.hardwareWalletId != null &&
+            // A scanned amount is the payee's, even when it equals the hardware maximum.
+            val wasHardwareMax = previous.hardwareWalletId != null && previous.fixedOnchainAmount == null &&
                 previous.amount > 0uL &&
                 previous.amount == previous.hardwareAvailableSats
             val hardwareAvailableSats = previous.hardwareWalletId?.let { walletId ->
@@ -4372,6 +4373,9 @@ class AppViewModel @Inject constructor(
             fixedContactLightningAmount(current)?.let {
                 return PaykitAmount(PaykitAsset.BTC, it)
             }
+        } else if (source != SendFundingSource.Usdt) {
+            // An amount typed on Spending must not replace the payee's on-chain amount.
+            current.fixedOnchainAmount?.let { return PaykitAmount(PaykitAsset.BTC, it) }
         }
         val input = activeIncomingPaymentRequest()?.amount ?: if (current.paykitUsesUsdt) {
             runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, current.paykitAmount) }.getOrNull()
@@ -5266,6 +5270,7 @@ class AppViewModel @Inject constructor(
                 },
                 hardwareWalletId = hardwareWalletId,
                 hardwareAvailableSats = selectedMaxSendOnchain.takeIf { hardwareWalletId != null } ?: 0uL,
+                fixedOnchainAmount = invoice.amountSatoshis.takeIf { it > 0uL && incomingPaymentRequest == null },
             )
         }
         updateCanSwitchWallet()
@@ -5399,6 +5404,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (amount > 0u && routeOnchainInvoiceAmount(amount, fromMainScanner, walletGeneration)) return
+
         Logger.info(
             when (amount > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
@@ -5408,6 +5415,43 @@ class AppViewModel @Inject constructor(
         )
 
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount, walletGeneration)
+    }
+
+    /**
+     * The payee set the amount, so it opens Confirm and never Amount. Returns false only when the
+     * request is paid another way. Manual coin selection opens the picker from the swipe.
+     */
+    private suspend fun routeOnchainInvoiceAmount(
+        amount: ULong,
+        fromMainScanner: Boolean,
+        walletGeneration: Long?,
+    ): Boolean {
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN || hasActiveContactPaymentContext()) return false
+        if (amount <= Defaults.dustLimit.toULong()) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
+                description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
+                    .replace("{amount}", formatMoneyValue(Defaults.dustLimit.toULong().safe() + 1uL.safe())),
+                testTag = "AmountTooLowToast",
+            )
+            return true
+        }
+        // Savings cannot cover it but a hardware wallet can, so pay from that instead of opening Amount.
+        if (!validateAmount(amount) && _sendUiState.value.hardwareWalletId == null) {
+            selectHardwareFundingSourceForAmount(amount, walletGeneration)
+        }
+        if (!validateAmount(amount)) return false
+        requireCurrentPaymentPreparation(walletGeneration)
+        // A failed estimate has shown its error; the user stays where the scan started.
+        if (!prepareHardwareSendFee()) return true
+        requireCurrentPaymentPreparation(walletGeneration)
+
+        Logger.info("Found payable amount in invoice, proceeding to confirm", context = TAG)
+        _sendUiState.update { it.copy(isAmountInputValid = true) }
+        navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm, walletGeneration)
+        refreshOnchainSendIfNeeded(walletGeneration)
+        return true
     }
 
     private suspend fun hardwareMaxSpendable(
@@ -8935,6 +8979,8 @@ data class SendUiState(
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
     val requiresAmountReview: Boolean = false,
+    /** The amount of a scanned on-chain request; the payee set it, so it cannot be edited. */
+    val fixedOnchainAmount: ULong? = null,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
@@ -8958,7 +9004,8 @@ data class SendUiState(
         get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
 
     val isAmountEditable: Boolean
-        get() = !isPaymentRequest && fixedLightningAmount == null
+        get() = !isPaymentRequest && fixedLightningAmount == null &&
+            !(payMethod == SendMethod.ONCHAIN && fixedOnchainAmount != null)
 
     val shouldAutomaticallyPay: Boolean
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&
