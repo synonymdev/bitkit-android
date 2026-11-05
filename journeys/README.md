@@ -165,6 +165,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
+| `send/onchain-original-payment-cancel.xml` | port pending — the iOS twin brings the same Cancel payment and Retry without checking exits, with the same file, journey name and actions |
+| `send/onchain-expired-payment-cancel.xml` | port pending — iOS master has Cancel expired payment with the same `AbandonExpiredOnchainPayment` identifier, but frees the guard and shows "Payment cancelled" once a mempool accepts the release; the iOS twin holds the guard until the release is final, and these actions apply there once it lands |
 | `send/recovery-pin-system-back.xml` | not ported — iOS has no system Back button, and `SendPinScreen` already answers cancel in `onDisappear` |
 | `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
 | `send/onchain-connecting-view.xml` | ported with another route — on iOS the LDK Debug Restart keeps the node in the running state and a launch shows home only once the node runs, so the iOS journey opens Send while the node is still starting |

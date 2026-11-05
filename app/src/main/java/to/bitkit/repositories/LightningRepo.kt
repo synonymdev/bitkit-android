@@ -1777,6 +1777,154 @@ class LightningRepo @Inject constructor(
         result
     }
 
+    suspend fun cancelOriginalOnchainSend(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        approvePrepared: suspend (OnchainPreparedReceipt) -> Unit,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("cancelOriginalOnchainSend") {
+        requireWalletRestoreComplete()
+        recoveryCoordinator.cancelOriginal(
+            attemptId,
+            walletId,
+            feeRateSatsPerVByte,
+            ::prepareOnchainCancellation,
+            approvePrepared,
+        )
+    }
+
+    private suspend fun prepareOnchainCancellation(attempt: OnchainSendAttempt, feeRate: ULong): PreparedOnchainSend {
+        val selected = requireNotNull(attempt.originalInputs).map { SpendableUtxo(OutPoint(it.txid, it.vout), 0uL) }
+        requireWalletRestoreComplete()
+        // Both outputs stay in this wallet: a dust-limit output to a fresh address plus change. Unlike a sweep,
+        // this stays within the node's spendable-balance and anchor-reserve checks for any original input set.
+        return guardPreparedBroadcast(
+            lightningService.prepareOnchainSend(
+                lightningService.newAddress(),
+                Defaults.dustLimit.toULong(),
+                feeRate,
+                selected,
+                false,
+                attempt.walletIndex,
+            )
+        )
+    }
+
+    /** The wallet's own spend that cancels [attempt], final or still confirming, if one exists. */
+    suspend fun findOnchainSendCancellation(attempt: OnchainSendAttempt): Result<OnchainInputSpend?> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val inputs = attempt.originalInputs ?: return@runSuspendCatching null
+                val cancellations = lightningService.walletSpendsOf(inputs, attempt.walletIndex)
+                    .filter(attempt::isCancelledBy)
+                cancellations.firstOrNull { it.isFinal } ?: cancellations.firstOrNull()
+            }
+        }
+
+    /**
+     * Settles the current unresolved send from the wallet's final spends of its inputs, read once. A final spend that
+     * pays nothing to the recipient invalidates every candidate and releases the guard; [beforeRelease] runs once that
+     * spend is found, before the guard's lock is taken. A final candidate is observed as the winner, for when no
+     * confirmation event reaches this attempt, such as one restored from a backup after its candidate confirmed. A
+     * final payment of exactly the original's coins that pays the recipient at least the amount is one too, though no
+     * candidate records it, such as a fee bump a restore lost: it is saved with its exact fee and rate, then observed
+     * the same way, so the payment completes rather than blocking every later send.
+     */
+    suspend fun settleOnchainSendFromWallet(
+        beforeRelease: suspend (OnchainSendAttempt) -> Unit = {},
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Result<OnchainSendSettlement?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val attempt = onchainSendAttemptStore.current()?.takeIf { it.isUnresolved }
+                ?: return@runSuspendCatching null
+            val inputs = attempt.originalInputs ?: return@runSuspendCatching null
+            val finalSpends = lightningService.walletSpendsOf(inputs, attempt.walletIndex).filter { it.isFinal }
+            finalSpends.firstOrNull(attempt::isCancelledBy)?.let { cancellation ->
+                return@runSuspendCatching releaseCancelled(attempt, cancellation, beforeRelease, removeOriginalProof)
+                    ?.let(OnchainSendSettlement::Cancelled)
+            }
+            val winner = finalSpends.firstOrNull { spend ->
+                attempt.candidateTxids.any { it.equals(spend.txid, ignoreCase = true) }
+            }?.txid ?: adoptLostCandidate(attempt, finalSpends) ?: return@runSuspendCatching null
+            onchainSendAttemptStore.observeExactTransaction(winner, isConfirmed = true)
+                ?.let(OnchainSendSettlement::Confirmed)
+        }
+    }
+
+    private suspend fun releaseCancelled(
+        attempt: OnchainSendAttempt,
+        spend: OnchainInputSpend,
+        beforeRelease: suspend (OnchainSendAttempt) -> Unit,
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): OnchainSendAttempt? {
+        // The original can never confirm now, so a guard still held here keeps every send blocked for nothing
+        val released = runSuspendCatching {
+            beforeRelease(attempt)
+            onchainSendAttemptStore.releaseCancelled(attempt.attemptId, attempt.walletIndex, spend, removeOriginalProof)
+        }.getOrElse {
+            Logger.error(
+                "Failed to release on-chain send '${attempt.attemptId}' after final cancellation '${spend.txid}'",
+                it,
+                context = TAG,
+            )
+            false
+        }
+        if (!released) {
+            Logger.error(
+                "Kept on-chain send '${attempt.attemptId}' after final cancellation '${spend.txid}'",
+                context = TAG,
+            )
+            return null
+        }
+        Logger.info(
+            "Released on-chain send '${attempt.attemptId}' after final cancellation '${spend.txid}'",
+            context = TAG,
+        )
+        return attempt
+    }
+
+    private suspend fun adoptLostCandidate(attempt: OnchainSendAttempt, finalSpends: List<OnchainInputSpend>): String? {
+        val lost = finalSpends
+            .filter { spend -> spend.outputAddresses.any { it.equals(attempt.address, ignoreCase = true) } }
+            .firstNotNullOfOrNull { lightningService.readLostCandidate(attempt, it.txid) }
+            ?: return null
+        onchainSendAttemptStore.adoptFinalCandidate(attempt, lost) ?: return null
+        Logger.info("Adopted final payment '${lost.txid}' of on-chain send '${attempt.attemptId}'", context = TAG)
+        return lost.txid
+    }
+
+    /** The time of the node's latest on-chain wallet sync, in seconds, when the node reports one. */
+    fun latestOnchainWalletSyncTimestamp(): ULong? = lightningService.status?.latestOnchainWalletSyncTimestamp
+
+    /**
+     * Replace a pending cancellation of [attemptId] with one paying [feeRateSatsPerVByte], after [approve], and save
+     * the replacement's exact fee, which covers any coins the bump added.
+     */
+    suspend fun speedUpOnchainCancellation(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        approve: suspend (estimatedFeeSats: ULong?) -> Unit,
+    ): Result<String> = executeWhenNodeRunning("speedUpOnchainCancellation") {
+        requireWalletRestoreComplete()
+        recoveryCoordinator.speedUpCancellation(
+            attemptId,
+            walletId,
+            feeRateSatsPerVByte,
+            findPending = { findOnchainSendCancellation(it).getOrThrow() },
+            approve = approve,
+        ) { txid, feeRate ->
+            requireWalletRestoreComplete()
+            val replacement = lightningService.bumpFeeByRbf(txid, feeRate)
+            val walletIndex = lightningService.currentWalletIndex
+            // An unread fee leaves the requested rate saved, which a later Cancel payment still outbids by rate
+            val exact = runSuspendCatching { lightningService.walletTransactionFee(replacement, walletIndex) }
+                .onFailure { Logger.warn("Failed to read the fee of cancellation '$replacement'", it, context = TAG) }
+                .getOrNull()
+            OnchainCancellationBump(replacement, exact?.first, exact?.second)
+        }
+    }
+
     private suspend fun finishOnchainSendLocally(attempt: OnchainSendAttempt) {
         val originalFollowup = attempt.backupFollowup
         check(
@@ -1885,19 +2033,37 @@ class LightningRepo @Inject constructor(
         attempt: OnchainSendAttempt,
         timeout: Duration,
     ): Boolean {
-        // The requested sync runs on the serial LDK queue after any sync already in flight, so its success proves a
-        // fresh view. Failing that, an on-chain sync that finishes later than the one read here also counts.
-        val previousSync = lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL
-        // The sync blocks on the LDK queue and ignores cancellation, so it runs apart and the wait keeps its limit.
+        // ldk-node joins a wallet sync already under way, which may have started before this request, and returns once
+        // it completes, after writing its timestamp. Only a sync after a successful first one proves a fresh view: the
+        // second requested sync, or an on-chain sync that finishes later than the one read between the two. A first
+        // sync that fails may never have joined the on-chain sync, so one from before the request may still finish.
+        // A node stopped between the two has no reading, and once restarted reports the joined sync's timestamp, so
+        // only the second sync's success counts then.
+        val previousSync = AtomicReference<ULong?>(null)
         val requestedSyncSucceeded = AtomicBoolean(false)
-        scope.launch { if (runSuspendCatching { lightningService.sync() }.isSuccess) requestedSyncSucceeded.set(true) }
-        withTimeoutOrNull(timeout) {
-            while (true) {
-                val latestSync = lightningService.status?.latestOnchainWalletSyncTimestamp
-                if (isOnchainSyncAfter(latestSync, previousSync, requestedSyncSucceeded.get())) break
-                delay(500.milliseconds)
+        val waitEnded = AtomicBoolean(false)
+        val firstSyncFailed = AtomicBoolean(false)
+        // The sync blocks in native code and ignores cancellation, so it runs apart and the wait keeps its limit.
+        scope.launch {
+            runSuspendCatching {
+                // Without a first sync no baseline exists, so the check fails at once rather than waiting it out
+                runSuspendCatching { lightningService.sync() }.onFailure { firstSyncFailed.set(true) }.getOrThrow()
+                lightningService.status?.latestOnchainWalletSyncTimestamp?.let(previousSync::set)
+                // A check that already gave up starts no further sync
+                if (waitEnded.get()) return@runSuspendCatching
+                lightningService.sync()
+                requestedSyncSucceeded.set(true)
             }
-        } ?: throw OnchainSendAbandonSyncError()
+        }
+        withTimeoutOrNull(timeout) {
+            var isFresh = false
+            while (!isFresh && !firstSyncFailed.get()) {
+                val latestSync = lightningService.status?.latestOnchainWalletSyncTimestamp
+                isFresh = isOnchainSyncAfter(latestSync, previousSync.get(), requestedSyncSucceeded.get())
+                if (!isFresh) delay(500.milliseconds)
+            }
+            isFresh.takeIf { it }
+        }.also { waitEnded.set(true) } ?: throw OnchainSendAbandonSyncError()
         return lightningService.walletKnowsNoCandidate(attempt)
     }
 
@@ -1905,6 +2071,9 @@ class LightningRepo @Inject constructor(
 
     override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean =
         lightningService.originalCoinSpentElsewhere(attempt)
+
+    override suspend fun originalCoinSpends(attempt: OnchainSendAttempt): List<OnchainInputSpend> =
+        lightningService.walletSpendsOf(attempt.originalInputs.orEmpty(), attempt.walletIndex)
 
     override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
         requireWalletRestoreComplete()
@@ -1921,16 +2090,13 @@ class LightningRepo @Inject constructor(
             }
         }
 
-    suspend fun recordOnchainRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
-        onchainSendAttemptStore.recordRelease(expected, txid)
+    suspend fun recordOnchainRelease(
+        expected: OnchainSendAttempt,
+        release: OnchainPreparedReceipt,
+    ): OnchainSendAttempt? = onchainSendAttemptStore.recordRelease(expected, release)
 
     suspend fun approveOnchainRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
         onchainSendAttemptStore.approveRelease(expected)
-
-    suspend fun abandonUnbroadcastOnchainSend(
-        expected: OnchainSendAttempt,
-        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
-    ): Boolean = onchainSendAttemptStore.abandonUnbroadcast(expected, removeOriginalProof)
 
     suspend fun releaseInterruptedShopPreparation(
         removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
@@ -2642,7 +2808,7 @@ class LightningRepo @Inject constructor(
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
-        private val ABANDON_SYNC_TIMEOUT = 30.seconds
+        private val ABANDON_SYNC_TIMEOUT = 120.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
 
         /** Max time to wait for a starting node before its id is treated as unavailable. */
@@ -2747,6 +2913,15 @@ sealed class ProbeError(message: String) : AppError(message) {
     class TimedOut : ProbeError("Probe timed out")
 }
 
+/** What the wallet's own final spends of an unresolved send's inputs showed. */
+sealed interface OnchainSendSettlement {
+    /** Every candidate was invalidated, and the released guard was this attempt. */
+    data class Cancelled(val attempt: OnchainSendAttempt) : OnchainSendSettlement
+
+    /** One candidate is final, and [attempt] has it observed as the winner. */
+    data class Confirmed(val attempt: OnchainSendAttempt) : OnchainSendSettlement
+}
+
 private fun Throwable.toLnurlPayInvoiceError(): Throwable {
     val lnurlPayValidationError = generateSequence(this) { it.cause }
         .firstOrNull { it.isLnurlPayValidationError() }
@@ -2831,8 +3006,9 @@ sealed interface ProbeOutcome {
 }
 
 /**
- * The sync requested for a check proves a fresh view once it succeeds. Otherwise only a sync that finished later than
- * the one read before the request counts; one finished in the same second may predate it.
+ * A sync known to have started after a check's request proves a fresh view once it succeeds. Otherwise only a sync that
+ * finished later than [previous], read once no sync from before the request can still be running, counts; one finished
+ * in the same second may predate that read, and without [previous] none counts.
  */
-internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong, requestedSyncSucceeded: Boolean = false): Boolean =
-    requestedSyncSucceeded || (latest ?: 0uL) > previous
+internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong?, requestedSyncSucceeded: Boolean = false): Boolean =
+    requestedSyncSucceeded || (previous != null && (latest ?: 0uL) > previous)

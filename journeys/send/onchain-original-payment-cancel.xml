@@ -1,0 +1,35 @@
+<journey name="onchain original payment cancel">
+  <description>
+    Verifies the exits from an unresolved original software on-chain payment once its request, quote or
+    order can no longer be re-authorized. Precondition: an onboarded funded dev wallet, PIN enabled, a
+    synced node, and a retained unresolved prepared-send receipt for a Paykit request whose candidate
+    never reached the chain, with its exact original recipient, amount, inputs and candidate
+    transaction IDs. A Blocktank order fixture offers Cancel payment but never Retry without checking,
+    since Bitkit no longer sells channels. Creating that fixture needs a controlled refusal, which the
+    Capabilities table does not provide; a seeded Pending fixture must be labelled as state injection,
+    never as proof of a native fault. Mining the 6 confirmations needs a regtest miner, so the unlock
+    steps are Manual Tests. Manual Tests must also confirm against the backend that the cancellation
+    spends the original inputs and pays only this wallet, that a cancellation evicted from mempools can
+    be replaced at a higher fee over the same inputs, that Retry without checking is refused once the
+    request is already marked as paid, and that the payee accepts a late payment before shipping Retry
+    without checking. See prepared-fee-recovery.md in this directory
+    for the shared fee-recovery cases.
+  </description>
+  <actions>
+    <action>Open the retained original payment's Pending screen and record its displayed transaction ID</action>
+    <action>Verify Pending says other payments remain blocked and offers Retry original payment, Cancel payment and Retry without checking</action>
+    <action>Tap Retry without checking and verify a warning says the request or quote may have expired, the recipient may not accept a late payment, and Bitkit will not send it if it is already marked as paid</action>
+    <action>Tap Cancel on the warning and verify the original Pending payment remains retained</action>
+    <action>Tap Cancel payment</action>
+    <action>Verify the dialog explains the cancellation needs 6 confirmations, does not show the original recipient as being paid, and prefills a fee rate above the original and at least the normal fee rate</action>
+    <action>Enter a valid fee rate that the funded fixture can support and tap Continue</action>
+    <action>Verify the exact prepared mining fee in sats is shown without a recipient amount; tap Authorize cancellation, accept any normal fee warnings, and verify the normal payment PIN screen appears before dispatch</action>
+    <action>Enter the fixture's normal payment PIN without recording entered digits</action>
+    <action>Verify Pending shows Cancellation sent with its transaction ID, says the payment can be cancelled again if the cancellation drops out of the network without confirming, no longer offers Retry original payment or Retry without checking, and still offers Cancel payment</action>
+    <action>Wait for the wallet to sync, then verify Pending offers Speed up cancellation instead of Cancel payment</action>
+    <action>Tap Speed up cancellation, verify the dialog prefills a fee rate above the cancellation just sent and at least the normal fee rate, tap Continue, and complete the normal payment PIN screen</action>
+    <action>Verify Pending shows Cancellation sent with a new cancellation transaction ID and still offers Speed up cancellation</action>
+    <action>Close the sheet, start a new on-chain send, and verify it is refused back to the original Pending payment</action>
+    <action>After the cancellation has 6 confirmations and the wallet syncs, verify a Payment Cancelled toast appears and a new on-chain send reaches its confirmation screen</action>
+  </actions>
+</journey>

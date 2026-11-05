@@ -177,6 +177,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OnchainOriginalStatusUnavailableError
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
@@ -184,6 +185,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
+import to.bitkit.repositories.OnchainSendSettlement
 import to.bitkit.repositories.PaykitAllowanceEntry
 import to.bitkit.repositories.PaykitAllowanceError
 import to.bitkit.repositories.PaykitAllowanceEvent
@@ -265,6 +267,7 @@ import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -393,6 +396,8 @@ class AppViewModel @Inject constructor(
     private var amountContinuePending = false
     private var fundingSourceSwitchPending = false
     private var onchainSendRefreshJob: Job? = null
+    private var onchainSettlementJob: Job? = null
+    private val onchainSettlementRequested = AtomicBoolean(false)
     private var sendStateGeneration = 0L
 
     fun setSendEvent(event: SendEvent) {
@@ -2507,7 +2512,10 @@ class AppViewModel @Inject constructor(
         val onActivitiesSynced: suspend () -> Unit = {
             viewModelScope.launch { refreshPublicPaykitAddressAfterActivitySync(canPublish) }
         }
-        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
+        if (event.syncType == SyncType.ONCHAIN_WALLET) {
+            completePendingRestoreActivitySeen(event.syncedBlockHeight)
+            scheduleOnchainSettlement()
+        }
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
@@ -6450,9 +6458,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Retry the original payment over its exact inputs. Without [reauthorize], the user has accepted that its request
+     * or quote may have expired, so only its expiry and payment deadline are waived: the re-send still refuses a
+     * request it cannot read fresh, one already paid or ended, and a proof already used.
+     */
     suspend fun retryOriginalOnchainSend(
         original: OnchainSendAttempt,
         feeRateSatsPerVByte: ULong,
+        reauthorize: Boolean = true,
         approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit = { _, _ -> },
     ): Result<OnchainSendOutcome> {
         // Blocktank no longer sells channels, so an unpaid order is never paid again.
@@ -6463,11 +6477,11 @@ class AppViewModel @Inject constructor(
                 IllegalStateException(context.getString(R.string.lightning__transfer_unavailable__nav_title))
             )
         }
-        val request = original.requestId?.let { id ->
+        val request = original.requestId?.takeIf { reauthorize }?.let { id ->
             (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
                 .firstOrNull { it.id == id }
         }
-        if (original.requestId != null && request == null) {
+        if (reauthorize && original.requestId != null && request == null) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
         val paymentDeadline = request?.let {
@@ -6480,22 +6494,15 @@ class AppViewModel @Inject constructor(
             original.walletId,
             feeRateSatsPerVByte,
             paymentDeadlineAt = paymentDeadline,
-            approvePrepared = { receipt ->
-                val fee = requireNotNull(receipt.miningFeeSats)
-                check(fee <= Long.MAX_VALUE.toULong())
-                val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrNull()
-                val warnings = buildList {
-                    if (fee > original.amountSats / 2uL) add(SanityWarning.FEE_OVER_HALF_VALUE)
-                    if (feeInUsd != null && feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
-                }
-                approvePrepared(receipt, warnings)
-            },
+            approvePrepared = { approvePrepared(it, recoveryFeeWarnings(it, original.amountSats)) },
         ) { attempt ->
             check(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
-            if (request != null) {
+            if (!reauthorize) {
+                ensureOriginalUnpaid(attempt)
+            } else if (request != null) {
                 val currentRequest =
                     (
                         paykitPaymentRequestRepo.pendingRequests.value +
@@ -6513,12 +6520,97 @@ class AppViewModel @Inject constructor(
                 val winner = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (request != null) {
                     paykitPaymentProofRepo.completeRecoveredOnchainPayment(request, winner)
+                } else if (winner.requestId != null) {
+                    paykitPaymentProofRepo.reconcile()
                 } else {
                     lightningRepo.completeAcceptedOrdinaryFollowup(requireNotNull(winner.txid))
                 }
             }.onFailure { Logger.warn("Failed to finish original recovered send locally", it, context = TAG) }
         }
         return result
+    }
+
+    private suspend fun ensureOriginalUnpaid(attempt: OnchainSendAttempt) {
+        if (attempt.requestId == null) return
+        // A request whose state cannot be read fresh is never taken as unpaid
+        paykitPaymentRequestRepo.refresh(PaykitPaymentRequestRefreshMode.FULL)
+            .getOrElse { throw OnchainOriginalStatusUnavailableError(it) }
+        paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(attempt).getOrThrow()
+    }
+
+    /** Replace the pending cancellation of [original] with one paying [feeRateSatsPerVByte], after [approve]. */
+    suspend fun speedUpOnchainCancellation(
+        original: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+        approve: suspend (estimatedFeeSats: ULong?, List<SanityWarning>) -> Unit,
+    ): Result<String> = lightningRepo.speedUpOnchainCancellation(
+        original.attemptId,
+        original.walletId,
+        feeRateSatsPerVByte,
+    ) { fee -> approve(fee, fee?.let { recoveryFeeWarnings(it, original.amountSats) }.orEmpty()) }
+
+    /** Spend the original inputs back to this wallet. Other sends stay blocked until that spend is final. */
+    suspend fun cancelOriginalOnchainSend(
+        original: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+        approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit,
+    ): Result<OnchainSendOutcome> = lightningRepo.cancelOriginalOnchainSend(
+        original.attemptId,
+        original.walletId,
+        feeRateSatsPerVByte,
+    ) { approvePrepared(it, recoveryFeeWarnings(it, original.amountSats)) }
+
+    private suspend fun recoveryFeeWarnings(receipt: OnchainPreparedReceipt, amountSats: ULong): List<SanityWarning> =
+        recoveryFeeWarnings(requireNotNull(receipt.miningFeeSats), amountSats)
+
+    private suspend fun recoveryFeeWarnings(fee: ULong, amountSats: ULong): List<SanityWarning> {
+        check(fee <= Long.MAX_VALUE.toULong())
+        val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrNull()
+        return buildList {
+            if (fee > amountSats / 2uL) add(SanityWarning.FEE_OVER_HALF_VALUE)
+            if (feeInUsd != null && feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
+        }
+    }
+
+    private fun scheduleOnchainSettlement() {
+        onchainSettlementRequested.set(true)
+        if (onchainSettlementJob?.isActive == true) return
+        val job = viewModelScope.launch {
+            do {
+                delay(ONCHAIN_SETTLEMENT_DEBOUNCE)
+                onchainSettlementRequested.set(false)
+                settleOnchainSendFromWallet()
+            } while (onchainSettlementRequested.get())
+        }
+        onchainSettlementJob = job
+        job.invokeOnCompletion { cause ->
+            if (cause == null && onchainSettlementJob === job && onchainSettlementRequested.get()) {
+                scheduleOnchainSettlement()
+            }
+        }
+    }
+
+    private suspend fun settleOnchainSendFromWallet() {
+        val settlement = paykitPaymentProofRepo.settleOnchainPaymentFromWallet()
+            .onFailure { Logger.warn("Failed to check for a final on-chain send spend", it, context = TAG) }
+            .getOrNull() ?: return
+        when (settlement) {
+            is OnchainSendSettlement.Cancelled -> toast(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.wallet__send_pending__cancelled_title),
+                description = context.getString(R.string.wallet__send_pending__cancelled_description),
+            )
+            is OnchainSendSettlement.Confirmed -> {
+                val txid = settlement.attempt.txid ?: return
+                runSuspendCatching {
+                    if (settlement.attempt.requestId != null) {
+                        paykitPaymentProofRepo.reconcile()
+                    } else {
+                        lightningRepo.completeAcceptedOrdinaryFollowup(txid)
+                    }
+                }.onFailure { Logger.warn("Failed to finish final on-chain send '$txid'", it, context = TAG) }
+            }
+        }
     }
 
     fun onRecoveredTransfer(original: OnchainSendAttempt) {
@@ -8811,6 +8903,7 @@ class AppViewModel @Inject constructor(
             .map { Regex("^$it:", RegexOption.IGNORE_CASE) }
         private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
         private const val TEN_USD = 10
+        private val ONCHAIN_SETTLEMENT_DEBOUNCE = 1.seconds
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val HW_SEND_FALLBACK_TX_VBYTES = 1_200uL

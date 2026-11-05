@@ -45,6 +45,7 @@ import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.lightningdevkit.ldknode.PublicKey
@@ -75,8 +76,11 @@ import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.models.feeRate
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
+import to.bitkit.models.vBytes
+import to.bitkit.repositories.OnchainInputSpend
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendInput
@@ -1093,11 +1097,51 @@ class LightningService internal constructor(
                 } ?: break
                 // Every spendable original coin must go, so no candidate can still confirm.
                 check(prepared.receipt.inputs.containsAll(originalCoins))
-                if (releaseOutbids(prepared.receipt, attempt)) return prepared
+                if (releaseOutbids(prepared.receipt, attempt)) {
+                    // A Cancel payment over the same coins must pay a higher rate than the release
+                    val receipt = prepared.receipt.copy(feeRateSatsPerVByte = feeRate)
+                    return PreparedOnchainSend(receipt) { prepared.broadcast(it) }
+                }
                 feeRate *= 2uL
             }
         }
         throw lastError
+    }
+
+    /** Read spends of [inputs] from the node wallet's own history, never from a backend or mempool query. */
+    suspend fun walletSpendsOf(inputs: List<OnchainSendInput>, walletIndex: Int): List<OnchainInputSpend> {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        return callOnchainSend {
+            if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            val bestHeight = originalNode.status().currentBestBlock.height
+            originalNode.listPayments().mapNotNull { payment ->
+                val kind = payment.kind as? PaymentKind.Onchain ?: return@mapNotNull null
+                val details = originalNode.getTransactionDetails(kind.txid) ?: return@mapNotNull null
+                onchainInputSpend(payment, details, inputs, bestHeight)
+            }
+        }
+    }
+
+    /** Reads the exact fee and rate of the wallet's transaction [txid], when the wallet holds every coin it spent. */
+    suspend fun walletTransactionFee(txid: String, walletIndex: Int): Pair<ULong, ULong>? {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        return callOnchainSend {
+            if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            val details = originalNode.getTransactionDetails(txid) ?: return@callOnchainSend null
+            val fee = exactTransactionFee(details) { originalNode.getTransactionDetails(it) }
+                ?: return@callOnchainSend null
+            fee to details.feeRate(fee)
+        }
+    }
+
+    /** Reads [txid] from the node wallet's own history as a payment of [attempt] that no candidate records. */
+    suspend fun readLostCandidate(attempt: OnchainSendAttempt, txid: String): OnchainPreparedReceipt? {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        return callOnchainSend {
+            if (currentWalletIndex != attempt.walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            val details = originalNode.getTransactionDetails(txid) ?: return@callOnchainSend null
+            lostCandidateReceipt(txid, details, attempt) { originalNode.getTransactionDetails(it) }
+        }
     }
 
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =
@@ -1557,6 +1601,51 @@ data class NetworkGraphInfo(
 
 class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")
 
+/** LDK reports an on-chain payment succeeded only once its transaction is ANTI_REORG_DELAY blocks deep. */
+internal fun onchainInputSpend(
+    payment: PaymentDetails,
+    details: TransactionDetails,
+    inputs: List<OnchainSendInput>,
+    bestHeight: UInt = 0u,
+): OnchainInputSpend? {
+    val kind = payment.kind as? PaymentKind.Onchain ?: return null
+    val guarded = inputs.map { it.copy(txid = it.txid.lowercase()) }.toSet()
+    val spent = details.inputs.map { OnchainSendInput(it.txid.lowercase(), it.vout) }
+    if (spent.none { it in guarded }) return null
+    return OnchainInputSpend(
+        txid = kind.txid.lowercase(),
+        inputs = spent,
+        outputAddresses = details.outputs.map { it.scriptpubkeyAddress },
+        vBytes = runCatching { details.vBytes() }.getOrNull(),
+        isFinal = kind.status is ConfirmationStatus.Confirmed && payment.status == PaymentStatus.SUCCEEDED,
+        confirmations = (kind.status as? ConfirmationStatus.Confirmed)
+            ?.let { if (bestHeight >= it.height) bestHeight - it.height + 1u else 1u } ?: 0u,
+    )
+}
+
+/**
+ * [details] of [txid] as a payment of [attempt] that no candidate records: it spends exactly the original's coins and
+ * pays the recipient at least the amount in one output. Its fee is exact, from [previous]. Null when it is not one, or
+ * when [previous] lacks a coin's transaction.
+ */
+internal fun lostCandidateReceipt(
+    txid: String,
+    details: TransactionDetails,
+    attempt: OnchainSendAttempt,
+    previous: (String) -> TransactionDetails?,
+): OnchainPreparedReceipt? {
+    val original = attempt.originalInputs ?: return null
+    val spent = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
+    if (spent.size != original.size || spent.toSet() != original.toSet()) return null
+    val paid = details.outputs
+        .filter { it.value >= 0 && it.scriptpubkeyAddress.equals(attempt.address, ignoreCase = true) }
+        .maxOfOrNull { it.value.toULong() }
+        ?.takeIf { it >= attempt.amountSats }
+        ?: return null
+    val fee = exactOriginalSendFee(details, original, previous) ?: return null
+    return OnchainPreparedReceipt(txid.lowercase(), spent, attempt.address, paid, details.feeRate(fee), fee)
+}
+
 /** Exact signed transaction inputs/prevouts, never an estimate or a backend-absence inference. */
 internal fun exactOriginalSendFee(
     details: TransactionDetails,
@@ -1564,7 +1653,14 @@ internal fun exactOriginalSendFee(
     previous: (String) -> TransactionDetails?,
 ): ULong? {
     val inputs = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
-    check(inputs.isNotEmpty() && inputs.distinct().size == inputs.size && inputs.toSet() == originalInputs.toSet())
+    check(inputs.toSet() == originalInputs.toSet())
+    return exactTransactionFee(details, previous)
+}
+
+/** Exact fee of [details] from the outputs its inputs spend, which [previous] reads; null when one is missing. */
+internal fun exactTransactionFee(details: TransactionDetails, previous: (String) -> TransactionDetails?): ULong? {
+    val inputs = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
+    check(inputs.isNotEmpty() && inputs.distinct().size == inputs.size)
     fun checkedSum(values: List<Long>): ULong = values.fold(0uL) { sum, value ->
         check(value >= 0 && ULong.MAX_VALUE - sum >= value.toULong())
         sum + value.toULong()

@@ -1,0 +1,28 @@
+<journey name="onchain expired payment cancel">
+  <description>
+    Verifies that cancelling an expired Shop payment keeps other on-chain payments blocked until the
+    cancellation is final, and does not report the payment as cancelled before then. Precondition: an
+    onboarded funded dev wallet, PIN for payments enabled, a synced node, and a retained unresolved
+    software on-chain payment for a Paykit Shop request whose candidate never reached the network and
+    whose request has since ended. Creating that fixture needs a controlled refusal and a Paykit Shop
+    request, which the Capabilities table does not provide; a seeded fixture must be labelled as state
+    injection, never as proof of a native fault. Mining the 6 confirmations needs a regtest miner, so the
+    unlock steps are Manual Tests. Manual Tests must also confirm against the backend that the
+    cancellation spends the original inputs, pays only this wallet, and pays a higher fee than the
+    original candidate, and that Cancel payment on the reopened Pending payment suggests a higher fee
+    rate than the release paid.
+  </description>
+  <actions>
+    <action>Open the retained original payment's Pending screen and verify it offers Cancel expired payment (testTag "AbandonExpiredOnchainPayment")</action>
+    <action>Tap Cancel expired payment and verify a dialog says the payment's request has ended and Bitkit sends the payment's coins back to the wallet for a network fee</action>
+    <action>Tap Continue and verify Pending says it is checking the network</action>
+    <action>Verify a dialog asks to send the payment's coins back to the wallet and shows the network fee in sats; tap Yes, Send and verify the normal payment PIN screen appears before dispatch</action>
+    <action>Enter the fixture's normal payment PIN without recording entered digits</action>
+    <action>Verify a toast and Pending say the cancellation was sent but is not confirmed yet and that other on-chain payments unlock once it has 6 confirmations, and that no toast says the payment was cancelled</action>
+    <action>Verify Pending stays open, no longer offers Cancel expired payment, Retry original payment or Retry without checking, and still offers Cancel payment</action>
+    <action>Close the sheet, start a new on-chain send, and verify it is refused back to the original Pending payment, which still offers Cancel payment but not Cancel expired payment, Retry original payment or Retry without checking</action>
+    <action>After the wallet syncs, verify the original Pending payment shows Cancellation sent with the cancellation's transaction ID and does not offer Cancel expired payment</action>
+    <action>Verify Pending offers Speed up cancellation instead of Cancel payment, and that its dialog prefills a fee rate above the release's</action>
+    <action>After the cancellation has 6 confirmations and the wallet syncs, verify a Payment Cancelled toast appears and a new on-chain send reaches its confirmation screen</action>
+  </actions>
+</journey>
