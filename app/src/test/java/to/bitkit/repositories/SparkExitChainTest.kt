@@ -78,6 +78,53 @@ class SparkExitChainTest : BaseUnitTest() {
         assertEquals(null, requests.single().headers["Content-Type"])
     }
 
+    private val bareRefusal = """{"error":"sendrawtransaction RPC error: {\"code\":-1}"}"""
+
+    @Test
+    fun `a lone transaction refused with a bare rpc error is sent again as a one-item package`() = test {
+        val sut = chain(
+            Route("a.example/api/tx", 400, bareRefusal),
+            Route("a.example/api/v1/txs/package", 200, """{"package_msg":"success","tx-results":{}}"""),
+        )
+
+        assertEquals(SparkExitBroadcastOutcome.Accepted, sut.broadcastHex("02sweep"))
+        assertEquals(listOf("02sweep", """["02sweep"]"""), bodies)
+    }
+
+    @Test
+    fun `a one-item package's own error is classified`() = test {
+        val sut = chain(
+            Route("a.example/api/tx", 400, bareRefusal),
+            Route(
+                "a.example/api/v1/txs/package",
+                200,
+                """{"package_msg":"transaction failed","tx-results":{"w":{"txid":"x","error":"non-BIP68-final"}}}""",
+            ),
+        )
+
+        val outcome = sut.broadcast(SparkExitFixtures.tx("s1", kind = breez_sdk_spark.RecoveryTxKind.SWEEP))
+
+        assertIs<SparkExitBroadcastOutcome.NotMature>(outcome)
+    }
+
+    @Test
+    fun `a lone transaction a host takes or refuses with a reason never goes out as a package`() = test {
+        assertEquals(
+            SparkExitBroadcastOutcome.Accepted,
+            chain(Route("a.example/api/tx", 200, "s1")).broadcastHex("02s1")
+        )
+        assertEquals(1, requests.size)
+        val refused = chain(
+            Route("a.example/api/tx", 400, "sendrawtransaction RPC error: min relay fee not met, 1 < 2")
+        )
+        assertIs<SparkExitBroadcastOutcome.Rejected>(refused.broadcastHex("02s1"))
+        assertEquals(2, requests.size)
+        assertFalse(
+            SparkExitBroadcastClassifier.isUnplaceable(SparkExitBroadcastOutcome.Rejected("min relay fee not met"))
+        )
+        assertTrue(SparkExitBroadcastClassifier.isUnplaceable(SparkExitBroadcastClassifier.classify(bareRefusal)))
+    }
+
     @Test
     fun `falls back to the unversioned package path then the next host`() = test {
         val sut = chain(

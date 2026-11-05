@@ -24,6 +24,7 @@ import kotlinx.serialization.json.longOrNull
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
+import to.bitkit.utils.SignedTransactionId
 import kotlin.math.ceil
 
 data class EsploraTxStatus(val confirmed: Boolean, val blockHeight: UInt? = null)
@@ -75,7 +76,10 @@ interface SparkExitChain {
     suspend fun isTxKnown(txid: String): Boolean
     suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome
 
-    /** A transaction of the app's own, such as the sweep of leftover fee funding, as a single `/tx`. */
+    /**
+     * A transaction of the app's own, such as the sweep of leftover fee funding, as a single `/tx`, or as a one-item
+     * package on a host that refuses it there with a bare RPC error.
+     */
     suspend fun broadcastHex(hex: String): SparkExitBroadcastOutcome
 
     /** The rate for the next block, from `/fee-estimates`, rounded up. */
@@ -109,7 +113,8 @@ data class SparkExitHosts(val reads: List<String>, val broadcasts: List<SparkExi
 
 /**
  * esplora and mempool.space REST: a transaction with a CPFP child goes out as a package (a JSON array of hex), one
- * without as a single `/tx`.
+ * without as a single `/tx`. A host that answers `/tx` with a bare `{"code":-1}`, as Spark's hosted regtest does for
+ * every lone transaction, gets the same hex again as a one-item package, whose answer decides.
  */
 class EsploraSparkExitChain(
     private val hosts: SparkExitHosts,
@@ -198,7 +203,7 @@ class EsploraSparkExitChain(
             val attempt = if (child != null) {
                 submitPackage(host, listOf(tx.txHex, child), tx.txid)
             } else {
-                submitSingle(host.url, tx.txHex)
+                submitSingle(host, tx.txHex)
             }
             // null: this host cannot take it (no package endpoint, unreachable).
             if (attempt == SparkExitBroadcastOutcome.Accepted) return attempt
@@ -211,7 +216,7 @@ class EsploraSparkExitChain(
 
     override suspend fun broadcastHex(hex: String): SparkExitBroadcastOutcome {
         val outcomes = hosts.broadcasts.mapNotNull { host ->
-            submitSingle(host.url, hex).also { if (it == SparkExitBroadcastOutcome.Accepted) return it }
+            submitSingle(host, hex).also { if (it == SparkExitBroadcastOutcome.Accepted) return it }
         }
         return outcomes.firstOrNull { it is SparkExitBroadcastOutcome.Rejected }
             ?: outcomes.firstOrNull()
@@ -221,7 +226,7 @@ class EsploraSparkExitChain(
     private suspend fun submitPackage(
         host: SparkExitBroadcastHost,
         hexes: List<String>,
-        parentTxid: String,
+        parentTxid: String?,
     ): SparkExitBroadcastOutcome? {
         val body = JsonArray(hexes.map(::JsonPrimitive)).toString()
         for (path in host.packagePaths) {
@@ -232,10 +237,13 @@ class EsploraSparkExitChain(
         return null
     }
 
-    private suspend fun submitSingle(host: String, hex: String): SparkExitBroadcastOutcome? {
-        val response = post("$host/tx", TextContent(hex, ContentType.Text.Plain)) ?: return null
+    private suspend fun submitSingle(host: SparkExitBroadcastHost, hex: String): SparkExitBroadcastOutcome? {
+        val response = post("${host.url}/tx", TextContent(hex, ContentType.Text.Plain)) ?: return null
         if (response.status.value in NOT_HERE) return null
-        return SparkExitBroadcastClassifier.single(response.status.value, response.bodyAsText())
+        val outcome = SparkExitBroadcastClassifier.single(response.status.value, response.bodyAsText())
+        if (!SparkExitBroadcastClassifier.isUnplaceable(outcome)) return outcome
+        val txid = runCatching { SignedTransactionId.fromHex(hex) }.getOrNull()
+        return submitPackage(host, listOf(hex), txid) ?: outcome
     }
 
     private suspend fun post(url: String, content: TextContent): HttpResponse? =
@@ -361,6 +369,16 @@ object SparkExitBroadcastClassifier {
 
     fun isFeeTooLow(outcome: SparkExitBroadcastOutcome): Boolean =
         outcome is SparkExitBroadcastOutcome.Rejected && isFeeTooLow(outcome.reason)
+
+    private val bareRpcError = Regex("code\\\\?\"\\s*:\\s*-1\\b")
+
+    /**
+     * A refusal that names only RPC code -1, with no reason a node gives: Spark's hosted regtest answers every lone
+     * `/tx` that way, while the same hex as a package gets a real answer.
+     */
+    fun isUnplaceable(outcome: SparkExitBroadcastOutcome): Boolean =
+        outcome is SparkExitBroadcastOutcome.Rejected && bareRpcError.containsMatchIn(outcome.reason) &&
+            !outcome.reason.contains("message", ignoreCase = true)
 
     fun classify(text: String): SparkExitBroadcastOutcome = when {
         knownMessages.any { it in text } || hasRpcCode(-27, text) -> SparkExitBroadcastOutcome.Accepted
