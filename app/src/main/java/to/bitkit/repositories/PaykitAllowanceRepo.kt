@@ -106,6 +106,8 @@ class PaykitAllowanceRepo @Inject constructor(
     private val scope = appScope(ioDispatcher, TAG)
     private val refreshMutex = Mutex()
     private val publishLock = Any()
+    private val activationLock = Any()
+    private var activationRevision = Any()
     private val isProcessingRequests = AtomicBoolean(false)
     private val isAcceptingOffers = AtomicBoolean(false)
     private val updates = MutableStateFlow(0)
@@ -123,7 +125,11 @@ class PaykitAllowanceRepo @Inject constructor(
         { limits, monthAnchor, endpoints -> limits.terms(monthAnchor, endpoints) }
 
     @Volatile
-    private var activeIdentity: String? = null
+    private var activation: Activation? = null
+
+    private val activeIdentity: String? get() = activation?.identity
+
+    private class Activation(val identity: String)
 
     private val _entries = MutableStateFlow<List<PaykitAllowanceEntry>>(emptyList())
 
@@ -183,16 +189,22 @@ class PaykitAllowanceRepo @Inject constructor(
 
     // region Lifecycle
 
-    suspend fun activate(identity: String?) {
+    suspend fun activate(identity: String?, canActivate: suspend () -> Boolean = { true }) {
         val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized)
         if (normalizedIdentity == null) {
             deactivate()
             return
         }
+        val revision = synchronized(activationLock) { activationRevision }
         withContext(ioDispatcher) {
-            val identityChanged = activeIdentity != normalizedIdentity
-            activeIdentity = normalizedIdentity
-            executor.activate(normalizedIdentity)
+            if (!canActivate()) return@withContext
+            val identityChanged = synchronized(activationLock) {
+                if (activationRevision !== revision) return@withContext
+                val changed = activeIdentity != normalizedIdentity
+                if (changed) activation = Activation(normalizedIdentity)
+                executor.activate(normalizedIdentity)
+                changed
+            }
             if (identityChanged) {
                 manualRequestSignatures.clear()
                 _offersToAnnounce.update { emptyList() }
@@ -204,8 +216,11 @@ class PaykitAllowanceRepo @Inject constructor(
     }
 
     fun deactivate() {
-        executor.activate(null)
-        clear()
+        synchronized(activationLock) {
+            activationRevision = Any()
+            executor.activate(null)
+            clear()
+        }
     }
 
     /**
@@ -213,14 +228,17 @@ class PaykitAllowanceRepo @Inject constructor(
      * the executor settle attempts left open before allowances were turned off; null keeps its current one.
      */
     suspend fun pause(identity: String? = null) {
-        executor.stopAdmitting()
-        clear()
+        synchronized(activationLock) {
+            activationRevision = Any()
+            executor.stopAdmitting()
+            clear()
+        }
         val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return
         withContext(ioDispatcher) { executor.pause(normalizedIdentity) }
     }
 
     private fun clear() {
-        activeIdentity = null
+        activation = null
         manualRequestSignatures.clear()
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()
@@ -327,11 +345,22 @@ class PaykitAllowanceRepo @Inject constructor(
             }
         }
 
-    suspend fun accept(entryId: String): Result<Unit> = respond(entry(entryId)) { acceptProposal(it) }
+    suspend fun accept(entryId: String): Result<Unit> {
+        val acceptingActivation = activation
+        return respond(entry(entryId)) { acceptProposal(it, acceptingActivation) }
+    }
 
-    private suspend fun acceptProposal(allowance: PaykitAllowance): AllowanceRecord {
+    private suspend fun acceptProposal(
+        allowance: PaykitAllowance,
+        acceptingActivation: Activation?,
+        canContinue: () -> Boolean = { true },
+    ): AllowanceRecord {
         val proposalStreamItemId = allowance.proposalStreamItemId ?: throw PaykitAllowanceError.Unavailable
-        return paykitSdkService.acceptAllowance(allowance.counterparty, allowance.allowanceId, proposalStreamItemId)
+        return paykitSdkService.acceptAllowance(allowance.counterparty, allowance.allowanceId, proposalStreamItemId) {
+            if (acceptingActivation == null || activation !== acceptingActivation || !canContinue()) {
+                throw PaykitAllowanceError.Unavailable
+            }
+        }
     }
 
     /**
@@ -346,7 +375,8 @@ class PaykitAllowanceRepo @Inject constructor(
         canAnnounce: () -> Boolean = { true },
         canContinue: () -> Boolean = { true },
     ): List<PaykitAllowanceEntry> = withContext(ioDispatcher) {
-        val identity = activeIdentity ?: return@withContext emptyList()
+        val acceptingActivation = activation ?: return@withContext emptyList()
+        val identity = acceptingActivation.identity
         val isCurrent = { activeIdentity == identity && canAnnounce() }
         val offers = _entries.value.filter { entry ->
             val answerable = entry.allowances.filter { it.isAnswerable }
@@ -369,7 +399,7 @@ class PaykitAllowanceRepo @Inject constructor(
                 }.onFailure { Logger.warn("Failed to mark an allowance offer before accepting it", it, context = TAG) }
                     .isSuccess
                 if (isMarked) {
-                    respond(offer) { acceptProposal(it) }
+                    respond(offer) { acceptProposal(it, acceptingActivation, canContinue) }
                         .onSuccess { accepted += offer }
                         .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
                 }
