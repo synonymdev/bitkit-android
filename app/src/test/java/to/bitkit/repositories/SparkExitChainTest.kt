@@ -31,7 +31,10 @@ class SparkExitChainTest : BaseUnitTest() {
     private val bodies = mutableListOf<String>()
 
     /** Answers each request with the first route whose URL it ends with; an unknown URL fails like a dead host. */
-    private fun chain(vararg routes: Route, hosts: List<String> = listOf(hostA)): EsploraSparkExitChain {
+    private fun chain(vararg routes: Route, hosts: List<String> = listOf(hostA)): EsploraSparkExitChain =
+        chain(*routes, hosts = SparkExitHosts.of(*hosts.toTypedArray()))
+
+    private fun chain(vararg routes: Route, hosts: SparkExitHosts): EsploraSparkExitChain {
         val pending = routes.toMutableList()
         val engine = MockEngine { request -> answer(request, pending) }
         // Like the app's shared client, which defaults every request to JSON.
@@ -222,5 +225,87 @@ class SparkExitChainTest : BaseUnitTest() {
         val down = Route("b.example/api/tx/t/hex", 503, "")
         assertFailsWith<SparkExitChainError> { chain(unknown, down, hosts = listOf(hostA, hostB)).isTxKnown("t") }
         assertFailsWith<Exception> { chain(hosts = listOf(hostA)).isTxKnown("t") }
+    }
+
+    @Test
+    fun `a single read host decides whether a transaction is known`() = test {
+        assertFalse(chain(Route("a.example/api/tx/t/hex", 404, "Transaction not found")).isTxKnown("t"))
+        assertFailsWith<SparkExitChainError> { chain(Route("a.example/api/tx/t/hex", 503, "")).isTxKnown("t") }
+        assertFailsWith<IOException> { chain().isTxKnown("t") }
+    }
+
+    private val ownHosts = SparkExitHosts(
+        reads = listOf(hostA),
+        broadcasts = listOf(
+            SparkExitBroadcastHost(hostA, packagePaths = listOf("/txs/package")),
+            SparkExitBroadcastHost(hostB),
+        ),
+    )
+
+    @Test
+    fun `reads stay on the read hosts`() = test {
+        val sut = chain(
+            Route("a.example/api/blocks/tip/height", 503, ""),
+            Route("b.example/api/blocks/tip/height", 200, "1"),
+            Route("b.example/api/tx/t/hex", 200, "02aa"),
+            hosts = ownHosts,
+        )
+
+        assertFailsWith<SparkExitChainError> { sut.tipHeight() }
+        assertFailsWith<IOException> { sut.isTxKnown("t") }
+        assertEquals(listOf("a.example", "a.example"), requests.map { it.url.host })
+    }
+
+    @Test
+    fun `a host with only the unversioned package path is asked once`() = test {
+        val sut = chain(
+            Route("a.example/api/txs/package", 200, """{"package_msg":"success"}"""),
+            hosts = ownHosts,
+        )
+
+        assertEquals(SparkExitBroadcastOutcome.Accepted, sut.broadcast(SparkExitFixtures.tx("n1", cpfp = "03c")))
+        assertEquals("/api/txs/package", requests.single().url.encodedPath)
+    }
+
+    @Test
+    fun `a broadcast falls back from the first host`() = test {
+        val sut = chain(
+            Route("a.example/api/txs/package", 503, ""),
+            Route("b.example/api/v1/txs/package", 200, """{"package_msg":"success"}"""),
+            Route("a.example/api/tx", 503, ""),
+            Route("b.example/api/tx", 200, "s1"),
+            hosts = ownHosts,
+        )
+
+        assertEquals(SparkExitBroadcastOutcome.Accepted, sut.broadcast(SparkExitFixtures.tx("n1", cpfp = "03c")))
+        assertEquals(SparkExitBroadcastOutcome.Accepted, sut.broadcastHex("02s1"))
+        val paths = requests.map { "${it.url.host}${it.url.encodedPath}" }
+        assertEquals(
+            listOf("a.example/api/txs/package", "b.example/api/v1/txs/package", "a.example/api/tx", "b.example/api/tx"),
+            paths,
+        )
+    }
+
+    @Test
+    fun `mainnet reads bitkit electrs and broadcasts there first`() {
+        val hosts = checkNotNull(EsploraSparkExitChain.defaultHosts("mainnet"))
+
+        assertEquals(listOf("https://bitkit.to/electrs"), hosts.reads)
+        assertEquals(
+            listOf(
+                SparkExitBroadcastHost("https://bitkit.to/electrs", listOf("/txs/package")),
+                SparkExitBroadcastHost("https://mempool.space/api", listOf("/v1/txs/package", "/txs/package")),
+                SparkExitBroadcastHost("https://blockstream.info/api", listOf("/v1/txs/package", "/txs/package")),
+            ),
+            hosts.broadcasts,
+        )
+    }
+
+    @Test
+    fun `regtest reads and broadcasts on the sdk host`() {
+        val regtest = "https://regtest-mempool.us-west-2.sparkinfra.net/api"
+
+        assertEquals(SparkExitHosts.of(regtest), EsploraSparkExitChain.defaultHosts("regtest"))
+        assertEquals(null, EsploraSparkExitChain.defaultHosts("signet"))
     }
 }

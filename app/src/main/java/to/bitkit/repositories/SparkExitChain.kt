@@ -21,6 +21,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 
@@ -67,8 +68,8 @@ interface SparkExitChain {
     suspend fun txStatus(txid: String): EsploraTxStatus
 
     /**
-     * Whether a host has [txid] in a block or its mempool, from `/tx/{txid}/hex`: false only when every host answers
-     * 404. Throws when a host fails otherwise, since that host may know it.
+     * Whether a read host has [txid] in a block or its mempool, from `/tx/{txid}/hex`: false only when every read host
+     * answers 404. Throws when a host fails otherwise, since that host may know it.
      */
     suspend fun isTxKnown(txid: String): Boolean
     suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome
@@ -79,22 +80,46 @@ interface SparkExitChain {
 
 class SparkExitChainError(message: String) : AppError(message)
 
+/** A host an exit broadcasts through, with the paths it takes a package on, tried in order. */
+data class SparkExitBroadcastHost(
+    val url: String,
+    val packagePaths: List<String> = listOf("/v1/txs/package", "/txs/package"),
+)
+
+/** Where an exit reads the chain, and where it broadcasts, each tried in order. */
+data class SparkExitHosts(val reads: List<String>, val broadcasts: List<SparkExitBroadcastHost>) {
+    companion object {
+        /** One set of hosts for reads and broadcasts alike. */
+        fun of(vararg urls: String) = SparkExitHosts(urls.toList(), urls.map(::SparkExitBroadcastHost))
+    }
+}
+
 /**
- * esplora and mempool.space REST, on the hosts the Spark SDK uses by default: a transaction with a CPFP child goes
- * out as a package through `/v1/txs/package` (a JSON array of hex), one without as a single `/tx`.
+ * esplora and mempool.space REST: a transaction with a CPFP child goes out as a package (a JSON array of hex), one
+ * without as a single `/tx`.
  */
 class EsploraSparkExitChain(
-    private val hosts: List<String>,
+    private val hosts: SparkExitHosts,
     private val client: HttpClient,
 ) : SparkExitChain {
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
 
-        /** The Spark SDK's default chain service per network (breez spark-sdk `default_rest_chain_services`). */
-        fun defaultHosts(sparkNetwork: String?): List<String> = when (sparkNetwork) {
-            "mainnet" -> listOf("https://mempool.space/api", "https://blockstream.info/api")
-            "regtest" -> listOf("https://regtest-mempool.us-west-2.sparkinfra.net/api")
-            else -> emptyList()
+        /**
+         * The chain the Spark SDK reads per network. Mainnet reads Bitkit's own esplora alone, which takes a package
+         * on `/txs/package` only, and broadcasts there first, then through the SDK's former default hosts.
+         */
+        fun defaultHosts(sparkNetwork: String?): SparkExitHosts? = when (sparkNetwork) {
+            "mainnet" -> SparkExitHosts(
+                reads = listOf(Env.bitkitEsploraUrl),
+                broadcasts = listOf(
+                    SparkExitBroadcastHost(Env.bitkitEsploraUrl, packagePaths = listOf("/txs/package")),
+                    SparkExitBroadcastHost("https://mempool.space/api"),
+                    SparkExitBroadcastHost("https://blockstream.info/api"),
+                ),
+            )
+            "regtest" -> SparkExitHosts.of("https://regtest-mempool.us-west-2.sparkinfra.net/api")
+            else -> null
         }
 
         private val NOT_HERE = setOf(404, 405)
@@ -119,10 +144,10 @@ class EsploraSparkExitChain(
         status(json.parseToJsonElement(get("/tx/$txid/status")).jsonObject)
 
     override suspend fun isTxKnown(txid: String): Boolean {
-        if (hosts.isEmpty()) throw SparkExitChainError("No chain host configured")
+        if (hosts.reads.isEmpty()) throw SparkExitChainError("No chain host configured")
         val path = "/tx/$txid/hex"
         var lastError: Throwable? = null
-        for (host in hosts) {
+        for (host in hosts.reads) {
             val status = runSuspendCatching { client.get("$host$path").status }
                 .onFailure { lastError = it }
                 .getOrNull()
@@ -137,12 +162,12 @@ class EsploraSparkExitChain(
     /** Tries each host until one accepts. Otherwise a node's refusal wins over a host that was only unavailable. */
     override suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome {
         val outcomes = mutableListOf<SparkExitBroadcastOutcome>()
-        for (host in hosts) {
+        for (host in hosts.broadcasts) {
             val child = tx.cpfpTxHex
             val attempt = if (child != null) {
                 submitPackage(host, listOf(tx.txHex, child), tx.txid)
             } else {
-                submitSingle(host, tx.txHex)
+                submitSingle(host.url, tx.txHex)
             }
             // null: this host cannot take it (no package endpoint, unreachable).
             if (attempt == SparkExitBroadcastOutcome.Accepted) return attempt
@@ -154,8 +179,8 @@ class EsploraSparkExitChain(
     }
 
     override suspend fun broadcastHex(hex: String): SparkExitBroadcastOutcome {
-        val outcomes = hosts.mapNotNull { host ->
-            submitSingle(host, hex).also { if (it == SparkExitBroadcastOutcome.Accepted) return it }
+        val outcomes = hosts.broadcasts.mapNotNull { host ->
+            submitSingle(host.url, hex).also { if (it == SparkExitBroadcastOutcome.Accepted) return it }
         }
         return outcomes.firstOrNull { it is SparkExitBroadcastOutcome.Rejected }
             ?: outcomes.firstOrNull()
@@ -163,13 +188,13 @@ class EsploraSparkExitChain(
     }
 
     private suspend fun submitPackage(
-        host: String,
+        host: SparkExitBroadcastHost,
         hexes: List<String>,
         parentTxid: String,
     ): SparkExitBroadcastOutcome? {
         val body = JsonArray(hexes.map(::JsonPrimitive)).toString()
-        for (path in listOf("/v1/txs/package", "/txs/package")) {
-            val response = post("$host$path", TextContent(body, ContentType.Application.Json)) ?: return null
+        for (path in host.packagePaths) {
+            val response = post("${host.url}$path", TextContent(body, ContentType.Application.Json)) ?: return null
             if (response.status.value in NOT_HERE) continue
             return SparkExitBroadcastClassifier.pkg(response.status.value, response.bodyAsText(), parentTxid)
         }
@@ -193,7 +218,7 @@ class EsploraSparkExitChain(
 
     private suspend fun get(path: String): String {
         var lastError: Throwable = SparkExitChainError("No chain host configured")
-        for (host in hosts) {
+        for (host in hosts.reads) {
             runSuspendCatching {
                 val response = client.get("$host$path")
                 if (!response.status.isSuccess()) {

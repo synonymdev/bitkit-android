@@ -105,7 +105,6 @@ class SparkExitRepo @Inject constructor(
 
     private val chain: SparkExitChain?
         get() = EsploraSparkExitChain.defaultHosts(sparkService.networkName)
-            .takeIf { it.isNotEmpty() }
             ?.let { EsploraSparkExitChain(it, httpClient) }
 
     // region lifecycle

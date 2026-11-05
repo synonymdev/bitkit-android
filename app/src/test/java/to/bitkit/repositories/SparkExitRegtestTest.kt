@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
  * `SPARK_EXIT_REGTEST=1` in the environment of `just test file SparkExitRegtestTest`.
  */
 class SparkExitRegtestTest : BaseUnitTest() {
-    private val chain = EsploraSparkExitChain(EsploraSparkExitChain.defaultHosts("regtest"), HttpClient())
+    private val chain = EsploraSparkExitChain(checkNotNull(EsploraSparkExitChain.defaultHosts("regtest")), HttpClient())
 
     @Before
     fun requireOptIn() {

@@ -72,7 +72,7 @@ class SparkExitRegtestTest {
             assertTrue(prepared.leaves.isEmpty())
             assertFalse(SparkExitQuote(prepared).isWorthExiting)
 
-            val chain = EsploraSparkExitChain(EsploraSparkExitChain.defaultHosts("regtest"), HttpClient())
+            val chain = EsploraSparkExitChain(checkNotNull(EsploraSparkExitChain.defaultHosts("regtest")), HttpClient())
             assertTrue(chain.tipHeight() > 0u)
             assertTrue(chain.utxos(address.address).isEmpty())
         } finally {
