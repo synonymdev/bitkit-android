@@ -122,7 +122,9 @@ data class ProfileEditBase(val profile: PubkyProfile?, val revision: String?)
 /** The pubky.app profile changed since Bitkit loaded it, so the save was not applied. */
 class PubkyProfileChangedError(cause: Throwable) : AppError("Profile changed in pubky.app", cause = cause)
 
-class PubkyProfileTagsUnavailableError : AppError("Profile tags could not be read")
+/** The other fields were saved and [base] is where a retry starts from, but the tag change was not. */
+class PubkyProfileTagsNotSavedError(val base: ProfileEditBase, cause: Throwable? = null) :
+    AppError("Profile tags were not saved", cause = cause)
 
 private class PubkyProfileNotFoundError : AppError("Profile not found")
 
@@ -1266,12 +1268,12 @@ class PubkyRepo @Inject constructor(
                 .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
                 .exceptionOrNull()
         }
-        val tagError = when {
-            keptTags == null && tags != baseTags -> PubkyProfileTagsUnavailableError()
-            copyError != null && keptTags != baseTags -> copyError
-            else -> null
-        }
         val stored = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
+        val tagsLost = (keptTags == null || copyError != null) && tags != baseTags
+        val tagError = PubkyProfileTagsNotSavedError(
+            ProfileEditBase(stored, snapshot.revision),
+            copyError
+        ).takeIf { tagsLost }
         return SavedProfile(stored, snapshot.revision, tagError)
     }
 
@@ -1297,10 +1299,10 @@ class PubkyRepo @Inject constructor(
         var snapshot = fetched ?: paykitData?.takeIf { migrating }?.let { migrateToPubkyApp(publicKey, it) }
         // While the move cannot finish, the Bitkit profile is shown and the next save creates the pubky.app profile.
         snapshot ?: return paykitData?.takeIf { migrating }?.let { it.toPubkyProfile(publicKey) to null }
-        val pendingAvatar = paykitData?.image
-        var retryingAvatar = fetched != null && publicKey in stored.pubkyAppAvatarPending && pendingAvatar != null
-        if (retryingAvatar && fetched?.profile?.image != null) {
-            // An avatar set on pubky.app meanwhile wins over the one still to move.
+        val pendingAvatar = paykitData?.image?.takeIf { it.isPaykitStorage() }
+        var retryingAvatar = fetched != null && publicKey in stored.pubkyAppAvatarPending
+        if (retryingAvatar && (pendingAvatar == null || fetched?.profile?.image != null)) {
+            // An avatar set on pubky.app meanwhile wins, and only an avatar on Paykit storage is moved.
             pubkyStore.update { it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - publicKey) }
             retryingAvatar = false
         }
@@ -1335,7 +1337,7 @@ class PubkyRepo @Inject constructor(
             )
             val snapshot = withPubkyAppScope { pubkyService.publishPubkyProfile(update, null, publicKey) }
             Logger.info("Moved Bitkit profile to pubky.app", context = TAG)
-            val image = data.image ?: return@runSuspendCatching snapshot
+            val image = data.image?.takeIf { it.isPaykitStorage() } ?: return@runSuspendCatching snapshot
             moveAvatar(publicKey, image, snapshot) ?: snapshot
         }.onFailure { Logger.warn("Failed to move Bitkit profile to pubky.app", it, context = TAG) }.getOrNull()
 

@@ -1323,7 +1323,7 @@
     <string name="profile__edit_save_error">Αποτυχία αποθήκευσης προφίλ</string>
     <string name="profile__edit_save_success">Το προφίλ αποθηκεύτηκε</string>
     <string name="profile__edit_tags">ΕΤΙΚΕΤΕΣ</string>
-    <string name="profile__edit_tags_error">Το Bitkit δεν μπόρεσε να διαβάσει τις ετικέτες σου, οπότε η αλλαγή ετικετών δεν αποθηκεύτηκε. Δοκίμασε ξανά.</string>
+    <string name="profile__edit_tags_error">Το Bitkit δεν μπόρεσε να αποθηκεύσει τις ετικέτες σου. Οι άλλες αλλαγές σου αποθηκεύτηκαν, οπότε δοκίμασε ξανά τις ετικέτες.</string>
     <string name="profile__edit_unlink_section">ΑΠΟΣΥΝΔΕΣΗ</string>
     <string name="profile__empty_state">Δεν ήταν δυνατή η φόρτωση του προφίλ σου.</string>
     <string name="profile__intro_description">Με το φορητό προφίλ σου, οι επαφές σου μπορούν να σε βρουν και να σε πληρώσουν οπουδήποτε.</string>

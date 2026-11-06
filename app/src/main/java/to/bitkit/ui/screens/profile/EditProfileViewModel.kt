@@ -29,7 +29,7 @@ import to.bitkit.models.takeCodePoints
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyProfileChangedError
-import to.bitkit.repositories.PubkyProfileTagsUnavailableError
+import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -230,11 +230,13 @@ class EditProfileViewModel @Inject constructor(
                     title = context.getString(R.string.profile__edit_save_error),
                     description = when {
                         changed -> context.getString(R.string.profile__edit_changed_error)
-                        it is PubkyProfileTagsUnavailableError -> context.getString(R.string.profile__edit_tags_error)
+                        it is PubkyProfileTagsNotSavedError -> context.getString(R.string.profile__edit_tags_error)
                         else -> it.message
                     },
                 )
                 if (changed) reloadAfterExternalEdit()
+                // The other fields are on pubky.app, so a retry starts from their revision.
+                if (it is PubkyProfileTagsNotSavedError) editBase = it.base
             }
         }
     }

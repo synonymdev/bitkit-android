@@ -650,7 +650,7 @@
     <string name="profile__edit_save_error">Failed to save profile</string>
     <string name="profile__edit_save_success">Profile saved</string>
     <string name="profile__edit_tags">TAGS</string>
-    <string name="profile__edit_tags_error">Bitkit could not read your tags, so the tag change was not saved. Try again.</string>
+    <string name="profile__edit_tags_error">Bitkit could not save your tags. Your other changes were saved, so try the tags again.</string>
     <string name="profile__edit_unlink_section">UNLINK</string>
     <string name="profile__empty_state">Unable to load your profile.</string>
     <string name="profile__intro_description">With your portable profile your contacts can reach you and pay you anywhere.</string>

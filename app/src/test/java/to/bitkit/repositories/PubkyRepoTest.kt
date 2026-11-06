@@ -1033,7 +1033,8 @@ class PubkyRepoTest : BaseUnitTest() {
             imageUrl = null
         )
 
-        assertIs<PubkyProfileTagsUnavailableError>(result.exceptionOrNull())
+        val error = assertIs<PubkyProfileTagsNotSavedError>(result.exceptionOrNull())
+        assertEquals("revision-", error.base.revision)
         verifyBlocking(pubkyService, never()) { publishPaykitProfile(any(), any()) }
     }
 
