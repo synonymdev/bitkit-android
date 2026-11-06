@@ -13,9 +13,11 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -93,5 +95,25 @@ class SendContactSelectViewModelTest : BaseUnitTest() {
             assertNull(model.uiState.value.resolvingPublicKey)
         }
         verify(payments, times(2)).beginSavedContactPayment("alice")
+    }
+
+    @Test
+    fun `pending private link explains that the contact must add this wallet too`() = test {
+        val context: Context = mock()
+        val contacts: PubkyRepo = mock()
+        val payments: PrivatePaykitRepo = mock()
+        whenever(context.getString(any<Int>())).thenReturn("")
+        whenever(contacts.contacts).thenReturn(MutableStateFlow(emptyList()))
+        whenever(contacts.isLoadingContacts).thenReturn(MutableStateFlow(false))
+        whenever(payments.beginSavedContactPayment("alice"))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.PrivateLinkPending))
+        val model = SendContactSelectViewModel(context, contacts, payments)
+
+        model.payContact("alice")
+        advanceUntilIdle()
+
+        verify(context).getString(R.string.contacts__pay_private_link_pending)
+        verify(context, never()).getString(R.string.slashtags__error_pay_waiting_msg)
+        assertNull(model.uiState.value.resolvingPublicKey)
     }
 }

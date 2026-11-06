@@ -329,10 +329,14 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /** True while the ledger read is older than one this wallet has read, which keeps automatic payments paused. */
     suspend fun isLedgerBehind(identity: String): Boolean = withContext(ioDispatcher) {
+        runSuspendCatching { isLedgerBehindOrThrow(identity) }.getOrDefault(false)
+    }
+
+    /** Like [isLedgerBehind], but a ledger that cannot be read throws instead of counting as current. */
+    suspend fun isLedgerBehindOrThrow(identity: String): Boolean = withContext(ioDispatcher) {
         val floor = localState(identity).ledgerRevisionFloor ?: return@withContext false
-        runSuspendCatching { paykitSdkService.allowanceAccountingState() }
-            .map { ledger -> ledger == null || ledger.revision < floor }
-            .getOrDefault(false)
+        val ledger = paykitSdkService.allowanceAccountingState()
+        ledger == null || ledger.revision < floor
     }
 
     /**
@@ -343,6 +347,12 @@ class PaykitAllowanceExecutor @Inject constructor(
         val ledger = paykitSdkService.allowanceAccountingState()
         updateLocalStateDurably(identity) { it.copy(ledgerRevisionFloor = ledger?.revision) }
     }
+
+    /** True after a wallet restore until [resumeAfterRestore]; every request asks for approval meanwhile. */
+    fun isPausedAfterRestore(): Boolean = store.isPausedAfterRestore()
+
+    /** Lets automatic payments run again after a wallet restore. The restored spends still count toward the limits. */
+    suspend fun resumeAfterRestore(): Unit = withContext(ioDispatcher) { store.resumeAfterRestore() }
 
     // endregion
 
@@ -450,8 +460,11 @@ class PaykitAllowanceExecutor @Inject constructor(
     }
 
     /**
-     * True when [request] fits no active Allowance of its contact, checked locally while the node cannot pay yet;
-     * such a request asks at once instead of waiting for channels, and raises Limit Reached.
+     * True when [request] cannot pay automatically, checked locally while the node cannot pay yet; such a request asks
+     * at once instead of waiting for channels. It waits only while an Allowance it may pay through fits it: one this
+     * wallet has not seen ended, without unchecked limits, within the per-payment cap and the monthly amount. Limit
+     * Reached is raised only when no Allowance this wallet has not seen ended fits at all, never while every covering
+     * Allowance has ended, automatic payments are paused or the ledger is behind this wallet.
      */
     suspend fun classifyAboveLimit(
         request: PaykitPaymentRequest,
@@ -460,23 +473,44 @@ class PaykitAllowanceExecutor @Inject constructor(
     ): Boolean = withContext(ioDispatcher) {
         val amountSats = request.allowanceSats() ?: return@withContext false
         val now = clock.now()
-        val matching = allowances.filter {
-            it.isAllower && it.status(now) == PaykitAllowance.Status.ACTIVE &&
-                PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
-        }
-        if (matching.isEmpty()) return@withContext false
+        val local = localState(identity)
+        val covering = activeAllowances(request, allowances, now)
+        if (covering.isEmpty()) return@withContext false
+        val matching = covering.filterNot { it.key in local.endedAllowanceIds }
+        // Allowances seen ended never pay again, so the request asks without waiting and without Limit Reached.
+        if (matching.isEmpty()) return@withContext true
+        // Paused automatic payments keep the request manual, without waiting for the node.
+        if (isPausedAfterRestore()) return@withContext true
         val read = runSuspendCatching { paykitSdkService.allowanceAccountingState() }
         // A ledger behind this wallet keeps the request manual, without waiting for the node.
         if (read.isSuccess && runSuspendCatching { !acceptsLedger(read.getOrNull(), identity) }.getOrDefault(true)) {
             return@withContext true
         }
-        val attempts = read.getOrNull()?.let { PaykitAllowanceCapacity.attempts(it.history) }.orEmpty()
-        val localAttempts = PaykitAllowanceCapacity.attempts(localState(identity).automaticSpends)
-        if (matching.any { PaykitAllowanceCapacity.fits(amountSats, it, attempts, now, localAttempts) }) {
-            return@withContext false
-        }
-        notifyLimitReached(request, identity)
+        val fitting = fittingAllowances(amountSats, matching, read.getOrNull(), local, now)
+        if (fitting.any { !it.hasUncheckedLimits }) return@withContext false
+        if (fitting.isEmpty()) notifyLimitReached(request, identity)
         true
+    }
+
+    private fun activeAllowances(
+        request: PaykitPaymentRequest,
+        allowances: List<PaykitAllowance>,
+        now: Instant,
+    ): List<PaykitAllowance> = allowances.filter {
+        it.isAllower && it.status(now) == PaykitAllowance.Status.ACTIVE &&
+            PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
+    }
+
+    private fun fittingAllowances(
+        amountSats: ULong,
+        matching: List<PaykitAllowance>,
+        ledger: AllowanceAccountingState?,
+        local: PaykitAllowanceLocalState,
+        now: Instant,
+    ): List<PaykitAllowance> {
+        val attempts = ledger?.let { PaykitAllowanceCapacity.attempts(it.history) }.orEmpty()
+        val localAttempts = PaykitAllowanceCapacity.attempts(local.automaticSpends)
+        return matching.filter { PaykitAllowanceCapacity.fits(amountSats, it, attempts, now, localAttempts) }
     }
 
     /** Settles journaled Lightning attempts whose outcome the node already knows, for events missed while inactive. */
@@ -609,6 +643,10 @@ class PaykitAllowanceExecutor @Inject constructor(
 
         val activation = activeIdentity
         try {
+            if (isPausedAfterRestore()) {
+                Logger.info("Kept an incoming request manual: paused after a wallet restore", context = TAG)
+                return@withContext PaykitAllowanceAutoPayResult.MANUAL
+            }
             runSuspendCatching {
                 ensureReconciled(identity)
                 // Survive a cancelled caller: stopping after the acceptance would leave the request unpaid.
@@ -642,31 +680,10 @@ class PaykitAllowanceExecutor @Inject constructor(
         val selectionTime = trustedTime(identity)
         val candidates = paykitSdkService.evaluateAllowanceCandidates(scope, selectionTime)
         val local = localState(identity)
-        val unblocked = candidates.filter { it.blocked == null }
-        val candidate = unblocked.firstOrNull {
-            PaykitAllowance.key(request.counterparty, it.allowanceId) !in local.endedAllowanceIds
-        }
-        if (candidate == null && unblocked.isNotEmpty()) {
-            Logger.info("Kept an incoming request manual: its allowance has ended", context = TAG)
-            return PaykitAllowanceAutoPayResult.MANUAL
-        }
-        val allowance = candidate?.let { eligible ->
-            allowances.firstOrNull {
-                it.allowanceId == eligible.allowanceId &&
-                    PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
-            }
-        }
-        if (candidate == null || allowance == null) {
-            val reasons = candidates.mapNotNull { it.blocked }
-            Logger.info("Kept an incoming request manual: no eligible allowance, blocked by '$reasons'", context = TAG)
-            // The SDK blocks a request above the per-payment limit before the capacity check below can notify.
-            val now = clock.now()
-            val isAbovePerPaymentMax = allowances.any { granted ->
-                granted.isAllower && granted.status(now) == PaykitAllowance.Status.ACTIVE &&
-                    PubkyPublicKeyFormat.matches(granted.counterparty, request.counterparty) &&
-                    granted.perPaymentMaxSats?.let { amountSats > it } == true
-            }
-            if (isAbovePerPaymentMax) notifyLimitReached(request, identity)
+        val now = clock.now()
+        val matching = activeAllowances(request, allowances, now).filterNot { it.key in local.endedAllowanceIds }
+        if (matching.isEmpty()) {
+            Logger.info("Kept an incoming request manual: no active allowance, or it has ended", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 
@@ -675,11 +692,27 @@ class PaykitAllowanceExecutor @Inject constructor(
             Logger.info("Kept an incoming request manual: the ledger is behind this wallet", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
-        val attempts = ledger?.let { PaykitAllowanceCapacity.attempts(it.history) }.orEmpty()
-        val localAttempts = PaykitAllowanceCapacity.attempts(local.automaticSpends)
-        if (!PaykitAllowanceCapacity.fits(amountSats, allowance, attempts, clock.now(), localAttempts)) {
-            Logger.info("Kept an incoming request manual: the allowance limit is reached", context = TAG)
-            notifyLimitReached(request, identity)
+        val fitting = fittingAllowances(amountSats, matching, ledger, local, now)
+        val checked = fitting.filterNot { it.hasUncheckedLimits }
+        val candidate = candidates.firstOrNull { eligible ->
+            eligible.blocked == null && checked.any { it.allowanceId == eligible.allowanceId }
+        }
+        if (candidate == null) {
+            val reasons = candidates.mapNotNull { it.blocked }
+            when {
+                fitting.isEmpty() -> {
+                    Logger.info("Kept an incoming request manual: the allowance limit is reached", context = TAG)
+                    notifyLimitReached(request, identity)
+                }
+                checked.isEmpty() -> Logger.info(
+                    "Kept an incoming request manual: it fits only allowances with unchecked limits",
+                    context = TAG,
+                )
+                else -> Logger.info(
+                    "Kept an incoming request manual: no eligible allowance, blocked by '$reasons'",
+                    context = TAG,
+                )
+            }
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 

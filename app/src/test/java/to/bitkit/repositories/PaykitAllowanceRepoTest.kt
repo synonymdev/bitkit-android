@@ -9,9 +9,13 @@ import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateSendReport
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -79,6 +83,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.events).thenReturn(executorEvents)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.isLedgerBehind(any())).thenReturn(false)
+        whenever(executor.isLedgerBehindOrThrow(any())).thenReturn(false)
         whenever(executor.rememberEnding(any(), any(), any())).doSuspendableAnswer {
             it.getArgument<suspend () -> Unit>(2).invoke()
         }
@@ -120,6 +125,54 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     // region Entries
+
+    @Test
+    fun `pause revokes an activation queued on the dispatcher`() = test {
+        val queued = PaykitAllowanceRepo(
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            paykitSdkService = sdk,
+            executor = executor,
+            lightningRepo = lightningRepo,
+            activityRepo = activityRepo,
+            clock = clock,
+        )
+        val activation = async(start = CoroutineStart.UNDISPATCHED) { queued.activate(identity) }
+
+        queued.pause()
+        activation.await()
+
+        verify(executor, never()).activate(identity)
+    }
+
+    @Test
+    fun `pause revokes activation while its caller admission is suspended`() = test {
+        val admissionStarted = CompletableDeferred<Unit>()
+        val finishAdmission = CompletableDeferred<Unit>()
+        val activation = async {
+            sut.activate(identity) {
+                admissionStarted.complete(Unit)
+                finishAdmission.await()
+                true
+            }
+        }
+        admissionStarted.await()
+        sut.pause()
+        finishAdmission.complete(Unit)
+        activation.await()
+
+        verify(executor, never()).activate(identity)
+        sut.activate(identity)
+        verify(executor).activate(identity)
+    }
+
+    @Test
+    fun `rejected activation does not recover or refresh allowances`() = test {
+        sut.activate(identity) { false }
+
+        verify(executor, never()).activate(identity)
+        verify(executor, never()).recover(any())
+        verify(sdk, never()).listAllowances(any())
+    }
 
     @Test
     fun `entries list one grant per contact with the grant's limits`() = test {
@@ -165,6 +218,92 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertEquals(emptyList(), sut.entries.value)
         assertTrue(sut.refresh().isSuccess)
         verify(sdk, times(2)).listAllowances(any())
+    }
+
+    @Test
+    fun `a restored wallet pauses automatic payments while it pays an allowance`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a restored wallet shows no pause without an allowance it pays`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(
+            fixtures.record(localRole = AllowanceLocalRole.ALLOWEE),
+            fixtures.record(allowanceId = "allowance-ended", state = AllowanceLifecycleState.ENDED),
+        )
+
+        sut.activate(identity)
+
+        assertEquals(2, sut.entries.value.size)
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a ledger behind this wallet explains the pause before a restore does`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehind(identity)).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.LEDGER_BEHIND, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming ends the pause after a restore`() = test {
+        var isPaused = true
+        whenever(executor.isPausedAfterRestore()).thenAnswer { isPaused }
+        whenever(executor.resumeAfterRestore()).doSuspendableAnswer { isPaused = false }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+
+        sut.resumeAutomaticPayments().getOrThrow()
+
+        verify(executor).acceptCurrentLedger(identity)
+        verify(executor).resumeAfterRestore()
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming from the restore notice keeps a ledger behind this wallet paused with its own notice`() = test {
+        var isLedgerBehind = false
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehind(identity)).thenAnswer { isLedgerBehind }
+        whenever(executor.isLedgerBehindOrThrow(identity)).thenAnswer { isLedgerBehind }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+        isLedgerBehind = true
+
+        sut.resumeAutomaticPayments().getOrThrow()
+
+        verify(executor, never()).acceptCurrentLedger(any())
+        verify(executor, never()).resumeAfterRestore()
+        assertEquals(PaykitAllowancePause.LEDGER_BEHIND, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming from the restore notice fails without accepting a ledger that cannot be read`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehindOrThrow(identity)).doSuspendableAnswer {
+            throw PaykitAllowanceError.Unavailable
+        }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+
+        val result = sut.resumeAutomaticPayments()
+
+        assertEquals(PaykitAllowanceError.Unavailable, result.exceptionOrNull())
+        verify(executor, never()).acceptCurrentLedger(any())
+        verify(executor, never()).resumeAfterRestore()
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
     }
 
     @Test
@@ -340,7 +479,10 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     fun `received ask is presented once and accepting answers it`() = test {
         val proposalRecord = receivedAsk()
         records = listOf(proposalRecord)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(proposalRecord)
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            proposalRecord
+        }
         sut.activate(identity)
 
         val proposal = checkNotNull(sut.proposalForPresentation())
@@ -351,8 +493,88 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.accept(proposal.id).isSuccess)
 
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk).acceptAllowance(eq(fixtures.counterpartyKey), eq(ALLOWANCE_ID), eq(1uL), any())
         verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
+    }
+
+    @Test
+    fun `same identity activation keeps a queued manual acceptance valid`() = test {
+        records = listOf(receivedAsk())
+        val waiting = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var accepted = 0
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            waiting.complete(Unit)
+            release.await()
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            accepted += 1
+            records.single()
+        }
+        sut.activate(identity)
+        val accepting = async { sut.accept(entryKey) }
+        waiting.await()
+
+        sut.activate(identity)
+        release.complete(Unit)
+
+        assertTrue(accepting.await().isSuccess)
+        assertEquals(1, accepted)
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any(), any())
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
+    }
+
+    @Test
+    fun `same identity activation keeps a queued offer acceptance valid`() = test {
+        records = listOf(receivedProposal())
+        val waiting = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var accepted = 0
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            waiting.complete(Unit)
+            release.await()
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            accepted += 1
+            records.single()
+        }
+        sut.activate(identity)
+        val accepting = async { sut.acceptOffersFromAllowers() }
+        waiting.await()
+
+        sut.activate(identity)
+        release.complete(Unit)
+
+        assertEquals(listOf(fixtures.counterpartyKey), accepting.await().map { it.counterparty })
+        assertEquals(1, accepted)
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any(), any())
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
+    }
+
+    @Test
+    fun `paused repository does not accept a queued offer`() = test {
+        for (reactivate in listOf(false, true)) {
+            records = listOf(receivedProposal())
+            val waiting = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var accepted = 0
+            whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+                waiting.complete(Unit)
+                release.await()
+                it.getArgument<suspend () -> Unit>(3).invoke()
+                accepted += 1
+                records.single()
+            }
+            sut.activate(identity)
+            val accepting = async { sut.acceptOffersFromAllowers() }
+            waiting.await()
+
+            sut.pause(identity)
+            assertTrue(sut.entries.value.isEmpty())
+            if (reactivate) sut.activate(identity)
+            release.complete(Unit)
+            assertTrue(accepting.await().isEmpty())
+
+            assertEquals(0, accepted, "A queued offer stays unanswered while allowances are disabled")
+        }
     }
 
     @Test
@@ -360,7 +582,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         // The proposer took the allower role, so this wallet is the allowee.
         val offer = receivedProposal()
         records = listOf(offer)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
             records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
             records.single()
         }
@@ -370,7 +593,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         val accepted = sut.acceptOffersFromAllowers()
 
         assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk).acceptAllowance(eq(fixtures.counterpartyKey), eq(ALLOWANCE_ID), eq(1uL), any())
         verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
         val entry = sut.entries.value.single()
         assertEquals(PaykitAllowance.Status.ACTIVE, entry.status(fixtures.now))
@@ -380,13 +603,13 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         sut.markOffersAnnounced(accepted)
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An accepted offer is not accepted or announced twice")
-        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
     fun `failed offer accept stays unanswered and is retried and announced once on the next refresh`() = test {
         records = listOf(receivedProposal())
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenThrow(RuntimeException("offline"))
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).thenThrow(RuntimeException("offline"))
         sut.activate(identity)
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "A failed accept is not announced")
@@ -398,7 +621,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
         sut.markOffersAnnounced(accepted)
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
-        verify(sdk, times(2)).acceptAllowance(any(), any(), any())
+        verify(sdk, times(2)).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
@@ -410,7 +633,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.acceptOffersFromAllowers(canAnnounce = { false }).isEmpty())
         assertTrue(sut.acceptOffersFromAllowers(canContinue = { false }).isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
@@ -423,20 +646,26 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             proposedByMe = false,
         )
         records = listOf(receivedProposal(), secondOffer)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer { records.first() }
+        var isActive = true
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false), secondOffer)
+            isActive = false
+            records.first()
+        }
         sut.activate(identity)
 
-        var checks = 0
-        val announced = sut.acceptOffersFromAllowers(canContinue = { ++checks == 1 })
+        val announced = sut.acceptOffersFromAllowers(canContinue = { isActive })
 
         assertEquals(1, announced.size, "An offer already accepted is announced, since it is never announced later")
-        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
     fun `offer whose accept committed as its refresh was cancelled is announced once on the next refresh`() = test {
         records = listOf(receivedProposal())
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
             records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
             throw CancellationException("The app left the foreground")
         }
@@ -455,7 +684,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "It is announced once")
         assertTrue(localState.acceptingOfferIds.isEmpty())
-        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
@@ -509,7 +738,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
@@ -522,7 +751,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         val announced = sut.acceptOffersFromAllowers(canAnnounce = { ++checks == 1 })
 
         assertTrue(announced.isEmpty(), "An accept that outlived its session is not announced")
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk).acceptAllowance(eq(fixtures.counterpartyKey), eq(ALLOWANCE_ID), eq(1uL), any())
     }
 
     @Test
@@ -545,7 +774,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             ),
             offerX,
         )
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
             if (it.getArgument<String>(1) == "Y") {
                 records = listOf(
                     fixtures.record(
@@ -570,21 +800,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         sut.acceptOffersFromAllowers()
 
-        verify(sdk).acceptAllowance(eq(fixtures.counterpartyKey), eq("X"), any())
-        verify(sdk, never()).acceptAllowance(eq(asker), eq("X"), any())
+        verify(sdk).acceptAllowance(eq(fixtures.counterpartyKey), eq("X"), any(), any())
+        verify(sdk, never()).acceptAllowance(eq(asker), eq("X"), any(), any())
     }
 
     @Test
     fun `offer accepted after the identity changed is not announced`() = test {
         records = listOf(receivedProposal())
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
             sut.deactivate()
             records.single()
         }
         sut.activate(identity)
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk).acceptAllowance(eq(fixtures.counterpartyKey), eq(ALLOWANCE_ID), eq(1uL), any())
     }
 
     @Test
@@ -595,7 +826,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any(), any())
         assertEquals(entryKey, sut.proposalForPresentation()?.id)
         assertEquals(PaykitAllowance.Status.AWAITING_MY_ANSWER, sut.entries.value.single().status(fixtures.now))
     }
@@ -627,7 +858,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
@@ -636,7 +867,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
@@ -650,7 +881,10 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             lastEventAt = "2026-09-01T10:00:00Z",
         )
         records = listOf(offer, ask)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(ask)
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            ask
+        }
         sut.activate(identity)
 
         // The offer is accepted automatically, so the sheet presents the other contact's ask.
@@ -659,8 +893,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertEquals(fixtures.otherCounterpartyKey, presented.counterparty)
         assertTrue(sut.accept(presented.id).isSuccess)
 
-        verify(sdk).acceptAllowance(fixtures.otherCounterpartyKey, ALLOWANCE_ID, 1uL)
-        verify(sdk, never()).acceptAllowance(eq(fixtures.counterpartyKey), any(), any())
+        verify(sdk).acceptAllowance(eq(fixtures.otherCounterpartyKey), eq(ALLOWANCE_ID), eq(1uL), any())
+        verify(sdk, never()).acceptAllowance(eq(fixtures.counterpartyKey), any(), any(), any())
     }
 
     @Test
@@ -672,12 +906,15 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             terms = fixtures.terms(perPaymentMaximum = null, monthlyLimit = null, expiresAt = "2027-09-24T12:00:00Z"),
         )
         records = listOf(expiryOnly)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(expiryOnly)
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            expiryOnly
+        }
         sut.activate(identity)
 
         assertNull(sut.proposalForPresentation())
         assertTrue(sut.accept(entryKey).isFailure)
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any(), any())
     }
 
     @Test
@@ -923,7 +1160,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     )
 
     private fun acceptFlipsRecordToActive() {
-        whenever { sdk.acceptAllowance(any(), any(), any()) }.thenAnswer {
+        whenever { sdk.acceptAllowance(any(), any(), any(), any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(3).invoke()
             records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
             records.single()
         }

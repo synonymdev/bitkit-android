@@ -1,5 +1,5 @@
 {
-  description = "Bitkit Android dev shell (JDK 17 + Android SDK 36/NDK r28b via androidenv)";
+  description = "Bitkit Android dev shell (JDK 17 + Android SDK 37/NDK r28b via androidenv)";
 
   # Provides the full toolchain to run: just compile / just build / just test / just lint
   #
@@ -53,7 +53,7 @@
           androidSdk = pkgs.androidenv.composeAndroidPackages {
             cmdLineToolsVersion = "latest";
             platformToolsVersion = "latest";
-            platformVersions = [ "36" ]; # compileSdk/targetSdk
+            platformVersions = [ "37.0" ]; # compileSdk
             buildToolsVersions = [ buildToolsVersion ];
             includeNDK = true;
             ndkVersions = [ ndkVersion ];
@@ -68,7 +68,7 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              jdk17 # AGP 9.3 / Gradle 9.5 require JDK 17+
+              jdk17 # AGP 9.3 / Gradle 9.8 require JDK 17+
               just
               git
             ];

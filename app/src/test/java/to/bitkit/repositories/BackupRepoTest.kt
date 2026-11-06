@@ -771,6 +771,37 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wallet restore pauses automatic allowance payments before restoring wallet state`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL)
+        stubWalletBackup(
+            paykitSdkBackupState = "saved-sdk-state",
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        val order = inOrder(paykitAllowanceStore, privatePaykitRepo)
+        order.verify(paykitAllowanceStore).pauseAfterRestore()
+        order.verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+        order.verify(privatePaykitRepo).restoreBackup("saved-sdk-state")
+    }
+
+    @Test
+    fun `wallet restore without allowance state still pauses automatic allowance payments`() = test {
+        stubWalletBackup(paykitSdkBackupState = "saved-sdk-state")
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitAllowanceStore, never()).restoreBackup(any())
+        verify(paykitAllowanceStore).pauseAfterRestore()
+    }
+
+    @Test
     fun `restore without Paykit state drops the ledger floor`() = test {
         val identity = "pubky" + "z".repeat(52)
         val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL, endedAllowanceIds = setOf("ended"))

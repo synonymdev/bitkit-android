@@ -63,7 +63,6 @@ class BackupsViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
         backupRepo.stopObservingBackups()
     }
 

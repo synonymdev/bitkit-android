@@ -15,6 +15,7 @@ import com.synonym.paykit.PaykitAppCapabilities
 import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
+import com.synonym.paykit.PaykitNoiseKeyAuthorization
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentPayload
@@ -393,7 +394,7 @@ class PaykitSdkServiceTest {
         service.setPaymentSubmissionActive(true)
         val caller = launch { wrapper.importShopContacts(listOf(RING_PUBKY), RING_PUBKY) { true } }
         runCurrent()
-        ServiceQueue.CORE.background { }
+        ServiceQueue.PUBKY.background { }
         caller.cancel()
         service.setPaymentSubmissionActive(false)
         caller.join()
@@ -1805,6 +1806,29 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `rejected allowance admission preserves cached backup and version`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.observedBackupStateRevision()).thenReturn(ObservedBackupStateRevision("state", "backup"))
+        whenever { sdk.backupStateRevision() }.thenReturn("backup")
+        whenever { sdk.processPendingPrivateMessages() }.thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        service.processPendingPrivateMessages()
+        val originalVersion = service.backupStateVersion.value
+        val failure = AppError("Admission revoked")
+
+        val thrown = assertFailsWith<AppError> {
+            service.acceptAllowance(RING_PUBKY, "allowance", 1uL) { throw failure }
+        }
+
+        assertSame(failure, thrown)
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        assertEquals(originalVersion, service.backupStateVersion.value)
+        service.processPendingPrivateMessages()
+        verify(sdk, times(1)).backupStateRevision()
+    }
+
+    @Test
     fun `cancelling active acceptance waits for its durable call and preserves backup notification`() = runTest {
         val sdk = mock<PaykitSdk>()
         val releaseAcceptance = CompletableDeferred<Unit>()
@@ -2647,6 +2671,24 @@ class PaykitSdkServiceTest {
             }
             assertTrue(service.resolvePublicContactPayment(RING_PUBKY).payableEndpoints.isEmpty())
         }
+    }
+
+    @Test
+    fun `noise key authorization lookup reports only a missing record as absent`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var failure: Throwable? = null
+        whenever(sdk.paykitNoiseKeyAuthorization(RING_PUBKY)).doSuspendableAnswer {
+            failure?.let { throw it }
+            mock<PaykitNoiseKeyAuthorization>()
+        }
+        assertTrue(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.NotFound("not_found", "No Noise key authorization")
+        assertFalse(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.Transport("transport", "Connection unavailable")
+        assertFailsWith<PaykitException.Transport> { service.hasPaykitNoiseKeyAuthorization(RING_PUBKY) }
     }
 
     @Test
