@@ -2995,6 +2995,8 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPaymentActivity(paymentHash: String) {
+        // Spark records its own sends; the node's record of the hash is an earlier attempt that would overwrite it.
+        if (lightningRepo.isSparkSend(paymentHash)) return
         runSuspendCatching { activityRepo.handlePaymentEvent(paymentHash) }.onFailure {
             Logger.warn("Failed to refresh payment activity for '$paymentHash'", it, context = TAG)
         }
@@ -6675,6 +6677,23 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
             }.onFailure { Logger.warn("Failed to open recovered transfer", it, context = TAG) }
         }
+    }
+
+    /** Opens Payment Pending for a transfer whose signed funding was not accepted, so it can be retried. */
+    fun showPendingTransfer(attempt: OnchainSendAttempt) {
+        if (!attempt.isTransfer || !attempt.blocksNextSend) return
+        showSheet(
+            Sheet.Send(
+                SendRoute.Pending(
+                    paymentHash = attempt.txid.orEmpty(),
+                    amount = attempt.amountSats.toLong(),
+                    observeResolution = false,
+                    isOnchain = true,
+                    walletId = attempt.walletId,
+                    refusalReason = attempt.refusalReason,
+                )
+            )
+        )
     }
 
     private fun showUnresolvedOnchainSend(

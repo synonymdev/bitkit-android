@@ -1195,6 +1195,7 @@ private fun RootNavHost(
                         onBackClick = { navController.popBackStack() },
                         onLearnMoreClick = { navController.navigateTo(Routes.TransferLearnMore) },
                         onSent = { navController.navigateToSettingUp() },
+                        onFundingPending = { attempt -> appViewModel.showPendingTransfer(attempt) },
                     )
                 }
                 composableWithDefaultTransitions<Routes.TransferLearnMore> {
