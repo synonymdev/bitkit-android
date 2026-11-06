@@ -40,6 +40,7 @@ import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
@@ -1131,6 +1132,56 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertEquals("hash", result.getOrThrow())
         verify(sparkRepo).payInvoice("invoice", 1_000uL, deadline, 10_000uL)
+    }
+
+    @Test
+    fun `an earlier spark failure never settles a retry the node is paying`() = test {
+        startNodeForTesting()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.failure(PaymentPendingException("hash")))
+        sut.payInvoice("bolt11", 1_000uL)
+        assertTrue(sut.isSparkSend("hash"))
+
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(false)
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send("bolt11", 1_000uL)).thenReturn("hash")
+        assertEquals("hash", sut.payInvoice("bolt11", 1_000uL).getOrThrow())
+        @Suppress("UNCHECKED_CAST")
+        (sparkRepo.nodeEvents as MutableSharedFlow<Event>)
+            .emit(Event.PaymentFailed("hash", "hash", PaymentFailureReason.UNEXPECTED_ERROR))
+        runCurrent()
+
+        assertTrue(events.none { it is Event.PaymentFailed })
+        assertNull(sut.settledSparkSendEvent("hash"))
+        verify(sparkRepo, never()).settledSendEvent(any())
+        assertFalse(sut.isSparkSend("hash"))
+    }
+
+    @Test
+    fun `a spark retry of an invoice the node failed is the send that settles it`() = test {
+        startNodeForTesting()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send("bolt11", 1_000uL)).thenReturn("hash")
+        sut.payInvoice("bolt11", 1_000uL).getOrThrow()
+        assertFalse(sut.isSparkSend("hash"))
+
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Result.success("hash"))
+        sut.payInvoice("bolt11", 1_000uL).getOrThrow()
+        val succeeded = Event.PaymentSuccessful("hash", "hash", "preimage", 0uL)
+        @Suppress("UNCHECKED_CAST")
+        (sparkRepo.nodeEvents as MutableSharedFlow<Event>).emit(succeeded)
+        runCurrent()
+
+        assertTrue(sut.isSparkSend("hash"))
+        assertEquals(listOf<Event>(succeeded), events)
     }
 
     @Test
