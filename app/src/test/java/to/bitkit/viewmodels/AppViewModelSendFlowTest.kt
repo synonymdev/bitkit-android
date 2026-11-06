@@ -12086,8 +12086,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `router none keeps the amount screen open`() = test {
+    fun `router none with a short balance says the balance is short`() = test {
+        routerNone(maxSendLightningSats = 500u)
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaykitRouteBalanceToast", it.testTag)
+                assertFalse(it.description.orEmpty().contains("Nothing can pay this contact"))
+            },
+        )
+    }
+
+    @Test
+    fun `router none with enough balance says the contact cannot be paid`() = test {
+        routerNone(maxSendLightningSats = 100_000u)
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaykitRouteNoneToast", it.testTag)
+                assertFalse(it.description.orEmpty().contains("Nothing can pay this contact"))
+            },
+        )
+    }
+
+    private suspend fun TestScope.routerNone(maxSendLightningSats: ULong) {
         val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = "bcrt1qrouted")
+        balanceState.value = BalanceState(maxSendLightningSats = maxSendLightningSats)
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
             .thenReturn(Result.success(PaykitRoute.None("Nothing can pay this contact")))
         setSendState(
@@ -12105,12 +12129,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         assertNull(sut.sendUiState.value.paykitRoute?.serviceLeg)
-        verify(toastManager).enqueue(
-            check {
-                assertEquals("PaykitRouteNoneToast", it.testTag)
-                assertFalse(it.description.orEmpty().contains("Nothing can pay this contact"))
-            },
-        )
     }
 
     private fun sparkRouteLeg(address: String) = ServiceRouteLeg(

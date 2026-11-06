@@ -4659,12 +4659,14 @@ class AppViewModel @Inject constructor(
     private suspend fun routePaykitPayment(route: PaykitRouteUi): PaykitRouteOutcome {
         val state = _sendUiState.value
         val fromSpending = state.payMethod == SendMethod.LIGHTNING
+        val lightningSpendable = if (fromSpending) maxSendableLightningSats() else 0uL
+        val onchainSpendable = if (fromSpending) 0uL else walletRepo.balanceState.value.maxSendOnchainSats
         _sendUiState.update { it.copy(isLoading = true) }
         val result = paykitRouteRepo.route(
             amountSats = state.amount,
             endpoints = if (fromSpending) route.endpoints else route.endpoints.filter { it.isOnchain() },
-            lightningSpendableSats = if (fromSpending) maxSendableLightningSats() else 0uL,
-            onchainSpendableSats = if (fromSpending) 0uL else walletRepo.balanceState.value.maxSendOnchainSats,
+            lightningSpendableSats = lightningSpendable,
+            onchainSpendableSats = onchainSpendable,
             quoteServiceLegs = fromSpending && route.offersSparkLeg,
         )
         _sendUiState.update { it.copy(isLoading = false) }
@@ -4690,11 +4692,25 @@ class AppViewModel @Inject constructor(
             is PaykitRoute.None -> {
                 Logger.warn("Found no Paykit route: '${picked.reason}'", context = TAG)
                 _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
+                // The router's reason is English for the log: the app tells a short balance from an unusable contact.
+                val isBalanceShort = state.amount > lightningSpendable.safe() + onchainSpendable.safe()
                 toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.wallet__send_amount_exceeded__title),
-                    description = context.getString(R.string.wallet__send_amount_exceeded__description),
-                    testTag = "PaykitRouteNoneToast",
+                    title = context.getString(
+                        if (isBalanceShort) {
+                            R.string.wallet__send_amount_exceeded__title
+                        } else {
+                            R.string.wallet__send_paykit_no_route__title
+                        }
+                    ),
+                    description = context.getString(
+                        if (isBalanceShort) {
+                            R.string.wallet__send_amount_exceeded__description
+                        } else {
+                            R.string.wallet__send_paykit_no_route__description
+                        }
+                    ),
+                    testTag = if (isBalanceShort) "PaykitRouteBalanceToast" else "PaykitRouteNoneToast",
                 )
                 PaykitRouteOutcome.Refused
             }
