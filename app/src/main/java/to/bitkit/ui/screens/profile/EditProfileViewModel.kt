@@ -26,6 +26,7 @@ import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyProfileChangedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
@@ -43,6 +44,8 @@ class EditProfileViewModel @Inject constructor(
         private const val TAG = "EditProfileViewModel"
     }
 
+    private var editBase = ProfileEditBase(profile = null, revision = null)
+
     private val _uiState = MutableStateFlow(EditProfileUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -56,7 +59,8 @@ class EditProfileViewModel @Inject constructor(
     private fun loadProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val profile = pubkyRepo.profile.value
+            editBase = pubkyRepo.profileEditBase()
+            val profile = editBase.profile
             val publicKey = pubkyRepo.publicKey.value.orEmpty()
             val removal = if (pubkyRepo.isRingAdoptedIdentity()) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
             if (profile != null) {
@@ -206,6 +210,7 @@ class EditProfileViewModel @Inject constructor(
                 links = state.links.map { PubkyProfileLink(label = it.label, url = it.url) },
                 tags = state.tags,
                 imageUrl = imageUrl,
+                editBase = editBase,
             ).onSuccess {
                 _uiState.update { it.copy(isSaving = false) }
                 ToastEventBus.send(

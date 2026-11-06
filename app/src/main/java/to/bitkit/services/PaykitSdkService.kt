@@ -624,11 +624,12 @@ class PaykitSdkService @Inject constructor(
         publicRead(PaykitReadLane.Bulk, 5.seconds) { it.fetchPubkyFileBounded(uri, maxBytes) }
             ?: throw PubkyFileNotFoundError()
 
-    suspend fun publishPaykitProfile(profile: PaykitProfile): PaykitProfileRecord {
+    suspend fun publishPaykitProfile(profile: PaykitProfile, expectedIdentity: String): PaykitProfileRecord {
         isSetup.await()
         return operationLock.withLock {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
+                requireProfileIdentity(publicKey, expectedIdentity)
                 val current = handle.fetchPaykitProfile(publicKey)
                 completeSdkCall {
                     handle.publishPaykitProfile(profile, current?.revision).also { notifyBackupStateChanged() }
@@ -676,25 +677,38 @@ class PaykitSdkService @Inject constructor(
     suspend fun fetchPaykitProfile(publicKey: String): PaykitProfileRecord? =
         publicRead { it.fetchPaykitProfile(publicKey) }
 
-    suspend fun publishPubkyProfile(update: PubkyProfileUpdate, expectedRevision: String?): PubkyProfileSnapshot {
+    suspend fun publishPubkyProfile(
+        update: PubkyProfileUpdate,
+        expectedRevision: String?,
+        expectedIdentity: String,
+    ): PubkyProfileSnapshot {
         isSetup.await()
         return operationLock.withLock {
+            requireProfileIdentity(currentIdentity(), expectedIdentity)
             completeSdkCall { handle().publishPubkyProfile(update, expectedRevision) }
         }
     }
 
-    suspend fun deletePubkyProfile(expectedRevision: String) {
+    suspend fun deletePubkyProfile(expectedRevision: String, expectedIdentity: String) {
         isSetup.await()
         operationLock.withLock {
+            requireProfileIdentity(currentIdentity(), expectedIdentity)
             completeSdkCall { handle().deletePubkyProfile(expectedRevision) }
         }
     }
 
-    suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String): String {
+    suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String, expectedIdentity: String): String {
         isSetup.await()
         return operationLock.withLock {
+            requireProfileIdentity(currentIdentity(), expectedIdentity)
             completeSdkCall { handle().uploadPubkyAppAvatar(bytes, contentType) }
         }
+    }
+
+    private suspend fun currentIdentity(): String? = completeSdkCall { handle().identityStatus() }?.publicKey
+
+    private fun requireProfileIdentity(current: String?, expectedIdentity: String) {
+        if (!PubkyPublicKeyFormat.matches(current, expectedIdentity)) throw PubkyProfileIdentityChangedError()
     }
 
     suspend fun fetchPubkyFollows(publicKey: String): List<String> =
@@ -2286,3 +2300,6 @@ internal fun <T> paykitStorageCallback(code: String, operation: () -> T): T =
         if (it is PaykitException) throw it
         throw PaykitException.Storage(code = code, context = "Platform Paykit storage operation failed")
     }
+
+/** The signed-in identity changed before a profile write, so it wrote nothing. */
+class PubkyProfileIdentityChangedError : AppError("Pubky identity changed before the profile write")

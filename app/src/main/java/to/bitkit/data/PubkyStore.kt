@@ -28,8 +28,14 @@ class PubkyStore @Inject constructor(
         store.updateData(transform)
     }
 
+    /** Clears the session's data but keeps the migration history, so a profile deleted on pubky.app stays deleted. */
     suspend fun reset() {
-        store.updateData { PubkyStoreData() }
+        store.updateData {
+            PubkyStoreData(
+                pubkyAppProfileOwners = it.pubkyAppProfileOwners,
+                pubkyAppAvatarPending = it.pubkyAppAvatarPending,
+            )
+        }
     }
 }
 

@@ -163,7 +163,7 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         whenever(pubkyService.contactRecords()).thenReturn(emptyList())
         whenever(pubkyService.currentPublicKey()).thenReturn(VALID_SELF_KEY)
-        whenever { pubkyService.publishPubkyProfile(any(), anyOrNull()) }.doSuspendableAnswer {
+        whenever { pubkyService.publishPubkyProfile(any(), anyOrNull(), any()) }.doSuspendableAnswer {
             val update = it.getArgument<PubkyProfileUpdate>(0)
             createSnapshot(
                 VALID_SELF_KEY,
@@ -579,7 +579,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.publicKeyFromSecret("test-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
         whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenReturn(Unit)
         whenever(
-            pubkyService.publishPubkyProfile(any(), anyOrNull())
+            pubkyService.publishPubkyProfile(any(), anyOrNull(), any())
         ).thenAnswer { throw TestAppError("Publish failed") }
         whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
@@ -609,7 +609,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertFalse(profileSetupPending.value)
         verify(keychain).loadString(Keychain.Key.BIP39_MNEMONIC.name)
-        verifyBlocking(pubkyService, never()) { publishPubkyProfile(any(), anyOrNull()) }
+        verifyBlocking(pubkyService, never()) { publishPubkyProfile(any(), anyOrNull(), any()) }
     }
 
     @Test
@@ -619,7 +619,7 @@ class PubkyRepoTest : BaseUnitTest() {
         profileSetupPending.value = true
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
         whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
-        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenReturn(mock())
 
         val result = sut.createIdentity("Restored", "", emptyList(), emptyList(), null)
 
@@ -646,7 +646,7 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(keychain, never()).loadString(Keychain.Key.BIP39_MNEMONIC.name)
         verifyBlocking(pubkyService, never()) { signIn(any()) }
         verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
-        verifyBlocking(pubkyService, never()) { publishPubkyProfile(any(), anyOrNull()) }
+        verifyBlocking(pubkyService, never()) { publishPubkyProfile(any(), anyOrNull(), any()) }
     }
 
     @Test
@@ -654,13 +654,13 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
         whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
         whenever(pubkyService.signIn("local-secret")).thenAnswer { throw TestAppError("offline") }.thenReturn(Unit)
-        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenReturn(mock())
 
         val firstResult = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
 
         assertEquals("offline", firstResult.exceptionOrNull()?.message)
         assertNull(sut.publicKey.value)
-        verifyBlocking(pubkyService, never()) { publishPubkyProfile(any(), anyOrNull()) }
+        verifyBlocking(pubkyService, never()) { publishPubkyProfile(any(), anyOrNull(), any()) }
 
         assertTrue(sut.createIdentity("Test", "", emptyList(), emptyList(), null).isSuccess)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
@@ -677,7 +677,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val existingProfile = sut.profile.value
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
         whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
-        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any()))
             .thenAnswer { throw TestAppError("offline") }
             .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Updated")))
 
@@ -709,7 +709,7 @@ class PubkyRepoTest : BaseUnitTest() {
             }
             Unit
         }
-        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull())).doSuspendableAnswer {
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any())).doSuspendableAnswer {
             if (cancelDuringSignIn == false) {
                 operationStarted.complete(Unit)
                 awaitCancellation()
@@ -743,7 +743,7 @@ class PubkyRepoTest : BaseUnitTest() {
         stubSignupKeys()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("ring-session")
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("")
-        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenReturn(mock())
 
         val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
 
@@ -762,7 +762,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.approveSignupAuth(ringSignupRequest()).isSuccess)
         clearInvocations(pubkyService)
         whenever(
-            pubkyService.publishPubkyProfile(any(), anyOrNull())
+            pubkyService.publishPubkyProfile(any(), anyOrNull(), any())
         ).thenAnswer { throw TestAppError("Publish failed") }
 
         val result = sut.createIdentity(
@@ -774,7 +774,7 @@ class PubkyRepoTest : BaseUnitTest() {
         )
 
         assertTrue(result.isFailure)
-        verifyBlocking(pubkyService) { publishPubkyProfile(any(), anyOrNull()) }
+        verifyBlocking(pubkyService) { publishPubkyProfile(any(), anyOrNull(), any()) }
         verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
         verifyBlocking(pubkyService, never()) { signIn(any()) }
         verifyBlocking(pubkyService, never()) { signOut() }
@@ -791,7 +791,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.deriveSecretKey("test mnemonic")).thenReturn("test-secret")
         whenever(pubkyService.publicKeyFromSecret("test-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
         whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenReturn(Unit)
-        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenReturn(mock())
         whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY))
             .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile()))
         whenever(pubkyService.contactRecords()).doSuspendableAnswer {
@@ -828,7 +828,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `createIdentity returns cache failure after profile publication`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         profileSetupPending.value = true
-        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenReturn(mock())
         whenever { pubkyStore.update(any()) }.thenAnswer {
             throw TestAppError("cache failed")
         }
@@ -842,7 +842,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `createIdentity keeps the published profile without waiting for readback`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         profileSetupPending.value = true
-        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenReturn(mock())
         whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY))
             .thenReturn(null)
         clearInvocations(pubkyService)
@@ -868,7 +868,7 @@ class PubkyRepoTest : BaseUnitTest() {
             }
             emptyList()
         }
-        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull())).doSuspendableAnswer {
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any())).doSuspendableAnswer {
             profilePublished.complete(Unit)
             createSnapshot(VALID_SELF_KEY, createPubkyProfile())
         }
@@ -927,7 +927,8 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService) {
             publishPubkyProfile(
                 PubkyProfileUpdate(name = "New", bio = null, image = null, links = null),
-                "revision-Old"
+                "revision-Old",
+                VALID_SELF_KEY,
             )
         }
         assertEquals("New", sut.profile.value?.name)
@@ -940,14 +941,14 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
         whenever(pubkyService.signIn(secretKey)).thenReturn(Unit)
         whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
-        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any()))
             .thenAnswer { throw PaykitException.Identity("identity_error", "Missing capabilities") }
             .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "New")))
 
         assertTrue(saveNewProfile().isSuccess)
 
         verifyBlocking(pubkyService) { signIn(secretKey) }
-        verifyBlocking(pubkyService, times(2)) { publishPubkyProfile(any(), anyOrNull()) }
+        verifyBlocking(pubkyService, times(2)) { publishPubkyProfile(any(), anyOrNull(), any()) }
     }
 
     @Test
@@ -959,7 +960,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         saveNewProfile()
 
-        verifyBlocking(pubkyService) { publishPubkyProfile(any(), eq("revision-Old")) }
+        verifyBlocking(pubkyService) { publishPubkyProfile(any(), eq("revision-Old"), any()) }
     }
 
     @Test
@@ -981,7 +982,7 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.loadProfile()
 
         assertEquals("pubky://self/pub/paykit/blobs/avatar.jpg", sut.profile.value?.imageUrl)
-        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any(), any()) }
     }
 
     @Test
@@ -990,7 +991,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         sut.deleteProfile()
 
-        verifyBlocking(pubkyService) { deletePubkyProfile("revision-Test") }
+        verifyBlocking(pubkyService) { deletePubkyProfile("revision-Test", VALID_SELF_KEY) }
     }
 
     @Test
@@ -1028,6 +1029,7 @@ class PubkyRepoTest : BaseUnitTest() {
                     ),
                 ),
                 null,
+                VALID_SELF_KEY,
             )
         }
     }
@@ -1045,7 +1047,7 @@ class PubkyRepoTest : BaseUnitTest() {
                 updatedAt = "2026-01-01T00:00:00Z",
             )
         )
-        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any()))
             .thenAnswer { throw PaykitException.Protocol("protocol", "Pubky profile name must be 3 to 50 characters") }
 
         sut.loadProfile()
@@ -1056,7 +1058,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `saveProfile reports a profile that changed in pubky app`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
-        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any()))
             .thenAnswer { throw PaykitException.ConcurrentUpdate("concurrent_update", "Pubky profile changed") }
 
         val result = saveNewProfile()
@@ -1084,6 +1086,7 @@ class PubkyRepoTest : BaseUnitTest() {
             publishPubkyProfile(
                 PubkyProfileUpdate(name = "Bitkit Name", bio = "b".repeat(160), image = null, links = emptyList()),
                 null,
+                VALID_SELF_KEY,
             )
         }
         assertEquals("Bitkit Name", sut.profile.value?.name)
@@ -1349,7 +1352,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(backupVersion + 1, sut.backupStateVersion.value)
-        verifyBlocking(pubkyService) { publishPubkyProfile(any(), anyOrNull()) }
+        verifyBlocking(pubkyService) { publishPubkyProfile(any(), anyOrNull(), any()) }
     }
 
     @Test
@@ -5065,7 +5068,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val session = "test_session"
         val currentPublicKey = "pubkyalice"
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
-        whenever(pubkyService.uploadPubkyAppAvatar(any(), any())).thenReturn("pubky://avatar")
+        whenever(pubkyService.uploadPubkyAppAvatar(any(), any(), any())).thenReturn("pubky://avatar")
 
         authenticateForTesting(publicKey = currentPublicKey, secret = session, profileName = "Alice")
 
@@ -5073,7 +5076,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals("pubky://avatar", result.getOrNull())
-        verifyBlocking(pubkyService) { uploadPubkyAppAvatar(any(), any()) }
+        verifyBlocking(pubkyService) { uploadPubkyAppAvatar(any(), any(), any()) }
     }
 
     @Test
@@ -5087,7 +5090,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.uploadAvatar(byteArrayOf(1, 2, 3))
 
         assertTrue(result.isFailure)
-        verifyBlocking(pubkyService, never()) { uploadPubkyAppAvatar(any(), any()) }
+        verifyBlocking(pubkyService, never()) { uploadPubkyAppAvatar(any(), any(), any()) }
     }
 
     @Test

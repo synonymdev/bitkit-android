@@ -202,8 +202,8 @@ class PubkyService @Inject constructor(
 
     // region Profile & contacts
 
-    suspend fun publishPaykitProfile(profile: PaykitProfile) = ServiceQueue.PUBKY.background {
-        paykitSdkService.publishPaykitProfile(profile)
+    suspend fun publishPaykitProfile(profile: PaykitProfile, expectedIdentity: String) = ServiceQueue.PUBKY.background {
+        paykitSdkService.publishPaykitProfile(profile, expectedIdentity)
     }
 
     suspend fun uploadProfileAvatar(bytes: ByteArray, contentType: String): String = ServiceQueue.PUBKY.background {
@@ -222,16 +222,20 @@ class PubkyService @Inject constructor(
         paykitSdkService.fetchPaykitProfile(publicKey)
     }
 
-    suspend fun publishPubkyProfile(update: PubkyProfileUpdate, expectedRevision: String?): PubkyProfileSnapshot =
-        ServiceQueue.PUBKY.background { paykitSdkService.publishPubkyProfile(update, expectedRevision) }
-
-    suspend fun deletePubkyProfile(expectedRevision: String) = ServiceQueue.PUBKY.background {
-        paykitSdkService.deletePubkyProfile(expectedRevision)
+    suspend fun publishPubkyProfile(
+        update: PubkyProfileUpdate,
+        expectedRevision: String?,
+        expectedIdentity: String,
+    ): PubkyProfileSnapshot = ServiceQueue.PUBKY.background {
+        paykitSdkService.publishPubkyProfile(update, expectedRevision, expectedIdentity)
     }
 
-    suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String): String = ServiceQueue.PUBKY.background {
-        paykitSdkService.uploadPubkyAppAvatar(bytes, contentType)
+    suspend fun deletePubkyProfile(expectedRevision: String, expectedIdentity: String) = ServiceQueue.PUBKY.background {
+        paykitSdkService.deletePubkyProfile(expectedRevision, expectedIdentity)
     }
+
+    suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String, expectedIdentity: String): String =
+        ServiceQueue.PUBKY.background { paykitSdkService.uploadPubkyAppAvatar(bytes, contentType, expectedIdentity) }
 
     suspend fun getContacts(publicKey: String): List<String> = cancellablePublicRead {
         paykitSdkService.fetchPubkyFollows(publicKey)
