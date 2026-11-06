@@ -2,7 +2,6 @@ package to.bitkit.utils.timedsheets.sheets
 
 import kotlinx.coroutines.flow.first
 import to.bitkit.data.SettingsStore
-import to.bitkit.env.Env
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.SparkRepo
@@ -20,8 +19,6 @@ class MoveToSparkTimedSheet @Inject constructor(
     override val priority = type.priority
 
     override suspend fun shouldShow(): Boolean {
-        // E2E runs open new channels and do not expect the move offer covering Home; the journey covers the sheet.
-        if (Env.isE2eTest) return false
         if (settingsStore.data.first().hasSeenMoveToSparkIntro) return false
         return MoveToSparkMath.canMove(lightningRepo.lightningState.value.channels, sparkRepo.state.value)
     }
