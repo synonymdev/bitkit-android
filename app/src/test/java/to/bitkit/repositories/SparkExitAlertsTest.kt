@@ -106,5 +106,9 @@ class SparkExitAlertsTest {
         assertTrue(SparkExitAlerts.isNewlyStalled(stalled, running))
         assertFalse(SparkExitAlerts.isNewlyStalled(stalled, stalled))
         assertFalse(SparkExitAlerts.isNewlyStalled(running, running))
+        // Posted while Bitkit is on screen too, as losses are; a missed run's reminder is not.
+        assertTrue(SparkExitAlert.NotMoving.isPostedOnScreen)
+        assertTrue(SparkExitAlert.Lost.isPostedOnScreen)
+        assertFalse(SparkExitAlert.Rejected.isPostedOnScreen)
     }
 }

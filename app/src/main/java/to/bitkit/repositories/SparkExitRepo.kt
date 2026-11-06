@@ -349,7 +349,7 @@ class SparkExitRepo @Inject constructor(
             val untilMaturity = SparkExitMath.untilNextMaturity(record.recovery, _state.value.tipHeight, Env.network)
             val deadline = SparkExitMath.deadline(untilMaturity, Env.network)
             work.notify(
-                SparkExitAlert.Rejected,
+                SparkExitAlert.NotMoving,
                 deadlineAtMillis = clock.nowMs() + deadline.deadlineIn.inWholeMilliseconds
             )
         }

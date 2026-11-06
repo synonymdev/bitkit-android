@@ -255,6 +255,36 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an exit that stops moving after three stall rebuilds notifies once, at once`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        store.save(SparkExitFixtures.record(Phase.Running).adopt(recovery, 0L))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val posts = mutableListOf<String>()
+        val refusal = """sendrawtransaction RPC error: {"code":-26,"message":"insufficient fee"}"""
+
+        repeat(SparkExitDriver.STALL_REBUILDS_TO_SURFACE + 1) { run ->
+            // A rival keeps winning the step: it was refused twice already in this generation, and rebuilds are due.
+            val stored = requireNotNull(store.load())
+            val refused = SparkExitRecord.BroadcastAttempt(stored.generation, "n1", 2, 2, 0L, "rejected", false)
+            store.save(stored.copy(broadcastLog = listOf(refused), lastBuildAt = null))
+            val sdk = FakeSparkExitRecovering().apply {
+                preparedResponse = SparkExitFixtures.prepared(funding = null)
+                checks += CheckRecoverFundsResponse(recovery, RecoveryVerdict.Valid)
+                builds += recovery
+            }
+            createSut(coldSpark(sdk), regtestMempool(posts, refusal)).runInBackground().getOrThrow()
+
+            val record = requireNotNull(store.load())
+            val expected = if (run + 1 >= SparkExitDriver.STALL_REBUILDS_TO_SURFACE) 1 else 0
+            assertEquals(minOf(run + 1, SparkExitDriver.STALL_REBUILDS_TO_SURFACE), record.stallRebuilds)
+            verify(work, times(expected)).notify(eq(SparkExitAlert.NotMoving), anyOrNull(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
     fun `a background run whose step keeps going unpaid lets the deadline alarm fire`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))

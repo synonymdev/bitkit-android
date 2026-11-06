@@ -227,8 +227,8 @@ class SparkExitWork @Inject constructor(
         amountSats: ULong? = null,
         feeRateSatPerVbyte: ULong? = null,
     ) {
-        // Losses are posted on screen too: the user may be anywhere in the app when an exit fails or loses a leaf.
-        if (App.currentActivity?.value != null && alert !in ALWAYS_POSTED) return
+        // Losses and a stopped exit are posted on screen too.
+        if (App.currentActivity?.value != null && !alert.isPostedOnScreen) return
         val time = deadlineAtMillis?.let { DateFormat.getTimeFormat(context).format(Date(it)) }
         val amount = amountSats?.let { "$BITCOIN_SYMBOL ${it.formatToModernDisplay()}" }
         val text = context.getString(alert.textRes(hasDeadline = time != null))
@@ -294,10 +294,15 @@ data class SparkExitBackgroundLimits(
     val areNotificationsEnabled: Boolean = true,
 )
 
-/** Why the user is asked to open Bitkit. */
-enum class SparkExitAlert { Funding, Lost, Failed, Rejected, FeeLow, Offline, Restricted, Battery, Behind }
+/**
+ * Why the user is asked to open Bitkit. [NotMoving] is the exit stopping its rebuilds over a broken chain, posted once
+ * on the tick it happens, with the refused-steps text.
+ */
+enum class SparkExitAlert { Funding, Lost, Failed, NotMoving, Rejected, FeeLow, Offline, Restricted, Battery, Behind }
 
-private val ALWAYS_POSTED = setOf(SparkExitAlert.Lost, SparkExitAlert.Failed)
+/** Posted while Bitkit is on screen too: the user may be anywhere in the app, and no later run changes them. */
+val SparkExitAlert.isPostedOnScreen: Boolean
+    get() = this == SparkExitAlert.Lost || this == SparkExitAlert.Failed || this == SparkExitAlert.NotMoving
 
 object SparkExitAlerts {
     /**
@@ -357,6 +362,7 @@ private fun SparkExitAlert.textRes(hasDeadline: Boolean): Int = when (this) {
     SparkExitAlert.Failed -> R.string.lightning__spark_exit__notification_failed
     SparkExitAlert.FeeLow -> R.string.lightning__spark_exit__fee_low
     SparkExitAlert.Rejected if hasDeadline -> R.string.lightning__spark_exit__notification_rejected
+    SparkExitAlert.NotMoving if hasDeadline -> R.string.lightning__spark_exit__notification_rejected
     SparkExitAlert.Offline if hasDeadline -> R.string.lightning__spark_exit__notification_offline
     SparkExitAlert.Restricted if hasDeadline -> R.string.lightning__spark_exit__notification_restricted
     SparkExitAlert.Battery if hasDeadline -> R.string.lightning__spark_exit__notification_battery
