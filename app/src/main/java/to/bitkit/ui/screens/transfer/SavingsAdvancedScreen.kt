@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.filterOpen
@@ -47,6 +48,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.transferViewModel
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
+import to.bitkit.viewmodels.SavingsSelection
 
 @Composable
 fun SavingsAdvancedScreen(
@@ -60,7 +62,11 @@ fun SavingsAdvancedScreen(
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val openChannels = lightningState.channels.filterOpen()
 
+    val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
+    val sparkSats = sparkState.balanceSats
+
     var selectedChannelIds by remember { mutableStateOf(setOf<String>()) }
+    var isSparkSelected by remember { mutableStateOf(true) }
 
     // Select all open channels on init
     LaunchedEffect(Unit) {
@@ -85,13 +91,20 @@ fun SavingsAdvancedScreen(
         }.toImmutableList()
     }
 
+    val sparkItem = sparkSats.takeIf { it > 0uL }?.let { SparkUiState(balance = it, isSelected = isSparkSelected) }
+
     SavingsAdvancedContent(
         channelItems = channelItems,
+        sparkItem = sparkItem,
         onChannelItemClick = { channelId -> toggleChannel(channelId) },
+        onSparkItemClick = { isSparkSelected = !isSparkSelected },
         onAmountClick = { currency.switchUnit() },
         onContinueClick = {
-            transfer.setSelectedChannelIds(
-                selectedChannelIds.takeUnless { it.size == openChannels.size } ?: emptySet()
+            transfer.setSavingsSelection(
+                SavingsSelection(
+                    channelIds = selectedChannelIds.takeUnless { it.size == openChannels.size }?.toImmutableSet(),
+                    includesSpark = isSparkSelected,
+                )
             )
             onContinueClick()
         },
@@ -102,12 +115,15 @@ fun SavingsAdvancedScreen(
 @Composable
 private fun SavingsAdvancedContent(
     channelItems: ImmutableList<TransferChannelUiState>,
+    sparkItem: SparkUiState? = null,
     onChannelItemClick: (String) -> Unit = {},
+    onSparkItemClick: () -> Unit = {},
     onAmountClick: () -> Unit = {},
     onContinueClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
 ) {
-    val totalAmount = channelItems.filter { it.isSelected }.sumOf { it.balance }
+    val sparkAmount = sparkItem?.takeIf { it.isSelected }?.balance ?: 0uL
+    val totalAmount = channelItems.filter { it.isSelected }.sumOf { it.balance } + sparkAmount
 
     ScreenColumn {
         AppTopBar(
@@ -132,6 +148,16 @@ private fun SavingsAdvancedContent(
             LazyColumn(
                 modifier = Modifier.weight(1f)
             ) {
+                sparkItem?.let { spark ->
+                    item(key = SPARK_ITEM_KEY) {
+                        ChannelItem(
+                            channelName = stringResource(R.string.lightning__spark),
+                            balanceSat = spark.balance,
+                            iSelected = spark.isSelected,
+                            onClick = onSparkItemClick,
+                        )
+                    }
+                }
                 itemsIndexed(
                     items = channelItems.sortedBy { it.channelId },
                     key = { _, channel -> channel.channelId },
@@ -153,7 +179,7 @@ private fun SavingsAdvancedContent(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinueClick,
-                enabled = channelItems.any { it.isSelected },
+                enabled = channelItems.any { it.isSelected } || sparkItem?.isSelected == true,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -196,6 +222,14 @@ fun ChannelItem(
     }
 }
 
+private const val SPARK_ITEM_KEY = "spark"
+
+@Immutable
+private data class SparkUiState(
+    val balance: ULong,
+    val isSelected: Boolean,
+)
+
 @Immutable
 private data class TransferChannelUiState(
     val channelId: String,
@@ -225,6 +259,7 @@ private fun SavingsAdvancedScreenPreview() {
                     isSelected = false,
                 ),
             ),
+            sparkItem = SparkUiState(balance = 12_000u, isSelected = true),
         )
     }
 }

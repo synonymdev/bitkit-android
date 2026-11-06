@@ -6,15 +6,19 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,11 +37,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.filterOpen
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
+import to.bitkit.models.safe
 import to.bitkit.ui.components.AmountSlider
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -58,6 +64,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.transferViewModel
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
+import to.bitkit.viewmodels.SavingsSelection
 import to.bitkit.viewmodels.SavingsSwapQuote
 import to.bitkit.viewmodels.SavingsTransferMode
 
@@ -75,20 +82,25 @@ fun SavingsConfirmScreen(
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val openChannels = lightningState.channels.filterOpen()
 
-    val hasMultiple = openChannels.size > 1
+    val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
+    val sparkSats = sparkState.balanceSats
 
-    val selectedChannelIds by transfer.selectedChannelIdsState.collectAsStateWithLifecycle()
-    val selectedChannels: List<ChannelDetails>? = selectedChannelIds
-        .takeIf { it.isNotEmpty() }
-        ?.let { list -> openChannels.filter { channel -> list.contains(channel.channelId) } }
+    // Spark counts as one more item: the selection list is offered once there are two to choose from.
+    val hasMultiple = openChannels.size + (if (sparkSats > 0uL) 1 else 0) > 1
 
-    val hasSelected = selectedChannelIds.isNotEmpty()
+    val selection by transfer.savingsSelection.collectAsStateWithLifecycle()
+    val hasSelected = !selection.isAll
 
-    val channels = selectedChannels ?: openChannels
+    val channels = selection.channels(openChannels)
+    val withdrawsSpark = selection.withdrawsSpark(sparkSats)
 
-    val amount = channels.sumOf { it.amountOnClose }
+    val channelsAmount = channels.sumOf { it.amountOnClose }
+    val sparkAmount = if (withdrawsSpark) sparkSats else 0uL
 
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
+    val sparkFeeSats by transfer.sparkWithdrawFeeSats.collectAsStateWithLifecycle()
+    val isSparkFeePricing by transfer.isSparkFeePricing.collectAsStateWithLifecycle()
+    val isSparkTooSmall by transfer.isSparkWithdrawTooSmall.collectAsStateWithLifecycle()
 
     // Pull the latest node balances so a just-received payment is reflected in the amounts below.
     LaunchedEffect(Unit) {
@@ -96,13 +108,24 @@ fun SavingsConfirmScreen(
     }
 
     // Present the swap fee before the user commits. Recomputed when the amount changes.
-    LaunchedEffect(amount) {
-        if (amount > 0uL) transfer.loadSavingsSwapQuote(amount)
+    // A zero amount clears an earlier quote, so a Spark-only transfer never swaps channel funds.
+    LaunchedEffect(channelsAmount) {
+        transfer.loadSavingsSwapQuote(channelsAmount, channels.totalNextOutboundHtlcLimitSats())
+    }
+
+    LaunchedEffect(withdrawsSpark, sparkSats) {
+        if (withdrawsSpark) transfer.loadSparkWithdrawFee(sparkSats)
     }
 
     Box {
         SavingsConfirmContent(
-            fallbackAmount = amount,
+            fallbackAmount = channelsAmount,
+            sparkAmount = sparkAmount,
+            sparkFeeSats = sparkFeeSats.takeIf { withdrawsSpark },
+            // Spark's part moves only at the fee shown, so nothing is confirmed before it is priced.
+            isSparkFeePricing = withdrawsSpark && isSparkFeePricing,
+            isSparkUnpriced = withdrawsSpark && sparkFeeSats == null,
+            isSparkTooSmall = withdrawsSpark && isSparkTooSmall,
             isSwapEnabled = swapState.isSwapEnabled,
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
@@ -114,13 +137,13 @@ fun SavingsConfirmScreen(
             onBackClick = onBackClick,
             onAmountClick = { currency.switchUnit() },
             onAdvancedClick = onAdvancedClick,
-            onSelectAllClick = { transfer.setSelectedChannelIds(emptySet()) },
+            onSelectAllClick = { transfer.setSavingsSelection(SavingsSelection()) },
             onSwipeConfirm = {
-                transfer.onTransferToSavingsConfirm(channels)
+                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark)
                 onConfirm()
             },
             onCloseConfirm = {
-                transfer.onTransferToSavingsConfirm(channels, SavingsTransferMode.CLOSE)
+                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark, SavingsTransferMode.CLOSE)
                 onConfirm()
             },
         )
@@ -140,6 +163,11 @@ fun SavingsConfirmScreen(
 @Composable
 private fun SavingsConfirmContent(
     fallbackAmount: ULong,
+    sparkAmount: ULong,
+    sparkFeeSats: ULong?,
+    isSparkFeePricing: Boolean,
+    isSparkUnpriced: Boolean,
+    isSparkTooSmall: Boolean,
     isSwapEnabled: Boolean,
     quote: SavingsSwapQuote?,
     isQuoteLoading: Boolean,
@@ -156,7 +184,9 @@ private fun SavingsConfirmContent(
     onCloseConfirm: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    val headlineAmount = quote?.amountSat ?: fallbackAmount
+    val headlineAmount = (quote?.amountSat ?: fallbackAmount).safe() + sparkAmount.safe()
+    val sparkReceive = sparkAmount.safe() - (sparkFeeSats ?: 0uL).safe()
+    val receiveAmount = (quote?.receiveSat ?: 0uL).safe() + sparkReceive.safe()
     // Only show the swap-pricing spinner while swaps are enabled and a quote is still being fetched;
     // otherwise the swipe just falls back to closing the channel and there is nothing to wait for.
     val isPricingSwap = isSwapEnabled && quote == null && isQuoteLoading
@@ -170,99 +200,141 @@ private fun SavingsConfirmContent(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
-
         ) {
-            VerticalSpacer(32.dp)
-            Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent())
-            VerticalSpacer(32.dp)
-
-            Caption13Up(text = stringResource(R.string.lightning__savings_confirm__label), color = Colors.White64)
-            VerticalSpacer(8.dp)
-            MoneyDisplay(sats = headlineAmount.toLong(), onClick = onAmountClick)
-
-            if (quote != null) {
-                VerticalSpacer(24.dp)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.height(IntrinsicSize.Min),
-                ) {
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__network_fee),
-                        amount = quote.networkFeeSat.toLong(),
-                    )
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__service_fee),
-                        amount = quote.swapFeeSat.toLong(),
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.height(IntrinsicSize.Min),
-                ) {
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__amount),
-                        amount = quote.amountSat.toLong(),
-                    )
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__receive),
-                        amount = quote.receiveSat.toLong(),
-                    )
-                }
-
-                // Adjust how much to move to savings, bounded to a payable range.
-                if (maxSat > minSat) {
-                    VerticalSpacer(28.dp)
-                    AmountSlider(
-                        value = quote.amountSat.toLong(),
-                        min = minSat.toLong(),
-                        max = maxSat.toLong(),
-                        onValueChange = onAmountChange,
-                    )
-                }
-            }
-
-            if (hasMultiple) {
-                VerticalSpacer(24.dp)
-                if (hasSelected) {
-                    PrimaryButton(
-                        text = stringResource(R.string.lightning__savings_confirm__transfer_all),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        onClick = { onSelectAllClick() },
-                    )
-                } else {
-                    PrimaryButton(
-                        text = stringResource(R.string.common__advanced),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        onClick = { onAdvancedClick() },
-                    )
-                }
-            }
-
-            // Flexible middle: the piggybank fills the remaining space, so it shrinks when the
-            // fees/slider are shown (no squished buttons) and fills the gap while the quote loads.
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center,
             ) {
-                if (isPricingSwap) {
-                    GradientCircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        strokeWidth = 3.dp,
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(min = maxHeight)
+                ) {
+                    VerticalSpacer(32.dp)
+                    Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent())
+                    VerticalSpacer(32.dp)
+
+                    Caption13Up(
+                        text = stringResource(R.string.lightning__savings_confirm__label),
+                        color = Colors.White64,
                     )
-                } else {
-                    Image(
-                        painter = painterResource(R.drawable.piggybank),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
+                    VerticalSpacer(8.dp)
+                    MoneyDisplay(sats = headlineAmount.toLong(), onClick = onAmountClick)
+
+                    if (quote != null) {
+                        VerticalSpacer(24.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                        ) {
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__network_fee),
+                                amount = quote.networkFeeSat.toLong(),
+                            )
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__service_fee),
+                                amount = quote.swapFeeSat.toLong(),
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                        ) {
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__amount),
+                                amount = headlineAmount.toLong(),
+                            )
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__receive),
+                                amount = receiveAmount.toLong(),
+                            )
+                        }
+
+                        // Adjust how much to move to savings, bounded to a payable range.
+                        if (maxSat > minSat) {
+                            VerticalSpacer(28.dp)
+                            AmountSlider(
+                                value = quote.amountSat.toLong(),
+                                min = minSat.toLong(),
+                                max = maxSat.toLong(),
+                                onValueChange = onAmountChange,
+                            )
+                        }
+                    }
+
+                    if (sparkFeeSats != null) {
+                        VerticalSpacer(if (quote != null) 0.dp else 24.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                        ) {
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__spark_fee),
+                                amount = sparkFeeSats.toLong(),
+                            )
+                        }
+                    }
+
+                    if (isSparkUnpriced && !isSparkFeePricing) {
+                        VerticalSpacer(16.dp)
+                        BodyS(
+                            text = stringResource(
+                                if (isSparkTooSmall) {
+                                    R.string.lightning__savings_confirm__amount_too_low
+                                } else {
+                                    R.string.lightning__savings_spark_failed
+                                }
+                            ),
+                            color = Colors.Red,
+                        )
+                    }
+
+                    if (hasMultiple) {
+                        VerticalSpacer(24.dp)
+                        if (hasSelected) {
+                            PrimaryButton(
+                                text = stringResource(R.string.lightning__savings_confirm__transfer_all),
+                                size = ButtonSize.Small,
+                                fullWidth = false,
+                                onClick = { onSelectAllClick() },
+                            )
+                        } else {
+                            PrimaryButton(
+                                text = stringResource(R.string.common__advanced),
+                                size = ButtonSize.Small,
+                                fullWidth = false,
+                                onClick = { onAdvancedClick() },
+                            )
+                        }
+                    }
+
+                    // Flexible middle: the piggybank fills the remaining space, so it shrinks when the
+                    // fees/slider are shown (no squished buttons) and fills the gap while the quote loads.
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer(scaleX = -1f),
-                    )
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isPricingSwap) {
+                            GradientCircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                strokeWidth = 3.dp,
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(R.drawable.piggybank),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer(scaleX = -1f),
+                            )
+                        }
+                    }
                 }
             }
 
@@ -271,7 +343,8 @@ private fun SavingsConfirmContent(
             var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
-                loading = isLoading || isPricingSwap,
+                loading = isLoading || isPricingSwap || isSparkFeePricing,
+                enabled = !isSparkUnpriced,
                 color = Colors.Brand,
                 onConfirm = {
                     scope.launch {
@@ -286,6 +359,7 @@ private fun SavingsConfirmContent(
                 // Fallback: drain a whole channel on-chain by closing it instead of swapping.
                 TertiaryButton(
                     text = stringResource(R.string.lightning__savings_confirm__close_instead),
+                    enabled = !isSparkUnpriced,
                     onClick = onCloseConfirm,
                 )
             }
@@ -300,6 +374,11 @@ private fun SavingsConfirmScreenPreview() {
     AppThemeSurface {
         SavingsConfirmContent(
             fallbackAmount = 50_123u,
+            sparkAmount = 12_000u,
+            sparkFeeSats = 1_470u,
+            isSparkFeePricing = false,
+            isSparkUnpriced = false,
+            isSparkTooSmall = false,
             isSwapEnabled = true,
             quote = SavingsSwapQuote(
                 amountSat = 50_123u,

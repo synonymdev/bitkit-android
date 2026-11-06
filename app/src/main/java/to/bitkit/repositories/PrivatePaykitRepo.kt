@@ -81,6 +81,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val addressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val lightningRepo: LightningRepo,
+    private val sparkRepo: SparkRepo,
     private val walletRepo: WalletRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val paymentRequestRepo: PaykitPaymentRequestRepo,
@@ -1966,6 +1967,7 @@ class PrivatePaykitRepo @Inject constructor(
                 amountSats = null,
                 description = "",
                 expirySeconds = privateInvoiceExpiry.inWholeSeconds.toUInt(),
+                isContactEndpoint = true,
             ).getOrThrow()
             if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
 
@@ -2472,7 +2474,7 @@ class PrivatePaykitRepo @Inject constructor(
                     it.kind is PaymentKind.Bolt11
             }
             .map { it.id.lowercase() }
-            .toSet()
+            .toSet() + sparkRepo.attemptedLightningPaymentHashes()
 
     private suspend fun isReceivedInvoiceSettled(paymentHash: String): Boolean =
         paymentHash in receivedSettledPaymentHashes()
@@ -2488,7 +2490,7 @@ class PrivatePaykitRepo @Inject constructor(
                     it.kind is PaymentKind.Bolt11
             }
             .map { it.id }
-            .toSet()
+            .toSet() + sparkRepo.receivedLightningPaymentHashes()
 
     private suspend fun rememberReceivedInvoicePaymentHash(paymentHash: String, publicKey: String) {
         if (paymentHash.isBlank()) return

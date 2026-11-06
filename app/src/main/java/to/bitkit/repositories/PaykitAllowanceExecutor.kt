@@ -42,6 +42,7 @@ import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 /** The side effects of paying one request, kept apart so the admission logic is testable without a node. */
 @Singleton
@@ -132,16 +133,37 @@ class PaykitAllowancePayer @Inject constructor(
         return PaymentOutcome.SUCCEEDED.takeIf { hasProof }
     }
 
-    /** True once the node can list its payments, so a payment missing from the list is one it never sent. */
+    /**
+     * True once the node and Spark can both list their payments, so a payment missing from both lists is one the
+     * wallet never sent.
+     */
     suspend fun canListLightningPayments(): Boolean =
-        runSuspendCatching { lightningRepo.listPaymentsOrNull() }.getOrNull() != null
+        runSuspendCatching { lightningRepo.listPaymentsOrNull() }.getOrNull() != null &&
+            lightningRepo.canListSparkPayments()
 
-    /** The node's status for an outbound payment, or null when the node does not know it (or is not running). */
-    suspend fun lightningPaymentStatus(paymentHash: String): PaymentStatus? =
-        runSuspendCatching { lightningRepo.listPaymentsOrNull() }
+    /**
+     * The status of an outbound payment from the node, else from Spark; null when neither knows it (or the node is
+     * not running). PENDING while Spark cannot list its payments, so a Spark send is never read as never sent.
+     */
+    suspend fun lightningPaymentStatus(paymentHash: String): PaymentStatus? {
+        val node = runSuspendCatching { lightningRepo.listPaymentsOrNull() }
             .getOrNull()
             ?.firstOrNull { it.direction == PaymentDirection.OUTBOUND && it.id.equals(paymentHash, ignoreCase = true) }
             ?.status
+        // A Spark retry of an invoice the node failed shares its hash and decides the payment.
+        if (node != null && node != PaymentStatus.FAILED) return node
+        val spark = runSuspendCatching { lightningRepo.sparkLightningSend(paymentHash) }
+            .getOrDefault(SparkLightningSend.Unavailable)
+        return when (spark) {
+            SparkLightningSend.Unavailable -> PaymentStatus.PENDING
+            SparkLightningSend.NotFound -> node
+            is SparkLightningSend.Found -> when (spark.status) {
+                SparkPaymentStatus.COMPLETED -> PaymentStatus.SUCCEEDED
+                SparkPaymentStatus.PENDING -> PaymentStatus.PENDING
+                SparkPaymentStatus.FAILED -> PaymentStatus.FAILED
+            }
+        }
+    }
 }
 
 /**

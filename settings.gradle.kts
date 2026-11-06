@@ -88,6 +88,10 @@ dependencyResolutionManagement {
             }
         }
         maven {
+            url = uri("https://mvn.breez.technology/releases")
+            content { includeGroup("breez_sdk_spark") }
+        }
+        maven {
             url = uri("https://maven.pkg.github.com/pubky/paykit-rs")
             credentials {
                 val (user, pass) = getGithubCredentials()

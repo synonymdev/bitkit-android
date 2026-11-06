@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -49,6 +50,7 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
@@ -56,6 +58,7 @@ import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -69,6 +72,7 @@ import to.bitkit.data.keychain.requireWalletRestoreComplete
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
+import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
@@ -80,6 +84,7 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
@@ -130,6 +135,7 @@ class LightningRepo @Inject constructor(
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
+    private val sparkRepo: SparkRepo,
 ) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -137,6 +143,12 @@ class LightningRepo @Inject constructor(
     private val _nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
     val nodeEventUpdates = _nodeEventUpdates.asSharedFlow()
     val nodeEvents = nodeEventUpdates.map { it.event }
+
+    /** Whether Spark is connected and can send and receive Lightning payments. */
+    val isSparkReady: Flow<Boolean> get() = sparkRepo.state.map { it.isReady }.distinctUntilChanged()
+
+    /** Whether Spark synced its payments since it connected, so its payment list is complete. */
+    val isSparkSynced: Flow<Boolean> get() = sparkRepo.state.map { it.hasSynced }.distinctUntilChanged()
 
     private val scope = appScope(bgDispatcher, TAG)
 
@@ -151,6 +163,9 @@ class LightningRepo @Inject constructor(
 
     @Volatile
     private var isWiping = false
+
+    /** The rail each Lightning send last went out on, by payment hash, so a retry settles only from its own rail. */
+    private val sendRails = ConcurrentHashMap<String, LightningRail>()
 
     @Volatile
     private var lastKnownNodeId: String? = null
@@ -180,6 +195,7 @@ class LightningRepo @Inject constructor(
 
     init {
         observeConnectivityForSyncRetry()
+        scope.launch { sparkRepo.nodeEvents.collect { onSparkEvent(it) } }
     }
 
     private fun observeConnectivityForSyncRetry() {
@@ -359,6 +375,9 @@ class LightningRepo @Inject constructor(
         }
 
         if (shouldCancelPendingStop) cancelPendingStop()
+
+        // Spark needs no node, so it starts alongside it and stays up while the node stops in background.
+        if (!isWiping) scope.launch { sparkRepo.start(walletIndex) }
 
         eventHandler?.let { _eventHandlers.add(it) }
 
@@ -607,6 +626,19 @@ class LightningRepo @Inject constructor(
         )
     }
 
+    private suspend fun onSparkEvent(event: Event) {
+        // An earlier Spark attempt's failure never fails a retry the node is paying.
+        if (event is Event.PaymentFailed && event.paymentHash?.let { isLdkSend(it) } == true) {
+            Logger.info("Skipped Spark failure of '${event.paymentHash}', its retry went over a channel", context = TAG)
+            return
+        }
+        val settledReceiveInvoice = (event as? Event.PaymentReceived)?.let { invalidateSettledReceiveInvoice(it) }
+        _eventHandlers.toList().forEach {
+            runCatching { it.invoke(event) }
+        }
+        _nodeEventUpdates.emit(NodeEventUpdate(event = event, settledReceiveInvoice = settledReceiveInvoice))
+    }
+
     private suspend fun invalidateSettledReceiveInvoice(event: Event.PaymentReceived): SettledReceiveInvoice? {
         val cachedReceive = runSuspendCatching {
             cacheStore.data.first()
@@ -659,7 +691,10 @@ class LightningRepo @Inject constructor(
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
-    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
+    fun setWiping(enabled: Boolean) = run {
+        isWiping = enabled
+        sparkRepo.setWiping(enabled)
+    }
 
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
@@ -907,6 +942,7 @@ class LightningRepo @Inject constructor(
                 lastKnownNodeId = null
                 _lastKnownChannels.update { persistentListOf() }
                 lightningService.wipeStorage(walletIndex)
+                sparkRepo.wipe(walletIndex).getOrThrow()
                 clearProbeOutcomes()
                 _lightningState.update {
                     LightningState(
@@ -1298,12 +1334,20 @@ class LightningRepo @Inject constructor(
             runSuspendCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
         }
 
+    /**
+     * Creates an invoice on the node or on Spark. A [isContactEndpoint] invoice is published to Paykit contacts, who
+     * pay it any amount, so it prefers Spark unless the node's inbound covers [AMOUNTLESS_NODE_INBOUND_SATS].
+     */
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
+        isContactEndpoint: Boolean = false,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
         requireWalletRestoreComplete()
+        if (shouldReceiveWithSpark(amountSats, isContactEndpoint)) {
+            return@executeWhenNodeRunning sparkRepo.createInvoice(amountSats, description, expirySeconds)
+        }
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
@@ -1313,7 +1357,38 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
         requireWalletRestoreComplete()
+        // Spark invoices hold whole sats, so a sub-sat part rounds up rather than dropping the amount.
+        val amountSats = (amountMsats.safe() + (MSATS_PER_SAT - 1uL).safe()) / MSATS_PER_SAT
+        if (shouldReceiveWithSpark(amountSats)) {
+            val invoiceSats = amountSats.takeIf { it > 0uL }
+            return@executeWhenNodeRunning sparkRepo.createInvoice(invoiceSats, description, expirySeconds)
+        }
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
+    }
+
+    /**
+     * Receives on Spark when no ready channel has the inbound capacity for [amountSats]. An amountless contact endpoint
+     * stays on the node only when its inbound covers [AMOUNTLESS_NODE_INBOUND_SATS].
+     */
+    private fun shouldReceiveWithSpark(amountSats: ULong?, isContactEndpoint: Boolean = false): Boolean {
+        if (!sparkRepo.canReceive()) return false
+        val readyChannels = _lightningState.value.channels.filter { it.isChannelReady }
+        val neededSats = amountSats?.takeIf { it > 0uL } ?: AMOUNTLESS_NODE_INBOUND_SATS.takeIf { isContactEndpoint }
+        return !ReceiveLiquidityDecision.canCreateLightningInvoice(
+            hasReadyChannels = readyChannels.isNotEmpty(),
+            inboundCapacitySats = readyChannels.calculateRemoteBalance(),
+            invoiceAmountSats = neededSats,
+        )
+    }
+
+    /** Pays with Spark when no channel has the outbound capacity for the invoice amount. */
+    private fun shouldPayWithSpark(bolt11: String, sats: ULong?): Boolean {
+        val amountSats = sats ?: runCatching { Bolt11Invoice.fromStr(bolt11).amountMilliSatoshis() }.getOrNull()
+            ?.let { it / MSATS_PER_SAT } ?: return false
+        val state = _lightningState.value
+        val ldkCanSend = state.nodeLifecycleState.canRun() &&
+            state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
+        return !ldkCanSend && sparkRepo.canSend(amountSats)
     }
 
     suspend fun fetchLnurlInvoice(
@@ -1409,15 +1484,56 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong?,
         onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> {
+        if (shouldPayWithSpark(bolt11, sats)) {
+            runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
+            val authorizeSend: suspend () -> Boolean = {
+                onBeforeSend().also { if (it) requireWalletRestoreComplete() }
+            }
+            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, authorizeSend)
+                .onSuccess { recordSendRail(it, LightningRail.Spark) }
+                .onFailure {
+                    if (it is PaymentPendingException) recordSendRail(it.paymentHash, LightningRail.Spark)
+                }
+        }
+        return payInvoiceWithLdk(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
+    }
+
+    private suspend fun payInvoiceWithLdk(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong?,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         requireWalletRestoreComplete()
         waitForUsableChannels()
         requireWalletRestoreComplete()
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
-        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }.also {
-            syncState()
-        }
+        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
+            .onSuccess { recordSendRail(it, LightningRail.Ldk) }
+            .also { syncState() }
+    }
+
+    private fun recordSendRail(paymentHash: String, rail: LightningRail) {
+        sendRails[paymentHash.lowercase()] = rail
+    }
+
+    /** Whether the latest send of [paymentHash] went out on Spark, so the node's record of it is an older attempt. */
+    fun isSparkSend(paymentHash: String): Boolean = sendRails[paymentHash.lowercase()] == LightningRail.Spark
+
+    private fun isLdkSend(paymentHash: String): Boolean = sendRails[paymentHash.lowercase()] == LightningRail.Ldk
+
+    /** Confirmations of an on-chain transaction this wallet sent or received, 0 while unconfirmed. */
+    suspend fun onchainConfirmations(txid: String): UInt? = withContext(bgDispatcher) {
+        val kind = lightningService.listPayments()
+            ?.map { it.kind }
+            ?.filterIsInstance<PaymentKind.Onchain>()
+            ?.firstOrNull { it.txid.equals(txid, ignoreCase = true) } ?: return@withContext null
+        val confirmed = kind.status as? ConfirmationStatus.Confirmed ?: return@withContext 0u
+        val tip = _lightningState.value.block()?.height ?: return@withContext null
+        if (tip < confirmed.height) 0u else tip - confirmed.height + 1u
     }
 
     suspend fun listPaymentsOrNull(): List<PaymentDetails>? = withContext(bgDispatcher) {
@@ -1872,6 +1988,17 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Finishes an accepted transfer locally; [orderId] is null for a transfer that funds the Spark wallet. */
+    suspend fun completeAcceptedTransferFollowup(orderId: String?, txid: String) {
+        val attempt = onchainSendAttemptStore.current() ?: return
+        if (attempt.isTransfer && attempt.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
+    }
+
     // A change signal only: consumers must reread and validate the original attempt.
     val onchainSendAttemptUpdates get() = onchainSendAttemptStore.backupStateVersion
 
@@ -2204,8 +2331,12 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Whether Spark alone can pay [amountSats], which it does whenever the node cannot. */
+    fun canSendWithSpark(amountSats: ULong): Boolean = sparkRepo.canSend(amountSats)
+
     fun canSend(amountSats: ULong): Boolean {
         val state = _lightningState.value
+        if (sparkRepo.canSend(amountSats)) return true
         if (!state.nodeLifecycleState.canRun()) return false
         return state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
     }
@@ -2256,9 +2387,23 @@ class LightningRepo @Inject constructor(
         if (state.nodeLifecycleState.isRunning()) state.channels else it
     }
 
+    /** The completion event of a Spark send that settled before its caller started watching for it. */
+    suspend fun settledSparkSendEvent(paymentHash: String): Event? =
+        if (isLdkSend(paymentHash)) null else sparkRepo.settledSendEvent(paymentHash)
+
+    /** Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed. */
+    suspend fun sparkLightningSend(paymentHash: String): SparkLightningSend = sparkRepo.lightningSend(paymentHash)
+
+    /** False while Spark is supported but its payment list is not complete yet, so a missing payment proves nothing. */
+    fun canListSparkPayments(): Boolean = sparkRepo.canListPayments()
+
+    /**
+     * Whether Lightning can be received, through a usable channel or Spark; Paykit publishes a Lightning endpoint
+     * only then.
+     */
     fun canReceive(): Boolean {
         val isRunning = _lightningState.value.nodeLifecycleState.isRunning()
-        return isRunning && lightningService.canReceive()
+        return isRunning && (lightningService.canReceive() || sparkRepo.canReceive())
     }
 
     suspend fun bumpFeeByRbf(
@@ -2328,6 +2473,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
+        if (shouldPayWithSpark(bolt11, null)) return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, null)
         Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
         lightningService.estimateRoutingFees(bolt11).onSuccess {
             Logger.info("Routing fees estimated: '$it'", context = TAG)
@@ -2338,6 +2484,9 @@ class LightningRepo @Inject constructor(
 
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
+            if (shouldPayWithSpark(bolt11, amountSats)) {
+                return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, amountSats)
+            }
             Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
                 Logger.info("Routing fees estimated: '$it'", context = TAG)
@@ -2345,6 +2494,20 @@ class LightningRepo @Inject constructor(
                 Logger.error("estimateRoutingFeesForAmount error", it, context = TAG)
             }
         }
+
+    /**
+     * What a Max send of the amountless [bolt11] keeps below [maxSendSats] for its fees: Spark's quote for sending its
+     * whole balance when Spark pays it, otherwise the routing fee for [maxSendSats] with a small buffer.
+     */
+    suspend fun estimateMaxSendFee(bolt11: String, maxSendSats: ULong): Result<ULong> {
+        if (shouldPayWithSpark(bolt11, maxSendSats)) {
+            sparkRepo.maxSendReserveSats(bolt11)
+                .onSuccess { return Result.success(it) }
+                .onFailure { Logger.warn("Failed to price a Max Spark send", it, context = TAG) }
+        }
+        val amountSats = maxSendSats.safe() - MAX_SEND_FEE_BUFFER_SATS.safe()
+        return estimateRoutingFeesForAmount(bolt11, amountSats).map { it.safe() + MAX_SEND_FEE_BUFFER_SATS.safe() }
+    }
 
     // region debug
     fun getNetworkGraphInfo() = lightningService.getNetworkGraphInfo()
@@ -2639,6 +2802,13 @@ class LightningRepo @Inject constructor(
         private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
+        private const val MSATS_PER_SAT = 1_000uL
+
+        /** Inbound the node's ready channels need before an amountless contact endpoint goes to the node, not Spark. */
+        private const val AMOUNTLESS_NODE_INBOUND_SATS = 1_000_000uL
+
+        /** Sats a Max Lightning send keeps beyond its estimated routing fee, as routes can price slightly higher. */
+        private const val MAX_SEND_FEE_BUFFER_SATS = 2uL
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
@@ -2836,3 +3006,6 @@ sealed interface ProbeOutcome {
  */
 internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong, requestedSyncSucceeded: Boolean = false): Boolean =
     requestedSyncSucceeded || (latest ?: 0uL) > previous
+
+/** The Lightning rail a send went out on. */
+enum class LightningRail { Ldk, Spark }
