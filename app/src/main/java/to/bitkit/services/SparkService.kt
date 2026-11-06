@@ -48,6 +48,7 @@ import kotlinx.coroutines.sync.withLock
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.safe
 import to.bitkit.repositories.SparkExitRecovering
 import to.bitkit.utils.AppError
@@ -71,13 +72,15 @@ class SparkService @Inject constructor(
         private const val TAG = "SparkService"
 
         /**
-         * Bitkit's settings over the SDK's [defaults]. Breez's real-time data sync server and its Lightning address
-         * (LNURL) server stay off on every network.
+         * Bitkit's settings over the SDK's [defaults]. Breez's real-time data sync server, its Lightning address
+         * (LNURL) server and its default external input parsers stay off on every network.
          */
         internal fun configure(defaults: Config, apiKey: String?, isExiting: Boolean): Config = defaults.apply {
             this.apiKey = apiKey
             realTimeSyncServerUrl = null
             lnurlDomain = null
+            // Bitkit parses what the user scans itself, so the SDK never sends it to third-party parsers.
+            useDefaultExternalInputParsers = false
             // Lowering it below the spread keeps the deposit from being claimed early, and does not hold back its
             // claim at maturity.
             maxDepositClaimFee = MaxFee(
@@ -139,6 +142,10 @@ class SparkService @Inject constructor(
 
     val isConnected: Boolean get() = sdk != null
 
+    /** Set for the whole wallet wipe, so a start that races it cannot connect and recreate the deleted storage. */
+    @Volatile
+    var isWiping: Boolean = false
+
     /**
      * Spark's regtest has no Lightning network, so there a Lightning invoice from another Spark wallet is paid as a
      * Spark transfer, which lets two dev builds pay each other's invoices.
@@ -151,6 +158,7 @@ class SparkService @Inject constructor(
      */
     suspend fun connect(walletIndex: Int, isExiting: Boolean = false) = mutex.withLock {
         if (sdk != null) return@withLock
+        if (isWiping) throw SparkError.WipeInProgress()
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
@@ -176,16 +184,26 @@ class SparkService @Inject constructor(
 
     suspend fun disconnect() = mutex.withLock {
         val current = sdk ?: return@withLock
-        listenerId?.let { current.removeEventListener(it) }
-        current.disconnect()
-        sdk = null
-        listenerId = null
-        Logger.info("Disconnected Spark wallet", context = TAG)
+        try {
+            listenerId?.let { current.removeEventListener(it) }
+            current.disconnect()
+            Logger.info("Disconnected Spark wallet", context = TAG)
+        } finally {
+            sdk = null
+            listenerId = null
+        }
     }
 
+    /** Deletes Spark's storage and any staged exit data restore, even when disconnecting failed. */
     suspend fun wipeStorage(walletIndex: Int) {
-        disconnect()
-        File(Env.sparkStoragePath(walletIndex)).deleteRecursively()
+        val disconnected = runSuspendCatching { disconnect() }
+        listOf(Env.sparkStoragePath(walletIndex), File(Env.sparkExitRestorePath(walletIndex)).parent)
+            .filterNotNull()
+            .forEach { path ->
+                val dir = File(path)
+                if (!dir.deleteRecursively() && dir.exists()) throw SparkError.WipeFailed(path)
+            }
+        disconnected.getOrThrow()
     }
 
     /** Syncs with Spark now instead of waiting for the SDK's next background sync. */
@@ -302,6 +320,14 @@ class BreezSparkExitRecovering(private val sdk: BreezSdk) : SparkExitRecovering 
 sealed class SparkError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     class Unsupported : SparkError("Spark is not available on this network or build")
     class NotConnected : SparkError("Spark wallet is not connected")
+    class WipeInProgress : SparkError("Spark wallet cannot connect while the wallet is wiped")
+    class WipeFailed(path: String) : SparkError("Failed to delete Spark storage at '$path'")
+
+    /** What the withdrawal leaves after its fee is below the on-chain dust limit. */
+    class WithdrawalTooSmall : SparkError("Spark balance is too small to withdraw after its fee")
+
+    /** The withdrawal fee rose above the fee the user confirmed. */
+    class WithdrawalFeeChanged : SparkError("Spark withdrawal fee changed since it was confirmed")
 
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the

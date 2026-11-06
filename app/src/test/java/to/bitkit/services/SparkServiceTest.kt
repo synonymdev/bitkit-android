@@ -5,12 +5,49 @@ import breez_sdk_spark.LeafOptimizationConfig
 import breez_sdk_spark.Network
 import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.TokenOptimizationConfig
+import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verifyNoInteractions
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.env.Env
+import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 class SparkServiceTest {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
+    @Test
+    fun `connect is refused during a wallet wipe`() = runTest {
+        val keychain = mock<Keychain>()
+        val sut = SparkService(keychain).apply { isWiping = true }
+
+        assertIs<SparkError.WipeInProgress>(runCatching { sut.connect(0) }.exceptionOrNull())
+
+        assertFalse(sut.isConnected)
+        verifyNoInteractions(keychain)
+    }
+
+    @Test
+    fun `wipe deletes spark storage and a staged exit data restore`() = runTest {
+        Env.initAppStoragePath(tempFolder.root.absolutePath)
+        val storage = File(Env.sparkStoragePath(0)).apply { mkdirs() }
+        File(storage, "db").writeText("old wallet")
+        val staged = File(Env.sparkExitRestorePath(0)).apply { parentFile?.mkdirs() }
+        staged.writeText("state")
+
+        SparkService(mock()).wipeStorage(0)
+
+        assertFalse(storage.exists())
+        assertFalse(staged.exists())
+    }
+
     @Test
     fun `lightning sends return before completion so callers see the completion event`() {
         val options = assertIs<SendPaymentOptions.Bolt11Invoice>(SparkService.bolt11SendOptions(prefersSpark = true))
@@ -61,12 +98,13 @@ class SparkServiceTest {
     )
 
     @Test
-    fun `config turns off breez data sync and the lightning address server on every network`() {
+    fun `config turns off breez data sync, the lightning address server and default parsers on every network`() {
         Network.entries.forEach { network ->
             val config = SparkService.configure(defaults(network), apiKey = "key", isExiting = false)
 
             assertNull(config.realTimeSyncServerUrl, "$network")
             assertNull(config.lnurlDomain, "$network")
+            assertFalse(config.useDefaultExternalInputParsers, "$network")
             assertEquals("key", config.apiKey)
         }
     }

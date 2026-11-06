@@ -7462,18 +7462,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val buffer = 2uL
-        val amountToEstimate = maxSendLightning.safe() - buffer.safe()
-
-        val feeResult = lightningRepo.estimateRoutingFeesForAmount(
-            bolt11 = bolt11,
-            amountSats = amountToEstimate
-        )
-
-        feeResult.onSuccess { fee ->
-            _sendUiState.update {
-                it.copy(estimatedRoutingFee = fee + buffer)
-            }
+        lightningRepo.estimateMaxSendFee(bolt11, maxSendLightning).onSuccess { fee ->
+            _sendUiState.update { it.copy(estimatedRoutingFee = fee) }
         }.onFailure { e ->
             Logger.error("Failed to estimate routing fee for max amount", e, context = TAG)
             _sendUiState.update { it.copy(estimatedRoutingFee = 0uL) }

@@ -35,6 +35,7 @@ import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.services.BoltzService
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
@@ -74,7 +75,8 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(boltzService.isSwapSupported).thenReturn(true)
         whenever { boltzService.isSwapEnabled() }.thenReturn(true)
         whenever(sparkRepo.state).thenReturn(sparkState)
-        whenever { sparkRepo.withdrawAll(any()) }.thenReturn(Result.success(Unit))
+        whenever { sparkRepo.withdrawAll(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(SPARK_FEE))
         whenever { lightningRepo.newAddress() }.thenReturn(Result.success(CLAIM_ADDRESS))
         whenever { lightningRepo.closeChannel(any(), any(), anyOrNull()) }.thenReturn(Result.success(Unit))
 
@@ -114,12 +116,13 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `transfer to savings with only spark withdraws spark and closes no channel`() = test {
         sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
         sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
 
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
         assertFalse(sut.hasChannelsToClose())
         assertTrue(sut.closeSelectedChannels().isEmpty())
-        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS)
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
         verify(lightningRepo, never()).awaitPeerConnected(any())
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
     }
@@ -130,7 +133,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = false)
 
         assertTrue(sut.closeSelectedChannels().isEmpty())
-        verify(sparkRepo, never()).withdrawAll(any())
+        verify(sparkRepo, never()).withdrawAll(any(), any())
         verify(lightningRepo).closeChannel(CHANNEL_B, false, null)
         verify(lightningRepo, never()).closeChannel(CHANNEL_A, false, null)
     }
@@ -138,7 +141,8 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `a failed spark withdrawal is reported while the selected channels still close`() = test {
         sparkState.value = SparkState(balanceSats = SPARK_SATS)
-        whenever { sparkRepo.withdrawAll(any()) }.thenReturn(Result.failure(AppError(PAY_ERROR)))
+        whenever { sparkRepo.withdrawAll(any(), any()) }.thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSparkWithdrawFee(SPARK_SATS)
         sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
 
         assertTrue(sut.closeSelectedChannels().isEmpty())
@@ -153,10 +157,11 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `transfer to savings with channels and spark moves both`() = test {
         sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
         sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A, CHANNEL_B), withdrawSpark = true)
 
         assertTrue(sut.closeSelectedChannels().isEmpty())
-        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS)
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
         verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
         verify(lightningRepo).closeChannel(CHANNEL_B, false, null)
     }
@@ -189,8 +194,37 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.startSavingsSwap()
         advanceUntilIdle()
 
-        verify(sparkRepo, never()).withdrawAll(any())
+        verify(sparkRepo, never()).withdrawAll(any(), any())
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `spark is not withdrawn at a fee the user was never shown`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }
+            .thenReturn(Result.failure(SparkError.WithdrawalTooSmall()))
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        assertTrue(sut.isSparkWithdrawTooSmall.value)
+        assertFalse(sut.isSparkFeePricing.value)
+
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+
+        assertTrue(sut.isSparkWithdrawFailed.value)
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+    }
+
+    @Test
+    fun `spark is withdrawn once per confirmed transfer`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+
+        sut.closeSelectedChannels()
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo, times(1)).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
     }
 
     @Test

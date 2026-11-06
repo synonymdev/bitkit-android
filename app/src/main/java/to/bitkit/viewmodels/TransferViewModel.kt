@@ -40,6 +40,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.services.BoltzService
+import to.bitkit.services.SparkError
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -72,7 +73,14 @@ class TransferViewModel @Inject constructor(
     private val _sparkWithdrawFeeSats = MutableStateFlow<ULong?>(null)
     val sparkWithdrawFeeSats = _sparkWithdrawFeeSats.asStateFlow()
 
+    private val _isSparkFeePricing = MutableStateFlow(false)
+    val isSparkFeePricing = _isSparkFeePricing.asStateFlow()
+
+    private val _isSparkWithdrawTooSmall = MutableStateFlow(false)
+    val isSparkWithdrawTooSmall = _isSparkWithdrawTooSmall.asStateFlow()
+
     private var sparkFeeJob: Job? = null
+    private var sparkWithdrawJob: Job? = null
     private var sparkFeeBalanceSats: ULong? = null
     private var sparkAddress: String? = null
 
@@ -310,15 +318,26 @@ class TransferViewModel @Inject constructor(
         sparkFeeJob?.cancel()
         sparkFeeBalanceSats = balanceSats
         _sparkWithdrawFeeSats.update { null }
-        sparkFeeJob = viewModelScope.launch {
-            val address = sparkWithdrawAddress() ?: return@launch
-            val result = withTimeoutOrNull(SWAP_QUOTE_TIMEOUT) { sparkRepo.estimateWithdrawAllFeeSats(address) }
-            if (result == null) Logger.warn("Timed out estimating Spark withdrawal fee", context = TAG)
+        _isSparkWithdrawTooSmall.update { false }
+        _isSparkFeePricing.update { true }
+        val job = viewModelScope.launch {
+            val address = sparkWithdrawAddress()
+            val result = address?.let {
+                withTimeoutOrNull(SWAP_QUOTE_TIMEOUT) { sparkRepo.estimateWithdrawAllFeeSats(it) }
+            }
+            if (address != null && result == null) {
+                Logger.warn("Timed out estimating Spark withdrawal fee", context = TAG)
+            }
             result
                 ?.onSuccess { fee -> _sparkWithdrawFeeSats.update { fee } }
-                ?.onFailure { Logger.warn("Failed to estimate Spark withdrawal fee", it, context = TAG) }
+                ?.onFailure {
+                    if (it is SparkError.WithdrawalTooSmall) _isSparkWithdrawTooSmall.update { true }
+                    Logger.warn("Failed to estimate Spark withdrawal fee", it, context = TAG)
+                }
             if (result?.isSuccess != true) sparkFeeBalanceSats = null
         }
+        sparkFeeJob = job
+        job.invokeOnCompletion { if (sparkFeeJob === job) _isSparkFeePricing.update { false } }
     }
 
     /** One Savings address for Spark's withdrawal, priced on the confirm screen and then paid to. */
@@ -344,6 +363,7 @@ class TransferViewModel @Inject constructor(
         // Drop any outcome from an earlier attempt so the progress screen cannot act on it.
         _savingsSwapResult.update { null }
         _isSparkWithdrawFailed.update { false }
+        sparkWithdrawJob = null
         _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels
         withdrawsSpark = withdrawSpark
@@ -366,15 +386,22 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun withdrawSparkToSavings() {
+        // Once per confirmed transfer, in viewModelScope, so leaving the progress screen cannot cut it short.
+        val job = sparkWithdrawJob ?: viewModelScope.launch { runSparkWithdrawal() }.also { sparkWithdrawJob = it }
+        job.join()
+    }
+
+    private suspend fun runSparkWithdrawal() {
         sparkFeeJob?.join()
-        val balance = sparkRepo.state.value.spendingSats
-        if (balance == 0uL) return
+        if (sparkRepo.state.value.spendingSats == 0uL) return
         val address = sparkWithdrawAddress()
-        if (address == null) {
+        val confirmedFeeSats = _sparkWithdrawFeeSats.value
+        if (address == null || confirmedFeeSats == null) {
+            Logger.warn("Skipped Spark withdrawal without an address or a priced fee", context = TAG)
             _isSparkWithdrawFailed.update { true }
             return
         }
-        sparkRepo.withdrawAll(address)
+        sparkRepo.withdrawAll(address, confirmedFeeSats)
             .onSuccess {
                 sparkAddress = null
                 sparkFeeBalanceSats = null

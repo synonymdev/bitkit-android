@@ -43,6 +43,7 @@ import to.bitkit.ext.filterOpen
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.safe
 import to.bitkit.ui.components.AmountSlider
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -98,6 +99,8 @@ fun SavingsConfirmScreen(
 
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
     val sparkFeeSats by transfer.sparkWithdrawFeeSats.collectAsStateWithLifecycle()
+    val isSparkFeePricing by transfer.isSparkFeePricing.collectAsStateWithLifecycle()
+    val isSparkTooSmall by transfer.isSparkWithdrawTooSmall.collectAsStateWithLifecycle()
 
     // Pull the latest node balances so a just-received payment is reflected in the amounts below.
     LaunchedEffect(Unit) {
@@ -119,6 +122,10 @@ fun SavingsConfirmScreen(
             fallbackAmount = channelsAmount,
             sparkAmount = sparkAmount,
             sparkFeeSats = sparkFeeSats.takeIf { withdrawsSpark },
+            // Spark's part moves only at the fee shown, so nothing is confirmed before it is priced.
+            isSparkFeePricing = withdrawsSpark && isSparkFeePricing,
+            isSparkUnpriced = withdrawsSpark && sparkFeeSats == null,
+            isSparkTooSmall = withdrawsSpark && isSparkTooSmall,
             isSwapEnabled = swapState.isSwapEnabled,
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
@@ -158,6 +165,9 @@ private fun SavingsConfirmContent(
     fallbackAmount: ULong,
     sparkAmount: ULong,
     sparkFeeSats: ULong?,
+    isSparkFeePricing: Boolean,
+    isSparkUnpriced: Boolean,
+    isSparkTooSmall: Boolean,
     isSwapEnabled: Boolean,
     quote: SavingsSwapQuote?,
     isQuoteLoading: Boolean,
@@ -267,6 +277,20 @@ private fun SavingsConfirmContent(
                         }
                     }
 
+                    if (isSparkUnpriced && !isSparkFeePricing) {
+                        VerticalSpacer(16.dp)
+                        BodyS(
+                            text = stringResource(
+                                if (isSparkTooSmall) {
+                                    R.string.lightning__savings_confirm__amount_too_low
+                                } else {
+                                    R.string.lightning__savings_spark_failed
+                                }
+                            ),
+                            color = Colors.Red,
+                        )
+                    }
+
                     if (hasMultiple) {
                         VerticalSpacer(24.dp)
                         if (hasSelected) {
@@ -319,7 +343,8 @@ private fun SavingsConfirmContent(
             var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
-                loading = isLoading || isPricingSwap,
+                loading = isLoading || isPricingSwap || isSparkFeePricing,
+                enabled = !isSparkUnpriced,
                 color = Colors.Brand,
                 onConfirm = {
                     scope.launch {
@@ -334,6 +359,7 @@ private fun SavingsConfirmContent(
                 // Fallback: drain a whole channel on-chain by closing it instead of swapping.
                 TertiaryButton(
                     text = stringResource(R.string.lightning__savings_confirm__close_instead),
+                    enabled = !isSparkUnpriced,
                     onClick = onCloseConfirm,
                 )
             }
@@ -350,6 +376,9 @@ private fun SavingsConfirmScreenPreview() {
             fallbackAmount = 50_123u,
             sparkAmount = 12_000u,
             sparkFeeSats = 1_470u,
+            isSparkFeePricing = false,
+            isSparkUnpriced = false,
+            isSparkTooSmall = false,
             isSwapEnabled = true,
             quote = SavingsSwapQuote(
                 amountSat = 50_123u,

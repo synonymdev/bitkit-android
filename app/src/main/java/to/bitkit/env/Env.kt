@@ -39,6 +39,7 @@ internal object Env {
      */
     val regtestEsploraUrl: String?
         get() = BuildConfig.ESPLORA_URL.takeIf { it.isNotBlank() && network == Network.REGTEST }
+
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
