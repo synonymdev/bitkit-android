@@ -164,6 +164,9 @@ class LightningRepo @Inject constructor(
     @Volatile
     private var isWiping = false
 
+    /** The rail each Lightning send last went out on, by payment hash, so a retry settles only from its own rail. */
+    private val sendRails = ConcurrentHashMap<String, LightningRail>()
+
     @Volatile
     private var lastKnownNodeId: String? = null
 
@@ -624,6 +627,11 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun onSparkEvent(event: Event) {
+        // An earlier Spark attempt's failure never fails a retry the node is paying.
+        if (event is Event.PaymentFailed && event.paymentHash?.let { isLdkSend(it) } == true) {
+            Logger.info("Skipped Spark failure of '${event.paymentHash}', its retry went over a channel", context = TAG)
+            return
+        }
         val settledReceiveInvoice = (event as? Event.PaymentReceived)?.let { invalidateSettledReceiveInvoice(it) }
         _eventHandlers.toList().forEach {
             runCatching { it.invoke(event) }
@@ -1473,6 +1481,10 @@ class LightningRepo @Inject constructor(
             if (!onBeforeSend()) return Result.failure(PaymentAbortedBeforeSend())
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat)
+                .onSuccess { recordSendRail(it, LightningRail.Spark) }
+                .onFailure {
+                    if (it is PaymentPendingException) recordSendRail(it.paymentHash, LightningRail.Spark)
+                }
         }
         return payInvoiceWithLdk(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
     }
@@ -1489,10 +1501,19 @@ class LightningRepo @Inject constructor(
         requireWalletRestoreComplete()
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
-        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }.also {
-            syncState()
-        }
+        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
+            .onSuccess { recordSendRail(it, LightningRail.Ldk) }
+            .also { syncState() }
     }
+
+    private fun recordSendRail(paymentHash: String, rail: LightningRail) {
+        sendRails[paymentHash.lowercase()] = rail
+    }
+
+    /** Whether the latest send of [paymentHash] went out on Spark, so the node's record of it is an older attempt. */
+    fun isSparkSend(paymentHash: String): Boolean = sendRails[paymentHash.lowercase()] == LightningRail.Spark
+
+    private fun isLdkSend(paymentHash: String): Boolean = sendRails[paymentHash.lowercase()] == LightningRail.Ldk
 
     /** Confirmations of an on-chain transaction this wallet sent or received, 0 while unconfirmed. */
     suspend fun onchainConfirmations(txid: String): UInt? = withContext(bgDispatcher) {
@@ -2354,7 +2375,8 @@ class LightningRepo @Inject constructor(
     }
 
     /** The completion event of a Spark send that settled before its caller started watching for it. */
-    suspend fun settledSparkSendEvent(paymentHash: String): Event? = sparkRepo.settledSendEvent(paymentHash)
+    suspend fun settledSparkSendEvent(paymentHash: String): Event? =
+        if (isLdkSend(paymentHash)) null else sparkRepo.settledSendEvent(paymentHash)
 
     /** Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed. */
     suspend fun sparkLightningSend(paymentHash: String): SparkLightningSend = sparkRepo.lightningSend(paymentHash)
@@ -2968,3 +2990,6 @@ sealed interface ProbeOutcome {
  */
 internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong, requestedSyncSucceeded: Boolean = false): Boolean =
     requestedSyncSucceeded || (latest ?: 0uL) > previous
+
+/** The Lightning rail a send went out on. */
+enum class LightningRail { Ldk, Spark }
