@@ -1967,6 +1967,7 @@ class PrivatePaykitRepo @Inject constructor(
                 amountSats = null,
                 description = "",
                 expirySeconds = privateInvoiceExpiry.inWholeSeconds.toUInt(),
+                isContactEndpoint = true,
             ).getOrThrow()
             if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
 
