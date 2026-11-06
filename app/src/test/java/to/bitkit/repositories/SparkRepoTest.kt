@@ -32,6 +32,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -237,6 +238,70 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertEquals(null, sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow())
     }
+
+    @Test
+    fun `records a withdrawal to a contact with its contact and fee`() = test {
+        val sut = journaledSpark()
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        assertEquals("withdrawal", sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact").getOrThrow())
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        val onchain = assertIs<Activity.Onchain>(activity.firstValue).v1
+        assertEquals(ActivityPaymentType.SENT, onchain.txType)
+        assertEquals(20_000uL, onchain.value)
+        assertEquals(300uL, onchain.fee)
+        assertEquals("pubkycontact", onchain.contact)
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `refuses a withdrawal while an earlier one is unsettled`() = test {
+        val sut = journaledSpark()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+
+        assertIs<SparkError.WithdrawalPending>(sut.withdraw("bcrt1qcontact", 20_000uL, null).exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `settles a journaled withdrawal from Spark's list on start`() = test {
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+
+        journaledSpark()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("pubkycontact", assertIs<Activity.Onchain>(activity.firstValue).v1.contact)
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `drops a journaled withdrawal Spark never sent`() = test {
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+        journaledSpark()
+
+        verify(activityRepo, never()).upsertActivity(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    private suspend fun journaledSpark(): SparkRepo {
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        return readySpark(balanceSats = 50_000uL)
+    }
+
+    private fun contactWithdrawal() = sentPayment(fees = 300).copy(
+        id = "withdrawal-payment",
+        amount = BigInteger.valueOf(20_000),
+        method = PaymentMethod.WITHDRAW,
+        details = PaymentDetails.Withdraw("withdrawal", 0u, "bcrt1qcontact"),
+    )
 
     private val contactEndpoint = PaykitEndpoint(methodId = "btc-regtest-p2wpkh", value = "bcrt1qcontact")
 

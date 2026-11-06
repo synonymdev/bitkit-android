@@ -296,6 +296,8 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     /** The withdrawal fee rose above the fee the user confirmed. */
     class WithdrawalFeeChanged : SparkError("Spark withdrawal fee changed since it was confirmed")
 
+    class WithdrawalPending : SparkError("An earlier Spark withdrawal is still settling")
+
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
      * payment, or its fee was over the caller's limit. A Paykit request or allowance attempt can then end as failed.

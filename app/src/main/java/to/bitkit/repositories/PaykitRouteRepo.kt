@@ -62,9 +62,9 @@ class PaykitRouteRepo @Inject constructor(
                 .getOrNull()
         }
 
-    /** Runs a service leg the router picked and returns the txid that pays the contact. */
-    suspend fun payServiceLeg(leg: ServiceRouteLeg): Result<String> = when (leg.service) {
-        SparkRepo.ROUTE_SERVICE -> sparkRepo.withdraw(leg.endpoint.value, leg.deliveredSat)
+    /** Runs a service leg the router picked to the [contact] and returns the txid that pays them. */
+    suspend fun payServiceLeg(leg: ServiceRouteLeg, contact: String?): Result<String> = when (leg.service) {
+        SparkRepo.ROUTE_SERVICE -> sparkRepo.withdraw(leg.endpoint.value, leg.deliveredSat, contact)
         else -> Result.failure(AppError("Unsupported route service '${leg.service}'"))
     }
 }
