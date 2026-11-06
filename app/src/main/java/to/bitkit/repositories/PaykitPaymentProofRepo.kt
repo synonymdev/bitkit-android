@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.UsdtPaymentProof
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentRequestLifecycleState
@@ -41,6 +42,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitRequestPayment
+import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkOperationLock
@@ -203,6 +205,15 @@ class PaykitPaymentProofRepo @Inject constructor(
                 ) {
                     throw PaykitPaymentRequestError.RequestUnavailable
                 }
+                paykitSdkService.requirePaymentProofFits(
+                    paymentReference = request.paymentReference,
+                    paymentAppId = paymentAppId,
+                    paymentEndpointIdentifier = paymentEndpointIdentifier,
+                    kind = kind,
+                    billingPeriod = request.billingPeriod,
+                    conversionQuoteId = paymentTerms?.quoteId,
+                    allowanceId = allowanceId,
+                )
                 val read = paykitSdkService.readPaymentRequests(request.counterparty)
                 val identityStatus = read.identityStatus
                 val identity = identityStatus?.publicKey?.let(PubkyPublicKeyFormat::normalized)
@@ -1682,6 +1693,70 @@ private fun proofJson(kind: PaykitPaymentProofKind, data: String): String {
         put("data", JsonPrimitive(data))
         put("type", JsonPrimitive(kind.type))
     }.toString()
+}
+
+/** Hex length of the 32-byte preimage or transaction id a Bitcoin proof carries. */
+private const val BITCOIN_PROOF_DATA_LENGTH = 64
+
+/** Hex digits of a 32-byte ERC-20 transaction hash after its `0x` prefix. */
+private const val USDT_TRANSACTION_HASH_DIGITS = 64
+
+/** Hex digits of a 65-byte EIP-712 signature after its `0x` prefix. */
+private const val USDT_SIGNATURE_DIGITS = 130
+
+/** The largest uint256 receipt log index, the longest one the SDK accepts in an ERC-20 proof. */
+internal const val USDT_MAX_RECEIPT_LOG_INDEX =
+    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+
+/** The longest proof Bitkit submits for this kind, so a measured proof is never shorter than the one sent. */
+internal fun PaykitPaymentProofKind.longestProofJson(): String = when (this) {
+    PaykitPaymentProofKind.Usdt -> Json.encodeToString(
+        PaykitUsdtProof.serializer(),
+        PaykitUsdtProof(
+            UsdtPaymentProof(
+                chainId = PaykitUsdt.CHAIN_ID,
+                transactionHash = "0x" + "0".repeat(USDT_TRANSACTION_HASH_DIGITS),
+                receiptLogIndex = USDT_MAX_RECEIPT_LOG_INDEX,
+                signature = "0x" + "0".repeat(USDT_SIGNATURE_DIGITS),
+            ),
+        ),
+    )
+    PaykitPaymentProofKind.Lightning, PaykitPaymentProofKind.Onchain ->
+        proofJson(this, "0".repeat(BITCOIN_PROOF_DATA_LENGTH))
+}
+
+/** Log context for measuring a Payment Proof before payment. */
+private const val PROOF_SIZE_TAG = "PaykitProofSize"
+
+/**
+ * Fails with [PaykitPaymentRequestError.RequestUnavailable] when the longest proof of [kind] for these values would
+ * not fit one Private Application Message, or cannot be measured, so nothing is paid for a proof that could never be
+ * delivered.
+ */
+internal fun PaykitSdkService.requirePaymentProofFits(
+    paymentReference: String,
+    paymentAppId: String,
+    paymentEndpointIdentifier: String,
+    kind: PaykitPaymentProofKind,
+    billingPeriod: PaykitBillingPeriod?,
+    conversionQuoteId: String?,
+    allowanceId: String?,
+) {
+    val length = runCatching {
+        paymentProofEventLength(
+            paymentReference = paymentReference,
+            paymentAppId = paymentAppId,
+            paymentEndpointIdentifier = paymentEndpointIdentifier,
+            proofJson = kind.longestProofJson(),
+            billingPeriod = billingPeriod,
+            conversionQuoteId = conversionQuoteId,
+            allowanceId = allowanceId,
+        )
+    }.getOrElse {
+        Logger.warn("Failed to measure a Paykit payment proof", it, context = PROOF_SIZE_TAG)
+        throw PaykitPaymentRequestError.RequestUnavailable
+    }
+    if (length > PaykitSdkService.MAX_MESSAGE_BYTES.toUInt()) throw PaykitPaymentRequestError.RequestUnavailable
 }
 
 private fun String.proofValues(): JsonObject? = runCatching { Json.parseToJsonElement(this).jsonObject }.getOrNull()

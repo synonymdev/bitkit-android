@@ -1311,6 +1311,7 @@
     <string name="profile__auth_error_invalid_capabilities">Żądany dostęp nie odpowiada temu oświadczeniu Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Ten link autoryzacji Pubky jest nieprawidłowy.</string>
     <string name="profile__auth_error_missing_claim">W tej autoryzacji brakuje wymaganego oświadczenia Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Serwer domowy nie zaakceptował tego kodu rejestracji. Spróbuj ponownie lub użyj innego linku rejestracyjnego.</string>
     <string name="profile__auth_error_timeout">Przekaźnik autoryzacji nie odpowiedział na czas. Spróbuj ponownie.</string>
     <string name="profile__auth_error_title">Autoryzacja nie powiodła się</string>
     <string name="profile__auth_error_unsupported_claim">To oświadczenie Bitkit nie jest obsługiwane.</string>
@@ -1547,6 +1548,7 @@
     <string name="wallet__payment_request_accepted_methods">Akceptuj płatność w</string>
     <string name="wallet__payment_request_after_expiry">Otrzymano · Po terminie</string>
     <string name="wallet__payment_request_amount">Kwota</string>
+    <string name="wallet__payment_request_before_request">Otrzymano · Przed żądaniem</string>
     <string name="wallet__payment_request_choose_recipient">Wybierz odbiorcę</string>
     <string name="wallet__payment_request_dismiss">Odrzuć</string>
     <string name="wallet__payment_request_enter_pubky">Wprowadź pubky</string>
@@ -1560,6 +1562,7 @@
     <string name="wallet__payment_request_mismatch">Dane płatności nie odpowiadają żądaniu. Płatność anulowana.</string>
     <string name="wallet__payment_request_not_specified">Nie określono</string>
     <string name="wallet__payment_request_note_placeholder">Za co jest ta płatność?</string>
+    <string name="wallet__payment_request_note_too_long">Skróć notatkę i spróbuj ponownie.</string>
     <string name="wallet__payment_request_or_pay">Zażądaj lub zapłać</string>
     <string name="wallet__payment_request_or_pay_description">Zapłać %1$s lub zażądaj płatności.</string>
     <string name="wallet__payment_request_or_pay_headline">Zażądaj\n&lt;accent&gt;lub zapłać ₿&lt;/accent&gt;</string>

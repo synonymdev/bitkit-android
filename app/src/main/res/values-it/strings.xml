@@ -1313,6 +1313,7 @@
     <string name="profile__auth_error_invalid_capabilities">L\'accesso richiesto non corrisponde a questa claim Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Questo link di autorizzazione Pubky non è valido.</string>
     <string name="profile__auth_error_missing_claim">In questa autorizzazione manca la claim Bitkit richiesta.</string>
+    <string name="profile__auth_error_signup_code_rejected">L\'homeserver non ha accettato questo codice di registrazione. Riprova o usa un altro link di registrazione.</string>
     <string name="profile__auth_error_timeout">Il relay di autorizzazione non ha risposto in tempo. Riprova.</string>
     <string name="profile__auth_error_title">Autorizzazione Non Riuscita</string>
     <string name="profile__auth_error_unsupported_claim">Questa claim Bitkit non è supportata.</string>
@@ -1547,6 +1548,7 @@
     <string name="wallet__payment_request_accepted_methods">Accetta pagamento in</string>
     <string name="wallet__payment_request_after_expiry">Ricevuto · Dopo la scadenza</string>
     <string name="wallet__payment_request_amount">Importo</string>
+    <string name="wallet__payment_request_before_request">Ricevuto · Prima della richiesta</string>
     <string name="wallet__payment_request_choose_recipient">Scegli Destinatario</string>
     <string name="wallet__payment_request_dismiss">Ignora</string>
     <string name="wallet__payment_request_enter_pubky">Inserisci pubky</string>
@@ -1561,6 +1563,7 @@
     <string name="wallet__payment_request_not_specified">Non specificato</string>
     <string name="wallet__payment_request_note">Nota</string>
     <string name="wallet__payment_request_note_placeholder">A cosa serve questo pagamento?</string>
+    <string name="wallet__payment_request_note_too_long">Accorcia la nota e riprova.</string>
     <string name="wallet__payment_request_or_pay">Richiedi o Paga</string>
     <string name="wallet__payment_request_or_pay_description">Paga %1$s o richiedi un pagamento.</string>
     <string name="wallet__payment_request_or_pay_headline">Richiedi\n&lt;accent&gt;o Paga ₿&lt;/accent&gt;</string>
