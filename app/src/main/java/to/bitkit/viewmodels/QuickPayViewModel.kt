@@ -67,7 +67,6 @@ class QuickPayViewModel @Inject constructor(
 
     override fun onCleared() {
         session?.let { quickPayRepo.detach(it) }
-        super.onCleared()
     }
 
     private fun QuickPaySessionEvent.toUiResult(): QuickPayResult = when (this) {

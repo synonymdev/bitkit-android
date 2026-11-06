@@ -271,6 +271,26 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `prepareImport leaves out the pubky app moderation accounts`() = test {
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A)
+        val moderationKeys = listOf(
+            "pubkyeuarj183st16psbzusb44usk8i1k5foubnw7zt3n3j8h9zxg6hro",
+            "nto4u7kkagk5hfjk4wgueemzy61nssic811hid1ty9u81uatmqzy",
+        )
+        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Alice")
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(moderationKeys + VALID_CONTACT_KEY_B)
+        stubFollowLookup(VALID_CONTACT_KEY_B, "Alice")
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(listOf(alice), sut.pendingImportContacts.value)
+
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(moderationKeys)
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
+    }
+
+    @Test
     fun `initial state should have no public key`() = test {
         assertNull(sut.publicKey.value)
         assertFalse(sut.isAuthenticated.value)

@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.bitkit.ext.bluetoothManager
+import to.bitkit.ext.connectGattDirect
 import to.bitkit.ext.usbManager
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.TransportType
@@ -661,7 +662,8 @@ class JadeTransport @Inject constructor(
         waitForBonding(device, address)?.let { return it }
 
         val connectionLatch = CountDownLatch(1)
-        val gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        val gatt = device.connectGattDirect(context, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            ?: return fail("BLE connection could not be opened", JadeTransportErrorCode.NOT_CONNECTED)
         bleConnections[path] = BleConnection(gatt = gatt, connectionLatch = connectionLatch)
 
         if (!connectionLatch.await(BLE_CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
