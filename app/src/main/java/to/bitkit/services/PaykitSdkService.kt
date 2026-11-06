@@ -1321,10 +1321,11 @@ class PaykitSdkService @Inject constructor(
         counterparty: String,
         allowanceId: String,
         expectedProposalStreamItemId: ULong,
+        admit: suspend () -> Unit,
     ): AllowanceRecord {
         isSetup.await()
         return operationLock.withLock(Priority.Interactive) {
-            withStateRevisionTracking { handle ->
+            withStateRevisionTracking(beforeOperation = admit) { handle ->
                 completeSdkCall { handle.acceptAllowance(counterparty, allowanceId, expectedProposalStreamItemId) }
             }
         }
@@ -1576,6 +1577,18 @@ class PaykitSdkService @Inject constructor(
             result
         }
         return resolution.toPaykitPublicContactPaymentResolution()
+    }
+
+    /**
+     * Returns whether [counterparty] publishes a Paykit Noise key authorization, which a private payment path
+     * requires. Returns false only when the record is missing; any other lookup failure is thrown.
+     */
+    suspend fun hasPaykitNoiseKeyAuthorization(counterparty: String): Boolean = publicRead { handle ->
+        val hasAuthorization = runSuspendCatching { handle.paykitNoiseKeyAuthorization(counterparty) }
+            .map { true }
+            .getOrElse { if (it is PaykitException.NotFound) false else throw it }
+        check(sdk === handle) { "Paykit runtime changed while checking the Noise key authorization" }
+        hasAuthorization
     }
 
     private fun PrivateContactPaymentResolution.toPaykitPrivateContactPaymentResolution() =

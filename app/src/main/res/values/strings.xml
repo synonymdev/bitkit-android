@@ -107,7 +107,7 @@
     <string name="contacts__add_error_fetch">Could not retrieve contact info. Please check the public key and try again.</string>
     <string name="contacts__add_error_invalid_key">Invalid pubky key format. Please check and try again.</string>
     <string name="contacts__add_error_self">You can\'t add your own pubky as a contact.</string>
-    <string name="contacts__add_privacy_notice">Please note that you and %1$s must add each other as contacts to pay each other privately. Otherwise, the payment will be visible publicly.</string>
+    <string name="contacts__add_privacy_notice">Please note that you and %1$s must add each other as contacts before you can pay each other privately. If you pay without saving, the payment is visible publicly.</string>
     <string name="contacts__add_pay">Pay</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Paste a pubky</string>
@@ -143,6 +143,7 @@
     <string name="contacts__intro_title">Dynamic\n&lt;accent&gt;contacts&lt;/accent&gt;</string>
     <string name="contacts__my_profile">MY PROFILE</string>
     <string name="contacts__nav_title">Contacts</string>
+    <string name="contacts__pay_private_link_pending">Bitkit is still setting up a private connection with this contact. Make sure they\'ve added you as a contact too, or ask them to send you a payment request.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Paste QR Or Link</string>
     <string name="contacts__scanner_status">SCANNING QR &amp; NFC</string>
@@ -1229,6 +1230,7 @@
     <string name="subscriptions__allowances_empty_description">You can set spending limits to automatically fulfill payment requests from trusted peers.</string>
     <string name="subscriptions__allowances_empty_headline"><![CDATA[Set up\n<accent>allowances</accent>]]></string>
     <string name="subscriptions__allowances_paused_description">Your allowance records are older than ones this wallet has already used. Requests ask for your approval until you resume.</string>
+    <string name="subscriptions__allowances_paused_restore_description">This wallet was restored from a backup. Requests ask for your approval until you resume.</string>
     <string name="subscriptions__allowances_paused_resume">Resume</string>
     <string name="subscriptions__allowances_paused_title">Automatic payments paused</string>
     <string name="subscriptions__cancel">Cancel</string>

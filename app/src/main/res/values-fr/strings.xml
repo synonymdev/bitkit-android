@@ -1260,7 +1260,7 @@
     <string name="contacts__add_error_fetch">Impossible de récupérer les infos du contact. Vérifiez la clé publique et réessayez.</string>
     <string name="contacts__add_error_invalid_key">Format de clé pubky non valide. Vérifiez-la et réessayez.</string>
     <string name="contacts__add_error_self">Vous ne pouvez pas ajouter votre propre pubky comme contact.</string>
-    <string name="contacts__add_privacy_notice">Veuillez noter que vous et %1$s devez vous ajouter mutuellement comme contacts pour vous payer en privé. Sinon, le paiement sera visible publiquement.</string>
+    <string name="contacts__add_privacy_notice">Veuillez noter que vous et %1$s devez vous ajouter mutuellement comme contacts avant de pouvoir vous payer en privé. Si vous payez sans enregistrer, le paiement sera visible publiquement.</string>
     <string name="contacts__add_pay">Payer</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Collez un pubky</string>
@@ -1291,6 +1291,7 @@
     <string name="contacts__intro_description">Payez vos contacts d\'un simple geste. Envoyez des paiements directement, à n\'importe qui, n\'importe où.</string>
     <string name="contacts__my_profile">MON PROFIL</string>
     <string name="contacts__nav_title">Contacts</string>
+    <string name="contacts__pay_private_link_pending">Bitkit configure encore une connexion privée avec ce contact. Assurez-vous qu\'il vous a aussi ajouté comme contact, ou demandez-lui de vous envoyer une demande de paiement.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Coller un QR ou un lien</string>
     <string name="contacts__scanner_status">SCAN QR ET NFC</string>
@@ -1601,6 +1602,7 @@
     <string name="subscriptions__allowances_empty_description">Vous pouvez définir des limites de dépenses pour régler automatiquement les demandes de paiement de contacts de confiance.</string>
     <string name="subscriptions__allowances_empty_headline">Configurez\n&lt;accent&gt;vos allocations&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Vos données d\'allocations sont plus anciennes que celles que ce portefeuille a déjà utilisées. Les demandes attendront votre accord jusqu\'à la reprise.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Ce portefeuille a été restauré à partir d\'une sauvegarde. Les demandes attendront votre accord jusqu\'à la reprise.</string>
     <string name="subscriptions__allowances_paused_resume">Reprendre</string>
     <string name="subscriptions__allowances_paused_title">Paiements automatiques en pause</string>
     <string name="subscriptions__cancel_subscription">Annuler l\'abonnement</string>

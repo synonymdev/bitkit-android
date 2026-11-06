@@ -1267,7 +1267,7 @@
     <string name="contacts__add_error_fetch">Não foi possível obter as informações do contato. Verifique a chave pública e tente novamente.</string>
     <string name="contacts__add_error_invalid_key">Formato de chave pubky inválido. Verifique e tente novamente.</string>
     <string name="contacts__add_error_self">Você não pode adicionar sua própria pubky como contato.</string>
-    <string name="contacts__add_privacy_notice">Observe que você e %1$s precisam adicionar um ao outro como contatos para pagarem um ao outro de forma privada. Caso contrário, o pagamento ficará visível publicamente.</string>
+    <string name="contacts__add_privacy_notice">Observe que você e %1$s precisam adicionar um ao outro como contatos antes de poderem pagar um ao outro de forma privada. Se você pagar sem salvar, o pagamento ficará visível publicamente.</string>
     <string name="contacts__add_pay">Pagar</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Cole uma pubky</string>
@@ -1296,6 +1296,7 @@
     <string name="contacts__import_title">Importar</string>
     <string name="contacts__intro_description">Pague seus contatos com apenas um toque. Envie pagamentos diretamente, para qualquer pessoa, em qualquer lugar.</string>
     <string name="contacts__my_profile">MEU PERFIL</string>
+    <string name="contacts__pay_private_link_pending">O Bitkit ainda está configurando uma conexão privada com este contato. Verifique se ele também adicionou você como contato ou peça que ele envie uma solicitação de pagamento para você.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Colar QR ou Link</string>
     <string name="contacts__scanner_status">ESCANEANDO QR E NFC</string>
@@ -1604,6 +1605,7 @@
     <string name="subscriptions__allowances_empty_description">Você pode definir limites de gastos para pagar automaticamente solicitações de pagamento de contatos de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configure\n&lt;accent&gt;mesadas&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Os registros das suas mesadas são mais antigos do que outros que esta carteira já usou. As solicitações vão pedir sua aprovação até você retomar.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Esta carteira foi restaurada a partir de um backup. As solicitações vão pedir sua aprovação até você retomar.</string>
     <string name="subscriptions__allowances_paused_resume">Retomar</string>
     <string name="subscriptions__allowances_paused_title">Pagamentos automáticos pausados</string>
     <string name="subscriptions__cancel_subscription">Cancelar Assinatura</string>

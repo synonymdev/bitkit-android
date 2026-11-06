@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.synonym.paykit.AllowanceLifecycleState
@@ -30,6 +31,7 @@ import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSystemClock
+import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
@@ -37,6 +39,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.PaykitAllowance
 import to.bitkit.repositories.PaykitAllowanceEntry
+import to.bitkit.repositories.PaykitAllowancePause
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestRepo
@@ -69,6 +72,7 @@ class AllowancesScreenTest {
     private val currencyRepo: CurrencyRepo = mock()
     private val settingsStore: SettingsStore = mock()
 
+    private val pause = MutableStateFlow<PaykitAllowancePause?>(PaykitAllowancePause.LEDGER_BEHIND)
     private var isHostShown by mutableStateOf(true)
     private var allowanceClicks = 0
     private lateinit var viewModel: AllowancesViewModel
@@ -79,7 +83,7 @@ class AllowancesScreenTest {
         whenever(app.validatePin(any())).thenReturn(true)
         whenever(allowanceRepo.entries).thenReturn(MutableStateFlow(listOf(entry())))
         whenever(allowanceRepo.autoPaidSats).thenReturn(MutableStateFlow(emptyMap()))
-        whenever(allowanceRepo.isAutomaticPaymentPaused).thenReturn(MutableStateFlow(true))
+        whenever(allowanceRepo.automaticPaymentPause).thenReturn(pause)
         whenever { allowanceRepo.refresh() }.thenReturn(Result.success(Unit))
         whenever { allowanceRepo.resumeAutomaticPayments() }.thenReturn(Result.success(Unit))
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
@@ -160,6 +164,24 @@ class AllowancesScreenTest {
         verifyBlocking(allowanceRepo, never()) { resumeAutomaticPayments() }
         click("AllowancesResume")
         composeRule.onNodeWithTag("N1").assertExists()
+    }
+
+    @Test
+    fun `the pause explains a wallet restore and a ledger behind with their own descriptions`() {
+        val restored = composeRule.activity.getString(R.string.subscriptions__allowances_paused_restore_description)
+        val ledgerBehind = composeRule.activity.getString(R.string.subscriptions__allowances_paused_description)
+        composeRule.onNodeWithText(ledgerBehind).assertExists()
+        composeRule.onNodeWithText(restored).assertDoesNotExist()
+
+        pause.value = PaykitAllowancePause.RESTORED
+
+        composeRule.onNodeWithText(restored).assertExists()
+        composeRule.onNodeWithText(ledgerBehind).assertDoesNotExist()
+        composeRule.onNodeWithTag("AllowancesResume").assertExists()
+
+        pause.value = null
+
+        composeRule.onNodeWithTag("AllowancesPaused").assertDoesNotExist()
     }
 
     // Tall enough that the row lies under the empty part of the PIN check, not under its keypad.
