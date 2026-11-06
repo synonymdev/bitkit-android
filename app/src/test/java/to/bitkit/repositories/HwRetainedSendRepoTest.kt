@@ -409,10 +409,10 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         sut.retain(WALLET, ADDRESS, 1uL, signedTx, HwRetainedSendReplacement.Consented).getOrThrow()
         val current = entries[WALLET]
 
-        sut.restore(previous, "cd".repeat(100)).getOrThrow()
+        assertEquals(HwRestoreOutcome.LeftCurrentRecord, sut.restore(previous, "cd".repeat(100)).getOrThrow())
         assertEquals(current, entries[WALLET])
 
-        sut.restore(previous, hex).getOrThrow()
+        assertEquals(HwRestoreOutcome.WroteOldRecord, sut.restore(previous, hex).getOrThrow())
         assertEquals(previous, sut.record(WALLET).getOrThrow())
     }
 
@@ -423,9 +423,37 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         sut.retain(WALLET, ADDRESS, 1uL, signedTx, HwRetainedSendReplacement.Consented).getOrThrow()
         sut.markObserved(WALLET, listOf(SignedTransactionId.fromHex(hex))).getOrThrow()
 
-        sut.restore(previous, hex).getOrThrow()
+        assertEquals(HwRestoreOutcome.LeftCurrentRecord, sut.restore(previous, hex).getOrThrow())
 
         assertEquals(signedTx, sut.record(WALLET).getOrThrow()?.signedTx)
+    }
+
+    @Test
+    fun `restore fails when the read fails and writes nothing`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx("ab".repeat(100))).getOrThrow()
+        val previous = assertNotNull(sut.record(WALLET).getOrThrow())
+        sut.retain(WALLET, ADDRESS, 1uL, signedTx, HwRetainedSendReplacement.Consented).getOrThrow()
+        val current = entries[WALLET]
+        val failure = KeychainError.FailedToLoad(KEY)
+        whenever(keychain.loadScopedString(KEY, WALLET)).thenAnswer { throw failure }
+
+        assertEquals(failure, sut.restore(previous, hex).exceptionOrNull())
+
+        assertEquals(current, entries[WALLET])
+    }
+
+    @Test
+    fun `restore fails when the write fails and keeps the new bytes`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx("ab".repeat(100))).getOrThrow()
+        val previous = assertNotNull(sut.record(WALLET).getOrThrow())
+        sut.retain(WALLET, ADDRESS, 1uL, signedTx, HwRetainedSendReplacement.Consented).getOrThrow()
+        val current = entries[WALLET]
+        val failure = KeychainError.FailedToSave(KEY)
+        whenever(keychain.upsertScopedString(eq(KEY), any(), any())).doSuspendableAnswer { throw failure }
+
+        assertEquals(failure, sut.restore(previous, hex).exceptionOrNull())
+
+        assertEquals(current, entries[WALLET])
     }
 
     @Test

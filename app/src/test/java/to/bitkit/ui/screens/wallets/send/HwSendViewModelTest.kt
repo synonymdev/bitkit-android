@@ -2647,6 +2647,92 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed read after a restore keeps consent`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val replacement = stubReplacementPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        val original = retainedEntries[WALLET_ID]
+        stubFailedReadAfterRestore(replacement, REFUSAL)
+
+        sut.consentToNewSignature(WALLET_ID, OTHER_ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(replacementRequest())
+        advanceUntilIdle()
+
+        assertEquals(original, retainedEntries[WALLET_ID])
+        assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(OTHER_ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+        assertFalse(sut.offersRetry(replacementRequest()))
+        assertTrue(hwRetainedSendRepo.record(WALLET_ID).isFailure)
+
+        sut.signAndBroadcast(replacementRequest())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, replacement.funding)
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(2)).broadcastFunding(replacement.signedTx)
+        assertEquals(replacement.broadcast.txId, sut.results.first().txId)
+    }
+
+    @Test
+    fun `a refused repeat of an observed payment signs anew despite a later failed read`() = test {
+        val (fixture, newBytes) = stubRepeatOfObservedPayment()
+        val original = retainedEntries[WALLET_ID]
+        stubFailedReadAfterRestore(newBytes, REFUSAL)
+
+        sut.consentToNewSignature(WALLET_ID, ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertEquals(original, retainedEntries[WALLET_ID])
+
+        // This tap's read is the one that fails. Consent reads nothing before signing, so the failure stops it at
+        // retain, after the device and before any dispatch.
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).broadcastFunding(newBytes.signedTx)
+        assertEquals(original, retainedEntries[WALLET_ID])
+        assertFalse(sut.offersRetry(request()))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(3)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(2)).broadcastFunding(newBytes.signedTx)
+        assertEquals(newBytes.broadcast.txId, sut.results.first().txId)
+    }
+
+    @Test
+    fun `a failed read after a restore on expiry keeps consent and the next tap signs anew`() = test {
+        val fixture = stubSuccessfulPayment()
+        val replacement = stubReplacementPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        val original = retainedEntries[WALLET_ID]
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        val request = replacementRequest().copy(paymentDeadlineAt = deadline)
+        stubFailedReadAfterRestore(replacement, AppError(ServiceError.PaymentDeadlineExpired()), deadline)
+
+        sut.consentToNewSignature(WALLET_ID, OTHER_ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(request)
+        advanceUntilIdle()
+
+        assertEquals(original, retainedEntries[WALLET_ID])
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(OTHER_ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+        assertTrue(hwRetainedSendRepo.record(WALLET_ID).isFailure)
+
+        sut.signAndBroadcast(request)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, replacement.funding)
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        assertEquals(replacement.broadcast.txId, sut.results.first().txId)
+    }
+
+    @Test
     fun `consent is stale after cancel, after a different request and after a restart`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
@@ -3404,6 +3490,34 @@ class HwSendViewModelTest : BaseUnitTest() {
         )
         whenever(hwWalletRepo.signFunding(WALLET_ID, fixture.funding)).thenReturn(Result.success(newBytes.signedTx))
         return fixture to newBytes
+    }
+
+    /** The first broadcast fails with [failure], and the one read after the write that restores the record fails. */
+    private suspend fun stubFailedReadAfterRestore(
+        payment: PaymentFixture,
+        failure: Throwable,
+        deadline: Instant? = null,
+    ) {
+        var broadcasts = 0
+        var isRestorePending = false
+        var isReadFailing = false
+        whenever(hwWalletRepo.broadcastFunding(payment.signedTx, deadline)).doSuspendableAnswer {
+            if (broadcasts++ > 0) return@doSuspendableAnswer Result.success(payment.broadcast)
+            isRestorePending = true
+            Result.failure(failure)
+        }
+        whenever(keychain.upsertScopedString(eq(RETAINED_KEY), any(), any())).doSuspendableAnswer {
+            retainedEntries[it.getArgument(2)] = it.getArgument(1)
+            isReadFailing = isRestorePending
+            isRestorePending = false
+        }
+        whenever(keychain.loadScopedString(RETAINED_KEY, WALLET_ID)).thenAnswer {
+            if (isReadFailing) {
+                isReadFailing = false
+                throw AppError("read failed")
+            }
+            retainedEntries[WALLET_ID]
+        }
     }
 
     private fun replacementRequest() = request().copy(address = OTHER_ADDRESS)

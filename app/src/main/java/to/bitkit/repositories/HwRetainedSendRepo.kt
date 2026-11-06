@@ -62,6 +62,9 @@ sealed interface HwRetainOutcome {
     data object ReplacedUnreadableEntry : HwRetainOutcome
 }
 
+/** What [HwRetainedSendRepo.restore] did to the wallet's entry. A failed read or write fails the `Result` instead. */
+enum class HwRestoreOutcome { WroteOldRecord, LeftCurrentRecord }
+
 sealed class HwRetainedSendError(message: String) : AppError(message) {
     class DifferentTransactionRetained : HwRetainedSendError("A different signed transaction is already retained")
 
@@ -132,9 +135,14 @@ class HwRetainedSendRepo @Inject constructor(
      * Puts back the record that [serializedTx] replaced, when those bytes never reached dispatch or settled as not
      * sent. Bytes the watcher has seen did go out, so they stay as the record.
      */
-    suspend fun restore(previous: HwRetainedSend, serializedTx: String): Result<Unit> = locked {
+    suspend fun restore(previous: HwRetainedSend, serializedTx: String): Result<HwRestoreOutcome> = locked {
         val current = load(previous.walletId)
-        if (current?.serializedTx.equals(serializedTx, ignoreCase = true) && current?.observed == false) save(previous)
+        if (current?.serializedTx.equals(serializedTx, ignoreCase = true) && current?.observed == false) {
+            save(previous)
+            HwRestoreOutcome.WroteOldRecord
+        } else {
+            HwRestoreOutcome.LeftCurrentRecord
+        }
     }
 
     suspend fun record(walletId: String): Result<HwRetainedSend?> = locked { load(walletId) }

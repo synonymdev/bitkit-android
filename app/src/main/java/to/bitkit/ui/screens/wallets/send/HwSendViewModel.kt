@@ -40,6 +40,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
+import to.bitkit.repositories.HwRestoreOutcome
 import to.bitkit.repositories.HwRetainOutcome
 import to.bitkit.repositories.HwRetainedSend
 import to.bitkit.repositories.HwRetainedSendReplacement
@@ -254,30 +255,36 @@ class HwSendViewModel @Inject constructor(
             .onFailure { Logger.warn("Failed to release retained hardware send for '$walletId'", it, context = TAG) }
     }
 
-    private suspend fun undoRetainBeforeDispatch(payment: PendingHwSendBroadcast, outcome: HwRetainOutcome?) {
-        when (outcome) {
-            HwRetainOutcome.Stored -> releaseRetainedSend(payment.request.walletId)
-            is HwRetainOutcome.Replaced -> restoreRetainedSend(outcome.previous, payment.signedTx)
-            // A record from an earlier attempt still guards it, and an unreadable one has nothing to put back.
-            HwRetainOutcome.AlreadyHeld, HwRetainOutcome.ReplacedUnreadableEntry, null -> Unit
+    /** Returns what the restore did, or null when none ran or it failed. */
+    private suspend fun undoRetainBeforeDispatch(
+        payment: PendingHwSendBroadcast,
+        outcome: HwRetainOutcome?,
+    ): HwRestoreOutcome? = when (outcome) {
+        HwRetainOutcome.Stored -> {
+            releaseRetainedSend(payment.request.walletId)
+            null
         }
+        is HwRetainOutcome.Replaced -> restoreRetainedSend(outcome.previous, payment.signedTx)
+        // A record from an earlier attempt still guards it, and an unreadable one has nothing to put back.
+        HwRetainOutcome.AlreadyHeld, HwRetainOutcome.ReplacedUnreadableEntry, null -> null
     }
 
-    private suspend fun releaseOrRestoreRetainedSend(payment: PendingHwSendBroadcast): Boolean {
+    /** Returns what the restore did, or null when none ran or it failed. */
+    private suspend fun releaseOrRestoreRetainedSend(payment: PendingHwSendBroadcast): HwRestoreOutcome? {
         val outcome = payment.retainOutcome
         // The payment an older record guards is still unknown, so it comes back rather than leaving nothing.
         if (outcome is HwRetainOutcome.Replaced) return restoreRetainedSend(outcome.previous, payment.signedTx)
         releaseRetainedSend(payment.request.walletId)
-        return false
+        return null
     }
 
-    private suspend fun restoreRetainedSend(previous: HwRetainedSend, signedTx: HwFundingSignedTx): Boolean =
+    private suspend fun restoreRetainedSend(previous: HwRetainedSend, signedTx: HwFundingSignedTx): HwRestoreOutcome? =
         // A failed restore only leaves the new bytes as the record, so the next attempt rebroadcasts or warns.
         hwRetainedSendRepo.restore(previous, signedTx.serializedTx)
             .onFailure {
                 Logger.warn("Failed to restore retained hardware send for '${previous.walletId}'", it, context = TAG)
             }
-            .isSuccess
+            .getOrNull()
 
     private suspend fun completeSend(request: HwSendRequest, result: HwFundingBroadcastResult, attempt: Int) {
         if (request.paymentRequestId == null) releaseRetainedSend(request.walletId)
@@ -385,8 +392,7 @@ class HwSendViewModel @Inject constructor(
                 } ?: !payment.hasAttemptedBroadcast
                 val unresolved = payment.hasAttemptedBroadcast || !cleared
                 val isConsentRegranted = if (request.paymentRequestId == null && !unresolved) {
-                    undoRetainBeforeDispatch(payment, retainOutcome)
-                    regrantConsentIfRestored(payment, retainOutcome)
+                    regrantConsentIfRestored(payment, undoRetainBeforeDispatch(payment, retainOutcome))
                 } else {
                     false
                 }
@@ -589,12 +595,14 @@ class HwSendViewModel @Inject constructor(
         isRetainedSendConsentEnded = true
     }
 
-    private suspend fun regrantConsentIfRestored(payment: PendingHwSendBroadcast, outcome: HwRetainOutcome?): Boolean {
+    /**
+     * Follows what this attempt's restore reported rather than a further read, which can fail and lose the consent
+     * while the old record is back. New bytes the watcher saw, or a failed restore, stay as the record, and a Retry
+     * refers to them.
+     */
+    private fun regrantConsentIfRestored(payment: PendingHwSendBroadcast, restoreOutcome: HwRestoreOutcome?): Boolean {
         if (payment.replacement != HwRetainedSendReplacement.Consented) return false
-        val previous = (outcome as? HwRetainOutcome.Replaced)?.previous ?: return false
-        // New bytes the watcher saw, or a failed restore, stay as the record, and then a Retry refers to them.
-        val record = hwRetainedSendRepo.record(previous.walletId).getOrNull() ?: return false
-        if (!record.serializedTx.equals(previous.serializedTx, ignoreCase = true)) return false
+        if (restoreOutcome != HwRestoreOutcome.WroteOldRecord) return false
         if (isRetainedSendConsentEnded) return false
         val request = payment.request
         retainedSendConsent = RetainedSendConsent(request.walletId, request.address, request.amountSats)
@@ -714,8 +722,7 @@ class HwSendViewModel @Inject constructor(
         val isFirstAttempt = dispatch == HwSendDispatch.FirstAttempt
         when {
             error.isHardwareBroadcastRefusalForNavigation() && isFirstAttempt -> {
-                releaseOrRestoreRetainedSend(settled)
-                regrantConsentIfRestored(settled, settled.retainOutcome)
+                regrantConsentIfRestored(settled, releaseOrRestoreRetainedSend(settled))
                 clearPendingBroadcast()
                 handleFailure(error, walletId)
             }
@@ -723,7 +730,7 @@ class HwSendViewModel @Inject constructor(
             error.isHardwareBroadcastNotSubmitted() -> {
                 if (isFirstAttempt) {
                     // A Retry of these bytes replaces the restored record again, under the same decision.
-                    val replacement = if (releaseOrRestoreRetainedSend(settled)) {
+                    val replacement = if (releaseOrRestoreRetainedSend(settled) != null) {
                         settled.replacement
                     } else {
                         HwRetainedSendReplacement.None
