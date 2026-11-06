@@ -103,8 +103,9 @@ class LightningConnectionsViewModel @Inject constructor(
                 lightningRepo.lastKnownChannels,
                 sparkRepo.state,
             ) { lightningState, channels, sparkState ->
-                Triple(lightningState.nodeLifecycleState.isRunning(), channels, sparkState)
-            }.collect { (isNodeRunning, channels, sparkState) ->
+                Triple(lightningState, channels, sparkState)
+            }.collect { (lightningState, channels, sparkState) ->
+                val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
                 val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.update {
@@ -118,7 +119,8 @@ class LightningConnectionsViewModel @Inject constructor(
                             .reversed().toImmutableList(),
                         localBalance = calculateLocalBalance(channels).safe() + sparkState.balanceSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
-                        canMoveToSpark = MoveToSparkMath.canMove(channels, sparkState),
+                        // The cached channels outlive a stopped node; the move reads the live ones.
+                        canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
                         spark = sparkState.toUi(lightningRepo),
                         isSparkReceiving = sparkState.isReady,
                     )

@@ -23,6 +23,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.minutes
@@ -53,12 +54,17 @@ class MoveToSparkRepo @Inject constructor(
 
     private val ownPaymentHashes = ConcurrentHashMap.newKeySet<String>()
     private val watchedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
+    private val reportedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
     /** Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments. */
     fun isMovePayment(paymentHash: String): Boolean = paymentHash in ownPaymentHashes
 
-    /** Whether the move screen still waits on [paymentHash] and reports its failure; after that the app does. */
-    fun isWatchedMovePayment(paymentHash: String): Boolean = paymentHash in watchedPaymentHashes
+    /**
+     * Whether the move screen waits on [paymentHash] or already reported its outcome, so the app raises no failure
+     * notice of its own; after a timeout or cancellation the app does.
+     */
+    fun isWatchedMovePayment(paymentHash: String): Boolean =
+        paymentHash in watchedPaymentHashes || paymentHash in reportedPaymentHashes
 
     /** Whether the channels hold a balance worth moving to a usable Spark wallet. */
     val canMove: Flow<Boolean> = combine(lightningRepo.lightningState, sparkRepo.state) { lightning, spark ->
@@ -121,18 +127,22 @@ class MoveToSparkRepo @Inject constructor(
 
     private suspend fun payAndWait(quote: MoveToSparkQuote, paymentHash: String): MoveToSparkOutcome =
         coroutineScope {
+            // LDK can report a failure without its hash, so the payment's id identifies it too once it is known.
+            val paymentId = AtomicReference<String?>(null)
             val settled = async(start = CoroutineStart.UNDISPATCHED) {
-                lightningRepo.nodeEvents.first { it.settles(paymentHash) }
+                lightningRepo.nodeEvents.first { it.settles(paymentHash, paymentId.get()) }
             }
             lightningRepo.payInvoiceOverLdk(
                 bolt11 = quote.invoice,
                 sats = quote.amountSats,
                 maxTotalRoutingFeeMsat = MoveToSparkMath.feeCapMsat(quote.feeSats),
-            ).getOrElse {
+            ).onSuccess { paymentId.set(it) }.getOrElse {
                 settled.cancel()
                 throw if (it.isNoRoute()) MoveToSparkError.TooLarge(quote.amountSats, it) else it
             }
-            when (val event = withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }) {
+            val event = withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }
+            if (event != null) reportedPaymentHashes += paymentHash
+            when (event) {
                 is Event.PaymentSuccessful -> MoveToSparkOutcome.Moved(
                     amountSats = quote.amountSats,
                     feeSats = (event.feePaidMsat ?: 0uL) / 1000uL,
@@ -147,12 +157,12 @@ class MoveToSparkRepo @Inject constructor(
             }
         }
 
-    private fun Throwable.isNoRoute(): Boolean =
+    private fun Throwable.isNoRoute(): Boolean = this is NodeException.RouteNotFound ||
         (this as? LdkError)?.compactType == NodeException.RouteNotFound::class.simpleName
 
-    private fun Event.settles(paymentHash: String): Boolean = when (this) {
+    private fun Event.settles(paymentHash: String, paymentId: String?): Boolean = when (this) {
         is Event.PaymentSuccessful -> this.paymentHash == paymentHash
-        is Event.PaymentFailed -> this.paymentHash == paymentHash
+        is Event.PaymentFailed -> this.paymentHash == paymentHash || (paymentId != null && this.paymentId == paymentId)
         else -> false
     }
 }
