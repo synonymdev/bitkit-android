@@ -855,6 +855,9 @@
     <string name="wallet__send_available">Dostępne</string>
     <string name="wallet__send_available_spending">Dostępne (na wydawanie)</string>
     <string name="wallet__send_max_spending__title">Saldo rezerwy</string>
+    <string name="wallet__send_onchain_lightning_paid">Płatność Lightning tej faktury już się powiodła, więc Bitkit nie opłaci jej ponownie onchain.</string>
+    <string name="wallet__send_onchain_lightning_pending">Płatność Lightning tej faktury może jeszcze zostać zrealizowana. Aby uniknąć podwójnej płatności, Bitkit nie opłaci jej onchain, chyba że ta płatność się nie powiedzie.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit nie może sprawdzić płatności Lightning tej faktury, dopóki portfel się nie uruchomi, więc jeszcze nie opłaci adresu. Spróbuj ponownie później albo wklej sam adres, aby zapłacić bez faktury.</string>
     <string name="wallet__send_pending__description">Ta płatność trwa nieco dłużej niż oczekiwano. Możesz kontynuować korzystanie z Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Płatność w toku</string>
     <string name="wallet__send_max_spending__description">Maksymalna kwota do wydania jest nieco niższa ze względu na wymagane saldo rezerwowe.</string>
@@ -862,6 +865,8 @@
     <string name="wallet__send_confirming_in">Potwierdzenie w ciągu</string>
     <string name="wallet__send_contact_title">Wybierz kontakt</string>
     <string name="wallet__send_invoice_expiration">Termin faktury</string>
+    <string name="wallet__send_lightning_onchain_sent">Płatność onchain na adres tej faktury mogła już zostać wysłana, więc Bitkit nie opłaci faktury dodatkowo przez Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit nie może odczytać swoich zapisów płatności onchain, więc nie wie, czy adres tej faktury został już opłacony. Aby uniknąć podwójnej płatności, nie opłaci faktury przez Lightning.</string>
     <string name="wallet__send_swipe">Przesuń, aby zapłacić</string>
     <string name="wallet__send_yes">Tak, wyślij</string>
     <string name="wallet__send_dialog1">Wygląda na to, że wysyłasz ponad $100. Czy kontynuować?</string>

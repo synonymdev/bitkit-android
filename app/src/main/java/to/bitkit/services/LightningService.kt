@@ -1513,6 +1513,14 @@ class LightningService internal constructor(
             node.listPayments()
         }
     }
+
+    /** The payment with [paymentId], or null when there is none. Throws while the node is not set up. */
+    suspend fun payment(paymentId: PaymentId): PaymentDetails? {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        return ServiceQueue.LDK.background(ldkQueue) {
+            node.payment(paymentId)
+        }
+    }
     // endregion
 
     // region debug

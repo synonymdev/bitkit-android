@@ -2,6 +2,9 @@ package to.bitkit.repositories
 
 import android.app.Application
 import app.cash.turbine.test
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlPayData
+import com.synonym.bitkitcore.NetworkType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +25,7 @@ import org.lightningdevkit.ldknode.NodeException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -42,6 +46,9 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
+import to.bitkit.viewmodels.QuickPayData
+import to.bitkit.viewmodels.QuickPayResult
+import to.bitkit.viewmodels.QuickPayViewModel
 import java.math.BigDecimal
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -60,6 +67,8 @@ class QuickPayRepoTest : BaseUnitTest() {
     companion object {
         private const val TEST_BOLT11 = "lnbcrt1quickpay"
         private const val TEST_HASH = "quickpay-invoice-hash"
+        private const val SECOND_BOLT11 = "lnbcrt1quickpay-second"
+        private const val SECOND_HASH = "quickpay-second-hash"
         private val IOS_LEDGER_JSON = """
             {
               "version": 1,
@@ -436,9 +445,8 @@ class QuickPayRepoTest : BaseUnitTest() {
 
     @Test
     fun `reserveBound fails with conversion error when rates are unavailable`() = test {
-        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer {
-            throw QuickPayConversionError()
-        }
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.failure(Exception("rates unavailable")))
 
         val result = sut.reserveBound("abc", 500u)
 
@@ -782,6 +790,123 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lnurl request paid again reuses its invoice instead of paying a fresh one`() = test {
+        stubTwoLnurlInvoices()
+        val dispatched = stubPayInvoiceAccepted()
+        val request = QuickPayPayRequest.LnurlPay(data = lnurlPayData(), amountSats = 500u, requestId = "request-1")
+        val first = QuickPaySession()
+        sut.attach(first)
+        backgroundScope.launch { sut.payNow(first, request) }
+        dispatched.await()
+        sut.detach(first)
+        advanceTimeBy(LightningRepo.SEND_LN_TIMEOUT)
+        advanceUntilIdle()
+
+        // A recreated screen asks again for the same request with a new session
+        val second = QuickPaySession()
+        sut.attach(second).test {
+            sut.payNow(second, request)
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+        }
+
+        verify(lightningRepo, times(1)).fetchLnurlInvoice(any(), any(), anyOrNull())
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
+    }
+
+    // A screen that leaves composition without a configuration change, as when a sheet replaces it or navigation pops
+    // it, detaches its session. Remounted, it attaches again and asks to pay the same request once more: as the screen
+    // it was, keeping its view model and saved session, or as a new one.
+    @Test
+    fun `an lnurl quickpay screen remounted with its saved session attaches to the payment in flight`() = test {
+        assertRemountAttachesToInFlightLnurlPayment(keepsViewModel = true)
+    }
+
+    @Test
+    fun `an lnurl quickpay screen remounted as a new screen attaches to the payment in flight`() = test {
+        assertRemountAttachesToInFlightLnurlPayment(keepsViewModel = false)
+    }
+
+    private suspend fun assertRemountAttachesToInFlightLnurlPayment(keepsViewModel: Boolean) {
+        stubTwoLnurlInvoices()
+        val dispatched = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            dispatched.complete(Unit)
+            hold.await()
+        }
+        val data = QuickPayData.LnurlPay(sats = 500u, data = lnurlPayData())
+        val screen = quickPayViewModel()
+        val session = QuickPaySession()
+        screen.attach(session)
+        screen.pay(session, data, requestId = "request-1")
+        dispatched.await()
+
+        screen.detach(session)
+        val remounted = if (keepsViewModel) screen else quickPayViewModel()
+        val remountedSession = if (keepsViewModel) session else QuickPaySession()
+        remounted.attach(remountedSession)
+        remounted.pay(remountedSession, data, requestId = "request-1")
+        hold.complete(Result.success("pid"))
+        sut.signalCompletion(paymentId = "pid", paymentHash = TEST_HASH, success = true)
+
+        assertEquals(TEST_HASH, assertIs<QuickPayResult.Success>(remounted.uiState.value.result).paymentHash)
+        verify(lightningRepo, times(1)).fetchLnurlInvoice(any(), any(), anyOrNull())
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        assertEquals(250L, spentCents())
+    }
+
+    @Test
+    fun `lnurl request under an old id with other pay data fetches and pays its own invoice`() = test {
+        stubTwoLnurlInvoices()
+        val dispatched = stubPayInvoiceAccepted()
+        val first = QuickPaySession()
+        sut.attach(first)
+        backgroundScope.launch {
+            sut.payNow(first, QuickPayPayRequest.LnurlPay(lnurlPayData(), amountSats = 500u, requestId = "request-1"))
+        }
+        dispatched.await()
+
+        val otherMerchant = lnurlPayData(uri = "lnurl1other", callback = "https://other.example.com/callback")
+        val second = QuickPaySession()
+        sut.attach(second)
+        backgroundScope.launch {
+            sut.payNow(second, QuickPayPayRequest.LnurlPay(otherMerchant, amountSats = 400u, requestId = "request-1"))
+        }
+        runCurrent()
+
+        verify(lightningRepo, times(2)).fetchLnurlInvoice(any(), any(), anyOrNull())
+        verify(lightningRepo).payInvoice(eq(TEST_BOLT11), anyOrNull(), any())
+        verify(lightningRepo).payInvoice(eq(SECOND_BOLT11), anyOrNull(), any())
+        assertEquals(2, cacheStore.data.first().quickPayLedger!!.records.size)
+    }
+
+    @Test
+    fun `lnurl request asked again after its payment failed fetches a fresh invoice`() = test {
+        stubTwoLnurlInvoices()
+        val dispatched = stubPayInvoiceAccepted()
+        val request = QuickPayPayRequest.LnurlPay(data = lnurlPayData(), amountSats = 500u, requestId = "request-1")
+        val first = QuickPaySession()
+        sut.attach(first).test {
+            backgroundScope.launch { sut.payNow(first, request) }
+            dispatched.await()
+            runCurrent()
+            sut.signalCompletion(paymentId = "pid", paymentHash = TEST_HASH, success = false)
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+
+        val second = QuickPaySession()
+        sut.attach(second)
+        backgroundScope.launch { sut.payNow(second, request) }
+        runCurrent()
+
+        verify(lightningRepo, times(2)).fetchLnurlInvoice(any(), any(), anyOrNull())
+        verify(lightningRepo).payInvoice(eq(SECOND_BOLT11), anyOrNull(), any())
+    }
+
+    @Test
     fun `detachAll does not sweep a session attached after snapshot`() = test {
         val first = QuickPaySession()
         sut.attach(first)
@@ -1018,6 +1143,33 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
     }
 
+    private suspend fun stubTwoLnurlInvoices() {
+        sut = repo(
+            invoiceParser = QuickPayInvoiceParser { bolt11 ->
+                when (bolt11) {
+                    TEST_BOLT11 -> TEST_HASH
+                    SECOND_BOLT11 -> SECOND_HASH
+                    else -> null
+                }
+            },
+        )
+        whenever { lightningRepo.fetchLnurlInvoice(any(), any(), anyOrNull()) }.thenReturn(
+            Result.success(lightningInvoice(TEST_BOLT11)),
+            Result.success(lightningInvoice(SECOND_BOLT11)),
+        )
+    }
+
+    private suspend fun stubPayInvoiceAccepted(): CompletableDeferred<Unit> {
+        val dispatched = CompletableDeferred<Unit>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            dispatched.complete(Unit)
+            Result.success("pid")
+        }
+        return dispatched
+    }
+
     private suspend fun stubPayInvoiceFailure(error: NodeException) {
         whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
             val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
@@ -1049,16 +1201,49 @@ class QuickPayRepoTest : BaseUnitTest() {
 
     private fun testInvoice(): Pair<String, String> = TEST_BOLT11 to TEST_HASH
 
-    private fun repo(): QuickPayRepo {
+    private fun lnurlPayData(
+        uri: String = "lnurl1quickpay",
+        callback: String = "https://example.com/callback",
+    ) = LnurlPayData(
+        uri = uri,
+        callback = callback,
+        minSendable = 1_000uL,
+        maxSendable = 100_000_000uL,
+        metadataStr = "[]",
+        commentAllowed = null,
+        allowsNostr = false,
+        nostrPubkey = null,
+    )
+
+    private fun lightningInvoice(bolt11: String) = LightningInvoice(
+        bolt11 = bolt11,
+        paymentHash = byteArrayOf(1, 2, 3),
+        amountSatoshis = 500uL,
+        timestampSeconds = 0u,
+        expirySeconds = 86_400u,
+        isExpired = false,
+        description = "",
+        networkType = NetworkType.REGTEST,
+        payeeNodeId = null,
+    )
+
+    private fun quickPayViewModel() = QuickPayViewModel(
+        context = mock(),
+        lightningRepo = lightningRepo,
+        quickPayRepo = sut,
+    )
+    private fun repo(
+        invoiceParser: QuickPayInvoiceParser = QuickPayInvoiceParser { bolt11 ->
+            bolt11.takeIf { it == TEST_BOLT11 }?.let { TEST_HASH }
+        },
+    ): QuickPayRepo {
         return QuickPayRepo(
             cacheStore = cacheStore,
             settingsStore = settingsStore,
             currencyRepo = currencyRepo,
             lightningRepo = lightningRepo,
             pendingPaymentRepo = pendingPaymentRepo,
-            invoiceParser = QuickPayInvoiceParser { bolt11 ->
-                bolt11.takeIf { it == TEST_BOLT11 }?.let { TEST_HASH }
-            },
+            invoiceParser = invoiceParser,
             paymentLookup = QuickPayPaymentLookup {
                 paymentRows ?: lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) }
             },

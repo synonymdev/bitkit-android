@@ -227,7 +227,7 @@ private fun SendPendingUiState.abandonErrorMessage(): String? = abandonError?.le
 
 @Composable
 private fun SendPendingUiState.recoveryErrorMessage(): String? = recoveryError?.let {
-    stringResource(
+    lightningPaymentRefusal ?: stringResource(
         if (invalidFeeRate) {
             R.string.wallet__send_pending__retry_invalid_fee
         } else {

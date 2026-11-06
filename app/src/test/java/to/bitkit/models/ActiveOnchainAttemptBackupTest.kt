@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private val lenientJson = Json { ignoreUnknownKeys = true }
 
@@ -22,6 +23,27 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
         val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         assertEquals("8487f073ee55b9049aeed241819055138c82af8a596104bc2eada95b6ce96aa7", hash)
         return json.decodeFromString(bytes.decodeToString())
+    }
+
+    @Test
+    fun `the hash of the invoice an address came with survives a backup, and an older record has none`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
+        assertNull(wire.lightningPaymentHash, "The golden predates the key")
+        val attempt = wire.restored("regtest", binding, "wallet0", 0)
+        assertNull(attempt.lightningPaymentHash)
+        val hash = "ab".repeat(32)
+
+        val exported = ActiveOnchainAttemptBackup.from(attempt.copy(lightningPaymentHash = hash), "regtest", binding)
+        val encoded = json.encodeToString(exported)
+
+        assertEquals(1, exported.version)
+        assertTrue(encoded.contains("\"lightningPaymentHash\":\"$hash\""))
+        val decoded = json.decodeFromString<ActiveOnchainAttemptBackup>(encoded)
+        assertEquals(hash, decoded.restored("regtest", binding, "wallet0", 0).lightningPaymentHash)
+        assertFalse(json.encodeToString(wire).contains("lightningPaymentHash"))
+        assertFailsWith<IllegalArgumentException> {
+            exported.copy(lightningPaymentHash = "010203").restored("regtest", binding, "wallet0", 0)
+        }
     }
 
     @Test

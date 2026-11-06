@@ -853,6 +853,9 @@
     <string name="wallet__send_available">Disponible</string>
     <string name="wallet__send_available_spending">Disponible (dépenses)</string>
     <string name="wallet__send_max_spending__title">Solde Réserve</string>
+    <string name="wallet__send_onchain_lightning_paid">Un paiement Lightning de cette facture a déjà abouti, Bitkit ne la paiera donc pas une seconde fois onchain.</string>
+    <string name="wallet__send_onchain_lightning_pending">Un paiement Lightning de cette facture peut encore aboutir. Pour éviter de la payer deux fois, Bitkit ne la paiera pas onchain sauf si ce paiement échoue.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit ne peut pas vérifier le paiement Lightning de cette facture avant le démarrage du portefeuille, il ne paiera donc pas encore l\'adresse. Réessayez à ce moment-là, ou collez l\'adresse seule pour la payer sans la facture.</string>
     <string name="wallet__send_pending__description">Ce paiement prend un peu plus de temps que prévu. Vous pouvez continuer à utiliser Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Paiement en attente</string>
     <string name="wallet__send_max_spending__description">Le montant maximum pouvant être dépensé est un peu moins élevé en raison d\'un solde de Réserve requis.</string>
@@ -860,6 +863,8 @@
     <string name="wallet__send_confirming_in">Confirmation en</string>
     <string name="wallet__send_contact_title">Sélectionnez un contact</string>
     <string name="wallet__send_invoice_expiration">Expiration de la facture</string>
+    <string name="wallet__send_lightning_onchain_sent">Un paiement onchain vers l\'adresse de cette facture a peut-être déjà été envoyé, Bitkit ne paiera donc pas aussi la facture via Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit ne peut pas lire ses enregistrements de paiements onchain, il ne peut donc pas savoir si l\'adresse de cette facture a déjà été payée. Pour éviter de payer deux fois, il ne paiera pas la facture via Lightning.</string>
     <string name="wallet__send_swipe">Glisser pour payer</string>
     <string name="wallet__send_yes">Oui, Envoyer</string>
     <string name="wallet__send_dialog1">Il apparaît que vous envoyez plus de 100 $. Voulez-vous continuer ?</string>

@@ -21,13 +21,16 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.WalletScope
+import to.bitkit.models.safe
 import to.bitkit.services.LightningService
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.ExperimentalTime
 
 sealed interface OnchainSendOutcome {
@@ -101,6 +104,11 @@ data class OnchainSendAttempt(
     val releaseApproved: Boolean = false,
     // The transaction spending the original's coins back to the wallet, saved before it is broadcast.
     val releaseTxid: String? = null,
+    // The hash of a Lightning invoice the address came with, which every re-send checks first. An attempt saved by
+    // an app that predates it carries none.
+    val lightningPaymentHash: String? = null,
+    // When that invoice expires, in epoch seconds, after which it can no longer be paid over Lightning.
+    val lightningInvoiceExpiresAt: ULong? = null,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -198,7 +206,12 @@ class OnchainSendAttemptStore @Inject constructor(
     private val clock: Clock,
 ) {
     companion object {
+        private const val TAG = "OnchainSendAttemptStore"
         private val KEY = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        private val PAID_INVOICES_KEY = Keychain.Key.ONCHAIN_PAID_INVOICES.name
+
+        /** How long past its expiry an invoice whose address was paid on-chain is still refused over Lightning. */
+        private val PAID_INVOICE_EXPIRY_MARGIN = 1.hours
     }
 
     private val mutex = Mutex()
@@ -235,6 +248,8 @@ class OnchainSendAttemptStore @Inject constructor(
         beforeSendAttempt: suspend () -> Unit,
         payerIdentity: String? = null,
         contactPublicKey: String? = null,
+        lightningPaymentHash: String? = null,
+        lightningInvoiceExpiresAt: ULong? = null,
     ): OnchainSendAttempt = withContext(ioDispatcher) {
         mutex.withLock {
             val walletIndex = lightningService.currentWalletIndex
@@ -272,6 +287,8 @@ class OnchainSendAttemptStore @Inject constructor(
                     channelId = channelId,
                     contact = contactPublicKey?.let(::JsonPrimitive),
                 ),
+                lightningPaymentHash = lightningPaymentHash,
+                lightningInvoiceExpiresAt = lightningInvoiceExpiresAt?.takeIf { lightningPaymentHash != null },
             )
             persist(attempt)
             inFlightPreparations += attempt.attemptId
@@ -736,7 +753,74 @@ class OnchainSendAttemptStore @Inject constructor(
     }
 
     private suspend fun persist(attempt: OnchainSendAttempt) {
+        if (attempt.initialDispatchAttempted || attempt.hasPositiveEvidence) rememberPaidInvoice(attempt)
         keychain.upsertString(KEY, Json.encodeToString(attempt), attempt.walletIndex)
         _backupStateVersion.update { it + 1 }
     }
+
+    /**
+     * The hashes of Lightning invoices whose address an on-chain send of this wallet dispatched, until the invoice
+     * expires. They outlive the attempt, which a later send or a restore replaces.
+     */
+    suspend fun paidInvoiceHashes(): Set<String> = withContext(ioDispatcher) {
+        mutex.withLock {
+            loadPaidInvoices(lightningService.currentWalletIndex).mapTo(mutableSetOf()) { it.paymentHash }
+        }
+    }
+
+    /** The entries to back up, or none while the record cannot be read, so the backup itself never fails on it. */
+    suspend fun paidInvoicesBackupSnapshot(walletIndex: Int): List<OnchainPaidInvoice> = withContext(ioDispatcher) {
+        mutex.withLock { loadPaidInvoicesOrNull(walletIndex).orEmpty() }
+    }
+
+    /**
+     * Keeps the well-formed entries of a restored backup and drops the rest. A local record that cannot be read is
+     * left as it is, so it keeps refusing Lightning rather than lose the invoices it may hold.
+     */
+    suspend fun restorePaidInvoices(invoices: List<OnchainPaidInvoice>, walletIndex: Int) =
+        withContext(ioDispatcher + NonCancellable) {
+            mutex.withLock {
+                val (valid, malformed) = invoices.partition { it.paymentHash.matches(HEX_HASH) }
+                if (malformed.isNotEmpty()) {
+                    Logger.warn("Dropped '${malformed.size}' malformed paid invoices from a restore", context = TAG)
+                }
+                val current = loadPaidInvoicesOrNull(walletIndex) ?: return@withLock
+                val merged = (current + valid).distinctBy { it.paymentHash }
+                runSuspendCatching { savePaidInvoices(merged, walletIndex) }
+                    .onFailure { Logger.warn("Failed to restore paid invoices", it, context = TAG) }
+            }
+        }
+
+    private suspend fun rememberPaidInvoice(attempt: OnchainSendAttempt) {
+        val paymentHash = attempt.lightningPaymentHash ?: return
+        val expiresAt = attempt.lightningInvoiceExpiresAt ?: return
+        val paid = loadPaidInvoicesOrNull(attempt.walletIndex) ?: return
+        if (paid.any { it.paymentHash == paymentHash }) return
+        runSuspendCatching { savePaidInvoices(paid + OnchainPaidInvoice(paymentHash, expiresAt), attempt.walletIndex) }
+            .onFailure { Logger.warn("Failed to record paid invoice '$paymentHash'", it, context = TAG) }
+    }
+
+    private fun loadPaidInvoicesOrNull(walletIndex: Int): List<OnchainPaidInvoice>? =
+        runCatching { loadPaidInvoices(walletIndex) }
+            .onFailure { Logger.warn("Failed to read paid invoices, leaving the record as it is", it, context = TAG) }
+            .getOrNull()
+
+    private fun loadPaidInvoices(walletIndex: Int): List<OnchainPaidInvoice> {
+        val value = keychain.loadString(PAID_INVOICES_KEY, walletIndex) ?: return emptyList()
+        val now = clock.now().epochSeconds.toULong()
+        return Json.decodeFromString<List<OnchainPaidInvoice>>(value).filter {
+            it.expiresAt.safe() + PAID_INVOICE_EXPIRY_MARGIN.inWholeSeconds.toULong().safe() > now
+        }
+    }
+
+    private suspend fun savePaidInvoices(invoices: List<OnchainPaidInvoice>, walletIndex: Int) {
+        keychain.upsertString(PAID_INVOICES_KEY, Json.encodeToString(invoices), walletIndex)
+        _backupStateVersion.update { it + 1 }
+    }
 }
+
+/** A Lightning invoice whose address an on-chain send dispatched, kept until [expiresAt] in epoch seconds. */
+@Serializable
+data class OnchainPaidInvoice(val paymentHash: String, val expiresAt: ULong)
+
+private val HEX_HASH = Regex("^[0-9a-f]{64}$")

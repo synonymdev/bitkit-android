@@ -1000,8 +1000,13 @@
     <string name="wallet__send_instant_failed">Platba se nezdařila</string>
     <string name="wallet__send_invoice">Faktura</string>
     <string name="wallet__send_invoice_expiration">Expirace faktury</string>
+    <string name="wallet__send_lightning_onchain_sent">Na adresu této faktury už mohla odejít onchain platba, takže Bitkit fakturu nezaplatí ještě přes Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit nemůže načíst své záznamy o onchain platbách, takže nepozná, zda adresa této faktury už byla zaplacena. Aby nedošlo k dvojí platbě, fakturu přes Lightning nezaplatí.</string>
     <string name="wallet__send_max_spending__description">Maximální částka, kterou lze utratit, je o něco nižší kvůli požadovanému zůstatku rezervy.</string>
     <string name="wallet__send_max_spending__title">Zůstatek rezervy</string>
+    <string name="wallet__send_onchain_lightning_paid">Lightning platba této faktury již proběhla úspěšně, takže ji Bitkit znovu onchain nezaplatí.</string>
+    <string name="wallet__send_onchain_lightning_pending">Lightning platba této faktury může být ještě dokončena. Aby nedošlo k dvojí platbě, Bitkit ji nezaplatí onchain, pokud tato platba neselže.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit nemůže ověřit Lightning platbu této faktury, dokud se peněženka nespustí, takže adresu zatím nezaplatí. Zkuste to pak znovu, nebo vložte samotnou adresu a zaplaťte ji bez faktury.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Převody na útratový zůstatek už nejsou dostupné. Bitkit nejprve zkontroluje síť a pak vrátí mince tohoto převodu do vaší peněženky, aby se původní převod nikdy nepotvrdil. Stojí to síťový poplatek.</string>
     <string name="wallet__send_pending__description">Tato platba trvá o něco déle, než se očekávalo. Bitkit můžete používat i nadále.</string>
     <string name="wallet__send_pending__nav_title">Platba čeká na vyřízení</string>

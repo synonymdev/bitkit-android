@@ -1017,8 +1017,13 @@
     <string name="wallet__send_instant_failed">Платеж не выполнен</string>
     <string name="wallet__send_invoice">Инвойс</string>
     <string name="wallet__send_invoice_expiration">Срок действия инвойса</string>
+    <string name="wallet__send_lightning_onchain_sent">Onchain-платёж на адрес этого счёта, возможно, уже отправлен, поэтому Bitkit не будет дополнительно оплачивать счёт через Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit не может прочитать свои записи об onchain-платежах, поэтому не знает, был ли уже оплачен адрес этого счёта. Чтобы не оплатить дважды, он не будет оплачивать счёт через Lightning.</string>
     <string name="wallet__send_max_spending__description">Максимальная сумма для траты немного меньше из-за необходимого резервного баланса.</string>
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
+    <string name="wallet__send_onchain_lightning_paid">Lightning-платёж по этому счёту уже прошёл успешно, поэтому Bitkit не будет оплачивать его повторно onchain.</string>
+    <string name="wallet__send_onchain_lightning_pending">Lightning-платёж по этому счёту ещё может завершиться. Чтобы не оплатить его дважды, Bitkit не будет оплачивать его onchain, пока этот платёж не завершится неудачей.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit не может проверить Lightning-платёж по этому счёту, пока кошелёк не запустится, поэтому пока не будет оплачивать адрес. Попробуйте снова позже или вставьте только адрес, чтобы оплатить его без счёта.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Переводы на баланс расходов больше недоступны. Bitkit сначала проверяет сеть, а затем возвращает монеты этого перевода в ваш кошелёк, чтобы исходный перевод никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>

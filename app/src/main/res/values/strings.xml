@@ -1543,8 +1543,13 @@
     <string name="wallet__send_instant_failed">Payment Failed</string>
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Invoice expiration</string>
+    <string name="wallet__send_lightning_onchain_sent">An on-chain payment to this invoice\'s address may already have gone out, so Bitkit will not pay the invoice over Lightning as well.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit can\'t read its on-chain payment records, so it can\'t tell whether this invoice\'s address was already paid. To avoid paying twice, it will not pay the invoice over Lightning.</string>
     <string name="wallet__send_max_spending__description">The maximum spendable amount is a bit lower due to a required reserve balance.</string>
     <string name="wallet__send_max_spending__title">Reserve Balance</string>
+    <string name="wallet__send_onchain_lightning_paid">A Lightning payment of this invoice already succeeded, so Bitkit will not pay it again on-chain.</string>
+    <string name="wallet__send_onchain_lightning_pending">A Lightning payment of this invoice may still complete. To avoid paying it twice, Bitkit will not pay it on-chain unless that payment fails.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit cannot check this invoice\'s Lightning payment until the wallet has started, so it will not pay the address yet. Try again then, or paste the address on its own to pay it without the invoice.</string>
     <string name="wallet__send_pending__abandon">Cancel expired payment</string>
     <string name="wallet__send_pending__abandon_checking">Checking the network. This can take up to 30 seconds.</string>
     <string name="wallet__send_pending__abandon_done">Payment cancelled. Its coins are back in your wallet.</string>
