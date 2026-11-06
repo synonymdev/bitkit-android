@@ -1032,8 +1032,16 @@ class ActivityService(
             return currentWalletAddress
         }
 
+        val accounts = runSuspendCatching { lightningService.listOnchainWalletAccounts() }
+            .onFailure { Logger.warn("Failed to list onchain wallet accounts", it, context = TAG) }
+            .getOrNull()
+        val loadedPrimaryTypes = accounts?.filter { it.accountIndex == 0u }
+            ?.map { it.addressType.toBitkitAddressType() }?.toSet()
+        val primaryTypes = prioritizedAddressTypes(selectedAddressType)
+            .filter { loadedPrimaryTypes == null || it in loadedPrimaryTypes }
+
         for (isChange in listOf(false, true)) {
-            for (addressType in prioritizedAddressTypes(selectedAddressType)) {
+            for (addressType in primaryTypes) {
                 searchReceivingAddressForType(
                     details = details,
                     value = value,
@@ -1044,12 +1052,9 @@ class ActivityService(
             }
         }
 
-        val accounts = runSuspendCatching { lightningService.listOnchainWalletAccounts() }
-            .onFailure { Logger.warn("Failed to list onchain wallet accounts", it, context = TAG) }
-            .getOrDefault(emptyList())
-            .filter { it.accountIndex != 0u }
+        val companionAccounts = accounts.orEmpty().filter { it.accountIndex != 0u }
         for (isChange in listOf(false, true)) {
-            for (account in accounts) {
+            for (account in companionAccounts) {
                 searchReceivingAddressForType(
                     details = details,
                     value = value,
