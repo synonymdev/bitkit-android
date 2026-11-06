@@ -56,6 +56,7 @@ import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
@@ -1066,6 +1067,60 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals("pubky://self/pub/pubky.app/files/0000000000000", sut.profile.value?.imageUrl)
         verifyBlocking(pubkyService, never()) { fetchFile(any(), any()) }
+    }
+
+    @Test
+    fun `createIdentity fits a restored Bitkit-only profile to pubky app limits`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(
+            paykitRecord(
+                PubkyProfileData(
+                    name = "Bitkit Name",
+                    bio = "b".repeat(200),
+                    links = listOf(PubkyProfileDataLink("City", "New York")) +
+                        (1..6).map { PubkyProfileDataLink("Site $it", "site$it.com") },
+                ).toPaykitProfile()
+            )
+        )
+        val restored = checkNotNull(sut.fetchRemoteProfile(VALID_SELF_KEY).getOrThrow())
+        clearInvocations(pubkyService)
+
+        sut.createIdentity(restored.name, restored.bio, restored.links, restored.tags, null)
+
+        val update = argumentCaptor<PubkyProfileUpdate>()
+        verifyBlocking(pubkyService) { publishPubkyProfile(update.capture(), anyOrNull(), any()) }
+        assertEquals("b".repeat(160), update.firstValue.bio)
+        assertEquals((1..5).map { "https://site$it.com" }, update.firstValue.links?.map { it.url })
+    }
+
+    @Test
+    fun `saveProfile keeps the stored tags when a tag retry follows a failed read and write`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        sut.loadProfile()
+        doReturn(
+            paykitRecord(PubkyProfileData(name = "Test", bio = "", tags = listOf("friend", "work")).toPaykitProfile())
+        )
+            .whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+        whenever(pubkyService.publishPaykitProfile(any(), any()))
+            .thenAnswer { throw TestAppError("offline") }
+            .thenAnswer { paykitRecord(it.getArgument(0)) }
+
+        val first = sut.saveProfile(name = "Test", bio = "", links = emptyList(), tags = listOf("vip"), imageUrl = null)
+        val base = assertIs<PubkyProfileTagsNotSavedError>(first.exceptionOrNull()).base
+        sut.saveProfile(
+            name = "Test",
+            bio = "",
+            links = emptyList(),
+            tags = listOf("vip"),
+            imageUrl = null,
+            editBase = base
+        )
+
+        val copy = argumentCaptor<PaykitProfile>()
+        verifyBlocking(pubkyService, times(2)) { publishPaykitProfile(copy.capture(), any()) }
+        assertEquals(listOf("friend", "work", "vip"), PubkyProfileData.fromPaykitProfile(copy.lastValue).tags)
     }
 
     @Test
@@ -5393,6 +5448,14 @@ class PubkyRepoTest : BaseUnitTest() {
     private fun directSignupRequest() = PubkyAuthRequest.parseSignup(
         "pubkyauth://direct_signup?hs=homeserver&st=invite",
     ).getOrThrow()
+
+    private fun paykitRecord(profile: PaykitProfile) = PaykitProfileRecord(
+        publicKey = VALID_SELF_KEY,
+        profile = profile,
+        path = "/pub/paykit/profile.json",
+        revision = "paykit-revision",
+        updatedAt = "2026-01-01T00:00:00Z",
+    )
 
     private fun createPaykitProfile(
         name: String,

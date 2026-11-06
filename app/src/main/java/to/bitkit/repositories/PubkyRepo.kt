@@ -130,6 +130,10 @@ private class PubkyProfileNotFoundError : AppError("Profile not found")
 
 private class SavedProfile(val profile: PubkyProfile, val revision: String, val tagError: Throwable?)
 
+private class StoredCopy(val tags: List<String>?, val image: String?)
+
+private class FittedProfile(val name: String, val bio: String, val links: List<PubkyProfileLink>)
+
 private class RestoreBase(val publicKey: String, val profile: PubkyProfile, val revision: String?)
 
 /** Whether a Pubky identity is ready to use once restores already under way have finished. */
@@ -1122,7 +1126,8 @@ class PubkyRepo @Inject constructor(
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            val pk = requireNotNull(_publicKey.value) { "No public key available" }
+            val signIn = requireNotNull(currentSignIn()) { "No public key available" }
+            val pk = signIn.publicKey
             val saved = runSuspendCatching {
                 writeProfile(
                     pk,
@@ -1140,6 +1145,8 @@ class PubkyRepo @Inject constructor(
                 scope.launch { loadProfile() }
                 throw PubkyProfileChangedError(it)
             }
+            // A session change while the save ran leaves the new session's profile alone.
+            if (!isCurrent(signIn)) return@withContext
             setProfile(saved.profile)
             ownProfileRevision = saved.revision
             cacheMetadata(saved.profile)
@@ -1227,13 +1234,17 @@ class PubkyRepo @Inject constructor(
         base: PubkyProfile?,
         expectedRevision: String?,
     ): SavedProfile {
-        val links = links.map {
+        val copyUnread = tagsUnavailable
+        // A profile written without a base is fitted to pubky.app's limits, as a move is.
+        val fitted = if (base == null) fitted(name, bio, links) else null
+        val links = fitted?.links ?: links.map {
             PubkyProfileLink(
                 label = it.label.singleLine(),
                 url = it.url.toPubkyAppLinkUrl() ?: it.url
             )
         }
-        val bio = bio.singleLine()
+        val bio = fitted?.bio ?: bio.singleLine()
+        val name = fitted?.name ?: name
         // A Bitkit avatar still on Paykit storage is moved by a later load rather than written to pubky.app as is.
         val paykitAvatar = imageUrl?.takeIf { it.isPaykitStorage() }
         val update = PubkyProfileUpdate(
@@ -1250,41 +1261,67 @@ class PubkyRepo @Inject constructor(
         )
         val snapshot = withPubkyAppScope { pubkyService.publishPubkyProfile(update, expectedRevision, publicKey) }
         ownProfileRevision = snapshot.revision
-        val avatarPending = paykitAvatar != null && snapshot.profile.image == null
+        val baseTags = base?.tags.orEmpty()
+        val stored = storedCopy(publicKey)
+        val wasPending = publicKey in pubkyStore.data.first().pubkyAppAvatarPending
+        // The form could not show an avatar still to move while the copy was unread, so it stays pending.
+        val keepPending = snapshot.profile.image == null && copyUnread && wasPending
+        val pendingAvatar = when {
+            snapshot.profile.image != null -> null
+            paykitAvatar != null -> paykitAvatar
+            keepPending -> stored?.image?.takeIf { it.isPaykitStorage() }
+            else -> null
+        }
+        val avatarPending = pendingAvatar != null || keepPending
         pubkyStore.update {
             val keys = it.pubkyAppAvatarPending
             val pending = if (avatarPending) keys + publicKey else keys - publicKey
             it.copy(pubkyAppProfileOwners = it.pubkyAppProfileOwners + publicKey, pubkyAppAvatarPending = pending)
         }
-        val baseTags = base?.tags.orEmpty()
-        val keptTags = tagsToKeep(publicKey, tags)
+        val keptTags = stored?.let { copy -> copy.tags?.let { it + tags.filterNot { tag -> tag in it } } ?: tags }
         val profile = PubkyProfile.fromPubkyProfile(publicKey, snapshot.profile).let {
-            it.copy(tags = keptTags ?: baseTags, imageUrl = if (avatarPending) paykitAvatar else it.imageUrl)
+            it.copy(tags = keptTags ?: baseTags, imageUrl = pendingAvatar ?: it.imageUrl)
         }
         // Tags live only in the Paykit copy, so a changed tag that it does not take is reported.
         val copyData = profile.toProfileData().toPaykitProfile()
         val copyError = keptTags?.let {
             runSuspendCatching { pubkyService.publishPaykitProfile(copyData, publicKey) }
+                .onSuccess { tagsUnavailable = false }
                 .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
                 .exceptionOrNull()
         }
-        val stored = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
+        val saved = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
         val tagsLost = (keptTags == null || copyError != null) && tags != baseTags
         val tagError = PubkyProfileTagsNotSavedError(
-            ProfileEditBase(stored, snapshot.revision),
+            ProfileEditBase(saved, snapshot.revision),
             copyError
         ).takeIf { tagsLost }
-        return SavedProfile(stored, snapshot.revision, tagError)
+        return SavedProfile(saved, snapshot.revision, tagError)
     }
 
-    /** The stored tags plus any new ones; null while the Paykit copy still cannot be read. */
-    private suspend fun tagsToKeep(publicKey: String, tags: List<String>): List<String>? {
-        if (!tagsUnavailable) return tags
-        val stored = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrElse { return null }
-        tagsUnavailable = false
-        val storedTags = stored?.let { PubkyProfileData.fromPaykitProfile(it.profile).tags }.orEmpty()
-        return storedTags + tags.filterNot { it in storedTags }
+    /**
+     * What a save keeps from the Paykit copy after the last load could not read it, as the form then lacked its tags
+     * and the avatar still to move: empty when that load read it, null while it still cannot be read.
+     */
+    private suspend fun storedCopy(publicKey: String): StoredCopy? {
+        if (!tagsUnavailable) return StoredCopy(tags = null, image = null)
+        val record = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrElse { return null }
+        val data = record?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
+        return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
     }
+
+    /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five valid links. */
+    private fun fitted(name: String, bio: String, links: List<PubkyProfileLink>) = FittedProfile(
+        name = name.singleLine().takeCodePoints(PUBKY_APP_NAME_MAX_LENGTH),
+        bio = bio.singleLine().takeCodePoints(PUBKY_APP_BIO_MAX_LENGTH),
+        links = links
+            .mapNotNull { link ->
+                val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val url = link.url.toPubkyAppLinkUrl() ?: return@mapNotNull null
+                PubkyProfileLink(label = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
+            }
+            .take(PUBKY_APP_LINKS_MAX_COUNT),
+    )
 
     private suspend fun loadOwnProfile(publicKey: String): Pair<PubkyProfile, String?>? {
         val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
@@ -1323,17 +1360,14 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun migrateToPubkyApp(publicKey: String, data: PubkyProfileData): PubkyProfileSnapshot? =
         runSuspendCatching {
+            val fitted = fitted(data.name, data.bio, data.links.map { PubkyProfileLink(it.label, it.url) })
+            // An avatar already on pubky.app is kept as is; one on Paykit storage is moved below.
+            val keptImage = data.image?.takeIf { it.isPubkyAppFile() }
             val update = PubkyProfileUpdate(
-                name = data.name.singleLine().takeCodePoints(PUBKY_APP_NAME_MAX_LENGTH),
-                bio = data.bio.singleLine().takeCodePoints(PUBKY_APP_BIO_MAX_LENGTH),
-                image = null,
-                links = data.links
-                    .mapNotNull { link ->
-                        val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                        val url = link.url.toPubkyAppLinkUrl() ?: return@mapNotNull null
-                        SdkPubkyProfileLink(title = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
-                    }
-                    .take(PUBKY_APP_LINKS_MAX_COUNT),
+                name = fitted.name,
+                bio = fitted.bio,
+                image = keptImage,
+                links = fitted.links.map { SdkPubkyProfileLink(title = it.label, url = it.url) },
             )
             val snapshot = withPubkyAppScope { pubkyService.publishPubkyProfile(update, null, publicKey) }
             Logger.info("Moved Bitkit profile to pubky.app", context = TAG)
@@ -1397,6 +1431,9 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun String.isPaykitStorage() = "/pub/paykit/" in this
+
+    private fun String.isPubkyAppFile() =
+        "/pub/pubky.app/files/" in this && codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
 
     private suspend fun publishPaykitProfileCopy(publicKey: String, profile: PubkyProfile) {
         runSuspendCatching { pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile(), publicKey) }
