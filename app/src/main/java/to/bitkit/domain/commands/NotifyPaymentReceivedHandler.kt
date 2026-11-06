@@ -15,6 +15,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
@@ -37,6 +38,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     private val clock: Clock,
     private val receivedNotificationContent: ReceivedNotificationContent,
     private val sparkRepo: SparkRepo,
+    private val moveToSparkRepo: MoveToSparkRepo,
 ) {
     private val presentationClaimsLock = Any()
     private val presentationClaims = mutableSetOf<String>()
@@ -109,6 +111,8 @@ class NotifyPaymentReceivedHandler @Inject constructor(
 
     private suspend fun shouldShowLightning(command: NotifyPaymentReceived.Command.Lightning): Boolean {
         val paymentId = command.event.paymentId ?: return false
+        // A move to Spark reports its outcome on its own screen.
+        if (moveToSparkRepo.isMovePayment(command.event.paymentHash)) return false
         delay(DELAY_FOR_ACTIVITY_SYNC_MS)
         return !activityRepo.isActivitySeen(paymentId)
     }

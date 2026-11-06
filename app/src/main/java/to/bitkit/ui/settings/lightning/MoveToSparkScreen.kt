@@ -183,6 +183,11 @@ private fun ColumnScope.Done(
         AmountRow(stringResource(R.string.lightning__move_to_spark__fee), outcome.feeSats, "MoveToSparkFeePaid")
     }
     Illustration(R.drawable.check)
+    // While the payment is in flight its amount may still return to the channel, so closing is not offered yet.
+    if (outcome is MoveToSparkOutcome.InFlight) {
+        PrimaryButton(text = stringResource(R.string.common__ok), onClick = onDone)
+        return
+    }
     if (uiState.hasRest) {
         Buttons(
             secondaryText = stringResource(R.string.common__later),

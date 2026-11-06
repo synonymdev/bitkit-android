@@ -13,12 +13,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
+import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -43,12 +45,19 @@ class MoveToSparkRepo @Inject constructor(
 
         /** How long the move waits for the payment to settle before it reports it as still in flight. */
         private val PAYMENT_TIMEOUT = 2.minutes
+
+        /** The failures that mean no route carried the amount, so a smaller one may route. */
+        private val NO_ROUTE_REASONS = setOf(PaymentFailureReason.ROUTE_NOT_FOUND, PaymentFailureReason.RETRIES_EXHAUSTED)
     }
 
     private val ownPaymentHashes = ConcurrentHashMap.newKeySet<String>()
+    private val watchedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
     /** Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments. */
     fun isMovePayment(paymentHash: String): Boolean = paymentHash in ownPaymentHashes
+
+    /** Whether the move screen still waits on [paymentHash] and reports its failure; after that the app does. */
+    fun isWatchedMovePayment(paymentHash: String): Boolean = paymentHash in watchedPaymentHashes
 
     /** Whether the channels hold a balance worth moving to a usable Spark wallet. */
     val canMove: Flow<Boolean> = combine(lightningRepo.lightningState, sparkRepo.state) { lightning, spark ->
@@ -75,11 +84,12 @@ class MoveToSparkRepo @Inject constructor(
             // The first amount leaves room for a guessed fee; once the real fee is known, the amount grows to fit it.
             repeat(MAX_QUOTE_ROUNDS) {
                 if (amountSats < MoveToSparkMath.MIN_MOVE_SATS) return@repeat
-                val feeSats = lightningRepo.estimateLdkRoutingFeesForAmount(invoice, amountSats).getOrElse {
+                val estimateSats = lightningRepo.estimateLdkRoutingFeesForAmount(invoice, amountSats).getOrElse {
                     fitting?.let { quote -> return@runSuspendCatching quote }
-                    throw MoveToSparkError.TooLarge(amountSats, it)
+                    throw if (it.isNoRoute()) MoveToSparkError.TooLarge(amountSats, it) else it
                 }
-                val nextSats = minOf(wantedSats, MoveToSparkMath.amountAfterFee(limitSats, feeSats))
+                val feeSats = MoveToSparkMath.quotedFeeSats(estimateSats)
+                val nextSats = minOf(wantedSats, MoveToSparkMath.amountAfterFee(limitSats, estimateSats))
                 if (amountSats.safe() + feeSats.safe() <= limitSats) {
                     fitting = MoveToSparkQuote(invoice, amountSats, feeSats)
                     if (nextSats <= amountSats) return@runSuspendCatching checkNotNull(fitting)
@@ -97,7 +107,19 @@ class MoveToSparkRepo @Inject constructor(
         runSuspendCatching {
             val paymentHash = Bolt11Invoice.fromStr(quote.invoice).paymentHash()
             ownPaymentHashes += paymentHash
-            coroutineScope {
+            watchedPaymentHashes += paymentHash
+            try {
+                payAndWait(quote, paymentHash)
+            } finally {
+                watchedPaymentHashes -= paymentHash
+            }
+        }.onFailure {
+            Logger.error("Failed to move '${quote.amountSats}' sats to Spark", it, context = TAG)
+        }
+    }
+
+    private suspend fun payAndWait(quote: MoveToSparkQuote, paymentHash: String): MoveToSparkOutcome =
+        coroutineScope {
                 val settled = async(start = CoroutineStart.UNDISPATCHED) {
                     lightningRepo.nodeEvents.first { it.settles(paymentHash) }
                 }
@@ -107,24 +129,25 @@ class MoveToSparkRepo @Inject constructor(
                     maxTotalRoutingFeeMsat = MoveToSparkMath.feeCapMsat(quote.feeSats),
                 ).getOrElse {
                     settled.cancel()
-                    throw MoveToSparkError.TooLarge(quote.amountSats, it)
+                    throw if (it.isNoRoute()) MoveToSparkError.TooLarge(quote.amountSats, it) else it
                 }
                 when (val event = withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }) {
                     is Event.PaymentSuccessful -> MoveToSparkOutcome.Moved(
                         amountSats = quote.amountSats,
                         feeSats = (event.feePaidMsat ?: 0uL) / 1000uL,
                     )
-                    is Event.PaymentFailed -> throw MoveToSparkError.TooLarge(quote.amountSats, reason = event.reason)
+                    is Event.PaymentFailed if event.reason in NO_ROUTE_REASONS ->
+                        throw MoveToSparkError.TooLarge(quote.amountSats, reason = event.reason)
+                    is Event.PaymentFailed -> throw MoveToSparkError.PaymentFailed(event.reason)
                     else -> {
                         settled.cancel()
                         MoveToSparkOutcome.InFlight(quote.amountSats)
                     }
                 }
             }
-        }.onFailure {
-            Logger.error("Failed to move '${quote.amountSats}' sats to Spark", it, context = TAG)
-        }
-    }
+
+    private fun Throwable.isNoRoute(): Boolean =
+        (this as? LdkError)?.compactType == NodeException.RouteNotFound::class.simpleName
 
     private fun Event.settles(paymentHash: String): Boolean = when (this) {
         is Event.PaymentSuccessful -> this.paymentHash == paymentHash
@@ -162,12 +185,15 @@ object MoveToSparkMath {
         return minOf(wantedSats, amountAfterFee(limitSats, guessSats))
     }
 
-    /** The amount that fits under [limitSats] together with [feeSats] and its margin. */
-    fun amountAfterFee(limitSats: ULong, feeSats: ULong): ULong =
-        limitSats.safe() - (feeSats.safe() + FEE_MARGIN_SATS.safe()).safe()
+    /** The amount that fits under [limitSats] together with the fee quoted for [estimateSats]. */
+    fun amountAfterFee(limitSats: ULong, estimateSats: ULong): ULong =
+        limitSats.safe() - quotedFeeSats(estimateSats).safe()
 
-    /** The routing fee cap for the payment: the quoted fee and its margin, so it never pays more than shown. */
-    fun feeCapMsat(feeSats: ULong): ULong = (feeSats.safe() + FEE_MARGIN_SATS.safe()).safe() * 1000uL.safe()
+    /** The routing fee to show for an estimate: the estimate and its margin, which also covers its rounding down. */
+    fun quotedFeeSats(estimateSats: ULong): ULong = estimateSats.safe() + FEE_MARGIN_SATS.safe()
+
+    /** The routing fee cap for the payment: exactly the quoted fee, so it never pays more than shown. */
+    fun feeCapMsat(feeSats: ULong): ULong = feeSats.safe() * 1000uL.safe()
 
     /** The smaller amount to offer after one did not route: half of it, or nothing below the minimum. */
     fun smallerAmount(sats: ULong): ULong? = (sats / 2uL).takeIf { it >= MIN_MOVE_SATS }
@@ -198,4 +224,7 @@ sealed class MoveToSparkError(message: String, cause: Throwable? = null) : AppEr
         cause: Throwable? = null,
         val reason: PaymentFailureReason? = null,
     ) : MoveToSparkError("Could not route '$amountSats' sats to Spark, reason '$reason'", cause)
+
+    /** The payment failed for a reason other than its route, such as an expired invoice. */
+    class PaymentFailed(val reason: PaymentFailureReason?) : MoveToSparkError("Failed to pay Spark, reason '$reason'")
 }

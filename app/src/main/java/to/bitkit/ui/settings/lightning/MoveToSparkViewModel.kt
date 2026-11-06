@@ -44,7 +44,9 @@ class MoveToSparkViewModel @Inject constructor(
     }
 
     fun move() {
-        val quote = (_uiState.value as? MoveToSparkUiState.Confirm)?.quote ?: return
+        val confirm = _uiState.value as? MoveToSparkUiState.Confirm ?: return
+        if (confirm.isMoving) return
+        val quote = confirm.quote
         _uiState.update { MoveToSparkUiState.Confirm(quote, isMoving = true) }
         viewModelScope.launch {
             moveToSparkRepo.move(quote).fold(

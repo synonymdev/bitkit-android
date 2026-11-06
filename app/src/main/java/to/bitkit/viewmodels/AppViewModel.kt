@@ -2867,7 +2867,7 @@ class AppViewModel @Inject constructor(
             refreshPaymentActivity(paymentHash)
             // A failed automatic Allowance payment falls back to the request's manual flow without a send error.
             if (isAutomaticAllowancePayment(paymentHash)) return
-            if (moveToSparkRepo.isMovePayment(paymentHash)) return
+            if (moveToSparkRepo.isWatchedMovePayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))

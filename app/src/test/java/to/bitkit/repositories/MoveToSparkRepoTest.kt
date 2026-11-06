@@ -4,6 +4,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.NodeException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
@@ -13,6 +14,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.LdkError
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -50,7 +52,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val quote = sut.quote().getOrThrow()
 
         assertEquals(INVOICE, quote.invoice)
-        assertEquals(30uL, quote.feeSats)
+        assertEquals(MoveToSparkMath.quotedFeeSats(30uL), quote.feeSats)
         assertEquals(MoveToSparkMath.amountAfterFee(100_000uL, 30uL), quote.amountSats)
         verify(sparkRepo).createInvoice(eq(null), any(), any())
     }
@@ -81,11 +83,23 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         sendable(100_000uL)
         whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
         whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any()))
-            .thenReturn(Result.failure(IllegalStateException("route not found")))
+            .thenReturn(Result.failure(LdkError(NodeException.RouteNotFound("no route"))))
 
         val error = sut.quote().exceptionOrNull()
 
         assertIs<MoveToSparkError.TooLarge>(error)
+    }
+
+    @Test
+    fun `quote keeps an estimate error other than no route`() = test {
+        sendable(100_000uL)
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any()))
+            .thenReturn(Result.failure(LdkError(NodeException.NotRunning("node stopped"))))
+
+        val error = sut.quote().exceptionOrNull()
+
+        assertIs<LdkError>(error)
     }
 
     @Test
@@ -119,7 +133,10 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fee cap covers the quoted fee and its margin`() {
-        assertEquals(32_000uL, MoveToSparkMath.feeCapMsat(30uL))
+    fun `fee cap is the quoted fee, which covers the estimate and its margin`() {
+        val feeSats = MoveToSparkMath.quotedFeeSats(30uL)
+        assertEquals(32uL, feeSats)
+        assertEquals(32_000uL, MoveToSparkMath.feeCapMsat(feeSats))
+        assertEquals(1_000_000uL, MoveToSparkMath.amountAfterFee(1_000_000uL, 30uL) + feeSats)
     }
 }
