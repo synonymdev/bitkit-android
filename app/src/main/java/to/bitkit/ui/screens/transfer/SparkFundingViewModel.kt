@@ -164,11 +164,7 @@ class SparkFundingViewModel @Inject constructor(
                     description = context.getString(R.string.lightning__spending_amount__error_balance__description),
                 )
 
-                quote.amountSats <= quote.instantFeeSats -> toast(
-                    title = R.string.lightning__spending_amount__error_min__title,
-                    description = context.getString(R.string.lightning__spending_amount__error_min__description)
-                        .replace("{amount}", quote.instantFeeSats.formatToModernDisplay()),
-                )
+                quote.amountSats <= quote.instantFeeSats -> toastBelowClaimFee(quote)
 
                 else -> {
                     showQuote(quote)
@@ -177,6 +173,12 @@ class SparkFundingViewModel @Inject constructor(
             }
         }
     }
+
+    private fun toastBelowClaimFee(quote: Quote) = toast(
+        title = R.string.lightning__spending_amount__error_min__title,
+        description = context.getString(R.string.lightning__spending_amount__error_min__description)
+            .replace("{amount}", quote.instantFeeSats.formatToModernDisplay()),
+    )
 
     /** Re-prices the confirm screen, so it never shows a stale quote. */
     fun onConfirmAppear() = requote()
@@ -222,6 +224,12 @@ class SparkFundingViewModel @Inject constructor(
                     title = R.string.lightning__spending_amount__error_balance__title,
                     description = context.getString(R.string.lightning__spending_amount__error_balance__description),
                 )
+                _uiState.update { it.copy(isSending = false) }
+                return@launch
+            }
+            if (quote.amountSats <= quote.instantFeeSats) {
+                Logger.info("Refused transfer that no longer covers its claim fee", context = TAG)
+                toastBelowClaimFee(quote)
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }

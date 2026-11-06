@@ -374,7 +374,7 @@ class LightningRepo @Inject constructor(
         if (shouldCancelPendingStop) cancelPendingStop()
 
         // Spark needs no node, so it starts alongside it and stays up while the node stops in background.
-        scope.launch { sparkRepo.start(walletIndex) }
+        if (!isWiping) scope.launch { sparkRepo.start(walletIndex) }
 
         eventHandler?.let { _eventHandlers.add(it) }
 
@@ -683,7 +683,10 @@ class LightningRepo @Inject constructor(
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
-    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
+    fun setWiping(enabled: Boolean) = run {
+        isWiping = enabled
+        sparkRepo.setWiping(enabled)
+    }
 
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
@@ -931,7 +934,7 @@ class LightningRepo @Inject constructor(
                 lastKnownNodeId = null
                 _lastKnownChannels.update { persistentListOf() }
                 lightningService.wipeStorage(walletIndex)
-                sparkRepo.wipe(walletIndex)
+                sparkRepo.wipe(walletIndex).getOrThrow()
                 clearProbeOutcomes()
                 _lightningState.update {
                     LightningState(
@@ -1341,9 +1344,11 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
         requireWalletRestoreComplete()
-        if (shouldReceiveWithSpark(amountMsats / MSATS_PER_SAT)) {
-            val amountSats = (amountMsats / MSATS_PER_SAT).takeIf { it > 0uL }
-            return@executeWhenNodeRunning sparkRepo.createInvoice(amountSats, description, expirySeconds)
+        // Spark invoices hold whole sats, so a sub-sat part rounds up rather than dropping the amount.
+        val amountSats = (amountMsats.safe() + (MSATS_PER_SAT - 1uL).safe()) / MSATS_PER_SAT
+        if (shouldReceiveWithSpark(amountSats)) {
+            val invoiceSats = amountSats.takeIf { it > 0uL }
+            return@executeWhenNodeRunning sparkRepo.createInvoice(invoiceSats, description, expirySeconds)
         }
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
@@ -2468,6 +2473,20 @@ class LightningRepo @Inject constructor(
             }
         }
 
+    /**
+     * What a Max send of the amountless [bolt11] keeps below [maxSendSats] for its fees: Spark's quote for sending its
+     * whole balance when Spark pays it, otherwise the routing fee for [maxSendSats] with a small buffer.
+     */
+    suspend fun estimateMaxSendFee(bolt11: String, maxSendSats: ULong): Result<ULong> {
+        if (shouldPayWithSpark(bolt11, maxSendSats)) {
+            sparkRepo.maxSendReserveSats(bolt11)
+                .onSuccess { return Result.success(it) }
+                .onFailure { Logger.warn("Failed to price a Max Spark send", it, context = TAG) }
+        }
+        val amountSats = maxSendSats.safe() - MAX_SEND_FEE_BUFFER_SATS.safe()
+        return estimateRoutingFeesForAmount(bolt11, amountSats).map { it.safe() + MAX_SEND_FEE_BUFFER_SATS.safe() }
+    }
+
     // region debug
     fun getNetworkGraphInfo() = lightningService.getNetworkGraphInfo()
 
@@ -2762,6 +2781,9 @@ class LightningRepo @Inject constructor(
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val MSATS_PER_SAT = 1_000uL
+
+        /** Sats a Max Lightning send keeps beyond its estimated routing fee, as routes can price slightly higher. */
+        private const val MAX_SEND_FEE_BUFFER_SATS = 2uL
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val CHANNELS_USABLE_POLL_DELAY = 1.seconds

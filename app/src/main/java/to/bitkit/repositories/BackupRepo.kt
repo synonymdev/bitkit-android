@@ -439,12 +439,12 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
-        // SPARK_EXIT - back up once Spark is ready, which replays when observing starts after it connected,
+        // SPARK_EXIT - back up once Spark is ready and synced, which replays when observing starts after that,
         // and again whenever Spark announces its unilateral exit data changed
         dataListenerJobs.add(
             scope.launch {
                 merge(
-                    sparkRepo.state.map { it.isReady }.distinctUntilChanged().filter { it },
+                    sparkRepo.state.map { it.isReady && it.hasSynced }.distinctUntilChanged().filter { it },
                     sparkRepo.exitStateChanged,
                 ).collect {
                     if (shouldSkipBackup()) return@collect
@@ -511,7 +511,7 @@ class BackupRepo @Inject constructor(
                 it.copy(running = true)
             }
 
-            delay(BACKUP_DEBOUNCE)
+            delay(if (category == BackupCategory.SPARK_EXIT) SPARK_EXIT_BACKUP_DEBOUNCE else BACKUP_DEBOUNCE)
             if (category == BackupCategory.WALLET) paykitSdkService.isPaymentSubmissionActive.first { !it }
 
             val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
@@ -638,9 +638,19 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    /** Nothing to back up until Spark connects, which marks [BackupCategory.SPARK_EXIT] required again. */
+    /**
+     * Defers until Spark has connected and synced, which marks [BackupCategory.SPARK_EXIT] required again. The first
+     * upload merges the stored backup into Spark before replacing it, and fails rather than replace one it could not
+     * read, so a failed or skipped restore never loses the stored exit data.
+     */
     private suspend fun uploadSparkExitBackup(): Result<Unit> = runSuspendCatching {
-        val backup = sparkRepo.exitBackup().getOrThrow() ?: return@runSuspendCatching
+        if (!sparkRepo.hasMergedRemoteExitState) {
+            sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
+            val remote = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+                ?.let { json.decodeFromString<SparkExitBackupV1>(String(it)) }
+            sparkRepo.mergeRemoteExitBackup(remote).getOrThrow()
+        }
+        val backup = sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
         vssBackupClient.putObject(
             key = BackupCategory.SPARK_EXIT.name,
             data = json.encodeToString(backup).toByteArray(),
@@ -708,6 +718,8 @@ class BackupRepo @Inject constructor(
         when {
             e is WalletBackupSnapshotChanged ->
                 Logger.debug("Deferred changing backup snapshot for: '$category'", context = TAG)
+            e is SparkExitBackupDeferred ->
+                Logger.debug("Deferred backup until Spark syncs for: '$category'", context = TAG)
             e.isTemporaryBackupFailure() -> retryAfterTemporaryFailure(category, backupRequired, e)
             else -> Logger.error("Backup failed for: '$category'", e, context = TAG)
         }
@@ -988,7 +1000,7 @@ class BackupRepo @Inject constructor(
                 // SETTINGS is optional; preserving explicit local corrections is required.
                 connectionSession.replay()
                 // Before the slower categories, so the exit data is staged before Spark connects and syncs.
-                performRestore(BackupCategory.SPARK_EXIT) { dataBytes ->
+                performRestore(BackupCategory.SPARK_EXIT, failedCategories) { dataBytes ->
                     val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
                     sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
                     parsed.createdAt
@@ -1383,6 +1395,9 @@ class BackupRepo @Inject constructor(
         private const val MINUTE_IN_MS = 60_000
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds
 
+        /** Spark's exit data can reach several MB and changes with every payment, so its uploads are spaced out. */
+        private const val SPARK_EXIT_BACKUP_DEBOUNCE = 60_000L
+
         /** Maximum captures before deferring a changing wallet to the next scheduled backup. */
         private const val WALLET_SNAPSHOT_ATTEMPTS = 3
 
@@ -1410,6 +1425,8 @@ class BackupRepo @Inject constructor(
 }
 
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
+
+internal class SparkExitBackupDeferred : AppError("Spark has not connected and synced yet")
 
 private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
     "Failed to retain public address exclusion during restore",
