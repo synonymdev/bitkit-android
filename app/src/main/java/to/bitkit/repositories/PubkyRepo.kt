@@ -192,6 +192,7 @@ class PubkyRepo @Inject constructor(
         private const val PUBKY_APP_BIO_MAX_LENGTH = 160
         private const val PUBKY_APP_LINKS_MAX_COUNT = 5
         private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
+        private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
         private const val PUBKY_APP_LINK_TITLE_MAX_LENGTH = 100
         private const val PUBKY_APP_LINK_URL_MAX_LENGTH = 300
         private const val PUBKY_APP_AVATAR_MAX_BYTES = 5_242_880uL
@@ -1410,13 +1411,22 @@ class PubkyRepo @Inject constructor(
         val url = when {
             !isPhone && runCatching { URI(value).scheme }.getOrNull() != null -> value
             value.isEmailAddress() -> "mailto:$value"
-            isPhone -> "tel:" + value.filterNot { it in " -()" }
+            isPhone -> "tel:" + value.filterNot { it in " -()." }
             '.' in value && !value.startsWith('.') -> "https://$value"
             else -> return null
         }
+        val parsed = runCatching { URI(url) }.getOrNull()
         val valid = url.codePointCount(0, url.length) <= PUBKY_APP_LINK_URL_MAX_LENGTH &&
-            runCatching { URI(url).scheme }.getOrNull() != null
+            parsed?.scheme != null && parsed.hasValidHost()
         return url.takeIf { valid }
+    }
+
+    /** Paykit rejects a host whose last label is all digits unless the host is an IPv4 address, as URL parsers do. */
+    private fun URI.hasValidHost(): Boolean {
+        val host = host ?: return true
+        if (!host.substringAfterLast('.').all { it.isDigit() }) return true
+        val octets = host.split('.')
+        return octets.size == 4 && octets.all { it.isNotEmpty() && it.all(Char::isDigit) && it.toInt() <= 255 }
     }
 
     private fun String.isEmailAddress(): Boolean {
@@ -1426,8 +1436,8 @@ class PubkyRepo @Inject constructor(
 
     private fun String.isPhoneNumber(): Boolean {
         val digits = count { it.isDigit() }
-        return (startsWith('+') || digits >= 7) && digits >= 5 && all { it in "+0123456789 -()" } && '+' !in drop(1) &&
-            !ISO_DATE.matches(this)
+        return (startsWith('+') || digits >= 7) && digits >= 5 && all { it in "+0123456789 -()." } && '+' !in drop(1) &&
+            !ISO_DATE.matches(this) && !IPV4.matches(this)
     }
 
     private fun String.isPaykitStorage() = "/pub/paykit/" in this
