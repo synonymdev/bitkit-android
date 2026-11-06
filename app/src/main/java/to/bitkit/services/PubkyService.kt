@@ -225,6 +225,10 @@ class PubkyService @Inject constructor(
     suspend fun publishPubkyProfile(update: PubkyProfileUpdate, expectedRevision: String?): PubkyProfileSnapshot =
         ServiceQueue.PUBKY.background { paykitSdkService.publishPubkyProfile(update, expectedRevision) }
 
+    suspend fun deletePubkyProfile(expectedRevision: String) = ServiceQueue.PUBKY.background {
+        paykitSdkService.deletePubkyProfile(expectedRevision)
+    }
+
     suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String): String = ServiceQueue.PUBKY.background {
         paykitSdkService.uploadPubkyAppAvatar(bytes, contentType)
     }

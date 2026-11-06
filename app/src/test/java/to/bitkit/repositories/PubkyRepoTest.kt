@@ -948,6 +948,49 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile checks the revision the edit started from after a refresh`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY))
+            .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Newer")))
+        sut.loadProfile()
+
+        saveNewProfile()
+
+        verifyBlocking(pubkyService) { publishPubkyProfile(any(), eq("revision-Old")) }
+    }
+
+    @Test
+    fun `loadProfile keeps the Bitkit avatar when moving it to pubky app fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(
+            PaykitProfileRecord(
+                publicKey = VALID_SELF_KEY,
+                profile = createPaykitProfile("Bitkit Name", image = "pubky://self/pub/paykit/blobs/avatar.jpg"),
+                path = "/pub/paykit/profile.json",
+                revision = "paykit-revision",
+                updatedAt = "2026-01-01T00:00:00Z",
+            )
+        )
+        whenever(pubkyService.fetchFile(any(), any())).thenAnswer { throw TestAppError("offline") }
+        clearInvocations(pubkyService)
+
+        sut.loadProfile()
+
+        assertEquals("pubky://self/pub/paykit/blobs/avatar.jpg", sut.profile.value?.imageUrl)
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+    }
+
+    @Test
+    fun `deleteProfile deletes the pubky app profile of a wallet identity`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+
+        sut.deleteProfile()
+
+        verifyBlocking(pubkyService) { deletePubkyProfile("revision-Test") }
+    }
+
+    @Test
     fun `saveProfile reports a profile that changed in pubky app`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))

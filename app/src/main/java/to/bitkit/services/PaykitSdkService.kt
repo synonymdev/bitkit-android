@@ -683,6 +683,13 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    suspend fun deletePubkyProfile(expectedRevision: String) {
+        isSetup.await()
+        operationLock.withLock {
+            completeSdkCall { handle().deletePubkyProfile(expectedRevision) }
+        }
+    }
+
     suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String): String {
         isSetup.await()
         return operationLock.withLock {
