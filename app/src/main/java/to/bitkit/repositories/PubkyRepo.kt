@@ -192,6 +192,7 @@ class PubkyRepo @Inject constructor(
         private const val PUBKY_APP_BIO_MAX_LENGTH = 160
         private const val PUBKY_APP_LINKS_MAX_COUNT = 5
         private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
+        private val WEB_SCHEMES = setOf("http", "https", "ws", "wss", "ftp")
         private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
         private const val PUBKY_APP_LINK_TITLE_MAX_LENGTH = 100
         private const val PUBKY_APP_LINK_URL_MAX_LENGTH = 300
@@ -1421,12 +1422,19 @@ class PubkyRepo @Inject constructor(
         return url.takeIf { valid }
     }
 
-    /** Paykit rejects a host whose last label is all digits unless the host is an IPv4 address, as URL parsers do. */
+    /**
+     * Paykit's URL parser reads a web URL's host that ends in an all-digit label as an IPv4 address (one to four
+     * numbers, as in `127.1`) and rejects it when it is not one; other schemes keep such hosts as they are.
+     */
     private fun URI.hasValidHost(): Boolean {
-        val host = host ?: return true
+        if (scheme?.lowercase() !in WEB_SCHEMES) return true
+        // java.net.URI leaves the host null when the name is not a valid hostname, so fall back to the authority.
+        val host = host ?: rawAuthority?.substringAfterLast('@')?.substringBefore(':') ?: return true
         if (!host.substringAfterLast('.').all { it.isDigit() }) return true
-        val octets = host.split('.')
-        return octets.size == 4 && octets.all { it.isNotEmpty() && it.all(Char::isDigit) && it.toInt() <= 255 }
+        val numbers = host.split('.').map { it.toLongOrNull() ?: return false }
+        if (numbers.size !in 1..4) return false
+        val lastLimit = (1L shl (8 * (5 - numbers.size))) - 1
+        return numbers.dropLast(1).all { it <= 255 } && numbers.last() <= lastLimit
     }
 
     private fun String.isEmailAddress(): Boolean {
