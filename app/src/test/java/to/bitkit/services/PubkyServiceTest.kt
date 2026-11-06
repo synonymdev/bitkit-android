@@ -21,6 +21,9 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
 import kotlin.test.assertEquals
@@ -31,6 +34,29 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class PubkyServiceTest : BaseUnitTest() {
+    @Test
+    fun `paykit initialization does not hold the core queue`() = test {
+        val paykit = mock<PaykitSdkService>()
+        val sut = PubkyService(paykit)
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        whenever(paykit.initialize()).doSuspendableAnswer {
+            entered.countDown()
+            release.await()
+        }
+        val initializing = launch { sut.initialize() }
+        try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val coreReady = CountDownLatch(1)
+            thread { ServiceQueue.CORE.blocking { coreReady.countDown() } }
+
+            assertTrue(coreReady.await(5, TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+        }
+        initializing.join()
+    }
+
     @Test
     fun `public cleanup reconciles disabled capabilities even after endpoint removal fails`() = test {
         for (failure in listOf(null, "endpoints", "registry")) {
@@ -96,7 +122,7 @@ class PubkyServiceTest : BaseUnitTest() {
 
     @Test
     fun `relay timeout cancels the queued call and allows another approval`() = test {
-        ServiceQueue.CORE.background {
+        ServiceQueue.PUBKY.background {
             val binding = Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")
             val approve = binding.getMethod(
                 "approvePubkyAuth",
@@ -131,7 +157,7 @@ class PubkyServiceTest : BaseUnitTest() {
 
     @Test
     fun `relay cancellation propagates without becoming a timeout failure`() = test {
-        ServiceQueue.CORE.background {
+        ServiceQueue.PUBKY.background {
             val binding = Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")
             val approve = binding.getMethod(
                 "approvePubkyAuth",

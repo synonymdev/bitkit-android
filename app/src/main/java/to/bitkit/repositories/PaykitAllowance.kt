@@ -42,6 +42,12 @@ data class PaykitAllowance(
     val lastEventAt: Instant? = null,
     /** The received proposal's private stream item; accepting it is bound to this item. */
     val proposalStreamItemId: ULong? = null,
+    /**
+     * True when the terms carry a limit beyond the per-payment cap and the first monthly amount limit, such as a
+     * lifetime total, a payment count or another period. This wallet does not check those itself, so requests under
+     * this Allowance stay on the manual flow.
+     */
+    val hasUncheckedLimits: Boolean = false,
 ) {
     @Serializable
     data class Id(
@@ -115,7 +121,12 @@ data class PaykitAllowance(
             }
             val terms = record.terms ?: return null
             if (terms.asset() != PaykitIssuerInterop.BITCOIN_ASSET) return null
-            val monthly = terms.periodLimits().firstOrNull { isMonthly(it.period()) }
+            val periodLimits = terms.periodLimits()
+            val monthlyIndex = periodLimits.indexOfFirst { isMonthly(it.period()) }
+            val monthly = periodLimits.getOrNull(monthlyIndex)
+            val hasUncheckedLimits = terms.lifetimeAmountLimit() != null ||
+                monthly?.paymentCountLimit() != null ||
+                periodLimits.indices.any { it != monthlyIndex }
             val perPaymentMaxSats = terms.perPaymentAmount()?.let { satsFromBitcoinAmount(it.maximum()) }
             val monthlyLimitSats = monthly?.amountLimit()?.let(::satsFromBitcoinAmount)
             val monthlyAnchor = monthly?.period()?.anchor()?.let(PaykitAllowanceTime::parse)
@@ -136,6 +147,7 @@ data class PaykitAllowance(
                 allowedPaymentEndpointIdentifiers = terms.allowedPaymentEndpointIdentifiers(),
                 lastEventAt = record.lastEventAt?.let(PaykitAllowanceTime::parse),
                 proposalStreamItemId = record.proposalStreamItemId,
+                hasUncheckedLimits = hasUncheckedLimits,
             )
         }
 

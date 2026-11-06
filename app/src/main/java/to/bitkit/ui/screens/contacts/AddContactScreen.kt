@@ -59,6 +59,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
@@ -243,7 +244,7 @@ fun AddContactScreen(
     viewModel: AddContactViewModel,
     onBackClick: () -> Unit,
     onContactSaved: (String) -> Unit,
-    onPayContact: (String, String, List<Endpoint>) -> Unit,
+    onPayContact: (String, String, PrivatePaykitPaymentContext?, List<Endpoint>) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -251,7 +252,8 @@ fun AddContactScreen(
         viewModel.effects.collect {
             when (it) {
                 is AddContactEffect.ContactSaved -> onContactSaved(it.publicKey)
-                is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey, it.endpoints)
+                is AddContactEffect.OpenPayment ->
+                    onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
             }
         }
     }
@@ -291,6 +293,7 @@ private fun Content(
             uiState.fetchedProfile != null -> LoadedContent(
                 profile = uiState.fetchedProfile,
                 isLoading = uiState.isLoading,
+                isPayLoading = uiState.isPayLoading,
                 hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
                 onPay = onPay,
                 onSave = onSave,
@@ -464,6 +467,7 @@ private fun ErrorContent(
 private fun LoadedContent(
     profile: PubkyProfile,
     isLoading: Boolean,
+    isPayLoading: Boolean,
     hasPublicPaymentEndpoint: Boolean,
     onPay: () -> Unit,
     onSave: () -> Unit,
@@ -499,6 +503,7 @@ private fun LoadedContent(
                 SecondaryButton(
                     text = stringResource(R.string.contacts__add_pay),
                     onClick = onPay,
+                    isLoading = isPayLoading,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("AddContactPay")

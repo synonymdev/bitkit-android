@@ -1,0 +1,23 @@
+<journey name="contact pay private link pending">
+  <description>
+    A saved contact that supports private payments is only paid privately. While the private
+    connection with that contact is still being set up, Pay explains that and opens no payment,
+    instead of paying the contact's public payment details; once both sides have saved each other,
+    Pay works again. Requires two disposable Bitkit identities with contact payment sharing enabled.
+    The second identity publishes public payment endpoints and must not have the first identity
+    saved or linked. The message is a toast, which the UI tree does not expose: read it from a
+    screenshot taken right after the tap. No payment is sent.
+  </description>
+  <actions>
+    <action>On the first device, open Contacts and add the second identity by its Pubky key</action>
+    <action>Verify the Add Contact notice reads "Please note that you and &lt;name&gt; must add each other as contacts before you can pay each other privately. If you pay without saving, the payment is visible publicly."</action>
+    <action>Save the contact and verify the contact's detail screen opens with the second identity's name and Pay (testTag "ContactPay")</action>
+    <action>Open the saved contact from Contacts and tap Pay (testTag "ContactPay")</action>
+    <action>Verify the send amount screen (testTag "send_amount_screen") does not open and a toast titled "Unable To Pay Contact" reads "Bitkit is still setting up a private connection with this contact. Make sure they've added you as a contact too, or ask them to send you a payment request."</action>
+    <action>Open Send and choose Contact, tap the second identity's row and verify the same toast appears, no amount screen opens and contact selection becomes available again</action>
+    <action>On the second device, open Contacts, add the first identity by its Pubky key, save it and keep Bitkit open in the foreground</action>
+    <action>On the first device, open the saved contact from Contacts and tap Pay; if the Request or Pay sheet (testTag "RequestOrPaySheet") appears, tap Pay on the sheet. If the private connection message appears instead of a payment, close any payment flow without paying and retry after 5 seconds, and keep retrying every 5 seconds</action>
+    <action>Verify the send amount screen (testTag "send_amount_screen") opens; record the elapsed time, or report a failure if it does not open during the run</action>
+    <action>Close the payment flow without paying</action>
+  </actions>
+</journey>

@@ -115,6 +115,12 @@ jobs:
     name: e2e-tests-local - ${{ matrix.shard.name }}
 
     steps:
+      # The regtest stack publishes 39388 (bitcoind P2P), 43782 (bitcoind RPC) and 60001 (electrs) on the host.
+      # They sit in Linux's ephemeral range, so an outbound connection made before `docker compose up`
+      # (npm ci, image pulls) can take one and fail the bind. Reserve them before any network step.
+      - name: Reserve regtest host ports
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=39388,43782,60001
+
       - name: Resolve E2E tests ref
         id: e2e-ref
         uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main

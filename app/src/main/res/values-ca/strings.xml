@@ -1171,7 +1171,7 @@
     <string name="contacts__add_error_fetch">No s\'ha pogut obtenir la informació del contacte. Comprova la clau pública i torna-ho a provar.</string>
     <string name="contacts__add_error_invalid_key">Format de clau pubky no vàlid. Comprova-ho i torna-ho a provar.</string>
     <string name="contacts__add_error_self">No pots afegir el teu propi pubky com a contacte.</string>
-    <string name="contacts__add_privacy_notice">Tingues en compte que tu i %1$s us heu d\'afegir mútuament com a contactes per pagar-vos de forma privada. Altrament, el pagament serà visible públicament.</string>
+    <string name="contacts__add_privacy_notice">Tingues en compte que tu i %1$s us heu d\'afegir mútuament com a contactes abans de poder pagar-vos de forma privada. Si pagues sense desar, el pagament serà visible públicament.</string>
     <string name="contacts__add_pay">Pagar</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Enganxa un pubky</string>
@@ -1202,6 +1202,7 @@
     <string name="contacts__intro_title">Contactes\n&lt;accent&gt;dinàmics&lt;/accent&gt;</string>
     <string name="contacts__my_profile">EL MEU PERFIL</string>
     <string name="contacts__nav_title">Contactes</string>
+    <string name="contacts__pay_private_link_pending">Bitkit encara està configurant una connexió privada amb aquest contacte. Assegura\'t que també t\'ha afegit com a contacte o demana-li que t\'enviï una sol·licitud de pagament.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Enganxa un QR o un enllaç</string>
     <string name="contacts__scanner_status">ESCANEJANT QR I NFC</string>
@@ -1515,6 +1516,7 @@
     <string name="subscriptions__allowances_empty_description">Pots establir límits de despesa per pagar automàticament les sol·licituds de pagament de contactes de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configura\n&lt;accent&gt;assignacions&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Els teus registres d\'assignacions són més antics que altres que aquest moneder ja ha fet servir. Les sol·licituds demanaran la teva aprovació fins que reprenguis.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Aquest moneder s\'ha restaurat des d\'una còpia de seguretat. Les sol·licituds demanaran la teva aprovació fins que reprenguis.</string>
     <string name="subscriptions__allowances_paused_resume">Reprèn</string>
     <string name="subscriptions__allowances_paused_title">Pagaments automàtics en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancel·lar subscripció</string>

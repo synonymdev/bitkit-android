@@ -13,12 +13,17 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.PrivatePaykitPaymentContext
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
@@ -33,6 +38,7 @@ class AddContactViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val publicPaykitRepo: PublicPaykitRepo = mock()
+    private val privatePaykitRepo: PrivatePaykitRepo = mock()
     private val refreshContactPaykitLink = mock<RefreshContactPaykitLinkUseCase>()
 
     @Test
@@ -212,11 +218,81 @@ class AddContactViewModelTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `pay opens the payment the saved contact path returns, with its private context`() = test {
+        val profile = PubkyProfile.placeholder(TEST_PUBLIC_KEY)
+        val paymentContext = PrivatePaykitPaymentContext(mapOf("btc-lightning-bolt11" to "bitkit"), 7uL)
+        whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(profile))
+        whenever(publicPaykitRepo.hasPayablePublicEndpoint(TEST_PUBLIC_KEY)).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("lnbcrt1private", paymentContext)))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.payContact()
+            advanceUntilIdle()
+
+            assertEquals(AddContactEffect.OpenPayment("lnbcrt1private", TEST_PUBLIC_KEY, paymentContext), awaitItem())
+        }
+        verify(publicPaykitRepo, never()).beginPayment(any())
+    }
+
+    @Test
+    fun `pay on a contact whose private connection is not ready explains it and opens nothing`() = test {
+        val profile = PubkyProfile.placeholder(TEST_PUBLIC_KEY)
+        whenever(context.getString(any())).thenReturn("")
+        whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(profile))
+        whenever(publicPaykitRepo.hasPayablePublicEndpoint(TEST_PUBLIC_KEY)).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.PrivateLinkPending))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.payContact()
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+        verify(context).getString(R.string.contacts__pay_private_link_pending)
+        verify(publicPaykitRepo, never()).beginPayment(any())
+    }
+
+    @Test
+    fun `a second pay tap while the payment resolves starts no second resolution`() = test {
+        val profile = PubkyProfile.placeholder(TEST_PUBLIC_KEY)
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(context.getString(any())).thenReturn("")
+        whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(profile))
+        whenever(publicPaykitRepo.hasPayablePublicEndpoint(TEST_PUBLIC_KEY)).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer { resolution.await() }
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.payContact()
+        advanceUntilIdle()
+        sut.payContact()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isPayLoading)
+        verify(privatePaykitRepo, times(1)).beginSavedContactPayment(TEST_PUBLIC_KEY)
+
+        resolution.complete(Result.success(PublicPaykitPaymentResult.NoEndpoint))
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isPayLoading)
+        sut.payContact()
+        advanceUntilIdle()
+        verify(privatePaykitRepo, times(2)).beginSavedContactPayment(TEST_PUBLIC_KEY)
+    }
+
     private fun createSut(publicKey: String = TEST_PUBLIC_KEY): AddContactViewModel {
         return AddContactViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
             publicPaykitRepo = publicPaykitRepo,
+            privatePaykitRepo = privatePaykitRepo,
             refreshContactPaykitLink = refreshContactPaykitLink,
             savedStateHandle = SavedStateHandle(mapOf("publicKey" to publicKey)),
         )
