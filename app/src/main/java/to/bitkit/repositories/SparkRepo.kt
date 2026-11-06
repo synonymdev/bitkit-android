@@ -352,6 +352,7 @@ class SparkRepo @Inject constructor(
         amountSats: ULong?,
         paymentDeadlineAt: Instant? = null,
         maxTotalFeeMsat: ULong? = null,
+        onBeforeSend: suspend () -> Boolean = { true },
     ): Result<PaymentId> = withContext(bgDispatcher) {
         runSuspendCatching {
             ensurePaymentDeadline(paymentDeadlineAt)
@@ -378,6 +379,8 @@ class SparkRepo @Inject constructor(
                     throw PaymentPendingException(paymentHash)
                 else -> Unit
             }
+            // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
+            if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
             if (!sendsInFlight.add(paymentHash.lowercase())) throw PaymentPendingException(paymentHash)
             val sent = try {
                 runSuspendCatching { sparkService.send(prepared) }
