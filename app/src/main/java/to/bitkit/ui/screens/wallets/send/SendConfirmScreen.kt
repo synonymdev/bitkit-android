@@ -868,7 +868,7 @@ private fun LightningDetails(
             }
         }
 
-        if (uiState.paykitRoute?.serviceLeg != null) {
+        if (uiState.routedPaykitRoute?.serviceLeg != null) {
             SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
                 BodySSB(
                     text = stringResource(R.string.wallet__send_swap_route_spark),

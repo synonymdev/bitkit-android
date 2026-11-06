@@ -4051,8 +4051,8 @@ class AppViewModel @Inject constructor(
         val canUseOnchain = address.isNotEmpty() &&
             walletRepo.balanceState.value.maxSendOnchainSats > Defaults.dustLimit.toULong()
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint, canUseLightning || canUseOnchain)
-        val route = paykitServiceRoute(payment, address, canUseLightning || canUseOnchain || useUsdt)
-        val payMethod = if (route != null) {
+        val route = paykitServiceRoute(payment, address, canUseLightning || useUsdt)
+        val payMethod = if (route != null && !canUseOnchain) {
             SendMethod.LIGHTNING
         } else {
             paykitBitcoinMethod(canUseLightning, address, invoice, lnurl)
@@ -4629,7 +4629,7 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
         }
-        _sendUiState.value.paykitRoute?.let {
+        _sendUiState.value.routedPaykitRoute?.let {
             if (quotePaykitRoute(it)) setSendEffect(SendEffect.NavigateToConfirm)
             return
         }
@@ -5088,8 +5088,7 @@ class AppViewModel @Inject constructor(
 
     private fun requiresPaykitServiceRoute(payment: ContactPaymentContext): Boolean {
         if (!paykitRouteRepo.canRouteThroughSpark || payment.incomingPaymentRequest != null) return false
-        if (payment.endpoints.isEmpty() || !payment.endpoints.all { it.methodId.isOnchain }) return false
-        return walletRepo.balanceState.value.maxSendOnchainSats <= Defaults.dustLimit.toULong()
+        return payment.endpoints.isNotEmpty() && payment.endpoints.all { it.methodId.isOnchain }
     }
 
     private fun requiresPaykitAssetSelection(payment: ContactPaymentContext): Boolean =
@@ -5730,7 +5729,10 @@ class AppViewModel @Inject constructor(
             return@buildList
         }
         if (state.usdtRecipient != null) add(SendFundingSource.Usdt)
-        if (state.isUnified || state.decodedInvoice != null || state.lnurl is LnurlParams.LnurlPay) {
+        if (
+            state.isUnified || state.decodedInvoice != null || state.lnurl is LnurlParams.LnurlPay ||
+            state.paykitRoute != null
+        ) {
             add(
                 SendFundingSource.Spending
             )
@@ -6377,7 +6379,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        _sendUiState.value.paykitRoute?.serviceLeg?.let {
+        _sendUiState.value.routedPaykitRoute?.serviceLeg?.let {
             proceedWithServiceRoutedPayment(it, contactPaymentContext, allowanceAttemptId)
             return
         }
@@ -6781,7 +6783,7 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
-        val txid = paykitRouteRepo.payServiceLeg(leg).getOrElse {
+        val txid = paykitRouteRepo.payServiceLeg(leg, contactPaymentContext?.publicKey).getOrElse {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             handlePaymentPreparationFailure(it, contactPaymentContext)
@@ -9204,6 +9206,10 @@ data class SendUiState(
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
     val paykitRoute: PaykitRouteUi? = null,
 ) {
+    /** The Paykit route this payment takes: offered routes run only while Spending is the source. */
+    val routedPaykitRoute: PaykitRouteUi?
+        get() = paykitRoute?.takeIf { payMethod == SendMethod.LIGHTNING }
+
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
 

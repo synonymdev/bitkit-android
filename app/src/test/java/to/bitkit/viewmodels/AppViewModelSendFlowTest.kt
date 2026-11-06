@@ -21,7 +21,9 @@ import com.synonym.bitkitcore.LnurlAddressData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.UsdtPaymentRequest
@@ -11973,6 +11975,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo).consumePrivatePaymentList(contactKey, privateContext)
     }
+
+    @Test
+    fun `spark route pays the contact while spending is the source`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        whenever(paykitRouteRepo.payServiceLeg(leg, "pubkycontact")).thenReturn(Result.success("txid"))
+        setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(leg.endpoint, leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(paykitRouteRepo).payServiceLeg(leg, "pubkycontact")
+    }
+
+    @Test
+    fun `spark route stays unused once savings is the source`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubSuccessfulOnchainSend(leg.endpoint.value, leg.deliveredSat)
+        setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                paykitRoute = PaykitRouteUi(leg.endpoint, leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull())
+    }
+
+    private fun sparkRouteLeg(address: String) = ServiceRouteLeg(
+        service = "spark",
+        endpoint = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = address),
+        deliveredSat = 1_000uL,
+        debitSat = 1_300uL,
+        atomicity = "trusted",
+        validUntilUnix = 0uL,
+    )
 
     @Test
     fun `incoming payment request consumes its private list before it is accepted`() = test {
