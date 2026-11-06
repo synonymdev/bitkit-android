@@ -505,6 +505,99 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `receipt confirmed during the first sync after launch celebrates once`() = test {
+        val now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("address")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.balance()).thenReturn(1_000_000uL)
+        whenever(wallet.syncHistory()).thenReturn(false, false, true)
+        val saved = incoming("saved")
+        val received = incoming("received").copy(timestamp = 1_800_000_010uL)
+        val nearLaunch = incoming("near launch").copy(timestamp = 1_799_999_970uL)
+        val discovered = incoming("discovered").copy(timestamp = 1_700_000_000uL)
+        var history = listOf(saved)
+        whenever(wallet.history()).thenAnswer { history }
+        whenever(wallet.refreshTransfers()).thenAnswer { history }
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
+
+        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.state.value.pendingReceipts.isEmpty())
+
+        history = listOf(received, nearLaunch, saved, discovered)
+        repo.refresh(true, force = true).getOrThrow()
+        assertFalse(repo.state.value.historyComplete)
+        assertEquals(listOf(received, nearLaunch), repo.state.value.pendingReceipts)
+        assertTrue(repo.consumeReceipt(received.id))
+        assertTrue(repo.consumeReceipt(nearLaunch.id))
+
+        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.state.value.historyComplete)
+        assertTrue(repo.state.value.pendingReceipts.isEmpty())
+    }
+
+    @Test
+    fun `receipt confirmed during the first sync after restore celebrates but restored history does not`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(service.wallet(requiresNetwork = false)).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("address")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.balance()).thenReturn(1_000_000uL)
+        whenever(wallet.syncHistory()).thenReturn(true, false, true)
+        val beforeRestore = incoming("before restore").copy(timestamp = 1_800_000_100uL)
+        var history = emptyList<UsdtTransfer>()
+        whenever(wallet.history()).thenAnswer { history }
+        whenever(wallet.refreshTransfers()).thenAnswer { history }
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
+        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.state.value.historyComplete)
+
+        now = Instant.fromEpochSeconds(1_800_001_000)
+        history = listOf(beforeRestore)
+        repo.restoreBackup("snapshot").getOrThrow()
+        assertFalse(repo.state.value.historyComplete)
+
+        val received = incoming("received").copy(timestamp = 1_800_001_006uL)
+        history = listOf(received, beforeRestore)
+        repo.refresh(true, force = true).getOrThrow()
+        assertFalse(repo.state.value.historyComplete)
+        assertEquals(listOf(received), repo.state.value.pendingReceipts)
+
+        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.state.value.historyComplete)
+        assertEquals(listOf(received), repo.state.value.pendingReceipts)
+    }
+
+    @Test
+    fun `restore does not repeat a consumed receipt but keeps an unconsumed one`() = test {
+        val now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(service.wallet(requiresNetwork = false)).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("address")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.balance()).thenReturn(1_000_000uL)
+        whenever(wallet.syncHistory()).thenReturn(false)
+        val consumed = incoming("consumed").copy(timestamp = 1_800_000_000uL)
+        val queued = incoming("queued").copy(timestamp = 1_800_000_000uL)
+        var history = listOf(consumed, queued)
+        whenever(wallet.history()).thenAnswer { history }
+        whenever(wallet.refreshTransfers()).thenAnswer { history }
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(consumed, queued), repo.state.value.pendingReceipts)
+        assertTrue(repo.consumeReceipt(consumed.id))
+
+        repo.restoreBackup("snapshot").getOrThrow()
+        assertTrue(repo.state.value.pendingReceipts.isEmpty())
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(queued), repo.state.value.pendingReceipts)
+    }
+
+    @Test
     fun `partial history remains visible without declaring initial sync complete`() = test {
         whenever(service.wallet()).thenReturn(wallet)
         whenever(wallet.receiveAddress()).thenReturn("address")
