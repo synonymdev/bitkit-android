@@ -68,7 +68,6 @@ import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyModerationBot
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
-import to.bitkit.models.PubkyProfileDataLink
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
@@ -206,6 +205,10 @@ class PubkyRepo @Inject constructor(
     /** Revision of the loaded pubky.app profile, which a save must still match; null when none exists. */
     @Volatile
     private var ownProfileRevision: String? = null
+
+    /** Whether the last profile load could not read the Paykit copy, so the shown tags are not the stored ones. */
+    @Volatile
+    private var tagsUnavailable = false
     private val signInGeneration = AtomicLong(0L)
     private val storedIdentityRevision = AtomicLong(0L)
     private val readOnlyProfileGeneration = AtomicLong(0L)
@@ -1094,7 +1097,7 @@ class PubkyRepo @Inject constructor(
                     links,
                     tags,
                     imageUrl,
-                    base = _profile.value,
+                    base = _profile.value.takeIf { ownProfileRevision != null },
                     expectedRevision = ownProfileRevision
                 )
             }.getOrElse {
@@ -1189,9 +1192,16 @@ class PubkyRepo @Inject constructor(
         base: PubkyProfile?,
         expectedRevision: String?,
     ): PubkyProfileSnapshot {
+        val links = links.map {
+            PubkyProfileLink(
+                label = it.label.singleLine(),
+                url = it.url.toPubkyAppLinkUrl() ?: it.url
+            )
+        }
+        val bio = bio.singleLine()
         val update = PubkyProfileUpdate(
-            name = name.takeIf { it != base?.name },
-            bio = bio.replace('\n', ' ').takeIf { base == null || it != base.bio },
+            name = name.singleLine().takeIf { it != base?.name },
+            bio = bio.takeIf { base == null || it != base.bio },
             image = when {
                 base == null -> imageUrl
                 imageUrl == base.imageUrl -> null
@@ -1202,21 +1212,37 @@ class PubkyRepo @Inject constructor(
         )
         val snapshot = withPubkyAppScope { pubkyService.publishPubkyProfile(update, expectedRevision) }
         ownProfileRevision = snapshot.revision
-        publishPaykitProfileCopy(PubkyProfile.fromPubkyProfile("", snapshot.profile).copy(tags = tags))
+        val keptTags = tagsToKeep(tags)
+        val copy = PubkyProfile.fromPubkyProfile("", snapshot.profile).copy(tags = keptTags)
+        // Tags live only in the Paykit copy, so a changed tag that it does not take is reported.
+        runSuspendCatching { pubkyService.publishPaykitProfile(copy.toProfileData().toPaykitProfile()) }.onFailure {
+            Logger.warn("Failed to update Bitkit profile copy", it, context = TAG)
+            if (keptTags != base?.tags.orEmpty()) throw it
+        }
         return snapshot
     }
 
-    private suspend fun loadOwnProfile(publicKey: String): Pair<PubkyProfile, String>? {
-        val paykitData = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
+    private suspend fun tagsToKeep(tags: List<String>): List<String> {
+        val publicKey = _publicKey.value ?: return tags
+        if (!tagsUnavailable) return tags
+        val stored = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrNull() ?: return tags
+        tagsUnavailable = false
+        val storedTags = PubkyProfileData.fromPaykitProfile(stored.profile).tags
+        return storedTags + tags.filterNot { it in storedTags }
+    }
+
+    private suspend fun loadOwnProfile(publicKey: String): Pair<PubkyProfile, String?>? {
+        val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
             .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
-            .getOrNull()
-            ?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
+        tagsUnavailable = paykitRead.isFailure
+        val paykitData = paykitRead.getOrNull()?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         val fetched = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
         val stored = pubkyStore.data.first()
         val hadPubkyAppProfile = publicKey in stored.pubkyAppProfileOwners
         val migrating = fetched == null && !hadPubkyAppProfile
         var snapshot = fetched ?: paykitData?.takeIf { migrating }?.let { migrateToPubkyApp(publicKey, it) }
-        snapshot ?: return null
+        // While the move cannot finish, the Bitkit profile is shown and the next save creates the pubky.app profile.
+        snapshot ?: return paykitData?.takeIf { migrating }?.let { it.toPubkyProfile(publicKey) to null }
         val pendingAvatar = paykitData?.image
         val retryingAvatar = fetched != null && publicKey in stored.pubkyAppAvatarPending && pendingAvatar != null
         if (retryingAvatar) snapshot = moveAvatar(publicKey, checkNotNull(pendingAvatar), snapshot) ?: snapshot
@@ -1237,14 +1263,16 @@ class PubkyRepo @Inject constructor(
     private suspend fun migrateToPubkyApp(publicKey: String, data: PubkyProfileData): PubkyProfileSnapshot? =
         runSuspendCatching {
             val update = PubkyProfileUpdate(
-                name = data.name.trim().take(PUBKY_APP_NAME_MAX_LENGTH),
-                bio = data.bio.trim().take(PUBKY_APP_BIO_MAX_LENGTH),
+                name = data.name.singleLine().takeCodePoints(PUBKY_APP_NAME_MAX_LENGTH),
+                bio = data.bio.singleLine().takeCodePoints(PUBKY_APP_BIO_MAX_LENGTH),
                 image = null,
                 links = data.links
-                    .map { PubkyProfileDataLink(label = it.label.trim(), url = it.url.trim()) }
-                    .filter { it.label.isNotEmpty() && it.url.isPubkyAppLinkUrl() }
-                    .take(PUBKY_APP_LINKS_MAX_COUNT)
-                    .map { SdkPubkyProfileLink(title = it.label.take(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = it.url) },
+                    .mapNotNull { link ->
+                        val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                        val url = link.url.toPubkyAppLinkUrl() ?: return@mapNotNull null
+                        SdkPubkyProfileLink(title = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
+                    }
+                    .take(PUBKY_APP_LINKS_MAX_COUNT),
             )
             val snapshot = withPubkyAppScope { pubkyService.publishPubkyProfile(update, expectedRevision = null) }
             Logger.info("Moved Bitkit profile to pubky.app", context = TAG)
@@ -1278,8 +1306,23 @@ class PubkyRepo @Inject constructor(
     private fun Throwable.isConcurrentUpdate() =
         generateSequence(this) { it.cause }.any { it is PaykitException.ConcurrentUpdate }
 
-    private fun String.isPubkyAppLinkUrl() =
-        length <= PUBKY_APP_LINK_URL_MAX_LENGTH && runCatching { URI(this).scheme }.getOrNull() != null
+    private fun String.singleLine() = map { if (it.isISOControl()) ' ' else it }.joinToString("").trim()
+
+    private fun String.takeCodePoints(max: Int) =
+        if (codePointCount(0, length) <= max) this else substring(0, offsetByCodePoints(0, max))
+
+    private fun String.toPubkyAppLinkUrl(): String? {
+        val value = trim().takeIf { it.isNotEmpty() } ?: return null
+        val url = when {
+            runCatching { URI(value).scheme }.getOrNull() != null -> value
+            '@' in value -> "mailto:$value"
+            value.all { it in "+0123456789 -()" } -> "tel:" + value.filterNot { it in " -()" }
+            else -> "https://$value"
+        }
+        val valid = url.codePointCount(0, url.length) <= PUBKY_APP_LINK_URL_MAX_LENGTH &&
+            runCatching { URI(url).scheme }.getOrNull() != null
+        return url.takeIf { valid }
+    }
 
     private suspend fun publishPaykitProfileCopy(profile: PubkyProfile) {
         runSuspendCatching { pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile()) }

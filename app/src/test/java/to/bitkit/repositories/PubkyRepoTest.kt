@@ -83,6 +83,8 @@ import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyProfileData
+import to.bitkit.models.PubkyProfileDataLink
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitReadLane
@@ -105,6 +107,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
+import com.synonym.paykit.PubkyProfileLink as SdkPubkyProfileLink
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class PubkyRepoTest : BaseUnitTest() {
@@ -988,6 +991,66 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.deleteProfile()
 
         verifyBlocking(pubkyService) { deletePubkyProfile("revision-Test") }
+    }
+
+    @Test
+    fun `loadProfile moves a multi-line bio and scheme-less links to pubky app`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(
+            PaykitProfileRecord(
+                publicKey = VALID_SELF_KEY,
+                profile = PubkyProfileData(
+                    name = "Bitkit Name",
+                    bio = "line one\nline two",
+                    links = listOf(
+                        PubkyProfileDataLink("Site", "example.com"),
+                        PubkyProfileDataLink("Mail", "a@b.com")
+                    ),
+                ).toPaykitProfile(),
+                path = "/pub/paykit/profile.json",
+                revision = "paykit-revision",
+                updatedAt = "2026-01-01T00:00:00Z",
+            )
+        )
+
+        sut.loadProfile()
+
+        verifyBlocking(pubkyService) {
+            publishPubkyProfile(
+                PubkyProfileUpdate(
+                    name = "Bitkit Name",
+                    bio = "line one line two",
+                    image = null,
+                    links = listOf(
+                        SdkPubkyProfileLink(title = "Site", url = "https://example.com"),
+                        SdkPubkyProfileLink(title = "Mail", url = "mailto:a@b.com"),
+                    ),
+                ),
+                null,
+            )
+        }
+    }
+
+    @Test
+    fun `loadProfile shows the Bitkit profile when moving it to pubky app fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(
+            PaykitProfileRecord(
+                publicKey = VALID_SELF_KEY,
+                profile = createPaykitProfile("Al"),
+                path = "/pub/paykit/profile.json",
+                revision = "paykit-revision",
+                updatedAt = "2026-01-01T00:00:00Z",
+            )
+        )
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))
+            .thenAnswer { throw PaykitException.Protocol("protocol", "Pubky profile name must be 3 to 50 characters") }
+
+        sut.loadProfile()
+
+        assertEquals("Al", sut.profile.value?.name)
     }
 
     @Test
