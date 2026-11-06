@@ -1334,9 +1334,10 @@
     <string name="profile__disconnect_error">Falha ao desconectar perfil</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Nota curta. Conte um pouco sobre você.</string>
+    <string name="profile__edit_changed_error">Seu perfil mudou no pubky.app. O Bitkit carregou a versão mais recente, então faça sua alteração de novo.</string>
     <string name="profile__edit_delete_section">EXCLUIR</string>
     <string name="profile__edit_name_placeholder">SEU NOME</string>
-    <string name="profile__edit_public_note">Observe que as informações do perfil são armazenadas em arquivos públicos.</string>
+    <string name="profile__edit_public_note">Este é o seu perfil do pubky.app. Ele é público, e as alterações que você faz aqui também aparecem no pubky.app.</string>
     <string name="profile__edit_save_error">Falha ao salvar perfil</string>
     <string name="profile__edit_save_success">Perfil salvo</string>
     <string name="profile__edit_tags">TAGS</string>

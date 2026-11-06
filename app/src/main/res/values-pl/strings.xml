@@ -1332,9 +1332,10 @@
     <string name="profile__disconnect_error">Nie udało się odłączyć profilu</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Krótka notatka. Napisz coś o sobie.</string>
+    <string name="profile__edit_changed_error">Twój profil zmienił się w pubky.app. Bitkit wczytał najnowszą wersję, więc wprowadź zmianę ponownie.</string>
     <string name="profile__edit_delete_section">USUWANIE</string>
     <string name="profile__edit_name_placeholder">TWOJE IMIĘ</string>
-    <string name="profile__edit_public_note">Pamiętaj, że dane profilu są przechowywane w publicznych plikach.</string>
+    <string name="profile__edit_public_note">To jest Twój profil pubky.app. Jest publiczny, a zmiany wprowadzone tutaj pojawią się też w pubky.app.</string>
     <string name="profile__edit_save_error">Nie udało się zapisać profilu</string>
     <string name="profile__edit_save_success">Profil zapisany</string>
     <string name="profile__edit_tags">TAGI</string>

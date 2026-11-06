@@ -7,7 +7,11 @@ import coil3.ImageLoader
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.ProfileResolution
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkyProfileSnapshot
+import com.synonym.paykit.PubkyProfileLink as SdkPubkyProfileLink
+import com.synonym.paykit.PubkyProfileUpdate
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -110,6 +114,9 @@ private fun Throwable.isPaykitReadTimeout(): Boolean =
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
+/** The pubky.app profile changed since Bitkit loaded it, so the save was not applied. */
+class PubkyProfileChangedError(cause: Throwable) : AppError("Profile changed in pubky.app", cause = cause)
+
 /** Whether a Pubky identity is ready to use once restores already under way have finished. */
 enum class PubkyIdentityReadiness {
     /** A session is active. */
@@ -160,6 +167,13 @@ class PubkyRepo @Inject constructor(
 
         /** Delay after a deferred restore before another attempt may begin. */
         private val DEFERRED_RESTORE_INTERVAL = 5.seconds
+
+        // pubky.app profile limits (pubky-app-specs), applied when moving a Bitkit profile there.
+        private const val PUBKY_APP_NAME_MAX_LENGTH = 50
+        private const val PUBKY_APP_BIO_MAX_LENGTH = 160
+        private const val PUBKY_APP_LINKS_MAX_COUNT = 5
+        private const val PUBKY_APP_LINK_TITLE_MAX_LENGTH = 100
+        private const val PUBKY_APP_AVATAR_MAX_BYTES = 5_242_880uL
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -185,6 +199,10 @@ class PubkyRepo @Inject constructor(
     private val adoptedSourceCheckMutex = Mutex()
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
+
+    /** Revision of the loaded pubky.app profile, which a save must still match; null when none exists. */
+    @Volatile
+    private var ownProfileRevision: String? = null
     private val signInGeneration = AtomicLong(0L)
     private val storedIdentityRevision = AtomicLong(0L)
     private val readOnlyProfileGeneration = AtomicLong(0L)
@@ -807,8 +825,7 @@ class PubkyRepo @Inject constructor(
             try {
                 runSuspendCatching {
                     withContext(ioDispatcher) {
-                        resolveContactProfile(signIn.publicKey, retry = true).getOrThrow()
-                            ?: throw AppError("Profile not found")
+                        loadOwnProfile(signIn.publicKey) ?: throw AppError("Profile not found")
                     }
                 }.onSuccess { loadedProfile ->
                     var isCurrent = false
@@ -846,7 +863,8 @@ class PubkyRepo @Inject constructor(
                     val secret = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
                         ?: adoptedSecretKeyHex() ?: return@runSuspendCatching null
                     val owner = pubkyService.publicKeyFromSecret(secret).ensurePubkyPrefix()
-                    resolveContactProfile(owner, retry = false).getOrThrow()
+                    pubkyService.fetchPubkyProfileWithRevision(owner)
+                        ?.let { PubkyProfile.fromPubkyProfile(owner, it.profile) }
                 }.onSuccess { loaded ->
                     synchronized(readOnlyProfileLock) {
                         if (isCurrentLoad()) _readOnlyProfile.update { loaded }
@@ -966,7 +984,9 @@ class PubkyRepo @Inject constructor(
         avatarBytes: ByteArray?,
     ): String? {
         val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
-        writeProfile(name, bio, links, tags, imageUrl)
+        val publicKey = requireNotNull(pubkyService.currentPublicKey()) { "No active Pubky session" }.ensurePubkyPrefix()
+        val existingRevision = pubkyService.fetchPubkyProfileWithRevision(publicKey)?.revision
+        writeProfile(name, bio, links, tags, imageUrl, base = null, expectedRevision = existingRevision)
         return imageUrl
     }
 
@@ -1030,7 +1050,7 @@ class PubkyRepo @Inject constructor(
                 "No session available"
             }
             val compressed = compressAvatar(imageBytes)
-            pubkyService.uploadProfileAvatar(compressed, contentType = "image/jpeg")
+            withPubkyAppScope { pubkyService.uploadPubkyAppAvatar(compressed, contentType = "image/jpeg") }
         }
     }
 
@@ -1045,18 +1065,19 @@ class PubkyRepo @Inject constructor(
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            writeProfile(name, bio, links, tags, imageUrl)
             val pk = requireNotNull(_publicKey.value) { "No public key available" }
-            val profile = PubkyProfile(
-                publicKey = pk,
-                name = name,
-                bio = bio,
-                imageUrl = imageUrl ?: _profile.value?.imageUrl,
-                links = links,
-                tags = tags,
-                status = _profile.value?.status,
-            )
+            val snapshot = runSuspendCatching {
+                writeProfile(name, bio, links, tags, imageUrl, base = _profile.value, expectedRevision = ownProfileRevision)
+            }.getOrElse {
+                if (generateSequence(it) { error -> error.cause }.none { error -> error is PaykitException.ConcurrentUpdate }) {
+                    throw it
+                }
+                scope.launch { loadProfile() }
+                throw PubkyProfileChangedError(it)
+            }
+            val profile = PubkyProfile.fromPubkyProfile(pk, snapshot.profile).copy(tags = tags)
             setProfile(profile)
+            ownProfileRevision = snapshot.revision
             cacheMetadata(profile)
             notifyBackupStateChanged()
         }
@@ -1124,17 +1145,74 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         imageUrl: String?,
-    ) {
-        val data = PubkyProfile(
-            publicKey = "",
-            name = name,
-            bio = bio,
-            imageUrl = imageUrl,
-            links = links,
-            tags = tags,
-            status = null,
-        ).toProfileData()
-        pubkyService.publishPaykitProfile(data.toPaykitProfile())
+        base: PubkyProfile?,
+        expectedRevision: String?,
+    ): PubkyProfileSnapshot {
+        val update = PubkyProfileUpdate(
+            name = name.takeIf { it != base?.name },
+            bio = bio.takeIf { base == null || it != base.bio },
+            image = when {
+                base == null -> imageUrl
+                imageUrl == base.imageUrl -> null
+                else -> imageUrl.orEmpty()
+            },
+            links = links.takeIf { base == null || it != base.links }
+                ?.map { SdkPubkyProfileLink(title = it.label, url = it.url) },
+        )
+        val snapshot = withPubkyAppScope { pubkyService.publishPubkyProfile(update, expectedRevision) }
+        ownProfileRevision = snapshot.revision
+        publishPaykitProfileCopy(PubkyProfile.fromPubkyProfile("", snapshot.profile).copy(tags = tags))
+        return snapshot
+    }
+
+    private suspend fun loadOwnProfile(publicKey: String): PubkyProfile? {
+        val paykitData = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
+            .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
+            .getOrNull()
+            ?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
+        val snapshot = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
+            ?: paykitData?.let { migrateToPubkyApp(it) }
+        ownProfileRevision = snapshot?.revision
+        snapshot ?: return null
+        val profile = PubkyProfile.fromPubkyProfile(publicKey, snapshot.profile).copy(tags = paykitData?.tags.orEmpty())
+        if (paykitData != null && paykitData != profile.toProfileData()) publishPaykitProfileCopy(profile)
+        return profile
+    }
+
+    private suspend fun migrateToPubkyApp(data: PubkyProfileData): PubkyProfileSnapshot? = runSuspendCatching {
+        val image = data.image?.let { migrateAvatar(it) }
+        val update = PubkyProfileUpdate(
+            name = data.name.trim().take(PUBKY_APP_NAME_MAX_LENGTH),
+            bio = data.bio.trim().take(PUBKY_APP_BIO_MAX_LENGTH),
+            image = image,
+            links = data.links
+                .filter { it.label.isNotBlank() && it.url.isNotBlank() }
+                .take(PUBKY_APP_LINKS_MAX_COUNT)
+                .map { SdkPubkyProfileLink(title = it.label.trim().take(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = it.url.trim()) },
+        )
+        withPubkyAppScope { pubkyService.publishPubkyProfile(update, expectedRevision = null) }
+            .also { Logger.info("Moved Bitkit profile to pubky.app", context = TAG) }
+    }.onFailure { Logger.warn("Failed to move Bitkit profile to pubky.app", it, context = TAG) }.getOrNull()
+
+    private suspend fun migrateAvatar(uri: String): String? = runSuspendCatching {
+        val bytes = pubkyService.fetchFile(uri, PUBKY_APP_AVATAR_MAX_BYTES)
+        val contentType = when (uri.substringAfterLast('.').lowercase()) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> "image/jpeg"
+        }
+        withPubkyAppScope { pubkyService.uploadPubkyAppAvatar(bytes, contentType) }
+    }.onFailure { Logger.warn("Failed to move avatar to pubky.app", it, context = TAG) }.getOrNull()
+
+    private suspend fun publishPaykitProfileCopy(profile: PubkyProfile) {
+        runSuspendCatching { pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile()) }
+            .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
+    }
+
+    private suspend fun <T> withPubkyAppScope(block: suspend () -> T): T = runSuspendCatching { block() }.getOrElse {
+        if (!it.isPaykitIdentityError() || !refreshSessionIfPossible().getOrDefault(false)) throw it
+        block()
     }
 
     private fun compressAvatar(imageBytes: ByteArray): ByteArray {
@@ -1998,30 +2076,23 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val prefixedKey = publicKey.ensurePubkyPrefix()
             if (!retry) return@withContext resolveProfileOnce(prefixedKey, lane)
-            var lastError: Throwable? = null
-
-            repeat(2) { attempt ->
-                val result = runSuspendCatching { resolveProfileOnce(prefixedKey, lane) }
-                if (result.isSuccess && (result.getOrNull() != null || attempt == 1)) {
-                    return@withContext result.getOrNull()
-                }
-                result.exceptionOrNull()?.let { error ->
-                    lastError = error
-                }
-
-                if (attempt == 0) {
-                    Logger.warn(
-                        "Retrying contact profile resolution for '${redacted(prefixedKey)}'",
-                        lastError,
-                        context = TAG,
-                    )
-                    delay(250)
-                }
-            }
-
-            lastError?.let { throw it }
-            null
+            readRetryingOnce(prefixedKey) { resolveProfileOnce(prefixedKey, lane) }
         }
+    }
+
+    private suspend fun <T : Any> readRetryingOnce(publicKey: String, read: suspend () -> T?): T? {
+        var lastError: Throwable? = null
+        repeat(2) { attempt ->
+            val result = runSuspendCatching { read() }
+            if (result.isSuccess && (result.getOrNull() != null || attempt == 1)) return result.getOrNull()
+            result.exceptionOrNull()?.let { lastError = it }
+            if (attempt == 0) {
+                Logger.warn("Retrying profile read for '${redacted(publicKey)}'", lastError, context = TAG)
+                delay(250)
+            }
+        }
+        lastError?.let { throw it }
+        return null
     }
 
     private suspend fun resolveProfileOnce(prefixedKey: String, lane: PaykitReadLane): PubkyProfile? =
@@ -2145,6 +2216,7 @@ class PubkyRepo @Inject constructor(
 
     private fun setProfile(profile: PubkyProfile?) {
         profileWriteGeneration.incrementAndGet()
+        if (profile == null) ownProfileRevision = null
         _profile.update { profile }
     }
 

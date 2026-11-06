@@ -1315,10 +1315,11 @@
     <string name="profile__disconnect_error">Αποτυχία αποσύνδεσης προφίλ</string>
     <string name="profile__edit_bio">ΒΙΟΓΡΑΦΙΚΟ</string>
     <string name="profile__edit_bio_placeholder">Σύντομη σημείωση. Πες λίγα λόγια για τον εαυτό σου.</string>
+    <string name="profile__edit_changed_error">Το προφίλ σου άλλαξε στο pubky.app. Το Bitkit φόρτωσε την πιο πρόσφατη έκδοση, οπότε κάνε ξανά την αλλαγή σου.</string>
     <string name="profile__edit_delete_section">ΔΙΑΓΡΑΦΗ</string>
     <string name="profile__edit_name_placeholder">ΤΟ ΟΝΟΜΑ ΣΟΥ</string>
     <string name="profile__edit_nav_title">Επεξεργασία προφίλ</string>
-    <string name="profile__edit_public_note">Τα στοιχεία του προφίλ αποθηκεύονται σε δημόσια αρχεία.</string>
+    <string name="profile__edit_public_note">Αυτό είναι το προφίλ σου στο pubky.app. Είναι δημόσιο, και οι αλλαγές που κάνεις εδώ εμφανίζονται και στο pubky.app.</string>
     <string name="profile__edit_save_error">Αποτυχία αποθήκευσης προφίλ</string>
     <string name="profile__edit_save_success">Το προφίλ αποθηκεύτηκε</string>
     <string name="profile__edit_tags">ΕΤΙΚΕΤΕΣ</string>

@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -22,14 +23,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyProfileChangedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import javax.inject.Inject
 
 @HiltViewModel
 class EditProfileViewModel @Inject constructor(
@@ -78,6 +80,14 @@ class EditProfileViewModel @Inject constructor(
         }
     }
 
+    private fun reloadAfterExternalEdit() {
+        viewModelScope.launch {
+            pubkyRepo.loadProfile()
+            _uiState.update { it.copy(newAvatarUri = null, newAvatarBytes = null) }
+            loadProfile()
+        }
+    }
+
     fun onAvatarSelected(uri: Uri) {
         viewModelScope.launch {
             runCatching {
@@ -97,7 +107,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun onNameChange(name: String) {
-        _uiState.update { it.copy(name = name) }
+        _uiState.update { it.copy(name = name.take(PROFILE_NAME_MAX_LENGTH)) }
     }
 
     fun onBioChange(bio: String) {
@@ -207,11 +217,13 @@ class EditProfileViewModel @Inject constructor(
             }.onFailure {
                 Logger.error("Failed to save profile", it, context = TAG)
                 _uiState.update { it.copy(isSaving = false) }
+                val changed = it is PubkyProfileChangedError
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__edit_save_error),
-                    description = it.message,
+                    description = if (changed) context.getString(R.string.profile__edit_changed_error) else it.message,
                 )
+                if (changed) reloadAfterExternalEdit()
             }
         }
     }

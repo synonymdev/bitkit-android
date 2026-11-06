@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import to.bitkit.R
+import to.bitkit.models.isValidProfileName
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
@@ -137,7 +138,7 @@ private fun Content(
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
                     onClick = onSave,
-                    enabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                    enabled = isValidProfileName(uiState.name) && !uiState.isSaving,
                     isLoading = uiState.isSaving,
                     modifier = Modifier.testTag("CreateProfileSave")
                 )

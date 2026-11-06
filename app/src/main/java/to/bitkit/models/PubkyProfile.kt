@@ -10,6 +10,12 @@ import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
 
 private val pubkyProfileJson = Json { ignoreUnknownKeys = true }
 
+/** pubky.app profile name limits from pubky-app-specs. */
+const val PROFILE_NAME_MIN_LENGTH = 3
+const val PROFILE_NAME_MAX_LENGTH = 50
+
+fun isValidProfileName(name: String) = name.trim().length in PROFILE_NAME_MIN_LENGTH..PROFILE_NAME_MAX_LENGTH
+
 @Immutable
 data class PubkyProfileLink(val label: String, val url: String)
 

@@ -4,9 +4,12 @@ import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PaykitProfileRecord
 import com.synonym.paykit.PaykitPublicKeys
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkyProfileSnapshot
+import com.synonym.paykit.PubkyProfileUpdate
 import com.synonym.paykit.PubkySessionBootstrapResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -209,6 +212,21 @@ class PubkyService @Inject constructor(
 
     suspend fun deletePaykitProfile() = ServiceQueue.PUBKY.background {
         paykitSdkService.deletePaykitProfile()
+    }
+
+    suspend fun fetchPubkyProfileWithRevision(publicKey: String): PubkyProfileSnapshot? = cancellablePublicRead {
+        paykitSdkService.fetchPubkyProfileWithRevision(publicKey)
+    }
+
+    suspend fun fetchPaykitProfile(publicKey: String): PaykitProfileRecord? = cancellablePublicRead {
+        paykitSdkService.fetchPaykitProfile(publicKey)
+    }
+
+    suspend fun publishPubkyProfile(update: PubkyProfileUpdate, expectedRevision: String?): PubkyProfileSnapshot =
+        ServiceQueue.CORE.background { paykitSdkService.publishPubkyProfile(update, expectedRevision) }
+
+    suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String): String = ServiceQueue.CORE.background {
+        paykitSdkService.uploadPubkyAppAvatar(bytes, contentType)
     }
 
     suspend fun getContacts(publicKey: String): List<String> = cancellablePublicRead {

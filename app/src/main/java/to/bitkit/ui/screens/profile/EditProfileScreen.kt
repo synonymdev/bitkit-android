@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.isValidProfileName
 import to.bitkit.ui.components.AddLinkSheet
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.GradientCircularProgressIndicator
@@ -166,7 +167,7 @@ private fun Content(
                 onAddTag = onAddTag,
                 onSave = onSave,
                 onCancel = onBackClick,
-                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isBusy,
+                isSaveEnabled = isValidProfileName(uiState.name) && !uiState.isBusy,
                 topBar = topBar,
                 isSaving = uiState.isSaving,
                 isDeleting = uiState.isDeleting,

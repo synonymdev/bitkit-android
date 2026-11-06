@@ -1308,10 +1308,11 @@
     <string name="profile__disconnect_error">Falha ao desligar o perfil</string>
     <string name="profile__edit_bio">BIOGRAFIA</string>
     <string name="profile__edit_bio_placeholder">Nota breve. Fale um pouco sobre si.</string>
+    <string name="profile__edit_changed_error">O teu perfil mudou no pubky.app. A Bitkit carregou a versão mais recente, por isso faz novamente a tua alteração.</string>
     <string name="profile__edit_delete_section">ELIMINAR</string>
     <string name="profile__edit_name_placeholder">O SEU NOME</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
-    <string name="profile__edit_public_note">Tenha em atenção que as informações do perfil são guardadas em ficheiros públicos.</string>
+    <string name="profile__edit_public_note">Este é o teu perfil do pubky.app. É público, e as alterações que fazes aqui também aparecem no pubky.app.</string>
     <string name="profile__edit_save_error">Falha ao guardar o perfil</string>
     <string name="profile__edit_save_success">Perfil guardado</string>
     <string name="profile__edit_tags">ETIQUETAS</string>
