@@ -9535,6 +9535,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `main scanner onchain scan the hardware balance but not its spendable covers shows insufficient funds`() =
         test {
             val input = stubOnchainAmountScan(amountSats = 9_000u)
+            val onchainInfo = mock<IBtInfoOnchain>()
+            val btInfo = mock<IBtInfo>()
+            whenever(onchainInfo.feeRates).thenReturn(FeeRates(fast = 5u, mid = 3u, slow = 1u))
+            whenever(btInfo.onchain).thenReturn(onchainInfo)
+            whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(info = btInfo)))
             balanceState.value = BalanceState(maxSendOnchainSats = 0u)
             hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 10_000uL))
             whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(8_000uL))
@@ -9546,6 +9551,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertFalse(sut.currentSheet.value is Sheet.Send)
+            verify(hwWalletRepo, atLeast(1)).estimateFundingMiningFee(any(), any(), eq(9_000uL), any())
             val toasts = argumentCaptor<Toast>()
             verify(toastManager, atLeast(1)).enqueue(toasts.capture())
             assertTrue(toasts.allValues.any { it.testTag == "InsufficientSavingsToast" })
