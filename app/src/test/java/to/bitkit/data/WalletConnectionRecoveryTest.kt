@@ -5,12 +5,15 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -22,6 +25,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.keychain.Keychain
@@ -45,6 +49,7 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val db = mock<AppDb>()
     private val binding = mock<VssStoreIdProvider>()
+    private val vssClients = VssClientCoordinator()
     private val config = MutableStateFlow(listOf(ConfigEntity()))
     private var record: String? = null
     private var pending = false
@@ -82,7 +87,47 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     @After
     fun tearDown() = runBlocking { settings.reset() }
 
-    private fun instance(store: SettingsStore = settings) = WalletConnectionRecovery(keychain, db, binding, store)
+    private fun instance(store: SettingsStore = settings) = WalletConnectionRecovery(
+        keychain,
+        db,
+        binding,
+        store,
+        vssClients,
+    )
+
+    @Test
+    fun `identity change waits for VSS cleanup and keeps admission closed through credentials`() = test {
+        val cleanup = CompletableDeferred<Unit>()
+        var changed = false
+        var drained = false
+        val old = launch {
+            vssClients.withWallet {
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) {
+                        cleanup.await()
+                        drained = true
+                    }
+                }
+            }
+        }
+        runCurrent()
+        val transition = launch {
+            sut.withIdentityChange {
+                assertTrue(drained)
+                assertFailsWith<CancellationException> { vssClients.withWallet {} }
+                changed = true
+            }
+        }
+        runCurrent()
+        assertFalse(changed)
+        cleanup.complete(Unit)
+        transition.join()
+        assertTrue(changed)
+        old.join()
+        vssClients.withWallet {}
+    }
 
     @Test
     fun `queued wallet generation is revoked during same seed replacement`() = test {

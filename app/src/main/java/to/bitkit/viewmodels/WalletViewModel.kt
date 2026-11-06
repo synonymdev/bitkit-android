@@ -487,7 +487,7 @@ class WalletViewModel @Inject constructor(
                         connectionSession = connectionSession,
                     )
                         .getOrThrow()
-                        .also { pubkyRepo.initialize() }
+                        .also { pubkyRepo.scheduleInitializationAfterRestore() }
                 } else {
                     restoreFromMostRecentBackup(connectionSession)
                 }
@@ -530,7 +530,7 @@ class WalletViewModel @Inject constructor(
                 .getOrThrow()
         }
 
-        pubkyRepo.initialize()
+        pubkyRepo.scheduleInitializationAfterRestore()
         return failedCategories
     }
 

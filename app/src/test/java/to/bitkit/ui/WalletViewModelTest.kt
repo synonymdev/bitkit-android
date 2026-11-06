@@ -31,7 +31,6 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -39,6 +38,7 @@ import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.ext.of
+import to.bitkit.models.BackupCategory
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.BackupRepo
@@ -938,11 +938,48 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `post restore profile failure allows proceeding only while safety markers stay clear`() = test {
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile cache unavailable") }
+    fun `completed wallet restore retains failed categories without waiting for optional identity activation`() = test {
+        val release = CompletableDeferred<Unit>()
+        val failedCategories = setOf(BackupCategory.SETTINGS, BackupCategory.WIDGETS)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.success(failedCategories))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer {
+            release.await()
+            Result.success(Unit)
+        }
+        try {
+            sut.onBackupRestoreRetry()
+            runCurrent()
+            assertEquals(RestoreState.Completed(failedCategories), sut.restoreState.value)
+            verify(pubkyRepo).scheduleInitializationAfterRestore()
+            verify(pubkyRepo, never()).initialize()
+            verify(backupRepo).setRestorePending(false)
+        } finally {
+            release.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `most recent backup restore preserves failed categories while identity activates separately`() = test {
+        val failedCategories = setOf(BackupCategory.METADATA)
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.success(failedCategories))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("identity unavailable") }
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.Completed(failedCategories), sut.restoreState.value)
+        verify(pubkyRepo).scheduleInitializationAfterRestore()
+        verify(pubkyRepo, never()).initialize()
+    }
+
+    @Test
+    fun `proceed rechecks safety markers after an optional restore failure`() = test {
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("metadata cache unavailable")))
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
         assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
@@ -950,6 +987,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(RestoreState.BackupFailed(2, hasPendingWalletRestore = false), sut.restoreState.value)
         assertEquals(null, sut.connectionStartupError.value)
+        verify(pubkyRepo, never()).scheduleInitializationAfterRestore()
 
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
         var dismissed = false
@@ -1132,7 +1170,7 @@ class WalletViewModelTest : BaseUnitTest() {
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
-        verifyBlocking(pubkyRepo) { initialize() }
+        verify(pubkyRepo).scheduleInitializationAfterRestore()
     }
 
     @Test
@@ -1719,10 +1757,8 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `backup only retry with saved correction counts one retry`() = test {
         stubRecoveryRecord()
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile cache unavailable") }
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("restore completion unavailable")))
         whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         sut.onBackupRestoreRetry()
@@ -1885,12 +1921,10 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `optional profile failure cannot replay a completed correction over later settings`() = test {
+    fun `restore completion failure cannot replay a completed correction over later settings`() = test {
         val stored = stubRecoveryRecord()
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile unavailable") }
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("restore completion unavailable")))
         whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
         whenever(
             lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()),
@@ -1917,10 +1951,8 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `proceed retains an unapplied correction until explicit retry`() = test {
         stubRecoveryRecord()
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile unavailable") }
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("restore completion unavailable")))
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         repeat(2) {
             sut.onBackupRestoreRetry()

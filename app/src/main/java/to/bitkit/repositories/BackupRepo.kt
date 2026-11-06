@@ -5,6 +5,8 @@ import com.synonym.bitkitcore.UsdtException
 import com.synonym.vssclient.VssException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -47,6 +50,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.UsdtRecoveryBackupStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.hwWalletNames
@@ -114,6 +118,7 @@ class BackupRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val cacheStore: CacheStore,
     private val vssBackupClient: VssBackupClient,
+    private val vssClients: VssClientCoordinator,
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
@@ -149,16 +154,26 @@ class BackupRepo @Inject constructor(
     private val usdtRecoveryBackup = UsdtRecoveryBackupStore(vssBackupClient)
     private val scope = appScope(ioDispatcher, TAG)
 
-    private val backupJobs = mutableMapOf<BackupCategory, Job>()
+    private val backupJobs = ConcurrentHashMap.newKeySet<Job>()
+    private val backupJobLock = Any()
+    private val pendingBackups = ConcurrentHashMap<BackupCategory, PendingBackup>()
+    private class PendingBackup(val owner: VssClientCoordinator.Owner) {
+        @Volatile
+        var admitted = false
+    }
+
     private val statusObserverJobs = mutableListOf<Job>()
     private val dataListenerJobs = mutableListOf<Job>()
     private var periodicCheckJob: Job? = null
+    private var setupJob: Job? = null
+    private var setupGeneration: Long? = null
 
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
     private val failedBackupRequired = ConcurrentHashMap<BackupCategory, Long>()
     private val temporaryFailureRetries = ConcurrentHashMap<BackupCategory, Int>()
     private val temporaryFailureSince = ConcurrentHashMap<BackupCategory, Long>()
 
+    @Volatile
     private var isObserving = false
     private var lastNotificationTime = 0L
 
@@ -172,8 +187,6 @@ class BackupRepo @Inject constructor(
 
     fun reset() {
         stopObservingBackups()
-        vssBackupClient.reset()
-        vssBackupClientLdk.reset()
     }
 
     fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
@@ -224,35 +237,48 @@ class BackupRepo @Inject constructor(
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
 
-        scope.launch {
-            vssBackupClient.setupWithRetry {
-                onSuccess = { attempt ->
-                    Logger.debug("VSS client setup succeeded on attempt $attempt", context = TAG)
+        setupJob = scope.launch {
+            vssClients.owners.collectLatest { owner ->
+                if (owner == null) return@collectLatest
+                vssClients.withWallet(owner) {
+                    if (setupGeneration != null && setupGeneration != owner.generation) {
+                        failedBackupRequired.clear()
+                        temporaryFailureRetries.clear()
+                        temporaryFailureSince.clear()
+                    }
+                    setupGeneration = owner.generation
+                    vssBackupClient.setupWithRetry {
+                        onSuccess = { attempt ->
+                            Logger.debug("VSS client setup succeeded on attempt $attempt", context = TAG)
+                        }
+                        onRetry = { attempt, maxAttempts, delayMs ->
+                            Logger.debug(
+                                "VSS client setup deferred, retrying in ${delayMs}ms (attempt $attempt/$maxAttempts)",
+                                context = TAG,
+                            )
+                        }
+                        onExhausted = { maxAttempts ->
+                            Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
+                        }
+                    }.onSuccess {
+                        vssBackupClientLdk.setup()
+                        _isWiping.first { !it }
+                        cacheStore.backupStatuses.first().forEach { (category, status) ->
+                            if (status.shouldBackup(category)) scheduleBackup(category)
+                        }
+                    }
                 }
-                onRetry = { attempt, maxAttempts, delayMs ->
-                    Logger.debug(
-                        "VSS client setup deferred, retrying in ${delayMs}ms (attempt $attempt/$maxAttempts)",
-                        context = TAG,
-                    )
-                }
-                onExhausted = { maxAttempts ->
-                    Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
-                }
-            }.onSuccess {
-                scope.launch { vssBackupClientLdk.setup() }
             }
         }
 
-        scope.launch {
+        launchForWallet {
             BackupCategory.entries.forEach { category ->
-                if (category !in runningBackups) {
-                    cacheStore.updateBackupStatus(category) { status ->
-                        if (status.running) {
-                            Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
-                            status.copy(running = false)
-                        } else {
-                            status
-                        }
+                cacheStore.updateBackupStatus(category) { status ->
+                    if (status.running && category !in runningBackups && pendingBackups[category]?.admitted != true) {
+                        Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
+                        status.copy(running = false)
+                    } else {
+                        status
                     }
                 }
             }
@@ -266,11 +292,18 @@ class BackupRepo @Inject constructor(
     fun stopObservingBackups() {
         if (!isObserving) return
 
-        isObserving = false
+        val pendingJobs = synchronized(backupJobLock) {
+            isObserving = false
+            backupJobs.toList().also {
+                backupJobs.clear()
+                pendingBackups.clear()
+            }
+        }
+        setupJob?.cancel()
+        setupJob = null
 
         // Cancel all backup jobs
-        backupJobs.values.forEach { it.cancel() }
-        backupJobs.clear()
+        pendingJobs.forEach { it.cancel() }
 
         // Cancel backup status observer jobs
         statusObserverJobs.forEach { it.cancel() }
@@ -472,8 +505,13 @@ class BackupRepo @Inject constructor(
         }
     }
 
+    private fun launchForWallet(block: suspend CoroutineScope.() -> Unit): Job {
+        val owner = runCatching { vssClients.captureOwner() }.getOrNull() ?: return Job().apply { cancel() }
+        return scope.launch { vssClients.withWallet(owner) { block() } }
+    }
+
     private fun markBackupRequired(category: BackupCategory) {
-        scope.launch {
+        launchForWallet {
             failedBackupRequired -= category
             cacheStore.updateBackupStatus(category) {
                 it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
@@ -482,50 +520,64 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    private fun scheduleBackup(category: BackupCategory) {
-        backupJobs[category]?.cancel()
-
-        Logger.verbose("Scheduling backup for: '$category'", context = TAG)
-
-        backupJobs[category] = scope.launch {
-            runningBackups += category
-            cacheStore.updateBackupStatus(category) {
-                it.copy(running = true)
+    private fun scheduleBackup(
+        category: BackupCategory,
+        expectedOwner: VssClientCoordinator.Owner? = null,
+        requireObservation: Boolean = true,
+    ) {
+        val owner = expectedOwner ?: runCatching { vssClients.captureOwner() }.getOrNull() ?: return
+        val job = synchronized(backupJobLock) {
+            if (requireObservation && !isObserving) return
+            val pending = PendingBackup(owner)
+            var reserved = false
+            pendingBackups.compute(category) { _, previous ->
+                previous?.takeIf { it.owner.generation >= owner.generation } ?: pending.also { reserved = true }
             }
-
-            delay(BACKUP_DEBOUNCE)
-            if (category == BackupCategory.WALLET) paykitSdkService.isPaymentSubmissionActive.first { !it }
-
-            val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
-            if (status.isRequired && !shouldSkipBackup(category)) {
-                triggerBackup(category)
-            } else {
-                Logger.debug("Backup no longer needed for: '$category'", context = TAG)
-                runningBackups -= category
-                cacheStore.updateBackupStatus(category) {
-                    it.copy(running = false)
-                }
-            }
-        }.also { job ->
-            job.invokeOnCompletion { exception ->
-                if (exception != null) {
-                    Logger.debug("Backup job cancelled for: '$category'", context = TAG)
-                    scope.launch {
-                        runningBackups -= category
-                        cacheStore.updateBackupStatus(category) {
-                            it.copy(running = false)
+            if (!reserved) return
+            Logger.debug("Scheduling backup for: '$category'", context = TAG)
+            scope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    vssClients.withWallet(owner) {
+                        pending.admitted = true
+                        try {
+                            cacheStore.updateBackupStatus(category) { it.copy(running = true) }
+                            delay(BACKUP_DEBOUNCE)
+                            if (category == BackupCategory.WALLET) {
+                                paykitSdkService.isPaymentSubmissionActive.first { !it }
+                            }
+                            pendingBackups.remove(category, pending)
+                            val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
+                            if (status.copy(running = category in runningBackups).shouldBackup(category)) {
+                                triggerBackup(category)
+                            }
+                        } finally {
+                            withContext(NonCancellable) {
+                                pendingBackups.remove(category, pending)
+                                cacheStore.updateBackupStatus(category) {
+                                    it.copy(
+                                        running = category in runningBackups ||
+                                            pendingBackups[category]?.admitted == true
+                                    )
+                                }
+                            }
                         }
                     }
+                } finally {
+                    pendingBackups.remove(category, pending)
                 }
+            }.also { scheduled ->
+                backupJobs.add(scheduled)
+                scheduled.invokeOnCompletion { backupJobs.remove(scheduled) }
             }
         }
+        job.start()
     }
 
     private fun checkForFailedBackups() {
         val currentTime = currentTimeMillis()
 
         // find if there are any backup categories that have been failing for more than 30 minutes
-        scope.launch {
+        launchForWallet {
             val backupStatuses = cacheStore.backupStatuses.first()
             val hasFailedBackups = BackupCategory.entries.any { category ->
                 val status = backupStatuses[category] ?: BackupItemStatus()
@@ -548,7 +600,7 @@ class BackupRepo @Inject constructor(
 
         lastNotificationTime = currentTime
 
-        scope.launch {
+        launchForWallet {
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.settings__backup__failed_title),
@@ -560,10 +612,12 @@ class BackupRepo @Inject constructor(
     }
 
     suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
-        if (category == BackupCategory.WALLET || category == BackupCategory.METADATA) {
-            walletBackupMutex.withLock { performBackup(category) }
-        } else {
-            performBackup(category)
+        vssClients.withWallet {
+            if (category == BackupCategory.WALLET || category == BackupCategory.METADATA) {
+                walletBackupMutex.withLock { performBackup(category) }
+            } else {
+                performBackup(category)
+            }
         }
     }
 
@@ -621,15 +675,20 @@ class BackupRepo @Inject constructor(
 
     suspend fun persistWalletBackup(): Result<Unit> =
         withContext(ioDispatcher) {
-            walletBackupMutex.withLock { uploadWalletBackup() }
-        }.onFailure { markBackupRequired(BackupCategory.WALLET) }
-
-    suspend fun persistUsdtRecoveryBackup(snapshot: String): Result<Unit> = runSuspendCatching {
-        cacheStore.updateBackupStatus(BackupCategory.USDT_RECOVERY) {
-            it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
+            vssClients.withWallet {
+                walletBackupMutex.withLock { uploadWalletBackup() }
+                    .onFailure { markBackupRequired(BackupCategory.WALLET) }
+            }
         }
-        uploadUsdtRecoveryBackup(snapshot).getOrThrow()
-    }.onFailure { markBackupRequired(BackupCategory.USDT_RECOVERY) }
+
+    suspend fun persistUsdtRecoveryBackup(snapshot: String): Result<Unit> = vssClients.withWallet {
+        runSuspendCatching {
+            cacheStore.updateBackupStatus(BackupCategory.USDT_RECOVERY) {
+                it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
+            }
+            uploadUsdtRecoveryBackup(snapshot).getOrThrow()
+        }.onFailure { markBackupRequired(BackupCategory.USDT_RECOVERY) }
+    }
 
     private suspend fun uploadUsdtRecoveryBackup(snapshot: String? = null): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -691,10 +750,10 @@ class BackupRepo @Inject constructor(
         val retryDelay = (TEMPORARY_FAILURE_RETRY_DELAY * (1 shl (attempt - 1).coerceAtMost(MAX_RETRY_SHIFT)))
             .coerceAtMost(TEMPORARY_FAILURE_RETRY_MAX_DELAY)
         Logger.warn("Retrying backup for: '$category' in '$retryDelay'", e, context = TAG)
-        scope.launch {
+        launchForWallet {
             delay(retryDelay)
-            if (!failedBackupRequired.remove(category, backupRequired) || !isObserving) return@launch
-            val status = cacheStore.backupStatuses.first()[category] ?: return@launch
+            if (!failedBackupRequired.remove(category, backupRequired) || !isObserving) return@launchForWallet
+            val status = cacheStore.backupStatuses.first()[category] ?: return@launchForWallet
             if (status.shouldBackup(category)) scheduleBackup(category)
         }
     }
@@ -775,8 +834,8 @@ class BackupRepo @Inject constructor(
         // propagate and fail the backup rather than upload an empty set over the stored ones.
         val hwWalletNames = hwWalletStore.backupSnapshot().takeIf { it.isNotEmpty() }
         val cacheData = cacheStore.data.first()
-        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
-        val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrDefault(null)
+        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrThrow()
+        val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrThrow()
 
         val payload = MetadataBackupV1(
             createdAt = currentTimeMillis(),
@@ -814,6 +873,9 @@ class BackupRepo @Inject constructor(
         val privateRepo = privatePaykitRepo.get()
         val privateVersion = privateRepo.backupStateVersion.value
         val paykitSdkBackupState = privateRepo.backupSnapshot().getOrThrow()
+        check(paykitSdkBackupState.state != null || !pubkyRepo.hasIdentityForBackup()) {
+            "Paykit identity is unavailable for backup"
+        }
         val reservationRepo = privatePaykitAddressReservationRepo.get()
         val reservationVersion = reservationRepo.backupStateVersion.value
         val privateReservations = reservationRepo.backupSnapshot().getOrThrow()
@@ -1211,21 +1273,23 @@ class BackupRepo @Inject constructor(
     }
 
     suspend fun getLatestBackupTime(): ULong? = withContext(ioDispatcher) {
-        runCatching {
-            withTimeout(VSS_TIMESTAMP_TIMEOUT) {
-                vssBackupClient.setup().getOrThrow()
-                coroutineScope {
-                    BackupCategory.entries
-                        .filter { it != BackupCategory.LIGHTNING_CONNECTIONS && it != BackupCategory.USDT_RECOVERY }
-                        .map { category -> async { getRemoteBackupTimestamp(category) } }
-                        .mapNotNull { it.await() }
-                        .filter { it > 0uL }
-                        .maxOrNull()
+        vssClients.withWallet {
+            runCatching {
+                withTimeout(VSS_TIMESTAMP_TIMEOUT) {
+                    vssBackupClient.setup().getOrThrow()
+                    coroutineScope {
+                        BackupCategory.entries
+                            .filter { it != BackupCategory.LIGHTNING_CONNECTIONS && it != BackupCategory.USDT_RECOVERY }
+                            .map { category -> async { getRemoteBackupTimestamp(category) } }
+                            .mapNotNull { it.await() }
+                            .filter { it > 0uL }
+                            .maxOrNull()
+                    }
                 }
-            }
-        }.onFailure { e ->
-            Logger.warn("Failed to get VSS backup timestamp: $e", context = TAG)
-        }.getOrNull()
+            }.onFailure { e ->
+                Logger.warn("Failed to get VSS backup timestamp: $e", context = TAG)
+            }.getOrNull()
+        }
     }
 
     private suspend fun getRemoteBackupTimestamp(category: BackupCategory): ULong? {
@@ -1242,11 +1306,12 @@ class BackupRepo @Inject constructor(
     }
 
     fun scheduleFullBackup() {
+        val owner = runCatching { vssClients.captureOwner() }.getOrNull() ?: return
         Logger.debug("Scheduling backups for all categories", context = TAG)
         BackupCategory.entries
             .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
             .forEach {
-                scheduleBackup(it)
+                scheduleBackup(it, expectedOwner = owner, requireObservation = false)
             }
     }
 

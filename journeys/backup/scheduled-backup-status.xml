@@ -1,0 +1,16 @@
+<journey name="scheduled backup status">
+  <description>
+    On an unfunded disposable dev wallet with working staging VSS and Electrum, verify
+    that a queued backup shows Running during its five-second debounce and becomes
+    Latest Backup after acknowledgement. Start at Home in English. No profile,
+    payment, recovery-phrase access or wallet reset is required. Android-only regression:
+    the iOS VSS ownership change did not alter backup scheduling or its running status.
+  </description>
+  <actions>
+    <action>Open Settings, select the General tab, and open Local Currency (testTag "CurrenciesSettings")</action>
+    <action>Choose a different local currency, then immediately open bitkit://screen/backup-settings</action>
+    <action>Verify that the Settings row shows Running and does not show Retry while its backup is queued</action>
+    <action>Wait for the Settings row to show Latest Backup after the VSS acknowledgement</action>
+    <action>Verify that Settings has no Failed Backup message or Retry button</action>
+  </actions>
+</journey>
