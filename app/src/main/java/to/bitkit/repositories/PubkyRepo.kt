@@ -1187,9 +1187,13 @@ class PubkyRepo @Inject constructor(
             .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
             .getOrNull()
             ?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
-        val snapshot = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
-            ?: paykitData?.let { migrateToPubkyApp(it) }
+        val fetched = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
+        val hadPubkyAppProfile = publicKey in pubkyStore.data.first().pubkyAppProfileOwners
+        val snapshot = fetched ?: paykitData?.takeUnless { hadPubkyAppProfile }?.let { migrateToPubkyApp(it) }
         snapshot ?: return null
+        if (!hadPubkyAppProfile) {
+            pubkyStore.update { it.copy(pubkyAppProfileOwners = it.pubkyAppProfileOwners + publicKey) }
+        }
         val profile = PubkyProfile.fromPubkyProfile(publicKey, snapshot.profile).copy(tags = paykitData?.tags.orEmpty())
         if (paykitData != null && paykitData != profile.toProfileData()) publishPaykitProfileCopy(profile)
         return profile to snapshot.revision

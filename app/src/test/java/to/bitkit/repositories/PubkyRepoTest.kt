@@ -931,6 +931,23 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile signs in again once when the session lacks the pubky app scope`() = test {
+        val secretKey = "local_secret"
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.signIn(secretKey)).thenReturn(Unit)
+        whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))
+            .thenAnswer { throw PaykitException.Identity("identity_error", "Missing capabilities") }
+            .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "New")))
+
+        assertTrue(saveNewProfile().isSuccess)
+
+        verifyBlocking(pubkyService) { signIn(secretKey) }
+        verifyBlocking(pubkyService, times(2)) { publishPubkyProfile(any(), anyOrNull()) }
+    }
+
+    @Test
     fun `saveProfile reports a profile that changed in pubky app`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.publishPubkyProfile(any(), anyOrNull()))

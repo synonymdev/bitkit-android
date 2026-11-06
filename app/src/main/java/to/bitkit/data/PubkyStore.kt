@@ -41,6 +41,8 @@ data class PubkyStoreData(
     val cachedName: String? = null,
     val cachedImageUri: String? = null,
     val contactProfileOverrides: Map<String, PubkyProfileData> = emptyMap(),
+    /** Identities Bitkit has seen a pubky.app profile for, so a profile deleted there is not moved back from Bitkit. */
+    val pubkyAppProfileOwners: Set<String> = emptySet(),
 ) {
     fun cachedProfile(): PubkyCachedProfile? = cachedProfileOwner?.let {
         PubkyCachedProfile(publicKey = it, name = cachedName.orEmpty(), imageUri = cachedImageUri)
