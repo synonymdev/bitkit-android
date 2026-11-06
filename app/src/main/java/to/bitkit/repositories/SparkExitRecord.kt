@@ -209,7 +209,12 @@ data class SparkExitRecord(
     data class FailedLeaf(val leafId: String, val valueSats: ULong)
 
     /** The leftover waits for network fees to drop before it is worth sweeping. */
-    val isLeftoverWaitingForFees: Boolean get() = leftover.isNotEmpty() && leftoverSweep?.isWaitingForFees == true
+    val isLeftoverWaitingForFees: Boolean
+        get() {
+            val sweep = leftoverSweep ?: return false
+            // A sweep refused for its fee goes back to waiting on the next tick; until then it reads the same.
+            return leftover.isNotEmpty() && (sweep.isWaitingForFees || (sweep.isFeeRejection && !sweep.isAccepted))
+        }
 
     /** Savings paid funding the exit has not taken yet, such as a higher fee: nothing is asked while it confirms. */
     val isAwaitingOwnPayment: Boolean
@@ -236,6 +241,13 @@ data class SparkExitRecord(
         val checkedAtHeight: UInt? = null,
         /** The wait ran out: the leftover stays at its funding address as dust. */
         val isDustKept: Boolean = false,
+        /**
+         * While waiting: the least rate a node takes, read from the refusal of an earlier version. The next build pays
+         * this or the network's cheapest rate, whichever is higher, even past the exit's own rate.
+         */
+        val refusedFeeRate: ULong? = null,
+        /** While waiting after a refusal: the tip from which the next build may go out, the block after it. */
+        val retryAtHeight: UInt? = null,
     ) {
         /** Not built, waiting for fees to drop. A sweep with no [txid] and no wait is dust kept, as before waits. */
         val isWaitingForFees: Boolean get() = txid == null && waitingSince != null && !isDustKept
@@ -754,6 +766,8 @@ object SparkExitJson {
         sweep.waitingSince?.let { put("waitingSince", it.toLong()) }
         sweep.checkedAtHeight?.let { put("checkedAtHeight", it.toLong()) }
         if (sweep.isDustKept) put("isDustKept", true)
+        sweep.refusedFeeRate?.let { put("refusedFeeRate", it.toLong()) }
+        sweep.retryAtHeight?.let { put("retryAtHeight", it.toLong()) }
     }
 
     /** What the exit keeps to pace and bound its rebuilds and waits, each left out at its default. */
@@ -864,6 +878,8 @@ object SparkExitJson {
                 waitingSince = it.ulongOrNull("waitingSince")?.toUInt(),
                 checkedAtHeight = it.ulongOrNull("checkedAtHeight")?.toUInt(),
                 isDustKept = it.booleanOrNull("isDustKept") ?: false,
+                refusedFeeRate = it.ulongOrNull("refusedFeeRate"),
+                retryAtHeight = it.ulongOrNull("retryAtHeight")?.toUInt(),
             )
         },
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),

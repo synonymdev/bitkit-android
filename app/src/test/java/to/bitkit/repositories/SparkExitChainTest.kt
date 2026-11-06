@@ -126,6 +126,23 @@ class SparkExitChainTest : BaseUnitTest() {
     }
 
     @Test
+    fun `fee estimates fall back to the next target, then to the min relay rate, and never fail`() = test {
+        val empty = chain(
+            Route("a.example/api/fee-estimates", 200, "{}"),
+            Route("a.example/api/fee-estimates", 200, "{}")
+        )
+        assertEquals(1uL, empty.nextBlockFeeRate())
+        assertEquals(SparkExitNetworkFees(fastest = 1uL, halfHour = 1uL), empty.networkFees())
+        assertEquals(1uL, chain(Route("a.example/api/fee-estimates", 200, "{}")).economyFeeRate())
+
+        val sparse = mapOf(6 to 3.2, 144 to 1.1)
+        assertEquals(4uL, SparkExitFeeEstimates.at(sparse, 1))
+        assertEquals(2uL, SparkExitFeeEstimates.at(sparse, 1_008))
+        assertEquals(2uL, SparkExitFeeEstimates.farthest(sparse))
+        assertEquals(sparse, SparkExitFeeEstimates.parse("""{"6":3.2,"144":1.1,"x":2}"""))
+    }
+
+    @Test
     fun `falls back to the unversioned package path then the next host`() = test {
         val sut = chain(
             Route("a.example/api/v1/txs/package", 404, "Not Found"),

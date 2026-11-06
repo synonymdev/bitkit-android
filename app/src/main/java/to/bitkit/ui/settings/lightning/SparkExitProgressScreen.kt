@@ -295,7 +295,7 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
             txidRes = R.string.lightning__spark_exit__leftover_txid,
             testTag = "SparkExitLeftoverSwept",
         )
-        sweep?.txid != null && (sweep.rejection == null || sweep.isFeeRejection) -> BodyS(
+        sweep?.txid != null && sweep.rejection == null -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover_sending)
                 .replace("{amount}", sparkExitAmountText(sweep.valueSats)),
             color = Colors.White64,

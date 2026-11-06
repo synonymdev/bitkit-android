@@ -88,8 +88,40 @@ interface SparkExitChain {
     /** The rates for the next block and about half an hour, from `/fee-estimates` targets 1 and 3, rounded up. */
     suspend fun networkFees(): SparkExitNetworkFees
 
-    /** The network's cheapest rate, `/fee-estimates` at its farthest target, rounded up and at least 1 sat/vB. */
+    /** The network's cheapest rate, `/fee-estimates` at its farthest target, rounded up; 1 sat/vB with none. */
     suspend fun economyFeeRate(): ULong
+}
+
+/** The least rate nodes relay, used when the chain host gives no estimate at all. */
+private const val MIN_RELAY_RATE = 1uL
+
+/**
+ * `/fee-estimates`, a map from confirmation target in blocks to sat/vB. A host can leave targets out, or answer `{}`
+ * as a fresh mempool does, so each read falls back to the next target it has.
+ */
+object SparkExitFeeEstimates {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun parse(body: String): Map<Int, Double> = runCatching {
+        json.parseToJsonElement(body).jsonObject.mapNotNull { (key, value) ->
+            val target = key.toIntOrNull() ?: return@mapNotNull null
+            val rate = (value as? JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+            target to rate
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    /** The rate for [target] blocks, else for the next target after it, else the closest before it; at least 1. */
+    fun at(estimates: Map<Int, Double>, target: Int): ULong? {
+        val key = estimates.keys.filter { it >= target }.minOrNull() ?: estimates.keys.maxOrNull() ?: return null
+        return round(estimates.getValue(key))
+    }
+
+    /** The rate at the farthest target, the cheapest the host knows; at least 1. */
+    fun farthest(
+        estimates: Map<Int, Double>
+    ): ULong? = estimates.keys.maxOrNull()?.let { round(estimates.getValue(it)) }
+
+    private fun round(rate: Double): ULong = maxOf(1uL, ceil(rate).toULong())
 }
 
 /** What the network asks now, in sat/vB: for the next block, and for about half an hour. */
@@ -161,23 +193,19 @@ class EsploraSparkExitChain(
     override suspend fun txStatus(txid: String): EsploraTxStatus =
         status(json.parseToJsonElement(get("/tx/$txid/status")).jsonObject)
 
-    override suspend fun nextBlockFeeRate(): ULong {
-        val rate = json.parseToJsonElement(get("/fee-estimates")).jsonObject.getValue("1").jsonPrimitive.content
-        return ceil(rate.toDouble()).toULong()
-    }
-
-    override suspend fun economyFeeRate(): ULong {
-        val estimates = json.parseToJsonElement(get("/fee-estimates")).jsonObject
-        val farthest = estimates.keys.maxByOrNull { it.toIntOrNull() ?: 0 }
-            ?: throw SparkExitChainError("No fee estimates")
-        return maxOf(1uL, ceil(estimates.getValue(farthest).jsonPrimitive.content.toDouble()).toULong())
-    }
+    override suspend fun nextBlockFeeRate(): ULong = SparkExitFeeEstimates.at(feeEstimates(), 1) ?: MIN_RELAY_RATE
 
     override suspend fun networkFees(): SparkExitNetworkFees {
-        val estimates = json.parseToJsonElement(get("/fee-estimates")).jsonObject
-        fun rate(target: String) = ceil(estimates.getValue(target).jsonPrimitive.content.toDouble()).toULong()
-        return SparkExitNetworkFees(fastest = rate("1"), halfHour = rate("3"))
+        val estimates = feeEstimates()
+        return SparkExitNetworkFees(
+            fastest = SparkExitFeeEstimates.at(estimates, 1) ?: MIN_RELAY_RATE,
+            halfHour = SparkExitFeeEstimates.at(estimates, 3) ?: MIN_RELAY_RATE,
+        )
     }
+
+    override suspend fun economyFeeRate(): ULong = SparkExitFeeEstimates.farthest(feeEstimates()) ?: MIN_RELAY_RATE
+
+    private suspend fun feeEstimates(): Map<Int, Double> = SparkExitFeeEstimates.parse(get("/fee-estimates"))
 
     override suspend fun isTxKnown(txid: String): Boolean {
         if (hosts.reads.isEmpty()) throw SparkExitChainError("No chain host configured")

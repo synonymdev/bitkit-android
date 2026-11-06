@@ -22,6 +22,22 @@ object SparkExitSweep {
     /** An unsigned sweep of [inputs] to [destination], or null when what it pays would be under the dust limit. */
     class Plan(val inputs: List<Input>, val destinationScript: ByteArray, val amountSats: ULong, val feeSats: ULong)
 
+    private val feeNotMet = Regex("""fee not met,\s*(\d+)\s*<\s*(\d+)""")
+
+    /**
+     * The least rate a node takes after it refused a sweep built at [feeRateSatPerVbyte] with [rejection], such as
+     * `min relay fee not met, 450 < 674` (fees in sats): that rate scaled to the fee asked for, rounded up, and at
+     * least one more than the refused rate.
+     */
+    fun refusedFeeRate(rejection: String?, feeRateSatPerVbyte: ULong): ULong {
+        val rate = maxOf(1uL, feeRateSatPerVbyte)
+        val match = rejection?.let { feeNotMet.find(it) }
+        val paid = match?.groupValues?.get(1)?.toULongOrNull()?.takeIf { it > 0uL }
+        val asked = match?.groupValues?.get(2)?.toULongOrNull()
+        val scaled = if (paid != null && asked != null) (rate * asked + paid - 1uL) / paid else 0uL
+        return maxOf(scaled, rate + 1uL)
+    }
+
     /** The inputs worth more than the fee each adds to a sweep at [feeRateSatPerVbyte]: the rest cost more to send. */
     fun worthSweeping(inputs: List<Input>, feeRateSatPerVbyte: ULong): List<Input> {
         val inputFee = SparkExitMath.inputFeeSats(maxOf(1uL, feeRateSatPerVbyte))

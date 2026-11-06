@@ -1245,26 +1245,58 @@ class SparkExitDriverTest : BaseUnitTest() {
         )
     }
 
+    /**
+     * The 0.28 rerun's case 6 (Run E): six 294-sat coins of per-node change swept at 1 sat/vB, which the mempool
+     * refused with "min relay fee not met, 450 < 674".
+     */
     @Test
-    fun `a leftover sweep refused for its fee is built again at the next block's rate`() = test {
-        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 300 < 400")
-        var record = driver(tip = 1_000u).tick(sweepDone())
-        val refused = assertNotNull(record.leftoverSweep)
-        assertTrue(refused.isFeeRejection)
-        assertTrue(record.isLeftoverSweepPending)
+    fun `a fee change sweep refused for its fee waits a block and tries again at a rate nodes take`() = test {
+        val coins = List(6) { SparkExitFixtures.utxo("%064x".format(it), 0u, 294uL) }
+        chain.utxosByAddress[SWEEP_FUNDING] = coins
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 450 < 674")
+        val done = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            feeRateSatPerVbyte = 1uL,
+            leftover = coins.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) },
+        )
 
-        chain.nextBlockRate = 10uL
+        var record = driver(tip = 1_000u).tick(done)
+        // Refused, as a stored record from before this rule would be: it already reads as waiting for fees.
+        assertTrue(assertNotNull(record.leftoverSweep).isFeeRejection)
+        assertTrue(record.isLeftoverWaitingForFees)
+        record = driver(tip = 1_000u).tick(record)
+
+        // Back to waiting, with the rate the refusal asks for, still driven, and Done says the change waits.
+        val waiting = assertNotNull(record.leftoverSweep)
+        assertTrue(record.isLeftoverWaitingForFees)
+        assertEquals(2uL, waiting.refusedFeeRate)
+        assertEquals(1_001u, waiting.retryAtHeight)
+        assertEquals(1_000u, waiting.waitingSince)
+        assertTrue(record.needsDriving)
+        assertEquals(1, chain.rawBroadcasts.size)
+        assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
+
+        // Not again in the same block; the next one builds at max(economy, 2).
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1, chain.rawBroadcasts.size)
         chain.outcome = SparkExitBroadcastOutcome.Accepted
         record = driver(tip = 1_001u).tick(record)
+        val sent = assertNotNull(record.leftoverSweep)
+        assertEquals(2uL, sent.feeRateSatPerVbyte)
+        assertTrue(sent.isAccepted)
+        assertEquals(6, SparkExitTxInputs.decode(requireNotNull(sent.txHex))?.size)
+        assertFalse(record.isLeftoverWaitingForFees)
+    }
 
-        val rebuilt = assertNotNull(record.leftoverSweep)
-        assertTrue(rebuilt.txid != refused.txid)
-        assertEquals(10uL, rebuilt.feeRateSatPerVbyte)
-        assertTrue(rebuilt.valueSats < refused.valueSats)
-        assertTrue(rebuilt.isAccepted)
-        assertNull(rebuilt.rejection)
-        assertEquals(1_001u, rebuilt.sentAtHeight)
-        assertEquals(rebuilt.txHex, chain.rawBroadcasts.last())
+    @Test
+    fun `a refused minimum is the refused rate scaled to the fee asked for, and at least one more`() {
+        assertEquals(2uL, SparkExitSweep.refusedFeeRate("min relay fee not met, 450 < 674", 1uL))
+        assertEquals(
+            4uL,
+            SparkExitSweep.refusedFeeRate("mempool min fee not met, 450 < 1_400".replace("_", ""), 1uL)
+        )
+        assertEquals(3uL, SparkExitSweep.refusedFeeRate("insufficient fee", 2uL))
     }
 
     @Test
@@ -1309,20 +1341,6 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(assertNotNull(record.leftoverSweep).isConfirmed)
         assertFalse(record.needsDriving)
     }
-
-    @Test
-    fun `a sweep refused for its fee that only dust is left of at the next block's rate waits for cheaper fees`() =
-        test {
-            chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 300 < 400")
-            var record = driver(tip = 1_000u).tick(sweepDone())
-            chain.nextBlockRate = 1_000uL
-
-            record = driver(tip = 1_001u).tick(record)
-
-            assertTrue(record.isLeftoverWaitingForFees)
-            assertEquals(1_001u, assertNotNull(record.leftoverSweep).waitingSince)
-            assertTrue(record.needsDriving)
-        }
 
     @Test
     fun `a replacement that would be dust keeps the accepted sweep`() = test {
