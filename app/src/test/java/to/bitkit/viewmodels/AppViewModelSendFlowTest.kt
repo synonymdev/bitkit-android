@@ -22,6 +22,7 @@ import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
+import com.synonym.bitkitcore.PaykitRoute
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.UsdtDestination
@@ -11986,7 +11987,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 address = leg.endpoint.value,
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(leg.endpoint, leg),
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12007,13 +12008,103 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
-                paykitRoute = PaykitRouteUi(leg.endpoint, leg),
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
         confirmCurrentPayment()
 
         verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull())
+    }
+
+    @Test
+    fun `router direct pays the lightning endpoint it picks`() = test {
+        val bolt11 = PaykitEndpoint(methodId = MethodId.Bolt11.rawValue, value = "lnbcrt1routed")
+        val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = "bcrt1qrouted")
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(bolt11)))
+        setSendState(
+            SendUiState(
+                amount = 1_000u,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(listOf(bolt11, onchain)),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(paykitRouteRepo).route(eq(1_000uL), eq(listOf(bolt11, onchain)), any(), eq(0uL), eq(false))
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.paykitRoute?.serviceLeg)
+    }
+
+    @Test
+    fun `router direct pays the onchain endpoint it picks from savings`() = test {
+        val bolt11 = PaykitEndpoint(methodId = MethodId.Bolt11.rawValue, value = "lnbcrt1routed")
+        val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = REGTEST_ADDRESS)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(onchain)))
+        setSendState(
+            SendUiState(
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                paykitRoute = PaykitRouteUi(listOf(bolt11, onchain)),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(paykitRouteRepo).route(eq(1_000uL), eq(listOf(onchain)), eq(0uL), eq(100_000uL), eq(false))
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(REGTEST_ADDRESS, sut.sendUiState.value.address)
+    }
+
+    @Test
+    fun `router service leg opens the confirm screen with the leg's fee`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        setSendState(
+            SendUiState(
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+            assertEquals(300L, sut.sendUiState.value.lightningFeeSats)
+        }
+        verify(paykitRouteRepo).route(eq(leg.deliveredSat), eq(listOf(leg.endpoint)), any(), eq(0uL), eq(true))
+    }
+
+    @Test
+    fun `router none keeps the amount screen open`() = test {
+        val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = "bcrt1qrouted")
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.None("Nothing can pay this contact")))
+        setSendState(
+            SendUiState(
+                amount = 1_000u,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(listOf(onchain), offersSparkLeg = true),
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+        assertNull(sut.sendUiState.value.paykitRoute?.serviceLeg)
     }
 
     private fun sparkRouteLeg(address: String) = ServiceRouteLeg(

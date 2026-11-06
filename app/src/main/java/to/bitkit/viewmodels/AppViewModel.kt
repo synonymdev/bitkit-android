@@ -4051,8 +4051,13 @@ class AppViewModel @Inject constructor(
         val canUseOnchain = address.isNotEmpty() &&
             walletRepo.balanceState.value.maxSendOnchainSats > Defaults.dustLimit.toULong()
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint, canUseLightning || canUseOnchain)
-        val route = paykitServiceRoute(payment, address, canUseLightning || useUsdt)
-        val payMethod = if (route != null && !canUseOnchain) {
+        val offersSparkLeg = offersSparkLeg(payment, address, canUseLightning || useUsdt)
+        val route = PaykitRouteUi(
+            endpoints = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
+                .map { PaykitEndpoint(methodId = it.methodId.rawValue, value = it.value) },
+            offersSparkLeg = offersSparkLeg,
+        ).takeIf { it.endpoints.isNotEmpty() }
+        val payMethod = if (offersSparkLeg && !canUseOnchain) {
             SendMethod.LIGHTNING
         } else {
             paykitBitcoinMethod(canUseLightning, address, invoice, lnurl)
@@ -4197,15 +4202,9 @@ class AppViewModel @Inject constructor(
         return !canUseBitcoin && balance > 0u
     }
 
-    private fun paykitServiceRoute(
-        payment: ContactPaymentContext,
-        address: String,
-        canPayDirectly: Boolean,
-    ): PaykitRouteUi? {
-        if (!paykitRouteRepo.canRouteThroughSpark || canPayDirectly || address.isEmpty()) return null
-        if (payment.incomingPaymentRequest != null) return null
-        val methodId = payment.endpoints.firstOrNull { it.methodId.isOnchain }?.methodId ?: return null
-        return PaykitRouteUi(endpoint = PaykitEndpoint(methodId = methodId.rawValue, value = address))
+    private fun offersSparkLeg(payment: ContactPaymentContext, address: String, canPayDirectly: Boolean): Boolean {
+        if (!paykitRouteRepo.canRouteThroughSpark || canPayDirectly || address.isEmpty()) return false
+        return payment.incomingPaymentRequest == null && payment.endpoints.any { it.methodId.isOnchain }
     }
 
     private fun canFundPaykitLightning(invoice: LightningInvoice?, lnurl: LnurlParams.LnurlPay?): Boolean {
@@ -4629,9 +4628,15 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
         }
-        _sendUiState.value.routedPaykitRoute?.let {
-            if (quotePaykitRoute(it)) setSendEffect(SendEffect.NavigateToConfirm)
-            return
+        _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
+            when (routePaykitPayment(it)) {
+                PaykitRouteOutcome.Leg -> {
+                    setSendEffect(SendEffect.NavigateToConfirm)
+                    return
+                }
+                PaykitRouteOutcome.Refused -> return
+                PaykitRouteOutcome.Direct -> Unit
+            }
         }
 
         _sendUiState.update { it.copy(isLoading = true) }
@@ -4647,39 +4652,73 @@ class AppViewModel @Inject constructor(
         setSendEffect(SendEffect.NavigateToConfirm)
     }
 
-    private suspend fun quotePaykitRoute(route: PaykitRouteUi): Boolean {
+    /**
+     * Asks bitkit-core's router how to pay the contact from the selected source: Spending offers every endpoint and a
+     * Spark leg to on-chain ones, Savings only the on-chain endpoints. Direct pays the endpoint it names.
+     */
+    private suspend fun routePaykitPayment(route: PaykitRouteUi): PaykitRouteOutcome {
+        val state = _sendUiState.value
+        val fromSpending = state.payMethod == SendMethod.LIGHTNING
         _sendUiState.update { it.copy(isLoading = true) }
         val result = paykitRouteRepo.route(
-            amountSats = _sendUiState.value.amount,
-            endpoints = listOf(route.endpoint),
-            lightningSpendableSats = maxSendableLightningSats(),
-            onchainSpendableSats = walletRepo.balanceState.value.maxSendOnchainSats,
+            amountSats = state.amount,
+            endpoints = if (fromSpending) route.endpoints else route.endpoints.filter { it.isOnchain() },
+            lightningSpendableSats = if (fromSpending) maxSendableLightningSats() else 0uL,
+            onchainSpendableSats = if (fromSpending) 0uL else walletRepo.balanceState.value.maxSendOnchainSats,
+            quoteServiceLegs = fromSpending && route.offersSparkLeg,
         )
         _sendUiState.update { it.copy(isLoading = false) }
         val picked = result.getOrElse {
             Logger.error("Failed to route Paykit payment", it, context = TAG)
             toast(it)
-            return false
+            return PaykitRouteOutcome.Refused
         }
-        when (picked) {
-            is PaykitRoute.Service -> _sendUiState.update {
-                it.copy(
-                    paykitRoute = route.copy(serviceLeg = picked.leg),
-                    lightningFeeSats = (picked.leg.debitSat - picked.leg.deliveredSat).toLong(),
-                )
+        return when (picked) {
+            is PaykitRoute.Direct -> {
+                payDirectEndpoint(route, picked.endpoint)
+                PaykitRouteOutcome.Direct
+            }
+            is PaykitRoute.Service -> {
+                _sendUiState.update {
+                    it.copy(
+                        paykitRoute = route.copy(serviceLeg = picked.leg),
+                        lightningFeeSats = (picked.leg.debitSat - picked.leg.deliveredSat).toLong(),
+                    )
+                }
+                PaykitRouteOutcome.Leg
             }
             is PaykitRoute.None -> {
-                toast(AppError(picked.reason))
-                return false
-            }
-            // Balances changed after the contact opened: the regular flow must reopen it.
-            is PaykitRoute.Direct -> {
-                _sendUiState.update { it.copy(paykitRoute = null) }
-                toast(AppError(context.getString(R.string.common__error_body)))
-                return false
+                _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__error_sending_title),
+                    description = picked.reason,
+                )
+                PaykitRouteOutcome.Refused
             }
         }
-        return true
+    }
+
+    private fun payDirectEndpoint(route: PaykitRouteUi, endpoint: PaykitEndpoint) {
+        _sendUiState.update {
+            when {
+                endpoint.isOnchain() -> it.copy(
+                    payMethod = SendMethod.ONCHAIN,
+                    address = endpoint.value,
+                    paykitRoute = route.copy(serviceLeg = null),
+                )
+                endpoint.methodId == MethodId.Lnurl.rawValue -> it.copy(
+                    payMethod = SendMethod.LIGHTNING,
+                    decodedInvoice = null,
+                    paykitRoute = route.copy(serviceLeg = null),
+                )
+                else -> it.copy(
+                    payMethod = SendMethod.LIGHTNING,
+                    lnurl = null,
+                    paykitRoute = route.copy(serviceLeg = null),
+                )
+            }
+        }
     }
 
     private suspend fun reviewPaykitAmount(navigateToUsdtReview: Boolean = true): Boolean {
@@ -5731,7 +5770,7 @@ class AppViewModel @Inject constructor(
         if (state.usdtRecipient != null) add(SendFundingSource.Usdt)
         if (
             state.isUnified || state.decodedInvoice != null || state.lnurl is LnurlParams.LnurlPay ||
-            state.paykitRoute != null
+            state.paykitRoute?.offersSparkLeg == true
         ) {
             add(
                 SendFundingSource.Spending
@@ -9206,9 +9245,13 @@ data class SendUiState(
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
     val paykitRoute: PaykitRouteUi? = null,
 ) {
-    /** The Paykit route this payment takes: offered routes run only while Spending is the source. */
+    /** The Paykit route this payment takes: a Spark leg runs only while Spending is the source. */
     val routedPaykitRoute: PaykitRouteUi?
         get() = paykitRoute?.takeIf { payMethod == SendMethod.LIGHTNING }
+
+    /** Whether bitkit-core's router picks how this contact payment is paid; USDT and hardware wallets pay as picked. */
+    val routesPaykitPayment: Boolean
+        get() = !paykitUsesUsdt && hardwareWalletId == null && lnurl !is LnurlParams.LnurlWithdraw
 
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
@@ -9238,12 +9281,20 @@ data class SendUiState(
             !initialSubscriptionPaymentNeedsConfirmation && !requiresAmountReview
 }
 
-/** A Paykit payment routed through a service the wallet holds a balance on: the endpoint, and the leg once quoted. */
+/**
+ * A contact payment bitkit-core's router picks the way for: the contact's bitcoin endpoints, whether a Spark leg may
+ * reach its on-chain ones, and the leg once the router picked one.
+ */
 @Stable
 data class PaykitRouteUi(
-    val endpoint: PaykitEndpoint,
+    val endpoints: List<PaykitEndpoint>,
+    val offersSparkLeg: Boolean = false,
     val serviceLeg: ServiceRouteLeg? = null,
 )
+
+private enum class PaykitRouteOutcome { Direct, Leg, Refused }
+
+private fun PaykitEndpoint.isOnchain(): Boolean = MethodId.fromRawValue(methodId)?.isOnchain == true
 
 @Immutable
 data class OnchainFeeUi(

@@ -39,6 +39,7 @@ class PaykitRouteRepo @Inject constructor(
         endpoints: List<PaykitEndpoint>,
         lightningSpendableSats: ULong,
         onchainSpendableSats: ULong,
+        quoteServiceLegs: Boolean,
     ): Result<PaykitRoute> = withContext(ioDispatcher) {
         runSuspendCatching {
             paykitRoutePayment(
@@ -47,7 +48,7 @@ class PaykitRouteRepo @Inject constructor(
                     contactEndpoints = endpoints,
                     lightningSpendableSat = lightningSpendableSats,
                     onchainSpendableSat = onchainSpendableSats,
-                    serviceLegs = serviceLegs(endpoints, amountSats),
+                    serviceLegs = if (quoteServiceLegs) serviceLegs(endpoints, amountSats) else emptyList(),
                 ),
                 network = Env.network.toCoreNetwork(),
             )
@@ -56,7 +57,7 @@ class PaykitRouteRepo @Inject constructor(
 
     /** Spark withdrawals to the contact's on-chain endpoints, each quoted with its fee. */
     private suspend fun serviceLegs(endpoints: List<PaykitEndpoint>, amountSats: ULong): List<ServiceRouteLeg> =
-        endpoints.mapNotNull { endpoint ->
+        endpoints.filter { MethodId.fromRawValue(it.methodId)?.isOnchain == true }.mapNotNull { endpoint ->
             sparkRepo.withdrawalRouteLeg(endpoint, amountSats)
                 .onFailure { Logger.warn("No Spark route to '${endpoint.methodId}'", it, context = TAG) }
                 .getOrNull()
