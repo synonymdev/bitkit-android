@@ -1118,20 +1118,21 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
         assertFalse(beforeSend)
-        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
     }
 
     @Test
     fun `spark payment keeps the deadline and the fee limit`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
-        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Result.success("hash"))
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
         val deadline = Instant.fromEpochSeconds(1_800_000_000)
 
         val result = sut.payInvoice("invoice", 1_000uL, deadline, maxTotalRoutingFeeMsat = 10_000uL) { true }
 
         assertEquals("hash", result.getOrThrow())
-        verify(sparkRepo).payInvoice("invoice", 1_000uL, deadline, 10_000uL)
+        verify(sparkRepo).payInvoice(eq("invoice"), eq(1_000uL), eq(deadline), eq(10_000uL), any())
     }
 
     @Test
@@ -1141,7 +1142,7 @@ class LightningRepoTest : BaseUnitTest() {
         backgroundScope.launch { sut.nodeEvents.collect { events += it } }
         runCurrent()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
-        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.failure(PaymentPendingException("hash")))
         sut.payInvoice("bolt11", 1_000uL)
         assertTrue(sut.isSparkSend("hash"))
@@ -1173,7 +1174,8 @@ class LightningRepoTest : BaseUnitTest() {
         assertFalse(sut.isSparkSend("hash"))
 
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
-        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Result.success("hash"))
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
         sut.payInvoice("bolt11", 1_000uL).getOrThrow()
         val succeeded = Event.PaymentSuccessful("hash", "hash", "preimage", 0uL)
         @Suppress("UNCHECKED_CAST")
@@ -1188,6 +1190,11 @@ class LightningRepoTest : BaseUnitTest() {
     fun `restore beginning during spark payment authorization prevents dispatch`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var dispatched = false
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorize = it.getArgument<suspend () -> Boolean>(4)
+            runCatching { if (authorize()) dispatched = true }.map { "hash" }
+        }
 
         val result = sut.payInvoice("invoice", 1_000uL, onBeforeSend = {
             whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
@@ -1195,7 +1202,7 @@ class LightningRepoTest : BaseUnitTest() {
         })
 
         assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
-        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())
+        assertFalse(dispatched)
     }
 
     @Test

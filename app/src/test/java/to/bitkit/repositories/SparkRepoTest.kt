@@ -475,6 +475,23 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a cancel landing while spark prepares sends nothing`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        var cancelled = false
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenAnswer {
+            cancelled = true
+            prepared
+        }
+        val sut = createSut()
+
+        val result = sut.payInvoice("lnbc1", 100uL, onBeforeSend = { !cancelled })
+
+        assertIs<PaymentAbortedBeforeSend>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
     fun `an expired invoice spark refuses is a typed refusal`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val expired = SdkException.InvalidInput("Invoice has expired")
