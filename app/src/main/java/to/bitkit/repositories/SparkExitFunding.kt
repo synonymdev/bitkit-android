@@ -99,6 +99,9 @@ data class SparkExitQuote(
 
     val leafIds: List<String> get() = prepared.leaves.map { it.leafId }
 
+    /** The value of the leaves the quote lists, which the exit takes on-chain. */
+    val leafTotalSats: ULong get() = prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
+
     /**
      * What the quote cannot exit now: the leaves it skips, and Spark's balance beyond every leaf it lists, such as a
      * counter-swap still unclaimed. Null when nothing.

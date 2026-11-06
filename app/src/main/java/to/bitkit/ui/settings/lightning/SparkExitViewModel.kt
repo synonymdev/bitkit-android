@@ -1,10 +1,12 @@
 package to.bitkit.ui.settings.lightning
 
+import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import breez_sdk_spark.RecoveryTxKind
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -18,9 +20,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.FeeRate
+import to.bitkit.models.Toast
 import to.bitkit.repositories.SparkExitBackgroundLimits
+import to.bitkit.repositories.SparkExitCancel
+import to.bitkit.repositories.SparkExitCancelUnreadable
 import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.repositories.SparkExitFundingKey
 import to.bitkit.repositories.SparkExitFundingState
@@ -40,6 +46,7 @@ import kotlin.time.Duration.Companion.seconds
 /** Drives the emergency exit screens, from the quote to the progress of a running exit. */
 @HiltViewModel
 class SparkExitViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val sparkExitRepo: SparkExitRepo,
     private val sparkRepo: SparkRepo,
 ) : ViewModel() {
@@ -220,8 +227,15 @@ class SparkExitViewModel @Inject constructor(
     fun cancel() {
         viewModelScope.launch {
             sparkExitRepo.cancel()
-                .onSuccess { _effects.emit(SparkExitEffect.Cancelled) }
-                .onFailure { ToastEventBus.send(it) }
+                // Funding that reached the address keeps the exit on screen while it is sent back to savings.
+                .onSuccess { if (it == SparkExitCancel.Cancelled) _effects.emit(SparkExitEffect.Cancelled) }
+                .onFailure {
+                    if (it !is SparkExitCancelUnreadable) return@onFailure ToastEventBus.send(it)
+                    ToastEventBus.send(
+                        Toast.ToastType.ERROR,
+                        context.getString(R.string.lightning__spark_exit__cancel_failed)
+                    )
+                }
         }
     }
 }

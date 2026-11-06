@@ -115,6 +115,11 @@
     <string name="lightning__spark_exit__amount">Amount to exit</string>
     <string name="lightning__spark_exit__button">Emergency exit</string>
     <string name="lightning__spark_exit__cancel">Cancel exit</string>
+    <string name="lightning__spark_exit__cancel_failed">Couldn\'t check the funding address. Try again.</string>
+    <string name="lightning__spark_exit__cancel_text">Spark goes back to how it was. If a payment reached the exit\'s fee funding address, Bitkit sends it back to savings.</string>
+    <string name="lightning__spark_exit__cancel_title">Cancel exit?</string>
+    <string name="lightning__spark_exit__cancelled_text">You cancelled the exit. The fee funding that arrived goes back to savings.</string>
+    <string name="lightning__spark_exit__cancelled_title">Exit\n&lt;accent&gt;cancelled&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__confirm_text">You won\'t be able to use these funds for &lt;accent&gt;up to 4 weeks&lt;/accent&gt;.</string>
     <string name="lightning__spark_exit__confirm_title">Start\n&lt;accent&gt;exit?&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__done_received">{amount} reached your savings.</string>

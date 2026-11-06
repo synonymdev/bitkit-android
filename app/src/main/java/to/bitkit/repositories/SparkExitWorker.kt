@@ -88,13 +88,15 @@ class SparkExitWork @Inject constructor(
     }
 
     /** The exit of the wallet Bitkit runs, read before the wallet graph exists. */
-    private suspend fun store(): SparkExitStore {
-        val index = runSuspendCatching { db.configDao().getAll().first().firstOrNull()?.walletIndex }
+    private suspend fun store(): SparkExitStore = SparkExitStore(File(Env.sparkExitRecordPath(activeWalletIndex())))
+
+    /** The wallet Bitkit runs, read from its config before the wallet graph or Spark has started. */
+    suspend fun activeWalletIndex(): Int =
+        runSuspendCatching { db.configDao().getAll().first().firstOrNull()?.walletIndex }
             .onFailure { Logger.warn("Failed to read the active wallet for the Spark exit", it, context = TAG) }
             .getOrNull()
-            ?: 0L
-        return SparkExitStore(File(Env.sparkExitRecordPath(index.toInt())))
-    }
+            ?.toInt()
+            ?: 0
 
     private val scope = appScope(bgDispatcher, TAG)
     private val preferences get() = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
@@ -114,7 +116,7 @@ class SparkExitWork @Inject constructor(
      */
     fun ensureScheduled() {
         scope.launch {
-            val loaded = runCatching { store().load() }
+            val loaded = runSuspendCatching { store().load() }
             // A record that cannot be read is salvaged by the next run, which the alarm and the work stay set for.
             if (loaded.isFailure) {
                 Logger.warn("Failed to read the Spark exit record; keeping its background work", context = TAG)
@@ -188,7 +190,7 @@ class SparkExitWork @Inject constructor(
      * run now, and warns again later if it stays behind.
      */
     suspend fun onDeadline() {
-        val loaded = runCatching { store().load() }
+        val loaded = runSuspendCatching { store().load() }
         if (loaded.isFailure) {
             Logger.warn("Failed to read the Spark exit record at its deadline; running it now", context = TAG)
             enqueueCatchUp()

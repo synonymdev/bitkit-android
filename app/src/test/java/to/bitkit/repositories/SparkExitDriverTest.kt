@@ -547,14 +547,16 @@ class SparkExitDriverTest : BaseUnitTest() {
 
     @Test
     fun `a leftover worth less than its fees waits for cheaper fees, then is kept as dust after four weeks`() = test {
-        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 400uL))
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 1_000uL))
+        chain.economyRate = 9uL
         val done = SparkExitFixtures.record(Phase.Done).copy(
             destination = SWEEP_DESTINATION,
             funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
-            leftover = listOf(SparkExitRecord.Leftover("f0", 1u, 400uL)),
+            leftover = listOf(SparkExitRecord.Leftover("f0", 1u, 1_000uL)),
+            feeRateSatPerVbyte = 9uL,
         )
 
-        // At 1 sat/vB the sweep's fee leaves less than dust: it waits, and the exit is still driven.
+        // At 9 sat/vB the sweep's fee leaves less than dust: it waits, and the exit is still driven.
         var record = driver(tip = 1_000u).tick(done)
         assertTrue(record.isLeftoverWaitingForFees)
         assertTrue(record.needsDriving)
@@ -564,7 +566,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         chain.utxosByAddress[SWEEP_FUNDING] = emptyList()
         record = driver(tip = 1_143u).tick(record)
         assertTrue(record.isLeftoverWaitingForFees)
-        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 400uL))
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 1_000uL))
         record = driver(tip = 1_144u).tick(record)
         assertEquals(1_144u, assertNotNull(record.leftoverSweep).checkedAtHeight)
         assertEquals(1_000u, assertNotNull(record.leftoverSweep).waitingSince)
@@ -575,6 +577,70 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
         assertTrue(chain.rawBroadcasts.isEmpty())
         assertFalse(record.needsDriving)
+    }
+
+    @Test
+    fun `a leftover not even the lowest rate can send is kept as dust at once`() = test {
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 400uL))
+        val done = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            leftover = listOf(SparkExitRecord.Leftover("f0", 1u, 400uL)),
+        )
+
+        val record = driver(tip = 1_000u).tick(done)
+
+        assertTrue(assertNotNull(record.leftoverSweep).isDustKept)
+        assertFalse(record.needsDriving)
+    }
+
+    @Test
+    fun `a leftover sweep whose inputs went elsewhere reads the address again`() = test {
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        assertNotNull(assertNotNull(record.leftoverSweep).txHex)
+        chain.outcome = SparkExitBroadcastOutcome.InputsMissing("missing-inputs")
+        record = driver(tip = 1_001u).tick(record)
+        assertNull(record.leftoverSweep)
+
+        chain.utxosByAddress[SWEEP_FUNDING] = emptyList()
+        record = driver(tip = 1_002u).tick(record)
+        assertTrue(record.leftover.isEmpty())
+        assertFalse(record.needsDriving)
+    }
+
+    @Test
+    fun `a higher fee waiting on its payment still sends the steps due and checks with the sdk`() = test {
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        val bumped = running(recovery).copy(
+            funding = listOf(
+                SparkExitFixtures.record().funding.single().copy(txid = "f0", vout = 0u, valueSats = 20_000uL)
+            ),
+        ).applyFeeBump(rate = 9uL, extraSats = 6_000uL, paymentTxid = "bump")
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+
+        var record = driver(tip = 1_001u).tick(bumped)
+
+        assertEquals(listOf("n1"), chain.broadcasts.map { it.txid })
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isAwaitingOwnPayment)
+        assertEquals(1_001u, record.fundingPaymentSeenAtHeight)
+        // No host knows the payment for a block: the exit forgets it and asks again.
+        chain.unknownTxids = setOf("bump")
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        record = driver(tip = 1_002u).tick(record)
+        assertEquals(1_002u, record.fundingPaymentMissingSince)
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        record = driver(tip = 1_003u).tick(record)
+        assertFalse(record.isAwaitingOwnPayment)
+        assertNull(record.fundingPaymentTxid)
+    }
+
+    @Test
+    fun `a payment from savings never adopted is forgotten 144 blocks after the first look`() {
+        val waiting = SparkExitFixtures.record(Phase.NeedsFunding(30_000uL)).copy(fundingPaymentTxid = "bump")
+        val looked = waiting.withOwnPaymentLooked(1_000u, isKnown = true)
+        assertTrue(looked.withOwnPaymentLooked(1_143u, isKnown = true).isAwaitingOwnPayment)
+        assertFalse(looked.withOwnPaymentLooked(1_144u, isKnown = true).isAwaitingOwnPayment)
     }
 
     @Test
@@ -798,7 +864,8 @@ class SparkExitDriverTest : BaseUnitTest() {
             listOf("f0", "bump"),
             sdk.recoverRequests.single().fundingInputs.map { (it as CpfpInput.P2wpkh).txid }
         )
-        assertEquals(listOf("n1b"), chain.broadcasts.map { it.txid })
+        // The generation out there kept going while the payment confirmed.
+        assertEquals(listOf("n1", "n1b"), chain.broadcasts.map { it.txid })
     }
 
     @Test

@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
@@ -33,7 +34,7 @@ class SparkExitViewModelTest : BaseUnitTest() {
     @Test
     fun `entering the funding step again offers both choices while nothing was paid`() = test {
         whenever(repo.refreshFundingAddress()).thenReturn(Result.success(0uL))
-        val sut = SparkExitViewModel(repo, sparkRepo)
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
         sut.onFundExternally()
         sut.stopWatchingFundingAddress()
 
@@ -46,7 +47,7 @@ class SparkExitViewModelTest : BaseUnitTest() {
     @Test
     fun `entering the funding step keeps the address once a payment reached it`() = test {
         whenever(repo.refreshFundingAddress()).thenReturn(Result.success(5_000uL))
-        val sut = SparkExitViewModel(repo, sparkRepo)
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
 
         sut.onFundingShown()
 
@@ -134,7 +135,7 @@ class SparkExitViewModelTest : BaseUnitTest() {
             lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 32_768uL)),
         )
         exitState.value = SparkExitState(record = stopped)
-        val sut = SparkExitViewModel(repo, sparkRepo)
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
 
         sparkState.value = SparkState(balanceSats = 34_464uL)
 

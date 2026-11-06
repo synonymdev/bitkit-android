@@ -1,9 +1,11 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.CheckRecoverFundsResponse
+import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.RecoveryRedoReason
 import breez_sdk_spark.RecoveryVerdict
 import breez_sdk_spark.SdkException
+import com.synonym.bitkitcore.GetAddressResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -14,9 +16,13 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.utils.io.errors.IOException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -26,7 +32,9 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -37,6 +45,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.models.FeeRate
 import to.bitkit.models.TransferType
 import to.bitkit.repositories.SparkExitRecord.Phase
 import to.bitkit.services.CoreService
@@ -45,8 +54,10 @@ import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -66,6 +77,7 @@ class SparkExitRepoTest : BaseUnitTest() {
     @Before
     fun setUp() {
         Env.initAppStoragePath(tempFolder.root.absolutePath)
+        whenever { work.activeWalletIndex() }.thenReturn(0)
     }
 
     private fun createSut(
@@ -73,12 +85,13 @@ class SparkExitRepoTest : BaseUnitTest() {
         httpClient: HttpClient = mock<HttpClient>(),
         keychain: Keychain = mock<Keychain>(),
         coreService: CoreService = mock<CoreService>(),
+        lightningRepo: LightningRepo = mock<LightningRepo>(),
     ) = SparkExitRepo(
         work = work,
         bgDispatcher = testDispatcher,
         sparkService = sparkService,
         sparkRepo = sparkRepo,
-        lightningRepo = mock<LightningRepo>(),
+        lightningRepo = lightningRepo,
         transferRepo = transferRepo,
         activityRepo = mock<ActivityRepo>(),
         coreService = coreService,
@@ -405,5 +418,240 @@ class SparkExitRepoTest : BaseUnitTest() {
         verify(
             onchain
         ).deriveBitcoinAddress(any(), eq(SparkExitFundingKey.path(2, Env.network)), anyOrNull(), anyOrNull())
+    }
+
+    private val lightning = mock<LightningRepo>()
+
+    private val funding = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+
+    /** A compressed regtest WIF of a 32-byte secret of 0x01s. */
+    private val wif = "cMceqPhHedrhbcR9eXgzmfWy7kRqLyAxMYwFT6ABDWsiwUp9Nsq9"
+
+    private suspend fun keyed(): Pair<Keychain, CoreService> {
+        val keychain = mock<Keychain> { on { loadString(any()) } doReturn "mnemonic" }
+        val onchain = mock<OnchainService>()
+        whenever(onchain.deriveBitcoinAddress(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(GetAddressResponse(funding, "m/84'/1'/7797'/0/0", "02ab"))
+        whenever(onchain.derivePrivateKey(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(wif)
+        return keychain to mock<CoreService> { on { this.onchain } doReturn onchain }
+    }
+
+    private suspend fun connectedSpark(sdk: FakeSparkExitRecovering) = mock<SparkService> {
+        on { networkName } doReturn "regtest"
+        on { isConnected } doReturn true
+        on { exitRecovering() } doReturn sdk
+    }.also {
+        whenever(it.fastestFeeRate()).thenReturn(9uL)
+        whenever(it.halfHourFeeRate()).thenReturn(6uL)
+    }
+
+    private fun fundingChain(utxos: String? = "[]") = HttpClient(
+        MockEngine { request ->
+            val url = request.url.toString()
+            when {
+                url.endsWith("/address/$funding/utxo") && utxos != null -> respond(utxos)
+                url.endsWith("/blocks/tip/height") -> respond("1000")
+                url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
+                else -> throw IOException("unreachable '$url'")
+            }
+        },
+    ) { defaultRequest { contentType(ContentType.Application.Json) } }
+
+    private suspend fun quotedSut(sdk: FakeSparkExitRecovering, http: HttpClient = fundingChain()): SparkExitRepo {
+        whenever(sparkRepo.needsSettling()).thenReturn(false)
+        whenever(sparkRepo.settleForExit()).thenReturn(Result.success(Unit))
+        whenever(lightning.newAddress()).thenReturn(Result.success("bcrt1qdestination"))
+        whenever(
+            transferRepo.createTransfer(
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull()
+            )
+        )
+            .thenReturn(Result.success("transfer-1"), Result.success("transfer-2"))
+        whenever(transferRepo.markSettled(any())).thenReturn(Result.success(Unit))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val (keychain, core) = keyed()
+        return createSut(connectedSpark(sdk), http, keychain, core, lightning)
+    }
+
+    @Test
+    fun `a quote prepares every leaf per node at the fastest rate to a fresh savings address`() = test {
+        val sdk = FakeSparkExitRecovering()
+        val sut = quotedSut(sdk)
+
+        val quote = sut.loadQuote().getOrThrow()
+
+        assertEquals(listOf("leaf-1"), quote.leafIds)
+        val request = sdk.prepareRequests.single()
+        assertEquals(CpfpFundingStrategy.PER_NODE, request.fundingStrategy)
+        assertEquals(9uL, request.feeRateSatPerVbyte)
+        assertEquals("bcrt1qdestination", request.destination)
+        assertEquals(funding, sut.state.value.fundingAddress)
+    }
+
+    @Test
+    fun `starting holds spark with the transfer, then reconnects it, and a second start is refused`() = test {
+        val sdk = FakeSparkExitRecovering()
+        val sut = quotedSut(sdk)
+        sut.loadQuote().getOrThrow()
+
+        sut.start(fundFromSavings = false).getOrThrow()
+
+        val order = inOrder(sparkRepo, transferRepo)
+        order.verify(sparkRepo).holdForExit()
+        order.verify(
+            transferRepo
+        ).createTransfer(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        order.verify(sparkRepo).awaitOptimizationIdle()
+        order.verify(sparkRepo).setExiting(true, true)
+        val record = assertNotNull(sut.state.value.record)
+        assertEquals(SparkExitRecord.PER_NODE, record.fundingStrategy)
+        assertEquals("transfer-1", record.transferId)
+        assertIs<Phase.AwaitingFunding>(record.phase)
+        assertTrue(sut.start(fundFromSavings = false).isFailure)
+        sut.onAppBackgrounded()
+    }
+
+    @Test
+    fun `a leaf swap between the quote and the start quotes the exit again`() = test {
+        val sdk = FakeSparkExitRecovering()
+        val sut = quotedSut(sdk)
+        sut.loadQuote().getOrThrow()
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
+
+        sut.start(fundFromSavings = false).getOrThrow()
+
+        val record = assertNotNull(sut.state.value.record)
+        assertEquals(listOf("leaf-2"), record.leafIds)
+        assertEquals("transfer-2", record.transferId)
+        verify(transferRepo).markSettled("transfer-1")
+        sut.onAppBackgrounded()
+    }
+
+    private fun awaitingRecord(paidTxid: String? = null) = SparkExitFixtures.record().copy(
+        funding = listOf(SparkExitRecord.Funding(0u, funding, "02ab")),
+        fundingPaymentTxid = paidTxid,
+    )
+
+    @Test
+    fun `cancel forgets an exit nothing reached, and never one savings paid`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord(paidTxid = "paid"))
+        val paid = quotedSut(FakeSparkExitRecovering())
+        paid.load().getOrThrow()
+        assertFalse(paid.canCancel)
+        assertTrue(paid.cancel().isFailure)
+        assertNotNull(store.load())
+
+        store.save(awaitingRecord())
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        assertTrue(sut.canCancel)
+        assertEquals(SparkExitCancel.Cancelled, sut.cancel().getOrThrow())
+        assertNull(store.load())
+        verify(sparkRepo).setExiting(false, false)
+    }
+
+    @Test
+    fun `cancel keeps funding that reached the address and sends it back to savings`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val utxo = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":5000,"status":{"confirmed":false}}]"""
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxo))
+        sut.load().getOrThrow()
+
+        assertEquals(SparkExitCancel.Sweeping, sut.cancel().getOrThrow())
+
+        val record = assertNotNull(store.load())
+        assertTrue(record.isCancelled)
+        assertEquals(Phase.Failed(CANCELLED_REASON), record.phase)
+        assertEquals(5_000uL, record.leftover.single().valueSats)
+        assertTrue(record.needsDriving)
+    }
+
+    @Test
+    fun `cancel refuses while the funding address cannot be read`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxos = null))
+        sut.load().getOrThrow()
+
+        assertIs<SparkExitCancelUnreadable>(sut.cancel().exceptionOrNull())
+        assertNotNull(store.load())
+    }
+
+    private suspend fun stubFunding(answer: suspend () -> Result<OnchainSendOutcome>) {
+        whenever {
+            lightning.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        }.doSuspendableAnswer { answer() }
+        whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
+    }
+
+    private fun runningRecord() = SparkExitFixtures.record(Phase.Running)
+        .copy(funding = listOf(SparkExitRecord.Funding(0u, funding, "02ab", "f0", 0u, 20_000uL)))
+        .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a higher fee pays once, even when tapped twice, and never for an ended exit`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        val gate = CompletableDeferred<Unit>()
+        stubFunding {
+            gate.await()
+            Result.success(OnchainSendOutcome.Accepted("bump"))
+        }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        val option = SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)
+
+        val first = async { sut.payHigherFee(option) }
+        advanceUntilIdle()
+        assertTrue(sut.payHigherFee(option).isFailure)
+        gate.complete(Unit)
+        first.await().getOrThrow()
+        // The tick the payment starts runs before the record is changed under it.
+        advanceUntilIdle()
+
+        val record = assertNotNull(store.load())
+        assertEquals("bump", record.fundingPaymentTxid)
+        assertEquals(9uL, record.feeRateSatPerVbyte)
+        assertTrue(record.isDrivingWhileFunding)
+
+        store.save(runningRecord().copy(phase = Phase.Done))
+        val ended = quotedSut(FakeSparkExitRecovering())
+        ended.load().getOrThrow()
+        assertTrue(ended.payHigherFee(option).isFailure)
+    }
+
+    @Test
+    fun `fee bump rates are priced without broadcasting, leaving out a rate the sdk refuses a leaf at`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        val sdk = FakeSparkExitRecovering().apply {
+            preparedResponse = SparkExitFixtures.prepared(funding = null)
+            prepareErrors += SdkException.SparkException("Leaf leaf-1 cannot be exited: its refund cannot pay its fee")
+        }
+        val sut = quotedSut(sdk)
+        sut.load().getOrThrow()
+
+        val options = sut.feeBumpOptions().getOrThrow()
+
+        assertEquals(listOf(FeeRate.NORMAL to 6uL), options.map { it.speed to it.rateSatPerVbyte })
+        assertEquals(0uL, options.single().totalSats)
+        assertTrue(sdk.recoverRequests.isEmpty())
     }
 }

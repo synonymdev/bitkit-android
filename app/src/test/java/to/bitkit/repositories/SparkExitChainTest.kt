@@ -119,10 +119,8 @@ class SparkExitChainTest : BaseUnitTest() {
         )
         assertIs<SparkExitBroadcastOutcome.Rejected>(refused.broadcastHex("02s1"))
         assertEquals(2, requests.size)
-        assertFalse(
-            SparkExitBroadcastClassifier.isUnplaceable(SparkExitBroadcastOutcome.Rejected("min relay fee not met"))
-        )
-        assertTrue(SparkExitBroadcastClassifier.isUnplaceable(SparkExitBroadcastClassifier.classify(bareRefusal)))
+        assertFalse(SparkExitBroadcastClassifier.isUnplaceable("min relay fee not met"))
+        assertTrue(SparkExitBroadcastClassifier.isUnplaceable(bareRefusal))
     }
 
     @Test
@@ -219,6 +217,23 @@ class SparkExitChainTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a refusal keeps only a short reason, never a host's page`() {
+        val classifier = SparkExitBroadcastClassifier
+        assertEquals(
+            SparkExitBroadcastOutcome.Rejected("min relay fee not met, 0 < 17"),
+            classifier.single(
+                400,
+                """{"error":"sendrawtransaction RPC error: """ +
+                    """{\"code\":-26,\"message\":\"min relay fee not met, 0 < 17\"}"}"""
+            ),
+        )
+        val page = "<html><body><h1>502 Bad Gateway</h1>" + "x".repeat(500) + "</body></html>"
+        val reason = (classifier.single(400, page) as SparkExitBroadcastOutcome.Rejected).reason
+        assertFalse("<" in reason)
+        assertTrue(reason.length <= 200)
+    }
+
+    @Test
     fun `classifies node answers`() {
         val failedPackage = """{"package_msg":"transaction failed","tx-results":"""
         val classifier = SparkExitBroadcastClassifier
@@ -227,7 +242,7 @@ class SparkExitChainTest : BaseUnitTest() {
             classifier.single(400, """sendrawtransaction RPC error: {"code":-27}"""),
         )
         assertEquals(
-            SparkExitBroadcastOutcome.InputsMissing("""sendrawtransaction RPC error: {"code":-25}"""),
+            SparkExitBroadcastOutcome.InputsMissing("RPC error -25"),
             classifier.single(400, """sendrawtransaction RPC error: {"code":-25}"""),
         )
         assertEquals(SparkExitBroadcastOutcome.RetryLater("HTTP 503"), classifier.single(503, ""))
@@ -248,7 +263,7 @@ class SparkExitChainTest : BaseUnitTest() {
             """"w2":{"txid":"b","error":"min relay fee not met"}}}"""
         assertIs<SparkExitBroadcastOutcome.NotMature>(classifier.pkg(200, nonFinalParent))
         val escaped = """{"error":"submitpackage RPC error: {\"code\":-25}"}"""
-        assertEquals(SparkExitBroadcastOutcome.InputsMissing(escaped), classifier.pkg(400, escaped))
+        assertEquals(SparkExitBroadcastOutcome.InputsMissing("RPC error -25"), classifier.pkg(400, escaped))
         // Missing inputs on the CPFP child alone say nothing about the step.
         val childMissing = failedPackage + """{"w1":{"txid":"parent"},""" +
             """"w2":{"txid":"child","error":"bad-txns-inputs-missingorspent"}}}"""

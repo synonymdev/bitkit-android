@@ -26,6 +26,7 @@ import kotlinx.serialization.json.put
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -127,6 +128,12 @@ data class SparkExitRecord(
     val landedSweepTxid: String? = null,
     /** Steps confirmed when the rebuild from the chain was adopted; one more clears [isRebuiltFromChain]. */
     val rebuiltFromChainConfirmedCount: Int? = null,
+    /** The tip of the first funding-wait tick that looked for [fundingPaymentTxid]. */
+    val fundingPaymentSeenAtHeight: UInt? = null,
+    /** The first tip at which no host knew [fundingPaymentTxid]; cleared once one does. */
+    val fundingPaymentMissingSince: UInt? = null,
+    /** The user cancelled the exit after funding had reached its address; the leftover sweep sends it back. */
+    val isCancelled: Boolean = false,
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -136,6 +143,12 @@ data class SparkExitRecord(
 
         /** Blocks a step a node accepted may go unconfirmed before the exit's fee rate counts as too low. */
         const val UNCONFIRMED_BLOCKS_TO_SURFACE = 6u
+
+        /** Blocks a payment from savings may be unknown to every host before the exit forgets it and asks again. */
+        const val OWN_PAYMENT_MISSING_BLOCKS = 1u
+
+        /** Blocks after the first look a payment from savings may stay unadopted before the exit asks again. */
+        const val OWN_PAYMENT_TIMEOUT_BLOCKS = 144u
 
         /** [fundingStrategy] of an exit that funds each fee-bumped transaction from a UTXO of its own. */
         const val PER_NODE = "perNode"
@@ -221,6 +234,26 @@ data class SparkExitRecord(
         get() = fundingPaymentTxid != null && fundingShortfallSats != null &&
             funding.none { it.txid == fundingPaymentTxid }
 
+    /** A higher fee's top-up, not a diverged rebuild: the generation out there is still driven while it confirms. */
+    val isDrivingWhileFunding: Boolean
+        get() = phase is Phase.NeedsFunding && recovery != null && !isRebuilding
+
+    /**
+     * [fundingPaymentTxid] at [tip], when [isKnown] says whether a host knows it: forgotten once missing for a block,
+     * or 144 blocks after the first look without being adopted, so the ask and its reminder come back.
+     */
+    fun withOwnPaymentLooked(tip: UInt, isKnown: Boolean): SparkExitRecord {
+        if (!isAwaitingOwnPayment) return this
+        val seenAt = fundingPaymentSeenAtHeight ?: tip
+        val missingSince = if (isKnown) null else fundingPaymentMissingSince ?: tip
+        val isMissing = missingSince != null && tip >= missingSince + OWN_PAYMENT_MISSING_BLOCKS
+        val isTimedOut = tip >= seenAt + OWN_PAYMENT_TIMEOUT_BLOCKS
+        if (isMissing || isTimedOut) {
+            return copy(fundingPaymentTxid = null, fundingPaymentSeenAtHeight = null, fundingPaymentMissingSince = null)
+        }
+        return copy(fundingPaymentSeenAtHeight = seenAt, fundingPaymentMissingSince = missingSince)
+    }
+
     /** A built sweep of the leftover, saved before it is sent; a null [txid] means it was dust and nothing went. */
     data class LeftoverSweep(
         val txid: String?,
@@ -248,6 +281,8 @@ data class SparkExitRecord(
         val refusedFeeRate: ULong? = null,
         /** While waiting after a refusal: the tip from which the next build may go out, the block after it. */
         val retryAtHeight: UInt? = null,
+        /** The tip it was built at, so one no node ever takes is built again from the address. */
+        val builtAtHeight: UInt? = null,
     ) {
         /** Not built, waiting for fees to drop. A sweep with no [txid] and no wait is dust kept, as before waits. */
         val isWaitingForFees: Boolean get() = txid == null && waitingSince != null && !isDustKept
@@ -371,12 +406,18 @@ data class SparkExitRecord(
      * and then rebuilds; with nothing to pay, it rebuilds on the next tick. Either way what has not confirmed goes
      * out again at the new rate and replaces what is in the mempool. Not a Redo, so it strikes nothing.
      */
-    fun applyFeeBump(rate: ULong, extraSats: ULong, paymentTxid: String?): SparkExitRecord {
+    fun applyFeeBump(
+        rate: ULong,
+        extraSats: ULong,
+        paymentTxid: String?,
+    ): SparkExitRecord {
         val bumped = copy(feeRateSatPerVbyte = rate, isRedoRebuild = false)
         if (extraSats == 0uL) return bumped.copy(isRebuilding = true, lastBuildAt = null)
         return bumped.copy(
             phase = Phase.NeedsFunding(fundedSats.safe() + extraSats.safe()),
             fundingPaymentTxid = paymentTxid,
+            fundingPaymentSeenAtHeight = null,
+            fundingPaymentMissingSince = null,
         )
     }
 
@@ -478,16 +519,16 @@ class SparkExitStore(private val file: File) {
     /** The record's raw text, for salvaging one that cannot be read; null when there is none. */
     fun loadText(): String? = file.takeIf { it.exists() }?.readText()
 
-    /** Moves an unreadable record out of the way, keeping it for support. */
+    /** Copies an unreadable record aside for support; the salvaged record then replaces it in one atomic write. */
     fun setAside(nowMillis: Long) {
         val aside = File(file.parentFile, "${file.nameWithoutExtension}.unreadable-$nowMillis.json")
-        Files.move(file.toPath(), aside.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        Files.copy(file.toPath(), aside.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 
     fun save(record: SparkExitRecord) {
         file.parentFile?.mkdirs()
         val temp = File(file.parentFile, "${file.name}.tmp")
-        temp.writeText(SparkExitJson.encode(record))
+        writeDurably(temp, SparkExitJson.encode(record))
         Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 
@@ -513,12 +554,20 @@ class SparkExitLostLeafStore(private val file: File) {
         if (known.containsAll(leafIds)) return
         file.parentFile?.mkdirs()
         val temp = File(file.parentFile, "${file.name}.tmp")
-        temp.writeText(JsonArray((known + leafIds).sorted().map(::JsonPrimitive)).toString())
+        writeDurably(temp, JsonArray((known + leafIds).sorted().map(::JsonPrimitive)).toString())
         Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 
     fun delete() {
         file.delete()
+    }
+}
+
+/** Writes [text] to [file] and syncs it to disk, so the atomic move after it never lands an empty file. */
+internal fun writeDurably(file: File, text: String) {
+    FileOutputStream(file).use {
+        it.write(text.toByteArray())
+        it.fd.sync()
     }
 }
 
@@ -620,13 +669,19 @@ object SparkExitJson {
             isRebuiltFromChain = isActive,
             exitStateSnapshot = read { o.stringOrNull("exitStateSnapshot") },
             fundingStrategy = read { o.stringOrNull("fundingStrategy") },
-            // An exit that had ended still sweeps what it left at its funding address.
-            leftover = read {
-                o.arrayOrEmpty("leftover").map {
-                    val l = it.jsonObject
-                    SparkExitRecord.Leftover(l.string("txid"), l.ulong("vout").toUInt(), l.ulong("valueSats"))
-                }
+            // An exit that had ended still sweeps what it left at its funding address, and keeps what it landed.
+            leftover = read { o.arrayOrEmpty("leftover").map { leftoverFromJson(it.jsonObject) } }.orEmpty(),
+            leftoverSweep = read { o.objectOrNull("leftoverSweep")?.let(::sweepFromJson) },
+            // The stored recovery's children and fan-out too, when it still reads: their outputs aren't new funding.
+            earlierCpfpTxids = (
+                read { o.arrayOrEmpty("earlierCpfpTxids").map { it.jsonPrimitive.content } }.orEmpty() +
+                    read { o.objectOrNull("recovery")?.let { SparkExitTxids.fundingTxids(recoveryFromJson(it)) } }
+                        .orEmpty()
+                ).distinct(),
+            earlierReceivedSats = read {
+                o.objectOrNull("earlierReceivedSats")?.mapValues { it.value.jsonPrimitive.content.toULong() }
             }.orEmpty(),
+            landedSweepTxid = read { o.stringOrNull("landedSweepTxid") },
         )
     }
 
@@ -768,6 +823,7 @@ object SparkExitJson {
         if (sweep.isDustKept) put("isDustKept", true)
         sweep.refusedFeeRate?.let { put("refusedFeeRate", it.toLong()) }
         sweep.retryAtHeight?.let { put("retryAtHeight", it.toLong()) }
+        sweep.builtAtHeight?.let { put("builtAtHeight", it.toLong()) }
     }
 
     /** What the exit keeps to pace and bound its rebuilds and waits, each left out at its default. */
@@ -807,6 +863,9 @@ object SparkExitJson {
         if (r.isFailedLeavesReleased) put("isFailedLeavesReleased", true)
         r.landedSweepTxid?.let { put("landedSweepTxid", it) }
         r.rebuiltFromChainConfirmedCount?.let { put("rebuiltFromChainConfirmedCount", it) }
+        r.fundingPaymentSeenAtHeight?.let { put("fundingPaymentSeenAtHeight", it.toLong()) }
+        r.fundingPaymentMissingSince?.let { put("fundingPaymentMissingSince", it.toLong()) }
+        if (r.isCancelled) put("isCancelled", true)
         if (r.earlierReceivedSats.isNotEmpty()) {
             put(
                 "earlierReceivedSats",
@@ -854,34 +913,14 @@ object SparkExitJson {
         transferId = o.stringOrNull("transferId"),
         expectedSats = o.ulong("expectedSats"),
         claimableAtHeight = o.ulongOrNull("claimableAtHeight")?.toUInt(),
-        leftover = o.arrayOrEmpty("leftover").map {
-            val l = it.jsonObject
-            SparkExitRecord.Leftover(l.string("txid"), l.ulong("vout").toUInt(), l.ulong("valueSats"))
-        },
+        leftover = o.arrayOrEmpty("leftover").map { leftoverFromJson(it.jsonObject) },
         skippedLeafCount = o.intOrNull("skippedLeafCount") ?: 0,
         failedLeafCount = o.intOrNull("failedLeafCount") ?: 0,
         isRebuilding = o.booleanOrNull("isRebuilding") ?: false,
         lastBuildAt = o.millisOrNull("lastBuildAt"),
         leafTotalSats = o.ulongOrNull("leafTotalSats"),
         earlierCpfpTxids = o.arrayOrEmpty("earlierCpfpTxids").map { it.jsonPrimitive.content },
-        leftoverSweep = o.objectOrNull("leftoverSweep")?.let {
-            SparkExitRecord.LeftoverSweep(
-                txid = it.stringOrNull("txid"),
-                txHex = it.stringOrNull("txHex"),
-                valueSats = it.ulong("valueSats"),
-                isAccepted = it.booleanOrNull("isAccepted") ?: false,
-                rejection = it.stringOrNull("rejection"),
-                isConfirmed = it.booleanOrNull("isConfirmed") ?: false,
-                feeRateSatPerVbyte = it.ulongOrNull("feeRateSatPerVbyte"),
-                sentAtHeight = it.ulongOrNull("sentAtHeight")?.toUInt(),
-                replacedTxids = it.arrayOrEmpty("replacedTxids").map { txid -> txid.jsonPrimitive.content },
-                waitingSince = it.ulongOrNull("waitingSince")?.toUInt(),
-                checkedAtHeight = it.ulongOrNull("checkedAtHeight")?.toUInt(),
-                isDustKept = it.booleanOrNull("isDustKept") ?: false,
-                refusedFeeRate = it.ulongOrNull("refusedFeeRate"),
-                retryAtHeight = it.ulongOrNull("retryAtHeight")?.toUInt(),
-            )
-        },
+        leftoverSweep = o.objectOrNull("leftoverSweep")?.let(::sweepFromJson),
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),
         isResultSeen = o.booleanOrNull("isResultSeen") ?: false,
         spentStepStrikes = o.objectOrNull("spentStepStrikes")
@@ -916,10 +955,35 @@ object SparkExitJson {
         isFailedLeavesReleased = o.booleanOrNull("isFailedLeavesReleased") ?: false,
         landedSweepTxid = o.stringOrNull("landedSweepTxid"),
         rebuiltFromChainConfirmedCount = o.intOrNull("rebuiltFromChainConfirmedCount"),
+        fundingPaymentSeenAtHeight = o.ulongOrNull("fundingPaymentSeenAtHeight")?.toUInt(),
+        fundingPaymentMissingSince = o.ulongOrNull("fundingPaymentMissingSince")?.toUInt(),
+        isCancelled = o.booleanOrNull("isCancelled") ?: false,
         earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),
     )
+
+    private fun leftoverFromJson(l: JsonObject) =
+        SparkExitRecord.Leftover(l.string("txid"), l.ulong("vout").toUInt(), l.ulong("valueSats"))
+
+    private fun sweepFromJson(it: JsonObject) =
+        SparkExitRecord.LeftoverSweep(
+            txid = it.stringOrNull("txid"),
+            txHex = it.stringOrNull("txHex"),
+            valueSats = it.ulong("valueSats"),
+            isAccepted = it.booleanOrNull("isAccepted") ?: false,
+            rejection = it.stringOrNull("rejection"),
+            isConfirmed = it.booleanOrNull("isConfirmed") ?: false,
+            feeRateSatPerVbyte = it.ulongOrNull("feeRateSatPerVbyte"),
+            sentAtHeight = it.ulongOrNull("sentAtHeight")?.toUInt(),
+            replacedTxids = it.arrayOrEmpty("replacedTxids").map { txid -> txid.jsonPrimitive.content },
+            waitingSince = it.ulongOrNull("waitingSince")?.toUInt(),
+            checkedAtHeight = it.ulongOrNull("checkedAtHeight")?.toUInt(),
+            isDustKept = it.booleanOrNull("isDustKept") ?: false,
+            refusedFeeRate = it.ulongOrNull("refusedFeeRate"),
+            retryAtHeight = it.ulongOrNull("retryAtHeight")?.toUInt(),
+            builtAtHeight = it.ulongOrNull("builtAtHeight")?.toUInt(),
+        )
 
     private fun phaseToJson(phase: SparkExitRecord.Phase): JsonObject = when (phase) {
         is SparkExitRecord.Phase.AwaitingFunding ->

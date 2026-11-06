@@ -11,6 +11,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -20,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.repositories.CANCELLED_REASON
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
@@ -30,6 +34,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.openNotificationSettings
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -131,12 +136,26 @@ private fun Content(
                 VerticalSpacer(16.dp)
             }
             if (uiState.canCancel) {
+                var isConfirming by remember { mutableStateOf(false) }
                 SecondaryButton(
                     text = stringResource(R.string.lightning__spark_exit__cancel),
-                    onClick = onCancel,
+                    onClick = { isConfirming = true },
                     testTag = "SparkExitCancel",
                 )
                 VerticalSpacer(16.dp)
+                if (isConfirming) {
+                    AppAlertDialog(
+                        title = stringResource(R.string.lightning__spark_exit__cancel_title),
+                        text = stringResource(R.string.lightning__spark_exit__cancel_text),
+                        confirmText = stringResource(R.string.lightning__spark_exit__cancel),
+                        onConfirm = {
+                            isConfirming = false
+                            onCancel()
+                        },
+                        onDismiss = { isConfirming = false },
+                        confirmTestTag = "SparkExitCancelConfirm",
+                    )
+                }
             }
             PrimaryButton(
                 text = stringResource(R.string.common__ok),
@@ -349,6 +368,7 @@ private fun BackgroundNotes(
 private fun progressTitle(phase: SparkExitRecord.Phase?, funding: SparkExitFundingState?): String = stringResource(
     when (phase) {
         SparkExitRecord.Phase.Done -> R.string.lightning__spark_exit__done_title
+        SparkExitRecord.Phase.Failed(CANCELLED_REASON) -> R.string.lightning__spark_exit__cancelled_title
         is SparkExitRecord.Phase.Failed -> R.string.lightning__spark_exit__failed_title
         // A payment that covers it, such as a higher fee paid from savings, only waits to confirm.
         is SparkExitRecord.Phase.NeedsFunding if funding is SparkExitFundingState.Ask ->
@@ -376,6 +396,8 @@ private fun progressText(
             stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{amount}", sparkExitAmountText(it))
         },
     ).joinToString(" ")
+    SparkExitRecord.Phase.Failed(CANCELLED_REASON) ->
+        stringResource(R.string.lightning__spark_exit__cancelled_text)
     is SparkExitRecord.Phase.Failed -> sparkExitFailedText(
         nothingText = stringResource(R.string.lightning__spark_exit__failed_text),
         staysText = stringResource(R.string.lightning__spark_exit__failed_stays),

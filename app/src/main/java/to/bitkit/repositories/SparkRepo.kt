@@ -224,8 +224,9 @@ class SparkRepo @Inject constructor(
      * Takes Spark off the Lightning rail while an emergency exit runs, so no payment moves leaves the exit is
      * spending, and connects Spark again so its leaf optimization follows: off while exiting, on once it ends.
      */
-    suspend fun setExiting(isExiting: Boolean): Result<Unit> = withContext(bgDispatcher) {
-        if (_state.value.isExiting == isExiting && sparkService.isConnected) return@withContext Result.success(Unit)
+    suspend fun setExiting(isExiting: Boolean, reconnect: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
+        val isCurrent = _state.value.isExiting == isExiting && sparkService.isConnected
+        if (isCurrent && !reconnect) return@withContext Result.success(Unit)
         _state.update { it.copy(isExiting = isExiting) }
         runSuspendCatching {
             onOptimizationCutShort()
@@ -236,6 +237,12 @@ class SparkRepo @Inject constructor(
             Logger.error("Failed to reconnect Spark with exit '$isExiting'", it, context = TAG)
         }
     }
+
+    /**
+     * Holds Spark for an exit about to start: no sends, receives or spending balance, in the same step the exit's
+     * transfer starts counting it. [setExiting] reconnects it for the exit afterwards.
+     */
+    fun holdForExit() = _state.update { it.copy(isExiting = true) }
 
     /** Whether an exit quote has to wait first: a leaf optimization runs, or one ran or was cut short recently. */
     suspend fun needsSettling(): Boolean =

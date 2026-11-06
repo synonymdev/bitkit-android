@@ -268,8 +268,11 @@ class EsploraSparkExitChain(
     private suspend fun submitSingle(host: SparkExitBroadcastHost, hex: String): SparkExitBroadcastOutcome? {
         val response = post("${host.url}/tx", TextContent(hex, ContentType.Text.Plain)) ?: return null
         if (response.status.value in NOT_HERE) return null
-        val outcome = SparkExitBroadcastClassifier.single(response.status.value, response.bodyAsText())
-        if (!SparkExitBroadcastClassifier.isUnplaceable(outcome)) return outcome
+        val body = response.bodyAsText()
+        val outcome = SparkExitBroadcastClassifier.single(response.status.value, body)
+        if (outcome !is SparkExitBroadcastOutcome.Rejected || !SparkExitBroadcastClassifier.isUnplaceable(body)) {
+            return outcome
+        }
         val txid = runCatching { SignedTransactionId.fromHex(hex) }.getOrNull()
         return submitPackage(host, listOf(hex), txid) ?: outcome
     }
@@ -354,9 +357,7 @@ object SparkExitBroadcastClassifier {
         }
         if (outcomes.isEmpty()) {
             return if (results.isEmpty()) {
-                SparkExitBroadcastOutcome.RetryLater(
-                    body
-                )
+                SparkExitBroadcastOutcome.RetryLater(shortReason(body))
             } else {
                 SparkExitBroadcastOutcome.Accepted
             }
@@ -404,18 +405,37 @@ object SparkExitBroadcastClassifier {
      * A refusal that names only RPC code -1, with no reason a node gives: Spark's hosted regtest answers every lone
      * `/tx` that way, while the same hex as a package gets a real answer.
      */
-    fun isUnplaceable(outcome: SparkExitBroadcastOutcome): Boolean =
-        outcome is SparkExitBroadcastOutcome.Rejected && bareRpcError.containsMatchIn(outcome.reason) &&
-            !outcome.reason.contains("message", ignoreCase = true)
+    fun isUnplaceable(text: String): Boolean =
+        bareRpcError.containsMatchIn(text) && !text.contains("message", ignoreCase = true)
 
+    /**
+     * Classifies a node's answer from its whole [text]; the outcome carries only a short reason, the node's message
+     * or RPC code, so a host's error page is never kept or shown.
+     */
     fun classify(text: String): SparkExitBroadcastOutcome = when {
         knownMessages.any { it in text } || hasRpcCode(-27, text) -> SparkExitBroadcastOutcome.Accepted
-        notMatureMessages.any { it in text } -> SparkExitBroadcastOutcome.NotMature(text)
+        notMatureMessages.any { it in text } -> SparkExitBroadcastOutcome.NotMature(shortReason(text))
         inputsMissingMessages.any { it in text } || hasRpcCode(-25, text) -> SparkExitBroadcastOutcome.InputsMissing(
-            text
+            shortReason(text)
         )
-        else -> SparkExitBroadcastOutcome.Rejected(text)
+        else -> SparkExitBroadcastOutcome.Rejected(shortReason(text))
     }
+
+    private val messageField = Regex("""message\\?"\s*:\s*\\?"((?:[^"\\]|\\[^"])*)""")
+    private val rpcCodeField = Regex("""code\\?"\s*:\s*(-?\d+)""")
+    private val markup = Regex("<[^>]*>")
+    private val whitespace = Regex("\\s+")
+
+    /** A node's message, else its RPC code, else the answer without markup, in one line of at most 200 characters. */
+    fun shortReason(text: String): String {
+        val message = messageField.find(text)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
+        val reason = message
+            ?: rpcCodeField.find(text)?.groupValues?.get(1)?.let { "RPC error $it" }
+            ?: text.replace(markup, " ")
+        return reason.replace(whitespace, " ").trim().take(MAX_REASON_LENGTH)
+    }
+
+    private const val MAX_REASON_LENGTH = 200
 
     /** The RPC code, also when the node's error sits JSON-escaped inside mempool's own error object. */
     private fun hasRpcCode(code: Int, text: String) = Regex("""code\\?"\s*:\s*$code\b""").containsMatchIn(text)

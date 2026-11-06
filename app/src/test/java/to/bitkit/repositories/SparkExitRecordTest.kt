@@ -318,7 +318,8 @@ class SparkExitRecordTest {
         assertTrue(store.isActive())
         assertEquals("{", store.loadText())
         store.setAside(42L)
-        assertFalse(file.exists())
+        // Copied aside: the salvaged record replaces the original in one atomic write.
+        assertTrue(file.exists())
         assertTrue(File(file.parentFile, "spark-exit.unreadable-42.json").exists())
     }
 
