@@ -820,8 +820,8 @@ private fun PaymentRequestsPreview() {
 internal fun paykitUsdtReceiptText(receipt: PaykitUsdtReceipt): String {
     val label = when {
         !receipt.verified -> R.string.wallet__payment_request_pending
-        receipt.underpaid -> R.string.wallet__payment_request_underpaid
         receipt.beforeRequest -> R.string.wallet__payment_request_before_request
+        receipt.underpaid -> R.string.wallet__payment_request_underpaid
         receipt.afterExpiry -> R.string.wallet__payment_request_after_expiry
         else -> R.string.wallet__payment_request_payment_verified
     }
