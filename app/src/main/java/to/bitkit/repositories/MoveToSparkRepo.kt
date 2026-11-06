@@ -47,7 +47,8 @@ class MoveToSparkRepo @Inject constructor(
         private val PAYMENT_TIMEOUT = 2.minutes
 
         /** The failures that mean no route carried the amount, so a smaller one may route. */
-        private val NO_ROUTE_REASONS = setOf(PaymentFailureReason.ROUTE_NOT_FOUND, PaymentFailureReason.RETRIES_EXHAUSTED)
+        private val NO_ROUTE_REASONS =
+            setOf(PaymentFailureReason.ROUTE_NOT_FOUND, PaymentFailureReason.RETRIES_EXHAUSTED)
     }
 
     private val ownPaymentHashes = ConcurrentHashMap.newKeySet<String>()
@@ -120,31 +121,31 @@ class MoveToSparkRepo @Inject constructor(
 
     private suspend fun payAndWait(quote: MoveToSparkQuote, paymentHash: String): MoveToSparkOutcome =
         coroutineScope {
-                val settled = async(start = CoroutineStart.UNDISPATCHED) {
-                    lightningRepo.nodeEvents.first { it.settles(paymentHash) }
-                }
-                lightningRepo.payInvoiceOverLdk(
-                    bolt11 = quote.invoice,
-                    sats = quote.amountSats,
-                    maxTotalRoutingFeeMsat = MoveToSparkMath.feeCapMsat(quote.feeSats),
-                ).getOrElse {
+            val settled = async(start = CoroutineStart.UNDISPATCHED) {
+                lightningRepo.nodeEvents.first { it.settles(paymentHash) }
+            }
+            lightningRepo.payInvoiceOverLdk(
+                bolt11 = quote.invoice,
+                sats = quote.amountSats,
+                maxTotalRoutingFeeMsat = MoveToSparkMath.feeCapMsat(quote.feeSats),
+            ).getOrElse {
+                settled.cancel()
+                throw if (it.isNoRoute()) MoveToSparkError.TooLarge(quote.amountSats, it) else it
+            }
+            when (val event = withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }) {
+                is Event.PaymentSuccessful -> MoveToSparkOutcome.Moved(
+                    amountSats = quote.amountSats,
+                    feeSats = (event.feePaidMsat ?: 0uL) / 1000uL,
+                )
+                is Event.PaymentFailed if event.reason in NO_ROUTE_REASONS ->
+                    throw MoveToSparkError.TooLarge(quote.amountSats, reason = event.reason)
+                is Event.PaymentFailed -> throw MoveToSparkError.PaymentFailed(event.reason)
+                else -> {
                     settled.cancel()
-                    throw if (it.isNoRoute()) MoveToSparkError.TooLarge(quote.amountSats, it) else it
-                }
-                when (val event = withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }) {
-                    is Event.PaymentSuccessful -> MoveToSparkOutcome.Moved(
-                        amountSats = quote.amountSats,
-                        feeSats = (event.feePaidMsat ?: 0uL) / 1000uL,
-                    )
-                    is Event.PaymentFailed if event.reason in NO_ROUTE_REASONS ->
-                        throw MoveToSparkError.TooLarge(quote.amountSats, reason = event.reason)
-                    is Event.PaymentFailed -> throw MoveToSparkError.PaymentFailed(event.reason)
-                    else -> {
-                        settled.cancel()
-                        MoveToSparkOutcome.InFlight(quote.amountSats)
-                    }
+                    MoveToSparkOutcome.InFlight(quote.amountSats)
                 }
             }
+        }
 
     private fun Throwable.isNoRoute(): Boolean =
         (this as? LdkError)?.compactType == NodeException.RouteNotFound::class.simpleName
