@@ -48,6 +48,101 @@ class BroadcastExceptionExtTest {
     }
 
     @Test
+    fun `only an undecodable transaction or a failed connect proves nothing was sent`() = runTest {
+        val notSent = listOf(
+            BroadcastException.InvalidHex("Invalid transaction hex: odd number of digits"),
+            BroadcastException.InvalidTransaction("Invalid transaction data: unexpected end of file"),
+            BroadcastException.ElectrumException("Failed to connect to Electrum: I/O error: Connection refused"),
+        )
+        for (error in notSent) {
+            assertTrue(AppError(error).isHardwareBroadcastNotSent())
+        }
+        val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
+        val maybeSent = listOf(
+            BroadcastException.ElectrumException(
+                "Broadcast failed: Made one or multiple attempts, all errored:\n\t- Broken pipe (os error 32)\n",
+            ),
+            BroadcastException.ElectrumException("Broadcast failed: Failed to connect to Electrum: lookalike"),
+            BroadcastException.TaskException("Broadcast task failed: task 7 panicked"),
+            BroadcastException.ElectrumException("Broadcast failed: min relay fee not met"),
+            AppError("unknown result"),
+            timeout,
+        )
+        for (error in maybeSent) {
+            assertFalse(error.isHardwareBroadcastNotSent())
+        }
+    }
+
+    @Test
+    fun `only undecodable bytes or a consensus or script refusal proves a transaction can never confirm`() {
+        assertTrue(AppError(BroadcastException.InvalidHex("bad hex")).isHardwareBroadcastNeverConfirmable())
+        assertTrue(BroadcastException.InvalidTransaction("bad tx").isHardwareBroadcastNeverConfirmable())
+        val neverConfirms = listOf(
+            "mandatory-script-verify-flag-failed (Signature must be zero for failed CHECK(MULTI)SIG operation)",
+            "block-script-verify-flag-failed (Script failed an OP_EQUALVERIFY operation)",
+            "bad-txns-in-belowout, value in (0.0001) < value out (0.0002)",
+            "bad-txns-inputs-duplicate",
+            "bad-txns-vout-negative",
+            "bad-txns-vout-toolarge",
+            "bad-txns-txouttotal-toolarge",
+            "bad-txns-oversize",
+        )
+        for (reason in neverConfirms) {
+            assertTrue(refusal("-26: $reason").isHardwareBroadcastNeverConfirmable(), reason)
+            assertFalse(refusal("-26: $reason").isHardwareBroadcastInputsSpent(), reason)
+        }
+        val mayConfirm = listOf(
+            "-26: min relay fee not met, 110 < 141",
+            "-26: mempool min fee not met, 110 < 141",
+            "-26: mempool full",
+            "-26: too-long-mempool-chain, too many unconfirmed ancestors [limit: 25]",
+            "-25: max-fee-exceeded",
+            "-26: txn-mempool-conflict",
+            "-26: non-final",
+            "-26: dust",
+            "-26: scriptpubkey",
+            "-26: mempool-script-verify-flag-failed (Witness program hash mismatch)",
+            "-26: dusty-but-unknown",
+            "-26: non-mandatory-script-verify-flag (Witness program hash mismatch)",
+            "-26: tx-size",
+            "-25: bad-txns-inputs-missingorspent",
+        )
+        for (reason in mayConfirm) {
+            assertFalse(refusal(reason).isHardwareBroadcastNeverConfirmable(), reason)
+        }
+        val unreadable = listOf(
+            "Broadcast failed: bad-txns-oversize",
+            "Broadcast failed: Electrum server error: bad-txns-oversize",
+            "Broadcast failed: Electrum server error: {\"message\": 26}",
+            "Failed to connect to Electrum: bad-txns-oversize",
+        )
+        for (details in unreadable) {
+            assertFalse(BroadcastException.ElectrumException(details).isHardwareBroadcastNeverConfirmable(), details)
+        }
+        assertFalse(
+            BroadcastException.ElectrumException(
+                "Broadcast failed: Made one or multiple attempts, all errored:\n\t- Broken pipe (os error 32)\n",
+            ).isHardwareBroadcastNeverConfirmable(),
+        )
+    }
+
+    @Test
+    fun `a missing or spent input refusal counts only as the server's JSON refusal`() {
+        assertTrue(refusal("-25: bad-txns-inputs-missingorspent").isHardwareBroadcastInputsSpent())
+        assertFalse(
+            BroadcastException.ElectrumException("Broadcast failed: bad-txns-inputs-missingorspent")
+                .isHardwareBroadcastInputsSpent(),
+        )
+        assertFalse(refusal("-26: txn-mempool-conflict").isHardwareBroadcastInputsSpent())
+    }
+
+    private fun refusal(reason: String) = AppError(
+        BroadcastException.ElectrumException(
+            "Broadcast failed: Electrum server error: \"sendrawtransaction RPC error $reason\"",
+        ),
+    )
+
+    @Test
     fun `recognized backend refusals allow navigation without proving no dispatch`() {
         val reasons = listOf(
             "min relay fee not met",

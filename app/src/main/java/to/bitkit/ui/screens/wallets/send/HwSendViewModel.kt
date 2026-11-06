@@ -1,24 +1,47 @@
 package to.bitkit.ui.screens.wallets.send
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.OnchainActivity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
+import to.bitkit.data.HeldHwSend
+import to.bitkit.data.HwHeldSendsUnreadableError
+import to.bitkit.ext.formatToString
 import to.bitkit.ext.isBroadcastConnectivityFailure
+import to.bitkit.ext.isHardwareBroadcastInputsSpent
+import to.bitkit.ext.isHardwareBroadcastNeverConfirmable
+import to.bitkit.ext.isHardwareBroadcastNotSent
 import to.bitkit.ext.isHardwareBroadcastRefusalForNavigation
 import to.bitkit.ext.isHwDeviceBusy
 import to.bitkit.ext.isHwFirmwareError
@@ -31,6 +54,8 @@ import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.HwHeldDispatch
+import to.bitkit.repositories.HwHeldDispatchTracker
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletMismatchError
@@ -41,11 +66,14 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
 import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -58,13 +86,19 @@ class HwSendViewModel @Inject constructor(
     private val coreService: CoreService,
     private val activityRepo: ActivityRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
+    private val heldDispatches: HwHeldDispatchTracker,
     private val clock: Clock = Clock.System,
 ) : ViewModel() {
     private companion object {
         const val TAG = "HwSendViewModel"
         val COMPOSE_TIMEOUT = 45.seconds
         val SIGN_TIMEOUT = 120.seconds
-        val BROADCAST_TIMEOUT = 120.seconds
+
+        /** How long the second confirmation of a clear of unreadable held sends ignores taps. */
+        val CLEAR_CONFIRM_DELAY = 1.seconds
+
+        /** How long the sheet waits for a broadcast before showing it as pending; the broadcast itself runs on. */
+        val BROADCAST_WAIT = 60.seconds
     }
 
     val wallets: StateFlow<ImmutableList<HwWallet>>
@@ -76,11 +110,25 @@ class HwSendViewModel @Inject constructor(
     private val pendingResult = MutableStateFlow<HwSendResult?>(null)
     val results = pendingResult.filterNotNull()
 
+    private val _heldSendEvents = MutableSharedFlow<HeldHwSendEvent>(extraBufferCapacity = 8)
+
+    /** Outcomes of held sends, which can arrive long after their sheet closed, so they are never replayed. */
+    val heldSendEvents: SharedFlow<HeldHwSendEvent> = _heldSendEvents.asSharedFlow()
+
     private var pendingBroadcast: PendingHwSendBroadcast? = null
+    private val unresolvedSends = mutableMapOf<String, UnresolvedHwSend>()
+    private var clearConfirmableAt: Instant? = null
     private var signingWalletId: String? = null
     private var signingJob: Job? = null
     private var signingAttempt = 0
     private var passphraseJob: Job? = null
+
+    init {
+        dropUnresolvedSendsOfRemovedWallets()
+        viewModelScope.launch {
+            heldDispatches.inFlight.collect { txIds -> _uiState.update { it.copy(retryingSendTxIds = txIds) } }
+        }
+    }
 
     fun warmUp(walletId: String) {
         hwWalletRepo.warmUpKnownDevice(walletId)
@@ -101,6 +149,13 @@ class HwSendViewModel @Inject constructor(
             val finishSubmission = beginPaymentSubmission()
             try {
                 runCatching {
+                    // A payment whose broadcast may have gone out is only ever broadcast again as the same bytes
+                    unresolvedSendFor(request)?.let { unresolved ->
+                        Logger.warn("Broadcasting held hardware send of '${request.walletId}' again", context = TAG)
+                        _uiState.update { it.copy(unresolvedSend = unresolved.send) }
+                        retryUnresolvedSend(unresolved.send.txId)
+                        return@runCatching
+                    }
                     if (pendingBroadcast?.matches(request) == false) {
                         ToastEventBus.send(
                             type = Toast.ToastType.ERROR,
@@ -110,6 +165,22 @@ class HwSendViewModel @Inject constructor(
                                 PaykitPaymentRequestError.OperationInProgress,
                             ),
                         )
+                        return@runCatching
+                    }
+                    // A send of this payment held after the sheet closed or the app restarted is finished first
+                    val held = if (pendingBroadcast == null && request.paymentRequestId == null) {
+                        hwWalletRepo.heldSendFor(request.walletId, request.address, request.amountSats).getOrThrow()
+                    } else {
+                        null
+                    }
+                    val seen = held?.let { seenActivityOf(request.walletId, it.txId, hwWalletRepo.activities.value) }
+                    if (held != null && seen != null) {
+                        recordSeenHeldSend(held, request, seen)
+                        return@runCatching
+                    }
+                    if (held != null) {
+                        Logger.warn("Broadcasting held hardware send of '${request.walletId}' again", context = TAG)
+                        retryUnresolvedSend(watchUnresolvedSend(held.toPendingBroadcast(request)).send.txId)
                         return@runCatching
                     }
                     var pending = pendingBroadcast?.takeIf { it.matches(request) }
@@ -168,9 +239,14 @@ class HwSendViewModel @Inject constructor(
                         return@runCatching
                     }
                     val result = broadcast(payment, onPaymentDeadlineExpired) ?: return@runCatching
-                    if (signingAttempt != attempt) return@runCatching
-                    runSuspendCatching { persistResult(request, result) }
-                        .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+                    if (signingAttempt == attempt) {
+                        runSuspendCatching { persistResult(request, result) }
+                            .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+                    }
+                    // Released once the send is recorded, so an app killed before that still holds it
+                    if (request.paymentRequestId == null) {
+                        releaseHeldSend(SignedTransactionId.fromHex(payment.signedTx.serializedTx))
+                    }
                     if (signingAttempt != attempt) return@runCatching
                     pendingResult.update {
                         HwSendResult(
@@ -240,46 +316,407 @@ class HwSendViewModel @Inject constructor(
                 return null
             }
         }
+        val request = payment.request
+        val requestId = request.paymentRequestId
+        val txId = SignedTransactionId.fromHex(payment.signedTx.serializedTx)
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
-        return withTimeout(BROADCAST_TIMEOUT) {
-            val request = payment.request
-            val requestId = request.paymentRequestId
-            if (requestId == null) {
-                pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
-                hwWalletRepo.broadcastFunding(payment.signedTx, request.paymentDeadlineAt)
-            } else {
-                hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
-                    check(
-                        paykitPaymentProofRepo.markHardwareOnchainDispatch(
-                            requestId,
-                            request.walletId,
-                            SignedTransactionId.fromHex(payment.signedTx.serializedTx),
-                            request.paymentIdentity,
-                            request.address,
-                            request.amountSats,
-                        )
-                    ) { "Original hardware payment is no longer eligible for dispatch" }
-                    pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
+        // Written before the broadcast, so a send that may have gone out stays held even if the app dies during it
+        if (requestId == null) hwWalletRepo.holdSend(payment.toHeldSend(txId, clock.now().epochSeconds)).getOrThrow()
+        // The broadcast runs to its end on the core queue, so it is never cancelled: the sheet stops waiting for it
+        // after a while, and its answer still settles the send
+        val tracked = if (requestId == null) {
+            checkNotNull(heldDispatches.begin(txId)) { "A broadcast of hardware send '$txId' is unanswered" }
+                .also { expireUnanswered(it) }
+        } else {
+            null
+        }
+        val isDispatched = AtomicBoolean(false)
+        val isAbandoned = AtomicBoolean(false)
+        val sheetDispatcher = requireNotNull(currentCoroutineContext()[ContinuationInterceptor])
+        val dispatch = viewModelScope.async {
+            hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
+                markDispatched(payment, isDispatched)
+                withContext(sheetDispatcher) {
+                    if (!isAbandoned.get()) {
+                        pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
+                    }
                 }
             }
-        }.getOrElse { error ->
-            if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
-                val request = payment.request
-                val cleared = request.paymentRequestId?.let { requestId ->
+        }
+        // A dispatch the sheet stops waiting for is settled by its answer, or counts as possibly sent if it has none
+        tracked?.let { dispatch.invokeOnCompletion { cause -> if (cause != null) heldDispatches.finish(it, false) } }
+        val outcome = withTimeoutOrNull(BROADCAST_WAIT) { dispatch.await() }
+            ?: return abandonBroadcastWait(payment, dispatch, isAbandoned, isDispatched, tracked)
+        val error = outcome.exceptionOrNull()
+        val isDeadlineExpired = error != null &&
+            generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }
+        // A failure before the dispatch sent nothing, while one after it may follow the write
+        val isNotSent = error != null && (!isDispatched.get() || error.isFirstHardwareBroadcastNotSent())
+        tracked?.let { heldDispatches.finish(it, isNotSent) }
+        val isOnlyPossibleSend = tracked?.let { heldDispatches.isOnlyPossibleSend(it) } != false
+        val isOutcomeUnknown = requestId == null && error != null && !isDeadlineExpired &&
+            !(isNotSent && isOnlyPossibleSend)
+        if (isOutcomeUnknown && isProvenNeverConfirming(payment, requireNotNull(error))) {
+            Logger.warn("Released hardware send '$txId' the network rejected for good", context = TAG)
+            releaseHeldSend(txId)
+            pendingBroadcast = null
+            _uiState.update { it.copy(hasPendingBroadcast = false, isBroadcastUnresolved = false) }
+            toastNotSent(R.string.hardware__send_broadcast_rejected_text)
+            return null
+        }
+        if (isOutcomeUnknown) {
+            Logger.warn("Held hardware send '$txId' after an unknown broadcast outcome", context = TAG)
+            watchUnresolvedSend(payment)
+            _uiState.update { it.copy(isBroadcastUnresolved = false) }
+        } else if (requestId == null && error != null && !isDeadlineExpired) {
+            releaseHeldSend(txId)
+        }
+        return outcome.getOrElse { error ->
+            if (isDeadlineExpired) {
+                val cleared = requestId?.let {
                     !payment.hasAttemptedBroadcast &&
                         paykitPaymentProofRepo.clearHardwareOnchainCandidateBeforeDispatch(
-                            requestId, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                            it, request.walletId, txId,
                             request.paymentIdentity, request.address, request.amountSats, payment.hasAttemptedBroadcast,
                         )
                 } ?: !payment.hasAttemptedBroadcast
                 val unresolved = payment.hasAttemptedBroadcast || !cleared
+                // An expiry never releases a send whose earlier broadcast may have gone out
+                if (requestId == null && !unresolved) releaseHeldSend(txId)
                 pendingBroadcast = payment.copy(hasAttemptedBroadcast = unresolved)
                 _uiState.update { it.copy(isBroadcastUnresolved = unresolved && !payment.isRefusedForNavigation) }
                 onPaymentDeadlineExpired(unresolved)
                 return null
             }
+            if (isOutcomeUnknown) return null
             throw error
         }
+    }
+
+    private suspend fun recordSeenHeldSend(held: HeldHwSend, request: HwSendRequest, seen: OnchainActivity) {
+        // It went out, so it is recorded and released, and the user decides whether to send the same payment again
+        Logger.info("Recorded held hardware send '${held.txId}' the wallet has seen", context = TAG)
+        val heldPayment = held.toPendingBroadcast(request)
+        val signedTx = heldPayment.signedTx
+        val result = HwFundingBroadcastResult(
+            txId = held.txId,
+            miningFeeSats = signedTx.miningFeeSats,
+            feeRate = signedTx.feeRate,
+            totalSpent = signedTx.totalSpent,
+        )
+        // A failed save still releases the hold: the wallet has the transaction, so it is never lost
+        runSuspendCatching { persistResult(heldPayment.request, result) }
+            .onFailure { Logger.error("Failed to persist seen hardware send '${held.txId}'", it, context = TAG) }
+        releaseHeldSend(held.txId)
+        val send = HwSendResult(
+            walletId = request.walletId,
+            txId = held.txId,
+            amountSats = request.amountSats,
+            paymentIdentity = request.paymentIdentity,
+        )
+        val sentAt = seen.timestamp.takeIf { it > 0uL }.formatToString().orEmpty()
+        _uiState.update { it.copy(alreadySentSend = AlreadySentHwSend(send, sentAt)) }
+    }
+
+    /** Shows the payment the user tried to make again as the one already sent. */
+    fun showAlreadySentSend() {
+        val alreadySent = _uiState.value.alreadySentSend ?: return
+        _uiState.update { it.copy(alreadySentSend = null) }
+        pendingResult.update { alreadySent.send }
+    }
+
+    /** Lets the user sign the payment again, as a new one beside the one already sent. */
+    fun confirmSendAgain() = _uiState.update { it.copy(alreadySentSend = null) }
+
+    private suspend fun markDispatched(payment: PendingHwSendBroadcast, isDispatched: AtomicBoolean) {
+        val request = payment.request
+        request.paymentRequestId?.let {
+            check(
+                paykitPaymentProofRepo.markHardwareOnchainDispatch(
+                    it,
+                    request.walletId,
+                    SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                    request.paymentIdentity,
+                    request.address,
+                    request.amountSats,
+                )
+            ) { "Original hardware payment is no longer eligible for dispatch" }
+        }
+        isDispatched.set(true)
+    }
+
+    private fun abandonBroadcastWait(
+        payment: PendingHwSendBroadcast,
+        dispatch: Deferred<Result<HwFundingBroadcastResult>>,
+        isAbandoned: AtomicBoolean,
+        isDispatched: AtomicBoolean,
+        tracked: HwHeldDispatch?,
+    ): HwFundingBroadcastResult? {
+        isAbandoned.set(true)
+        if (payment.request.paymentRequestId != null) {
+            // A Shop payment keeps its retained receipt and its guarded sheet, and its late answer still lands
+            val attempted = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
+            pendingBroadcast = attempted
+            viewModelScope.launch { settleLateShopBroadcast(attempted, dispatch.await()) }
+            throw HwBroadcastWaitExpiredError()
+        }
+        val unresolved = watchUnresolvedSend(payment)
+        Logger.warn("Stopped waiting for broadcast of held hardware send '${unresolved.send.txId}'", context = TAG)
+        _uiState.update { it.copy(isBroadcastUnresolved = false) }
+        viewModelScope.launch {
+            settleLateBroadcast(unresolved, dispatch.await(), isDispatched.get(), requireNotNull(tracked))
+        }
+        return null
+    }
+
+    private suspend fun settleLateBroadcast(
+        unresolved: UnresolvedHwSend,
+        outcome: Result<HwFundingBroadcastResult>,
+        isDispatched: Boolean,
+        tracked: HwHeldDispatch,
+    ) {
+        val txId = unresolved.send.txId
+        val error = outcome.exceptionOrNull()
+        val isNotSent = error != null && (!isDispatched || error.isFirstHardwareBroadcastNotSent())
+        heldDispatches.finish(tracked, isNotSent)
+        // An accepted broadcast stays pending until the wallet sees its transaction
+        if (error == null) {
+            Logger.info("Accepted late broadcast of held hardware send '$txId'", context = TAG)
+            return
+        }
+        if (releaseIfNeverConfirming(unresolved, error)) return
+        // Proof that this broadcast sent nothing says nothing about any other dispatch of the same bytes
+        if (isNotSent && heldDispatches.isOnlyPossibleSend(tracked)) {
+            releaseUnresolvedSend(unresolved, R.string.hardware__send_not_sent_text)
+            return
+        }
+        Logger.warn("Kept held hardware send '$txId' after a late failure", error, context = TAG)
+    }
+
+    private suspend fun settleLateShopBroadcast(
+        payment: PendingHwSendBroadcast,
+        outcome: Result<HwFundingBroadcastResult>,
+    ) {
+        // A later attempt or an exact observation may have settled this payment meanwhile
+        if (pendingBroadcast?.signedTx != payment.signedTx || pendingResult.value != null) return
+        val request = payment.request
+        outcome
+            .onSuccess { result ->
+                runSuspendCatching { persistResult(request, result) }
+                    .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+                pendingResult.update {
+                    HwSendResult(
+                        walletId = request.walletId,
+                        txId = result.txId,
+                        amountSats = request.amountSats,
+                        paymentRequestId = request.paymentRequestId,
+                        paymentIdentity = request.paymentIdentity,
+                    )
+                }
+            }
+            .onFailure { handleFailure(it, request.walletId) }
+    }
+
+    private fun Throwable.isFirstHardwareBroadcastNotSent(): Boolean =
+        isHardwareBroadcastNotSent() || isHardwareBroadcastRefusalForNavigation()
+
+    private suspend fun isProvenNeverConfirming(payment: PendingHwSendBroadcast, error: Throwable): Boolean {
+        if (payment.request.paymentRequestId != null) return false
+        if (error.isHardwareBroadcastNeverConfirmable()) return true
+        if (!error.isHardwareBroadcastInputsSpent()) return false
+        // A coin missing to this node proves nothing until a final spend of it by another transaction shows up
+        return hwWalletRepo.isSpentByAnotherTransaction(payment.request.walletId, payment.signedTx.serializedTx)
+            .onFailure { Logger.warn("Failed to read spends of hardware send coins", it, context = TAG) }
+            .getOrDefault(false)
+    }
+
+    private suspend fun releaseIfNeverConfirming(unresolved: UnresolvedHwSend, error: Throwable): Boolean {
+        if (!isProvenNeverConfirming(unresolved.payment, error)) return false
+        releaseUnresolvedSend(unresolved, R.string.hardware__send_broadcast_rejected_text)
+        return true
+    }
+
+    private suspend fun releaseUnresolvedSend(unresolved: UnresolvedHwSend, @StringRes description: Int) {
+        if (unresolvedSends[unresolved.send.txId] !== unresolved) return
+        // A transaction the wallet has seen went out, whatever this broadcast's answer says
+        if (isSeenByWallet(unresolved.send.walletId, unresolved.send.txId)) {
+            completeUnresolvedSend(unresolved)
+            return
+        }
+        Logger.warn("Released held hardware send '${unresolved.send.txId}' that was never sent", context = TAG)
+        forgetUnresolvedSend(unresolved)
+        releaseHeldSend(unresolved.send.txId)
+        toastNotSent(description)
+        _heldSendEvents.emit(HeldHwSendEvent.Released(unresolved.send))
+    }
+
+    private fun isSeenByWallet(walletId: String, txId: String): Boolean =
+        seenActivityOf(walletId, txId, hwWalletRepo.activities.value) != null
+
+    private fun seenActivityOf(walletId: String, txId: String, activities: List<Activity>): OnchainActivity? =
+        activities.filterIsInstance<Activity.Onchain>().map { it.v1 }.firstOrNull {
+            // A replaced transaction no longer exists, so it does not count as sent
+            it.walletId == walletId && it.txId.equals(txId, ignoreCase = true) && it.doesExist
+        }
+
+    private suspend fun toastNotSent(@StringRes description: Int) = ToastEventBus.send(
+        type = Toast.ToastType.ERROR,
+        title = context.getString(R.string.hardware__send_not_sent_title),
+        description = context.getString(description),
+    )
+
+    private suspend fun releaseHeldSend(txId: String) {
+        heldDispatches.forget(txId)
+        hwWalletRepo.releaseHeldSend(txId)
+            .onFailure { Logger.warn("Failed to release held hardware send '$txId'", it, context = TAG) }
+    }
+
+    private fun watchUnresolvedSend(payment: PendingHwSendBroadcast): UnresolvedHwSend {
+        val request = payment.request
+        val txId = SignedTransactionId.fromHex(payment.signedTx.serializedTx).lowercase()
+        val send = HwSendResult(request.walletId, txId, request.amountSats, paymentIdentity = request.paymentIdentity)
+        // The held send leaves the sheet's attempt, so another payment can be signed beside it
+        if (pendingBroadcast?.signedTx == payment.signedTx) pendingBroadcast = null
+        val unresolved = UnresolvedHwSend(payment, send)
+        unresolvedSends.put(txId, unresolved)?.watch?.cancel()
+        unresolved.watch = viewModelScope.launch {
+            hwWalletRepo.activities.first { seenActivityOf(send.walletId, send.txId, it) != null }
+            completeUnresolvedSend(unresolved)
+        }
+        _uiState.update {
+            it.copy(
+                hasPendingBroadcast = pendingBroadcast != null,
+                unresolvedSend = send,
+                unresolvedSends = unresolvedSends.values.map { held -> held.send }.toImmutableList(),
+            )
+        }
+        return unresolved
+    }
+
+    private fun unresolvedSendFor(request: HwSendRequest): UnresolvedHwSend? =
+        unresolvedSends.values.firstOrNull { it.payment.request.isPaymentOf(request) }
+
+    private fun dropUnresolvedSendsOfRemovedWallets() {
+        viewModelScope.launch {
+            var knownWalletIds = emptySet<String>()
+            hwWalletRepo.wallets.collect { wallets ->
+                val walletIds = wallets.mapTo(mutableSetOf()) { it.id }
+                val removed = knownWalletIds - walletIds
+                knownWalletIds = walletIds
+                // A removed wallet's send stays held in the store, which guards it again once the wallet is back
+                unresolvedSends.values.filter { it.send.walletId in removed }.forEach { forgetUnresolvedSend(it) }
+            }
+        }
+    }
+
+    private fun forgetUnresolvedSend(unresolved: UnresolvedHwSend) {
+        if (unresolvedSends[unresolved.send.txId] !== unresolved) return
+        unresolvedSends.remove(unresolved.send.txId)
+        unresolved.watch?.cancel()
+        _uiState.update { state ->
+            state.copy(
+                unresolvedSend = state.unresolvedSend?.takeUnless { it.txId == unresolved.send.txId },
+                unresolvedSends = unresolvedSends.values.map { it.send }.toImmutableList(),
+            )
+        }
+    }
+
+    /**
+     * Broadcasts the identical signed bytes of the held send [txId] again, never signing it again. An accepted
+     * broadcast stays pending until the wallet sees the transaction, and only a refusal proving it can never confirm
+     * releases it, since an earlier broadcast may still confirm.
+     */
+    fun retryUnresolvedSend(txId: String) {
+        val unresolved = unresolvedSends[txId.lowercase()] ?: return
+        val send = unresolved.send
+        // One dispatch of the same bytes at a time, from any sheet
+        val tracked = heldDispatches.begin(send.txId) ?: run {
+            viewModelScope.launch {
+                ToastEventBus.send(
+                    type = Toast.ToastType.INFO,
+                    title = context.getString(R.string.hardware__send_broadcast_in_flight),
+                )
+            }
+            return
+        }
+        expireUnanswered(tracked)
+        viewModelScope.launch {
+            var isNotSent = false
+            try {
+                // Written again first, so the send stays held whatever happened to the record since
+                val heldAt = clock.now().epochSeconds
+                hwWalletRepo.holdSend(unresolved.payment.toHeldSend(send.txId, heldAt)).onFailure {
+                    isNotSent = true
+                    Logger.warn("Skipped broadcast again of '${send.txId}' without its hold", it, context = TAG)
+                    toastBroadcastFailed()
+                    return@launch
+                }
+                // The wallet may have seen it, and its hold been released, since this was asked for: it went out
+                if (isSeenByWallet(send.walletId, send.txId)) {
+                    isNotSent = true
+                    completeUnresolvedSend(unresolved)
+                    return@launch
+                }
+                val outcome = hwWalletRepo.broadcastFunding(unresolved.payment.signedTx)
+                isNotSent = outcome.exceptionOrNull()?.isHardwareBroadcastNotSent() == true
+                heldDispatches.finish(tracked, isNotSent)
+                outcome
+                    .onSuccess {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.hardware__send_broadcast_accepted),
+                        )
+                    }
+                    .onFailure {
+                        if (unresolvedSends[send.txId] !== unresolved) return@onFailure
+                        if (releaseIfNeverConfirming(unresolved, it)) return@onFailure
+                        ToastEventBus.send(
+                            type = Toast.ToastType.WARNING,
+                            title = context.getString(R.string.hardware__send_broadcast_failed_title),
+                            description = context.getString(R.string.hardware__send_broadcast_refused_text),
+                        )
+                    }
+            } finally {
+                heldDispatches.finish(tracked, isNotSent)
+            }
+        }
+    }
+
+    private fun expireUnanswered(dispatch: HwHeldDispatch) {
+        viewModelScope.launch {
+            delay(HwHeldDispatchTracker.ANSWER_BOUND)
+            heldDispatches.expire(dispatch)
+        }
+    }
+
+    private suspend fun toastBroadcastFailed() = ToastEventBus.send(
+        type = Toast.ToastType.WARNING,
+        title = context.getString(R.string.hardware__send_broadcast_failed_title),
+        description = context.getString(R.string.hardware__send_broadcast_failed_text),
+    )
+
+    /**
+     * Broadcasts again the held send of a payment whose earlier broadcast may have gone out, instead of signing it
+     * anew, and returns it to show as pending; null when there is none.
+     */
+    fun resumeHeldSend(walletId: String, address: String, amountSats: ULong): HwSendResult? {
+        val send = unresolvedSends.values.firstOrNull { it.payment.request.isPaymentOf(walletId, address, amountSats) }
+            ?.send ?: return null
+        retryUnresolvedSend(send.txId)
+        return send
+    }
+
+    private suspend fun completeUnresolvedSend(unresolved: UnresolvedHwSend) {
+        // Known to be sent now, so neither the wallet's observation nor a retry completes it a second time
+        if (unresolvedSends[unresolved.send.txId] !== unresolved) return
+        forgetUnresolvedSend(unresolved)
+        val send = unresolved.send
+        val signedTx = unresolved.payment.signedTx
+        val result = HwFundingBroadcastResult(send.txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
+        runSuspendCatching { persistResult(unresolved.payment.request, result) }
+            .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+        releaseHeldSend(send.txId)
+        _heldSendEvents.emit(HeldHwSendEvent.Completed(send))
     }
 
     fun submitPassphrase(
@@ -320,6 +757,63 @@ class HwSendViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Discards the unreadable held send records of the wallet the sheet was refused for, on the user's explicit choice
+     * after being told a payment they held may then be sent twice.
+     */
+    fun clearUnreadableHeldSends() {
+        val prompt = _uiState.value.unreadableHeldSends ?: return
+        if (!prompt.isConfirming) {
+            // A clear that may send a payment twice is asked a second time, which a fast double tap cannot answer
+            val confirmableAt = clock.now() + CLEAR_CONFIRM_DELAY
+            _uiState.update { it.copy(unreadableHeldSends = prompt.copy(isConfirming = true)) }
+            clearConfirmableAt = confirmableAt
+            return
+        }
+        if (clearConfirmableAt?.let { clock.now() < it } == true) return
+        _uiState.update { it.copy(unreadableHeldSends = null) }
+        viewModelScope.launch {
+            hwWalletRepo.clearUnreadableHeldSends(prompt.walletId).onFailure {
+                Logger.error("Failed to clear unreadable held sends of '${prompt.walletId}'", it, context = TAG)
+                _uiState.update { state -> state.copy(unreadableHeldSends = prompt.copy(isConfirming = false)) }
+            }
+        }
+    }
+
+    fun dismissUnreadableHeldSends() = _uiState.update { it.copy(unreadableHeldSends = null) }
+
+    private fun HwHeldSendsUnreadableError.toPrompt(walletId: String): UnreadableHeldSendsPrompt {
+        val unknown = context.getString(R.string.hardware__held_sends_record_unknown)
+        val explanation = context.getString(
+            if (clearsAllWallets) {
+                R.string.hardware__held_sends_unreadable_text_all
+            } else {
+                R.string.hardware__held_sends_unreadable_text
+            },
+        )
+        val details = records.map { record ->
+            context.getString(
+                R.string.hardware__held_sends_record,
+                record.amountSats?.toString() ?: unknown,
+                record.address ?: unknown,
+                record.txId ?: unknown,
+                record.heldAt?.toULong().formatToString() ?: unknown,
+            )
+        }
+        return UnreadableHeldSendsPrompt(
+            walletId = this.walletId ?: walletId,
+            message = (listOf(explanation) + details).joinToString("\n\n"),
+            clearsAllWallets = clearsAllWallets,
+            confirmMessage = context.getString(
+                when {
+                    this.walletId == null -> R.string.hardware__held_sends_clear_confirm_text_file
+                    clearsAllWallets -> R.string.hardware__held_sends_clear_confirm_text_unknown_wallet
+                    else -> R.string.hardware__held_sends_clear_confirm_text
+                },
+            ),
+        )
+    }
+
     fun dismissPassphrase() {
         passphraseJob?.cancel()
         passphraseJob = null
@@ -329,7 +823,7 @@ class HwSendViewModel @Inject constructor(
     fun cancel() {
         passphraseJob?.cancel()
         passphraseJob = null
-        _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
+        _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false, unresolvedSend = null) }
         if (_uiState.value.isBroadcastUnresolved) return
 
         signingJob?.cancel()
@@ -499,6 +993,13 @@ class HwSendViewModel @Inject constructor(
             it.copy(isBroadcastUnresolved = retainedShopPayment && pendingBroadcast?.blocksNavigation == true)
         }
         when {
+            generateSequence(error) { it.cause }.any { it is HwHeldSendsUnreadableError } -> {
+                // Nothing is signed until the user decides, knowing what it risks, to clear the unreadable record
+                Logger.warn("Refused hardware send of '$walletId' with unreadable holds", error, context = TAG)
+                val unreadable = generateSequence(error) { it.cause }.filterIsInstance<HwHeldSendsUnreadableError>()
+                    .first()
+                _uiState.update { it.copy(unreadableHeldSends = unreadable.toPrompt(walletId)) }
+            }
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
             }
@@ -519,8 +1020,11 @@ class HwSendViewModel @Inject constructor(
                 title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),
                 description = context.getString(R.string.lightning__transfer_hw__reconnect_error_description),
             )
-            pendingBroadcast != null &&
-                (error.isBroadcastConnectivityFailure() || error is TimeoutCancellationException) -> ToastEventBus.send(
+            pendingBroadcast != null && (
+                error.isBroadcastConnectivityFailure() ||
+                    error is TimeoutCancellationException ||
+                    error is HwBroadcastWaitExpiredError
+                ) -> ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.hardware__send_broadcast_failed_title),
                 description = context.getString(R.string.hardware__send_broadcast_failed_text),
@@ -557,6 +1061,15 @@ data class HwSendUiState(
     val isBroadcastUnresolved: Boolean = false,
     val isPassphraseRequired: Boolean = false,
     val isVerifyingPassphrase: Boolean = false,
+    /** The held send this sheet's attempt ran into, which the sheet shows as pending. */
+    val unresolvedSend: HwSendResult? = null,
+    /** Sends whose broadcast may have gone out: each is pending until it is sent, and is never signed again. */
+    val unresolvedSends: ImmutableList<HwSendResult> = persistentListOf(),
+    val retryingSendTxIds: ImmutableSet<String> = persistentSetOf(),
+    /** A payment the user tried to make again that its wallet has already sent, waiting for their choice. */
+    val alreadySentSend: AlreadySentHwSend? = null,
+    /** Sends refused because an earlier held send cannot be read, waiting for the user to clear its record. */
+    val unreadableHeldSends: UnreadableHeldSendsPrompt? = null,
 ) {
     /**
      * Whether the sign sheet may be dismissed. Connecting or unlocking can be abandoned, and leaving
@@ -575,6 +1088,27 @@ data class HwSendResult(
     val paymentIdentity: String? = null,
 )
 
+data class AlreadySentHwSend(val send: HwSendResult, val sentAt: String)
+
+/** What the user is told before clearing unreadable held send records, asked a second time once [isConfirming]. */
+data class UnreadableHeldSendsPrompt(
+    val walletId: String,
+    val message: String,
+    val clearsAllWallets: Boolean,
+    /** What the second confirmation says gets cleared. */
+    val confirmMessage: String,
+    val isConfirming: Boolean = false,
+)
+
+sealed interface HeldHwSendEvent {
+    val send: HwSendResult
+
+    data class Completed(override val send: HwSendResult) : HeldHwSendEvent
+
+    /** The network rejected the send for good, so it was never sent and is no longer held. */
+    data class Released(override val send: HwSendResult) : HeldHwSendEvent
+}
+
 data class HwSendRequest(
     val walletId: String,
     val address: String,
@@ -584,7 +1118,18 @@ data class HwSendRequest(
     val paymentRequestId: PaykitPaymentRequestId? = null,
     val paymentIdentity: String? = null,
     val paymentDeadlineAt: Instant? = null,
-)
+) {
+    fun isPaymentOf(walletId: String, address: String, amountSats: ULong): Boolean =
+        this.walletId == walletId && this.address.equals(address, ignoreCase = true) && this.amountSats == amountSats
+
+    fun isPaymentOf(other: HwSendRequest): Boolean = isPaymentOf(other.walletId, other.address, other.amountSats)
+}
+
+private class HwBroadcastWaitExpiredError : AppError("Hardware broadcast did not answer in time")
+
+private class UnresolvedHwSend(val payment: PendingHwSendBroadcast, val send: HwSendResult) {
+    var watch: Job? = null
+}
 
 private data class PendingHwSendBroadcast(
     val request: HwSendRequest,
@@ -598,4 +1143,24 @@ private data class PendingHwSendBroadcast(
     fun matches(request: HwSendRequest): Boolean = this.request == request ||
         hasAttemptedBroadcast && this.request.paymentRequestId != null &&
         this.request.copy(satsPerVByte = request.satsPerVByte, tags = request.tags) == request
+
+    fun toHeldSend(txId: String, heldAt: Long) = HeldHwSend(
+        walletId = request.walletId,
+        txId = txId,
+        address = request.address,
+        amountSats = request.amountSats,
+        satsPerVByte = request.satsPerVByte,
+        tags = request.tags,
+        serializedTx = signedTx.serializedTx,
+        miningFeeSats = signedTx.miningFeeSats,
+        feeRate = signedTx.feeRate,
+        totalSpent = signedTx.totalSpent,
+        heldAt = heldAt,
+    )
 }
+
+private fun HeldHwSend.toPendingBroadcast(request: HwSendRequest) = PendingHwSendBroadcast(
+    request = request.copy(satsPerVByte = satsPerVByte, tags = tags),
+    signedTx = HwFundingSignedTx(serializedTx, miningFeeSats, feeRate, totalSpent),
+    isPreparedForBroadcast = true,
+)

@@ -9,16 +9,19 @@ import com.synonym.bitkitcore.CompletedTransaction
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.JadeTransportKind
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.TransactionDetail
 import com.synonym.bitkitcore.TransactionDetails
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
+import com.synonym.bitkitcore.TxDetailInput
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.CompletableDeferred
@@ -29,6 +32,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -41,6 +47,10 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.HeldHwSend
+import to.bitkit.data.HwHeldSendData
+import to.bitkit.data.HwHeldSendStore
+import to.bitkit.data.HwHeldSendsUnreadableError
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
@@ -63,6 +73,7 @@ import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -73,6 +84,9 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     private companion object {
         const val HARDWARE_WALLET_ID = "hardware-wallet"
+        const val HELD_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
+        const val HELD_TXID = "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e"
+        const val HELD_INPUT_TXID = "167c8b8b6169007fd94edc121d606c829cbb5d6b51075bb0c664911848a0c5f7"
         const val HIDDEN_WALLET_ID = "hidden-wallet"
         const val JADE_WALLET_ID = "jade-wallet"
         val WATCHER_RECEIVE_ADDRESS = AddressInfo(
@@ -87,6 +101,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
+    private val hwHeldSendStore = mock<HwHeldSendStore>()
     private val settingsStore = mock<SettingsStore>()
 
     private lateinit var storeData: MutableStateFlow<HwWalletData>
@@ -156,6 +171,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever { activityRepo.getTagMetadataForWallet(any()) }.thenReturn(Result.success(emptyList()))
         whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
+        whenever { hwHeldSendStore.load() }.thenReturn(HwHeldSendData())
     }
 
     @Test
@@ -301,6 +317,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         preActivityMetadataRepo = preActivityMetadataRepo,
         hwWalletStore = hwWalletStore,
+        hwHeldSendStore = hwHeldSendStore,
         settingsStore = settingsStore,
         ioDispatcher = testDispatcher,
     )
@@ -344,6 +361,159 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals("Trezor Safe 7", sut.wallets.value.single().name)
     }
+
+    @Test
+    fun `a held send is found for its own payment only`() = test {
+        val held = HeldHwSend(
+            walletId = HARDWARE_WALLET_ID,
+            txId = "T1",
+            address = HELD_ADDRESS,
+            amountSats = 25_000uL,
+            satsPerVByte = 2uL,
+            serializedTx = "00",
+            miningFeeSats = 200uL,
+            feeRate = 2uL,
+            totalSpent = 25_200uL,
+        )
+        whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(heldSends = listOf(held)))
+        val sut = createRepo()
+
+        assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).getOrThrow())
+        assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS.uppercase(), 25_000uL).getOrThrow())
+        assertNull(sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_001uL).getOrThrow())
+        assertNull(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).getOrThrow())
+        verify(hwHeldSendStore, never()).releaseHeldSends(any())
+    }
+
+    @Test
+    fun `a held send its wallet has seen is tagged and released, unless the transaction was replaced`() = test {
+        val held = HeldHwSend(
+            walletId = HARDWARE_WALLET_ID,
+            txId = "T1",
+            address = HELD_ADDRESS,
+            amountSats = 25_000uL,
+            satsPerVByte = 2uL,
+            tags = listOf("rent"),
+            serializedTx = "00",
+            miningFeeSats = 200uL,
+            feeRate = 2uL,
+            totalSpent = 25_200uL,
+        )
+        whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(heldSends = listOf(held)))
+        whenever(activityRepo.addTagsToActivity(any(), any(), any())).thenReturn(Result.success(Unit))
+        createRepo()
+
+        emitSent(watcherActivity(amount = 25_000uL, txid = "t1", txType = PaymentType.SENT, doesExist = false))
+        verify(hwHeldSendStore, never()).releaseHeldSends(any())
+
+        emitSent(watcherActivity(amount = 25_000uL, txid = "t1", txType = PaymentType.SENT))
+        inOrder(activityRepo, hwHeldSendStore) {
+            verify(activityRepo).addTagsToActivity("t1", listOf("rent"), HARDWARE_WALLET_ID)
+            verify(hwHeldSendStore).releaseHeldSends(setOf("T1"))
+        }
+    }
+
+    private suspend fun emitSent(activity: Activity) = watcherEvents.emit(
+        "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
+            balance = walletBalance(total = 0uL),
+            activities = listOf(activity),
+            transactionDetails = emptyList(),
+            txCount = 1u,
+            blockHeight = 850_000u,
+            accountType = AccountType.NATIVE_SEGWIT,
+            nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
+        )
+    )
+
+    @Test
+    fun `an unreadable held send refuses sends of its wallet, and of every wallet when its wallet is unreadable`() =
+        test {
+            val unreadable = buildJsonObject {
+                put("walletId", HARDWARE_WALLET_ID)
+                put("txId", 7)
+            }
+            whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(unreadable = listOf(unreadable)))
+            val sut = createRepo()
+
+            val refused = sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).exceptionOrNull()
+            assertEquals(HARDWARE_WALLET_ID, (refused as HwHeldSendsUnreadableError).walletId)
+            assertNull(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).getOrThrow())
+
+            whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(unreadable = listOf(JsonPrimitive("?"))))
+            assertTrue(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).isFailure)
+
+            whenever(hwHeldSendStore.load()).doSuspendableAnswer { throw HwHeldSendsUnreadableError(walletId = null) }
+            assertTrue(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).isFailure)
+        }
+
+    @Test
+    fun `a held send is proven unconfirmable only by a final spend of its coin by another transaction`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val held = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
+            .bufferedReader().readText().trim()
+        val spender = "cd".repeat(32)
+        stubHistory(
+            historyTx(HELD_INPUT_TXID, blockHeight = 100u, confirmations = 10u, sent = 0uL),
+            historyTx(spender, blockHeight = 105u, confirmations = 6u, sent = 25_000uL),
+        )
+        stubDetail(spender, HELD_INPUT_TXID to 1u)
+        val sut = createRepo()
+
+        assertTrue(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        stubDetail(spender, HELD_INPUT_TXID to 0u)
+        assertFalse(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        stubDetail(spender, HELD_INPUT_TXID to 1u)
+        stubHistory(
+            historyTx(HELD_INPUT_TXID, blockHeight = 100u, confirmations = 10u, sent = 0uL),
+            historyTx(spender, blockHeight = 105u, confirmations = 5u, sent = 25_000uL),
+        )
+        assertFalse(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        stubHistory(
+            historyTx(HELD_INPUT_TXID, blockHeight = 100u, confirmations = 10u, sent = 0uL),
+            historyTx(spender, blockHeight = 105u, confirmations = 6u, sent = 25_000uL),
+            historyTx(HELD_TXID, blockHeight = null, confirmations = 0u, sent = 25_000uL),
+        )
+        assertFalse(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        whenever(
+            trezorRepo.getTransactionHistory("zpubNS", Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        ).thenReturn(Result.failure(AppError("Electrum unreachable")))
+        assertTrue(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).isFailure)
+    }
+
+    private suspend fun stubHistory(vararg transactions: HistoryTransaction) {
+        val history = mock<TransactionHistoryResult> { on { this.transactions }.thenReturn(transactions.toList()) }
+        whenever(
+            trezorRepo.getTransactionHistory("zpubNS", Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        ).thenReturn(Result.success(history))
+    }
+
+    private suspend fun stubDetail(txid: String, vararg inputs: Pair<String, UInt>) {
+        val detailInputs = inputs.map { (inputTxid, vout) ->
+            mock<TxDetailInput> {
+                on { this.txid }.thenReturn(inputTxid)
+                on { this.vout }.thenReturn(vout)
+            }
+        }
+        val detail = mock<TransactionDetail> {
+            on { this.txid }.thenReturn(txid)
+            on { this.inputs }.thenReturn(detailInputs)
+        }
+        whenever(
+            trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        ).thenReturn(Result.success(detail))
+    }
+
+    private fun historyTx(txid: String, blockHeight: UInt?, confirmations: UInt, sent: ULong) =
+        mock<HistoryTransaction> {
+            on { this.txid }.thenReturn(txid)
+            on { this.blockHeight }.thenReturn(blockHeight)
+            on { this.confirmations }.thenReturn(confirmations)
+            on { this.sent }.thenReturn(sent)
+        }
 
     @Test
     fun `transactions changed event sets device balance and maps activity`() = test {
@@ -1859,7 +2029,16 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         verify(trezorRepo).stopWatcher("hardware-wallet|nativeSegwit")
         verify(trezorRepo).resetState()
+        verify(hwHeldSendStore).reset()
         assertEquals(0uL, sut.totalSats.value)
+    }
+
+    @Test
+    fun `resetState fails when held sends cannot be cleared`() = test {
+        whenever(hwHeldSendStore.reset()).doSuspendableAnswer { throw HwHeldSendsUnreadableError(walletId = null) }
+        val sut = createRepo()
+
+        assertFailsWith<HwHeldSendsUnreadableError> { sut.resetState() }
     }
 
     @Test
@@ -2684,6 +2863,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         confirmations: UInt = 3u,
         fee: ULong = 0uL,
         walletId: String = HARDWARE_WALLET_ID,
+        doesExist: Boolean = true,
     ) = Activity.Onchain(
         OnchainActivity.create(
             walletId = walletId,
@@ -2695,6 +2875,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             address = "",
             timestamp = timestamp ?: 0uL,
             confirmed = blockHeight != null && confirmations > 0u,
+            doesExist = doesExist,
         )
     )
 
