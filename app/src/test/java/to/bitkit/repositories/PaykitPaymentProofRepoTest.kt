@@ -48,6 +48,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
@@ -156,7 +157,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 emptyList()
             }
             PaymentRequestRead(status, records)
-        }.whenever(paykitSdkService).readPaymentRequests(any(), org.mockito.kotlin.anyOrNull())
+        }.whenever(paykitSdkService).readPaymentRequests(any(), anyOrNull())
         whenever(store.load()).thenAnswer {
             if (shouldFailNextLoad) {
                 shouldFailNextLoad = false
@@ -251,6 +252,44 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             LOCAL_IDENTITY,
         )
         verify(paykitSdkService, never()).processPendingPrivateMessages()
+    }
+
+    @Test
+    fun `lightning proof that fits one message is measured with its largest preimage before payment`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(
+            paykitSdkService.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt())
+
+        paymentProofRepo()
+            .prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning, allowanceId = "a")
+            .getOrThrow()
+
+        verify(paykitSdkService).paymentProofEventLength(
+            paymentReference = request.paymentReference,
+            paymentAppId = "bitkit",
+            paymentEndpointIdentifier = MethodId.Bolt11.rawValue,
+            proofJson = """{"data":"${"0".repeat(64)}","type":"bitcoin-bolt11-preimage"}""",
+            billingPeriod = request.billingPeriod,
+            conversionQuoteId = null,
+            allowanceId = "a",
+        )
+        assertEquals(request.id, storedProofs.single().requestId)
+    }
+
+    @Test
+    fun `onchain proof too large for one message fails before payment`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(
+            paykitSdkService.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt() + 1u)
+
+        val result = paymentProofRepo()
+            .prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain)
+
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, result.exceptionOrNull())
+        assertTrue(storedProofs.isEmpty())
+        verify(paykitSdkService, never()).readPaymentRequests(any(), anyOrNull())
     }
 
     @Test

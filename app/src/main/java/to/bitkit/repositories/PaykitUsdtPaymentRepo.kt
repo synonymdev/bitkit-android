@@ -27,9 +27,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
@@ -137,39 +134,6 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                 periodEndsAt = period?.endsAt.orEmpty(),
                 conversionQuoteId = quoteId.orEmpty(),
             )
-        }
-
-        fun validateProofSize(binding: UsdtPaymentProofBinding) {
-            val profile =
-                PaykitUsdtProof(
-                    UsdtPaymentProof("42161", "0x" + "0".repeat(64), "9".repeat(78), "0x" + "0".repeat(130))
-                )
-            val message = buildJsonObject {
-                put("version", 1)
-                put("kind", "paykit.payment_proof")
-                put("app_id", "bitkit")
-                put("event_id", UUID.randomUUID().toString())
-                put("payment_request_id", binding.paymentRequestId)
-                put("payment_reference", binding.paymentReference)
-                put("payment_app_id", binding.paymentAppId)
-                put("payment_endpoint_identifier", binding.paymentEndpointIdentifier)
-                put(
-                    "billing_period",
-                    if (binding.periodStartsAt.isEmpty()) {
-                        JsonNull
-                    } else {
-                        buildJsonObject {
-                            put("starts_at", binding.periodStartsAt)
-                            put("ends_at", binding.periodEndsAt)
-                        }
-                    }
-                )
-                if (binding.conversionQuoteId.isNotEmpty()) put("conversion_quote_id", binding.conversionQuoteId)
-                put("proof", Json.encodeToJsonElement(PaykitUsdtProof.serializer(), profile))
-            }
-            if (message.toString().toByteArray(Charsets.UTF_8).size > PaykitSdkService.MAX_MESSAGE_BYTES) {
-                throw PaykitPaymentRequestError.RequestUnavailable
-            }
         }
     }
 
@@ -433,7 +397,17 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                             it.billingPeriod?.sdkValue
                         )
                     }
-                    binding?.let(::validateProofSize)
+                    binding?.let {
+                        sdk.requirePaymentProofFits(
+                            paymentReference = it.paymentReference,
+                            paymentAppId = it.paymentAppId,
+                            paymentEndpointIdentifier = it.paymentEndpointIdentifier,
+                            kind = PaykitPaymentProofKind.Usdt,
+                            billingPeriod = request.billingPeriod,
+                            conversionQuoteId = it.conversionQuoteId.takeIf(String::isNotEmpty),
+                            allowanceId = null,
+                        )
+                    }
                     val attempt =
                         PaykitUsdtAttempt(
                             quote.id,

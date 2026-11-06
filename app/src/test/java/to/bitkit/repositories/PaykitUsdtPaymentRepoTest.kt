@@ -740,27 +740,45 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `proof envelope includes the application id at the UTF-8 message boundary`() {
-        val binding = PaykitUsdtPaymentRepo.binding(request, identity, "bitkit", null, null)
-        // The rc63 envelope and largest ERC-20 receipt proof reserve 692 bytes before the reference.
-        val exactLimit = binding.copy(paymentReference = "é".repeat(154))
-        PaykitUsdtPaymentRepo.validateProofSize(exactLimit)
-        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> {
-            PaykitUsdtPaymentRepo.validateProofSize(
-                exactLimit.copy(paymentReference = exactLimit.paymentReference + "x")
-            )
-        }
+    fun `proof that fits one message is measured by the sdk before the payment is prepared`() = test {
+        whenever(
+            sdk.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt())
+
+        repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+
+        verify(sdk).paymentProofEventLength(
+            paymentReference = request.paymentReference,
+            paymentAppId = "bitkit",
+            paymentEndpointIdentifier = MethodId.UsdtArbitrum.rawValue,
+            proofJson = PaykitPaymentProofKind.Usdt.longestProofJson(),
+            billingPeriod = null,
+            conversionQuoteId = null,
+            allowanceId = null,
+        )
+        assertTrue(stored != null)
     }
 
     @Test
-    fun `proof size is bounded before the payment is prepared`() = test {
-        val binding = PaykitUsdtPaymentRepo.binding(request, identity, "bitkit", null, request.billingPeriod?.sdkValue)
-        PaykitUsdtPaymentRepo.validateProofSize(binding)
-        val oversized = context(request.copy(paymentReference = "é".repeat(256)))
-        assertTrue(
-            repo().prepare(oversized, quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).isFailure
-        )
+    fun `proof too large for one message fails before the payment is prepared`() = test {
+        whenever(
+            sdk.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt() + 1u)
+
+        val result = repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now()))
+
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, result.exceptionOrNull())
         assertEquals(null, stored)
+    }
+
+    @Test
+    fun `longest usdt proof carries the largest receipt log index`() {
+        val proof = Json.decodeFromString<PaykitUsdtProof>(PaykitPaymentProofKind.Usdt.longestProofJson())
+
+        assertEquals(PaykitUsdt.CHAIN_ID, proof.chainId)
+        assertEquals(66, proof.transactionHash.length)
+        assertEquals("9".repeat(78), proof.receiptLogIndex)
+        assertEquals(132, proof.signature.length)
     }
 
     @Test
