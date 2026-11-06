@@ -12105,6 +12105,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         assertNull(sut.sendUiState.value.paykitRoute?.serviceLeg)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaykitRouteNoneToast", it.testTag)
+                assertFalse(it.description.orEmpty().contains("Nothing can pay this contact"))
+            },
+        )
     }
 
     private fun sparkRouteLeg(address: String) = ServiceRouteLeg(

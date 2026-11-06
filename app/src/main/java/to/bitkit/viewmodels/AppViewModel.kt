@@ -4688,11 +4688,13 @@ class AppViewModel @Inject constructor(
                 PaykitRouteOutcome.Leg
             }
             is PaykitRoute.None -> {
+                Logger.warn("Found no Paykit route: '${picked.reason}'", context = TAG)
                 _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
                 toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.wallet__error_sending_title),
-                    description = picked.reason,
+                    title = context.getString(R.string.wallet__send_amount_exceeded__title),
+                    description = context.getString(R.string.wallet__send_amount_exceeded__description),
+                    testTag = "PaykitRouteNoneToast",
                 )
                 PaykitRouteOutcome.Refused
             }
