@@ -1223,6 +1223,8 @@
     <string name="hardware__search_error">No se pudieron buscar billeteras de hardware. Revise su conexión y vuelva a intentarlo.</string>
     <string name="hardware__send_broadcast_failed_text">Revise su conexión y vuelva a intentarlo.</string>
     <string name="hardware__send_broadcast_failed_title">Pago no confirmado</string>
+    <string name="hardware__send_broadcast_uncertain_text">Es posible que su transacción se haya transmitido. Revise su actividad antes de volver a intentarlo.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Es posible que la transacción se haya enviado</string>
     <string name="hardware__send_confirm_address">A LA DIRECCIÓN (CONFIRME EN EL DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">Desde esta billetera, Trezor solo puede enviar a una dirección de Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Desde esta billetera, Jade solo puede enviar a una dirección de Bitcoin.</string>

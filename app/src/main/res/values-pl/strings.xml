@@ -1220,6 +1220,8 @@
     <string name="hardware__search_error">Nie udało się wyszukać portfeli sprzętowych. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_text">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_title">Płatność niepotwierdzona</string>
+    <string name="hardware__send_broadcast_uncertain_text">Twoja transakcja mogła zostać rozgłoszona. Sprawdź swoją aktywność przed ponowną próbą.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transakcja mogła zostać wysłana</string>
     <string name="hardware__send_confirm_address">NA ADRES (POTWIERDŹ NA URZĄDZENIU)</string>
     <string name="hardware__send_onchain_only_text">Trezor może wysyłać z tego portfela tylko na adres Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade może wysyłać z tego portfela tylko na adres Bitcoin.</string>

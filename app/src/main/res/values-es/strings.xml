@@ -1212,6 +1212,8 @@
     <string name="hardware__search_error">No se pudieron buscar monederos de hardware. Compruebe su conexión e inténtelo de nuevo.</string>
     <string name="hardware__send_broadcast_failed_text">Compruebe su conexión e inténtelo de nuevo.</string>
     <string name="hardware__send_broadcast_failed_title">Pago no confirmado</string>
+    <string name="hardware__send_broadcast_uncertain_text">Es posible que su transacción se haya difundido. Compruebe su actividad antes de volver a intentarlo.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Es posible que la transacción se haya enviado</string>
     <string name="hardware__send_confirm_address">A LA DIRECCIÓN (CONFIRME EN EL DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">Trezor solo puede enviar a una dirección de Bitcoin desde este monedero.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade solo puede enviar a una dirección de Bitcoin desde este monedero.</string>

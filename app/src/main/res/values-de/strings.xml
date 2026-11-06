@@ -1218,6 +1218,8 @@
     <string name="hardware__search_error">Die Suche nach Hardware-Wallets ist fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_text">Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_title">Zahlung nicht bestätigt</string>
+    <string name="hardware__send_broadcast_uncertain_text">Deine Transaktion wurde möglicherweise übertragen. Bitte prüfe deine Aktivität, bevor du es erneut versuchst.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transaktion wurde möglicherweise gesendet</string>
     <string name="hardware__send_confirm_address">AN ADRESSE (AM GERÄT BESTÄTIGEN)</string>
     <string name="hardware__send_onchain_only_text">Trezor kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>

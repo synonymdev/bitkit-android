@@ -1214,6 +1214,8 @@
     <string name="hardware__search_error">Kon niet zoeken naar hardwarewallets. Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_text">Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_title">Betaling niet bevestigd</string>
+    <string name="hardware__send_broadcast_uncertain_text">Uw transactie is mogelijk uitgezonden. Controleer uw activiteit voordat u het opnieuw probeert.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transactie is mogelijk verzonden</string>
     <string name="hardware__send_confirm_address">NAAR ADRES (BEVESTIG OP APPARAAT)</string>
     <string name="hardware__send_onchain_only_text">Trezor kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>
