@@ -1704,8 +1704,9 @@ private const val USDT_TRANSACTION_HASH_DIGITS = 64
 /** Hex digits of a 65-byte EIP-712 signature after its `0x` prefix. */
 private const val USDT_SIGNATURE_DIGITS = 130
 
-/** Decimal digits of the largest uint256 receipt log index. */
-private const val USDT_LOG_INDEX_DIGITS = 78
+/** The largest uint256 receipt log index, the longest one the SDK accepts in an ERC-20 proof. */
+internal const val USDT_MAX_RECEIPT_LOG_INDEX =
+    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
 
 /** The longest proof Bitkit submits for this kind, so a measured proof is never shorter than the one sent. */
 internal fun PaykitPaymentProofKind.longestProofJson(): String = when (this) {
@@ -1715,7 +1716,7 @@ internal fun PaykitPaymentProofKind.longestProofJson(): String = when (this) {
             UsdtPaymentProof(
                 chainId = PaykitUsdt.CHAIN_ID,
                 transactionHash = "0x" + "0".repeat(USDT_TRANSACTION_HASH_DIGITS),
-                receiptLogIndex = "9".repeat(USDT_LOG_INDEX_DIGITS),
+                receiptLogIndex = USDT_MAX_RECEIPT_LOG_INDEX,
                 signature = "0x" + "0".repeat(USDT_SIGNATURE_DIGITS),
             ),
         ),

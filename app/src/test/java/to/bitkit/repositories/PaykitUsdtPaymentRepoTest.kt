@@ -64,6 +64,7 @@ import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.ContactPaymentContext
+import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -826,7 +827,8 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
 
         assertEquals(PaykitUsdt.CHAIN_ID, proof.chainId)
         assertEquals(66, proof.transactionHash.length)
-        assertEquals("9".repeat(78), proof.receiptLogIndex)
+        assertEquals(78, proof.receiptLogIndex.length)
+        assertEquals(BigInteger.ONE.shiftLeft(256) - BigInteger.ONE, BigInteger(proof.receiptLogIndex))
         assertEquals(132, proof.signature.length)
     }
 
