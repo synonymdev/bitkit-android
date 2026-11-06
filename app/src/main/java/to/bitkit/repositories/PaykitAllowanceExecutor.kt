@@ -146,15 +146,17 @@ class PaykitAllowancePayer @Inject constructor(
      * not running). PENDING while Spark cannot list its payments, so a Spark send is never read as never sent.
      */
     suspend fun lightningPaymentStatus(paymentHash: String): PaymentStatus? {
-        runSuspendCatching { lightningRepo.listPaymentsOrNull() }
+        val node = runSuspendCatching { lightningRepo.listPaymentsOrNull() }
             .getOrNull()
             ?.firstOrNull { it.direction == PaymentDirection.OUTBOUND && it.id.equals(paymentHash, ignoreCase = true) }
-            ?.let { return it.status }
+            ?.status
+        // A Spark retry of an invoice the node failed shares its hash and decides the payment.
+        if (node != null && node != PaymentStatus.FAILED) return node
         val spark = runSuspendCatching { lightningRepo.sparkLightningSend(paymentHash) }
             .getOrDefault(SparkLightningSend.Unavailable)
         return when (spark) {
             SparkLightningSend.Unavailable -> PaymentStatus.PENDING
-            SparkLightningSend.NotFound -> null
+            SparkLightningSend.NotFound -> node
             is SparkLightningSend.Found -> when (spark.status) {
                 SparkPaymentStatus.COMPLETED -> PaymentStatus.SUCCEEDED
                 SparkPaymentStatus.PENDING -> PaymentStatus.PENDING
