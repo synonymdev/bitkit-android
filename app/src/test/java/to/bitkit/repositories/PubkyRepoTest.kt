@@ -75,6 +75,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.data.sharedpubky.SharedPubkyContract
+import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
@@ -729,6 +730,43 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService) { signUp("secret", "test-homeserver", "test-code") }
         verifyBlocking(pubkyService, never()) { signIn(any()) }
         httpClient.close()
+    }
+
+    @Test
+    fun `createIdentity signs in when sign up finds the identity on another homeserver`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        stubSignupKeys()
+        whenever(pubkyService.signUp("secret", "test-homeserver", "test-code")).thenAnswer {
+            throw AppError(PaykitException.Policy("policy_error", "Identity lives on another homeserver"))
+        }
+        whenever(pubkyService.signIn("secret")).thenReturn(Unit)
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+        httpClient.close()
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService) { signIn("secret") }
+    }
+
+    @Test
+    fun `createIdentity reports a transport failure without signing up again`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        stubSignupKeys()
+        val offline = PaykitException.Transport("transport_error", "Homeserver unavailable")
+        whenever(pubkyService.signUp("secret", "test-homeserver", "test-code")).thenAnswer { throw AppError(offline) }
+        whenever(pubkyService.signIn("secret")).thenAnswer { throw AppError(offline) }
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+        httpClient.close()
+
+        assertTrue(result.exceptionOrNull()?.isPaykitTemporarilyUnavailable() == true)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService, times(1)) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
     }
 
     @Test
