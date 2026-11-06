@@ -2981,6 +2981,8 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPaymentActivity(paymentHash: String) {
+        // Spark records its own sends; the node's record of the hash is an earlier attempt that would overwrite it.
+        if (lightningRepo.isSparkSend(paymentHash)) return
         runSuspendCatching { activityRepo.handlePaymentEvent(paymentHash) }.onFailure {
             Logger.warn("Failed to refresh payment activity for '$paymentHash'", it, context = TAG)
         }

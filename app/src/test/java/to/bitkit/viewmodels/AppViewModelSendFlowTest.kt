@@ -8174,6 +8174,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry's success is not overwritten by the node's earlier failure`() = test {
+        val paymentHash = "spark_retry_hash"
+        whenever(lightningRepo.isSparkSend(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = paymentHash,
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(activityRepo, never()).handlePaymentEvent(paymentHash)
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Success(paymentHash = paymentHash, amountWithFeeSats = null),
+        )
+    }
+
+    @Test
     fun `pending success still resolves if activity sync fails`() = test {
         val paymentHash = "pending_sync_fail"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
