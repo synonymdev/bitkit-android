@@ -1167,7 +1167,7 @@ class PubkyRepo @Inject constructor(
     ): PubkyProfileSnapshot {
         val update = PubkyProfileUpdate(
             name = name.takeIf { it != base?.name },
-            bio = bio.takeIf { base == null || it != base.bio },
+            bio = bio.replace('\n', ' ').takeIf { base == null || it != base.bio },
             image = when {
                 base == null -> imageUrl
                 imageUrl == base.imageUrl -> null
