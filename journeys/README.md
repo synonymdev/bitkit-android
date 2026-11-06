@@ -164,6 +164,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `node-lifecycle/connections-during-restart.xml` | not ported — iOS shows Lightning Connections without a node-running gate and has no syncing row |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
+| `lightning-connections/channel-details-time-format.xml` | not ported — `LightningConnectionDetailView.swift` hardcodes `MMM d, yyyy - HH:mm`, so iOS has no 12-hour behaviour to assert |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `send/recovery-pin-system-back.xml` | not ported — iOS has no system Back button, and `SendPinScreen` already answers cancel in `onDisappear` |
 | `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
