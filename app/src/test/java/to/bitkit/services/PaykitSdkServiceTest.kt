@@ -394,7 +394,7 @@ class PaykitSdkServiceTest {
         service.setPaymentSubmissionActive(true)
         val caller = launch { wrapper.importShopContacts(listOf(RING_PUBKY), RING_PUBKY) { true } }
         runCurrent()
-        ServiceQueue.CORE.background { }
+        ServiceQueue.PUBKY.background { }
         caller.cancel()
         service.setPaymentSubmissionActive(false)
         caller.join()
