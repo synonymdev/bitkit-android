@@ -86,6 +86,7 @@ class SparkRepoTest : BaseUnitTest() {
     private val cacheData = MutableStateFlow(AppCacheData())
     private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
     private val contactResolver = mock<PrivatePaykitContactResolver>()
+    private val pendingPaymentRepo = PendingPaymentRepo()
     private val now = Instant.fromEpochSeconds(1_800_000_000)
     private val clock = object : Clock {
         override fun now() = this@SparkRepoTest.now
@@ -97,6 +98,7 @@ class SparkRepoTest : BaseUnitTest() {
         activityRepo = { activityRepo },
         cacheStore = cacheStore,
         contactResolver = { contactResolver },
+        pendingPaymentRepo = pendingPaymentRepo,
         clock = clock,
     )
 
@@ -376,6 +378,59 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(SparkDepositClaim.Later, sut.depositClaims.value["txid"])
         verify(sparkService, never()).listUnclaimedDeposits()
         verify(sparkService, never()).claimDeposit(any(), any(), any())
+    }
+
+    @Test
+    fun `a later deposit reads as claimed once spark claims it`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        sut.followDepositClaim("txid", SparkClaimSpeed.Later, ceilingSats = 500uL)
+
+        whenever { sparkService.listPayments() }.thenReturn(listOf(depositPayment()))
+        sparkEvents.emit(SdkEvent.ClaimedDeposits(emptyList()))
+
+        assertEquals(SparkDepositClaim.Claimed, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `a payment event settles even when the balance read fails`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        whenever { sparkService.getInfo() }.thenAnswer { throw SdkException.Generic("offline") }
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(sentPayment(fees = 1)))
+        runCurrent()
+
+        assertEquals("hash", assertIs<Event.PaymentSuccessful>(events.single()).paymentHash)
+    }
+
+    @Test
+    fun `a restore whose exit data spark rejects fails and keeps it staged`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.importExitState(any()) }.thenAnswer { throw SdkException.Generic("bad state") }
+        val sut = createSut()
+
+        val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertTrue(result.isFailure)
+        assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a sent withdrawal succeeds even when the refresh after it fails`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 500))
+        whenever { sparkService.listPayments() }.thenAnswer { throw SdkException.Generic("offline") }
+
+        assertTrue(createSut().withdrawAll(ADDRESS, confirmedFeeSats = 500uL).isSuccess)
     }
 
     @Test

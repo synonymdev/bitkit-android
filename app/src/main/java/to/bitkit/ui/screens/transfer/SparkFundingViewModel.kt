@@ -32,6 +32,8 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
@@ -293,7 +295,11 @@ class SparkFundingViewModel @Inject constructor(
                 isTransfer = true,
                 isMaxAmount = state.isMax,
             ).getOrThrow()
-            check(outcome is OnchainSendOutcome.Accepted) { "Spark funding was not accepted: '$outcome'" }
+            if (outcome !is OnchainSendOutcome.Accepted) {
+                Logger.warn("Spark funding was not accepted: '$outcome'", context = TAG)
+                if (showRetainedFunding()) return@runSuspendCatching
+                error("Spark funding was not accepted: '$outcome'")
+            }
             withContext(NonCancellable) {
                 runSuspendCatching {
                     lightningRepo.completeAcceptedTransferFollowup(orderId = null, txid = outcome.txid)
@@ -308,12 +314,21 @@ class SparkFundingViewModel @Inject constructor(
             _effects.emit(SideEffect.Sent)
         }.onFailure {
             Logger.error("Failed to fund Spark", it, context = TAG)
+            if (it is OnchainSendBlockedError && showRetainedFunding()) return@onFailure
             toast(
                 title = R.string.lightning__close_error,
                 description = context.getString(R.string.wallet__send_error_create_tx),
             )
         }
         _uiState.update { it.copy(isSending = false) }
+    }
+
+    // A signed funding that was not accepted is kept; Payment Pending shows it and retries it at a new fee.
+    private suspend fun showRetainedFunding(): Boolean {
+        val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+        if (attempt == null || !attempt.isTransfer || !attempt.blocksNextSend) return false
+        _effects.emit(SideEffect.FundingPending(attempt))
+        return true
     }
 
     fun onPayRepriced() {
@@ -455,6 +470,9 @@ interface SparkFundingContract {
     sealed interface SideEffect {
         data object AmountReady : SideEffect
         data object Sent : SideEffect
+
+        /** The funding transaction is signed but not accepted; its recovery opens on Payment Pending. */
+        data class FundingPending(val attempt: OnchainSendAttempt) : SideEffect
 
         /** Priced and checked; the hardware wallet signs [request] next. */
         data class SignHw(val request: HwSendRequest) : SideEffect

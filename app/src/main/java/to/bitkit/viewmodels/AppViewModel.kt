@@ -6765,6 +6765,23 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /** Opens Payment Pending for a transfer whose signed funding was not accepted, so it can be retried. */
+    fun showPendingTransfer(attempt: OnchainSendAttempt) {
+        if (!attempt.isTransfer || !attempt.blocksNextSend) return
+        showSheet(
+            Sheet.Send(
+                SendRoute.Pending(
+                    paymentHash = attempt.txid.orEmpty(),
+                    amount = attempt.amountSats.toLong(),
+                    observeResolution = false,
+                    isOnchain = true,
+                    walletId = attempt.walletId,
+                    refusalReason = attempt.refusalReason,
+                )
+            )
+        )
+    }
+
     private fun showUnresolvedOnchainSend(
         txid: String?,
         amount: ULong,

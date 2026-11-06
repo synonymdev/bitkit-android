@@ -3,8 +3,11 @@ package to.bitkit.repositories
 import com.synonym.paykit.PaymentOutcome
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.models.WalletScope
@@ -44,6 +47,21 @@ class PaykitAllowancePayerTest : BaseUnitTest() {
 
             assertEquals(node, sut.lightningPaymentStatus(paymentHash))
         }
+    }
+
+    @Test
+    fun `a spark retry of an invoice the node failed decides its status`() = test {
+        val failed = mock<PaymentDetails> {
+            on { direction } doReturn PaymentDirection.OUTBOUND
+            on { id } doReturn paymentHash
+            on { status } doReturn PaymentStatus.FAILED
+        }
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(failed))
+        assertEquals(PaymentStatus.FAILED, sut.lightningPaymentStatus(paymentHash))
+
+        whenever(lightningRepo.sparkLightningSend(paymentHash))
+            .thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, "preimage"))
+        assertEquals(PaymentStatus.SUCCEEDED, sut.lightningPaymentStatus(paymentHash))
     }
 
     @Test

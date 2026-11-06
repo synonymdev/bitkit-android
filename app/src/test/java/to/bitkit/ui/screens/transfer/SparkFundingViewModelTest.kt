@@ -21,11 +21,14 @@ import to.bitkit.R
 import to.bitkit.models.BalanceState
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
@@ -189,6 +192,38 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Later, 1_350uL)
         assertEquals("txid", sut.uiState.value.txid)
         assertTrue(sut.uiState.value.claim == SparkDepositClaim.Later)
+    }
+
+    @Test
+    fun `a funding that was signed but not accepted opens its recovery instead of an error`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
+        val retained = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(retained)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        val effects = mutableListOf<SideEffect>()
+        backgroundScope.launch { sut.effects.collect { effects += it } }
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertTrue(toasts.isEmpty())
+        assertEquals(SideEffect.FundingPending(retained), effects.last())
+        verify(sparkRepo, never()).onDepositBroadcast(any(), any())
     }
 
     @Test

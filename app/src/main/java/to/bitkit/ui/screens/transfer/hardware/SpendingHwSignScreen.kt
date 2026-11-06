@@ -87,6 +87,7 @@ fun SpendingHwSignScreen(
 
                 SideEffect.Sent -> onSent()
                 SideEffect.AmountReady -> Unit
+                is SideEffect.FundingPending -> Unit
             }
         }
     }
