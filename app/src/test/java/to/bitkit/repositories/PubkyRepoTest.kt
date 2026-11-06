@@ -952,13 +952,22 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `saveProfile checks the revision the edit started from after a refresh`() = test {
+    fun `an edit opened before a refresh saves against the revision it opened with`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
+        val editBase = sut.profileEditBase()
         whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY))
             .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Newer")))
         sut.loadProfile()
+        assertEquals("revision-Newer", sut.profileEditBase().revision)
 
-        saveNewProfile()
+        sut.saveProfile(
+            name = "New",
+            bio = "",
+            links = emptyList(),
+            tags = emptyList(),
+            imageUrl = null,
+            editBase = editBase
+        )
 
         verifyBlocking(pubkyService) { publishPubkyProfile(any(), eq("revision-Old"), any()) }
     }

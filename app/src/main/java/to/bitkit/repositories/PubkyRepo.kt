@@ -846,7 +846,7 @@ class PubkyRepo @Inject constructor(
                         Logger.debug("Skipped stale profile load for '${redacted(signIn.publicKey)}'", context = TAG)
                         return@onSuccess
                     }
-                    if (ownProfileRevision == null) ownProfileRevision = revision
+                    ownProfileRevision = revision
                     invalidateReadOnlyProfile()
                     cacheMetadata(loadedProfile, isCurrentLoad)
                 }.onFailure {
