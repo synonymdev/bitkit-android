@@ -1317,6 +1317,7 @@
     <string name="profile__edit_save_error">فشل حفظ الملف الشخصي</string>
     <string name="profile__edit_save_success">تم حفظ الملف الشخصي</string>
     <string name="profile__edit_tags">العلامات</string>
+    <string name="profile__edit_tags_error">تعذّر على Bitkit قراءة وسومك، لذا لم يُحفظ تغيير الوسوم. حاول مرة أخرى.</string>
     <string name="profile__edit_unlink_section">إلغاء الربط</string>
     <string name="profile__empty_state">تعذر تحميل ملفك الشخصي.</string>
     <string name="profile__intro_description">مع ملفك الشخصي المحمول، يمكن لجهات اتصالك الوصول إليك والدفع لك في أي مكان.</string>

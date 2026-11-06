@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.PROFILE_LINKS_MAX_COUNT
 import to.bitkit.models.isValidProfileName
 import to.bitkit.ui.components.AddLinkSheet
 import to.bitkit.ui.components.AddTagSheet
@@ -171,6 +172,7 @@ private fun Content(
                 topBar = topBar,
                 isSaving = uiState.isSaving,
                 isDeleting = uiState.isDeleting,
+                maxLinks = PROFILE_LINKS_MAX_COUNT,
                 avatarContent = {
                     AvatarSection(
                         imageUrl = uiState.imageUrl,

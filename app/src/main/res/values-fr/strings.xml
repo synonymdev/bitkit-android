@@ -1336,6 +1336,7 @@
     <string name="profile__edit_save_error">Échec de l\'enregistrement du profil</string>
     <string name="profile__edit_save_success">Profil enregistré</string>
     <string name="profile__edit_tags">ÉTIQUETTES</string>
+    <string name="profile__edit_tags_error">Bitkit n\'a pas pu lire vos étiquettes, la modification des étiquettes n\'a donc pas été enregistrée. Réessayez.</string>
     <string name="profile__edit_unlink_section">DISSOCIER</string>
     <string name="profile__empty_state">Impossible de charger votre profil.</string>
     <string name="profile__intro_description">Grâce à votre profil portable, vos contacts peuvent vous joindre et vous payer partout.</string>

@@ -13,8 +13,14 @@ private val pubkyProfileJson = Json { ignoreUnknownKeys = true }
 /** pubky.app profile name limits from pubky-app-specs. */
 const val PROFILE_NAME_MIN_LENGTH = 3
 const val PROFILE_NAME_MAX_LENGTH = 50
+const val PROFILE_LINKS_MAX_COUNT = 5
 
-fun isValidProfileName(name: String) = name.trim().length in PROFILE_NAME_MIN_LENGTH..PROFILE_NAME_MAX_LENGTH
+/** pubky.app counts code points, not UTF-16 chars. */
+fun isValidProfileName(name: String) = name.trim().let { it.codePointCount(0, it.length) } in
+    PROFILE_NAME_MIN_LENGTH..PROFILE_NAME_MAX_LENGTH
+
+fun String.takeCodePoints(max: Int) =
+    if (codePointCount(0, length) <= max) this else substring(0, offsetByCodePoints(0, max))
 
 @Immutable
 data class PubkyProfileLink(val label: String, val url: String)

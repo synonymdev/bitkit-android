@@ -1338,6 +1338,7 @@
     <string name="profile__edit_save_error">Profiel opslaan mislukt</string>
     <string name="profile__edit_save_success">Profiel opgeslagen</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_tags_error">Bitkit kon je tags niet lezen, dus de tagwijziging is niet opgeslagen. Probeer het opnieuw.</string>
     <string name="profile__edit_unlink_section">ONTKOPPELEN</string>
     <string name="profile__empty_state">Kan uw profiel niet laden.</string>
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>

@@ -995,6 +995,79 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createIdentity does not overwrite a pubky app profile its form was not filled from`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any()))
+            .thenAnswer { throw PaykitException.ConcurrentUpdate("concurrent_update", "Pubky profile changed") }
+
+        val result = sut.createIdentity("Updated", "", emptyList(), emptyList(), null)
+
+        assertIs<PubkyProfileChangedError>(result.exceptionOrNull())
+        verifyBlocking(pubkyService, times(1)) { publishPubkyProfile(any(), anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `createIdentity restores against the pubky app profile its form was filled from`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val restored = checkNotNull(sut.fetchRemoteProfile(VALID_SELF_KEY).getOrThrow())
+        clearInvocations(pubkyService)
+
+        sut.createIdentity("Renamed", restored.bio, restored.links, restored.tags, null)
+
+        verifyBlocking(pubkyService) {
+            publishPubkyProfile(PubkyProfileUpdate("Renamed", null, null, null), "revision-Test", VALID_SELF_KEY)
+        }
+    }
+
+    @Test
+    fun `saveProfile reports a tag change it could not store while the tags cannot be read`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        sut.loadProfile()
+
+        val result = sut.saveProfile(
+            name = "Test",
+            bio = "",
+            links = emptyList(),
+            tags = listOf("new"),
+            imageUrl = null
+        )
+
+        assertIs<PubkyProfileTagsUnavailableError>(result.exceptionOrNull())
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any(), any()) }
+    }
+
+    @Test
+    fun `loadProfile keeps an avatar set on pubky app over a pending avatar move`() = test {
+        whenever(pubkyStore.data).thenReturn(
+            flowOf(
+                PubkyStoreData(
+                    pubkyAppProfileOwners = setOf(VALID_SELF_KEY),
+                    pubkyAppAvatarPending = setOf(VALID_SELF_KEY)
+                )
+            )
+        )
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(
+            createSnapshot(VALID_SELF_KEY, createPubkyProfile(image = "pubky://self/pub/pubky.app/files/0000000000000"))
+        )
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(
+            PaykitProfileRecord(
+                publicKey = VALID_SELF_KEY,
+                profile = createPaykitProfile("Test", image = "pubky://self/pub/paykit/blobs/avatar.jpg"),
+                path = "/pub/paykit/profile.json",
+                revision = "paykit-revision",
+                updatedAt = "2026-01-01T00:00:00Z",
+            )
+        )
+
+        sut.loadProfile()
+
+        assertEquals("pubky://self/pub/pubky.app/files/0000000000000", sut.profile.value?.imageUrl)
+        verifyBlocking(pubkyService, never()) { fetchFile(any(), any()) }
+    }
+
+    @Test
     fun `deleteProfile deletes the pubky app profile of a wallet identity`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
 
@@ -1015,7 +1088,11 @@ class PubkyRepoTest : BaseUnitTest() {
                     bio = "line one\nline two",
                     links = listOf(
                         PubkyProfileDataLink("Site", "example.com"),
-                        PubkyProfileDataLink("Mail", "a@b.com")
+                        PubkyProfileDataLink("Mail", "a@b.com"),
+                        PubkyProfileDataLink("Medium", "medium.com/@alice"),
+                        PubkyProfileDataLink("City", "New York"),
+                        PubkyProfileDataLink("Date", "2024-01-01"),
+                        PubkyProfileDataLink("Phone", "+49 123 456"),
                     ),
                 ).toPaykitProfile(),
                 path = "/pub/paykit/profile.json",
@@ -1035,6 +1112,8 @@ class PubkyRepoTest : BaseUnitTest() {
                     links = listOf(
                         SdkPubkyProfileLink(title = "Site", url = "https://example.com"),
                         SdkPubkyProfileLink(title = "Mail", url = "mailto:a@b.com"),
+                        SdkPubkyProfileLink(title = "Medium", url = "https://medium.com/@alice"),
+                        SdkPubkyProfileLink(title = "Phone", url = "tel:+49123456"),
                     ),
                 ),
                 null,

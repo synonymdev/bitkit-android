@@ -1341,6 +1341,7 @@
     <string name="profile__edit_save_error">Impossibile salvare il profilo</string>
     <string name="profile__edit_save_success">Profilo salvato</string>
     <string name="profile__edit_tags">TAG</string>
+    <string name="profile__edit_tags_error">Bitkit non è riuscito a leggere i tuoi tag, quindi la modifica dei tag non è stata salvata. Riprova.</string>
     <string name="profile__edit_unlink_section">SCOLLEGA</string>
     <string name="profile__empty_state">Impossibile caricare il tuo profilo.</string>
     <string name="profile__intro_description">Con il tuo profilo portatile i tuoi contatti possono raggiungerti e pagarti ovunque.</string>

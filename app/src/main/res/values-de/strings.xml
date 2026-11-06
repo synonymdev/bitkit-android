@@ -1338,6 +1338,7 @@
     <string name="profile__edit_save_error">Profil konnte nicht gespeichert werden</string>
     <string name="profile__edit_save_success">Profil gespeichert</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_tags_error">Bitkit konnte deine Tags nicht lesen, daher wurde die Tag-Änderung nicht gespeichert. Versuche es erneut.</string>
     <string name="profile__edit_unlink_section">VERKNÜPFUNG AUFHEBEN</string>
     <string name="profile__empty_state">Dein Profil kann nicht geladen werden.</string>
     <string name="profile__intro_description">Mit deinem portablen Profil können deine Kontakte dich überall erreichen und bezahlen.</string>

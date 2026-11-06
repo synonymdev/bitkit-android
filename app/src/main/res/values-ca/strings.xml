@@ -1338,6 +1338,7 @@
     <string name="profile__edit_save_error">No s\'ha pogut desar el perfil</string>
     <string name="profile__edit_save_success">Perfil desat</string>
     <string name="profile__edit_tags">ETIQUETES</string>
+    <string name="profile__edit_tags_error">Bitkit no ha pogut llegir les teves etiquetes, així que el canvi d\'etiquetes no s\'ha desat. Torna-ho a provar.</string>
     <string name="profile__edit_unlink_section">DESVINCULAR</string>
     <string name="profile__empty_state">No s\'ha pogut carregar el teu perfil.</string>
     <string name="profile__intro_description">Amb el teu perfil portable, els teus contactes et poden trobar i pagar a qualsevol lloc.</string>

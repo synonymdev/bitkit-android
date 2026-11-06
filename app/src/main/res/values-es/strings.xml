@@ -1335,6 +1335,7 @@
     <string name="profile__edit_save_error">No se pudo guardar el perfil</string>
     <string name="profile__edit_save_success">Perfil guardado</string>
     <string name="profile__edit_tags">ETIQUETAS</string>
+    <string name="profile__edit_tags_error">Bitkit no pudo leer tus etiquetas, así que el cambio de etiquetas no se guardó. Inténtalo de nuevo.</string>
     <string name="profile__edit_unlink_section">DESVINCULAR</string>
     <string name="profile__empty_state">No se pudo cargar su perfil.</string>
     <string name="profile__intro_description">Con su perfil portátil, sus contactos pueden localizarle y pagarle en cualquier lugar.</string>

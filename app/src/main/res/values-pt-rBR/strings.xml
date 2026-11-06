@@ -1341,6 +1341,7 @@
     <string name="profile__edit_save_error">Falha ao salvar perfil</string>
     <string name="profile__edit_save_success">Perfil salvo</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_tags_error">O Bitkit não conseguiu ler suas tags, então a alteração das tags não foi salva. Tente novamente.</string>
     <string name="profile__edit_unlink_section">DESVINCULAR</string>
     <string name="profile__empty_state">Não foi possível carregar seu perfil.</string>
     <string name="profile__intro_description">Com seu perfil portátil, seus contatos podem encontrar você e pagar você em qualquer lugar.</string>

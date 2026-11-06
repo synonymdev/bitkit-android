@@ -25,9 +25,11 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.models.takeCodePoints
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyProfileChangedError
+import to.bitkit.repositories.PubkyProfileTagsUnavailableError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -111,7 +113,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun onNameChange(name: String) {
-        _uiState.update { it.copy(name = name.take(PROFILE_NAME_MAX_LENGTH)) }
+        _uiState.update { it.copy(name = name.takeCodePoints(PROFILE_NAME_MAX_LENGTH)) }
     }
 
     fun onBioChange(bio: String) {
@@ -226,7 +228,11 @@ class EditProfileViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__edit_save_error),
-                    description = if (changed) context.getString(R.string.profile__edit_changed_error) else it.message,
+                    description = when {
+                        changed -> context.getString(R.string.profile__edit_changed_error)
+                        it is PubkyProfileTagsUnavailableError -> context.getString(R.string.profile__edit_tags_error)
+                        else -> it.message
+                    },
                 )
                 if (changed) reloadAfterExternalEdit()
             }

@@ -1316,6 +1316,7 @@
     <string name="profile__edit_save_error">Falha ao guardar o perfil</string>
     <string name="profile__edit_save_success">Perfil guardado</string>
     <string name="profile__edit_tags">ETIQUETAS</string>
+    <string name="profile__edit_tags_error">O Bitkit não conseguiu ler as suas etiquetas, por isso a alteração das etiquetas não foi guardada. Tente novamente.</string>
     <string name="profile__edit_unlink_section">DESASSOCIAR</string>
     <string name="profile__empty_state">Não foi possível carregar o seu perfil.</string>
     <string name="profile__intro_description">Com o seu perfil portátil, os seus contactos podem encontrá-lo e pagar-lhe em qualquer lugar.</string>
