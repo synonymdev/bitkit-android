@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Inject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -25,6 +24,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import javax.inject.Inject
 
 @HiltViewModel
 class CreateProfileViewModel @Inject constructor(
