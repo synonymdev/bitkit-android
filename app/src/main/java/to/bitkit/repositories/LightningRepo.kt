@@ -1487,9 +1487,10 @@ class LightningRepo @Inject constructor(
     ): Result<PaymentId> {
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
-            if (!onBeforeSend()) return Result.failure(PaymentAbortedBeforeSend())
-            runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
-            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat)
+            val authorizeSend: suspend () -> Boolean = {
+                onBeforeSend().also { if (it) requireWalletRestoreComplete() }
+            }
+            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, authorizeSend)
                 .onSuccess { recordSendRail(it, LightningRail.Spark) }
                 .onFailure {
                     if (it is PaymentPendingException) recordSendRail(it.paymentHash, LightningRail.Spark)
