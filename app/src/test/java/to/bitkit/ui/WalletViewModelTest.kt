@@ -24,6 +24,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
@@ -37,6 +38,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
@@ -52,6 +54,9 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
+import to.bitkit.security.WipeCoordinator
+import to.bitkit.security.WipeReason
+import to.bitkit.security.WipeState
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PendingChannelMigration
@@ -86,12 +91,14 @@ class WalletViewModelTest : BaseUnitTest() {
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val boltzService = mock<BoltzService>()
+    private val wipeCoordinator = mock<WipeCoordinator>()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
     private val balanceState = MutableStateFlow(BalanceState())
     private val isRecoveryMode = MutableStateFlow(false)
     private val isOnline = MutableStateFlow(ConnectivityState.CONNECTED)
+    private val wipeState = MutableStateFlow<WipeState>(WipeState.Idle)
 
     @Before
     fun setUp() = runBlocking {
@@ -111,6 +118,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(boltzService.events).thenReturn(MutableSharedFlow())
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(1uL))
+        whenever(wipeCoordinator.state).thenReturn(wipeState)
 
         connectionRecovery = connectionRecoveryFixture(settingsStore, recoveryKeychain) { currentBinding }
         sut = WalletViewModel(
@@ -126,6 +134,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
         )
     }
 
@@ -138,6 +147,74 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(boltzService).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `ensureSwapUpdatesRunning starts nothing while the wipe gate is up`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        wipeState.value = WipeState.Running
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, never()).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `the wipe gate ends the swap updates retries`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        whenever(boltzService.startUpdates(anyOrNull(), any(), anyOrNull()))
+            .doSuspendableAnswer { throw AppError("Boltz unreachable") }
+        sut.ensureSwapUpdatesRunning()
+        runCurrent()
+
+        wipeState.value = WipeState.Running
+        advanceUntilIdle()
+
+        verify(boltzService, times(1)).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a wipe lets the next wallet start its own swap updates stream`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        wipeState.value = WipeState.Running
+        advanceUntilIdle()
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, times(2)).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a swap updates start that lands after a wipe began leaves the next start free`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        val firstStartLands = CompletableDeferred<Unit>()
+        var starts = 0
+        whenever(boltzService.startUpdates(anyOrNull(), any(), anyOrNull())).doSuspendableAnswer {
+            if (++starts == 1) withContext(NonCancellable) { firstStartLands.await() }
+        }
+        sut.ensureSwapUpdatesRunning()
+        runCurrent()
+
+        wipeState.value = WipeState.Running
+        runCurrent()
+        firstStartLands.complete(Unit)
+        advanceUntilIdle()
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        assertEquals(2, starts)
     }
 
     @Test
@@ -201,11 +278,89 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wipeWallet should call walletRepo wipeWallet`() = test {
-        whenever(walletRepo.wipeWallet(walletIndex = 0)).thenReturn(Result.success(Unit))
-        sut.wipeWallet()
+    fun `wipeWallet should begin a coordinated wipe for the given reason`() = test {
+        whenever(wipeCoordinator.begin(WipeReason.USER_RESET)).thenReturn(Result.success(Unit))
+        sut.wipeWallet(WipeReason.USER_RESET)
 
-        verify(walletRepo).wipeWallet(walletIndex = 0)
+        verify(wipeCoordinator).begin(WipeReason.USER_RESET)
+        verify(walletRepo, never()).wipeWallet(any())
+    }
+
+    @Test
+    fun `RN migration check waits until the wipe gate is down`() = test {
+        wipeState.value = WipeState.Running
+        clearInvocations(migrationService)
+
+        WalletViewModel(
+            context = context,
+            bgDispatcher = testDispatcher,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+            settingsStore = settingsStore,
+            backupRepo = backupRepo,
+            blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
+            migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
+        )
+        advanceUntilIdle()
+        verify(migrationService, never()).isMigrationChecked()
+
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+        verify(migrationService).isMigrationChecked()
+    }
+
+    @Test
+    fun `walletExists starts from the wallet state without reading the keychain`() = test {
+        walletState.value = walletState.value.copy(walletExists = true)
+        whenever(walletRepo.walletExists())
+            .thenAnswer { throw KeychainError.FailedToLoad(Keychain.Key.BIP39_MNEMONIC.name) }
+
+        val testSut = WalletViewModel(
+            context = context,
+            bgDispatcher = testDispatcher,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+            settingsStore = settingsStore,
+            backupRepo = backupRepo,
+            blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
+            migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
+        )
+
+        assertTrue(testSut.walletExists)
+    }
+
+    @Test
+    fun `pending wallet restore is not offered while the wipe gate is up`() = test {
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        wipeState.value = WipeState.Running
+
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.Initial, sut.restoreState.value)
+    }
+
+    @Test
+    fun `pending wallet restore is offered once the wipe gate drops`() = test {
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        wipeState.value = WipeState.Blocked(AppError("unreadable"))
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
     }
 
     @Test
@@ -1176,6 +1331,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -1243,6 +1399,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
         )
 
         testSut.start()
@@ -1299,6 +1456,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
         )
 
         // Trigger restore to put state in non-idle
@@ -1339,6 +1497,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
         )
 
         testSut.restoreWallet("mnemonic", null)
@@ -1430,6 +1589,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            wipeCoordinator = wipeCoordinator,
         )
         advanceUntilIdle()
 

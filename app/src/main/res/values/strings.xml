@@ -749,6 +749,7 @@
     <string name="security__pass_your">Your Passphrase</string>
     <string name="security__pin_allowance">Please enter your PIN code to confirm this allowance change.</string>
     <string name="security__pin_attempts">{attemptsRemaining} attempts remaining. Forgot your PIN?</string>
+    <string name="security__pin_check_error">Bitkit could not check your PIN. Please try again.</string>
     <string name="security__pin_choose_header">Choose 4-Digit PIN</string>
     <string name="security__pin_choose_text">Please use a PIN you will remember. If you forget your PIN you can reset it, but that will require restoring your wallet.</string>
     <string name="security__pin_disable_button">Disable PIN</string>
@@ -776,6 +777,7 @@
     <string name="security__reset_button_backup">Back Up First</string>
     <string name="security__reset_button_reset">Reset Wallet</string>
     <string name="security__reset_confirm">Yes, Reset</string>
+    <string name="security__reset_dialog_channel_migration">Your Lightning channels from the previous Bitkit app have not finished moving to this wallet yet. Their data stays on this device, but resetting now can make those funds harder to recover.</string>
     <string name="security__reset_dialog_desc">Are you sure you want to reset your Bitkit Wallet? Do you have a backup of your recovery phrase and wallet data?</string>
     <string name="security__reset_dialog_title">Reset Bitkit?</string>
     <string name="security__reset_graph_button">Reset Network Graph</string>
@@ -793,6 +795,14 @@
     <string name="security__success_title">Wallet Secured</string>
     <string name="security__use_pin">Use PIN code</string>
     <string name="security__wipe_app">Wipe App</string>
+    <string name="security__wipe_blocked_text">Bitkit can\'t verify its security state, so your wallet stays locked. Tap Retry to check again, or export the logs for support.</string>
+    <string name="security__wipe_blocked_title">Wallet Locked</string>
+    <string name="security__wipe_clear_storage_text">If this keeps happening, clear Bitkit\'s storage in Android Settings › Apps › Bitkit › Storage, then restore your wallet with your recovery phrase.</string>
+    <string name="security__wipe_failed_text">Bitkit could not finish deleting your wallet data and will try again. Keep Bitkit open, or tap Retry.</string>
+    <string name="security__wipe_incomplete_text">Bitkit has been reset, but some USDT wallet data could not be deleted from this device.</string>
+    <string name="security__wipe_not_started">Reset could not start. Nothing was deleted.</string>
+    <string name="security__wipe_running_text">Bitkit is deleting all wallet data from this device. Keep Bitkit open until it finishes.</string>
+    <string name="security__wipe_title">Resetting Bitkit</string>
     <string name="security__wiped_message">Bitkit has been reset and all wallet data has been deleted.</string>
     <string name="security__wiped_title">Wallet Data Deleted</string>
     <string name="settings__about__legal">Legal</string>

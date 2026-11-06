@@ -1,12 +1,24 @@
 package to.bitkit.services
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
@@ -17,10 +29,84 @@ import to.bitkit.ext.create
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.io.File
+import java.security.KeyStore
+import java.security.KeyStoreException
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MigrationServiceTest : BaseUnitTest() {
+    @get:Rule
+    val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun `wipe removes the legacy seed, app state and the channel files a node start took`() = test {
+        withLegacyAppData { service, store, keyStore ->
+            store.edit { it[stringPreferencesKey(MigrationService.RN_MIGRATION_COMPLETED_KEY)] = "true" }
+            service.migrateLdkData().getOrThrow()
+            service.consumePendingChannelMigration()
+
+            assertTrue(service.removeLegacyAppData().isSuccess)
+
+            listOf("wallet0", "wallet0passphrase", "pin").forEach { verify(keyStore).deleteEntry(it) }
+            assertFalse(rnKeychainFile.exists())
+            assertFalse(rnMmkvDir.exists())
+            assertFalse(rnLdkDir.exists())
+            assertNull(store.data.first()[stringPreferencesKey("rnLocalChannelDataConsumed")])
+        }
+    }
+
+    @Test
+    fun `wipe fails while the legacy keystore keys remain, and still removes the app state`() = test {
+        withLegacyAppData { service, _, keyStore ->
+            whenever(keyStore.deleteEntry(any())).thenThrow(KeyStoreException("keystore unavailable"))
+
+            val result = service.removeLegacyAppData()
+
+            assertTrue(result.isFailure)
+            assertFalse(rnMmkvDir.exists())
+        }
+    }
+
+    @Test
+    fun `wipe fails while the legacy keychain file remains`() = test {
+        withLegacyAppData { service, _, _ ->
+            // A read-only directory keeps its entries
+            val keychainDir = requireNotNull(rnKeychainFile.parentFile)
+            assertTrue(keychainDir.setWritable(false))
+
+            val result = try {
+                service.removeLegacyAppData()
+            } finally {
+                keychainDir.setWritable(true)
+            }
+
+            assertTrue(result.isFailure)
+            assertTrue(rnKeychainFile.exists())
+        }
+    }
+
+    @Test
+    fun `wipe keeps the legacy channel files that no node start took`() = test {
+        withLegacyAppData { service, store, keyStore ->
+            // The migration completed in an earlier process, or failed to load its channel files, and left no evidence
+            store.edit { it[stringPreferencesKey(MigrationService.RN_MIGRATION_COMPLETED_KEY)] = "true" }
+
+            service.removeLegacyAppData()
+
+            verify(keyStore).deleteEntry("wallet0")
+            assertFalse(rnKeychainFile.exists())
+            assertFalse(rnMmkvDir.exists())
+            assertTrue(rnLdkDir.exists())
+
+            // Loaded, but the node start that takes them has not run
+            service.migrateLdkData().getOrThrow()
+            service.removeLegacyAppData()
+            assertTrue(rnLdkDir.exists())
+        }
+    }
 
     @Test
     fun `missing transfer markers remain pending until their activity exists`() = test {
@@ -153,5 +239,35 @@ class MigrationServiceTest : BaseUnitTest() {
         val metadata = RNMetadata(tags = null, lastUsedTags = listOf("sent"))
 
         assertEquals(null, unappliedRnMetadata(metadata, setOf("missing")))
+    }
+
+    private val rnKeychainFile get() = File(temporaryFolder.root, "datastore/RN_KEYCHAIN.preferences_pb")
+    private val rnMmkvDir get() = File(temporaryFolder.root, "mmkv")
+    private val rnLdkDir get() = File(temporaryFolder.root, "ldk")
+
+    private suspend fun withLegacyAppData(
+        block: suspend (MigrationService, DataStore<Preferences>, KeyStore) -> Unit,
+    ) {
+        rnKeychainFile.apply { parentFile?.mkdirs() }.writeText("ciphertext")
+        File(rnMmkvDir, "mmkv.default").apply { parentFile?.mkdirs() }.writeText("state")
+        File(rnLdkDir, "wallet0bitcoinRegtestldkaccountv3/channel_manager.bin").apply { parentFile?.mkdirs() }
+            .writeText("manager")
+        val context = mock<Context>()
+        whenever(context.applicationContext).thenReturn(context)
+        whenever(context.filesDir).thenReturn(temporaryFolder.root)
+        val keyStore = mock<KeyStore>()
+        whenever(keyStore.containsAlias(any())).thenReturn(true)
+        val storeFile = File(temporaryFolder.root, "rn_migration.preferences_pb")
+        val job = SupervisorJob()
+        val store = PreferenceDataStoreFactory.create(scope = CoroutineScope(job + Dispatchers.IO)) { storeFile }
+        val service = MigrationService(
+            context, mock(), mock(), mock(), mock(), mock(), mock(), mock(), mock(), mock(), store,
+            androidKeyStore = { keyStore },
+        )
+        try {
+            block(service, store, keyStore)
+        } finally {
+            job.cancelAndJoin()
+        }
     }
 }

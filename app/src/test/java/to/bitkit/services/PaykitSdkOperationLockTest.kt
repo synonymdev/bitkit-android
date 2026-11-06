@@ -3,21 +3,67 @@ package to.bitkit.services
 import com.synonym.paykit.PaykitException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Test
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaykitSdkOperationLockTest {
+    @Test
+    fun `work a wipe abandoned is rejected once the wipe has ended`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        lateinit var abandoned: CoroutineContext
+        lock.withWalletWipe { abandoned = currentCoroutineContext().minusKey(Job) }
+
+        withContext(abandoned) {
+            assertEquals("wallet_wipe_in_progress", assertFailsWith<PaykitException.Storage> { lock.withLock {} }.code)
+            assertFailsWith<PaykitException.Storage> { lock.withoutLock {} }
+            assertFailsWith<PaykitException.Storage> { lock.checkWipeOwnership() }
+        }
+        assertEquals("fresh", lock.withLock { "fresh" })
+    }
+
+    @Test
+    fun `work an earlier wipe abandoned is rejected during the next wipe`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        lateinit var abandoned: CoroutineContext
+        lock.withWalletWipe { abandoned = currentCoroutineContext().minusKey(Job) }
+
+        lock.withWalletWipe {
+            withContext(abandoned) { assertFailsWith<PaykitException.Storage> { lock.withLock {} } }
+            assertEquals("owner", lock.withLock { "owner" })
+        }
+    }
+
+    @Test
+    fun `a wipe fails within its bound while an operation never releases the lock`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val releaseHolder = CompletableDeferred<Unit>()
+        val holder = launch { lock.withLock { releaseHolder.await() } }
+        runCurrent()
+
+        assertFailsWith<PaykitWipeLockTimeout> { lock.withWalletWipe(acquireTimeout = 15.seconds) { error("ran") } }
+
+        assertEquals(15.seconds.inWholeMilliseconds, testScheduler.currentTime)
+        releaseHolder.complete(Unit)
+        holder.join()
+        assertEquals("next", lock.withWalletWipe { "next" })
+    }
+
     @Test
     fun `interactive work overtakes only queued publication with bounded fairness`() = runTest {
         val lock = PaykitSdkOperationLock()

@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -107,6 +108,7 @@ class MigrationService internal constructor(
     private val bip39Service: Bip39Service,
     private val transferDao: TransferDao,
     private val rnMigrationStore: DataStore<Preferences>,
+    private val androidKeyStore: () -> KeyStore = { KeyStore.getInstance("AndroidKeyStore").apply { load(null) } },
 ) {
     companion object {
         private const val TAG = "Migration"
@@ -122,6 +124,10 @@ class MigrationService internal constructor(
         private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
         private const val RN_DID_ATTEMPT_PEER_RECOVERY_KEY = "rnDidAttemptMigrationPeerRecovery"
         private const val RN_DID_CLEANUP_INVALID_TRANSFERS_KEY = "didCleanupInvalidMigrationTransfers"
+
+        /** Set once a node start took the channels of the RN app's channel files, then no longer their only copy. */
+        private const val RN_LOCAL_CHANNEL_DATA_CONSUMED_KEY = "rnLocalChannelDataConsumed"
+
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
@@ -184,10 +190,22 @@ class MigrationService internal constructor(
     @Volatile
     private var pendingChannelMigration: PendingChannelMigration? = null
 
-    fun consumePendingChannelMigration(): PendingChannelMigration? {
+    @Volatile
+    private var localChannelMigration: PendingChannelMigration? = null
+
+    /** Takes the channel migration a node start applied. */
+    suspend fun consumePendingChannelMigration(): PendingChannelMigration? {
         val migration = pendingChannelMigration ?: return null
         pendingChannelMigration = null
+        if (migration === localChannelMigration) markLocalChannelDataConsumed()
         return migration
+    }
+
+    private suspend fun markLocalChannelDataConsumed() {
+        localChannelMigration = null
+        runSuspendCatching {
+            rnMigrationStore.edit { it[stringPreferencesKey(RN_LOCAL_CHANNEL_DATA_CONSUMED_KEY)] = "true" }
+        }.onFailure { Logger.warn("Failed to record that the node took the RN channel files", it, context = TAG) }
     }
 
     fun peekPendingChannelMigration(): PendingChannelMigration? = pendingChannelMigration
@@ -622,7 +640,8 @@ class MigrationService internal constructor(
         keychain.saveString(Keychain.Key.PIN.name, pin)
     }
 
-    private fun migrateLdkData() = runCatching {
+    @VisibleForTesting
+    internal fun migrateLdkData() = runCatching {
         val accountPath = buildRnLdkAccountPath()
         val managerPath = File(accountPath, "channel_manager.bin")
 
@@ -644,10 +663,12 @@ class MigrationService internal constructor(
             }
         }
 
-        pendingChannelMigration = PendingChannelMigration(
+        val migration = PendingChannelMigration(
             channelManager = managerData,
             channelMonitors = monitors,
         )
+        localChannelMigration = migration
+        pendingChannelMigration = migration
     }.onFailure {
         Logger.error("Failed to migrate LDK data: $it", it, context = TAG)
     }
@@ -1470,6 +1491,49 @@ class MigrationService internal constructor(
                 refreshActive = refreshActive,
             )
         }
+
+    /**
+     * Removes the RN app's seed, passphrase and PIN, and its app state, for a wipe, after which nothing reads them.
+     * Fails when its keystore keys or keychain file remain, as they hold the seed; the rest is best effort. Its channel
+     * files go only on evidence that a node start took their channels. Without it, as after a migration that failed,
+     * was killed or ran before that evidence was kept, they may be the only copy of the channel monitors.
+     */
+    suspend fun removeLegacyAppData(): Result<Unit> {
+        val secretsRemoved = runSuspendCatching {
+            val keyStore = androidKeyStore()
+            RNKeychainKey.entries.map { it.service }.filter(keyStore::containsAlias).forEach(keyStore::deleteEntry)
+            val keychainFile = File(context.filesDir, "datastore/RN_KEYCHAIN.preferences_pb")
+            check(deleteLegacyFile(keychainFile)) { "Failed to delete the RN keychain file" }
+        }
+        deleteLegacyFile(File(context.filesDir, "mmkv"))
+        removeTakenLegacyChannelFiles()
+        return secretsRemoved
+    }
+
+    private suspend fun removeTakenLegacyChannelFiles() {
+        // A store that cannot be read holds no evidence, so it keeps the files too
+        val isLocalChannelDataConsumed = runSuspendCatching {
+            val preferences = rnMigrationStore.data.first()
+            preferences[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] == "true" &&
+                preferences[stringPreferencesKey(RN_LOCAL_CHANNEL_DATA_CONSUMED_KEY)] == "true" &&
+                peekPendingChannelMigration() == null
+        }.getOrDefault(false)
+        val rnLdkDir = File(context.filesDir, "ldk")
+        if (!isLocalChannelDataConsumed) {
+            if (rnLdkDir.exists()) Logger.warn("Kept the RN channel files, which no node start took", context = TAG)
+            return
+        }
+        if (!deleteLegacyFile(rnLdkDir)) return
+        runSuspendCatching {
+            rnMigrationStore.edit { it.remove(stringPreferencesKey(RN_LOCAL_CHANNEL_DATA_CONSUMED_KEY)) }
+        }.onFailure { Logger.warn("Failed to clear the record of the taken RN channel files", it, context = TAG) }
+    }
+
+    private fun deleteLegacyFile(file: File): Boolean {
+        if (!file.exists() || file.deleteRecursively()) return true
+        Logger.error("Failed to delete RN app data at '${file.name}'", context = TAG)
+        return false
+    }
 
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()

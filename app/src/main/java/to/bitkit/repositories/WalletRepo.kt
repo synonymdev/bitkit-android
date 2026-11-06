@@ -46,6 +46,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toBalance
 import to.bitkit.models.toDerivationPath
+import to.bitkit.security.WipeCoordinator
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
@@ -56,6 +57,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.measured
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
@@ -76,10 +78,12 @@ class WalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val wipeCoordinator: Provider<WipeCoordinator>,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
-    private val _walletState = MutableStateFlow(WalletState(walletExists = walletExists()))
+    // Must not crash startup: an unreadable keychain raises the wipe gate, which refreshes this once a read succeeds
+    private val _walletState = MutableStateFlow(WalletState(walletExists = initialWalletExists()))
     val walletState = _walletState.asStateFlow()
 
     private val _balanceState = MutableStateFlow(BalanceState())
@@ -208,6 +212,14 @@ class WalletRepo @Inject constructor(
     }
 
     fun walletExists(): Boolean = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
+
+    private fun initialWalletExists(): Boolean = runCatching { walletExists() }
+        .onFailure {
+            Logger.warn("Failed to read wallet existence", it, context = TAG)
+            // Onboarding must not show for a wallet that may exist
+            wipeCoordinator.get().block(it)
+        }
+        .getOrDefault(false)
 
     fun setWalletExistsState() {
         _walletState.update { it.copy(walletExists = walletExists()) }

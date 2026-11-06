@@ -88,9 +88,11 @@ import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -203,6 +205,9 @@ enum class PaykitReadLane {
 
 /** A public Pubky read that ran out of the timeout its caller gave it once it held a read slot. */
 class PaykitReadTimeoutError(timeout: Duration) : AppError("Public Pubky read timed out after $timeout")
+
+/** A Paykit setup whose caller was cancelled before it finished. */
+class PaykitSetupInterrupted(cause: Throwable) : AppError("Paykit setup was interrupted", cause)
 
 private class TimedRead<T>(val value: T)
 
@@ -353,6 +358,8 @@ class PaykitSdkService @Inject constructor(
     private suspend fun initialize(activate: suspend () -> Unit) {
         setupMutex.withLock {
             if (isSetup.isCompleted && !setupFailed) return
+            // Setup reaches the server, and a wallet wipe never waits on one, so a retry during it fails instead
+            if (setupFailed && operationLock.isWipeInProgress) return isSetup.await()
             if (setupFailed) {
                 isSetup = CompletableDeferred()
                 setupFailed = false
@@ -363,12 +370,20 @@ class PaykitSdkService @Inject constructor(
                 launch { republishIdentityIfNeeded() }
                 operationLock.withLock { activate() }
                 isSetup.complete(Unit)
+            } catch (e: CancellationException) {
+                // A stored cancellation would reach every waiter as if the waiter itself had been cancelled
+                failSetup(PaykitSetupInterrupted(e))
+                throw e
             } catch (t: Throwable) {
-                setupFailed = true
-                isSetup.completeExceptionally(t)
+                failSetup(t)
                 throw t
             }
         }
+    }
+
+    private fun failSetup(failure: Throwable) {
+        setupFailed = true
+        isSetup.completeExceptionally(failure)
     }
 
     private suspend fun initializeRuntime() {
@@ -1668,10 +1683,16 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun <T> withWalletWipe(operation: suspend () -> T): T {
-        // Drain setup before closing admission, so cleanup cannot await setup queued behind its own barrier.
-        runSuspendCatching { initialize() }
+        // Drain setup before closing admission, so cleanup cannot await setup queued behind its own barrier. Setup can
+        // reach the network in an SDK call that does not end on cancellation, so the wipe waits for its outcome with a
+        // bound and leaves a setup that outlives it to finish on its own.
+        val setup = async(start = CoroutineStart.UNDISPATCHED) { initialize() }
+        runSuspendCatching { withTimeoutOrNull(WALLET_WIPE_SETUP_TIMEOUT) { setup.await() } }
+            .onSuccess {
+                if (it == null) Logger.warn("Timed out initializing Paykit before wallet wipe", context = TAG)
+            }
             .onFailure { Logger.warn("Failed to initialize Paykit before wallet wipe", it, context = TAG) }
-        return operationLock.withWalletWipe {
+        return operationLock.withWalletWipe(acquireTimeout = WALLET_WIPE_LOCK_TIMEOUT) {
             resetRuntime()
             try {
                 operation()
@@ -1719,6 +1740,9 @@ class PaykitSdkService @Inject constructor(
     private suspend fun paykitKey(root: PubkyLocalSecretKey): PaykitIdentitySecretKey {
         val publicKey = pubkyPublicKeyFromSecret(root)
         val generation = handle().paykitAppRegistry(publicKey)?.keyGeneration ?: 1uL
+        // The registry read may return after its caller was abandoned, as by a wipe, which must not save its generation
+        currentCoroutineContext().ensureActive()
+        operationLock.checkWipeOwnership()
         val storageKey = "${Keychain.Key.PAYKIT_KEY_GENERATION.name}:$publicKey"
         val saved = keychain.loadString(storageKey)?.toULong()
         check(generation >= (saved ?: 1uL)) { "The Paykit App Registry has an older key generation" }
@@ -1821,6 +1845,7 @@ class PaykitSdkService @Inject constructor(
         val started = TimeSource.Monotonic.markNow()
         refreshPaykitKey()
         if (BuildConfig.DEBUG) Logger.debug("Prepared Paykit key duration='${started.elapsedNow()}'", context = TAG)
+        operationLock.checkWipeOwnership()
         return runSuspendCatching { block(handle()) }
             .onFailure(::invalidatePaykitKeyIfNeeded)
             .getOrThrow()
@@ -1976,6 +2001,12 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum duration of a public payment-request capability lookup. */
         private val PAYMENT_REQUEST_DISCOVERY_TIMEOUT = 5.seconds
+
+        /** Maximum time a wallet wipe waits for Paykit setup before closing admission. */
+        private val WALLET_WIPE_SETUP_TIMEOUT = 15.seconds
+
+        /** Maximum time a wallet wipe waits for the SDK operation that holds the lock once admission is closed. */
+        private val WALLET_WIPE_LOCK_TIMEOUT = 15.seconds
 
         /** Maximum concurrent public Pubky reads that run outside the operation lock. */
         private const val PUBLIC_READ_PERMITS = 6

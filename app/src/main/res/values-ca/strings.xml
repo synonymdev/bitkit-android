@@ -457,6 +457,7 @@
     <string name="security__pass_your">La teva frase de pas</string>
     <string name="security__pin_allowance">Si us plau, introdueix el teu codi PIN per confirmar aquest canvi en l\'assignació.</string>
     <string name="security__pin_attempts">{attemptsRemaining} intents restants. Has oblidat el PIN?</string>
+    <string name="security__pin_check_error">Bitkit no ha pogut comprovar el teu PIN. Torna-ho a provar.</string>
     <string name="security__pin_choose_header">Escolliu un PIN de 4 dígits</string>
     <string name="security__pin_choose_text">Si us plau, utilitza un PIN que recordis. Si oblides el teu PIN pots restablir-lo, però caldrà restaurar la cartera.</string>
     <string name="security__pin_disable_button">Desactiva el PIN</string>
@@ -483,6 +484,7 @@
     <string name="security__reset_button_backup">Còpia de seguretat primer</string>
     <string name="security__reset_button_reset">Restableix la cartera</string>
     <string name="security__reset_confirm">Sí, reinicia</string>
+    <string name="security__reset_dialog_channel_migration">Els teus canals Lightning de l\'aplicació Bitkit anterior encara no s\'han acabat de traslladar a aquesta cartera. Les seves dades es queden en aquest dispositiu, però restablir ara pot fer més difícil recuperar aquests fons.</string>
     <string name="security__reset_dialog_desc">Estàs segur que vols restablir la teva cartera Bitkit? Tens una còpia de seguretat de la teva frase de recuperació i les dades de la cartera?</string>
     <string name="security__reset_dialog_title">Reiniciar Bitkit?</string>
     <string name="security__reset_graph_confirm">Sí, reinicia</string>
@@ -494,6 +496,14 @@
     <string name="security__success_title">Cartera assegurada</string>
     <string name="security__use_pin">Utilitzar el codi PIN</string>
     <string name="security__wipe_app">Esborra l\'aplicació</string>
+    <string name="security__wipe_blocked_text">Bitkit no pot verificar el seu estat de seguretat, així que la teva cartera continua bloquejada. Toca Reintentar per tornar-ho a comprovar, o exporta els registres per al suport.</string>
+    <string name="security__wipe_blocked_title">Cartera bloquejada</string>
+    <string name="security__wipe_clear_storage_text">Si continua passant, esborra l\'emmagatzematge de Bitkit a Configuració d\'Android › Aplicacions › Bitkit › Emmagatzematge i després restaura el teu moneder amb la frase de recuperació.</string>
+    <string name="security__wipe_failed_text">Bitkit no ha pogut acabar d\'esborrar les dades de la teva cartera i ho tornarà a intentar. Mantén Bitkit obert o toca Reintentar.</string>
+    <string name="security__wipe_incomplete_text">S\'ha restablert Bitkit, però no s\'han pogut eliminar algunes dades del moneder USDT d\'aquest dispositiu.</string>
+    <string name="security__wipe_not_started">No s\'ha pogut iniciar el restabliment. No s\'ha eliminat res.</string>
+    <string name="security__wipe_running_text">Bitkit està esborrant totes les dades de la cartera d\'aquest dispositiu. Mantén Bitkit obert fins que acabi.</string>
+    <string name="security__wipe_title">Restablint Bitkit</string>
     <string name="security__wiped_message">Bitkit s\'ha restablert i totes les dades de la cartera s\'han eliminat.</string>
     <string name="security__wiped_title">Dades de la cartera eliminades</string>
     <string name="security__pin_enable_button">Habilitar PIN</string>

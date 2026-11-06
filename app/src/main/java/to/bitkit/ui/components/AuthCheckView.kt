@@ -51,11 +51,13 @@ fun AuthCheckView(
     onBack: (() -> Unit)? = null,
 ) {
     val isBiometricsEnabled by settingsViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
+    val canUseBiometrics by appViewModel.canUseBiometrics.collectAsStateWithLifecycle()
     val attemptsRemaining by appViewModel.pinAttemptsRemaining.collectAsStateWithLifecycle()
 
     AuthCheckViewContent(
         isBiometricsEnabled = isBiometricsEnabled,
         isBiometrySupported = isBiometrySupported,
+        canUseBiometrics = canUseBiometrics,
         showLogoOnPin = showLogoOnPin,
         attemptsRemaining = attemptsRemaining,
         requireBiometrics = requireBiometrics,
@@ -71,11 +73,12 @@ fun AuthCheckView(
 private fun AuthCheckViewContent(
     isBiometricsEnabled: Boolean,
     isBiometrySupported: Boolean,
+    canUseBiometrics: Boolean,
     showLogoOnPin: Boolean,
     attemptsRemaining: Int,
     requireBiometrics: Boolean = false,
     requirePin: Boolean = false,
-    validatePin: (String) -> Boolean,
+    validatePin: suspend (String) -> Boolean,
     onSuccess: (() -> Unit)? = null,
     onBack: (() -> Unit)?,
     onClickForgotPin: () -> Unit,
@@ -94,7 +97,7 @@ private fun AuthCheckViewContent(
             .blockPointerInputPassthrough()
             .navigationBarsPadding()
     ) {
-        if ((showBio && isBiometrySupported && !requirePin) || requireBiometrics) {
+        if (canUseBiometrics && ((showBio && isBiometrySupported && !requirePin) || requireBiometrics)) {
             BiometricsView(
                 onSuccess = { onSuccess?.invoke() },
                 onFailure = { showBio = false },
@@ -104,7 +107,7 @@ private fun AuthCheckViewContent(
                 showLogo = showLogoOnPin,
                 validatePin = validatePin,
                 attemptsRemaining = attemptsRemaining,
-                allowBiometrics = isBiometricsEnabled && isBiometrySupported && !requirePin,
+                allowBiometrics = canUseBiometrics && isBiometricsEnabled && isBiometrySupported && !requirePin,
                 onShowBiometrics = { showBio = true },
                 onSuccess = onSuccess,
                 onBack = onBack,
@@ -117,7 +120,7 @@ private fun AuthCheckViewContent(
 @Composable
 private fun PinPad(
     showLogo: Boolean = false,
-    validatePin: (String) -> Boolean,
+    validatePin: suspend (String) -> Boolean,
     attemptsRemaining: Int,
     allowBiometrics: Boolean,
     onShowBiometrics: () -> Unit,
@@ -230,6 +233,7 @@ private fun PreviewBio() {
             onBack = {},
             isBiometricsEnabled = true,
             isBiometrySupported = true,
+            canUseBiometrics = true,
             showLogoOnPin = true,
             validatePin = { true },
             attemptsRemaining = 8,
@@ -247,6 +251,7 @@ private fun PreviewPin() {
             onBack = {},
             isBiometricsEnabled = false,
             isBiometrySupported = true,
+            canUseBiometrics = true,
             showLogoOnPin = true,
             validatePin = { true },
             attemptsRemaining = 8,
@@ -264,6 +269,7 @@ private fun PreviewPinAttempts() {
             onBack = null,
             isBiometricsEnabled = false,
             isBiometrySupported = true,
+            canUseBiometrics = true,
             showLogoOnPin = false,
             validatePin = { true },
             attemptsRemaining = 6,
@@ -281,6 +287,7 @@ private fun PreviewPinAttemptLast() {
             onBack = {},
             isBiometricsEnabled = false,
             isBiometrySupported = true,
+            canUseBiometrics = true,
             showLogoOnPin = true,
             validatePin = { true },
             attemptsRemaining = 1,

@@ -462,6 +462,7 @@
     <string name="security__pass_your">Vaše přístupová fráze</string>
     <string name="security__pin_allowance">Pro potvrzení této změny rozpočtu prosím zadejte svůj PIN kód.</string>
     <string name="security__pin_attempts">Zbývá {attemptsRemaining} pokus/ů. Zapomněli jste svůj PIN?</string>
+    <string name="security__pin_check_error">Bitkit nedokázal ověřit váš PIN. Zkuste to prosím znovu.</string>
     <string name="security__pin_choose_header">Vyberte 4místný PIN</string>
     <string name="security__pin_choose_text">Použijte prosím PIN, který si zapamatujete. Pokud svůj PIN zapomenete, můžete jej resetovat, ale to bude vyžadovat obnovení vaší peněženky.</string>
     <string name="security__pin_disable_button">Zakázat PIN</string>
@@ -488,6 +489,7 @@
     <string name="security__reset_button_backup">Nejprve zálohujte</string>
     <string name="security__reset_button_reset">Resetovat peněženku</string>
     <string name="security__reset_confirm">Ano, resetovat</string>
+    <string name="security__reset_dialog_channel_migration">Vaše Lightning kanály z předchozí aplikace Bitkit ještě nebyly úplně přesunuty do této peněženky. Jejich data zůstávají v tomto zařízení, ale resetování nyní může ztížit obnovení těchto prostředků.</string>
     <string name="security__reset_dialog_desc">Opravdu chcete resetovat svou peněženku Bitkit? Máte zálohu své fráze pro obnovení a dat peněženky?</string>
     <string name="security__reset_dialog_title">Resetovat Bitkit?</string>
     <string name="security__reset_graph_confirm">Ano, resetovat</string>
@@ -499,6 +501,14 @@
     <string name="security__success_title">Peněženka zabezpečena</string>
     <string name="security__use_pin">Použít PIN kód</string>
     <string name="security__wipe_app">Vymazat aplikaci</string>
+    <string name="security__wipe_blocked_text">Bitkit nemůže ověřit svůj stav zabezpečení, proto vaše peněženka zůstává uzamčená. Klepněte na Opakovat a ověřte ho znovu, nebo exportujte protokoly pro podporu.</string>
+    <string name="security__wipe_blocked_title">Peněženka uzamčena</string>
+    <string name="security__wipe_clear_storage_text">Pokud se to opakuje, vymažte úložiště aplikace Bitkit v Nastavení Androidu › Aplikace › Bitkit › Úložiště a poté obnovte peněženku pomocí fráze pro obnovení.</string>
+    <string name="security__wipe_failed_text">Bitkit nedokázal dokončit mazání dat vaší peněženky a zkusí to znovu. Nechte Bitkit otevřený, nebo klepněte na Opakovat.</string>
+    <string name="security__wipe_incomplete_text">Bitkit byl resetován, ale některá data peněženky USDT se z tohoto zařízení nepodařilo smazat.</string>
+    <string name="security__wipe_not_started">Resetování se nepodařilo spustit. Nic nebylo smazáno.</string>
+    <string name="security__wipe_running_text">Bitkit maže všechna data peněženky z tohoto zařízení. Nechte Bitkit otevřený, dokud to nedokončí.</string>
+    <string name="security__wipe_title">Resetování Bitkitu</string>
     <string name="security__wiped_message">Bitkit byla resetována a všechna data peněženky byla vymazána.</string>
     <string name="security__wiped_title">Odstranění dat peněženky</string>
     <string name="security__pin_enable_button">Povolit PIN</string>

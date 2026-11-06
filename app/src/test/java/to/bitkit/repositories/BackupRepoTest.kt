@@ -1192,6 +1192,14 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payment backup is refused while a wipe is pending from an earlier process`() = test {
+        whenever(keychain.loadWipePending()).thenReturn("{}")
+
+        assertTrue(sut.persistWalletBackup().isFailure)
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
     fun `start observing is skipped while wiping`() = test {
         sut.setWiping(true)
 

@@ -241,6 +241,12 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | weather/WeatherEditScreen.kt | Widgets › Bitcoin Weather Widget Settings |
 | weather/WeatherPreviewScreen.kt | Widgets › Bitcoin Weather wide |
 
+## ui/screens/wipe
+
+| Android | Figma |
+| - | - |
+| WipeGateScreen.kt | `todo` |
+
 ## ui/settings
 
 | Android | Figma |

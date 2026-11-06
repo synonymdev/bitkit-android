@@ -887,6 +887,22 @@ class LightningServiceTest : BaseUnitTest() {
         setupDone.await() // proceeds once released (build then fails on the mocked deps, which is fine)
     }
 
+    @Test
+    fun `wipeStorage fails when part of the LDK storage cannot be deleted`() = runGateTest {
+        gated.node = null
+        val storage = File(Env.ldkStoragePath(0))
+        File(storage, "channels/monitor.bin").apply { parentFile?.mkdirs() }.writeText("monitor")
+        // A read-only directory keeps its entries
+        assertTrue(File(storage, "channels").setWritable(false))
+
+        try {
+            assertFailsWith<IllegalStateException> { gated.wipeStorage(walletIndex = 0) }
+        } finally {
+            File(storage, "channels").setWritable(true)
+        }
+        assertTrue(File(storage, "channels/monitor.bin").exists())
+    }
+
     // Regression (c): with no pending release the gate must add no latency.
     @Test
     fun `wipeStorage proceeds immediately when no release is pending`() = runGateTest {

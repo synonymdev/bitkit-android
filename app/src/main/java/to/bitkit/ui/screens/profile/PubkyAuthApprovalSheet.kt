@@ -130,6 +130,7 @@ private fun PubkyAuthorizationLocalAuth(
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val canUseBiometrics by app.canUseBiometrics.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
 
     LaunchedEffect(Unit) {
@@ -142,6 +143,7 @@ private fun PubkyAuthorizationLocalAuth(
                             isPinEnabled = isPinEnabled,
                             isBiometricEnabled = isBiometricEnabled,
                             isBiometrySupported = isBiometrySupported,
+                            canUseBiometrics = canUseBiometrics,
                         )
                     ) {
                         PubkyApprovalLocalAuthMode.AuthCheck -> {
@@ -208,8 +210,10 @@ internal fun resolvePubkyApprovalLocalAuthMode(
     isPinEnabled: Boolean,
     isBiometricEnabled: Boolean,
     isBiometrySupported: Boolean,
+    canUseBiometrics: Boolean,
 ): PubkyApprovalLocalAuthMode = when {
-    isPinEnabled -> PubkyApprovalLocalAuthMode.AuthCheck
+    // A locked-out app must not approve on biometrics, nor without any check at all
+    isPinEnabled || !canUseBiometrics -> PubkyApprovalLocalAuthMode.AuthCheck
     isBiometricEnabled && isBiometrySupported -> PubkyApprovalLocalAuthMode.Biometrics
     else -> PubkyApprovalLocalAuthMode.None
 }

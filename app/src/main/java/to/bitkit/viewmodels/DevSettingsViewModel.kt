@@ -26,6 +26,8 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.security.WipeCoordinator
+import to.bitkit.security.WipeReason
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -52,6 +54,7 @@ class DevSettingsViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val blocktankRepo: BlocktankRepo,
     private val appDb: AppDb,
+    private val wipeCoordinator: WipeCoordinator,
 ) : ViewModel() {
     private val _legacyRnRecoveryState = MutableStateFlow(LegacyRnRecoveryUiState())
     val legacyRnRecoveryState = _legacyRnRecoveryState.asStateFlow()
@@ -198,7 +201,7 @@ class DevSettingsViewModel @Inject constructor(
     }
 
     fun wipeWallet() = viewModelScope.launch {
-        walletRepo.wipeWallet()
+        wipeCoordinator.begin(WipeReason.DEV).onFailure { ToastEventBus.send(it) }
     }
 
     fun resetCacheStore() = viewModelScope.launch {

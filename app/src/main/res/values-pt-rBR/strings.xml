@@ -464,6 +464,7 @@
     <string name="security__pass_your">Sua Frase Secreta</string>
     <string name="security__pin_allowance">Digite seu código PIN para confirmar essa alteração na mesada.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativas restantes. Esqueceu seu PIN?</string>
+    <string name="security__pin_check_error">A Bitkit não conseguiu verificar seu PIN. Tente novamente.</string>
     <string name="security__pin_choose_header">Escolha o PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
     <string name="security__pin_disable_button">Desativar PIN</string>
@@ -490,6 +491,7 @@
     <string name="security__reset_button_backup">Fazer Backup Primeiro</string>
     <string name="security__reset_button_reset">Redefinir a Carteira</string>
     <string name="security__reset_confirm">Sim, Redefinir</string>
+    <string name="security__reset_dialog_channel_migration">Seus canais Lightning do app Bitkit anterior ainda não terminaram de ser transferidos para esta carteira. Os dados deles continuam neste dispositivo, mas redefinir agora pode dificultar a recuperação desses fundos.</string>
     <string name="security__reset_dialog_desc">Você tem certeza de que deseja redefinir sua Bitkit? Você tem um backup de sua frase de recuperação e dos dados da carteira?</string>
     <string name="security__reset_dialog_title">Redefinir Bitkit?</string>
     <string name="security__reset_graph_confirm">Sim, Redefinir</string>
@@ -501,6 +503,14 @@
     <string name="security__success_title">Carteira Protegida</string>
     <string name="security__use_pin">Usar o código PIN</string>
     <string name="security__wipe_app">Limpar Aplicativo</string>
+    <string name="security__wipe_blocked_text">A Bitkit não consegue verificar seu estado de segurança, então sua carteira continua bloqueada. Toque em Tentar novamente para verificar de novo, ou exporte os logs para o suporte.</string>
+    <string name="security__wipe_blocked_title">Carteira bloqueada</string>
+    <string name="security__wipe_clear_storage_text">Se isso continuar acontecendo, limpe o armazenamento do Bitkit em Configurações do Android › Apps › Bitkit › Armazenamento e depois restaure sua carteira com sua frase de recuperação.</string>
+    <string name="security__wipe_failed_text">A Bitkit não conseguiu concluir a exclusão dos dados da sua carteira e vai tentar novamente. Mantenha a Bitkit aberta ou toque em Tentar novamente.</string>
+    <string name="security__wipe_incomplete_text">O Bitkit foi redefinido, mas não foi possível excluir alguns dados da carteira USDT deste dispositivo.</string>
+    <string name="security__wipe_not_started">Não foi possível iniciar a redefinição. Nada foi excluído.</string>
+    <string name="security__wipe_running_text">A Bitkit está excluindo todos os dados da carteira deste dispositivo. Mantenha a Bitkit aberta até terminar.</string>
+    <string name="security__wipe_title">Redefinindo a Bitkit</string>
     <string name="security__wiped_message">O Bitkit foi redefinido e todos os dados da carteira foram excluídos.</string>
     <string name="security__wiped_title">Dados da Carteira Deletados</string>
     <string name="security__pin_enable_button">Ativar PIN</string>

@@ -18,6 +18,7 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.security.WipeCoordinator
 import to.bitkit.services.BluetoothInit
 import to.bitkit.services.PubkyAuthHandlerRegistrar
 import to.bitkit.utils.Crypto
@@ -42,6 +43,9 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var subscriptionClockOffsetSync: SubscriptionClockOffsetSync
 
+    @Inject
+    lateinit var wipeCoordinator: WipeCoordinator
+
     /** Resolved only once the process changes foreground state, so startup does not build the wallet graph. */
     @Inject
     lateinit var hwWalletRepo: Lazy<HwWalletRepo>
@@ -57,6 +61,8 @@ internal open class App : Application(), Configuration.Provider {
         super.onCreate()
         Env.initAppStoragePath(filesDir.absolutePath)
         installUncaughtExceptionLogger()
+        // Before anything can start the node or show the wallet, in every process including background ones
+        wipeCoordinator.resumeAtLaunch()
         SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
@@ -71,7 +77,10 @@ internal open class App : Application(), Configuration.Provider {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_START -> hwWalletRepo.get().onAppForegrounded()
+                    Lifecycle.Event.ON_START -> {
+                        hwWalletRepo.get().onAppForegrounded()
+                        wipeCoordinator.retry()
+                    }
                     Lifecycle.Event.ON_STOP -> hwWalletRepo.get().onAppBackgrounded()
                     else -> Unit
                 }

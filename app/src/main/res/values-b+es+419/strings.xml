@@ -463,6 +463,7 @@
     <string name="security__pass_your">Su frase de acceso</string>
     <string name="security__pin_allowance">Por favor, introduzca su código PIN para confirmar este cambio en la asignación.</string>
     <string name="security__pin_attempts">{attemptsRemaining} intentos restantes. ¿Ha olvidado su PIN?</string>
+    <string name="security__pin_check_error">Bitkit no pudo verificar su PIN. Vuelva a intentarlo.</string>
     <string name="security__pin_choose_header">Elija el PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su billetera.</string>
     <string name="security__pin_disable_button">Desactivar PIN</string>
@@ -489,6 +490,7 @@
     <string name="security__reset_button_backup">Respaldar primero</string>
     <string name="security__reset_button_reset">Resetear cartera</string>
     <string name="security__reset_confirm">Sí, Resetear</string>
+    <string name="security__reset_dialog_channel_migration">Sus canales Lightning de la app Bitkit anterior aún no terminaron de trasladarse a esta billetera. Sus datos permanecen en este dispositivo, pero restablecerla ahora puede dificultar la recuperación de esos fondos.</string>
     <string name="security__reset_dialog_desc">Estás seguro de que quieres restablecer tu wallet de Bitkit? ¿Tienes una copia de tu frase de recuperación y los datos de tu billetera?</string>
     <string name="security__reset_dialog_title">¿Resetear Bitkit?</string>
     <string name="security__reset_graph_confirm">Sí, Restaurar</string>
@@ -500,6 +502,14 @@
     <string name="security__success_title">Billetera protegida</string>
     <string name="security__use_pin">Utilizar código PIN</string>
     <string name="security__wipe_app">Eliminar datos de la app</string>
+    <string name="security__wipe_blocked_text">Bitkit no puede verificar su estado de seguridad, por lo que su billetera sigue bloqueada. Vuelva a intentarlo para verificarlo de nuevo, o exporte los logs para el soporte.</string>
+    <string name="security__wipe_blocked_title">Billetera bloqueada</string>
+    <string name="security__wipe_clear_storage_text">Si esto sigue pasando, borra el almacenamiento de Bitkit en Ajustes de Android › Apps › Bitkit › Almacenamiento y luego restaura tu billetera con tu frase de recuperación.</string>
+    <string name="security__wipe_failed_text">Bitkit no pudo terminar de borrar los datos de su billetera y lo intentará de nuevo. Mantenga Bitkit abierto o vuelva a intentarlo.</string>
+    <string name="security__wipe_incomplete_text">Bitkit se restableció, pero no se pudieron eliminar algunos datos de la billetera USDT de este dispositivo.</string>
+    <string name="security__wipe_not_started">No se pudo iniciar el restablecimiento. No se eliminó nada.</string>
+    <string name="security__wipe_running_text">Bitkit está borrando todos los datos de la billetera de este dispositivo. Mantenga Bitkit abierto hasta que termine.</string>
+    <string name="security__wipe_title">Restableciendo Bitkit</string>
     <string name="security__wiped_message">Bitkit ha sido reseteado y todos los datos han sido borrados.</string>
     <string name="security__wiped_title">Datos de la billetera borrados</string>
     <string name="security__pin_enable_button">Habilitar PIN</string>
