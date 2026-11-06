@@ -1304,7 +1304,12 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
         when (payment.status) {
             PaymentStatus.PENDING -> Unit
-            PaymentStatus.FAILED -> removeLightningProofsLocked(paymentHash)
+            // A Spark retry of an invoice the node failed shares its hash and decides the payment.
+            PaymentStatus.FAILED -> when (lightningRepo.sparkLightningSend(paymentHash)) {
+                is SparkLightningSend.Found -> reconcileSparkLightningProof(proof, paymentHash)
+                SparkLightningSend.Unavailable -> Unit
+                SparkLightningSend.NotFound -> removeLightningProofsLocked(paymentHash)
+            }
             PaymentStatus.SUCCEEDED -> completeLightningProofLocked(
                 proof,
                 paymentHash,

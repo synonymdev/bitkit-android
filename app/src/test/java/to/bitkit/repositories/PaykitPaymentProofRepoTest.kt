@@ -849,6 +849,40 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a spark retry decides a lightning proof the node failed`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val failed = mock<PaymentDetails> {
+            on { id } doReturn PAYMENT_HASH
+            on { direction } doReturn PaymentDirection.OUTBOUND
+            on { status } doReturn PaymentStatus.FAILED
+        }
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(failed)))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), any())
+        ).thenReturn(record)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+
+        val sparkPending = SparkLightningSend.Found(SparkPaymentStatus.PENDING, null)
+        for (pending in listOf(SparkLightningSend.Unavailable, sparkPending)) {
+            whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH)).thenReturn(pending)
+            paymentProofRepo().reconcile()
+            assertEquals(PAYMENT_HASH, storedProofs.single().paymentIdentifier)
+        }
+        whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH))
+            .thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, PREIMAGE))
+        paymentProofRepo().reconcile()
+
+        verify(paykitSdkService).submitPaymentProof(
+            any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), any(),
+        )
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `lightning proof is removed when spark failed the send`() = test {
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))

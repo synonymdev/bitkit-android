@@ -80,6 +80,7 @@ class SparkRepo @Inject constructor(
     private val activityRepo: Provider<ActivityRepo>,
     private val cacheStore: CacheStore,
     private val contactResolver: Provider<PrivatePaykitContactResolver>,
+    private val pendingPaymentRepo: PendingPaymentRepo,
     private val clock: Clock,
 ) {
     companion object {
@@ -99,6 +100,14 @@ class SparkRepo @Inject constructor(
 
         /** The longest an exit quote waits for a running leaf optimization to end. */
         private val OPTIMIZATION_WAIT = 2.minutes
+
+        /** How long a send's settlement waits for the send screen to track it as pending before it reports. */
+        private val PENDING_TRACK_WAIT = 10.seconds
+
+        /** Tries to learn the outcome of a send whose result was lost while Spark cannot list its payments. */
+        private const val SETTLE_ATTEMPTS = 10
+
+        private val SETTLE_RETRY_INTERVAL = 30.seconds
 
         /** Seconds a withdrawal quote must still hold to be reused, so it can't expire mid-send. */
         private const val QUOTE_EXPIRY_MARGIN_SECS = 30uL
@@ -383,16 +392,30 @@ class SparkRepo @Inject constructor(
 
     private fun settleUncertainSend(paymentHash: String) {
         scope.launch {
-            runSuspendCatching { sparkService.syncWallet() }
-                .onFailure { Logger.warn("Failed to sync Spark after send '$paymentHash'", it, context = TAG) }
-                .onSuccess { _state.update { it.copy(hasSynced = true) } }
-            val event = when (lightningSend(paymentHash)) {
-                SparkLightningSend.NotFound ->
-                    Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR)
-                is SparkLightningSend.Found -> settledSendEvent(paymentHash)
-                SparkLightningSend.Unavailable -> null
+            // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
+            withTimeoutOrNull(PENDING_TRACK_WAIT) {
+                pendingPaymentRepo.state.first { paymentHash in it.pendingPayments }
             }
-            event?.let { _nodeEvents.emit(it) }
+            repeat(SETTLE_ATTEMPTS) {
+                runSuspendCatching { sparkService.syncWallet() }
+                    .onFailure { Logger.warn("Failed to sync Spark after send '$paymentHash'", it, context = TAG) }
+                    .onSuccess { _state.update { it.copy(hasSynced = true) } }
+                when (val send = lightningSend(paymentHash)) {
+                    SparkLightningSend.NotFound -> {
+                        val reason = PaymentFailureReason.UNEXPECTED_ERROR
+                        _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, reason))
+                        return@launch
+                    }
+                    // A pending send ends with its own payment event.
+                    is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@launch
+                    is SparkLightningSend.Found -> {
+                        settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                        return@launch
+                    }
+                    SparkLightningSend.Unavailable -> delay(SETTLE_RETRY_INTERVAL)
+                }
+            }
+            Logger.warn("Stopped settling Spark send '$paymentHash'", context = TAG)
         }
     }
 
@@ -515,7 +538,10 @@ class SparkRepo @Inject constructor(
             val payment = sparkService.send(prepared.response)
             preparedWithdrawal = null
             (payment.details as? PaymentDetails.Withdraw)?.txId?.let { withdrawalTxids += it }
-            refresh()
+            Unit
+        }.onSuccess {
+            runSuspendCatching { refresh() }
+                .onFailure { Logger.warn("Failed to refresh Spark after its withdrawal", it, context = TAG) }
         }.onFailure {
             Logger.error("Failed to withdraw from Spark", it, context = TAG)
         }
@@ -617,14 +643,14 @@ class SparkRepo @Inject constructor(
                     return@runSuspendCatching
                 }
                 File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState)
-                if (sparkService.isConnected) importRestoredExitState(walletIndex)
+                if (sparkService.isConnected) importRestoredExitState(walletIndex).getOrThrow()
             }
         }
 
-    private suspend fun importRestoredExitState(walletIndex: Int) {
+    private suspend fun importRestoredExitState(walletIndex: Int): Result<Unit> {
         val file = File(Env.sparkExitRestorePath(walletIndex))
-        if (!file.exists()) return
-        runSuspendCatching { sparkService.importExitState(file.readText()) }
+        if (!file.exists()) return Result.success(Unit)
+        return runSuspendCatching { sparkService.importExitState(file.readText()) }
             .onSuccess {
                 file.delete()
                 Logger.info(
@@ -634,6 +660,7 @@ class SparkRepo @Inject constructor(
                 )
             }
             .onFailure { Logger.error("Failed to import Spark exit data", it, context = TAG) }
+            .map {}
     }
 
     suspend fun refreshState(): Result<Unit> = withContext(bgDispatcher) {
@@ -671,8 +698,19 @@ class SparkRepo @Inject constructor(
                 recoverableFundsSats = info.recoverableFundsSats,
             ).withBroadcastDeposits()
         }
+        markClaimedDeposits(claimed)
         payments.filter { it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0 }.forEach { recordActivity(it) }
         markTransfers(payments)
+    }
+
+    private fun markClaimedDeposits(claimed: List<SparkDeposit>) {
+        val claimedTxids = claimed.map { it.txid.lowercase() }.toSet()
+        _depositClaims.update { claims ->
+            claims.mapValues { (txid, claim) ->
+                if (txid.lowercase() in claimedTxids) SparkDepositClaim.Claimed else claim
+            }
+        }
+        claimJobs.keys.filter { it.lowercase() in claimedTxids }.forEach { claimJobs.remove(it)?.cancel() }
     }
 
     private fun List<Payment>.toWithdrawals() = filter { it.status != PaymentStatus.FAILED }
@@ -801,7 +839,9 @@ class SparkRepo @Inject constructor(
     }
 
     private suspend fun onPayment(payment: Payment) {
-        refresh()
+        // The event carries its outcome, so a failed balance read never holds back its settlement.
+        runSuspendCatching { refresh() }
+            .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }

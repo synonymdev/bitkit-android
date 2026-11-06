@@ -43,6 +43,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
@@ -76,6 +77,7 @@ fun SpendingConfirmScreen(
     onBackClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onSent: () -> Unit = {},
+    onFundingPending: (OnchainSendAttempt) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -87,7 +89,11 @@ fun SpendingConfirmScreen(
 
     LaunchedEffect(viewModel, onSent) {
         viewModel.effects.collect {
-            if (it == SideEffect.Sent) onSent()
+            when (it) {
+                SideEffect.Sent -> onSent()
+                is SideEffect.FundingPending -> onFundingPending(it.attempt)
+                else -> Unit
+            }
         }
     }
 
