@@ -1545,6 +1545,7 @@
     <string name="wallet__payment_request_accepted_methods">Acceptar pagament en</string>
     <string name="wallet__payment_request_after_expiry">Rebut · Després del venciment</string>
     <string name="wallet__payment_request_amount">Import</string>
+    <string name="wallet__payment_request_before_request">Rebut · Abans de la sol·licitud</string>
     <string name="wallet__payment_request_choose_recipient">Triar destinatari</string>
     <string name="wallet__payment_request_dismiss">Descartar</string>
     <string name="wallet__payment_request_enter_pubky">Introdueix un pubky</string>

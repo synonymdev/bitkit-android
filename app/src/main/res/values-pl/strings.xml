@@ -1547,6 +1547,7 @@
     <string name="wallet__payment_request_accepted_methods">Akceptuj płatność w</string>
     <string name="wallet__payment_request_after_expiry">Otrzymano · Po terminie</string>
     <string name="wallet__payment_request_amount">Kwota</string>
+    <string name="wallet__payment_request_before_request">Otrzymano · Przed żądaniem</string>
     <string name="wallet__payment_request_choose_recipient">Wybierz odbiorcę</string>
     <string name="wallet__payment_request_dismiss">Odrzuć</string>
     <string name="wallet__payment_request_enter_pubky">Wprowadź pubky</string>

@@ -1541,6 +1541,7 @@
     <string name="wallet__payment_request_accepted_methods">قبول الدفع بـ</string>
     <string name="wallet__payment_request_after_expiry">مستلم · بعد انتهاء الصلاحية</string>
     <string name="wallet__payment_request_amount">المبلغ</string>
+    <string name="wallet__payment_request_before_request">مستلم · قبل الطلب</string>
     <string name="wallet__payment_request_choose_recipient">اختر المستلم</string>
     <string name="wallet__payment_request_dismiss">تجاهل</string>
     <string name="wallet__payment_request_enter_pubky">أدخل pubky</string>

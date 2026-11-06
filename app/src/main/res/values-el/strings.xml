@@ -1542,6 +1542,7 @@
     <string name="wallet__payment_request_accepted_methods">Αποδοχή πληρωμής σε</string>
     <string name="wallet__payment_request_after_expiry">Ελήφθη · Μετά τη λήξη</string>
     <string name="wallet__payment_request_amount">Ποσό</string>
+    <string name="wallet__payment_request_before_request">Ελήφθη · Πριν από το αίτημα</string>
     <string name="wallet__payment_request_choose_recipient">Επιλογή παραλήπτη</string>
     <string name="wallet__payment_request_dismiss">Απόρριψη</string>
     <string name="wallet__payment_request_enter_pubky">Εισαγωγή pubky</string>

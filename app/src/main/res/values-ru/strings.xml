@@ -1562,6 +1562,7 @@
     <string name="wallet__payment_request_accepted_methods">Принимать оплату в</string>
     <string name="wallet__payment_request_after_expiry">Получено · После истечения</string>
     <string name="wallet__payment_request_amount">Сумма</string>
+    <string name="wallet__payment_request_before_request">Получено · До запроса</string>
     <string name="wallet__payment_request_choose_recipient">Выберите Получателя</string>
     <string name="wallet__payment_request_dismiss">Отклонить</string>
     <string name="wallet__payment_request_enter_pubky">Введите pubky</string>

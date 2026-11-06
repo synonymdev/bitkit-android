@@ -1547,6 +1547,7 @@
     <string name="wallet__payment_request_accepted_methods">Betaling accepteren in</string>
     <string name="wallet__payment_request_after_expiry">Ontvangen · Na vervaldatum</string>
     <string name="wallet__payment_request_amount">Bedrag</string>
+    <string name="wallet__payment_request_before_request">Ontvangen · Vóór het verzoek</string>
     <string name="wallet__payment_request_choose_recipient">Ontvanger kiezen</string>
     <string name="wallet__payment_request_contact">Contact</string>
     <string name="wallet__payment_request_dismiss">Negeren</string>

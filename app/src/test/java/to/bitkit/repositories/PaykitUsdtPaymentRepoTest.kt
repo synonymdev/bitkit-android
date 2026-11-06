@@ -70,6 +70,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -688,6 +690,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         for (invalidReceipt in listOf(
             receipt.copy(underpaid = true),
             receipt.copy(afterExpiry = true),
+            receipt.copy(beforeRequest = true),
             receipt.copy(verified = false),
             receipt.copy(proofEventId = "unrelated")
         )) {
@@ -698,6 +701,52 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             )
         }
     }
+
+    @Test
+    fun `transfer within the timestamp tolerance of the proposal pays the request`() = test {
+        val paidAt = clock.now()
+        for (proposedAt in listOf(paidAt - 1.hours, paidAt + PaykitUsdtPaymentRepo.PAYMENT_TIME_TOLERANCE)) {
+            val record = receivedRequest(proposalRecordedAt = proposedAt.toString())
+            whenever(sdk.paymentRequests()).thenReturn(listOf(record))
+            stubVerification(Result.success(verifiedPayment(paidAt)))
+            stored = null
+            val repo = repo()
+
+            repo.reconcile().getOrThrow()
+
+            val receipt = repo.receipts.value.single()
+            assertFalse(receipt.beforeRequest)
+            assertTrue(receipt.satisfied)
+        }
+    }
+
+    @Test
+    fun `transfer earlier than the proposal beyond the tolerance does not pay the request`() = test {
+        val paidAt = clock.now()
+        val proposedAt = paidAt + PaykitUsdtPaymentRepo.PAYMENT_TIME_TOLERANCE + 1.seconds
+        val record = receivedRequest(proposalRecordedAt = proposedAt.toString())
+        whenever(sdk.paymentRequests()).thenReturn(listOf(record))
+        stubVerification(Result.success(verifiedPayment(paidAt)))
+        val repo = repo()
+
+        repo.reconcile().getOrThrow()
+
+        val receipt = repo.receipts.value.single()
+        assertTrue(receipt.verified)
+        assertTrue(receipt.beforeRequest)
+        assertFalse(receipt.satisfied)
+        assertTrue(repo.verifiedReceipts(identity).getOrThrow().isEmpty())
+        assertEquals(receipt, PaykitUsdtStateBackup.Receipt(receipt).restored())
+    }
+
+    private fun verifiedPayment(paidAt: Instant) = UsdtVerifiedPayment(
+        "42161:transaction:0",
+        "transaction:0",
+        "sender",
+        address,
+        50_000u,
+        paidAt.epochSeconds.toULong(),
+    )
 
     @Test
     fun `receipt status survives restart and reflects canonical execution and payment deadline`() = test {

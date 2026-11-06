@@ -1548,6 +1548,7 @@
     <string name="wallet__payment_request_accepted_methods">Aceitar pagamento em</string>
     <string name="wallet__payment_request_after_expiry">Recebido · Após o vencimento</string>
     <string name="wallet__payment_request_amount">Valor</string>
+    <string name="wallet__payment_request_before_request">Recebido · Antes da solicitação</string>
     <string name="wallet__payment_request_choose_recipient">Escolher Destinatário</string>
     <string name="wallet__payment_request_dismiss">Dispensar</string>
     <string name="wallet__payment_request_enter_pubky">Digite a pubky</string>

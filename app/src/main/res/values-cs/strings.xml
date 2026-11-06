@@ -1548,6 +1548,7 @@
     <string name="wallet__payment_request_accepted_methods">Přijmout platbu v</string>
     <string name="wallet__payment_request_after_expiry">Přijato · Po vypršení</string>
     <string name="wallet__payment_request_amount">Částka</string>
+    <string name="wallet__payment_request_before_request">Přijato · Před žádostí</string>
     <string name="wallet__payment_request_choose_recipient">Vybrat příjemce</string>
     <string name="wallet__payment_request_dismiss">Odmítnout</string>
     <string name="wallet__payment_request_enter_pubky">Zadejte pubky</string>
