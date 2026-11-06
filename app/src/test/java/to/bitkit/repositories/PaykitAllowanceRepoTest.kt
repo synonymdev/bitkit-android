@@ -1072,6 +1072,34 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `covered request Spark can pay is paid while the node is stopped`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        whenever(lightningRepo.canSendWithSpark(1_000uL)).thenReturn(true)
+        val request = fixtures.paymentRequest()
+
+        sut.processIncomingRequests(listOf(request))
+
+        verify(executor).autoPay(eq(request), any(), eq(identity))
+    }
+
+    @Test
+    fun `covered request Spark can pay is paid while no channel is usable`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        val reconnecting = mock<ChannelDetails> { on { isUsable } doReturn false }
+        lightningState.update {
+            it.copy(nodeLifecycleState = NodeLifecycleState.Running, channels = persistentListOf(reconnecting))
+        }
+        whenever(lightningRepo.canSendWithSpark(1_000uL)).thenReturn(true)
+        val request = fixtures.paymentRequest()
+
+        sut.processIncomingRequests(listOf(request))
+
+        verify(executor).autoPay(eq(request), any(), eq(identity))
+    }
+
+    @Test
     fun `nothing is processed without an identity`() = test {
         assertFalse(sut.processIncomingRequests(listOf(fixtures.paymentRequest())))
         verify(executor, never()).autoPay(any(), any(), any())
