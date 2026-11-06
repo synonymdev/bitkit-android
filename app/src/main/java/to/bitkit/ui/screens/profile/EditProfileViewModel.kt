@@ -22,9 +22,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.models.takeCodePoints
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.ProfileEditBase
+import to.bitkit.repositories.PubkyProfileChangedError
+import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -41,6 +46,8 @@ class EditProfileViewModel @Inject constructor(
         private const val TAG = "EditProfileViewModel"
     }
 
+    private var editBase = ProfileEditBase(profile = null, revision = null)
+
     private val _uiState = MutableStateFlow(EditProfileUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -54,7 +61,8 @@ class EditProfileViewModel @Inject constructor(
     private fun loadProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val profile = pubkyRepo.profile.value
+            editBase = pubkyRepo.profileEditBase()
+            val profile = editBase.profile
             val publicKey = pubkyRepo.publicKey.value.orEmpty()
             val removal = if (pubkyRepo.isRingAdoptedIdentity()) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
             if (profile != null) {
@@ -78,6 +86,14 @@ class EditProfileViewModel @Inject constructor(
         }
     }
 
+    private fun reloadAfterExternalEdit() {
+        viewModelScope.launch {
+            pubkyRepo.loadProfile()
+            _uiState.update { it.copy(newAvatarUri = null, newAvatarBytes = null) }
+            loadProfile()
+        }
+    }
+
     fun onAvatarSelected(uri: Uri) {
         viewModelScope.launch {
             runCatching {
@@ -97,7 +113,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun onNameChange(name: String) {
-        _uiState.update { it.copy(name = name) }
+        _uiState.update { it.copy(name = name.takeCodePoints(PROFILE_NAME_MAX_LENGTH)) }
     }
 
     fun onBioChange(bio: String) {
@@ -196,6 +212,7 @@ class EditProfileViewModel @Inject constructor(
                 links = state.links.map { PubkyProfileLink(label = it.label, url = it.url) },
                 tags = state.tags,
                 imageUrl = imageUrl,
+                editBase = editBase,
             ).onSuccess {
                 _uiState.update { it.copy(isSaving = false) }
                 ToastEventBus.send(
@@ -207,11 +224,19 @@ class EditProfileViewModel @Inject constructor(
             }.onFailure {
                 Logger.error("Failed to save profile", it, context = TAG)
                 _uiState.update { it.copy(isSaving = false) }
+                val changed = it is PubkyProfileChangedError
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__edit_save_error),
-                    description = it.message,
+                    description = when {
+                        changed -> context.getString(R.string.profile__edit_changed_error)
+                        it is PubkyProfileTagsNotSavedError -> context.getString(R.string.profile__edit_tags_error)
+                        else -> it.message
+                    },
                 )
+                if (changed) reloadAfterExternalEdit()
+                // The other fields are on pubky.app, so a retry starts from their revision.
+                if (it is PubkyProfileTagsNotSavedError) editBase = it.base
             }
         }
     }

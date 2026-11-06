@@ -9,6 +9,7 @@ import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
+import com.synonym.paykit.pubkyAppProfileSessionCapabilities
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -206,6 +207,7 @@ class PaykitSdkServiceWipeTest {
 
         mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
             native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+            native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
             val active = async(start = CoroutineStart.UNDISPATCHED) { service.importSession("active") }
             bootstrapStarted.await()
             val queued = async(start = CoroutineStart.UNDISPATCHED) {

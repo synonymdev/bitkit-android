@@ -4895,6 +4895,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 error = null,
             )
         },
+        acknowledged = emptyList(),
         failedToQueue = failedToQueue,
         failedToDeliver = failedToDeliver,
     )
@@ -4912,6 +4913,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         cleared = updates
             .filter { it.reservations.isEmpty() }
             .map { privateListSyncChange(it.counterparty) },
+        acknowledged = emptyList(),
         failedToQueue = emptyList(),
         failedToDeliver = emptyList(),
     )
