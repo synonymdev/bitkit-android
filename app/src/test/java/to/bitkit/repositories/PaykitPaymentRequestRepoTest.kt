@@ -2655,6 +2655,34 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `proposal too large for one message reports a note that is too long`() = test {
+        val target = stubProposal(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE))
+        val draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds))
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).doSuspendableAnswer {
+            throw PaykitException.Protocol("message_too_large", "Private Application Message exceeds the limit")
+        }
+
+        val result = sut.propose(draft, target, listOf(COUNTERPARTY))
+
+        assertSame(PaykitPaymentRequestError.RequestTooLong, result.exceptionOrNull())
+        assertFalse(sut.isCreatingRequest.value)
+    }
+
+    @Test
+    fun `other proposal protocol errors are reported unchanged`() = test {
+        val target = stubProposal(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE))
+        val draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds))
+        val failure = PaykitException.Protocol("protocol_error", "Link is not ready")
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).doSuspendableAnswer {
+            throw failure
+        }
+
+        val result = sut.propose(draft, target, listOf(COUNTERPARTY))
+
+        assertSame(failure, result.exceptionOrNull())
+    }
+
+    @Test
     fun `proposal uses canonical terms and accepts available selected methods`() = test {
         val target =
             stubProposal(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE, counterparty = COUNTERPARTY))

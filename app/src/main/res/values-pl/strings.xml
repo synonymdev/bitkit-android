@@ -1561,6 +1561,7 @@
     <string name="wallet__payment_request_mismatch">Dane płatności nie odpowiadają żądaniu. Płatność anulowana.</string>
     <string name="wallet__payment_request_not_specified">Nie określono</string>
     <string name="wallet__payment_request_note_placeholder">Za co jest ta płatność?</string>
+    <string name="wallet__payment_request_note_too_long">Skróć notatkę i spróbuj ponownie.</string>
     <string name="wallet__payment_request_or_pay">Zażądaj lub zapłać</string>
     <string name="wallet__payment_request_or_pay_description">Zapłać %1$s lub zażądaj płatności.</string>
     <string name="wallet__payment_request_or_pay_headline">Zażądaj\n&lt;accent&gt;lub zapłać ₿&lt;/accent&gt;</string>

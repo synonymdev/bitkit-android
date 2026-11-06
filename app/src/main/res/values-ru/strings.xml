@@ -1576,6 +1576,7 @@
     <string name="wallet__payment_request_mismatch">Платёжные данные не совпали с запросом. Платёж отменён.</string>
     <string name="wallet__payment_request_not_specified">Не указано</string>
     <string name="wallet__payment_request_note_placeholder">За что этот платёж?</string>
+    <string name="wallet__payment_request_note_too_long">Сократите заметку и попробуйте снова.</string>
     <string name="wallet__payment_request_or_pay">Запросить или Оплатить</string>
     <string name="wallet__payment_request_or_pay_description">Заплатите %1$s или запросите платёж.</string>
     <string name="wallet__payment_request_or_pay_headline">Запросить\n&lt;accent&gt;или Оплатить ₿&lt;/accent&gt;</string>

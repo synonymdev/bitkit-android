@@ -1562,6 +1562,7 @@
     <string name="wallet__payment_request_mismatch">De betaalgegevens kwamen niet overeen met het verzoek. Betaling geannuleerd.</string>
     <string name="wallet__payment_request_not_specified">Niet opgegeven</string>
     <string name="wallet__payment_request_note_placeholder">Waar is deze betaling voor?</string>
+    <string name="wallet__payment_request_note_too_long">Maak de notitie korter en probeer het opnieuw.</string>
     <string name="wallet__payment_request_or_pay">Verzoeken of betalen</string>
     <string name="wallet__payment_request_or_pay_description">Betaal %1$s of vraag een betaling aan.</string>
     <string name="wallet__payment_request_or_pay_headline">Verzoek\n&lt;accent&gt;of betaal ₿&lt;/accent&gt;</string>

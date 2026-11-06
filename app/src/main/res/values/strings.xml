@@ -1432,6 +1432,7 @@
     <string name="wallet__payment_request_not_specified">Not specified</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
+    <string name="wallet__payment_request_note_too_long">Shorten the note and try again.</string>
     <string name="wallet__payment_request_or_pay">Request Or Pay</string>
     <string name="wallet__payment_request_or_pay_description">Pay %1$s or request a payment.</string>
     <string name="wallet__payment_request_or_pay_headline"><![CDATA[Request\n<accent>Or Pay ₿</accent>]]></string>

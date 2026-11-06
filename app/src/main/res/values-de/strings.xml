@@ -1561,6 +1561,7 @@
     <string name="wallet__payment_request_mismatch">Die Zahlungsdetails stimmten nicht mit der Anforderung überein. Zahlung abgebrochen.</string>
     <string name="wallet__payment_request_not_specified">Nicht angegeben</string>
     <string name="wallet__payment_request_note_placeholder">Wofür ist diese Zahlung?</string>
+    <string name="wallet__payment_request_note_too_long">Kürze die Notiz und versuche es erneut.</string>
     <string name="wallet__payment_request_or_pay">Anfordern oder bezahlen</string>
     <string name="wallet__payment_request_or_pay_description">Bezahle %1$s oder fordere eine Zahlung an.</string>
     <string name="wallet__payment_request_or_pay_headline">Anfordern\n&lt;accent&gt;oder ₿ zahlen&lt;/accent&gt;</string>

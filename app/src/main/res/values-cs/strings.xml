@@ -1562,6 +1562,7 @@
     <string name="wallet__payment_request_mismatch">Platební údaje neodpovídaly žádosti. Platba byla zrušena.</string>
     <string name="wallet__payment_request_not_specified">Neuvedeno</string>
     <string name="wallet__payment_request_note_placeholder">Za co je tato platba?</string>
+    <string name="wallet__payment_request_note_too_long">Zkraťte poznámku a zkuste to znovu.</string>
     <string name="wallet__payment_request_or_pay">Požádat nebo zaplatit</string>
     <string name="wallet__payment_request_or_pay_description">Zaplaťte kontaktu %1$s nebo požádejte o platbu.</string>
     <string name="wallet__payment_request_or_pay_headline">Požádat\n&lt;accent&gt;nebo zaplatit ₿&lt;/accent&gt;</string>

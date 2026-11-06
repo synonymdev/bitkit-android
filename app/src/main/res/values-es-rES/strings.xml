@@ -1558,6 +1558,7 @@
     <string name="wallet__payment_request_mismatch">Los datos del pago no coinciden con la solicitud. Pago cancelado.</string>
     <string name="wallet__payment_request_not_specified">Sin especificar</string>
     <string name="wallet__payment_request_note_placeholder">¿Para qué es este pago?</string>
+    <string name="wallet__payment_request_note_too_long">Acorta la nota e inténtalo de nuevo.</string>
     <string name="wallet__payment_request_or_pay">Solicitar o pagar</string>
     <string name="wallet__payment_request_or_pay_description">Paga a %1$s o solicita un pago.</string>
     <string name="wallet__payment_request_or_pay_headline">Solicitar\n&lt;accent&gt;o pagar ₿&lt;/accent&gt;</string>

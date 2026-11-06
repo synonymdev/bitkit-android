@@ -1562,6 +1562,7 @@
     <string name="wallet__payment_request_not_specified">Non specificato</string>
     <string name="wallet__payment_request_note">Nota</string>
     <string name="wallet__payment_request_note_placeholder">A cosa serve questo pagamento?</string>
+    <string name="wallet__payment_request_note_too_long">Accorcia la nota e riprova.</string>
     <string name="wallet__payment_request_or_pay">Richiedi o Paga</string>
     <string name="wallet__payment_request_or_pay_description">Paga %1$s o richiedi un pagamento.</string>
     <string name="wallet__payment_request_or_pay_headline">Richiedi\n&lt;accent&gt;o Paga ₿&lt;/accent&gt;</string>

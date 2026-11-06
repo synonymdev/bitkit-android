@@ -1555,6 +1555,7 @@
     <string name="wallet__payment_request_mismatch">لم تطابق تفاصيل الدفع الطلب. تم إلغاء الدفع.</string>
     <string name="wallet__payment_request_not_specified">غير محدد</string>
     <string name="wallet__payment_request_note_placeholder">ما الغرض من هذه الدفعة؟</string>
+    <string name="wallet__payment_request_note_too_long">اختصر الملاحظة وحاول مرة أخرى.</string>
     <string name="wallet__payment_request_or_pay">طلب أو دفع</string>
     <string name="wallet__payment_request_or_pay_description">ادفع لـ %1$s أو اطلب دفعة.</string>
     <string name="wallet__payment_request_or_pay_headline">اطلب\n&lt;accent&gt;أو ادفع ₿&lt;/accent&gt;</string>

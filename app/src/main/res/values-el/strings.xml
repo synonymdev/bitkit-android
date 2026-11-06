@@ -1556,6 +1556,7 @@
     <string name="wallet__payment_request_mismatch">Τα στοιχεία πληρωμής δεν αντιστοιχούσαν στο αίτημα. Η πληρωμή ακυρώθηκε.</string>
     <string name="wallet__payment_request_not_specified">Δεν καθορίστηκε</string>
     <string name="wallet__payment_request_note_placeholder">Για τι είναι αυτή η πληρωμή;</string>
+    <string name="wallet__payment_request_note_too_long">Συντόμευσε τη σημείωση και δοκίμασε ξανά.</string>
     <string name="wallet__payment_request_or_pay">Αίτημα ή πληρωμή</string>
     <string name="wallet__payment_request_or_pay_description">Πλήρωσε τον/την %1$s ή ζήτησε πληρωμή.</string>
     <string name="wallet__payment_request_or_pay_headline">Αίτημα\n&lt;accent&gt;ή πληρωμή ₿&lt;/accent&gt;</string>
