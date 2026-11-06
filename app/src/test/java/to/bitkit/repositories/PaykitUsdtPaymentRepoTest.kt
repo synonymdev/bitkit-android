@@ -785,7 +785,10 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         assertEquals(true, repo.receipts.value.single().satisfied)
     }
 
-    private fun receivedRequest(id: String = request.paymentRequestId): PaymentRequestRecord {
+    private fun receivedRequest(
+        id: String = request.paymentRequestId,
+        proposalRecordedAt: String? = null,
+    ): PaymentRequestRecord {
         val json = Json.encodeToString(
             PaykitUsdtProof(UsdtPaymentProof("42161", "0x" + "a".repeat(64), "0", "0x" + "b".repeat(130)))
         )
@@ -806,6 +809,8 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             proposalAppId = "bitkit",
             payerAppId = "bitkit",
             executionClaimAppId = "bitkit",
+            proposalRecordedAt = proposalRecordedAt,
+            acceptanceRecordedAt = null,
             terms = PaymentRequestTerms(
                 PaymentRequestAmount("0.05", "usd"),
                 reference,

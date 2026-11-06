@@ -1669,6 +1669,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         proposalAppId = "bitkit",
         payerAppId = null,
         executionClaimAppId = null,
+        proposalRecordedAt = null,
+        acceptanceRecordedAt = null,
     )
     private fun linkedPeer(
         publicKey: String,

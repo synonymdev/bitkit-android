@@ -226,7 +226,7 @@ class PaykitSdkServiceTest {
                 }
                 "revision"
             }
-            val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+            val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
             whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
             val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -2519,7 +2519,7 @@ class PaykitSdkServiceTest {
                 withdrawal.thenThrow(IllegalStateException("network unavailable"))
             } else {
                 withdrawal.thenReturn(
-                    PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList()),
+                    PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
                 )
             }
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -3355,7 +3355,7 @@ class PaykitSdkServiceTest {
         val sdk = mock<PaykitSdk>()
         val started = CompletableDeferred<Unit>()
         val resume = CompletableDeferred<Unit>()
-        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
         whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(LinkedPeerState.LINKED)))
         whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).doSuspendableAnswer {
             started.complete(Unit)
@@ -3415,7 +3415,7 @@ class PaykitSdkServiceTest {
         whenever(sdk.paykitAppRegistry(RING_PUBKY)).thenReturn(
             PaykitAppRegistry(1u, null, listOf(PaykitApp("bitkit", "Bitkit", capabilities)), null, emptyMap()),
         )
-        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
         val updates = listOf(RING_PUBKY, other).map { PrivatePaymentListReservationUpdateInput(it, emptyList()) }
         whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)).thenReturn(report)
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -3462,6 +3462,7 @@ class PaykitSdkServiceTest {
                     emptyList()
                 },
                 failedToDeliver = emptyList(),
+                acknowledged = emptyList(),
             )
         }
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }

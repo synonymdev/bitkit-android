@@ -3666,5 +3666,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         proposalAppId = "bitkit",
         payerAppId = null,
         executionClaimAppId = null,
+        proposalRecordedAt = null,
+        acceptanceRecordedAt = null,
     )
 }
