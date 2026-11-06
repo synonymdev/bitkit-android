@@ -336,6 +336,19 @@ class SparkExitRepo @Inject constructor(
         isOnTrack: Boolean,
         reportedLost: Set<String>,
     ) {
+        // A started exit nothing reached yet is reminded about once, 4 hours in; funds seen or paid, or another phase,
+        // call the reminder off.
+        val remindIn = SparkExitAlerts.fundingReminderIn(
+            record,
+            _state.value.fundingSeenSats,
+            clock.nowMs(),
+            Env.network
+        )
+        if (remindIn != null) {
+            work.scheduleFundingReminder(record.createdAt, remindIn)
+        } else {
+            work.cancelFundingReminder(record.createdAt)
+        }
         SparkExitAlerts.losses(record, previous, reportedLost).forEach {
             work.notify(it, amountSats = record.lostSats.takeIf { _ -> it == SparkExitAlert.Lost })
         }

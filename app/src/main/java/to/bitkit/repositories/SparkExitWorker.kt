@@ -19,6 +19,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.EntryPoint
@@ -29,6 +30,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.async.appScope
@@ -54,6 +56,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -76,6 +80,8 @@ class SparkExitWork @Inject constructor(
         private const val TAG = "SparkExitWork"
         private const val PERIODIC_WORK = "spark-exit-tick"
         private const val CATCH_UP_WORK = "spark-exit-catch-up"
+        private const val FUNDING_REMINDER_WORK = "spark-exit-funding-reminder"
+        const val KEY_EXIT_CREATED_AT = "exit-created-at"
         const val DEADLINE_ACTION = "to.bitkit.spark-exit.DEADLINE"
         private const val PREFERENCES = "spark-exit-work"
         private const val KEY_WARN_AT = "warn-at"
@@ -181,8 +187,36 @@ class SparkExitWork @Inject constructor(
         WorkManager.getInstance(context).run {
             cancelUniqueWork(PERIODIC_WORK)
             cancelUniqueWork(CATCH_UP_WORK)
+            cancelAllWorkByTag(FUNDING_REMINDER_WORK)
         }
         cancelDeadline()
+    }
+
+    /**
+     * Reminds once, after [delay], that the exit created at [exitCreatedAt] waits for its fee funding. Unique per
+     * exit and kept as first scheduled, so later ticks do not push it back.
+     */
+    fun scheduleFundingReminder(exitCreatedAt: Long, delay: Duration) {
+        val request = OneTimeWorkRequestBuilder<SparkExitFundingReminderWorker>()
+            .setInitialDelay(delay.inWholeMilliseconds, TimeUnit.MILLISECONDS)
+            .setInputData(workDataOf(KEY_EXIT_CREATED_AT to exitCreatedAt))
+            .addTag(FUNDING_REMINDER_WORK)
+            .build()
+        WorkManager.getInstance(context)
+            .enqueueUniqueWork(fundingReminderName(exitCreatedAt), ExistingWorkPolicy.KEEP, request)
+    }
+
+    fun cancelFundingReminder(exitCreatedAt: Long) {
+        WorkManager.getInstance(context).cancelUniqueWork(fundingReminderName(exitCreatedAt))
+    }
+
+    private fun fundingReminderName(exitCreatedAt: Long) = "$FUNDING_REMINDER_WORK-$exitCreatedAt"
+
+    /** The reminder fired: posts the funding notification while the exit it was for still waits for funding. */
+    suspend fun onFundingReminder(exitCreatedAt: Long) {
+        val record = runSuspendCatching { store().load() }.getOrNull() ?: return
+        if (record.createdAt != exitCreatedAt || !SparkExitAlerts.isAwaitingFirstFunding(record)) return
+        notify(SparkExitAlert.Funding)
     }
 
     /**
@@ -328,6 +362,26 @@ object SparkExitAlerts {
         )
     }
 
+    /** How long after its start an unfunded exit is reminded about: 4 hours, 10 minutes on regtest, as on iOS. */
+    private val fundingReminderDelay = 4.hours
+    private val regtestFundingReminderDelay = 10.minutes
+
+    /** A started exit nothing was paid into: no adopted funding, no payment from savings. */
+    fun isAwaitingFirstFunding(record: SparkExitRecord): Boolean =
+        record.phase is SparkExitRecord.Phase.AwaitingFunding && record.fundingShortfallSats != null &&
+            record.fundedSats == 0uL && record.fundingPaymentTxid == null
+
+    /**
+     * How long from [nowMillis] until the one reminder about [record] waiting for its first funding, or null when no
+     * reminder is due: funding was paid or [seenSats] reached the address, or the exit is past that phase.
+     */
+    fun fundingReminderIn(record: SparkExitRecord, seenSats: ULong, nowMillis: Long, network: Network): Duration? {
+        if (!isAwaitingFirstFunding(record) || seenSats > 0uL) return null
+        val delay = if (network == Network.REGTEST) regtestFundingReminderDelay else fundingReminderDelay
+        val at = record.createdAt + delay.inWholeMilliseconds
+        return maxOf(at - nowMillis, 0L).milliseconds
+    }
+
     /** [record] started saying it is not moving on the tick from [previous]. */
     fun isNewlyStalled(record: SparkExitRecord, previous: SparkExitRecord): Boolean =
         record.isActive && record.isStalled && !previous.isStalled
@@ -370,6 +424,20 @@ private fun SparkExitAlert.textRes(hasDeadline: Boolean): Int = when (this) {
     SparkExitAlert.Battery if hasDeadline -> R.string.lightning__spark_exit__notification_battery
     SparkExitAlert.Behind if hasDeadline -> R.string.lightning__spark_exit__notification_behind
     else -> R.string.lightning__spark_exit__notification_late
+}
+
+/** The one reminder that a started exit still waits for its fee funding. */
+@HiltWorker
+class SparkExitFundingReminderWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted workerParams: WorkerParameters,
+    private val work: SparkExitWork,
+) : CoroutineWorker(appContext, workerParams) {
+    override suspend fun doWork(): Result {
+        val createdAt = inputData.getLong(SparkExitWork.KEY_EXIT_CREATED_AT, 0L)
+        work.onFundingReminder(createdAt)
+        return Result.success()
+    }
 }
 
 @HiltWorker

@@ -1,11 +1,15 @@
 package to.bitkit.repositories
 
 import org.junit.Test
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.repositories.SparkExitRecord.Phase
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 class SparkExitAlertsTest {
     private val running = SparkExitFixtures.record(Phase.Running)
@@ -110,5 +114,21 @@ class SparkExitAlertsTest {
         assertTrue(SparkExitAlert.NotMoving.isPostedOnScreen)
         assertTrue(SparkExitAlert.Lost.isPostedOnScreen)
         assertFalse(SparkExitAlert.Rejected.isPostedOnScreen)
+    }
+
+    @Test
+    fun `an exit nothing was paid into is reminded about once, 4 hours after it started`() {
+        val unfunded = SparkExitFixtures.record(Phase.AwaitingFunding(20_000uL)).copy(createdAt = 0L)
+        val hour = 3_600_000L
+        assertEquals(4.hours, SparkExitAlerts.fundingReminderIn(unfunded, 0uL, 0L, Network.BITCOIN))
+        assertEquals(1.hours, SparkExitAlerts.fundingReminderIn(unfunded, 0uL, 3 * hour, Network.BITCOIN))
+        assertEquals(Duration.ZERO, SparkExitAlerts.fundingReminderIn(unfunded, 0uL, 5 * hour, Network.BITCOIN))
+        assertEquals(10.minutes, SparkExitAlerts.fundingReminderIn(unfunded, 0uL, 0L, Network.REGTEST))
+        // Funds seen or paid, or another phase: no reminder.
+        assertNull(SparkExitAlerts.fundingReminderIn(unfunded, 5_000uL, 0L, Network.BITCOIN))
+        assertNull(
+            SparkExitAlerts.fundingReminderIn(unfunded.copy(fundingPaymentTxid = "paid"), 0uL, 0L, Network.BITCOIN)
+        )
+        assertNull(SparkExitAlerts.fundingReminderIn(unfunded.copy(phase = Phase.Running), 0uL, 0L, Network.BITCOIN))
     }
 }

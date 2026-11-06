@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -445,14 +446,18 @@ class SparkExitRepoTest : BaseUnitTest() {
         whenever(it.halfHourFeeRate()).thenReturn(6uL)
     }
 
+    // On the test's own dispatcher, so no tick a start or payment launches runs on after the test.
     private fun fundingChain(utxos: String? = "[]") = HttpClient(
-        MockEngine { request ->
-            val url = request.url.toString()
-            when {
-                url.endsWith("/address/$funding/utxo") && utxos != null -> respond(utxos)
-                url.endsWith("/blocks/tip/height") -> respond("1000")
-                url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
-                else -> throw IOException("unreachable '$url'")
+        MockEngine.create {
+            dispatcher = testDispatcher
+            addHandler { request ->
+                val url = request.url.toString()
+                when {
+                    url.endsWith("/address/$funding/utxo") && utxos != null -> respond(utxos)
+                    url.endsWith("/blocks/tip/height") -> respond("1000")
+                    url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
+                    else -> throw IOException("unreachable '$url'")
+                }
             }
         },
     ) { defaultRequest { contentType(ContentType.Application.Json) } }
@@ -497,6 +502,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals(funding, sut.state.value.fundingAddress)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `starting holds spark with the transfer, then reconnects it, and a second start is refused`() = test {
         val sdk = FakeSparkExitRecovering()
@@ -517,6 +523,9 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals("transfer-1", record.transferId)
         assertIs<Phase.AwaitingFunding>(record.phase)
         assertTrue(sut.start(fundFromSavings = false).isFailure)
+        // Nothing paid in yet: the one reminder is scheduled for 4 hours (10 minutes on regtest) after the start.
+        runCurrent()
+        verify(work, atLeastOnce()).scheduleFundingReminder(eq(record.createdAt), any())
         sut.onAppBackgrounded()
     }
 
