@@ -103,6 +103,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -223,6 +224,8 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
         whenever { sparkRepo.exitBackup() }.thenReturn(Result.success(null))
         whenever { sparkRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { sparkRepo.mergeRemoteExitBackup(anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(true)
         whenever(sparkRepo.exitStateChanged).thenReturn(MutableSharedFlow())
         whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
 
@@ -285,13 +288,15 @@ class BackupRepoTest : BaseUnitTest() {
         val statuses = MutableStateFlow(mapOf(BackupCategory.SPARK_EXIT to BackupItemStatus(synced = 1, required = 1)))
         stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
         stubBackupObservers()
-        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true, isReady = true)))
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isSupported = true, isReady = true, hasSynced = true))
+        )
         val backup = SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state")
         whenever(sparkRepo.exitBackup()).thenReturn(Result.success(backup))
         try {
             sut.startObservingBackups()
             runCurrent()
-            advanceTimeBy(6_000)
+            advanceTimeBy(61_000)
             runCurrent()
 
             verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
@@ -301,10 +306,63 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark exit backup uploads nothing while Spark is not connected`() = test {
+    fun `spark exit backup defers, without uploading, until Spark has connected and synced`() = test {
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+
+        assertIs<SparkExitBackupDeferred>(sut.triggerBackup(BackupCategory.SPARK_EXIT).exceptionOrNull())
+
+        verify(vssBackupClient, never()).getObject(BackupCategory.SPARK_EXIT.name)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `first spark exit backup merges the stored one into Spark before replacing it`() = test {
+        val stored = SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "stored")
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(
+                VssItem(
+                    key = BackupCategory.SPARK_EXIT.name,
+                    value = json.encodeToString(stored).toByteArray(),
+                    version = 1,
+                )
+            )
+        )
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "merged"))
+        )
+
         sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
 
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(sparkRepo).mergeRemoteExitBackup(stored)
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+    }
+
+    @Test
+    fun `spark exit backup never replaces a stored one it could not read`() = test {
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.failure(AppError("unreachable")))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        assertTrue(sut.triggerBackup(BackupCategory.SPARK_EXIT).isFailure)
+
+        verify(sparkRepo, never()).mergeRemoteExitBackup(anyOrNull())
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `a failed spark exit restore is reported as an incomplete restore`() = test {
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.failure(AppError("unreachable")))
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(BackupCategory.SPARK_EXIT in failed)
     }
 
     @Test
