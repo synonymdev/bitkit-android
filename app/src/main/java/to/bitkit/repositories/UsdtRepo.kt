@@ -55,6 +55,9 @@ class UsdtRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "UsdtRepo"
+
+        /** Allows for block timestamps that trail the device clock. */
+        private val RECEIPT_CLOCK_MARGIN = 60.seconds
     }
 
     private val displayCacheNetwork = MessageDigest.getInstance("SHA-256")
@@ -65,6 +68,14 @@ class UsdtRepo @Inject constructor(
 
     private var nextRefresh = 0L
     private var rateLimitedUntil = 0L
+
+    /**
+     * Before the first complete history sync, a confirmed receipt counts as new only if its block
+     * time is after this point (first refresh of a wallet, or restore). Older entries are history the
+     * sync is still discovering.
+     */
+    private var receiptsSince = receiptBaseline()
+    private val announcedReceiptIds = mutableSetOf<String>()
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
     val recoveryGeneration: Long get() = service.recoveryGeneration
@@ -85,6 +96,7 @@ class UsdtRepo @Inject constructor(
                     val address = wallet.receiveAddress()
                     if (_state.value.address != address) {
                         _state.update { UsdtWalletState(address = address, refreshing = true) }
+                        resetReceiptBaseline()
                     }
                     if (_state.value.balance == null) {
                         runSuspendCatching { cacheStore.data.first().usdtDisplayBalance }
@@ -131,13 +143,24 @@ class UsdtRepo @Inject constructor(
         }
     }
 
+    private fun receiptBaseline() = (clock.now() - RECEIPT_CLOCK_MARGIN).epochSeconds.coerceAtLeast(0).toULong()
+
+    /** A restore keeps [announcedReceiptIds], so a receipt celebrated just before it is not celebrated again. */
+    private fun resetReceiptBaseline(keepAnnounced: Boolean = false) {
+        receiptsSince = receiptBaseline()
+        if (!keepAnnounced) announcedReceiptIds.clear()
+    }
+
     private fun announceNewReceipts(previous: List<UsdtTransfer>?, current: List<UsdtTransfer>) {
-        if (previous == null) return
-        val knownIds = previous.filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }
+        val knownIds = previous.orEmpty().filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }
             .map { it.id }.toSet()
         val received = current.filter {
-            it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u && it.id !in knownIds
+            it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u &&
+                it.id !in knownIds && it.id !in announcedReceiptIds &&
+                (previous != null || it.timestamp >= receiptsSince)
         }
+        if (received.isEmpty()) return
+        announcedReceiptIds += received.map { it.id }
         _state.update {
             it.copy(
                 pendingReceipts = (it.pendingReceipts + received).distinctBy { receipt -> receipt.id }.toImmutableList()
@@ -202,6 +225,9 @@ class UsdtRepo @Inject constructor(
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
                 clearDisplayBalance()
+                resetReceiptBaseline(keepAnnounced = true)
+                // Restore drops queued receipts, so let them be announced again.
+                announcedReceiptIds -= _state.value.pendingReceipts.map { it.id }.toSet()
                 _state.update {
                     it.copy(
                         address = wallet.receiveAddress(),
