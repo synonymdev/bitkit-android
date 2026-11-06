@@ -1306,20 +1306,31 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `amountless invoice goes to spark when the channel inbound is small`() = test {
+    fun `amountless contact endpoint goes to spark when the channel inbound is small`() = test {
         startNodeForTesting()
         readyChannelWithInbound(50_000uL)
         whenever(sparkRepo.canReceive()).thenReturn(true)
         whenever(sparkRepo.createInvoice(null, "test", 86_400u)).thenReturn(Result.success("spark"))
 
-        assertEquals("spark", sut.createInvoice(description = "test").getOrThrow())
+        assertEquals("spark", sut.createInvoice(description = "test", isContactEndpoint = true).getOrThrow())
         verify(lightningService, never()).receive(anyOrNull(), any(), any())
     }
 
     @Test
-    fun `amountless invoice stays on the node when the channel inbound is large`() = test {
+    fun `amountless contact endpoint stays on the node when the channel inbound is large`() = test {
         startNodeForTesting()
         readyChannelWithInbound(1_000_000uL)
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+        whenever(lightningService.receive(null, "test", 86_400u)).thenReturn("node")
+
+        assertEquals("node", sut.createInvoice(description = "test", isContactEndpoint = true).getOrThrow())
+        verify(sparkRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `plain amountless invoice stays on the node when a channel has inbound`() = test {
+        startNodeForTesting()
+        readyChannelWithInbound(50_000uL)
         whenever(sparkRepo.canReceive()).thenReturn(true)
         whenever(lightningService.receive(null, "test", 86_400u)).thenReturn("node")
 

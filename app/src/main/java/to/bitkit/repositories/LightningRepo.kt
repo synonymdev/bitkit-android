@@ -1334,13 +1334,18 @@ class LightningRepo @Inject constructor(
             runSuspendCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
         }
 
+    /**
+     * Creates an invoice on the node or on Spark. A [isContactEndpoint] invoice is published to Paykit contacts, who
+     * pay it any amount, so it prefers Spark unless the node's inbound covers [AMOUNTLESS_NODE_INBOUND_SATS].
+     */
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
+        isContactEndpoint: Boolean = false,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
         requireWalletRestoreComplete()
-        if (shouldReceiveWithSpark(amountSats)) {
+        if (shouldReceiveWithSpark(amountSats, isContactEndpoint)) {
             return@executeWhenNodeRunning sparkRepo.createInvoice(amountSats, description, expirySeconds)
         }
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
@@ -1362,16 +1367,17 @@ class LightningRepo @Inject constructor(
     }
 
     /**
-     * Receives on Spark when no ready channel has the inbound capacity for [amountSats]. An amountless invoice can be
-     * paid any amount, so it stays on the node only when its inbound covers [AMOUNTLESS_NODE_INBOUND_SATS].
+     * Receives on Spark when no ready channel has the inbound capacity for [amountSats]. An amountless contact endpoint
+     * stays on the node only when its inbound covers [AMOUNTLESS_NODE_INBOUND_SATS].
      */
-    private fun shouldReceiveWithSpark(amountSats: ULong?): Boolean {
+    private fun shouldReceiveWithSpark(amountSats: ULong?, isContactEndpoint: Boolean = false): Boolean {
         if (!sparkRepo.canReceive()) return false
         val readyChannels = _lightningState.value.channels.filter { it.isChannelReady }
+        val neededSats = amountSats?.takeIf { it > 0uL } ?: AMOUNTLESS_NODE_INBOUND_SATS.takeIf { isContactEndpoint }
         return !ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = readyChannels.isNotEmpty(),
             inboundCapacitySats = readyChannels.calculateRemoteBalance(),
-            invoiceAmountSats = amountSats?.takeIf { it > 0uL } ?: AMOUNTLESS_NODE_INBOUND_SATS,
+            invoiceAmountSats = neededSats,
         )
     }
 
@@ -2810,7 +2816,7 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val MSATS_PER_SAT = 1_000uL
 
-        /** Inbound capacity the node's ready channels need before an amountless invoice goes to the node, not Spark. */
+        /** Inbound the node's ready channels need before an amountless contact endpoint goes to the node, not Spark. */
         private const val AMOUNTLESS_NODE_INBOUND_SATS = 1_000_000uL
 
         /** Sats a Max Lightning send keeps beyond its estimated routing fee, as routes can price slightly higher. */
