@@ -293,6 +293,20 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `proof the sdk cannot measure fails before payment as unavailable`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(
+            paykitSdkService.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenAnswer { throw PaykitException.Protocol("protocol_error", "Payment Proof cannot be measured") }
+
+        val result = paymentProofRepo()
+            .prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning)
+
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, result.exceptionOrNull())
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `proof snapshot waits for local persistence to finish`() = test {
         val request = paymentRequest(MethodId.Bolt11.rawValue)
         val repo = paymentProofRepo()

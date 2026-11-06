@@ -1725,9 +1725,13 @@ internal fun PaykitPaymentProofKind.longestProofJson(): String = when (this) {
         proofJson(this, "0".repeat(BITCOIN_PROOF_DATA_LENGTH))
 }
 
+/** Log context for measuring a Payment Proof before payment. */
+private const val PROOF_SIZE_TAG = "PaykitProofSize"
+
 /**
  * Fails with [PaykitPaymentRequestError.RequestUnavailable] when the longest proof of [kind] for these values would
- * not fit one Private Application Message, so nothing is paid for a proof that could never be delivered.
+ * not fit one Private Application Message, or cannot be measured, so nothing is paid for a proof that could never be
+ * delivered.
  */
 internal fun PaykitSdkService.requirePaymentProofFits(
     paymentReference: String,
@@ -1738,15 +1742,20 @@ internal fun PaykitSdkService.requirePaymentProofFits(
     conversionQuoteId: String?,
     allowanceId: String?,
 ) {
-    val length = paymentProofEventLength(
-        paymentReference = paymentReference,
-        paymentAppId = paymentAppId,
-        paymentEndpointIdentifier = paymentEndpointIdentifier,
-        proofJson = kind.longestProofJson(),
-        billingPeriod = billingPeriod,
-        conversionQuoteId = conversionQuoteId,
-        allowanceId = allowanceId,
-    )
+    val length = runCatching {
+        paymentProofEventLength(
+            paymentReference = paymentReference,
+            paymentAppId = paymentAppId,
+            paymentEndpointIdentifier = paymentEndpointIdentifier,
+            proofJson = kind.longestProofJson(),
+            billingPeriod = billingPeriod,
+            conversionQuoteId = conversionQuoteId,
+            allowanceId = allowanceId,
+        )
+    }.getOrElse {
+        Logger.warn("Failed to measure a Paykit payment proof", it, context = PROOF_SIZE_TAG)
+        throw PaykitPaymentRequestError.RequestUnavailable
+    }
     if (length > PaykitSdkService.MAX_MESSAGE_BYTES.toUInt()) throw PaykitPaymentRequestError.RequestUnavailable
 }
 

@@ -711,7 +711,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             return PaykitAllowanceAutoPayResult.MANUAL
         }
         // Measured before the acceptance, so a proof that can never be delivered is never accepted on the payee's side.
-        val proofFits = runCatching {
+        val proofFits = runSuspendCatching {
             paykitSdkService.requirePaymentProofFits(
                 paymentReference = request.paymentReference,
                 paymentAppId = payment.appId,
