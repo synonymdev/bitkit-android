@@ -1361,14 +1361,17 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
 
-    /** Receives on Spark when no ready channel has the inbound capacity for [amountSats]. */
+    /**
+     * Receives on Spark when no ready channel has the inbound capacity for [amountSats]. An amountless invoice can be
+     * paid any amount, so it stays on the node only when its inbound covers [AMOUNTLESS_NODE_INBOUND_SATS].
+     */
     private fun shouldReceiveWithSpark(amountSats: ULong?): Boolean {
         if (!sparkRepo.canReceive()) return false
         val readyChannels = _lightningState.value.channels.filter { it.isChannelReady }
         return !ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = readyChannels.isNotEmpty(),
             inboundCapacitySats = readyChannels.calculateRemoteBalance(),
-            invoiceAmountSats = amountSats,
+            invoiceAmountSats = amountSats?.takeIf { it > 0uL } ?: AMOUNTLESS_NODE_INBOUND_SATS,
         )
     }
 
@@ -2334,6 +2337,9 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Whether Spark alone can pay [amountSats], which it does whenever the node cannot. */
+    fun canSendWithSpark(amountSats: ULong): Boolean = sparkRepo.canSend(amountSats)
+
     fun canSend(amountSats: ULong): Boolean {
         val state = _lightningState.value
         if (sparkRepo.canSend(amountSats)) return true
@@ -2803,6 +2809,9 @@ class LightningRepo @Inject constructor(
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val MSATS_PER_SAT = 1_000uL
+
+        /** Inbound capacity the node's ready channels need before an amountless invoice goes to the node, not Spark. */
+        private const val AMOUNTLESS_NODE_INBOUND_SATS = 1_000_000uL
 
         /** Sats a Max Lightning send keeps beyond its estimated routing fee, as routes can price slightly higher. */
         private const val MAX_SEND_FEE_BUFFER_SATS = 2uL

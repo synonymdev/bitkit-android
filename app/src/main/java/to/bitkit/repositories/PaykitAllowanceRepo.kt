@@ -610,11 +610,12 @@ class PaykitAllowanceRepo @Inject constructor(
             it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
         }
         if (covered.isEmpty()) return@withContext false
-        if (!canPayNow()) return@withContext markAboveLimitManual(covered, identity, signature)
+        val payable = payableNow(covered)
+        if (payable.isEmpty()) return@withContext markAboveLimitManual(covered, identity, signature)
         if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
         try {
-            whileUpdating { payCovered(covered, identity, signature) }
+            whileUpdating { payCovered(payable, identity, signature) }
         } finally {
             isProcessingRequests.set(false)
         }
@@ -633,11 +634,15 @@ class PaykitAllowanceRepo @Inject constructor(
 
     /**
      * A node that just started lists its channels before they reconnect, and a payment sent then fails with no route.
-     * Covered requests wait for the next refresh instead of falling back to the manual flow.
+     * Covered requests wait for the next refresh instead of falling back to the manual flow, except those Spark can
+     * pay: Spark pays whenever the node cannot, so it needs neither a running node nor a usable channel.
      */
-    private fun canPayNow(): Boolean {
+    private fun payableNow(covered: List<PaykitPaymentRequest>): List<PaykitPaymentRequest> {
         val state = lightningRepo.lightningState.value
-        return state.nodeLifecycleState.isRunning() && (state.channels.isEmpty() || state.channels.any { it.isUsable })
+        val nodeCanPay = state.nodeLifecycleState.isRunning() &&
+            (state.channels.isEmpty() || state.channels.any { it.isUsable })
+        if (nodeCanPay) return covered
+        return covered.filter { request -> request.allowanceSats()?.let { lightningRepo.canSendWithSpark(it) } == true }
     }
 
     /** While the node cannot pay, a request that fits no allowance must not wait for channels: it asks at once. */
