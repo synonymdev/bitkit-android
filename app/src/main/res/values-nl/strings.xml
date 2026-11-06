@@ -1310,6 +1310,7 @@
     <string name="profile__auth_error_invalid_capabilities">De gevraagde toegang komt niet overeen met deze Bitkit-claim.</string>
     <string name="profile__auth_error_invalid_url">Deze Pubky-autorisatielink is ongeldig.</string>
     <string name="profile__auth_error_missing_claim">Deze autorisatie mist de vereiste Bitkit-claim.</string>
+    <string name="profile__auth_error_signup_code_rejected">De homeserver heeft deze aanmeldcode niet geaccepteerd. Probeer het opnieuw of gebruik een andere aanmeldlink.</string>
     <string name="profile__auth_error_timeout">De autorisatierelay reageerde niet op tijd. Probeer het opnieuw.</string>
     <string name="profile__auth_error_title">Autorisatie mislukt</string>
     <string name="profile__auth_error_unsupported_claim">Deze Bitkit-claim wordt niet ondersteund.</string>

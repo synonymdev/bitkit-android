@@ -1308,6 +1308,7 @@
     <string name="profile__auth_error_invalid_capabilities">El acceso solicitado no coincide con esta reclamación de Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Este enlace de autorización de Pubky no es válido.</string>
     <string name="profile__auth_error_missing_claim">A esta autorización le falta la reclamación de Bitkit necesaria.</string>
+    <string name="profile__auth_error_signup_code_rejected">El servidor principal no ha aceptado este código de registro. Inténtalo de nuevo o usa otro enlace de registro.</string>
     <string name="profile__auth_error_timeout">El relé de autorización no respondió a tiempo. Inténtalo de nuevo.</string>
     <string name="profile__auth_error_title">Error de autorización</string>
     <string name="profile__auth_error_unsupported_claim">Esta reclamación de Bitkit no es compatible.</string>

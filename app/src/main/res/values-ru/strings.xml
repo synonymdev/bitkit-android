@@ -1328,6 +1328,7 @@
     <string name="profile__auth_error_invalid_capabilities">Запрошенный доступ не соответствует этому заявлению Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Эта ссылка авторизации Pubky недействительна.</string>
     <string name="profile__auth_error_missing_claim">В этой авторизации отсутствует обязательное заявление Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Домашний сервер не принял этот код регистрации. Попробуйте снова или используйте другую ссылку для регистрации.</string>
     <string name="profile__auth_error_timeout">Ретранслятор авторизации не ответил вовремя. Пожалуйста, попробуйте снова.</string>
     <string name="profile__auth_error_title">Ошибка Авторизации</string>
     <string name="profile__auth_error_unsupported_claim">Это заявление Bitkit не поддерживается.</string>

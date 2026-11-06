@@ -1294,6 +1294,7 @@
     <string name="profile__auth_error_invalid_capabilities">Η ζητούμενη πρόσβαση δεν αντιστοιχεί σε αυτή τη δήλωση Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Αυτός ο σύνδεσμος εξουσιοδότησης Pubky δεν είναι έγκυρος.</string>
     <string name="profile__auth_error_missing_claim">Σε αυτή την εξουσιοδότηση λείπει η απαιτούμενη δήλωση Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Ο homeserver δεν δέχτηκε αυτόν τον κωδικό εγγραφής. Δοκίμασε ξανά ή χρησιμοποίησε άλλον σύνδεσμο εγγραφής.</string>
     <string name="profile__auth_error_timeout">Ο αναμεταδότης εξουσιοδότησης δεν απάντησε εγκαίρως. Δοκίμασε ξανά.</string>
     <string name="profile__auth_error_title">Η εξουσιοδότηση απέτυχε</string>
     <string name="profile__auth_error_unsupported_claim">Αυτή η δήλωση Bitkit δεν υποστηρίζεται.</string>

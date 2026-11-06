@@ -1287,6 +1287,7 @@
     <string name="profile__auth_error_invalid_capabilities">O acesso pedido não corresponde a esta declaração Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Este link de autorização Pubky é inválido.</string>
     <string name="profile__auth_error_missing_claim">Falta a esta autorização a declaração Bitkit obrigatória.</string>
+    <string name="profile__auth_error_signup_code_rejected">O homeserver não aceitou este código de registo. Tente novamente ou use outra ligação de registo.</string>
     <string name="profile__auth_error_timeout">O relay de autorização não respondeu a tempo. Tente novamente.</string>
     <string name="profile__auth_error_title">Falha na autorização</string>
     <string name="profile__auth_error_unsupported_claim">Esta declaração Bitkit não é suportada.</string>

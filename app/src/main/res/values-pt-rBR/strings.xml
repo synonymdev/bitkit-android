@@ -1313,6 +1313,7 @@
     <string name="profile__auth_error_invalid_capabilities">O acesso solicitado não corresponde a esta declaração da Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Este link de autorização do Pubky é inválido.</string>
     <string name="profile__auth_error_missing_claim">Esta autorização não contém a declaração da Bitkit necessária.</string>
+    <string name="profile__auth_error_signup_code_rejected">O homeserver não aceitou este código de cadastro. Tente novamente ou use outro link de cadastro.</string>
     <string name="profile__auth_error_timeout">O relay de autorização não respondeu a tempo. Tente novamente.</string>
     <string name="profile__auth_error_title">Falha na Autorização</string>
     <string name="profile__auth_error_unsupported_claim">Esta declaração da Bitkit não é suportada.</string>

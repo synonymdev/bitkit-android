@@ -1310,6 +1310,7 @@
     <string name="profile__auth_error_invalid_capabilities">Der angeforderte Zugriff passt nicht zu diesem Bitkit-Claim.</string>
     <string name="profile__auth_error_invalid_url">Dieser Pubky-Autorisierungslink ist ungültig.</string>
     <string name="profile__auth_error_missing_claim">Dieser Autorisierung fehlt der erforderliche Bitkit-Claim.</string>
+    <string name="profile__auth_error_signup_code_rejected">Der Homeserver hat diesen Registrierungscode nicht akzeptiert. Versuche es erneut oder nutze einen anderen Registrierungslink.</string>
     <string name="profile__auth_error_timeout">Das Autorisierungs-Relay hat nicht rechtzeitig geantwortet. Bitte versuche es erneut.</string>
     <string name="profile__auth_error_title">Autorisierung fehlgeschlagen</string>
     <string name="profile__auth_error_unsupported_claim">Dieser Bitkit-Claim wird nicht unterstützt.</string>

@@ -1308,6 +1308,7 @@
     <string name="profile__auth_error_invalid_capabilities">L\'accès demandé ne correspond pas à cette déclaration Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Ce lien d\'autorisation Pubky n\'est pas valide.</string>
     <string name="profile__auth_error_missing_claim">Il manque à cette autorisation la déclaration Bitkit requise.</string>
+    <string name="profile__auth_error_signup_code_rejected">Le serveur domestique n\'a pas accepté ce code d\'inscription. Réessayez ou utilisez un autre lien d\'inscription.</string>
     <string name="profile__auth_error_timeout">Le relais d\'autorisation n\'a pas répondu à temps. Veuillez réessayer.</string>
     <string name="profile__auth_error_title">Échec de l\'autorisation</string>
     <string name="profile__auth_error_unsupported_claim">Cette déclaration Bitkit n\'est pas prise en charge.</string>

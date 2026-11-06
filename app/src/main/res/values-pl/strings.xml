@@ -1311,6 +1311,7 @@
     <string name="profile__auth_error_invalid_capabilities">Żądany dostęp nie odpowiada temu oświadczeniu Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Ten link autoryzacji Pubky jest nieprawidłowy.</string>
     <string name="profile__auth_error_missing_claim">W tej autoryzacji brakuje wymaganego oświadczenia Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Serwer domowy nie zaakceptował tego kodu rejestracji. Spróbuj ponownie lub użyj innego linku rejestracyjnego.</string>
     <string name="profile__auth_error_timeout">Przekaźnik autoryzacji nie odpowiedział na czas. Spróbuj ponownie.</string>
     <string name="profile__auth_error_title">Autoryzacja nie powiodła się</string>
     <string name="profile__auth_error_unsupported_claim">To oświadczenie Bitkit nie jest obsługiwane.</string>

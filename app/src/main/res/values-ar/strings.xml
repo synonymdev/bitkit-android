@@ -1288,6 +1288,7 @@
     <string name="profile__auth_error_invalid_capabilities">الوصول المطلوب لا يطابق مطالبة Bitkit هذه.</string>
     <string name="profile__auth_error_invalid_url">رابط تفويض Pubky هذا غير صالح.</string>
     <string name="profile__auth_error_missing_claim">ينقص هذا التفويض مطالبة Bitkit المطلوبة.</string>
+    <string name="profile__auth_error_signup_code_rejected">لم يقبل الخادم الرئيسي رمز التسجيل هذا. حاول مرة أخرى أو استخدم رابط تسجيل آخر.</string>
     <string name="profile__auth_error_timeout">لم يستجب مُرحّل التفويض في الوقت المحدد. يرجى المحاولة مرة أخرى.</string>
     <string name="profile__auth_error_title">فشل التفويض</string>
     <string name="profile__auth_error_unsupported_claim">مطالبة Bitkit هذه غير مدعومة.</string>
