@@ -1306,6 +1306,45 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `amountless invoice goes to spark when the channel inbound is small`() = test {
+        startNodeForTesting()
+        readyChannelWithInbound(50_000uL)
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+        whenever(sparkRepo.createInvoice(null, "test", 86_400u)).thenReturn(Result.success("spark"))
+
+        assertEquals("spark", sut.createInvoice(description = "test").getOrThrow())
+        verify(lightningService, never()).receive(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `amountless invoice stays on the node when the channel inbound is large`() = test {
+        startNodeForTesting()
+        readyChannelWithInbound(1_000_000uL)
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+        whenever(lightningService.receive(null, "test", 86_400u)).thenReturn("node")
+
+        assertEquals("node", sut.createInvoice(description = "test").getOrThrow())
+        verify(sparkRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `amount invoice stays on the node when the channel inbound covers it`() = test {
+        startNodeForTesting()
+        readyChannelWithInbound(50_000uL)
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+        whenever(lightningService.receive(20_000uL, "test", 86_400u)).thenReturn("node")
+
+        assertEquals("node", sut.createInvoice(20_000uL, "test").getOrThrow())
+        verify(sparkRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    private fun readyChannelWithInbound(sats: ULong) {
+        val channel = createChannelDetails().copy(isChannelReady = true, inboundCapacityMsat = sats * 1_000uL)
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        sut.syncState()
+    }
+
+    @Test
     fun `fetchLnurlInvoice delegates to core and decodes after success`() = test {
         val data = lnurlPayData()
         val invoice = lightningInvoice("lnbc1")
