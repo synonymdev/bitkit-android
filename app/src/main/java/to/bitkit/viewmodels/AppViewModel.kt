@@ -132,6 +132,7 @@ import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.FeeRate
 import to.bitkit.models.HwFundingSignedTx
+import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -1014,7 +1015,10 @@ class AppViewModel @Inject constructor(
         isPaymentRequestIdentityActivating = true
         val requestRefresh = try {
             paykitPaymentRequestRepo.activate(state.publicKey)
-            if (state.areAllowancesEnabled) paykitAllowanceRepo.activate(state.publicKey)
+            if (!isStillCurrent()) return
+            if (state.areAllowancesEnabled && areAllowancesEnabled()) {
+                paykitAllowanceRepo.activate(state.publicKey) { areAllowancesEnabled() && isStillCurrent() }
+            }
             // Allowances may have turned off while this activated, before the activation took effect.
             if (!state.areAllowancesEnabled || !areAllowancesEnabled()) paykitAllowanceRepo.pause(state.publicKey)
             if (!pubkyRepo.isCurrent(signIn)) return
@@ -4215,7 +4219,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountChange(amount: ULong) {
-        if (_sendUiState.value.paykitUsesUsdt || _sendUiState.value.fixedLightningAmount != null) return
+        if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -4270,7 +4274,10 @@ class AppViewModel @Inject constructor(
 
                 else -> false
             }
-            val wasHardwareMax = previous.hardwareWalletId != null &&
+            // A scanned amount or a payment request's amount is the payee's, so it never follows the
+            // send-max amount, even when it equals what the wallet can spend.
+            val wasHardwareMax = activeIncomingPaymentRequest() == null &&
+                previous.hardwareWalletId != null && previous.fixedOnchainAmount == null &&
                 previous.amount > 0uL &&
                 previous.amount == previous.hardwareAvailableSats
             val hardwareAvailableSats = previous.hardwareWalletId?.let { walletId ->
@@ -4426,6 +4433,9 @@ class AppViewModel @Inject constructor(
             fixedContactLightningAmount(current)?.let {
                 return PaykitAmount(PaykitAsset.BTC, it)
             }
+        } else if (source != SendFundingSource.Usdt) {
+            // An amount typed on Spending must not replace the payee's on-chain amount.
+            current.fixedOnchainAmount?.let { return PaykitAmount(PaykitAsset.BTC, it) }
         }
         val input = activeIncomingPaymentRequest()?.amount ?: if (current.paykitUsesUsdt) {
             runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, current.paykitAmount) }.getOrNull()
@@ -4512,8 +4522,8 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): Boolean {
         val state = _sendUiState.value
-        for (wallet in hwWalletRepo.wallets.value) {
-            val available = hardwareMaxSpendable(wallet.id, state.address, state.speed, walletGeneration)
+        for (wallet in hwWalletRepo.wallets.value.sortedByDescending { it.fundingBalanceSats }) {
+            val available = hardwareAvailableForPayment(wallet, amount, state, walletGeneration)
             if (amount > available) continue
             _sendUiState.update {
                 it.copy(
@@ -4526,11 +4536,37 @@ class AppViewModel @Inject constructor(
                     confirmedWarnings = persistentListOf(),
                 )
             }
+            // The caller refreshes the confirm fee once it navigates; refreshing here too would
+            // start a refresh that the caller's then cancels.
             updateCanSwitchWallet()
-            refreshOnchainSendIfNeeded(walletGeneration)
             return true
         }
         return false
+    }
+
+    /**
+     * What [wallet] can spend toward [amount]. Composing the exact payment proves it can pay and
+     * leaves its fee in [HwWalletRepo] for the confirm screen, so the request is composed once.
+     * When that fails, the max-spendable compose says how far short the wallet is.
+     */
+    private suspend fun hardwareAvailableForPayment(
+        wallet: HwWallet,
+        amount: ULong,
+        state: SendUiState,
+        walletGeneration: Long?,
+    ): ULong {
+        val satsPerVByte = state.feeRates?.getSatsPerVByteFor(state.speed) ?: 0u
+        if (wallet.fundingBalanceSats >= amount && satsPerVByte > 0u) {
+            requireCurrentPaymentPreparation(walletGeneration)
+            val fee = hwWalletRepo.estimateFundingMiningFee(
+                walletId = wallet.id,
+                address = state.address,
+                sats = amount,
+                satsPerVByte = satsPerVByte.toULong(),
+            ).also { requireCurrentPaymentPreparation(walletGeneration) }.getOrNull()
+            if (fee != null) return wallet.fundingBalanceSats.safe() - fee.safe()
+        }
+        return hardwareMaxSpendable(wallet.id, state.address, state.speed, walletGeneration)
     }
 
     fun switchToLightning() {
@@ -5320,6 +5356,7 @@ class AppViewModel @Inject constructor(
                 },
                 hardwareWalletId = hardwareWalletId,
                 hardwareAvailableSats = selectedMaxSendOnchain.takeIf { hardwareWalletId != null } ?: 0uL,
+                fixedOnchainAmount = invoice.amountSatoshis.takeIf { it > 0uL && incomingPaymentRequest == null },
             )
         }
         updateCanSwitchWallet()
@@ -5453,6 +5490,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (amount > 0u && routeOnchainInvoiceAmount(amount, fromMainScanner, walletGeneration)) return
+
         Logger.info(
             when (amount > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
@@ -5462,6 +5501,55 @@ class AppViewModel @Inject constructor(
         )
 
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount, walletGeneration)
+    }
+
+    /**
+     * The payee set the amount, so it opens Confirm and never Amount. Returns false only when the
+     * request is paid another way. Manual coin selection opens the picker from the swipe.
+     */
+    private suspend fun routeOnchainInvoiceAmount(
+        amount: ULong,
+        fromMainScanner: Boolean,
+        walletGeneration: Long?,
+    ): Boolean {
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN || hasActiveContactPaymentContext()) return false
+        if (amount <= Defaults.dustLimit.toULong()) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
+                description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
+                    .replace("{amount}", formatMoneyValue(Defaults.dustLimit.toULong().safe() + 1uL.safe())),
+                testTag = "AmountTooLowToast",
+            )
+            return true
+        }
+        // Savings cannot cover it but a hardware wallet can, so pay from that instead of opening Amount.
+        // The balance check above counts raw hardware balances, so no wallet may cover it once fees are taken.
+        if (
+            !validateAmount(amount) &&
+            _sendUiState.value.hardwareWalletId == null &&
+            !selectHardwareFundingSourceForAmount(amount, walletGeneration)
+        ) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+                description = context.getString(R.string.other__pay_insufficient_savings_description),
+                testTag = "InsufficientSavingsToast",
+            )
+            clearActiveContactPaymentContext()
+            return true
+        }
+        if (!validateAmount(amount)) return false
+        requireCurrentPaymentPreparation(walletGeneration)
+        // A failed estimate has shown its error; the user stays where the scan started.
+        if (!prepareHardwareSendFee()) return true
+        requireCurrentPaymentPreparation(walletGeneration)
+
+        Logger.info("Found payable amount in invoice, proceeding to confirm", context = TAG)
+        _sendUiState.update { it.copy(isAmountInputValid = true) }
+        navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm, walletGeneration)
+        refreshOnchainSendIfNeeded(walletGeneration)
+        return true
     }
 
     private suspend fun hardwareMaxSpendable(
@@ -6686,7 +6774,7 @@ class AppViewModel @Inject constructor(
                 Logger.info("Lightning payment pending", context = TAG)
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
-                refreshIncomingPaykitPaymentRequests()
+                if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
@@ -6722,11 +6810,8 @@ class AppViewModel @Inject constructor(
         isPaymentRequest: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
+        else if !isPaymentRequest -> true
         is LightningPaymentFailedError -> {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
-            true
-        }
-        else if !isPaymentRequest -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }
@@ -7212,7 +7297,9 @@ class AppViewModel @Inject constructor(
             }
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
-            refreshOnchainFeeUi(walletGeneration)
+            // Each hardware fee is a compose of several seconds on the single core queue; signing
+            // would wait behind the other speeds, so they are estimated when the picker opens.
+            refreshOnchainFeeUi(walletGeneration, selectedSpeedOnly = currentState.hardwareWalletId != null)
         }
     }
 
@@ -7253,14 +7340,37 @@ class AppViewModel @Inject constructor(
         return job
     }
 
+    /**
+     * With [selectedSpeedOnly], only the selected speed's fee is estimated and `estimates` is left
+     * empty, so opening the speed picker estimates the rest ([SendEvent.SpeedAndFee]).
+     */
     private suspend fun refreshOnchainFeeUi(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        selectedSpeedOnly: Boolean = false,
     ) = withContext(bgDispatcher) {
         requireCurrentPaymentPreparation(walletGeneration)
         val generation = sendStateGeneration
         val currentState = _sendUiState.value
         if (currentState.isRetainedHardwarePayment) return@withContext
         updateOnchainFeeUi { it.copy(isLoading = true) }
+
+        if (selectedSpeedOnly) {
+            val fee = if (currentState.feeRates?.getSatsPerVByteFor(currentState.speed) != 0u) {
+                getFeeEstimate(currentState.speed, walletGeneration)
+            } else {
+                0
+            }
+            requireCurrentPaymentPreparation(walletGeneration)
+            if (generation != sendStateGeneration) return@withContext
+            updateOnchainFeeUi {
+                OnchainFeeUi(
+                    rate = FeeRate.fromSpeed(currentState.speed),
+                    sats = fee.takeIf { sats -> sats > 0 },
+                    isLoading = false,
+                )
+            }
+            return@withContext
+        }
 
         val speeds = listOf(
             TransactionSpeed.Fast,
@@ -7912,7 +8022,6 @@ class AppViewModel @Inject constructor(
 
     override fun onCleared() {
         isSubmittingPaymentRequest = false
-        super.onCleared()
     }
 
     fun beginHardwarePaymentSubmission(): () -> Unit = beginPaymentSubmission()
@@ -9000,6 +9109,8 @@ data class SendUiState(
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
     val requiresAmountReview: Boolean = false,
+    /** The amount of a scanned on-chain request; the payee set it, so it cannot be edited. */
+    val fixedOnchainAmount: ULong? = null,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
@@ -9023,7 +9134,8 @@ data class SendUiState(
         get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
 
     val isAmountEditable: Boolean
-        get() = !isPaymentRequest && fixedLightningAmount == null
+        get() = !isPaymentRequest && fixedLightningAmount == null &&
+            !(payMethod == SendMethod.ONCHAIN && fixedOnchainAmount != null)
 
     val shouldAutomaticallyPay: Boolean
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&

@@ -152,7 +152,6 @@ class ContactDetailViewModel @Inject constructor(
 
     override fun onCleared() {
         paymentScanJob?.cancel()
-        super.onCleared()
     }
 
     private fun cancelPendingPayment() {
@@ -247,9 +246,9 @@ class ContactDetailViewModel @Inject constructor(
                         showPayError(R.string.slashtags__error_pay_empty_msg)
                     PublicPaykitPaymentResult.NotOpened ->
                         showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                    PublicPaykitPaymentResult.PrivateLinkPending,
-                    PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
-                    ->
+                    PublicPaykitPaymentResult.PrivateLinkPending ->
+                        showPayError(R.string.contacts__pay_private_link_pending)
+                    PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
                         showPayError(R.string.slashtags__error_pay_waiting_msg)
                 }
             }

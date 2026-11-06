@@ -1195,7 +1195,7 @@
     <string name="contacts__add_error_fetch">No se pudo obtener la información del contacto. Comprueba la clave pública e inténtalo de nuevo.</string>
     <string name="contacts__add_error_invalid_key">Formato de clave pubky no válido. Compruébalo e inténtalo de nuevo.</string>
     <string name="contacts__add_error_self">No puedes añadir tu propio pubky como contacto.</string>
-    <string name="contacts__add_privacy_notice">Ten en cuenta que tú y %1$s debéis añadiros mutuamente como contactos para pagaros de forma privada. De lo contrario, el pago será visible públicamente.</string>
+    <string name="contacts__add_privacy_notice">Ten en cuenta que tú y %1$s debéis añadiros mutuamente como contactos antes de poder pagaros de forma privada. Si pagas sin guardar, el pago será visible públicamente.</string>
     <string name="contacts__add_pay">Pagar</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Pegar un pubky</string>
@@ -1225,6 +1225,7 @@
     <string name="contacts__intro_description">Paga a tus contactos con un solo toque. Envía pagos directamente, a cualquiera, en cualquier lugar.</string>
     <string name="contacts__my_profile">MI PERFIL</string>
     <string name="contacts__nav_title">Contactos</string>
+    <string name="contacts__pay_private_link_pending">Bitkit todavía está configurando una conexión privada con este contacto. Asegúrate de que también te haya añadido como contacto o pídele que te envíe una solicitud de pago.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Pegar QR o enlace</string>
     <string name="contacts__scanner_status">ESCANEANDO QR Y NFC</string>
@@ -1537,6 +1538,7 @@
     <string name="subscriptions__allowances_empty_description">Puedes establecer límites de gasto para pagar automáticamente las solicitudes de pago de contactos de confianza.</string>
     <string name="subscriptions__allowances_empty_headline">Configura\n&lt;accent&gt;asignaciones&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Tus registros de asignaciones son más antiguos que otros que este monedero ya ha usado. Las solicitudes pedirán tu aprobación hasta que reanudes.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Este monedero se ha restaurado desde una copia de seguridad. Las solicitudes pedirán tu aprobación hasta que reanudes.</string>
     <string name="subscriptions__allowances_paused_resume">Reanudar</string>
     <string name="subscriptions__allowances_paused_title">Pagos automáticos en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancelar suscripción</string>

@@ -1199,7 +1199,7 @@
     <string name="contacts__add_error_fetch">Kontaktinformationen konnten nicht abgerufen werden. Bitte überprüfe den öffentlichen Schlüssel und versuche es erneut.</string>
     <string name="contacts__add_error_invalid_key">Ungültiges Format des pubky-Schlüssels. Bitte überprüfe ihn und versuche es erneut.</string>
     <string name="contacts__add_error_self">Du kannst deinen eigenen pubky nicht als Kontakt hinzufügen.</string>
-    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, um euch privat bezahlen zu können. Andernfalls ist die Zahlung öffentlich sichtbar.</string>
+    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, bevor ihr euch privat bezahlen könnt. Wenn du ohne Speichern bezahlst, ist die Zahlung öffentlich sichtbar.</string>
     <string name="contacts__add_pay">Bezahlen</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">pubky einfügen</string>
@@ -1229,6 +1229,7 @@
     <string name="contacts__intro_description">Bezahle deine Kontakte mit nur einem Tippen. Sende Zahlungen direkt, an jeden, überall.</string>
     <string name="contacts__my_profile">MEIN PROFIL</string>
     <string name="contacts__nav_title">Kontakte</string>
+    <string name="contacts__pay_private_link_pending">Bitkit richtet noch eine private Verbindung mit diesem Kontakt ein. Stelle sicher, dass der Kontakt dich ebenfalls hinzugefügt hat, oder bitte ihn, dir eine Zahlungsanforderung zu senden.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">QR-Code oder Link einfügen</string>
     <string name="contacts__scanner_status">SCANNE QR &amp; NFC</string>
@@ -1540,6 +1541,7 @@
     <string name="subscriptions__allowances_empty_description">Lege Ausgabenlimits fest, um Zahlungsanforderungen von vertrauenswürdigen Kontakten automatisch zu erfüllen.</string>
     <string name="subscriptions__allowances_empty_headline">Richte deine\n&lt;accent&gt;Budgets&lt;/accent&gt; ein</string>
     <string name="subscriptions__allowances_paused_description">Deine Budgetdaten sind älter als Daten, die diese Wallet bereits verwendet hat. Anfragen warten auf deine Bestätigung, bis du fortsetzt.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Diese Wallet wurde aus einem Backup wiederhergestellt. Anfragen warten auf deine Bestätigung, bis du fortsetzt.</string>
     <string name="subscriptions__allowances_paused_resume">Fortsetzen</string>
     <string name="subscriptions__allowances_paused_title">Automatische Zahlungen pausiert</string>
     <string name="subscriptions__cancel_subscription">Abonnement kündigen</string>

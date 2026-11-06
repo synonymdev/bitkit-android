@@ -1625,9 +1625,14 @@ private fun NavGraphBuilder.contacts(
                         popUpTo(Routes.AddContact(publicKey)) { inclusive = true }
                     }
                 },
-                onPayContact = { paymentRequest, publicKey, endpoints ->
+                onPayContact = { paymentRequest, publicKey, privatePaymentContext, endpoints ->
                     navController.popBackStack()
-                    appViewModel.openContactPayment(paymentRequest, publicKey, endpoints = endpoints)
+                    appViewModel.openContactPayment(
+                        paymentRequest,
+                        publicKey,
+                        privatePaymentContext,
+                        endpoints = endpoints,
+                    )
                 },
             )
         }

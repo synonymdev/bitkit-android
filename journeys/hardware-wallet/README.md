@@ -79,6 +79,7 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `transfer-to-spending.xml` | Happy-path transfer into Spark plus one scoped hardware Transfer activity |
 | `transfer-to-spending-node-warmup.xml` | Transfer started during app/node warm-up; verifies loading recovers into the sign screen |
 | `send-onchain.xml` | Normal Send flow funded by Trezor: source selection, guarded preparation, device signing, broadcast, success, and activity |
+| `scan-onchain-amount-over-spendable.xml` | Scanned on-chain amount the Trezor balance covers but not after fees: Insufficient Savings toast instead of a locked Amount screen |
 | `receive-onchain.xml` | Trezor Receive tab: current address and QR display plus exact on-device address verification |
 | `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |
 | `passphrase-duplicate.xml` | Re-entering a watched passphrase reports "already added" and adds no tile |

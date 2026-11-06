@@ -1168,7 +1168,7 @@
     <string name="contacts__add_error_fetch">تعذر جلب معلومات جهة الاتصال. يرجى التحقق من المفتاح العام والمحاولة مرة أخرى.</string>
     <string name="contacts__add_error_invalid_key">تنسيق مفتاح pubky غير صالح. يرجى التحقق والمحاولة مرة أخرى.</string>
     <string name="contacts__add_error_self">لا يمكنك إضافة pubky الخاص بك كجهة اتصال.</string>
-    <string name="contacts__add_privacy_notice">يرجى ملاحظة أنه يجب عليك وعلى %1$s إضافة بعضكما كجهتي اتصال للدفع لبعضكما بشكل خاص. وإلا ستكون الدفعة مرئية للعامة.</string>
+    <string name="contacts__add_privacy_notice">يرجى ملاحظة أنه يجب عليك وعلى %1$s إضافة بعضكما كجهتي اتصال قبل أن تتمكنا من الدفع لبعضكما بشكل خاص. إذا دفعت دون الحفظ، فستكون الدفعة مرئية للعامة.</string>
     <string name="contacts__add_pay">دفع</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">الصق pubky</string>
@@ -1202,6 +1202,7 @@
     <string name="contacts__intro_title">جهات اتصال\n&lt;accent&gt;ديناميكية&lt;/accent&gt;</string>
     <string name="contacts__my_profile">ملفي الشخصي</string>
     <string name="contacts__nav_title">جهات الاتصال</string>
+    <string name="contacts__pay_private_link_pending">لا يزال Bitkit يُعدّ اتصالًا خاصًا مع جهة الاتصال هذه. تأكد من أنها أضافتك أيضًا كجهة اتصال، أو اطلب منها أن ترسل إليك طلب دفع.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">لصق رمز QR أو رابط</string>
     <string name="contacts__scanner_status">جارٍ مسح QR و NFC</string>
@@ -1527,6 +1528,7 @@
     <string name="subscriptions__allowances_empty_description">يمكنك تعيين حدود للإنفاق لتلبية طلبات الدفع من جهات الاتصال الموثوقة تلقائيًا.</string>
     <string name="subscriptions__allowances_empty_headline">أعدّ\n&lt;accent&gt;الميزانيات&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">سجلات الميزانيات لديك أقدم من سجلات استخدمتها هذه المحفظة من قبل. ستطلب الطلبات موافقتك حتى تستأنف.</string>
+    <string name="subscriptions__allowances_paused_restore_description">تمت استعادة هذه المحفظة من نسخة احتياطية. ستطلب الطلبات موافقتك حتى تستأنف.</string>
     <string name="subscriptions__allowances_paused_resume">استئناف</string>
     <string name="subscriptions__allowances_paused_title">تم إيقاف الدفعات التلقائية مؤقتًا</string>
     <string name="subscriptions__cancel_subscription">إلغاء الاشتراك</string>
