@@ -289,6 +289,17 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
 /** Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. */
 @Composable
 private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?) {
+    // Sweeps that already confirmed come first; funding that arrived after them has a note of its own below.
+    record.sweptLeftover.forEach {
+        VerticalSpacer(16.dp)
+        SparkExitTxNote(
+            text = stringResource(R.string.lightning__spark_exit__leftover_swept)
+                .replace("{amount}", sparkExitAmountText(it.valueSats)),
+            txid = it.txid,
+            txidRes = R.string.lightning__spark_exit__leftover_txid,
+            testTag = "SparkExitLeftoverSweptEarlier",
+        )
+    }
     if (record.leftover.isEmpty()) return
     val total = record.leftover.fold(0uL) { sum, leftover -> sum + leftover.valueSats }
     val sweep = record.leftoverSweep

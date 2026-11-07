@@ -126,6 +126,8 @@ data class SparkExitRecord(
     val isFailedLeavesReleased: Boolean = false,
     /** The confirmed sweep of a replaced generation, so Done still names it after a retry of leaves replaced it. */
     val landedSweepTxid: String? = null,
+    /** Leftover sweeps that confirmed while more funding was still at the address, earliest first. */
+    val sweptLeftover: List<SweptLeftover> = emptyList(),
     /** Steps confirmed when the rebuild from the chain was adopted; one more clears [isRebuiltFromChain]. */
     val rebuiltFromChainConfirmedCount: Int? = null,
     /** The tip of the first funding-wait tick that looked for [fundingPaymentTxid]. */
@@ -216,6 +218,8 @@ data class SparkExitRecord(
 
     data class LostLeaf(val leafId: String, val valueSats: ULong)
 
+    data class SweptLeftover(val txid: String, val valueSats: ULong)
+
     data class LeftBehindLeaf(val leafId: String, val valueSats: ULong, val reason: String)
 
     /** A cooperative leaf the operators moved on-chain; [valueSats] is 0 until a retry's quote names it. */
@@ -286,6 +290,9 @@ data class SparkExitRecord(
     ) {
         /** Not built, waiting for fees to drop. A sweep with no [txid] and no wait is dust kept, as before waits. */
         val isWaitingForFees: Boolean get() = txid == null && waitingSince != null && !isDustKept
+
+        /** This version, once a node accepted it, and the earlier ones it replaced: any of them may still confirm. */
+        val sentTxids: List<String> get() = listOfNotNull(txid.takeIf { isAccepted }) + replacedTxids
 
         /** A refusal for its fee is not final: the sweep is built again at the network's current rate. */
         val isFeeRejection: Boolean get() = rejection?.contains("fee", ignoreCase = true) == true
@@ -682,6 +689,7 @@ object SparkExitJson {
                 o.objectOrNull("earlierReceivedSats")?.mapValues { it.value.jsonPrimitive.content.toULong() }
             }.orEmpty(),
             landedSweepTxid = read { o.stringOrNull("landedSweepTxid") },
+            sweptLeftover = read { sweptLeftoverFromJson(o) }.orEmpty(),
         )
     }
 
@@ -862,6 +870,21 @@ object SparkExitJson {
         r.failedLeafRetriedAt?.let { put("failedLeafRetriedAt", it.toLong()) }
         if (r.isFailedLeavesReleased) put("isFailedLeavesReleased", true)
         r.landedSweepTxid?.let { put("landedSweepTxid", it) }
+        if (r.sweptLeftover.isNotEmpty()) {
+            put(
+                "sweptLeftover",
+                buildJsonArray {
+                    r.sweptLeftover.forEach {
+                        add(
+                            buildJsonObject {
+                                put("txid", it.txid)
+                                put("valueSats", it.valueSats.toLong())
+                            },
+                        )
+                    }
+                },
+            )
+        }
         r.rebuiltFromChainConfirmedCount?.let { put("rebuiltFromChainConfirmedCount", it) }
         r.fundingPaymentSeenAtHeight?.let { put("fundingPaymentSeenAtHeight", it.toLong()) }
         r.fundingPaymentMissingSince?.let { put("fundingPaymentMissingSince", it.toLong()) }
@@ -954,6 +977,7 @@ object SparkExitJson {
         failedLeafRetriedAt = o.ulongOrNull("failedLeafRetriedAt")?.toUInt(),
         isFailedLeavesReleased = o.booleanOrNull("isFailedLeavesReleased") ?: false,
         landedSweepTxid = o.stringOrNull("landedSweepTxid"),
+        sweptLeftover = sweptLeftoverFromJson(o),
         rebuiltFromChainConfirmedCount = o.intOrNull("rebuiltFromChainConfirmedCount"),
         fundingPaymentSeenAtHeight = o.ulongOrNull("fundingPaymentSeenAtHeight")?.toUInt(),
         fundingPaymentMissingSince = o.ulongOrNull("fundingPaymentMissingSince")?.toUInt(),
@@ -962,6 +986,11 @@ object SparkExitJson {
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),
     )
+
+    private fun sweptLeftoverFromJson(o: JsonObject) = o.arrayOrEmpty("sweptLeftover").map {
+        val l = it.jsonObject
+        SparkExitRecord.SweptLeftover(l.string("txid"), l.ulong("valueSats"))
+    }
 
     private fun leftoverFromJson(l: JsonObject) =
         SparkExitRecord.Leftover(l.string("txid"), l.ulong("vout").toUInt(), l.ulong("valueSats"))

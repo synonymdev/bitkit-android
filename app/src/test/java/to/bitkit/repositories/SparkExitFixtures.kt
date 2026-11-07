@@ -198,6 +198,9 @@ class FakeSparkExitRecovering : SparkExitRecovering {
     val recoverRequests = mutableListOf<RecoverFundsRequest>()
     val checkedRecoveries = mutableListOf<RecoverFundsResponse>()
 
+    /** Errors the next recovers throw, in order, before [recoverError]. */
+    val recoverErrors = ArrayDeque<Throwable>()
+
     /** Errors the next prepares throw, in order, before [preparedResponse] is returned. */
     val prepareErrors = ArrayDeque<Throwable>()
 
@@ -212,6 +215,7 @@ class FakeSparkExitRecovering : SparkExitRecovering {
 
     override suspend fun recover(request: RecoverFundsRequest, signer: CpfpSigner?): RecoverFundsResponse {
         recoverRequests += request
+        recoverErrors.removeFirstOrNull()?.let { throw it }
         recoverError?.let { throw it }
         return builds.removeFirst()
     }

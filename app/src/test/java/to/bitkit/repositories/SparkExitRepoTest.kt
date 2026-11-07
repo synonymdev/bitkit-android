@@ -184,17 +184,20 @@ class SparkExitRepoTest : BaseUnitTest() {
 
     /** Spark's regtest mempool, where nothing is confirmed yet and every single transaction is accepted. */
     private fun regtestMempool(posts: MutableList<String>, refusal: String? = null) = HttpClient(
-        MockEngine { request ->
-            val url = request.url.toString()
-            when {
-                request.method == HttpMethod.Post && url.endsWith("/api/tx") -> {
-                    posts += String(request.body.toByteArray())
-                    if (refusal != null) return@MockEngine respond(refusal, HttpStatusCode.BadRequest)
-                    respond(String(request.body.toByteArray()).removePrefix("02"))
+        MockEngine.create {
+            dispatcher = testDispatcher
+            addHandler { request ->
+                val url = request.url.toString()
+                when {
+                    request.method == HttpMethod.Post && url.endsWith("/api/tx") -> {
+                        posts += String(request.body.toByteArray())
+                        if (refusal != null) return@addHandler respond(refusal, HttpStatusCode.BadRequest)
+                        respond(String(request.body.toByteArray()).removePrefix("02"))
+                    }
+                    url.endsWith("/blocks/tip/height") -> respond("1000")
+                    url.endsWith("/status") -> respond("""{"confirmed":false}""")
+                    else -> throw IOException("unreachable '$url'")
                 }
-                url.endsWith("/blocks/tip/height") -> respond("1000")
-                url.endsWith("/status") -> respond("""{"confirmed":false}""")
-                else -> throw IOException("unreachable '$url'")
             }
         },
     ) { defaultRequest { contentType(ContentType.Application.Json) } }
@@ -243,6 +246,51 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertEquals(listOf("02n1"), posts)
         assertEquals(1, restarted.checkedRecoveries.size)
+    }
+
+    @Test
+    fun `a background run gives up on a hanging connect at the timeout and leaves it running`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        store.save(SparkExitFixtures.record(Phase.Running).adopt(recovery, 0L))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val spark = coldSpark(FakeSparkExitRecovering(), connects = false)
+        val gate = CompletableDeferred<Unit>()
+        var isCancelled = false
+        whenever(sparkRepo.start(any())).doSuspendableAnswer {
+            runCatching { gate.await() }.onFailure { isCancelled = true }.getOrThrow()
+            Result.success(Unit)
+        }
+
+        createSut(spark, regtestMempool(mutableListOf())).runInBackground().getOrThrow()
+
+        assertFalse(gate.isCompleted)
+        assertFalse(isCancelled)
+        gate.complete(Unit)
+    }
+
+    @Test
+    fun `a tick that fails after saving a step keeps the saved record`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val running = runningRecord()
+        store.save(running)
+        val sdk = FakeSparkExitRecovering().apply {
+            checks += CheckRecoverFundsResponse(
+                running.recovery!!,
+                RecoveryVerdict.Redo(RecoveryRedoReason.ON_CHAIN_STATE_DIVERGED),
+            )
+            // The rebuild is saved, then its prepare fails.
+            prepareErrors += SdkException.SparkException("connection reset")
+        }
+        val sut = quotedSut(sdk)
+        sut.load().getOrThrow()
+
+        assertTrue(sut.tick().isFailure)
+
+        assertTrue(assertNotNull(sut.state.value.record).isRebuilding)
+        assertEquals(store.load(), sut.state.value.record)
     }
 
     @Test
@@ -338,14 +386,17 @@ class SparkExitRepoTest : BaseUnitTest() {
         whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
         val utxo = """[{"txid":"$funded","vout":0,"value":9035,"status":{"confirmed":true,"block_height":900}}]"""
         val mempool = HttpClient(
-            MockEngine { request ->
-                val url = request.url.toString()
-                when {
-                    request.method == HttpMethod.Post && url.endsWith("/api/tx") -> respond("n1")
-                    url.endsWith("/address/${SparkExitFixtures.FUNDING_ADDRESS}/utxo") -> respond(utxo)
-                    url.endsWith("/blocks/tip/height") -> respond("1000")
-                    url.endsWith("/status") -> respond("""{"confirmed":false}""")
-                    else -> throw IOException("unreachable '$url'")
+            MockEngine.create {
+                dispatcher = testDispatcher
+                addHandler { request ->
+                    val url = request.url.toString()
+                    when {
+                        request.method == HttpMethod.Post && url.endsWith("/api/tx") -> respond("n1")
+                        url.endsWith("/address/${SparkExitFixtures.FUNDING_ADDRESS}/utxo") -> respond(utxo)
+                        url.endsWith("/blocks/tip/height") -> respond("1000")
+                        url.endsWith("/status") -> respond("""{"confirmed":false}""")
+                        else -> throw IOException("unreachable '$url'")
+                    }
                 }
             },
         ) { defaultRequest { contentType(ContentType.Application.Json) } }
@@ -569,6 +620,60 @@ class SparkExitRepoTest : BaseUnitTest() {
         verify(sparkRepo).setExiting(false, false)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a savings payment with an unknown result counts as paid and keeps the exit`() = test {
+        stubFunding { Result.success(OnchainSendOutcome.Unknown("maybe")) }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+
+        sut.start(fundFromSavings = true).getOrThrow()
+        runCurrent()
+
+        val record = assertNotNull(sut.state.value.record)
+        assertEquals("maybe", record.fundingPaymentTxid)
+        assertTrue(record.isAwaitingOwnPayment)
+        assertFalse(sut.canCancel)
+        assertTrue(sut.cancel().isFailure)
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        assertEquals("maybe", store.load()?.fundingPaymentTxid)
+        verify(lightning, never()).completeAcceptedOrdinaryFollowup(any())
+        sut.onAppBackgrounded()
+    }
+
+    @Test
+    fun `cancel keeps an exit savings may still pay, while its send to the address is unresolved`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val attempt = OnchainSendAttempt(
+            walletId = "wallet",
+            attemptId = "attempt",
+            requestId = null,
+            orderId = null,
+            address = funding,
+            amountSats = 9_000uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 9uL,
+            isTransfer = false,
+            channelId = null,
+            tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown,
+            txid = "maybe",
+        )
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(attempt)
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+
+        assertTrue(sut.cancel().isFailure)
+        assertFalse(sut.canCancel)
+        assertNotNull(store.load())
+
+        // Once savings let the send go, the exit nothing reached can go too.
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(null)
+        assertEquals(SparkExitCancel.Cancelled, sut.cancel().getOrThrow())
+        assertNull(store.load())
+    }
+
     @Test
     fun `cancel keeps funding that reached the address and sends it back to savings`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
@@ -647,7 +752,7 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fee bump rates are priced without broadcasting, leaving out a rate the sdk refuses a leaf at`() = test {
+    fun `fee bump rates are priced without broadcasting, leaving a leaf the sdk refuses behind`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(runningRecord())
         val sdk = FakeSparkExitRecovering().apply {
@@ -659,8 +764,8 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         val options = sut.feeBumpOptions().getOrThrow()
 
-        assertEquals(listOf(FeeRate.NORMAL to 6uL), options.map { it.speed to it.rateSatPerVbyte })
-        assertEquals(0uL, options.single().totalSats)
+        assertEquals(listOf(FeeRate.FAST to 9uL, FeeRate.NORMAL to 6uL), options.map { it.speed to it.rateSatPerVbyte })
+        assertTrue(options.all { it.totalSats == 0uL })
         assertTrue(sdk.recoverRequests.isEmpty())
     }
 }

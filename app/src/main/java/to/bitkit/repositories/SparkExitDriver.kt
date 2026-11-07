@@ -238,7 +238,14 @@ class SparkExitDriver(
             return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(needed))
         }
         if (built.transactions.isEmpty()) {
-            // Cooperative leaves the operators could not co-sign now are tried again on the next tick.
+            // A first build of only cooperative leaves the operators could not co-sign is kept: they are retried for a
+            // week like any failed leaf. A rebuild like it keeps the recovery it has and tries again on the next tick.
+            if (built.failed.isNotEmpty() && record.recovery == null) {
+                val adopted = record.adopt(built, nowMillis())
+                save(adopted)
+                Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
+                return adopted
+            }
             if (built.failed.isNotEmpty()) return record.copy(failedLeafCount = built.failed.size)
             return end(record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover")), record)
         }
@@ -379,6 +386,10 @@ class SparkExitDriver(
 
     private suspend fun check(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
         val stored = record.recovery ?: return record.copy(phase = SparkExitRecord.Phase.AwaitingFunding(0uL))
+        // Nothing to check or send: only the failed cooperative leaves are left, and their retry decides the end.
+        if (stored.transactions.isEmpty() && stored.failed.isNotEmpty()) {
+            return retryFailedLeaves(record, stored.failed.map { it.leafId }, sdk)
+        }
         // An SDK that cannot check this tick still leaves the stored, signed steps to send.
         val checked = runSuspendCatching { sdk.check(withConfirmations(stored)) }
             .onFailure { Logger.warn("Failed to check the Spark exit, sending without the SDK", it, context = TAG) }
@@ -435,24 +446,35 @@ class SparkExitDriver(
 
     /**
      * What the exit's funding address must still receive to rebuild at [rate]: a build of the exit's leaves with the
-     * funding it holds, nothing broadcast. Zero when that funding covers it; otherwise the SDK's shortfall less what
-     * the address still holds, with one more input's fee for the payment, at least dust.
+     * funding it holds, nothing broadcast. Priced on a copy: a leaf the SDK refuses is left behind on the copy and
+     * the rest priced again, as a rebuild would, so the live exit's leaves never change. Zero when that funding covers
+     * it; otherwise the SDK's shortfall less what the address still holds, with one more input's fee for the payment,
+     * at least dust.
      */
     suspend fun feeBumpShortfall(record: SparkExitRecord, rate: ULong): ULong {
         val sdk = checkNotNull(recovering) { "Spark is not connected" }
-        val atRate = withExitState(record, sdk).copy(feeRateSatPerVbyte = rate)
-        val prepared = sdk.prepare(prepareRequest(atRate, ExitLeafSelection.Specific(atRate.exitLeafIds)))
-        if (prepared.funding == null) return 0uL
-        val built =
-            runSuspendCatching { sdk.recover(RecoverFundsRequest(prepared, atRate.fundingInputs), makeSigner()) }
-        val error = built.exceptionOrNull() ?: return 0uL
-        val required = (error as? SdkException.InsufficientCpfpFunds ?: throw error).requiredSats
-        val held = atRate.funding.firstOrNull()?.address?.let { address ->
-            runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, atRate) }
+        var atRate = withExitState(record, sdk).copy(feeRateSatPerVbyte = rate)
+        while (true) {
+            val (priced, prepared) = prepare(atRate, sdk)
+            atRate = priced
+            if (prepared == null || prepared.funding == null) return 0uL
+            val built =
+                runSuspendCatching { sdk.recover(RecoverFundsRequest(prepared, atRate.fundingInputs), makeSigner()) }
+            val error = built.exceptionOrNull() ?: return 0uL
+            val refusal = SparkExitUnexitable.parse(error)?.takeIf { it.leafId in atRate.exitLeafIds }
+            if (refusal != null) {
+                atRate = atRate.leaveBehind(refusal.leafId, refusal.reason)
+                continue
+            }
+            val required = (error as? SdkException.InsufficientCpfpFunds ?: throw error).requiredSats
+            val held = atRate.funding.firstOrNull()?.address?.let { address ->
+                runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, atRate) }
+            }
+            val needed =
+                SparkExitMath.neededFunding(required, atRate.fundedSats, held, SparkExitMath.inputFeeSats(rate))
+            val extra = if (needed > atRate.fundedSats) needed - atRate.fundedSats else 0uL
+            return maxOf(extra, SparkExitMath.FUNDING_DUST_SATS)
         }
-        val needed = SparkExitMath.neededFunding(required, atRate.fundedSats, held, SparkExitMath.inputFeeSats(rate))
-        val extra = if (needed > atRate.fundedSats) needed - atRate.fundedSats else 0uL
-        return maxOf(extra, SparkExitMath.FUNDING_DUST_SATS)
     }
 
     private suspend fun retryFailedLeaves(
@@ -571,14 +593,13 @@ class SparkExitDriver(
         val built = record.leftoverSweep
         if (built?.txHex != null) {
             // The sweep, or a version it replaced, confirmed.
-            val sent = listOfNotNull(built.txid.takeIf { built.isAccepted }) + built.replacedTxids
-            if (sent.any { isConfirmed(it) }) return record.copy(leftoverSweep = built.copy(isConfirmed = true))
+            built.sentTxids.firstOrNull { isConfirmed(it) }?.let { return sweepLanded(record, built, it) }
             // Refused for its fee: wait for the next block and try again at a rate nodes take.
             if (built.isFeeRejection) return waitForFees(record, built)
             // No node took it in a day: built again from what the address holds.
             val builtAt = built.builtAtHeight
             if (!built.isAccepted && builtAt != null && tip != null && tip >= builtAt + SWEEP_RECHECK_BLOCKS) {
-                return record.copy(leftoverSweep = null)
+                return readAddressAgain(record, built)
             }
             val sentAt = built.sentAtHeight
             val isOverdue = built.isAccepted && sentAt != null && tip != null && tip >= sentAt + SWEEP_REPLACE_BLOCKS
@@ -588,9 +609,7 @@ class SparkExitDriver(
         }
         if (built?.isWaitingForFees == true) {
             // A version a node accepted before a later refusal may still confirm.
-            if (built.replacedTxids.any { isConfirmed(it) }) {
-                return record.copy(leftoverSweep = built.copy(isConfirmed = true))
-            }
+            built.replacedTxids.firstOrNull { isConfirmed(it) }?.let { return sweepLanded(record, built, it) }
             val height = tip ?: return record
             val since = requireNotNull(built.waitingSince)
             if (height >= since + SWEEP_RELEASE_BLOCKS) {
@@ -645,6 +664,59 @@ class SparkExitDriver(
         return buildSweep(current, inputs, rate, built?.replacedTxids?.takeIf { it.isNotEmpty() })
     }
 
+    /**
+     * The sweep confirmed. Funding that reached the address after it was built is still there: it waits and goes out
+     * in a sweep of its own, and the confirmed one is kept to show.
+     */
+    private suspend fun sweepLanded(
+        record: SparkExitRecord,
+        sweep: SparkExitRecord.LeftoverSweep,
+        txid: String,
+    ): SparkExitRecord {
+        val landed = record.copy(leftoverSweep = sweep.copy(isConfirmed = true))
+        val address = record.funding.firstOrNull()?.address ?: return landed
+        // Read again on the next tick: what is left at the address decides how the sweep ends.
+        // A host behind the block that confirmed it may still list what it spent.
+        val spent = sweep.txHex?.let { hex -> SparkExitTxInputs.decode(hex)?.map { "${it.prevTxid}:${it.vout}" } }
+            ?: record.leftover.map { "${it.txid}:${it.vout}" }
+        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull()
+            ?.filter { "${it.txid}:${it.vout}" !in spent }
+            ?: return record
+        if (utxos.isEmpty()) return landed
+        val height = tip ?: return record
+        Logger.info("Spark exit leftover sweep '$txid' confirmed with more funding left to sweep", context = TAG)
+        val total = utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+        return record.copy(
+            sweptLeftover = record.sweptLeftover + SparkExitRecord.SweptLeftover(txid, sweep.valueSats),
+            leftover = utxos.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) },
+            leftoverSweep = SparkExitRecord.LeftoverSweep(
+                null,
+                null,
+                total,
+                waitingSince = height,
+                checkedAtHeight = height,
+                retryAtHeight = height,
+            ),
+        )
+    }
+
+    /** What the address holds is read again on the next tick, still looking for the versions a node accepted. */
+    private fun readAddressAgain(record: SparkExitRecord, sweep: SparkExitRecord.LeftoverSweep): SparkExitRecord {
+        val height = tip ?: return record.copy(leftoverSweep = null)
+        val total = record.leftover.fold(0uL) { sum, leftover -> sum.safe() + leftover.valueSats.safe() }
+        return record.copy(
+            leftoverSweep = SparkExitRecord.LeftoverSweep(
+                null,
+                null,
+                total,
+                replacedTxids = sweep.sentTxids,
+                waitingSince = record.leftoverSweep?.waitingSince ?: height,
+                checkedAtHeight = height,
+                retryAtHeight = height,
+            ),
+        )
+    }
+
     private suspend fun economyRate(): ULong? = runSuspendCatching { chain.economyFeeRate() }
         .onFailure { Logger.warn("Failed to read the economy fee rate for the leftover sweep", it, context = TAG) }
         .getOrNull()
@@ -666,7 +738,7 @@ class SparkExitDriver(
                 null,
                 null,
                 totalSats,
-                replacedTxids = refused?.replacedTxids.orEmpty(),
+                replacedTxids = (refused ?: earlier)?.sentTxids.orEmpty(),
                 waitingSince = since,
                 checkedAtHeight = height,
                 refusedFeeRate = floor,
@@ -753,14 +825,12 @@ class SparkExitDriver(
             // A replacement refused for another reason while the version it replaced may still confirm waits again.
             is SparkExitBroadcastOutcome.Rejected if sweep.replacedTxids.isNotEmpty() && tip != null &&
                 !outcome.reason.contains("fee", ignoreCase = true) ->
-                waitForFees(
-                    record
-                ).let { it.copy(leftoverSweep = it.leftoverSweep?.copy(replacedTxids = sweep.replacedTxids)) }
+                waitForFees(record.copy(leftoverSweep = sweep))
             is SparkExitBroadcastOutcome.Rejected -> record.copy(
                 leftoverSweep = sweep.copy(isAccepted = false, rejection = outcome.reason),
             )
             // Its inputs went elsewhere: what is still at the address is read and swept again.
-            is SparkExitBroadcastOutcome.InputsMissing -> record.copy(leftoverSweep = null)
+            is SparkExitBroadcastOutcome.InputsMissing -> readAddressAgain(record, sweep)
             is SparkExitBroadcastOutcome.RetryLater,
             is SparkExitBroadcastOutcome.NotMature,
             -> record

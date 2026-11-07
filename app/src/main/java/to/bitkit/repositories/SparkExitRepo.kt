@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.Activity
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -177,7 +178,9 @@ class SparkExitRepo @Inject constructor(
             if (_state.value.record?.needsDriving != true) return@runSuspendCatching _state.value.record
             tick()
             if (_state.value.isExiting && !sparkService.isConnected) {
-                withTimeoutOrNull(BACKGROUND_CONNECT_TIMEOUT) { sparkRepo.start(walletIndex) }
+                // The connect keeps going past the timeout, so the next run finds Spark connecting or connected.
+                val connect = scope.async { sparkRepo.start(walletIndex) }
+                withTimeoutOrNull(BACKGROUND_CONNECT_TIMEOUT) { connect.await() }
                 if (sparkService.isConnected) tick()
             }
             _state.value.record
@@ -196,6 +199,10 @@ class SparkExitRepo @Inject constructor(
                 .onFailure {
                     Logger.error("Failed to drive the Spark exit", it, context = TAG)
                     _state.update { state -> state.copy(lastError = it.message) }
+                    // Steps the run saved before it failed are on disk, newer than the record it started from.
+                    runSuspendCatching { store.load() }.getOrNull()?.let { saved ->
+                        _state.update { state -> state.copy(record = saved) }
+                    }
                     // A run that failed did not keep the exit on track: the alerts still run and the alarm may fire.
                     _state.value.record?.takeIf { record -> record.needsDriving }?.let { record ->
                         runSuspendCatching { afterTick(record, record, isOnTrack = false, reportedLostLeafIds()) }
@@ -218,6 +225,7 @@ class SparkExitRepo @Inject constructor(
         tip?.let { height -> sparkExitTip.height.update { height } }
         refreshNetworkFees(chain)
         refreshFundingSeen(chain, current)
+        if (current.isActive) _state.update { it.copy(isSavingsSendUnresolved = isSavingsSending(current)) }
         val store = store
         val recovering = sparkService.exitRecovering()
         val driver = driver(chain, recovering, current, tip)
@@ -687,16 +695,26 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
+    private suspend fun isSavingsSending(record: SparkExitRecord): Boolean {
+        val address = record.funding.firstOrNull()?.address ?: return false
+        val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+        return attempt?.address == address && attempt.isUnresolved
+    }
+
     private suspend fun sendFunding(address: String, sats: ULong): String {
         val outcome = lightningRepo.sendOnChain(
             address = address,
             sats = sats,
             speed = TransactionSpeed.Fast,
         ).getOrThrow()
-        if (outcome !is OnchainSendOutcome.Accepted) {
-            throw SparkExitError(
-                "Spark exit funding was not accepted: '$outcome'"
-            )
+        if (outcome is OnchainSendOutcome.Rejected) {
+            throw SparkExitError("Spark exit funding was not accepted: '$outcome'")
+        }
+        // A send no host confirmed may still go out: it counts as paid, so the exit keeps watching its address and
+        // cannot be cancelled. The own-payment wait forgets it if no host ever sees it.
+        if (outcome is OnchainSendOutcome.Unknown) {
+            Logger.warn("Spark exit funding '${outcome.txid}' went out with an unknown result", context = TAG)
+            return outcome.txid
         }
         runSuspendCatching { lightningRepo.completeAcceptedOrdinaryFollowup(outcome.txid) }
             .onFailure { Logger.warn("Failed to finish the Spark exit funding locally", it, context = TAG) }
@@ -716,6 +734,7 @@ class SparkExitRepo @Inject constructor(
                 record.recovery == null &&
                 record.fundedSats == 0uL &&
                 record.fundingPaymentTxid == null &&
+                !exit.isSavingsSendUnresolved &&
                 exit.fundingSeenSats == 0uL
         }
 
@@ -740,10 +759,15 @@ class SparkExitRepo @Inject constructor(
     suspend fun cancel(): Result<SparkExitCancel> = withContext(bgDispatcher) {
         runSuspendCatching {
             tickMutex.withLock {
-                if (!canCancel) throw SparkExitError("The Spark exit can no longer be cancelled")
-                val record = requireNotNull(_state.value.record)
-                val chain = requireNotNull(chain) { "No chain host for this network" }
+                val record = _state.value.record ?: throw SparkExitError("No Spark exit to cancel")
                 val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
+                // A savings send to the address still unresolved may be retried later: the exit keeps watching it.
+                val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
+                    .getOrElse { throw SparkExitCancelUnreadable() }
+                val isSending = attempt?.address == address && attempt.isUnresolved
+                _state.update { it.copy(isSavingsSendUnresolved = isSending) }
+                if (!canCancel) throw SparkExitError("The Spark exit can no longer be cancelled")
+                val chain = requireNotNull(chain) { "No chain host for this network" }
                 val utxos = runSuspendCatching { chain.utxos(address) }.getOrElse { throw SparkExitCancelUnreadable() }
                 record.transferId?.let { transferRepo.markSettled(it) }
                 val outcome = if (utxos.isEmpty()) {
@@ -827,6 +851,8 @@ data class SparkExitState(
     val tipHeight: UInt? = null,
     /** Confirmed or not, what reached the funding address. */
     val fundingSeenSats: ULong = 0uL,
+    /** A savings send to the funding address is unresolved and may be retried: cancel stays off. */
+    val isSavingsSendUnresolved: Boolean = false,
     /** How many payments make up [fundingSeenSats] before the exit starts: each adds its own input fee. */
     val fundingSeenCount: Int = 0,
     /** What progress shows while the exit needs fee funding. */

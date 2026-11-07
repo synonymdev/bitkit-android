@@ -598,9 +598,12 @@ class SparkExitDriverTest : BaseUnitTest() {
     fun `a leftover sweep whose inputs went elsewhere reads the address again`() = test {
         var record = driver(tip = 1_000u).tick(sweepDone())
         assertNotNull(assertNotNull(record.leftoverSweep).txHex)
+        val first = assertNotNull(record.leftoverSweep.txid)
         chain.outcome = SparkExitBroadcastOutcome.InputsMissing("missing-inputs")
         record = driver(tip = 1_001u).tick(record)
-        assertNull(record.leftoverSweep)
+        // The accepted sweep may still confirm: it is looked for while the address is read again.
+        assertEquals(listOf(first), assertNotNull(record.leftoverSweep).replacedTxids)
+        assertNull(record.leftoverSweep.txid)
 
         chain.utxosByAddress[SWEEP_FUNDING] = emptyList()
         record = driver(tip = 1_002u).tick(record)
@@ -722,20 +725,31 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cooperative leaves the operators could not sign are tried again`() = test {
+    fun `a first build of only cooperative leaves the operators could not sign is kept and retried`() = test {
         sdk.preparedResponse = SparkExitFixtures.prepared(funding = null)
-        sdk.builds += SparkExitFixtures.recovery(
-            emptyList(),
-            failed = listOf(
-                CooperativeRecoveryFailure("leaf-1", "o", 0u, CooperativeRecoveryError.OperatorsUnavailable("down")),
-            ),
+        val failed = listOf(
+            CooperativeRecoveryFailure("leaf-1", "o", 0u, CooperativeRecoveryError.OperatorsUnavailable("down")),
         )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = failed)
 
-        val record = driver().tick(SparkExitFixtures.record(Phase.AwaitingFunding(0uL)))
+        var record = driver(tip = 1_000u).tick(SparkExitFixtures.record(Phase.AwaitingFunding(0uL)))
 
-        assertEquals(Phase.AwaitingFunding(0uL), record.phase)
+        assertEquals(Phase.Running, record.phase)
         assertEquals(1, record.failedLeafCount)
-        assertNull(record.recovery)
+        assertEquals(failed, assertNotNull(record.recovery).failed)
+        assertEquals(record, saved.last())
+
+        // No check of a recovery with nothing in it: the failed leaves are retried at once, then let go.
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = failed)
+        record = driver(tip = 1_001u).tick(record)
+        assertTrue(sdk.checkedRecoveries.isEmpty())
+        assertEquals(listOf("leaf-1"), (sdk.prepareRequests.last().selection as ExitLeafSelection.Specific).leafIds)
+        assertEquals(listOf("leaf-1"), record.failedLeaves.map { it.leafId })
+        assertEquals(Phase.Running, record.phase)
+
+        record = driver(tip = 2_009u).tick(record)
+        assertEquals(Phase.Done, record.phase)
+        assertTrue(record.isFailedLeavesReleased)
     }
 
     private val operatorsDown = CooperativeRecoveryFailure(
@@ -789,7 +803,6 @@ class SparkExitDriverTest : BaseUnitTest() {
     fun `a retry the operators co-sign becomes the next generation and the exit ends once it confirms`() = test {
         val done = SparkExitFixtures.recovery(emptyList(), failed = listOf(operatorsDown))
         var record = running(done)
-        sdk.checks += check(done, RecoveryVerdict.Done)
         sdk.preparedResponse = coopLeaf(16_384uL)
         val coop = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("coop", kind = RecoveryTxKind.COOPERATIVE)))
         sdk.builds += coop
@@ -839,6 +852,25 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         sdk.recoverError = SdkException.InsufficientCpfpFunds(20_000uL, "")
         assertEquals(SparkExitMath.FUNDING_DUST_SATS, driver().feeBumpShortfall(record, 9uL))
+    }
+
+    @Test
+    fun `a higher fee leaves a leaf the build refuses behind on a copy and prices the rest`() = test {
+        val record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
+            .copy(leafIds = listOf("leaf-1", "leaf-2"))
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-1", "leaf-2"))
+        sdk.preparedResponses += SparkExitFixtures.prepared(leaves = listOf("leaf-1", "leaf-2"))
+        sdk.preparedResponses += SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
+        sdk.recoverErrors += ladderRefusal("leaf-1")
+        sdk.recoverError = SdkException.InsufficientCpfpFunds(26_000uL, "")
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", value = 20_000uL))
+
+        assertEquals(6_612uL, driver().feeBumpShortfall(record, 9uL))
+
+        assertEquals(listOf("leaf-2"), (sdk.prepareRequests.last().selection as ExitLeafSelection.Specific).leafIds)
+        // The live exit keeps its leaves.
+        assertEquals(listOf("leaf-1", "leaf-2"), record.exitLeafIds)
+        assertTrue(saved.isEmpty())
     }
 
     @Test
@@ -1392,6 +1424,43 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(replaced.txid != first.txid)
         assertEquals(5uL, replaced.feeRateSatPerVbyte)
         assertEquals(1_144u, replaced.sentAtHeight)
+    }
+
+    @Test
+    fun `a sweep that confirmed with more funding at the address is kept and the rest swept on its own`() = test {
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        val first = assertNotNull(record.leftoverSweep)
+        chain.confirmedTxids = setOf(assertNotNull(first.txid))
+        val late = SparkExitFixtures.utxo("e1".repeat(32), 0u, 30_000uL)
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(late)
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(listOf(SparkExitRecord.SweptLeftover(first.txid, first.valueSats)), record.sweptLeftover)
+        assertEquals(listOf(SparkExitRecord.Leftover(late.txid, late.vout, late.value)), record.leftover)
+        val swept = SparkExitJson.decode(SparkExitJson.encode(record))
+        assertEquals(record.sweptLeftover, swept.sweptLeftover)
+
+        record = driver(tip = 1_001u).tick(record)
+        val second = assertNotNull(record.leftoverSweep)
+        assertTrue(second.isAccepted)
+        assertEquals(late.txid, SparkExitTxInputs.decode(second.txHex!!)!!.single().prevTxid)
+        assertTrue(record.needsDriving)
+    }
+
+    @Test
+    fun `a sweep no node took is built again still looking for the version a node accepted`() = test {
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        val first = requireNotNull(record.leftoverSweep?.txid)
+        record = driver(tip = 1_144u).tick(record)
+        assertEquals(listOf(first), record.leftoverSweep?.replacedTxids)
+        val replacement = assertNotNull(record.leftoverSweep)
+        // No node takes the replacement for a day: the address is read again, still looking for the first.
+        chain.outcome = SparkExitBroadcastOutcome.RetryLater("timeout")
+        record = driver(tip = 1_145u).tick(record.copy(leftoverSweep = replacement.copy(isAccepted = false)))
+        record = driver(tip = 1_288u).tick(record)
+        assertNull(record.leftoverSweep?.txid)
+        assertEquals(listOf(first), record.leftoverSweep?.replacedTxids)
     }
 
     @Test
