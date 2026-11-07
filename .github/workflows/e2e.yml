@@ -106,9 +106,8 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: send, grep: "@send" }
-          - { name: lightning_security, grep: "@lightning|@security" }
-          - { name: lnurl_transfer, grep: "@lnurl|@transfer_2" }
+          - { name: boost_recipient, grep: "@boost_2" }
+          - { name: multi_address_recipient, grep: "@multi_address_3" }
 
     name: e2e-tests-local - ${{ matrix.shard.name }}
 
