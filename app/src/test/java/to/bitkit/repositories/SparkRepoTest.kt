@@ -420,6 +420,35 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(5_000uL, cacheData.value.pendingSparkWithdrawal?.amountSats)
     }
 
+    @Test
+    fun `a foreground during an in-flight withdrawal keeps its journal until spark lists it`() = test {
+        val sut = journaledSpark()
+        val sendGate = CompletableDeferred<Unit>()
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            sendGate.await()
+            contactWithdrawal()
+        }
+        val withdrawal = async { sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact") }
+        runCurrent()
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+
+        var offline = true
+        whenever { sparkService.syncWallet() }.thenAnswer { if (offline) throw SdkException.Generic("offline") }
+        sut.start(0).getOrThrow()
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+        offline = false
+        sut.start(0).getOrThrow()
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+
+        sendGate.complete(Unit)
+        assertEquals("withdrawal", withdrawal.await().getOrThrow())
+
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("pubkycontact", assertIs<Activity.Onchain>(activity.firstValue).v1.contact)
+    }
+
     private suspend fun journaledSpark(): SparkRepo {
         whenever { cacheStore.update(any()) }.doSuspendableAnswer {
             cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))

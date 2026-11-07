@@ -131,6 +131,10 @@ class SparkRepo @Inject constructor(
 
     private val sendsInFlight = ConcurrentHashMap.newKeySet<String>()
 
+    /** A withdrawal's send call is running, so its journal entry must not be settled before Spark lists it. */
+    @Volatile
+    private var isWithdrawing = false
+
     /** The remote exit data backup was merged in, or there was none, so an upload cannot drop what it held. */
     @Volatile
     var hasMergedRemoteExitState = false
@@ -164,12 +168,13 @@ class SparkRepo @Inject constructor(
             sparkService.connect(walletIndex)
             importRestoredExitState(walletIndex)
             // The SDK starts syncing inside build(), before the listener exists, so its first Synced can be missed.
-            runSuspendCatching { sparkService.syncWallet() }
+            val synced = runSuspendCatching { sparkService.syncWallet() }
                 .onSuccess { _state.update { it.copy(hasSynced = true) } }
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
+                .isSuccess
             _exitStateChanged.emit(Unit)
             refresh()
-            syncActivities()
+            syncActivities(settleJournal = synced)
         }.onFailure {
             Logger.error("Failed to start Spark wallet", it, context = TAG)
         }
@@ -516,7 +521,7 @@ class SparkRepo @Inject constructor(
         amountSats: ULong,
         earlierTxids: Set<String>,
     ): SparkWithdrawalOutcome = withContext(bgDispatcher) {
-        if (!_state.value.hasSynced) return@withContext SparkWithdrawalOutcome.Unknown
+        if (!_state.value.hasSynced || isWithdrawing) return@withContext SparkWithdrawalOutcome.Unknown
         val txid = sparkService.listPayments().firstNotNullOfOrNull { payment ->
             val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@firstNotNullOfOrNull null
             withdraw.txId.takeIf {
@@ -556,9 +561,15 @@ class SparkRepo @Inject constructor(
                 if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
                 val journal = PendingSparkWithdrawal(address, amountSats, contact, earlierTxids, tags)
                 cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
-                val payment = runSuspendCatching { sparkService.send(prepared) }.getOrElse {
+                isWithdrawing = true
+                val sent = try {
+                    runSuspendCatching { sparkService.send(prepared) }
+                } finally {
+                    isWithdrawing = false
+                }
+                val payment = sent.getOrElse {
                     // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops.
-                    runSuspendCatching { sparkService.syncWallet() }.onSuccess { syncActivities() }
+                    runSuspendCatching { sparkService.syncWallet() }.onSuccess { syncActivities(settleJournal = true) }
                     throw it
                 }
                 Logger.info("Sent Spark withdrawal '${payment.id}' with status '${payment.status}'", context = TAG)
@@ -809,10 +820,13 @@ class SparkRepo @Inject constructor(
             .toSet()
     }
 
-    private suspend fun syncActivities() {
+    /**
+     * Records Spark's payments as activity. With [settleJournal], after a sync that just succeeded, a journaled
+     * withdrawal the list still lacks never sent, unless it is still being sent in this process.
+     */
+    private suspend fun syncActivities(settleJournal: Boolean) {
         sparkService.listPayments().forEach { recordActivity(it) }
-        // A synced list that still lacks the journaled withdrawal proves the app was killed before Spark sent it.
-        if (_state.value.hasSynced) {
+        if (settleJournal && !isWithdrawing) {
             cacheStore.data.first().pendingSparkWithdrawal?.let { journal ->
                 Logger.warn("Dropped Spark withdrawal to '${journal.address}' that Spark never sent", context = TAG)
                 cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
