@@ -11252,6 +11252,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onchain and USDT contact keeps the spark leg whatever the USDT preference`() = test {
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 50_000u)
+        for (enabled in listOf(true, false)) {
+            usdtEnabled.value = enabled
+            sut.openContactPayment(
+                paymentRequest = REGTEST_ADDRESS,
+                publicKey = testPublicKey,
+                endpoints = listOf(
+                    Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+                    Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+                ),
+            )
+            advanceUntilIdle()
+
+            assertEquals(true, sut.sendUiState.value.paykitRoute?.offersSparkLeg, "USDT enabled: $enabled")
+        }
+    }
+
+    @Test
     fun `hardware mixed contact uses only its onchain endpoint`() = test {
         val bolt11 = "lnbcrt1contactfixed"
         stubLightningScan(bolt11, amountSats = 10_000u)
