@@ -243,6 +243,17 @@ class SparkExitFundingTest {
         assertEquals(listOf("big", "small"), SparkExitMath.fundingTopUp(utxos, requiredSats = 2_999uL)?.map { it.txid })
         assertNull(SparkExitMath.fundingTopUp(utxos, requiredSats = 3_000uL))
         assertNull(SparkExitMath.fundingTopUp(emptyList(), requiredSats = 0uL))
+        // At 20 sat/vB a 294-sat coin costs more than it adds: the 10,000-sat coin alone funds 10,000.
+        val withDust = listOf(
+            SparkExitFixtures.utxo("dust", value = 294uL),
+            SparkExitFixtures.utxo("coin", value = 10_000uL)
+        )
+        val inputFee = SparkExitMath.inputFeeSats(20uL)
+        assertEquals(
+            listOf("coin"),
+            SparkExitMath.fundingTopUp(withDust, requiredSats = 10_000uL, inputFeeSats = inputFee)?.map { it.txid },
+        )
+        assertNull(SparkExitMath.fundingTopUp(withDust, requiredSats = 10_001uL, inputFeeSats = inputFee))
     }
 
     @Test

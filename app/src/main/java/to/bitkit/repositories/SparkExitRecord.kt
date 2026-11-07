@@ -238,6 +238,14 @@ data class SparkExitRecord(
         get() = fundingPaymentTxid != null && fundingShortfallSats != null &&
             funding.none { it.txid == fundingPaymentTxid }
 
+    /** The exit ended while a payment from savings to its address was unresolved: it is watched until it is. */
+    val isEndedPaymentPending: Boolean
+        get() = !isActive && fundingPaymentTxid != null && funding.none { it.txid == fundingPaymentTxid } &&
+            leftover.none { it.txid == fundingPaymentTxid }
+
+    /** Steps still go out: the exit runs, or drives its generation while a higher fee's payment confirms. */
+    val isSendingSteps: Boolean get() = phase == Phase.Running || isDrivingWhileFunding
+
     /** A higher fee's top-up, not a diverged rebuild: the generation out there is still driven while it confirms. */
     val isDrivingWhileFunding: Boolean
         get() = phase is Phase.NeedsFunding && recovery != null && !isRebuilding
@@ -247,7 +255,7 @@ data class SparkExitRecord(
      * or 144 blocks after the first look without being adopted, so the ask and its reminder come back.
      */
     fun withOwnPaymentLooked(tip: UInt, isKnown: Boolean): SparkExitRecord {
-        if (!isAwaitingOwnPayment) return this
+        if (!isAwaitingOwnPayment && !isEndedPaymentPending) return this
         val seenAt = fundingPaymentSeenAtHeight ?: tip
         val missingSince = if (isKnown) null else fundingPaymentMissingSince ?: tip
         val isMissing = missingSince != null && tip >= missingSince + OWN_PAYMENT_MISSING_BLOCKS
@@ -313,7 +321,8 @@ data class SparkExitRecord(
      * An exit that failed or lost leaves keeps it until the user opened it once.
      */
     val showsResult: Boolean
-        get() = isActive || isLeftoverSweepPending || (leftover.isNotEmpty() && leftoverSweep?.rejection != null) ||
+        get() = isActive || isLeftoverSweepPending || isEndedPaymentPending ||
+            (leftover.isNotEmpty() && leftoverSweep?.rejection != null) ||
             hasUnseenResult
 
     /** The exit ended failed or with leaves lost, and the user has not opened its result yet. */
@@ -321,7 +330,7 @@ data class SparkExitRecord(
         get() = !isActive && (phase is Phase.Failed || lostSats > 0uL) && !isResultSeen
 
     /** Background runs and the foreground loop keep going while the exit runs and until its leftover is swept. */
-    val needsDriving: Boolean get() = isActive || isLeftoverSweepPending
+    val needsDriving: Boolean get() = isActive || isLeftoverSweepPending || isEndedPaymentPending
 
     val isActive: Boolean
         get() = when (phase) {
@@ -444,6 +453,19 @@ data class SparkExitRecord(
      * A step of this generation that keeps being refused, or whose fee chain keeps failing, and has not confirmed:
      * the chain is broken, so the exit rebuilds over it.
      */
+    /**
+     * A step of this generation whose last send reached no node, such as a host timing out: the exit is not on track
+     * while it waits, so the deadline is not pushed back.
+     */
+    val unpublishedStep: BroadcastAttempt?
+        get() {
+            val confirmed = confirmedTxids
+            return broadcastLog.firstOrNull {
+                it.generation == generation && !it.isAccepted && it.txid !in confirmed &&
+                    it.lastOutcome.startsWith(SparkExitBroadcastOutcome.RetryLater.PREFIX)
+            }
+        }
+
     val stuckStep: BroadcastAttempt?
         get() {
             val confirmed = confirmedTxids

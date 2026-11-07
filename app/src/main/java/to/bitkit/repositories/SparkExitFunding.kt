@@ -374,15 +374,22 @@ object SparkExitMath {
     }
 
     /**
-     * Every confirmed UTXO of new funding, the largest first, once together they cover [requiredSats] plus
-     * [inputFeeSats] for each coin beyond the first: the SDK spends every input it is given.
+     * The fewest confirmed UTXOs of new funding, the largest first, that cover [requiredSats] plus [inputFeeSats] for
+     * each coin beyond the first; a coin worth no more than its input's fee is never taken. The SDK spends every input
+     * it is given, so the rest stays for the leftover sweep.
      */
     fun fundingTopUp(utxos: List<EsploraUtxo>, requiredSats: ULong, inputFeeSats: ULong = 0uL): List<EsploraUtxo>? {
         val confirmed = utxos.filter { it.status.confirmed }.sortedByDescending { it.value }
-        if (confirmed.isEmpty()) return null
-        val total = confirmed.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
-        val needed = requiredSats.safe() + (inputFeeSats.safe() * (confirmed.size - 1).toULong().safe()).safe()
-        return confirmed.takeIf { total >= needed }
+        val taken = mutableListOf<EsploraUtxo>()
+        var total = 0uL
+        for (utxo in confirmed) {
+            if (taken.isNotEmpty() && utxo.value <= inputFeeSats) return null
+            taken += utxo
+            total = total.safe() + utxo.value.safe()
+            val needed = requiredSats.safe() + (inputFeeSats.safe() * (taken.size - 1).toULong().safe()).safe()
+            if (total >= needed) return taken
+        }
+        return null
     }
 
     /** About how long until [height]. */

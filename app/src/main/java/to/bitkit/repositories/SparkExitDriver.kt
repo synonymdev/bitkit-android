@@ -130,8 +130,9 @@ class SparkExitDriver(
         var record = start
         when (record.phase) {
             SparkExitRecord.Phase.Done, is SparkExitRecord.Phase.Failed -> {
-                if (!record.isLeftoverSweepPending) return record
-                record = sweepLeftover(record)
+                if (!record.isLeftoverSweepPending && !record.isEndedPaymentPending) return record
+                record = watchEndedPayment(record)
+                if (record.isLeftoverSweepPending) record = sweepLeftover(record)
                 save(record)
                 return record
             }
@@ -162,6 +163,7 @@ class SparkExitDriver(
             record = record.copy(claimableAtHeight = record.recovery?.let { SparkExitMath.claimableAtHeight(it, tip) })
         }
         // The tick that ends the exit also sends its leftover fee funding to savings.
+        if (!record.isActive) record = watchEndedPayment(record)
         if (record.isLeftoverSweepPending) record = sweepLeftover(record)
         save(record)
         return record
@@ -446,36 +448,35 @@ class SparkExitDriver(
 
     /**
      * What the exit's funding address must still receive to rebuild at [rate]: a build of the exit's leaves with the
-     * funding it holds, nothing broadcast. Priced on a copy: a leaf the SDK refuses is left behind on the copy and
-     * the rest priced again, as a rebuild would, so the live exit's leaves never change. Zero when that funding covers
-     * it; otherwise the SDK's shortfall less what the address still holds, with one more input's fee for the payment,
-     * at least dust.
+     * funding it holds, nothing broadcast, on a copy with the rebuild's drop-and-retry. A leaf the prepare or the build
+     * refuses at that rate throws [SparkExitFeeBumpLeavesBehind]. Zero when that funding covers it; otherwise the
+     * SDK's shortfall less what the address still holds, with one more input's fee for the payment, at least dust.
      */
     suspend fun feeBumpShortfall(record: SparkExitRecord, rate: ULong): ULong {
         val sdk = checkNotNull(recovering) { "Spark is not connected" }
-        var atRate = withExitState(record, sdk).copy(feeRateSatPerVbyte = rate)
-        while (true) {
-            val (priced, prepared) = prepare(atRate, sdk)
-            atRate = priced
-            if (prepared == null || prepared.funding == null) return 0uL
-            val built =
-                runSuspendCatching { sdk.recover(RecoverFundsRequest(prepared, atRate.fundingInputs), makeSigner()) }
-            val error = built.exceptionOrNull() ?: return 0uL
-            val refusal = SparkExitUnexitable.parse(error)?.takeIf { it.leafId in atRate.exitLeafIds }
-            if (refusal != null) {
-                atRate = atRate.leaveBehind(refusal.leafId, refusal.reason)
-                continue
-            }
-            val required = (error as? SdkException.InsufficientCpfpFunds ?: throw error).requiredSats
-            val held = atRate.funding.firstOrNull()?.address?.let { address ->
-                runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, atRate) }
-            }
-            val needed =
-                SparkExitMath.neededFunding(required, atRate.fundedSats, held, SparkExitMath.inputFeeSats(rate))
-            val extra = if (needed > atRate.fundedSats) needed - atRate.fundedSats else 0uL
-            return maxOf(extra, SparkExitMath.FUNDING_DUST_SATS)
+        val atRate = withExitState(record, sdk).copy(feeRateSatPerVbyte = rate)
+        val (priced, prepared) = prepare(atRate, sdk)
+        // A rate at which a leaf can't pay its own exit would leave that leaf on Spark: never offered.
+        val dropped = priced.leftBehindLeaves.drop(record.leftBehindLeaves.size)
+        if (dropped.isNotEmpty() || prepared == null) throw SparkExitFeeBumpLeavesBehind(leavesSats(record, dropped))
+        if (prepared.funding == null) return 0uL
+        val built =
+            runSuspendCatching { sdk.recover(RecoverFundsRequest(prepared, priced.fundingInputs), makeSigner()) }
+        val error = built.exceptionOrNull() ?: return 0uL
+        SparkExitUnexitable.parse(error)?.takeIf { it.leafId in priced.exitLeafIds }?.let {
+            throw SparkExitFeeBumpLeavesBehind(record.leafValueSats(it.leafId))
         }
+        val required = (error as? SdkException.InsufficientCpfpFunds ?: throw error).requiredSats
+        val held = priced.funding.firstOrNull()?.address?.let { address ->
+            runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, priced) }
+        }
+        val needed = SparkExitMath.neededFunding(required, priced.fundedSats, held, SparkExitMath.inputFeeSats(rate))
+        val extra = if (needed > priced.fundedSats) needed - priced.fundedSats else 0uL
+        return maxOf(extra, SparkExitMath.FUNDING_DUST_SATS)
     }
+
+    private fun leavesSats(record: SparkExitRecord, leaves: List<SparkExitRecord.LeftBehindLeaf>): ULong =
+        leaves.fold(0uL) { sum, leaf -> sum.safe() + record.leafValueSats(leaf.leafId).safe() }
 
     private suspend fun retryFailedLeaves(
         start: SparkExitRecord,
@@ -658,7 +659,7 @@ class SparkExitDriver(
         val floor = built?.takeIf { it.isWaitingForFees }?.refusedFeeRate ?: 0uL
         val rate = maxOf(SparkExitMath.sweepFeeRate(economyRate(), record.feeRateSatPerVbyte), floor)
         val inputs = SparkExitSweep.worthSweeping(
-            utxos.map { SparkExitSweep.Input(it.txid, it.vout, it.value) },
+            confirmed.map { SparkExitSweep.Input(it.txid, it.vout, it.value) },
             rate,
         )
         return buildSweep(current, inputs, rate, built?.replacedTxids?.takeIf { it.isNotEmpty() })
@@ -902,7 +903,58 @@ class SparkExitDriver(
             if (isDue(tx.txid, current)) current = broadcastAndSave(tx, current, parentsConfirmed = true)
             tx
         }
-        return current.copy(recovery = recovery.copy(transactions = transactions))
+        val checked = current.copy(recovery = recovery.copy(transactions = transactions))
+        // Every step confirmed and no leaf failed: the exit is done without an SDK verdict.
+        val isAllConfirmed = transactions.isNotEmpty() &&
+            transactions.all { it.status is ExitTransactionStatus.Confirmed }
+        if (!isAllConfirmed || recovery.failed.isNotEmpty() || checked.phase != SparkExitRecord.Phase.Running) {
+            return checked
+        }
+        Logger.info("Every Spark exit step confirmed; ending the exit without the SDK", context = TAG)
+        return end(checked.copy(phase = SparkExitRecord.Phase.Done, failedLeaves = emptyList()), checked)
+    }
+
+    /**
+     * A payment from savings still unresolved when the exit ended, such as a higher fee sent with an unknown result:
+     * its outputs join the leftover once they reach the address, and the own-payment wait forgets one no host sees.
+     */
+    private suspend fun watchEndedPayment(record: SparkExitRecord): SparkExitRecord {
+        val txid = record.fundingPaymentTxid ?: return record
+        // Already in the leftover: the sweep takes it, and nothing more is watched.
+        if (!record.isActive && record.leftover.any { it.txid == txid }) {
+            return record.copy(
+                fundingPaymentTxid = null,
+                fundingPaymentSeenAtHeight = null,
+                fundingPaymentMissingSince = null,
+            )
+        }
+        if (!record.isEndedPaymentPending) return record
+        val height = tip ?: return record
+        val address = record.funding.firstOrNull()?.address ?: return record
+        val arrived = runSuspendCatching { chain.utxos(address) }.getOrNull()?.filter { it.txid == txid }
+            ?: return record
+        if (arrived.isEmpty()) {
+            val isKnown = runSuspendCatching { chain.isTxKnown(txid) }.getOrDefault(true)
+            return record.withOwnPaymentLooked(height, isKnown)
+        }
+        val sweep = record.leftoverSweep
+        // A sweep still out there settles first; then the payment goes in a sweep of its own.
+        if (sweep?.txHex != null && !sweep.isConfirmed && sweep.rejection == null) return record
+        Logger.info(
+            "Adding Spark exit payment '$txid' that arrived after the exit ended to its leftover",
+            context = TAG
+        )
+        val swept = sweep?.takeIf { it.isConfirmed && it.txid != null }
+            ?.let { record.sweptLeftover + SparkExitRecord.SweptLeftover(requireNotNull(it.txid), it.valueSats) }
+        val payment = arrived.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) }
+        return record.copy(
+            leftover = if (swept != null) payment else (record.leftover + payment).distinct(),
+            sweptLeftover = swept ?: record.sweptLeftover,
+            leftoverSweep = null,
+            fundingPaymentTxid = null,
+            fundingPaymentSeenAtHeight = null,
+            fundingPaymentMissingSince = null,
+        )
     }
 
     private suspend fun parentHeight(txid: String, known: EsploraTxStatus?): UInt? {

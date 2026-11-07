@@ -97,6 +97,13 @@ private fun Content(
                 ) {
                     CircularProgressIndicator(strokeWidth = 2.dp, color = Colors.White32)
                 }
+                bump.isLeavingLeaves -> BodyM(
+                    text = stringResource(R.string.lightning__spark_exit__fee_bump_leaves_behind),
+                    color = Colors.White64,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .testTag("SparkExitFeeBumpLeavesBehind")
+                )
                 bump.hasError -> BodyM(
                     text = stringResource(R.string.lightning__spark_exit__fee_bump_error),
                     color = Colors.White64,
@@ -140,7 +147,7 @@ private fun Content(
                         .fillMaxWidth()
                         .testTag("SparkExitFeeBumpRetry")
                 )
-            } else {
+            } else if (!bump.isLeavingLeaves) {
                 PrimaryButton(
                     text = stringResource(
                         if (selected?.extraSats == 0uL) {

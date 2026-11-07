@@ -41,7 +41,11 @@ sealed interface SparkExitBroadcastOutcome {
 
     /** The host or node could not take it now: the next tick tries again. */
     data class RetryLater(val reason: String) : SparkExitBroadcastOutcome {
-        override val summary get() = "retry: $reason"
+        override val summary get() = "$PREFIX$reason"
+
+        companion object {
+            const val PREFIX = "retry: "
+        }
     }
 
     /** Its relative timelock has not matured (`non-BIP68-final`): sent again once it has, never a rejection. */

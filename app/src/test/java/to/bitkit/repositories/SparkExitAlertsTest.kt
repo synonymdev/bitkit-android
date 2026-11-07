@@ -32,6 +32,13 @@ class SparkExitAlertsTest {
         )
         assertEquals(SparkExitAlert.Rejected, SparkExitAlerts.reason(refused, isOnline = false, unlimited))
         assertEquals(SparkExitAlert.Offline, SparkExitAlerts.reason(running, isOnline = false, unlimited))
+        // A generation driven while a higher fee's payment confirms falls behind like a running one.
+        val bumped = running.adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
+            .applyFeeBump(rate = 9uL, extraSats = 6_000uL, paymentTxid = "bump")
+        assertTrue(bumped.isDrivingWhileFunding && bumped.isSendingSteps)
+        assertEquals(SparkExitAlert.Offline, SparkExitAlerts.reason(bumped, isOnline = false, unlimited))
+        val awaiting = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(9_000uL))
+        assertEquals(SparkExitAlert.Funding, SparkExitAlerts.reason(awaiting, isOnline = false, unlimited))
         assertEquals(
             SparkExitAlert.Restricted,
             SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isRestricted = true, isOptimized = true)),

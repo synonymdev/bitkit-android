@@ -68,8 +68,9 @@ class SparkExitRepoTest : BaseUnitTest() {
     val tempFolder = TemporaryFolder()
 
     private val transferRepo = mock<TransferRepo>()
+    private val wiped = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     private val sparkRepo = mock<SparkRepo> {
-        on { walletWiped } doReturn MutableSharedFlow()
+        on { walletWiped } doReturn wiped
         on { walletIndex } doReturn 0
         on { state } doReturn MutableStateFlow(SparkState())
     }
@@ -183,7 +184,11 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     /** Spark's regtest mempool, where nothing is confirmed yet and every single transaction is accepted. */
-    private fun regtestMempool(posts: MutableList<String>, refusal: String? = null) = HttpClient(
+    private fun regtestMempool(
+        posts: MutableList<String>,
+        refusal: String? = null,
+        refusalStatus: HttpStatusCode = HttpStatusCode.BadRequest,
+    ) = HttpClient(
         MockEngine.create {
             dispatcher = testDispatcher
             addHandler { request ->
@@ -191,7 +196,7 @@ class SparkExitRepoTest : BaseUnitTest() {
                 when {
                     request.method == HttpMethod.Post && url.endsWith("/api/tx") -> {
                         posts += String(request.body.toByteArray())
-                        if (refusal != null) return@addHandler respond(refusal, HttpStatusCode.BadRequest)
+                        if (refusal != null) return@addHandler respond(refusal, refusalStatus)
                         respond(String(request.body.toByteArray()).removePrefix("02"))
                     }
                     url.endsWith("/blocks/tip/height") -> respond("1000")
@@ -291,6 +296,68 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertTrue(assertNotNull(sut.state.value.record).isRebuilding)
         assertEquals(store.load(), sut.state.value.record)
+    }
+
+    @Test
+    fun `a background run whose steps no host takes for now never pushes the deadline back`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        store.save(SparkExitFixtures.record(Phase.Running).adopt(recovery, 0L))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val posts = mutableListOf<String>()
+
+        repeat(2) {
+            val spark = coldSpark(FakeSparkExitRecovering(), connects = false)
+            val mempool = regtestMempool(posts, "busy", HttpStatusCode.ServiceUnavailable)
+            createSut(spark, mempool).runInBackground().getOrThrow()
+        }
+
+        assertTrue(posts.isNotEmpty())
+        assertNotNull(store.load()?.unpublishedStep)
+        verify(work, never()).armDeadline(any(), any())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a wipe waits for the tick in flight and deletes what it saved`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        val gate = CompletableDeferred<Unit>()
+        val chain = HttpClient(
+            MockEngine.create {
+                dispatcher = testDispatcher
+                addHandler { request ->
+                    val url = request.url.toString()
+                    when {
+                        url.endsWith("/blocks/tip/height") -> {
+                            gate.await()
+                            respond("1000")
+                        }
+                        url.endsWith("/address/$funding/utxo") -> respond("[]")
+                        url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
+                        else -> throw IOException("unreachable '$url'")
+                    }
+                }
+            },
+        ) { defaultRequest { contentType(ContentType.Application.Json) } }
+        val sdk = FakeSparkExitRecovering().apply {
+            checks += CheckRecoverFundsResponse(runningRecord().recovery!!, RecoveryVerdict.Valid)
+        }
+        val sut = quotedSut(sdk, chain)
+        sut.load().getOrThrow()
+
+        val tick = async { sut.tick() }
+        runCurrent()
+        wiped.emit(0)
+        gate.complete(Unit)
+        tick.await()
+        runCurrent()
+
+        assertNull(store.load())
+        assertNull(sut.state.value.record)
+        verify(work, atLeastOnce()).cancelAll()
     }
 
     @Test
@@ -580,6 +647,34 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.onAppBackgrounded()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a cancel during the start's optimization wait ends the exit before anything is paid`() = test {
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
+        val gate = CompletableDeferred<Unit>()
+        whenever(sparkRepo.awaitOptimizationIdle()).doSuspendableAnswer { gate.await() }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+
+        val start = async { sut.start(fundFromSavings = true) }
+        runCurrent()
+        assertTrue(sut.canCancel)
+        assertEquals(SparkExitCancel.Cancelled, sut.cancel().getOrThrow())
+        gate.complete(Unit)
+
+        assertIs<SparkExitStartCancelled>(start.await().exceptionOrNull())
+        assertNull(SparkExitStore(File(Env.sparkExitRecordPath(0))).load())
+        assertNull(sut.state.value.record)
+        verify(transferRepo).markSettled("transfer-1")
+        verify(lightning, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+        verify(sparkRepo, never()).setExiting(true, true)
+    }
+
     @Test
     fun `a leaf swap between the quote and the start quotes the exit again`() = test {
         val sdk = FakeSparkExitRecovering()
@@ -752,7 +847,7 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fee bump rates are priced without broadcasting, leaving a leaf the sdk refuses behind`() = test {
+    fun `fee bump rates are priced without broadcasting, leaving out a rate the sdk refuses a leaf at`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(runningRecord())
         val sdk = FakeSparkExitRecovering().apply {
@@ -764,8 +859,13 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         val options = sut.feeBumpOptions().getOrThrow()
 
-        assertEquals(listOf(FeeRate.FAST to 9uL, FeeRate.NORMAL to 6uL), options.map { it.speed to it.rateSatPerVbyte })
-        assertTrue(options.all { it.totalSats == 0uL })
+        assertEquals(listOf(FeeRate.NORMAL to 6uL), options.map { it.speed to it.rateSatPerVbyte })
+        assertEquals(0uL, options.single().totalSats)
+
+        // No rate left that every leaf can pay its exit at: that is the error.
+        val refusal = "Leaf leaf-1 cannot be exited: its refund cannot pay its fee"
+        repeat(2) { sdk.prepareErrors += SdkException.SparkException(refusal) }
+        assertIs<SparkExitFeeBumpLeavesBehind>(sut.feeBumpOptions().exceptionOrNull())
         assertTrue(sdk.recoverRequests.isEmpty())
     }
 }

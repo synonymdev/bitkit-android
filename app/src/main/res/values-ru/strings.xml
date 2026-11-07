@@ -264,6 +264,7 @@
     <string name="lightning__spark_exit__fee_bump_button">Pay a higher fee</string>
     <string name="lightning__spark_exit__fee_bump_confirm">Use this fee</string>
     <string name="lightning__spark_exit__fee_bump_error">Could not price a higher fee. Try again.</string>
+    <string name="lightning__spark_exit__fee_bump_leaves_behind">A higher fee would leave part of this exit on Spark, so none is offered. The exit confirms once network fees drop.</string>
     <string name="lightning__spark_exit__fee_bump_rate">{rate} sat/vB</string>
     <string name="lightning__spark_exit__fee_bump_text">This exit pays &lt;accent&gt;{rate} sat/vB&lt;/accent&gt;, less than the network asks now. Pick a higher rate and Bitkit sends the waiting steps again. It pays the difference from savings: the amount next to each speed.</string>
     <string name="lightning__spark_exit__fee_bump_title">Pay a\n&lt;accent&gt;higher fee&lt;/accent&gt;</string>

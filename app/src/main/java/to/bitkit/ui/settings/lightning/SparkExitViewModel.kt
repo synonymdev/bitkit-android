@@ -27,6 +27,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitCancel
 import to.bitkit.repositories.SparkExitCancelUnreadable
+import to.bitkit.repositories.SparkExitFeeBumpLeavesBehind
 import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.repositories.SparkExitFundingKey
 import to.bitkit.repositories.SparkExitFundingState
@@ -36,6 +37,7 @@ import to.bitkit.repositories.SparkExitPrestartFunding
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitStartCancelled
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.surfacedRejection
@@ -167,7 +169,8 @@ class SparkExitViewModel @Inject constructor(
             sparkExitRepo.start(_uiState.value.fundFromSavings)
                 .onSuccess { _effects.emit(SparkExitEffect.Started) }
                 .onFailure {
-                    ToastEventBus.send(it)
+                    // A cancel during the start already said so on progress.
+                    if (it !is SparkExitStartCancelled) ToastEventBus.send(it)
                     // The exit started but paying its fee funding failed: progress shows where to fund it.
                     if (sparkExitRepo.state.value.isExiting) _effects.emit(SparkExitEffect.Started)
                 }
@@ -187,7 +190,14 @@ class SparkExitViewModel @Inject constructor(
                     val selected = options.firstOrNull(bump::canPay)?.speed
                     _uiState.update { it.copy(feeBump = bump.copy(selected = selected)) }
                 }
-                .onFailure { _uiState.update { it.copy(feeBump = SparkExitFeeBumpUiState(hasError = true)) } }
+                .onFailure { error ->
+                    val bump = if (error is SparkExitFeeBumpLeavesBehind) {
+                        SparkExitFeeBumpUiState(isLeavingLeaves = true)
+                    } else {
+                        SparkExitFeeBumpUiState(hasError = true)
+                    }
+                    _uiState.update { it.copy(feeBump = bump) }
+                }
         }
     }
 
@@ -348,6 +358,8 @@ enum class SparkExitQuoteBlock { Error, Nothing, Uneconomic }
 data class SparkExitFeeBumpUiState(
     val isLoading: Boolean = false,
     val hasError: Boolean = false,
+    /** Every higher rate would leave part of the exit on Spark, so none is offered. */
+    val isLeavingLeaves: Boolean = false,
     val options: ImmutableList<SparkExitFeeBumpOption> = persistentListOf(),
     val selected: FeeRate? = null,
     val spendableSats: ULong? = null,

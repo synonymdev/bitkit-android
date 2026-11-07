@@ -27,6 +27,7 @@ import to.bitkit.ui.settings.lightning.SparkExitUiState
 import to.bitkit.utils.SignedTransactionId
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -38,6 +39,7 @@ class SparkExitDriverTest : BaseUnitTest() {
     private companion object {
         const val SWEEP_DESTINATION = "bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6"
         const val SWEEP_FUNDING = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val BUMP = "be".repeat(32)
         val UNPAID = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 0 < 17")
     }
 
@@ -469,12 +471,12 @@ class SparkExitDriverTest : BaseUnitTest() {
         // Two coins: the second adds its own input fee too.
         chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = funded.map {
             SparkExitFixtures.utxo(requireNotNull(it.txid), value = requireNotNull(it.valueSats))
-        } + listOf(SparkExitFixtures.utxo("t1", value = 200uL), SparkExitFixtures.utxo("t2", value = 121uL))
+        } + listOf(SparkExitFixtures.utxo("t1", value = 150uL), SparkExitFixtures.utxo("t2", value = 121uL))
         record = driver().tick(record)
         assertEquals(Phase.NeedsFunding(9_221uL), record.phase)
         chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = funded.map {
             SparkExitFixtures.utxo(requireNotNull(it.txid), value = requireNotNull(it.valueSats))
-        } + listOf(SparkExitFixtures.utxo("t1", value = 200uL), SparkExitFixtures.utxo("t2", value = 122uL))
+        } + listOf(SparkExitFixtures.utxo("t1", value = 150uL), SparkExitFixtures.utxo("t2", value = 172uL))
         sdk.recoverError = null
         sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2")))
         record = driver().tick(record)
@@ -855,20 +857,22 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a higher fee leaves a leaf the build refuses behind on a copy and prices the rest`() = test {
+    fun `a higher fee at which a leaf can't pay its own exit is refused, the live exit unchanged`() = test {
         val record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
             .copy(leafIds = listOf("leaf-1", "leaf-2"))
         sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-1", "leaf-2"))
-        sdk.preparedResponses += SparkExitFixtures.prepared(leaves = listOf("leaf-1", "leaf-2"))
-        sdk.preparedResponses += SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
-        sdk.recoverErrors += ladderRefusal("leaf-1")
-        sdk.recoverError = SdkException.InsufficientCpfpFunds(26_000uL, "")
+        // Refused by the build at this rate.
+        sdk.recoverError = ladderRefusal("leaf-1")
         chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", value = 20_000uL))
 
-        assertEquals(6_612uL, driver().feeBumpShortfall(record, 9uL))
+        val refused = assertFailsWith<SparkExitFeeBumpLeavesBehind> { driver().feeBumpShortfall(record, 9uL) }
+        assertEquals(100_000uL, refused.sats)
 
-        assertEquals(listOf("leaf-2"), (sdk.prepareRequests.last().selection as ExitLeafSelection.Specific).leafIds)
-        // The live exit keeps its leaves.
+        // Refused by the prepare at this rate.
+        sdk.recoverError = null
+        sdk.prepareErrors += ladderRefusal("leaf-2")
+        assertFailsWith<SparkExitFeeBumpLeavesBehind> { driver().feeBumpShortfall(record, 9uL) }
+
         assertEquals(listOf("leaf-1", "leaf-2"), record.exitLeafIds)
         assertTrue(saved.isEmpty())
     }
@@ -1058,6 +1062,76 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(listOf("n1"), chain.broadcasts.map { it.txid })
         assertEquals(1, sdk.recoverRequests.size)
         assertEquals(1, requireNotNull(store.load()).broadcastLog.single().attempts)
+    }
+
+    @Test
+    fun `without the sdk an exit whose every step confirmed ends done`() = test {
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        chain.confirmedTxids = setOf("n1")
+
+        val record = driver(withSdk = false, tip = 1_000u).tick(running(recovery))
+
+        assertEquals(Phase.Done, record.phase)
+        assertTrue(chain.broadcasts.isEmpty())
+    }
+
+    @Test
+    fun `without the sdk an exit whose steps confirmed with failed leaves keeps running for their retry`() = test {
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")), failed = listOf(operatorsDown))
+        chain.confirmedTxids = setOf("n1")
+
+        val record = driver(withSdk = false, tip = 1_000u).tick(running(recovery))
+
+        assertEquals(Phase.Running, record.phase)
+    }
+
+    @Test
+    fun `an exit that ended with a savings payment unresolved watches it and sweeps it once it arrives`() = test {
+        chain.utxosByAddress[SWEEP_FUNDING] = emptyList()
+        val ended = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            fundingPaymentTxid = BUMP,
+        )
+        assertTrue(ended.needsDriving)
+
+        var record = driver(tip = 1_000u).tick(ended)
+        assertEquals(1_000u, record.fundingPaymentSeenAtHeight)
+        assertTrue(record.needsDriving)
+
+        val payment = SparkExitFixtures.utxo(BUMP, 0u, 6_000uL)
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(payment)
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(listOf(SparkExitRecord.Leftover(BUMP, 0u, 6_000uL)), record.leftover)
+        assertNull(record.fundingPaymentTxid)
+        assertNotNull(assertNotNull(record.leftoverSweep).txHex)
+
+        // One no host ever sees is forgotten after a block, and the exit stops.
+        chain.unknownTxids = setOf("gone")
+        var forgotten = driver(tip = 1_000u).tick(ended.copy(fundingPaymentTxid = "gone"))
+        forgotten = driver(tip = 1_001u).tick(forgotten)
+        assertNull(forgotten.fundingPaymentTxid)
+        assertFalse(forgotten.needsDriving)
+    }
+
+    @Test
+    fun `a sweep past the day's wait for unconfirmed funding spends only the confirmed outputs`() = test {
+        val confirmed = SparkExitFixtures.utxo("c1".repeat(32), 0u, 25_000uL)
+        val unconfirmed = SparkExitFixtures.utxo("d1".repeat(32), 0u, 10_000uL, confirmed = false)
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(confirmed, unconfirmed)
+        val done = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            leftover = listOf(SparkExitRecord.Leftover(confirmed.txid, 0u, 25_000uL)),
+        )
+
+        var record = driver(tip = 1_000u).tick(done)
+        assertTrue(record.isLeftoverWaitingForFees)
+        record = driver(tip = 1_144u).tick(record)
+
+        val sweep = assertNotNull(record.leftoverSweep)
+        assertEquals(listOf(confirmed.txid), SparkExitTxInputs.decode(assertNotNull(sweep.txHex))?.map { it.prevTxid })
     }
 
     @Test

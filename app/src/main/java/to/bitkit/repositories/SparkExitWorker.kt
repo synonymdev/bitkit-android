@@ -87,6 +87,7 @@ class SparkExitWork @Inject constructor(
         private const val KEY_WARN_AT = "warn-at"
         private const val KEY_DEADLINE_AT = "deadline-at"
         private const val KEY_FEE_LOW_RATE = "fee-low-rate"
+        private const val KEY_FUNDING_REMINDED = "funding-reminded-exit"
         private const val NOTIFICATION_ID = 7797
 
         /** The shortest period WorkManager runs periodic work at. */
@@ -197,6 +198,8 @@ class SparkExitWork @Inject constructor(
      * exit and kept as first scheduled, so later ticks do not push it back.
      */
     fun scheduleFundingReminder(exitCreatedAt: Long, delay: Duration) {
+        // One reminder per exit: once it fired, later ticks of the same exit schedule none.
+        if (preferences.getLong(KEY_FUNDING_REMINDED, 0L) == exitCreatedAt) return
         val request = OneTimeWorkRequestBuilder<SparkExitFundingReminderWorker>()
             .setInitialDelay(delay.inWholeMilliseconds, TimeUnit.MILLISECONDS)
             .setInputData(workDataOf(KEY_EXIT_CREATED_AT to exitCreatedAt))
@@ -214,6 +217,7 @@ class SparkExitWork @Inject constructor(
 
     /** The reminder fired: posts the funding notification while the exit it was for still waits for funding. */
     suspend fun onFundingReminder(exitCreatedAt: Long) {
+        preferences.edit { putLong(KEY_FUNDING_REMINDED, exitCreatedAt) }
         val record = runSuspendCatching { store().load() }.getOrNull() ?: return
         if (record.createdAt != exitCreatedAt || !SparkExitAlerts.isAwaitingFirstFunding(record)) return
         notify(SparkExitAlert.Funding)
@@ -238,7 +242,8 @@ class SparkExitWork @Inject constructor(
             "Spark exit deadline alarm fired with alert '$alert' (${context.logBatterySettings()})",
             context = TAG,
         )
-        if (alert == null || record?.phase != SparkExitRecord.Phase.Running) {
+        // A generation driven while a higher fee's payment confirms keeps the alarm, as a running one does.
+        if (alert == null || record?.isSendingSteps != true) {
             cancelDeadline()
             return
         }
@@ -398,8 +403,9 @@ object SparkExitAlerts {
     ): SparkExitAlert? {
         if (record?.isActive != true) return null
         return when {
-            record.phase is SparkExitRecord.Phase.NeedsFunding -> SparkExitAlert.Funding
-            record.phase != SparkExitRecord.Phase.Running -> null
+            record.phase is SparkExitRecord.Phase.NeedsFunding && !record.isDrivingWhileFunding ->
+                SparkExitAlert.Funding
+            !record.isSendingSteps -> null
             record.surfacedRejection != null ||
                 (record.stuckStep?.rejections ?: 0) >= SparkExitDriver.REJECTIONS_TO_SURFACE -> SparkExitAlert.Rejected
             feeLowRate != null -> SparkExitAlert.FeeLow
