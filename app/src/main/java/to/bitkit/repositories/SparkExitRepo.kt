@@ -939,7 +939,10 @@ data class SparkExitState(
     val inTransferSats: ULong?
         get() {
             val exit = record ?: return null
-            val received = SparkExitMath.receivedSats(exit) ?: 0uL
+            // Reached only once its sweep or cooperative step confirmed: the plan lists the sweep from the first build.
+            val confirmed = exit.recovery?.let { SparkExitMath.confirmedReceived(it, exit.destination) }.orEmpty()
+            val received = (exit.earlierReceivedSats + confirmed).values
+                .fold(0uL) { sum, sats -> sum.safe() + sats.safe() }
             val unpaid = (exit.phase as? SparkExitRecord.Phase.AwaitingFunding)
                 ?.takeIf { exit.fundingPaymentTxid == null }
                 ?.let { it.requiredSats.safe() - maxOf(exit.fundedSats, fundingSeenSats).safe() }

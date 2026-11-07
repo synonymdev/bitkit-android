@@ -169,6 +169,29 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `an exit's value is in transfer until its sweep confirms, from the first build on`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val script = AddressScript.of(address)
+        // One output of 90,000 to the destination.
+        val hex = "02000000" + "01" + "11".repeat(32) + "00000000" + "00" + "ffffffff" + "01" +
+            "905f010000000000" + "%02x".format(script.size) + script.toHexString() + "00000000"
+        val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP).copy(txHex = hex)
+        val built = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
+            .copy(destination = address, expectedSats = 95_000uL)
+            .adopt(SparkExitFixtures.recovery(listOf(sweep)), 1L)
+
+        // The plan lists the sweep from the first build: nothing reached savings yet.
+        assertEquals(95_000uL, SparkExitState(record = built).inTransferSats)
+
+        val landed = built.copy(
+            recovery = built.recovery?.copy(
+                transactions = listOf(sweep.copy(status = ExitTransactionStatus.Confirmed(900u))),
+            ),
+        )
+        assertEquals(5_000uL, SparkExitState(record = landed).inTransferSats)
+    }
+
+    @Test
     fun `a wait for a leaf that may still move tries again at doubling gaps up to a day and ends after a week`() {
         assertFalse(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_000u, tip = 1_005u))
         assertTrue(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_000u, tip = 1_006u))
