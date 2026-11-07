@@ -70,6 +70,7 @@ class PaykitRouteRepo @Inject constructor(
     suspend fun payServiceLeg(
         leg: ServiceRouteLeg,
         contact: String?,
+        tags: List<String> = emptyList(),
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> = when (leg.service) {
         SparkRepo.ROUTE_SERVICE -> sparkRepo.withdraw(
@@ -77,6 +78,7 @@ class PaykitRouteRepo @Inject constructor(
             amountSats = leg.deliveredSat,
             contact = contact,
             maxDebitSats = leg.debitSat,
+            tags = tags,
             onBeforeSend = onBeforeSend,
         )
         else -> Result.failure(AppError("Unsupported route service '${leg.service}'"))

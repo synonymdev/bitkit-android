@@ -387,6 +387,22 @@ class SparkRepoTest : BaseUnitTest() {
         )
     }
 
+    @Test
+    fun `tags a recovered withdrawal with the tags picked on confirmation`() = test {
+        whenever { activityRepo.addTagsToActivity(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        cacheData.update {
+            it.copy(
+                pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null, tags = listOf("rent")),
+            )
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+
+        journaledSpark()
+
+        verify(activityRepo).addTagsToActivity(eq("withdrawal"), eq(listOf("rent")), any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
     private suspend fun journaledSpark(): SparkRepo {
         whenever { cacheStore.update(any()) }.doSuspendableAnswer {
             cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))

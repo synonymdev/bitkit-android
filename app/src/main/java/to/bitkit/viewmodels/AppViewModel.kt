@@ -4140,6 +4140,7 @@ class AppViewModel @Inject constructor(
             return true
         }
         _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
+            preferSparkWhenSavingsShort(it)
             if (routePaykitPayment(it) == PaykitRouteOutcome.Refused) return false
         }
         if (!bindBitcoinRequestTerms()) return false
@@ -4148,6 +4149,17 @@ class AppViewModel @Inject constructor(
         refreshOnchainSendIfNeeded(walletGeneration)
         estimateLightningRoutingFeesIfNeeded(walletGeneration)
         return true
+    }
+
+    /**
+     * A request skips the amount step, so its source is picked here: Savings only when it covers the amount with its
+     * fee, else Spending, where the router can take the Spark leg.
+     */
+    private fun preferSparkWhenSavingsShort(route: PaykitRouteUi) {
+        val state = _sendUiState.value
+        if (!route.offersSparkLeg || state.payMethod != SendMethod.ONCHAIN || state.hardwareWalletId != null) return
+        if (walletRepo.balanceState.value.maxSendOnchainSats >= state.amount) return
+        _sendUiState.update { it.copy(payMethod = SendMethod.LIGHTNING) }
     }
 
     private suspend fun bindUsdtRequestTerms(): Boolean {
@@ -6872,7 +6884,11 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
-        val txid = paykitRouteRepo.payServiceLeg(leg, contactPaymentContext?.publicKey) {
+        val txid = paykitRouteRepo.payServiceLeg(
+            leg,
+            contactPaymentContext?.publicKey,
+            _sendUiState.value.selectedTags,
+        ) {
             startSparkOnchainProof(leg, incomingPaymentRequest, preparedPaymentProofRequest, contactPaymentContext)
                 .getOrThrow()
             true
@@ -6884,10 +6900,6 @@ class AppViewModel @Inject constructor(
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
-        }
-        _sendUiState.value.selectedTags.takeIf { it.isNotEmpty() }?.let { tags ->
-            activityRepo.addTagsToActivity(txid, tags)
-                .onFailure { Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG) }
         }
         incomingPaymentRequest?.let { request ->
             // The journaled withdrawal and Spark's payment list let a later reconcile finish a proof that fails here.

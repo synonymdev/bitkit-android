@@ -541,6 +541,7 @@ class SparkRepo @Inject constructor(
         amountSats: ULong,
         contact: String?,
         maxDebitSats: ULong? = null,
+        tags: List<String> = emptyList(),
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> =
         withContext(bgDispatcher) {
@@ -553,7 +554,7 @@ class SparkRepo @Inject constructor(
                 if (maxDebitSats != null && debitSats > maxDebitSats) throw SparkError.WithdrawalFeeChanged()
                 val earlierTxids = withdrawalTxidsTo(address)
                 if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-                val journal = PendingSparkWithdrawal(address, amountSats, contact, earlierTxids)
+                val journal = PendingSparkWithdrawal(address, amountSats, contact, earlierTxids, tags)
                 cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
                 val payment = runSuspendCatching { sparkService.send(prepared) }.getOrElse {
                     // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops.
@@ -917,7 +918,14 @@ class SparkRepo @Inject constructor(
         val saved = activityRepo.get().upsertActivity(Activity.Onchain(activity))
             .onFailure { Logger.warn("Failed to record Spark withdrawal '$txid'", it, context = TAG) }
             .isSuccess
-        if (saved && journal != null) cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
+        if (saved && journal != null) {
+            // The tags picked on Confirm travel with the journal, so a recovered withdrawal keeps them too.
+            if (journal.tags.isNotEmpty()) {
+                activityRepo.get().addTagsToActivity(txid, journal.tags)
+                    .onFailure { Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG) }
+            }
+            cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
+        }
     }
 
     private suspend fun receivedContact(payment: Payment, paymentHash: String): String? {
@@ -960,6 +968,7 @@ data class PendingSparkWithdrawal(
     val contact: String?,
     /** Withdrawals to [address] listed before this attempt, which never settle it. */
     val earlierTxids: Set<String> = emptySet(),
+    val tags: List<String> = emptyList(),
 )
 
 /** What became of a Spark withdrawal attempt, from Spark's payment list. */
