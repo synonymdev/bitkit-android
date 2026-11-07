@@ -217,6 +217,7 @@ import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
+import to.bitkit.repositories.SparkWithdrawalOutcome
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -12314,6 +12315,79 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
+    }
+
+    @Test
+    fun `a spark proof whose payer check fails is released so the request can be retried`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedrequest")
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val privateContext = privatePaymentContext(7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.captureOriginalOnchainPayer(request)).thenReturn(Result.success(testPublicKey))
+        whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
+        whenever(
+            paykitPaymentProofRepo.markSparkOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull(), any()),
+        ).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+        whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).thenReturn(true)
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any())).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+            runSuspendCatching { onBeforeSend() }.map { "never" }
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).releaseUnsentSparkOnchainProof(request)
+        verify(lightningRepo, never()).sparkWithdrawalOutcome(any(), any(), any())
+        verify(privatePaykitRepo).releasePrivatePaymentList(any(), any())
+    }
+
+    @Test
+    fun `an uncertain spark send keeps the request in flight`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
+        whenever(lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unknown)
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+            onBeforeSend()
+            Result.failure(AppError("send outcome lost"))
+        }
+        val privateContext = privatePaymentContext(7uL)
+        whenever(privatePaykitRepo.consumePrivatePaymentList("pubkycontact", privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext("pubkycontact", privateContext)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
     }
 
     private fun sparkRouteLeg(address: String) = ServiceRouteLeg(

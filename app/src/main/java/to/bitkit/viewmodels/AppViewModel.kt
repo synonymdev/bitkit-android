@@ -225,6 +225,7 @@ import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
+import to.bitkit.repositories.SparkWithdrawalOutcome
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -6884,21 +6885,32 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
+        var earlierTxids: Set<String>? = null
         val txid = paykitRouteRepo.payServiceLeg(
             leg,
             contactPaymentContext?.publicKey,
             _sendUiState.value.selectedTags,
         ) {
-            startSparkOnchainProof(leg, incomingPaymentRequest, preparedPaymentProofRequest, contactPaymentContext)
-                .getOrThrow()
+            val earlier = lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)
+            startSparkOnchainProof(
+                leg = leg,
+                incomingPaymentRequest = incomingPaymentRequest,
+                preparedPaymentProofRequest = preparedPaymentProofRequest,
+                contactPaymentContext = contactPaymentContext,
+                earlierTxids = earlier,
+            ).getOrThrow()
+            earlierTxids = earlier
             true
         }.getOrElse {
-            // A started proof is released only once Spark shows the withdrawal never sent.
-            incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(it) }
-            releasePrivatePaymentListIfNeeded(contactPaymentContext)
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext)
+            handleServiceLegFailure(
+                error = it,
+                leg = leg,
+                earlierTxids = earlierTxids,
+                incomingPaymentRequest = incomingPaymentRequest,
+                preparedPaymentProofRequest = preparedPaymentProofRequest,
+                contactPaymentContext = contactPaymentContext,
+                allowanceAttemptId = allowanceAttemptId,
+            )
             return
         }
         incomingPaymentRequest?.let { request ->
@@ -6918,6 +6930,36 @@ class AppViewModel @Inject constructor(
     }
 
     /**
+     * Only a withdrawal Spark shows never sent is a definite failure: it releases the started proof, the private list
+     * and the allowance attempt. Once a send was attempted and Spark can't tell yet, they stay, as on-chain.
+     */
+    @Suppress("LongParameterList")
+    private suspend fun handleServiceLegFailure(
+        error: Throwable,
+        leg: ServiceRouteLeg,
+        earlierTxids: Set<String>?,
+        incomingPaymentRequest: PaykitPaymentRequest?,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String?,
+    ) {
+        incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(it) }
+        val unsent = earlierTxids == null ||
+            lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, earlierTxids) ==
+            SparkWithdrawalOutcome.Unsent
+        if (!unsent) {
+            Logger.warn("Left a Spark withdrawal with an uncertain send result to Spark", error, context = TAG)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = null)
+            showUnresolvedOnchainSend(null, leg.deliveredSat, incomingPaymentRequest)
+            return
+        }
+        releasePrivatePaymentListIfNeeded(contactPaymentContext)
+        cancelPaymentProofPreparation(preparedPaymentProofRequest)
+        finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+        handlePaymentPreparationFailure(error, contactPaymentContext)
+    }
+
+    /**
      * Runs once the Spark withdrawal is prepared, right before it sends: checks the request may still be paid, then
      * marks its on-chain proof started for the leg's address and checks the original payer.
      */
@@ -6926,6 +6968,7 @@ class AppViewModel @Inject constructor(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
         contactPaymentContext: ContactPaymentContext?,
+        earlierTxids: Set<String>,
     ): Result<Unit> = runSuspendCatching {
         val request = incomingPaymentRequest ?: return@runSuspendCatching
         paykitPaymentRequestRepo.ensurePaymentAllowed(request).getOrThrow()
@@ -6939,7 +6982,7 @@ class AppViewModel @Inject constructor(
                 amountSats = leg.deliveredSat,
                 privatePaymentListVersion = privateContext?.paymentListVersion,
                 previousPrivatePaymentListVersion = privateContext?.previousPaymentListVersion,
-                earlierWithdrawalTxids = lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value),
+                earlierWithdrawalTxids = earlierTxids,
             ).getOrThrow()
             paykitPaymentProofRepo.verifyOriginalOnchainPayer(prepared, originalPayer).getOrThrow()
         }

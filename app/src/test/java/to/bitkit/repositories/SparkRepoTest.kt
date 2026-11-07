@@ -403,6 +403,23 @@ class SparkRepoTest : BaseUnitTest() {
         assertNull(cacheData.value.pendingSparkWithdrawal)
     }
 
+    @Test
+    fun `an older open journal refuses a new withdrawal before its proof can start`() = test {
+        val sut = journaledSpark()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 5_000uL, null)) }
+        var checked = false
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, onBeforeSend = {
+            checked = true
+            true
+        })
+
+        assertIs<SparkError.WithdrawalPending>(result.exceptionOrNull())
+        assertFalse(checked)
+        verify(sparkService, never()).prepareSend(any(), anyOrNull(), anyOrNull())
+        assertEquals(5_000uL, cacheData.value.pendingSparkWithdrawal?.amountSats)
+    }
+
     private suspend fun journaledSpark(): SparkRepo {
         whenever { cacheStore.update(any()) }.doSuspendableAnswer {
             cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
