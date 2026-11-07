@@ -76,6 +76,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
           E2E: true
+          TREZOR_BRIDGE: true
+          TREZOR_BRIDGE_URL: http://10.0.2.2:21325
         run: ./gradlew assembleDevDebug
 
       - name: Rename APK
@@ -106,9 +108,7 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: send, grep: "@send" }
-          - { name: lightning_security, grep: "@lightning|@security" }
-          - { name: lnurl_transfer, grep: "@lnurl|@transfer_2" }
+          - { name: hardware_wallet, grep: "@hardware_wallet" }
 
     name: e2e-tests-local - ${{ matrix.shard.name }}
 
