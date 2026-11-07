@@ -2,9 +2,12 @@ package to.bitkit.services
 
 import breez_sdk_spark.BreezSdk
 import breez_sdk_spark.ChainApiType
+import breez_sdk_spark.CheckRecoverFundsRequest
+import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.ClaimDepositRequest
 import breez_sdk_spark.Config
+import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.DepositInfo
 import breez_sdk_spark.EventListener
 import breez_sdk_spark.FeePolicy
@@ -21,10 +24,14 @@ import breez_sdk_spark.MaxOnchainFee
 import breez_sdk_spark.OnchainConfirmationSpeed
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentRequest
+import breez_sdk_spark.PrepareRecoverFundsRequest
+import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.PrepareSendPaymentRequest
 import breez_sdk_spark.PrepareSendPaymentResponse
 import breez_sdk_spark.ReceivePaymentMethod
 import breez_sdk_spark.ReceivePaymentRequest
+import breez_sdk_spark.RecoverFundsRequest
+import breez_sdk_spark.RecoverFundsResponse
 import breez_sdk_spark.SdkBuilder
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.Seed
@@ -43,6 +50,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.safe
+import to.bitkit.repositories.SparkExitRecovering
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -67,7 +75,7 @@ class SparkService @Inject constructor(
          * Bitkit's settings over the SDK's [defaults]. Breez's real-time data sync server, its Lightning address
          * (LNURL) server and its default external input parsers stay off on every network.
          */
-        internal fun configure(defaults: Config, apiKey: String?): Config = defaults.apply {
+        internal fun configure(defaults: Config, apiKey: String?, isExiting: Boolean): Config = defaults.apply {
             this.apiKey = apiKey
             realTimeSyncServerUrl = null
             lnurlDomain = null
@@ -79,6 +87,7 @@ class SparkService @Inject constructor(
                 onchain = MaxOnchainFee.NetworkRecommended(DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB),
                 proportionalPpm = null,
             )
+            leafOptimizationConfig = leafOptimizationConfig.copy(autoEnabled = !isExiting)
         }
 
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
@@ -143,13 +152,17 @@ class SparkService @Inject constructor(
      */
     val prefersSpark: Boolean get() = Env.network == Network.REGTEST
 
-    suspend fun connect(walletIndex: Int) = mutex.withLock {
+    /**
+     * Connects the Spark wallet. While [isExiting], leaf optimization stays off: it swaps leaves with the operators,
+     * which would hand the leaves an emergency exit is spending to someone else, whose refunds then confirm first.
+     */
+    suspend fun connect(walletIndex: Int, isExiting: Boolean = false) = mutex.withLock {
         if (sdk != null) return@withLock
         if (isWiping) throw SparkError.WipeInProgress()
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-        val config = configure(defaultConfig(network), Env.breezApiKey)
+        val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
         val chainServiceUrl = Env.sparkChainServiceUrl(Env.network)
         val connected = SdkBuilder(config, Seed.Mnemonic(mnemonic, passphrase)).use { builder ->
@@ -165,7 +178,8 @@ class SparkService @Inject constructor(
             },
         )
         sdk = connected
-        Logger.info("Connected Spark wallet on '$network' with chain '${chainServiceUrl ?: "default"}'", context = TAG)
+        val chain = chainServiceUrl ?: "default"
+        Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
     }
 
     suspend fun disconnect() = mutex.withLock {
@@ -272,6 +286,9 @@ class SparkService @Inject constructor(
     suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse =
         requireSdk().importUnilateralExitState(ImportUnilateralExitStateRequest(exitState))
 
+    /** The SDK calls of an emergency exit, or null while Spark is not connected. */
+    fun exitRecovering(): SparkExitRecovering? = sdk?.let(::BreezSparkExitRecovering)
+
     /** The Spark network this build runs on, as exit data backups record it. */
     val networkName: String? get() = sparkNetwork()?.name?.lowercase()
 
@@ -282,6 +299,22 @@ class SparkService @Inject constructor(
         Network.REGTEST -> SparkNetwork.REGTEST
         else -> null
     }
+}
+
+class BreezSparkExitRecovering(private val sdk: BreezSdk) : SparkExitRecovering {
+    override suspend fun prepare(request: PrepareRecoverFundsRequest): PrepareRecoverFundsResponse =
+        sdk.prepareRecoverFunds(request)
+
+    override suspend fun recover(request: RecoverFundsRequest, signer: CpfpSigner?): RecoverFundsResponse =
+        sdk.recoverFunds(request, signer)
+
+    override suspend fun check(recovery: RecoverFundsResponse): CheckRecoverFundsResponse =
+        sdk.checkRecoverFunds(CheckRecoverFundsRequest(recovery))
+
+    override suspend fun exportExitState(): String = sdk.exportUnilateralExitState().exitState
+
+    override suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse =
+        sdk.importUnilateralExitState(ImportUnilateralExitStateRequest(exitState))
 }
 
 sealed class SparkError(message: String, cause: Throwable? = null) : AppError(message, cause) {

@@ -14,6 +14,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.hardware.usb.UsbManager
+import android.net.ConnectivityManager
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.format.DateFormat
@@ -40,6 +41,9 @@ val Context.activityManager: ActivityManager
 
 val Context.alarmManager: AlarmManager
     get() = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+val Context.connectivityManager: ConnectivityManager
+    get() = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
 val Context.usbManager: UsbManager
     get() = getSystemService(Context.USB_SERVICE) as UsbManager

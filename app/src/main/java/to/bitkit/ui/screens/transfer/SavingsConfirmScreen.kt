@@ -83,7 +83,7 @@ fun SavingsConfirmScreen(
     val openChannels = lightningState.channels.filterOpen()
 
     val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
-    val sparkSats = sparkState.balanceSats
+    val sparkSats = sparkState.spendingSats
 
     // Spark counts as one more item: the selection list is offered once there are two to choose from.
     val hasMultiple = openChannels.size + (if (sparkSats > 0uL) 1 else 0) > 1

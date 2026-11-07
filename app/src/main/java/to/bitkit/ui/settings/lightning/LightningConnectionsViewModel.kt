@@ -38,6 +38,8 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.SparkDeposit
+import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
 import to.bitkit.repositories.SparkWithdrawal
@@ -55,6 +57,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val logsRepo: LogsRepo,
     private val activityRepo: ActivityRepo,
     private val sparkRepo: SparkRepo,
+    private val sparkExitRepo: SparkExitRepo,
 ) : ViewModel() {
 
     companion object {
@@ -101,9 +104,11 @@ class LightningConnectionsViewModel @Inject constructor(
                 lightningRepo.lightningState,
                 lightningRepo.lastKnownChannels,
                 sparkRepo.state,
-            ) { lightningState, channels, sparkState ->
-                Triple(lightningState.nodeLifecycleState.isRunning(), channels, sparkState)
-            }.collect { (isNodeRunning, channels, sparkState) ->
+                sparkExitRepo.state,
+            ) { lightningState, channels, sparkState, exitState ->
+                ConnectionsSnapshot(lightningState.nodeLifecycleState.isRunning(), channels, sparkState, exitState)
+            }.collect { snapshot ->
+                val (isNodeRunning, channels, sparkState) = snapshot
                 val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.update {
@@ -115,10 +120,10 @@ class LightningConnectionsViewModel @Inject constructor(
                         pendingConnections = channels.filterPending()
                             .map { it.mapToUiModel(channels, connectionText) }
                             .reversed().toImmutableList(),
-                        localBalance = calculateLocalBalance(channels).safe() + sparkState.balanceSats.safe(),
+                        localBalance = calculateLocalBalance(channels).safe() + sparkState.spendingSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
-                        spark = sparkState.toUi(lightningRepo),
-                        isSparkReceiving = sparkState.isReady,
+                        spark = sparkState.toUi(lightningRepo, snapshot.exitState.showsResult),
+                        isSparkReceiving = sparkState.isUsable,
                     )
                 }
             }
@@ -238,7 +243,14 @@ data class SparkUi(
     val balanceSats: ULong,
     val deposits: ImmutableList<SparkDepositUi> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
+    val recoverableFundsSats: ULong = 0uL,
+    val isExiting: Boolean = false,
+    /** An exit runs, or ended with leftover fee funding not yet swept: Emergency exit opens its progress. */
+    val showsExitResult: Boolean = false,
 ) {
+    /** The emergency exit is offered while Spark holds funds, and leads to its progress while it shows one. */
+    val showsExit get() = balanceSats > 0uL || recoverableFundsSats > 0uL || showsExitResult
+
     val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
     val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
 }
@@ -249,18 +261,31 @@ data class SparkDepositUi(
     val confirmations: UInt? = null,
 )
 
-internal suspend fun SparkState.toUi(lightningRepo: LightningRepo): SparkUi? {
-    if (!isReady) return null
+internal suspend fun SparkState.toUi(lightningRepo: LightningRepo, showsExitResult: Boolean = false): SparkUi? {
+    val showsExit = isExiting || showsExitResult
+    // An emergency exit keeps Spark listed, also while it cannot connect, so its progress stays reachable.
+    if (!isReady && !showsExit) return null
     // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
-    if (balanceSats == 0uL && deposits.isEmpty() && Env.network != Network.REGTEST) return null
+    val hasExit = showsExit || recoverableFundsSats > 0uL
+    if (balanceSats == 0uL && deposits.isEmpty() && !hasExit && Env.network != Network.REGTEST) return null
     return SparkUi(
         balanceSats = balanceSats,
         deposits = deposits.map {
             SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
         }.toImmutableList(),
         withdrawals = withdrawals,
+        recoverableFundsSats = recoverableFundsSats,
+        isExiting = isExiting,
+        showsExitResult = showsExit,
     )
 }
+
+private data class ConnectionsSnapshot(
+    val isNodeRunning: Boolean,
+    val channels: List<ChannelDetails>,
+    val sparkState: SparkState,
+    val exitState: SparkExitState,
+)
 
 data class ChannelUi(
     val name: String,

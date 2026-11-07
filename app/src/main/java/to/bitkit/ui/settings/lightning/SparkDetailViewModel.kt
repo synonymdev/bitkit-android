@@ -8,12 +8,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkRepo
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
@@ -23,13 +25,17 @@ class SparkDetailViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val sparkRepo: SparkRepo,
+    private val sparkExitRepo: SparkExitRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SparkDetailUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch(bgDispatcher) {
-            sparkRepo.state.collect { state -> _uiState.update { it.copy(spark = state.toUi(lightningRepo)) } }
+            combine(sparkRepo.state, sparkExitRepo.state) { state, exit -> state to exit.showsResult }
+                .collect { (state, showsResult) ->
+                    _uiState.update { it.copy(spark = state.toUi(lightningRepo, showsResult)) }
+                }
         }
         if (Env.network == Network.REGTEST) {
             viewModelScope.launch(bgDispatcher) {
@@ -48,7 +54,8 @@ class SparkDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             sparkRepo.refreshState()
-            _uiState.update { it.copy(spark = sparkRepo.state.value.toUi(lightningRepo)) }
+            val showsResult = sparkExitRepo.state.value.showsResult
+            _uiState.update { it.copy(spark = sparkRepo.state.value.toUi(lightningRepo, showsResult)) }
             delay(500.milliseconds)
             _uiState.update { it.copy(isRefreshing = false) }
         }

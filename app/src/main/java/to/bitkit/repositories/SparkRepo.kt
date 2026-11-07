@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.AutoOptimizationEvent
 import breez_sdk_spark.ClaimDeferredReason
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.FeePolicy
@@ -61,6 +62,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import breez_sdk_spark.PaymentType as SparkPaymentType
@@ -92,6 +94,12 @@ class SparkRepo @Inject constructor(
         private const val CLAIM_POLL_ATTEMPTS = 60
 
         private val SEND_STATUS_PRIORITY = listOf(PaymentStatus.COMPLETED, PaymentStatus.PENDING, PaymentStatus.FAILED)
+
+        /** How long the SDK leaves the counter-swap of a leaf swap cut short unclaimed (its 300 s), plus a margin. */
+        private val COUNTER_SWAP_GRACE = 330.seconds
+
+        /** The longest an exit quote waits for a running leaf optimization to end. */
+        private val OPTIMIZATION_WAIT = 2.minutes
 
         /** How long a send's settlement waits for the send screen to track it as pending before it reports. */
         private val PENDING_TRACK_WAIT = 10.seconds
@@ -130,6 +138,9 @@ class SparkRepo @Inject constructor(
     var hasMergedRemoteExitState = false
         private set
 
+    /** The SDK is swapping leaves with the operators; their value is in flight until it ends. */
+    private val isOptimizing = MutableStateFlow(false)
+
     /** Watchers of the claims of deposits this app sent, by txid; they outlive the screens that start them. */
     private val claimJobs = ConcurrentHashMap<String, Job>()
 
@@ -149,13 +160,26 @@ class SparkRepo @Inject constructor(
     /** Fires once Spark connects and whenever its unilateral exit data changes, so the exit data backup is redone. */
     val exitStateChanged: SharedFlow<Unit> = _exitStateChanged.asSharedFlow()
 
+    /** The wallet Spark last started for. */
+    @Volatile
+    var walletIndex: Int = 0
+        private set
+
+    private val _walletWiped = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+
+    /** Fires with the wallet index once its Spark wallet, and any emergency exit of it, was wiped. */
+    val walletWiped: SharedFlow<Int> = _walletWiped.asSharedFlow()
+
     suspend fun start(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext Result.success(Unit)
+        this@SparkRepo.walletIndex = walletIndex
         runSuspendCatching {
             if (isCollectingEvents.compareAndSet(false, true)) {
                 scope.launch { sparkService.events.collect { onSdkEvent(it) } }
             }
-            sparkService.connect(walletIndex)
+            val isExiting = exitStore(walletIndex).isActive()
+            _state.update { it.copy(isExiting = isExiting) }
+            sparkService.connect(walletIndex, isExiting)
             importRestoredExitState(walletIndex)
             // The SDK starts syncing inside build(), before the listener exists, so its first Synced can be missed.
             runSuspendCatching { sparkService.syncWallet() }
@@ -173,8 +197,8 @@ class SparkRepo @Inject constructor(
     fun setWiping(isWiping: Boolean) = run { sparkService.isWiping = isWiping }
 
     /**
-     * Disconnects Spark and deletes its storage and in-memory state. Spark stays connected for the life of the
-     * process otherwise, so a node stopped in background keeps Lightning available through it.
+     * Disconnects Spark and deletes its storage, its emergency exit records and its in-memory state. Spark stays
+     * connected for the life of the process otherwise, so a node stopped in background keeps Lightning available.
      */
     suspend fun wipe(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         claimJobs.values.forEach { it.cancel() }
@@ -187,10 +211,99 @@ class SparkRepo @Inject constructor(
         hasMergedRemoteExitState = false
         _depositClaims.update { emptyMap() }
         _state.update { SparkState(isSupported = sparkService.isSupported) }
-        runSuspendCatching { sparkService.wipeStorage(walletIndex) }
+        val storage = runSuspendCatching { sparkService.wipeStorage(walletIndex) }
+        val exitRecords = runSuspendCatching {
+            exitStore(walletIndex).delete()
+            SparkExitLostLeafStore(File(Env.sparkExitLostLeavesPath(walletIndex))).delete()
+        }
+        _walletWiped.emit(walletIndex)
+        storage.mapCatching { exitRecords.getOrThrow() }
     }
 
-    fun canReceive(): Boolean = _state.value.isReady
+    /**
+     * Takes Spark off the Lightning rail while an emergency exit runs, so no payment moves leaves the exit is
+     * spending, and connects Spark again so its leaf optimization follows: off while exiting, on once it ends.
+     */
+    suspend fun setExiting(isExiting: Boolean, reconnect: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
+        val isCurrent = _state.value.isExiting == isExiting && sparkService.isConnected
+        if (isCurrent && !reconnect) return@withContext Result.success(Unit)
+        _state.update { it.copy(isExiting = isExiting) }
+        runSuspendCatching {
+            onOptimizationCutShort()
+            sparkService.disconnect()
+            sparkService.connect(walletIndex, isExiting)
+            refresh()
+        }.onFailure {
+            Logger.error("Failed to reconnect Spark with exit '$isExiting'", it, context = TAG)
+        }
+    }
+
+    /**
+     * Holds Spark for an exit about to start: no sends, receives or spending balance, in the same step the exit's
+     * transfer starts counting it. [setExiting] reconnects it for the exit afterwards.
+     */
+    fun holdForExit() = _state.update { it.copy(isExiting = true) }
+
+    /** Whether an exit quote has to wait first: a leaf optimization runs, or one ran or was cut short recently. */
+    suspend fun needsSettling(): Boolean =
+        isOptimizing.value || cacheStore.data.first().sparkOptimizationActivityAt != null
+
+    /**
+     * Settles the leaves for an emergency exit quote, which exits the leaves listed then. The balance leaves out an
+     * unclaimed counter-swap, and a leaf optimization cut short leaves its counter-swap unclaimed for the SDK's 300 s
+     * grace. So: wait for a running optimization, then until the last one is [COUNTER_SWAP_GRACE] old, then sync,
+     * which claims counter-swaps past the grace.
+     */
+    suspend fun settleForExit(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            awaitOptimizationIdle()
+            cacheStore.data.first().sparkOptimizationActivityAt?.let {
+                delay(Instant.fromEpochMilliseconds(it) + COUNTER_SWAP_GRACE - clock.now())
+            }
+            sparkService.syncWallet()
+            cacheStore.update { it.copy(sparkOptimizationActivityAt = null) }
+            refresh()
+        }
+    }
+
+    /** Waits, up to [OPTIMIZATION_WAIT], for a running leaf optimization to end. */
+    suspend fun awaitOptimizationIdle() {
+        if (withTimeoutOrNull(OPTIMIZATION_WAIT) { isOptimizing.first { !it } } == null) {
+            Logger.warn("Gave up waiting for a Spark leaf optimization to end", context = TAG)
+        }
+    }
+
+    private suspend fun onOptimization(event: AutoOptimizationEvent) {
+        when (event) {
+            is AutoOptimizationEvent.Started, is AutoOptimizationEvent.RoundCompleted -> {
+                isOptimizing.update { true }
+                stampOptimizationActivity()
+            }
+            AutoOptimizationEvent.Cancelled, is AutoOptimizationEvent.Failed -> {
+                isOptimizing.update { false }
+                stampOptimizationActivity()
+            }
+            AutoOptimizationEvent.Completed, AutoOptimizationEvent.Skipped -> {
+                isOptimizing.update { false }
+                cacheStore.update { it.copy(sparkOptimizationActivityAt = null) }
+            }
+        }
+    }
+
+    private suspend fun onOptimizationCutShort() {
+        if (!isOptimizing.value) return
+        isOptimizing.update { false }
+        stampOptimizationActivity()
+    }
+
+    private suspend fun stampOptimizationActivity() {
+        val now = clock.now().toEpochMilliseconds()
+        cacheStore.update { it.copy(sparkOptimizationActivityAt = now) }
+    }
+
+    private fun exitStore(walletIndex: Int) = SparkExitStore(File(Env.sparkExitRecordPath(walletIndex)))
+
+    fun canReceive(): Boolean = _state.value.isReady && !_state.value.isExiting
 
     fun canSend(amountSats: ULong): Boolean = _state.value.isReady && _state.value.sendableSats >= amountSats
 
@@ -244,6 +357,7 @@ class SparkRepo @Inject constructor(
         runSuspendCatching {
             ensurePaymentDeadline(paymentDeadlineAt)
             if (!sparkService.isConnected) throw SparkError.SendRefused("Spark is not connected")
+            if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
             val prepared = runSuspendCatching { sparkService.prepareSend(bolt11, amountSats) }.getOrElse {
                 if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
                 throw SparkError.SendRefused("Spark could not prepare the payment", it)
@@ -428,6 +542,7 @@ class SparkRepo @Inject constructor(
      */
     suspend fun withdrawAll(address: String, confirmedFeeSats: ULong): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
+            if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
             val prepared = prepareWithdrawAll(address)
             if (prepared.feeSats() > confirmedFeeSats) throw SparkError.WithdrawalFeeChanged()
             val payment = sparkService.send(prepared.response)
@@ -497,12 +612,17 @@ class SparkRepo @Inject constructor(
 
     /**
      * The exit data backup, or null until Spark has connected and synced once, since an export taken before its
-     * first sync can miss what the wallet holds.
+     * first sync can miss what the wallet holds. Also null while an emergency exit runs: the operators stop reporting
+     * the leaves it moves, so the backup from before it is kept.
      */
     suspend fun exitBackup(): Result<SparkExitBackupV1?> = withContext(bgDispatcher) {
         runSuspendCatching {
             val network = sparkService.networkName
             if (!sparkService.isConnected || network == null || !_state.value.hasSynced) return@runSuspendCatching null
+            if (_state.value.isExiting || exitStore(walletIndex).isActive()) {
+                Logger.info("Skipped the Spark exit data backup while an exit runs", context = TAG)
+                return@runSuspendCatching null
+            }
             SparkExitBackupV1(createdAt = nowMillis(), network = network, exitState = sparkService.exportExitState())
         }
     }
@@ -585,6 +705,7 @@ class SparkRepo @Inject constructor(
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),
                 withdrawals = payments.toWithdrawals(),
+                recoverableFundsSats = info.recoverableFundsSats,
             ).withBroadcastDeposits()
         }
         markClaimedDeposits(claimed)
@@ -719,6 +840,7 @@ class SparkRepo @Inject constructor(
                 is SdkEvent.NewDeposits -> refresh()
                 is SdkEvent.UnilateralExitStateChanged -> _exitStateChanged.emit(Unit)
                 is SdkEvent.ClaimedDeposits -> refresh()
+                is SdkEvent.AutoOptimization -> onOptimization(event.optimizationEvent)
                 else -> Unit
             }
         }.onFailure {
@@ -817,9 +939,18 @@ data class SparkState(
     val pendingDepositSats: ULong = 0uL,
     val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
+    val recoverableFundsSats: ULong = 0uL,
+    /** An emergency exit is moving the balance on-chain: Spark then neither sends nor receives. */
+    val isExiting: Boolean = false,
 ) {
     /** The most Spark can send once its service fee is paid, so a payment near the full balance isn't offered. */
-    val sendableSats: ULong get() = SparkFees.sendableSats(balanceSats)
+    val sendableSats: ULong get() = if (isExiting) 0uL else SparkFees.sendableSats(balanceSats)
+
+    /** Spark can take payments and transfers: connected, and no emergency exit runs. */
+    val isUsable: Boolean get() = isReady && !isExiting
+
+    /** The balance Spending counts; during an emergency exit it is in transfer to Savings instead. */
+    val spendingSats: ULong get() = if (isExiting) 0uL else balanceSats
 }
 
 object SparkFees {
