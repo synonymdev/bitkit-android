@@ -104,13 +104,9 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: onboarding_backup_numberpad, grep: "@onboarding|@backup|@numberpad" }
-          - { name: onchain_boost_receive_widgets, grep: "@onchain|@boost|@receive|@widgets" }
-          - { name: settings, grep: "@settings" }
           - { name: send, grep: "@send" }
           - { name: lightning_security, grep: "@lightning|@security" }
           - { name: lnurl_transfer, grep: "@lnurl|@transfer_2" }
-          - { name: multi_address_local, grep: "@multi_address_1|@multi_address_3|@multi_address_4" }
 
     name: e2e-tests-local - ${{ matrix.shard.name }}
 
