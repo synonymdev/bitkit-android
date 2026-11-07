@@ -708,6 +708,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private var walletGeneration = 0L
 
     private fun stubRepositories() {
+        // The router pays the endpoint of the selected source: Lightning from Spending, on-chain from Savings.
+        // Result is an inline class, so a suspend answer returns its value unboxed.
+        whenever { paykitRouteRepo.route(any(), any(), any(), any(), any()) }.thenAnswer {
+            val endpoints = it.getArgument<List<PaykitEndpoint>>(1)
+            val fromSpending = it.getArgument<Long>(3) == 0L
+            val picked = endpoints.firstOrNull { endpoint ->
+                MethodId.fromRawValue(endpoint.methodId)?.isOnchain != fromSpending
+            } ?: endpoints.first()
+            PaykitRoute.Direct(picked)
+        }
         whenever(connectionRecovery.currentGeneration()).thenAnswer { walletGeneration }
         whenever(connectionRecovery.isCurrentGeneration(anyOrNull())).thenAnswer {
             it.getArgument<Long?>(0) == walletGeneration
@@ -11980,7 +11990,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `spark route pays the contact while spending is the source`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
-        whenever(paykitRouteRepo.payServiceLeg(leg, "pubkycontact")).thenReturn(Result.success("txid"))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any())).thenReturn(Result.success("txid"))
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
         setSendState(
             SendUiState(
@@ -11993,7 +12003,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo).payServiceLeg(leg, "pubkycontact")
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any())
     }
 
     @Test
@@ -12014,7 +12024,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull())
+        verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull(), any())
     }
 
     @Test
@@ -12129,6 +12139,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         assertNull(sut.sendUiState.value.paykitRoute?.serviceLeg)
+    }
+
+    @Test
+    fun `spark route pays an onchain request and completes its proof`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedrequest")
+        val txid = "ab".repeat(32)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val privateContext = privatePaymentContext(7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.captureOriginalOnchainPayer(request)).thenReturn(Result.success(testPublicKey))
+        whenever(paykitPaymentProofRepo.markSparkOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any())).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(2)
+            if (onBeforeSend()) Result.success(txid) else Result.failure(AppError("refused"))
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+        advanceUntilIdle()
+
+        inOrder(paykitPaymentRequestRepo, paykitPaymentProofRepo).apply {
+            verify(paykitPaymentRequestRepo).ensurePaymentAllowed(request)
+            verify(paykitPaymentProofRepo).markSparkOnchainPaymentStarted(
+                eq(request),
+                eq(leg.endpoint.value),
+                eq(leg.deliveredSat),
+                anyOrNull(),
+                anyOrNull(),
+            )
+            verify(paykitPaymentProofRepo).completeSparkOnchainPayment(request, txid)
+        }
     }
 
     private fun sparkRouteLeg(address: String) = ServiceRouteLeg(
@@ -17407,6 +17466,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(sut.sendUiState.value.shouldConfirmPay)
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `request confirmation pays the endpoint the router picks`() = test {
+        enablePaykitUi()
+        usdtEnabled.value = false
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val endpoint = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001")))),
+            acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+        resolution.complete(
+            Result.success(PublicPaykitPaymentResult.Opened(endpoint.value, endpoints = listOf(endpoint)))
+        )
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(2_500uL, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(paykitRouteRepo).route(
+            eq(2_500uL),
+            eq(listOf(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))),
+            eq(0uL),
+            eq(100_000uL),
+            eq(false),
+        )
     }
 
     @Test

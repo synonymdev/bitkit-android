@@ -4133,6 +4133,9 @@ class AppViewModel @Inject constructor(
             )
             return true
         }
+        _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
+            if (routePaykitPayment(it) == PaykitRouteOutcome.Refused) return false
+        }
         if (!bindBitcoinRequestTerms()) return false
         requireCurrentPaymentPreparation(walletGeneration)
         navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm, walletGeneration)
@@ -4204,7 +4207,7 @@ class AppViewModel @Inject constructor(
 
     private fun offersSparkLeg(payment: ContactPaymentContext, address: String, canPayDirectly: Boolean): Boolean {
         if (!paykitRouteRepo.canRouteThroughSpark || canPayDirectly || address.isEmpty()) return false
-        return payment.incomingPaymentRequest == null && payment.endpoints.any { it.methodId.isOnchain }
+        return payment.endpoints.any { it.methodId.isOnchain }
     }
 
     private fun canFundPaykitLightning(invoice: LightningInvoice?, lnurl: LnurlParams.LnurlPay?): Boolean {
@@ -4388,6 +4391,12 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
+        // A request's confirm screen opens without the amount step, so a source switch asks the router again there.
+        if (activeIncomingPaymentRequest() != null) {
+            _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
+                routePaykitPayment(it)
+            }
+        }
         reviewFundingSourceChange(current, canReviewInPlace, wasReviewed)
     }
 
@@ -5144,7 +5153,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun requiresPaykitServiceRoute(payment: ContactPaymentContext): Boolean {
-        if (!paykitRouteRepo.canRouteThroughSpark || payment.incomingPaymentRequest != null) return false
+        if (!paykitRouteRepo.canRouteThroughSpark) return false
         return payment.endpoints.isNotEmpty() && payment.endpoints.all { it.methodId.isOnchain }
     }
 
@@ -5808,10 +5817,11 @@ class AppViewModel @Inject constructor(
         source: SendFundingSource = selectedFundingSource(),
     ): MethodId = when (source) {
         SendFundingSource.Usdt -> MethodId.UsdtArbitrum
-        SendFundingSource.Spending -> when (lnurl) {
-            is LnurlParams.LnurlPay -> MethodId.Lnurl
-            else -> MethodId.Bolt11
-        }
+        SendFundingSource.Spending -> routedPaykitRoute?.serviceLeg?.let { MethodId.fromRawValue(it.endpoint.methodId) }
+            ?: when (lnurl) {
+                is LnurlParams.LnurlPay -> MethodId.Lnurl
+                else -> MethodId.Bolt11
+            }
         SendFundingSource.Savings, is SendFundingSource.Hardware -> PublicPaykitRepo.onchainMethodId(address)
     }
 
@@ -6437,7 +6447,13 @@ class AppViewModel @Inject constructor(
         }
 
         _sendUiState.value.routedPaykitRoute?.serviceLeg?.let {
-            proceedWithServiceRoutedPayment(it, contactPaymentContext, allowanceAttemptId)
+            proceedWithServiceRoutedPayment(
+                leg = it,
+                incomingPaymentRequest = incomingPaymentRequest,
+                preparedPaymentProofRequest = preparedPaymentProofRequest,
+                contactPaymentContext = contactPaymentContext,
+                allowanceAttemptId = allowanceAttemptId,
+            )
             return
         }
 
@@ -6472,6 +6488,7 @@ class AppViewModel @Inject constructor(
         val endpointIdentifier = paymentProofPreparation(contactPaymentContext).endpointIdentifier
         val paymentHash = _sendUiState.value.decodedInvoice
             ?.takeIf { _sendUiState.value.payMethod == SendMethod.LIGHTNING }
+            ?.takeIf { _sendUiState.value.routedPaykitRoute?.serviceLeg == null }
             ?.paymentHash?.toHex()
         return paykitAllowanceRepo.beginManualPayment(request, endpointIdentifier, paymentHash)
             .recoverCatching {
@@ -6837,14 +6854,25 @@ class AppViewModel @Inject constructor(
 
     private suspend fun proceedWithServiceRoutedPayment(
         leg: ServiceRouteLeg,
+        incomingPaymentRequest: PaykitPaymentRequest?,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
-        val txid = paykitRouteRepo.payServiceLeg(leg, contactPaymentContext?.publicKey).getOrElse {
+        val txid = paykitRouteRepo.payServiceLeg(leg, contactPaymentContext?.publicKey) {
+            startSparkOnchainProof(leg, incomingPaymentRequest, preparedPaymentProofRequest, contactPaymentContext)
+                .getOrThrow()
+            true
+        }.getOrElse {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            cancelPaymentProofPreparation(preparedPaymentProofRequest)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
+        }
+        incomingPaymentRequest?.let { request ->
+            // The journaled withdrawal and Spark's payment list let a later reconcile finish a proof that fails here.
+            viewModelScope.launch { paykitPaymentProofRepo.completeSparkOnchainPayment(request, txid) }
         }
         finishManualAllowancePayment(allowanceAttemptId, succeeded = true, transactionId = txid)
         Logger.info("Paid Paykit contact through '${leg.service}' in '$txid'", context = TAG)
@@ -6856,6 +6884,33 @@ class AppViewModel @Inject constructor(
                 sats = leg.deliveredSat.toLong(),
             ),
         )
+    }
+
+    /**
+     * Runs once the Spark withdrawal is prepared, right before it sends: checks the request may still be paid, then
+     * marks its on-chain proof started for the leg's address and checks the original payer.
+     */
+    private suspend fun startSparkOnchainProof(
+        leg: ServiceRouteLeg,
+        incomingPaymentRequest: PaykitPaymentRequest?,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
+    ): Result<Unit> = runSuspendCatching {
+        val request = incomingPaymentRequest ?: return@runSuspendCatching
+        paykitPaymentRequestRepo.ensurePaymentAllowed(request).getOrThrow()
+        val prepared = preparedPaymentProofRequest
+        if (prepared != null) {
+            val originalPayer = paykitPaymentProofRepo.captureOriginalOnchainPayer(prepared).getOrThrow()
+            val privateContext = contactPaymentContext?.privatePaymentContext
+            paykitPaymentProofRepo.markSparkOnchainPaymentStarted(
+                request = request,
+                address = leg.endpoint.value,
+                amountSats = leg.deliveredSat,
+                privatePaymentListVersion = privateContext?.paymentListVersion,
+                previousPrivatePaymentListVersion = privateContext?.previousPaymentListVersion,
+            ).getOrThrow()
+            paykitPaymentProofRepo.verifyOriginalOnchainPayer(prepared, originalPayer).getOrThrow()
+        }
     }
 
     private suspend fun proceedWithLightningPayment(

@@ -224,7 +224,7 @@ class SparkRepoTest : BaseUnitTest() {
                 service = "spark",
                 endpoint = contactEndpoint,
                 deliveredSat = 20_000uL,
-                debitSat = 20_300uL,
+                debitSat = 20_500uL,
                 atomicity = "trusted",
                 validUntilUnix = 1_900_000_000uL,
             ),
@@ -234,7 +234,7 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `offers no route leg the balance cannot cover with its fee`() = test {
-        val sut = readySpark(balanceSats = 20_299uL)
+        val sut = readySpark(balanceSats = 20_499uL)
 
         assertEquals(null, sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow())
     }
@@ -287,6 +287,46 @@ class SparkRepoTest : BaseUnitTest() {
 
         verify(activityRepo, never()).upsertActivity(any())
         assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a withdrawal refused right before it sends writes no journal`() = test {
+        val sut = journaledSpark()
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, onBeforeSend = { false })
+
+        assertIs<PaymentAbortedBeforeSend>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `finds the txid of a withdrawal to an address once spark synced`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = journaledSpark()
+
+        assertEquals("withdrawal", sut.withdrawalTxid("bcrt1qcontact", 20_000uL))
+        assertNull(sut.withdrawalTxid("bcrt1qcontact", 19_999uL))
+        assertNull(sut.withdrawalTxid("bcrt1qother", 20_000uL))
+    }
+
+    @Test
+    fun `a withdrawal to a contact is not marked as a transfer`() = test {
+        val sent = OnchainActivity.create(
+            id = "withdrawal",
+            txType = ActivityPaymentType.SENT,
+            txId = "withdrawal",
+            value = 20_000uL,
+            fee = 500uL,
+            address = "bcrt1qcontact",
+            timestamp = 1uL,
+        )
+        whenever { activityRepo.getOnchainActivityByTxId(eq("withdrawal"), any()) }.thenReturn(sent)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = journaledSpark()
+
+        assertTrue(sut.markWithdrawalAsTransfer("withdrawal"))
+        verify(activityRepo, never()).updateActivity(any(), any(), any())
     }
 
     private suspend fun journaledSpark(): SparkRepo {

@@ -484,7 +484,9 @@ class SparkRepo @Inject constructor(
                 if (!canSend(amountSats)) return@runSuspendCatching null
                 val method = sparkService.prepareSend(endpoint.value, amountSats).paymentMethod
                 val quote = (method as SendPaymentMethod.BitcoinAddress).feeQuote
-                val debitSats = amountSats + quote.speedMedium.userFeeSat
+                // Spark charges its fee and the L1 broadcast fee on top of what reaches the contact.
+                val speed = quote.speedMedium
+                val debitSats = amountSats.safe() + (speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()).safe()
                 if (quote.isEstimate || !canSend(debitSats)) return@runSuspendCatching null
                 ServiceRouteLeg(
                     service = ROUTE_SERVICE,
@@ -497,16 +499,34 @@ class SparkRepo @Inject constructor(
             }
         }
 
+    /** The txid of a withdrawal Spark sent of exactly [amountSats] to [address], once Spark's synced list holds it. */
+    suspend fun withdrawalTxid(address: String, amountSats: ULong): String? = withContext(bgDispatcher) {
+        if (!_state.value.hasSynced) return@withContext null
+        sparkService.listPayments().firstNotNullOfOrNull { payment ->
+            val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@firstNotNullOfOrNull null
+            withdraw.txId.takeIf {
+                payment.status != PaymentStatus.FAILED && withdraw.destinationAddress == address &&
+                    payment.amount.toLong().toULong() == amountSats
+            }
+        }
+    }
+
     /**
      * Withdraws exactly [amountSats] to a Paykit [contact]'s on-chain [address] at medium speed and returns the
      * withdrawal's txid. A journal entry written before the send lets the next start settle a withdrawal the app was
      * killed during, from Spark's payment list, and refuses another withdrawal until then.
      */
-    suspend fun withdraw(address: String, amountSats: ULong, contact: String?): Result<String> =
+    suspend fun withdraw(
+        address: String,
+        amountSats: ULong,
+        contact: String?,
+        onBeforeSend: suspend () -> Boolean = { true },
+    ): Result<String> =
         withContext(bgDispatcher) {
             runSuspendCatching {
                 if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
                 val prepared = sparkService.prepareSend(address, amountSats)
+                if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
                 val journal = PendingSparkWithdrawal(address, amountSats, contact)
                 cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
                 val payment = runSuspendCatching { sparkService.send(prepared) }.getOrElse {
@@ -678,7 +698,7 @@ class SparkRepo @Inject constructor(
         val isWithdrawal = txid in withdrawalTxids || _state.value.withdrawals.any { it.txid == txid }
         if (!isWithdrawal) return@withContext false
         val activities = activityRepo.get()
-        activities.getOnchainActivityByTxId(txid)?.takeUnless { it.isTransfer }?.let {
+        activities.getOnchainActivityByTxId(txid)?.takeUnless { it.isTransfer || it.txType == PaymentType.SENT }?.let {
             activities.updateActivity(it.id, Activity.Onchain(it.copy(isTransfer = true)))
         }
         true
@@ -689,7 +709,9 @@ class SparkRepo @Inject constructor(
         payments.filter { it.status != PaymentStatus.FAILED }
             .mapNotNull { (it.details as? PaymentDetails.Withdraw)?.txId }
             .forEach { txid ->
-                val activity = activities.getOnchainActivityByTxId(txid)?.takeUnless { it.isTransfer } ?: return@forEach
+                // A withdrawal to a Paykit contact is a send of its own; only an arrival in Savings is a transfer.
+                val activity = activities.getOnchainActivityByTxId(txid)
+                    ?.takeUnless { it.isTransfer || it.txType == PaymentType.SENT } ?: return@forEach
                 activities.updateActivity(activity.id, Activity.Onchain(activity.copy(isTransfer = true)))
             }
     }

@@ -2331,6 +2331,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** The txid of Spark's withdrawal of exactly [amountSats] to [address], once Spark lists it. */
+    suspend fun sparkWithdrawalTxid(address: String, amountSats: ULong): String? =
+        sparkRepo.withdrawalTxid(address, amountSats)
+
     /** Whether Spark alone can pay [amountSats], which it does whenever the node cannot. */
     fun canSendWithSpark(amountSats: ULong): Boolean = sparkRepo.canSend(amountSats)
 
