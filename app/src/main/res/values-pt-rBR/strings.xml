@@ -1055,6 +1055,8 @@
     <string name="wallet__send_invoice_expiration">Vencimento do invoice</string>
     <string name="wallet__send_max_spending__description">O valor máximo utilizável é um pouco menor devido a um saldo de reserva obrigatório.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
+    <string name="wallet__send_paykit_no_route__description">Este contato não tem nenhum método de pagamento que o Bitkit possa usar agora.</string>
+    <string name="wallet__send_paykit_no_route__title">Não é possível pagar este contato</string>
     <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos não estão mais disponíveis. O Bitkit primeiro verifica a rede e depois devolve as moedas desta transferência para sua carteira, para que a transferência original nunca seja confirmada. Isso tem uma taxa de rede.</string>
     <string name="wallet__send_pending__description">Esse pagamento está demorando mais do que o esperado. Enquanto isso, você pode continuar usando a Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento Pendente</string>
