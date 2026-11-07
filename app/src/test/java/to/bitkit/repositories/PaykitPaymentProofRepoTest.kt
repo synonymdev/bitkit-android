@@ -885,14 +885,21 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(record)
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.markSparkOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(
+            request,
+            ONCHAIN_ADDRESS,
+            request.amount.atomic,
+            earlierWithdrawalTxids = setOf("ef".repeat(32)),
+        ).getOrThrow()
 
-        whenever(lightningRepo.sparkWithdrawalTxid(ONCHAIN_ADDRESS, request.amount.atomic)).thenReturn(null)
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, setOf("ef".repeat(32))))
+            .thenReturn(SparkWithdrawalOutcome.Unknown)
         paymentProofRepo().reconcile()
         assertTrue(storedProofs.single().paymentStarted)
         assertEquals(null, storedProofs.single().proofData)
 
-        whenever(lightningRepo.sparkWithdrawalTxid(ONCHAIN_ADDRESS, request.amount.atomic)).thenReturn(txid)
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, setOf("ef".repeat(32))))
+            .thenReturn(SparkWithdrawalOutcome.Sent(txid))
         paymentProofRepo().reconcile()
         runCurrent()
 
@@ -904,6 +911,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             """{"data":"$txid","type":"${PaykitPaymentProofKind.Onchain.type}"}""",
             proofCaptor.firstValue,
         )
+    }
+
+    @Test
+    fun `a spark withdrawal proof that never sent is released so the request can be paid again`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unsent)
+
+        assertTrue(repo.releaseUnsentSparkOnchainProof(request))
+
+        assertTrue(storedProofs.isEmpty())
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
     }
 
     @Test

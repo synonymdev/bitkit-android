@@ -62,6 +62,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
@@ -301,16 +302,6 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `finds the txid of a withdrawal to an address once spark synced`() = test {
-        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
-        val sut = journaledSpark()
-
-        assertEquals("withdrawal", sut.withdrawalTxid("bcrt1qcontact", 20_000uL))
-        assertNull(sut.withdrawalTxid("bcrt1qcontact", 19_999uL))
-        assertNull(sut.withdrawalTxid("bcrt1qother", 20_000uL))
-    }
-
-    @Test
     fun `a withdrawal to a contact is not marked as a transfer`() = test {
         val sent = OnchainActivity.create(
             id = "withdrawal",
@@ -347,6 +338,53 @@ class SparkRepoTest : BaseUnitTest() {
         val sut = journaledSpark()
 
         assertTrue(sut.state.value.withdrawals.isEmpty())
+    }
+
+    @Test
+    fun `refuses a withdrawal whose fee rose above the confirmed debit`() = test {
+        val sut = journaledSpark()
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, maxDebitSats = 20_499uL)
+
+        assertIs<SparkError.WithdrawalFeeChanged>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `keeps the journal when the withdrawal's activity fails to save`() = test {
+        val sut = journaledSpark()
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(AppError("disk full")))
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact").getOrThrow()
+
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+    }
+
+    @Test
+    fun `an earlier withdrawal to the same address never settles a new attempt`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = journaledSpark()
+        cacheData.update {
+            it.copy(
+                pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null, setOf("withdrawal")),
+            )
+        }
+
+        assertEquals(
+            SparkWithdrawalOutcome.Unknown,
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, setOf("withdrawal")),
+        )
+        cacheData.update { it.copy(pendingSparkWithdrawal = null) }
+        assertEquals(
+            SparkWithdrawalOutcome.Unsent,
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, setOf("withdrawal")),
+        )
+        assertEquals(
+            SparkWithdrawalOutcome.Sent("withdrawal"),
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+        )
     }
 
     private suspend fun journaledSpark(): SparkRepo {

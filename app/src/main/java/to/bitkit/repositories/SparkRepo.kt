@@ -499,15 +499,35 @@ class SparkRepo @Inject constructor(
             }
         }
 
-    /** The txid of a withdrawal Spark sent of exactly [amountSats] to [address], once Spark's synced list holds it. */
-    suspend fun withdrawalTxid(address: String, amountSats: ULong): String? = withContext(bgDispatcher) {
-        if (!_state.value.hasSynced) return@withContext null
-        sparkService.listPayments().firstNotNullOfOrNull { payment ->
+    /** Txids of the withdrawals Spark lists to [address], so a new attempt to it can tell its own withdrawal apart. */
+    suspend fun withdrawalTxidsTo(address: String): Set<String> = withContext(bgDispatcher) {
+        sparkService.listPayments().mapNotNull { payment ->
+            (payment.details as? PaymentDetails.Withdraw)?.takeIf { it.destinationAddress == address }?.txId
+        }.toSet()
+    }
+
+    /**
+     * What became of an attempt to withdraw exactly [amountSats] to [address]: sent once Spark's synced list holds a
+     * withdrawal to it that is not one of [earlierTxids], unsent once Spark synced and no journaled withdrawal to
+     * [address] is still settling, else unknown.
+     */
+    suspend fun withdrawalOutcome(
+        address: String,
+        amountSats: ULong,
+        earlierTxids: Set<String>,
+    ): SparkWithdrawalOutcome = withContext(bgDispatcher) {
+        if (!_state.value.hasSynced) return@withContext SparkWithdrawalOutcome.Unknown
+        val txid = sparkService.listPayments().firstNotNullOfOrNull { payment ->
             val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@firstNotNullOfOrNull null
             withdraw.txId.takeIf {
                 payment.status != PaymentStatus.FAILED && withdraw.destinationAddress == address &&
-                    payment.amount.toLong().toULong() == amountSats
+                    payment.amount.toLong().toULong() == amountSats && it !in earlierTxids
             }
+        }
+        when {
+            txid != null -> SparkWithdrawalOutcome.Sent(txid)
+            cacheStore.data.first().pendingSparkWithdrawal?.address == address -> SparkWithdrawalOutcome.Unknown
+            else -> SparkWithdrawalOutcome.Unsent
         }
     }
 
@@ -520,14 +540,20 @@ class SparkRepo @Inject constructor(
         address: String,
         amountSats: ULong,
         contact: String?,
+        maxDebitSats: ULong? = null,
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> =
         withContext(bgDispatcher) {
             runSuspendCatching {
                 if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
                 val prepared = sparkService.prepareSend(address, amountSats)
+                val speed = prepared.withdrawalQuote().speedMedium
+                val debitSats = amountSats.safe() + (speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()).safe()
+                // The user confirmed the leg's debit; a quote that rose since then needs a new confirmation.
+                if (maxDebitSats != null && debitSats > maxDebitSats) throw SparkError.WithdrawalFeeChanged()
+                val earlierTxids = withdrawalTxidsTo(address)
                 if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-                val journal = PendingSparkWithdrawal(address, amountSats, contact)
+                val journal = PendingSparkWithdrawal(address, amountSats, contact, earlierTxids)
                 cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
                 val payment = runSuspendCatching { sparkService.send(prepared) }.getOrElse {
                     // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops.
@@ -870,7 +896,8 @@ class SparkRepo @Inject constructor(
         val existing = (activityRepo.get().getActivity(txid).getOrNull() as? Activity.Onchain)?.v1
             ?.takeIf { it.txType == PaymentType.SENT }
         val journal = cacheStore.data.first().pendingSparkWithdrawal?.takeIf {
-            it.address == withdraw.destinationAddress && it.amountSats == payment.amount.toLong().toULong()
+            it.address == withdraw.destinationAddress && it.amountSats == payment.amount.toLong().toULong() &&
+                txid !in it.earlierTxids
         }
         if (existing == null && journal == null) return
         val activity = OnchainActivity.create(
@@ -886,8 +913,11 @@ class SparkRepo @Inject constructor(
             contact = existing?.contact ?: journal?.contact,
             seenAt = existing?.seenAt,
         )
-        activityRepo.get().upsertActivity(Activity.Onchain(activity))
-        if (journal != null) cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
+        // The journal stays until the activity is saved, so a failed save is retried from Spark's list.
+        val saved = activityRepo.get().upsertActivity(Activity.Onchain(activity))
+            .onFailure { Logger.warn("Failed to record Spark withdrawal '$txid'", it, context = TAG) }
+            .isSuccess
+        if (saved && journal != null) cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
     }
 
     private suspend fun receivedContact(payment: Payment, paymentHash: String): String? {
@@ -928,7 +958,19 @@ data class PendingSparkWithdrawal(
     val address: String,
     val amountSats: ULong,
     val contact: String?,
+    /** Withdrawals to [address] listed before this attempt, which never settle it. */
+    val earlierTxids: Set<String> = emptySet(),
 )
+
+/** What became of a Spark withdrawal attempt, from Spark's payment list. */
+sealed interface SparkWithdrawalOutcome {
+    data class Sent(val txid: String) : SparkWithdrawalOutcome
+
+    /** Spark synced, holds no withdrawal for the attempt and has none settling: it never sent. */
+    data object Unsent : SparkWithdrawalOutcome
+
+    data object Unknown : SparkWithdrawalOutcome
+}
 
 private class PreparedWithdrawal(
     val address: String,

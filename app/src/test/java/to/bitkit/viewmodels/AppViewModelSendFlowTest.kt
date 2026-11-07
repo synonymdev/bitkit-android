@@ -12155,7 +12155,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         whenever(paykitPaymentProofRepo.captureOriginalOnchainPayer(request)).thenReturn(Result.success(testPublicKey))
-        whenever(paykitPaymentProofRepo.markSparkOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
+        whenever(
+            paykitPaymentProofRepo.markSparkOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull(), any()),
+        )
             .thenReturn(Result.success(Unit))
         whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
             .thenReturn(Result.success(Unit))
@@ -12185,9 +12188,108 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 eq(leg.deliveredSat),
                 anyOrNull(),
                 anyOrNull(),
+                any(),
             )
             verify(paykitPaymentProofRepo).completeSparkOnchainPayment(request, txid)
         }
+    }
+
+    @Test
+    fun `spark route saves the tags picked on confirmation`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any())).thenReturn(Result.success("txid"))
+        whenever(activityRepo.addTagsToActivity(any(), any(), any())).thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                selectedTags = persistentListOf("rent"),
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(activityRepo).addTagsToActivity(eq("txid"), eq(listOf("rent")), any())
+    }
+
+    @Test
+    fun `a failed spark leg releases a request proof spark never sent`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedrequest")
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val privateContext = privatePaymentContext(7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any()))
+            .thenReturn(Result.failure(AppError("send failed")))
+        whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).thenReturn(true)
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).releaseUnsentSparkOnchainProof(request)
+    }
+
+    @Test
+    fun `a source switch on confirmation reroutes a contact payment`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 10_000u)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+            ),
+        )
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+    }
+
+    @Test
+    fun `spark leg fees count in the payment warnings`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact").copy(deliveredSat = 1_000uL, debitSat = 2_000uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                isAmountInputValid = true,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
     }
 
     private fun sparkRouteLeg(address: String) = ServiceRouteLeg(

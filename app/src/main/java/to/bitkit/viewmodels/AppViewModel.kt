@@ -473,6 +473,10 @@ class AppViewModel @Inject constructor(
     private val processedPaymentsLock = Any()
     private val processedPayments = mutableSetOf<String>()
     private val contactPaymentContextLock = Any()
+
+    /** The Paykit router picked this payment's way on Continue or a request's confirm step, so a switch reroutes. */
+    @Volatile
+    private var paykitRouteDecided = false
     private var activeContactPaymentContext: ContactPaymentContext? = null
     val usdtWallet = usdtRepo.state
     val isUsdtEnabled = usdtPreferences.enabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -4051,7 +4055,9 @@ class AppViewModel @Inject constructor(
         val canUseOnchain = address.isNotEmpty() &&
             walletRepo.balanceState.value.maxSendOnchainSats > Defaults.dustLimit.toULong()
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint, canUseLightning || canUseOnchain)
-        val offersSparkLeg = offersSparkLeg(payment, address, canUseLightning || useUsdt)
+        // The Spark leg stays offered beside USDT, so switching such a contact to Spending can still route through it.
+        val offersSparkLeg = offersSparkLeg(payment, address, canUseLightning)
+        paykitRouteDecided = false
         val route = PaykitRouteUi(
             endpoints = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
                 .map { PaykitEndpoint(methodId = it.methodId.rawValue, value = it.value) },
@@ -4232,6 +4238,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun onAmountChange(amount: ULong) {
         if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
+        paykitRouteDecided = false
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -4391,8 +4398,8 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
-        // A request's confirm screen opens without the amount step, so a source switch asks the router again there.
-        if (activeIncomingPaymentRequest() != null) {
+        // A source switch on Confirm asks the router again, for a request (no amount step) or a route already decided.
+        if (activeIncomingPaymentRequest() != null || paykitRouteDecided) {
             _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
                 routePaykitPayment(it)
             }
@@ -4684,6 +4691,7 @@ class AppViewModel @Inject constructor(
             toast(it)
             return PaykitRouteOutcome.Refused
         }
+        paykitRouteDecided = picked !is PaykitRoute.None
         return when (picked) {
             is PaykitRoute.Direct -> {
                 payDirectEndpoint(route, picked.endpoint)
@@ -6271,6 +6279,9 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.showSanityWarningDialog != null) return
 
         val settings = settingsStore.data.first()
+        // A Spark leg spends its debit, the amount plus Spark's fees, from Spark's balance.
+        val leg = _sendUiState.value.routedPaykitRoute?.serviceLeg
+        val spentSats = leg?.debitSat ?: amountSats
         val balanceToCheck = when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 _sendUiState.value.hardwareAvailableSats
@@ -6280,7 +6291,7 @@ class AppViewModel @Inject constructor(
             SendMethod.LIGHTNING -> walletRepo.balanceState.value.maxSendLightningSats
         }
         if (
-            amountSats > BigDecimal.valueOf(balanceToCheck.toLong())
+            spentSats > BigDecimal.valueOf(balanceToCheck.toLong())
                 .times(BigDecimal(MAX_BALANCE_FRACTION)).toLong().toUInt() &&
             SanityWarning.OVER_HALF_BALANCE !in _sendUiState.value.confirmedWarnings
         ) {
@@ -6303,9 +6314,11 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN && leg == null) return
 
-        val totalFee = if (_sendUiState.value.hardwareWalletId != null) {
+        val totalFee = if (leg != null) {
+            leg.debitSat.safe() - leg.deliveredSat.safe()
+        } else if (_sendUiState.value.hardwareWalletId != null) {
             _sendUiState.value.onchainFeeUi.sats?.toULong() ?: return
         } else {
             lightningRepo.calculateTotalFee(
@@ -6864,11 +6877,17 @@ class AppViewModel @Inject constructor(
                 .getOrThrow()
             true
         }.getOrElse {
+            // A started proof is released only once Spark shows the withdrawal never sent.
+            incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(it) }
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
+        }
+        _sendUiState.value.selectedTags.takeIf { it.isNotEmpty() }?.let { tags ->
+            activityRepo.addTagsToActivity(txid, tags)
+                .onFailure { Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG) }
         }
         incomingPaymentRequest?.let { request ->
             // The journaled withdrawal and Spark's payment list let a later reconcile finish a proof that fails here.
@@ -6908,6 +6927,7 @@ class AppViewModel @Inject constructor(
                 amountSats = leg.deliveredSat,
                 privatePaymentListVersion = privateContext?.paymentListVersion,
                 previousPrivatePaymentListVersion = privateContext?.previousPaymentListVersion,
+                earlierWithdrawalTxids = lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value),
             ).getOrThrow()
             paykitPaymentProofRepo.verifyOriginalOnchainPayer(prepared, originalPayer).getOrThrow()
         }

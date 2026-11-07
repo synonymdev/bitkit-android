@@ -317,6 +317,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         amountSats: ULong,
         privatePaymentListVersion: ULong? = null,
         previousPrivatePaymentListVersion: ULong? = null,
+        earlierWithdrawalTxids: Set<String> = emptySet(),
     ): Result<Unit> = markOnchainStarted(
         request = request,
         address = address,
@@ -326,6 +327,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         signedTx = null,
         previousPrivatePaymentListVersion = previousPrivatePaymentListVersion,
         sparkWithdrawal = true,
+        earlierWithdrawalTxids = earlierWithdrawalTxids,
     )
 
     @Suppress("LongParameterList")
@@ -338,6 +340,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         signedTx: HwFundingSignedTx?,
         previousPrivatePaymentListVersion: ULong?,
         sparkWithdrawal: Boolean,
+        earlierWithdrawalTxids: Set<String> = emptySet(),
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
@@ -378,6 +381,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                     hardwareTotalSpent = signedTx?.totalSpent,
                     hardwareDispatchAttempted = signedTx?.let { false },
                     sparkWithdrawal = sparkWithdrawal,
+                    onchainMatchingTransactionIdsBeforeAttempt = if (sparkWithdrawal) {
+                        earlierWithdrawalTxids
+                    } else {
+                        proofs[index].onchainMatchingTransactionIdsBeforeAttempt
+                    },
                 )
                 persist(proofs)
             }
@@ -402,12 +410,45 @@ class PaykitPaymentProofRepo @Inject constructor(
             }.getOrDefault(false)
         }
 
+    /**
+     * Releases the started Spark proof of [request] when Spark shows its withdrawal never sent, so the request can be
+     * paid again; returns whether it did.
+     */
+    suspend fun releaseUnsentSparkOnchainProof(request: PaykitPaymentRequest): Boolean = withContext(ioDispatcher) {
+        val identity = currentIdentity() ?: return@withContext false
+        runSuspendCatching {
+            operationMutex.withLock {
+                val proof = loadProofs().lastOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                        it.sparkWithdrawal && it.paymentStarted && it.proofData == null
+                } ?: return@withLock false
+                reconcileSparkOnchainProof(proof)
+                loadProofs().none { it == proof }
+            }
+        }.onFailure {
+            Logger.warn("Failed to release an unsent Spark withdrawal proof", it, context = TAG)
+        }.getOrDefault(false)
+    }
+
+    /** Settles a started Spark proof from Spark's list: completed by its own withdrawal, removed when it never sent. */
     private suspend fun reconcileSparkOnchainProof(proof: PendingPaykitPaymentProof): Boolean {
         if (!proof.paymentStarted || proof.proofData != null) return false
         val address = proof.onchainAddress ?: return false
         val amount = proof.onchainAmountSats ?: return false
-        val txid = lightningRepo.sparkWithdrawalTxid(address, amount) ?: return false
-        return completeSparkOnchainProofLocked(proof, txid)
+        val outcome = lightningRepo.sparkWithdrawalOutcome(
+            address,
+            amount,
+            proof.onchainMatchingTransactionIdsBeforeAttempt,
+        )
+        return when (outcome) {
+            is SparkWithdrawalOutcome.Sent -> completeSparkOnchainProofLocked(proof, outcome.txid)
+            SparkWithdrawalOutcome.Unsent -> {
+                Logger.info("Released a Paykit proof whose Spark withdrawal never sent", context = TAG)
+                removeProofsLocked { it == proof }
+                false
+            }
+            SparkWithdrawalOutcome.Unknown -> false
+        }
     }
 
     private suspend fun completeSparkOnchainProofLocked(proof: PendingPaykitPaymentProof, txid: String): Boolean {

@@ -72,7 +72,13 @@ class PaykitRouteRepo @Inject constructor(
         contact: String?,
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> = when (leg.service) {
-        SparkRepo.ROUTE_SERVICE -> sparkRepo.withdraw(leg.endpoint.value, leg.deliveredSat, contact, onBeforeSend)
+        SparkRepo.ROUTE_SERVICE -> sparkRepo.withdraw(
+            address = leg.endpoint.value,
+            amountSats = leg.deliveredSat,
+            contact = contact,
+            maxDebitSats = leg.debitSat,
+            onBeforeSend = onBeforeSend,
+        )
         else -> Result.failure(AppError("Unsupported route service '${leg.service}'"))
     }
 }
