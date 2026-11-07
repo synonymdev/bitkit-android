@@ -2331,6 +2331,16 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** What became of a Spark withdrawal attempt of exactly [amountSats] to [address], from Spark's payment list. */
+    suspend fun sparkWithdrawalOutcome(
+        address: String,
+        amountSats: ULong,
+        earlierTxids: Set<String>,
+    ): SparkWithdrawalOutcome = sparkRepo.withdrawalOutcome(address, amountSats, earlierTxids)
+
+    /** Txids of the Spark withdrawals to [address] so far, which a new attempt to it never counts as its own. */
+    suspend fun sparkWithdrawalTxidsTo(address: String): Set<String> = sparkRepo.withdrawalTxidsTo(address)
+
     /** Whether Spark alone can pay [amountSats], which it does whenever the node cannot. */
     fun canSendWithSpark(amountSats: ULong): Boolean = sparkRepo.canSend(amountSats)
 

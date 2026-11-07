@@ -18,6 +18,7 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
+import to.bitkit.repositories.PendingSparkWithdrawal
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -169,6 +170,8 @@ data class AppCacheData(
     val quickPayLedger: QuickPayLedger? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /** A Spark withdrawal to a Paykit contact that started, kept until Spark's payment list settles it. */
+    val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

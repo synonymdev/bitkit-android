@@ -849,6 +849,88 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `onchain proof of a spark withdrawal completes with its txid`() = test {
+        val txid = "cd".repeat(32)
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), any())
+        ).thenReturn(record)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
+
+        assertTrue(repo.completeSparkOnchainPayment(request, txid))
+
+        runCurrent()
+        val proofCaptor = argumentCaptor<String>()
+        verify(paykitSdkService).submitPaymentProof(
+            any(), any(), any(), any(), proofCaptor.capture(), isNull(), isNull(), isNull(), any(),
+        )
+        assertEquals(
+            """{"data":"$txid","type":"${PaykitPaymentProofKind.Onchain.type}"}""",
+            proofCaptor.firstValue,
+        )
+    }
+
+    @Test
+    fun `onchain proof of a spark withdrawal settles from spark after a restart`() = test {
+        val txid = "cd".repeat(32)
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), any())
+        ).thenReturn(record)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(
+            request,
+            ONCHAIN_ADDRESS,
+            request.amount.atomic,
+            earlierWithdrawalTxids = setOf("ef".repeat(32)),
+        ).getOrThrow()
+
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, setOf("ef".repeat(32))))
+            .thenReturn(SparkWithdrawalOutcome.Unknown)
+        paymentProofRepo().reconcile()
+        assertTrue(storedProofs.single().paymentStarted)
+        assertEquals(null, storedProofs.single().proofData)
+
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, setOf("ef".repeat(32))))
+            .thenReturn(SparkWithdrawalOutcome.Sent(txid))
+        paymentProofRepo().reconcile()
+        runCurrent()
+
+        val proofCaptor = argumentCaptor<String>()
+        verify(paykitSdkService).submitPaymentProof(
+            any(), any(), any(), any(), proofCaptor.capture(), isNull(), isNull(), isNull(), any(),
+        )
+        assertEquals(
+            """{"data":"$txid","type":"${PaykitPaymentProofKind.Onchain.type}"}""",
+            proofCaptor.firstValue,
+        )
+    }
+
+    @Test
+    fun `a spark withdrawal proof that never sent is released so the request can be paid again`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unsent)
+
+        assertTrue(repo.releaseUnsentSparkOnchainProof(request))
+
+        assertTrue(storedProofs.isEmpty())
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+    }
+
+    @Test
     fun `a spark retry decides a lightning proof the node failed`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.Bolt11.rawValue)

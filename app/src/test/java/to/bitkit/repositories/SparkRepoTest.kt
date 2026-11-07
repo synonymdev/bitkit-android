@@ -25,11 +25,14 @@ import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaykitEndpoint
+import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -59,6 +62,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
@@ -208,6 +212,272 @@ class SparkRepoTest : BaseUnitTest() {
         verify(activityRepo).updateActivity(eq("arrival"), updated.capture(), any())
         assertTrue((updated.firstValue as Activity.Onchain).v1.isTransfer)
         assertEquals(listOf(SparkWithdrawal("withdrawal", 128uL, 1_470uL)), sut.state.value.withdrawals)
+    }
+
+    @Test
+    fun `quotes a withdrawal to a Paykit contact as a route leg`() = test {
+        val sut = readySpark(balanceSats = 50_000uL)
+
+        val leg = sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow()
+
+        assertEquals(
+            ServiceRouteLeg(
+                service = "spark",
+                endpoint = contactEndpoint,
+                deliveredSat = 20_000uL,
+                debitSat = 20_500uL,
+                atomicity = "trusted",
+                validUntilUnix = 1_900_000_000uL,
+            ),
+            leg,
+        )
+    }
+
+    @Test
+    fun `offers no route leg the balance cannot cover with its fee`() = test {
+        val sut = readySpark(balanceSats = 20_499uL)
+
+        assertEquals(null, sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow())
+    }
+
+    @Test
+    fun `records a withdrawal to a contact with its contact and fee`() = test {
+        val sut = journaledSpark()
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        assertEquals("withdrawal", sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact").getOrThrow())
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        val onchain = assertIs<Activity.Onchain>(activity.firstValue).v1
+        assertEquals(ActivityPaymentType.SENT, onchain.txType)
+        assertEquals(20_000uL, onchain.value)
+        assertEquals(300uL, onchain.fee)
+        assertEquals("pubkycontact", onchain.contact)
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `refuses a withdrawal while an earlier one is unsettled`() = test {
+        val sut = journaledSpark()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+
+        assertIs<SparkError.WithdrawalPending>(sut.withdraw("bcrt1qcontact", 20_000uL, null).exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `settles a journaled withdrawal from Spark's list on start`() = test {
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+
+        journaledSpark()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("pubkycontact", assertIs<Activity.Onchain>(activity.firstValue).v1.contact)
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `drops a journaled withdrawal Spark never sent`() = test {
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+        journaledSpark()
+
+        verify(activityRepo, never()).upsertActivity(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a withdrawal refused right before it sends writes no journal`() = test {
+        val sut = journaledSpark()
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, onBeforeSend = { false })
+
+        assertIs<PaymentAbortedBeforeSend>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a withdrawal to a contact is not marked as a transfer`() = test {
+        val sent = OnchainActivity.create(
+            id = "withdrawal",
+            txType = ActivityPaymentType.SENT,
+            txId = "withdrawal",
+            value = 20_000uL,
+            fee = 500uL,
+            address = "bcrt1qcontact",
+            timestamp = 1uL,
+        )
+        whenever { activityRepo.getOnchainActivityByTxId(eq("withdrawal"), any()) }.thenReturn(sent)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = journaledSpark()
+
+        assertTrue(sut.markWithdrawalAsTransfer("withdrawal"))
+        verify(activityRepo, never()).updateActivity(any(), any(), any())
+    }
+
+    @Test
+    fun `lists a withdrawal to a contact with the sends, not as a transfer to savings`() = test {
+        val sent = OnchainActivity.create(
+            id = "withdrawal",
+            txType = ActivityPaymentType.SENT,
+            txId = "withdrawal",
+            value = 20_000uL,
+            fee = 300uL,
+            address = "bcrt1qcontact",
+            timestamp = 1uL,
+        )
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
+            .thenReturn(Result.success(Activity.Onchain(sent)))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+
+        val sut = journaledSpark()
+
+        assertTrue(sut.state.value.withdrawals.isEmpty())
+    }
+
+    @Test
+    fun `refuses a withdrawal whose fee rose above the confirmed debit`() = test {
+        val sut = journaledSpark()
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, maxDebitSats = 20_499uL)
+
+        assertIs<SparkError.WithdrawalFeeChanged>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `keeps the journal when the withdrawal's activity fails to save`() = test {
+        val sut = journaledSpark()
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(AppError("disk full")))
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact").getOrThrow()
+
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+    }
+
+    @Test
+    fun `an earlier withdrawal to the same address never settles a new attempt`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = journaledSpark()
+        cacheData.update {
+            it.copy(
+                pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null, setOf("withdrawal")),
+            )
+        }
+
+        assertEquals(
+            SparkWithdrawalOutcome.Unknown,
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, setOf("withdrawal")),
+        )
+        cacheData.update { it.copy(pendingSparkWithdrawal = null) }
+        assertEquals(
+            SparkWithdrawalOutcome.Unsent,
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, setOf("withdrawal")),
+        )
+        assertEquals(
+            SparkWithdrawalOutcome.Sent("withdrawal"),
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+        )
+    }
+
+    @Test
+    fun `tags a recovered withdrawal with the tags picked on confirmation`() = test {
+        whenever { activityRepo.addTagsToActivity(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        cacheData.update {
+            it.copy(
+                pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null, tags = listOf("rent")),
+            )
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+
+        journaledSpark()
+
+        verify(activityRepo).addTagsToActivity(eq("withdrawal"), eq(listOf("rent")), any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `an older open journal refuses a new withdrawal before its proof can start`() = test {
+        val sut = journaledSpark()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 5_000uL, null)) }
+        var checked = false
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, onBeforeSend = {
+            checked = true
+            true
+        })
+
+        assertIs<SparkError.WithdrawalPending>(result.exceptionOrNull())
+        assertFalse(checked)
+        verify(sparkService, never()).prepareSend(any(), anyOrNull(), anyOrNull())
+        assertEquals(5_000uL, cacheData.value.pendingSparkWithdrawal?.amountSats)
+    }
+
+    @Test
+    fun `a foreground during an in-flight withdrawal keeps its journal until spark lists it`() = test {
+        val sut = journaledSpark()
+        val sendGate = CompletableDeferred<Unit>()
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            sendGate.await()
+            contactWithdrawal()
+        }
+        val withdrawal = async { sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact") }
+        runCurrent()
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+
+        var offline = true
+        whenever { sparkService.syncWallet() }.thenAnswer { if (offline) throw SdkException.Generic("offline") }
+        sut.start(0).getOrThrow()
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+        offline = false
+        sut.start(0).getOrThrow()
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+
+        sendGate.complete(Unit)
+        assertEquals("withdrawal", withdrawal.await().getOrThrow())
+
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("pubkycontact", assertIs<Activity.Onchain>(activity.firstValue).v1.contact)
+    }
+
+    private suspend fun journaledSpark(): SparkRepo {
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        return readySpark(balanceSats = 50_000uL)
+    }
+
+    private fun contactWithdrawal() = sentPayment(fees = 300).copy(
+        id = "withdrawal-payment",
+        amount = BigInteger.valueOf(20_000),
+        method = PaymentMethod.WITHDRAW,
+        details = PaymentDetails.Withdraw("withdrawal", 0u, "bcrt1qcontact"),
+    )
+
+    private val contactEndpoint = PaykitEndpoint(methodId = "btc-regtest-p2wpkh", value = "bcrt1qcontact")
+
+    private suspend fun readySpark(balanceSats: ULong): SparkRepo {
+        whenever { sparkService.getInfo() }.thenReturn(info(balanceSats))
+        val speed = SendOnchainSpeedFeeQuote(userFeeSat = 300uL, l1BroadcastFeeSat = 200uL)
+        val prepared = mock<PrepareSendPaymentResponse>()
+        whenever(prepared.paymentMethod).thenReturn(
+            SendPaymentMethod.BitcoinAddress(
+                address = mock<BitcoinAddressDetails>(),
+                feeQuote = SendOnchainFeeQuote("quote", 1_900_000_000uL, speed, speed, speed, isEstimate = false),
+            ),
+        )
+        whenever { sparkService.prepareSend(eq("bcrt1qcontact"), eq(20_000uL), anyOrNull()) }.thenReturn(prepared)
+        whenever(sparkService.isConnected).thenReturn(true)
+        return createSut().also { it.start(0).getOrThrow() }
     }
 
     @Test
