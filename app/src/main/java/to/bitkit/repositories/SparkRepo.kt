@@ -655,13 +655,14 @@ class SparkRepo @Inject constructor(
                 )
             }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
+        val transfers = payments.toWithdrawals().filterNot { isContactWithdrawal(it.txid) }.toImmutableList()
         _state.update {
             it.copy(
                 isReady = true,
                 balanceSats = info.balanceSats,
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),
-                withdrawals = payments.toWithdrawals(),
+                withdrawals = transfers,
             ).withBroadcastDeposits()
         }
         markClaimedDeposits(claimed)
@@ -689,6 +690,10 @@ class SparkRepo @Inject constructor(
             )
         }
         .toImmutableList()
+
+    /** A withdrawal to a Paykit contact is recorded as an on-chain send: it is no Transfer to Savings. */
+    private suspend fun isContactWithdrawal(txid: String): Boolean =
+        (activityRepo.get().getActivity(txid).getOrNull() as? Activity.Onchain)?.v1?.txType == PaymentType.SENT
 
     /**
      * Marks the on-chain receive [txid] as a transfer from Spending when it is a Spark withdrawal, so it shows no

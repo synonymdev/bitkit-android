@@ -329,6 +329,26 @@ class SparkRepoTest : BaseUnitTest() {
         verify(activityRepo, never()).updateActivity(any(), any(), any())
     }
 
+    @Test
+    fun `lists a withdrawal to a contact with the sends, not as a transfer to savings`() = test {
+        val sent = OnchainActivity.create(
+            id = "withdrawal",
+            txType = ActivityPaymentType.SENT,
+            txId = "withdrawal",
+            value = 20_000uL,
+            fee = 300uL,
+            address = "bcrt1qcontact",
+            timestamp = 1uL,
+        )
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
+            .thenReturn(Result.success(Activity.Onchain(sent)))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+
+        val sut = journaledSpark()
+
+        assertTrue(sut.state.value.withdrawals.isEmpty())
+    }
+
     private suspend fun journaledSpark(): SparkRepo {
         whenever { cacheStore.update(any()) }.doSuspendableAnswer {
             cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
