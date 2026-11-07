@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ebe9bc09850704d1e96a2bb1697fd5d5a664fd1a
 
       - name: Setup Java
         uses: actions/setup-java@v6
