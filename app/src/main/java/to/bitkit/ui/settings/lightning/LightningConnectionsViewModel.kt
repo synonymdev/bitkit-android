@@ -37,6 +37,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.SparkDeposit
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
@@ -102,8 +103,9 @@ class LightningConnectionsViewModel @Inject constructor(
                 lightningRepo.lastKnownChannels,
                 sparkRepo.state,
             ) { lightningState, channels, sparkState ->
-                Triple(lightningState.nodeLifecycleState.isRunning(), channels, sparkState)
-            }.collect { (isNodeRunning, channels, sparkState) ->
+                Triple(lightningState, channels, sparkState)
+            }.collect { (lightningState, channels, sparkState) ->
+                val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
                 val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.update {
@@ -117,6 +119,8 @@ class LightningConnectionsViewModel @Inject constructor(
                             .reversed().toImmutableList(),
                         localBalance = calculateLocalBalance(channels).safe() + sparkState.balanceSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
+                        // The cached channels outlive a stopped node; the move reads the live ones.
+                        canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
                         spark = sparkState.toUi(lightningRepo),
                         isSparkReceiving = sparkState.isReady,
                     )
@@ -231,6 +235,8 @@ data class LightningConnectionsUiState(
     val remoteBalance: ULong = 0u,
     val spark: SparkUi? = null,
     val isSparkReceiving: Boolean = false,
+    /** The channels hold a balance that can move to Spark, which Blocktank's channel closes make the cheaper path. */
+    val canMoveToSpark: Boolean = false,
 )
 
 /** The Spark wallet shown as a connection, present once it holds a balance or a deposit. */
