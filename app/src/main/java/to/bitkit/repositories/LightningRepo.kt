@@ -1430,13 +1430,21 @@ class LightningRepo @Inject constructor(
             delayNoUsableChannelsFeedback()
             return@withContext
         }
-        if (state.hasUsableChannels()) return@withContext
-
         state = waitForChannelsToLoadIfNeeded(state) ?: return@withContext
         if (!state.nodeLifecycleState.canRun()) {
             delayNoUsableChannelsFeedback()
             return@withContext
         }
+
+        // Usability can stay true while a payment changes the outbound HTLC limit.
+        // Publish current channels before callers derive send capacity from them.
+        refreshChannelsAndPeers()
+        state = _lightningState.value
+        if (!state.nodeLifecycleState.canRun()) {
+            delayNoUsableChannelsFeedback()
+            return@withContext
+        }
+        if (state.hasUsableChannels()) return@withContext
 
         if (state.channels.isEmpty()) {
             if (state.nodeLifecycleState.isRunning()) {
