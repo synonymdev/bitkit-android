@@ -1641,6 +1641,26 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `waitForUsableChannels handles a removed channel without reading balances`() = test {
+        val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(emptyList())
+        clearInvocations(lightningService)
+
+        val wait = async { sut.waitForUsableChannels() }
+        runCurrent()
+
+        assertTrue(sut.lightningState.value.channels.isEmpty())
+        assertFalse(wait.isCompleted)
+        verify(lightningService, never()).balances
+        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS)
+        runCurrent()
+        assertTrue(wait.isCompleted)
+        verify(lightningService, never()).balances
+    }
+
+    @Test
     fun `waitForUsableChannels rechecks lifecycle when the node stops during refresh`() = test {
         val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
         whenever(lightningService.channels).thenReturn(listOf(cached))

@@ -1447,16 +1447,8 @@ class LightningRepo @Inject constructor(
         if (state.hasUsableChannels()) return@withContext
 
         if (state.channels.isEmpty()) {
-            if (state.nodeLifecycleState.isRunning()) {
-                syncState()
-                state = _lightningState.value
-            }
-
-            if (state.channels.isEmpty()) {
-                delayNoUsableChannelsFeedback()
-                return@withContext
-            }
-            if (state.hasUsableChannels()) return@withContext
+            delayNoUsableChannelsFeedback()
+            return@withContext
         }
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
