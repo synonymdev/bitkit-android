@@ -749,8 +749,18 @@ class SparkRepo @Inject constructor(
     }
 
     private suspend fun syncActivities() {
-        sparkService.listPayments().forEach { recordActivity(it) }
+        val payments = sparkService.listPayments()
+        payments.forEach { recordActivity(it) }
+        // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
+        // retry of it is still live.
+        payments.mapNotNull { it.failedSendHash() }.distinct()
+            .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
+            .forEach { cacheStore.removeSparkSendHash(it) }
     }
+
+    private fun Payment.failedSendHash(): String? = (details as? PaymentDetails.Lightning)
+        ?.takeIf { paymentType == SparkPaymentType.SEND && status == PaymentStatus.FAILED }
+        ?.htlcDetails?.paymentHash
 
     private suspend fun onSdkEvent(event: SdkEvent) {
         runSuspendCatching {
@@ -781,6 +791,12 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
+        payment.failedSendHash()?.let { hash ->
+            val latest = lightningSend(hash)
+            val isReleased = latest == SparkLightningSend.NotFound ||
+                (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
+            if (isReleased) cacheStore.removeSparkSendHash(hash)
+        }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
@@ -790,10 +806,6 @@ class SparkRepo @Inject constructor(
             return
         }
         val id = lightning.htlcDetails.paymentHash
-        // A failed send no longer holds the node off its invoice, also when it failed while the app was closed.
-        if (payment.paymentType == SparkPaymentType.SEND && payment.status == PaymentStatus.FAILED) {
-            cacheStore.removeSparkSendHash(id)
-        }
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
         val activity = LightningActivity.create(
             id = id,

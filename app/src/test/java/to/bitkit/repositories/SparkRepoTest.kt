@@ -247,6 +247,25 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed send does not release a hash its retry still holds pending`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(id = "first", status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed, retry))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
     fun `an uncertain send spark never recorded is no longer held from the node`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
