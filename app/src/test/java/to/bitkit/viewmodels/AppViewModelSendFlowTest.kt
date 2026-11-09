@@ -12278,6 +12278,46 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a route that returns after its payment was dismissed never lands on the next payment`() = test {
+        val legA = sparkRouteLeg("bcrt1qcontacta")
+        val endpointB = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = "bcrt1qcontactb")
+        val quote = CompletableDeferred<Result<PaykitRoute>>()
+        balanceState.value = BalanceState(maxSendLightningSats = 10_000u)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quote.await() }
+        setActiveContactPaymentContext("pubkycontacta", privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = legA.endpoint.value,
+                amount = legA.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(listOf(legA.endpoint), offersSparkLeg = true),
+            ),
+        )
+        sut.showSheet(Sheet.Send(SendRoute.Amount))
+        sut.setSendEvent(SendEvent.AmountContinue)
+        runCurrent()
+
+        sut.hideSheet()
+        setActiveContactPaymentContext("pubkycontactb", privatePaymentContext(8uL))
+        val stateB = SendUiState(
+            address = endpointB.value,
+            amount = 2_000uL,
+            payMethod = SendMethod.LIGHTNING,
+            paykitRoute = PaykitRouteUi(listOf(endpointB), offersSparkLeg = true),
+        )
+        setSendState(stateB)
+        quote.complete(Result.success(PaykitRoute.Service(legA)))
+        advanceUntilIdle()
+
+        assertEquals(
+            stateB.paykitRoute,
+            sut.sendUiState.value.paykitRoute,
+            "contact A's quote must not route B's payment",
+        )
+        assertEquals(endpointB.value, sut.sendUiState.value.address)
+    }
+
+    @Test
     fun `spark route saves the tags picked on confirmation`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), any()))

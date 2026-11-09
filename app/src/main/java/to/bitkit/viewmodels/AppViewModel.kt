@@ -4165,7 +4165,8 @@ class AppViewModel @Inject constructor(
         }
         _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
             preferSparkWhenSavingsShort(it)
-            if (routePaykitPayment(it) == PaykitRouteOutcome.Refused) return false
+            val outcome = routePaykitPayment(it)
+            if (outcome == PaykitRouteOutcome.Refused || outcome == PaykitRouteOutcome.Stale) return false
             // Validity was set against the source before routing; the route may have moved the payment to Spark.
             _sendUiState.update { state -> state.copy(isAmountInputValid = validateAmount(state.amount)) }
         }
@@ -4691,7 +4692,7 @@ class AppViewModel @Inject constructor(
                     setSendEffect(SendEffect.NavigateToConfirm)
                     return
                 }
-                PaykitRouteOutcome.Refused -> return
+                PaykitRouteOutcome.Refused, PaykitRouteOutcome.Stale -> return
                 PaykitRouteOutcome.Direct -> Unit
             }
         }
@@ -4715,6 +4716,8 @@ class AppViewModel @Inject constructor(
      */
     private suspend fun routePaykitPayment(route: PaykitRouteUi): PaykitRouteOutcome {
         val state = _sendUiState.value
+        val generation = sendStateGeneration
+        val contact = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         val fromSpending = state.payMethod == SendMethod.LIGHTNING
         val lightningSpendable = if (fromSpending) maxSendableLightningSats() else 0uL
         val onchainSpendable = if (fromSpending) 0uL else walletRepo.balanceState.value.maxSendOnchainSats
@@ -4726,6 +4729,12 @@ class AppViewModel @Inject constructor(
             onchainSpendableSats = onchainSpendable,
             quoteServiceLegs = fromSpending && route.offersSparkLeg,
         )
+        // A dismissed or replaced payment's route must never land on the one that followed it.
+        if (generation != sendStateGeneration ||
+            synchronized(contactPaymentContextLock) { activeContactPaymentContext } !== contact
+        ) {
+            return PaykitRouteOutcome.Stale
+        }
         _sendUiState.update { it.copy(isLoading = false) }
         val picked = result.getOrElse {
             Logger.error("Failed to route Paykit payment", it, context = TAG)
@@ -9478,7 +9487,7 @@ data class PaykitRouteUi(
     val serviceLeg: ServiceRouteLeg? = null,
 )
 
-private enum class PaykitRouteOutcome { Direct, Leg, Refused }
+private enum class PaykitRouteOutcome { Direct, Leg, Refused, Stale }
 
 private fun PaykitEndpoint.isOnchain(): Boolean = MethodId.fromRawValue(methodId)?.isOnchain == true
 
