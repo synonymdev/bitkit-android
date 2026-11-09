@@ -123,7 +123,8 @@ class SparkRepo @Inject constructor(
 
     private val refreshMutex = Mutex()
 
-    private val sendsInFlight = ConcurrentHashMap.newKeySet<String>()
+    /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
+    private val sendsInFlight = ConcurrentHashMap<String, String>()
 
     @Volatile
     private var hasSyncedActivities = false
@@ -271,7 +272,9 @@ class SparkRepo @Inject constructor(
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
             if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-            if (!sendsInFlight.add(paymentHash.lowercase())) throw PaymentPendingException(paymentHash)
+            if (sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) != null) {
+                throw PaymentPendingException(paymentHash)
+            }
             val sent = try {
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
@@ -679,10 +682,13 @@ class SparkRepo @Inject constructor(
 
     /**
      * Spark's pending or paid send of [bolt11], matched by the invoice or its [paymentHash], so the node never pays it
-     * again; null when Spark's send failed or none is known.
+     * again; a send still inside Spark's send call is pending. Null when Spark's send failed or none is known.
      */
     suspend fun earlierLightningSend(bolt11: String, paymentHash: String?): EarlierSend? =
         withContext(bgDispatcher) {
+            sendsInFlight.entries
+                .firstOrNull { it.value.equals(bolt11, ignoreCase = true) || it.key == paymentHash?.lowercase() }
+                ?.let { return@withContext EarlierSend.Pending(it.key) }
             if (!sparkService.isConnected) return@withContext null
             val send = runSuspendCatching { sparkService.listPayments() }
                 .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }

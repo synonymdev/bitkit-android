@@ -1,6 +1,11 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import breez_sdk_spark.Bolt11InvoiceDetails
+import breez_sdk_spark.FeePolicy
+import breez_sdk_spark.Payment
+import breez_sdk_spark.PrepareSendPaymentResponse
+import breez_sdk_spark.SendPaymentMethod
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BlocktankException
 import com.synonym.bitkitcore.FeeRates
@@ -91,12 +96,14 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
+import java.math.BigInteger
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -105,6 +112,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -1238,6 +1246,60 @@ class LightningRepoTest : BaseUnitTest() {
 
         verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
         assertIs<PaymentPendingException>(retry.exceptionOrNull())
+    }
+
+    @Test
+    fun `an invoice spark is still sending is not sent again through the node`() = test {
+        val sparkService = mock<SparkService>()
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val details = mock<Bolt11InvoiceDetails> { on { paymentHash } doReturn "hash" }
+        val prepared = PrepareSendPaymentResponse(
+            paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, 1uL),
+            amount = BigInteger.valueOf(1_000),
+            tokenIdentifier = null,
+            conversionEstimate = null,
+            feePolicy = FeePolicy.FEES_EXCLUDED,
+        )
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sending = CompletableDeferred<Payment>()
+        whenever(sparkService.send(any())).doSuspendableAnswer { sending.await() }
+        val spark = SparkRepo(
+            bgDispatcher = testDispatcher,
+            sparkService = sparkService,
+            activityRepo = { mock() },
+            cacheStore = cacheStore,
+            contactResolver = { mock() },
+            pendingPaymentRepo = PendingPaymentRepo(),
+            clock = Clock.System,
+        )
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = onchainSendAttemptStore,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+            sparkRepo = spark,
+        )
+        startNodeForTesting()
+        val first = async { spark.payInvoice("bolt11", 1_000uL) }
+        runCurrent()
+        verify(sparkService).send(prepared)
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+
+        val retry = sut.payInvoice("bolt11", 1_000uL)
+
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+        assertIs<PaymentPendingException>(retry.exceptionOrNull())
+        first.cancel()
     }
 
     @Test
