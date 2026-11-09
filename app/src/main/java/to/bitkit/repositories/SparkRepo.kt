@@ -65,6 +65,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import breez_sdk_spark.PaymentType as SparkPaymentType
@@ -104,6 +105,9 @@ class SparkRepo @Inject constructor(
 
         /** Tries to learn the outcome of a send whose result was lost while Spark cannot list its payments. */
         private const val SETTLE_ATTEMPTS = 10
+
+        /** How long a journaled withdrawal Spark doesn't list stays open before a sync closes it as never sent. */
+        private val UNLISTED_WITHDRAWAL_GRACE = 10.minutes
 
         private val SETTLE_RETRY_INTERVAL = 30.seconds
 
@@ -575,7 +579,14 @@ class SparkRepo @Inject constructor(
                 isWithdrawing = true
                 val sent = try {
                     if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-                    val journal = PendingSparkWithdrawal(address, amountSats, contact, earlierTxids, tags)
+                    val journal = PendingSparkWithdrawal(
+                        address,
+                        amountSats,
+                        contact,
+                        earlierTxids,
+                        tags,
+                        startedAt = clock.now().epochSeconds,
+                    )
                     cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
                     runSuspendCatching { sparkService.send(prepared) }
                 } finally {
@@ -876,7 +887,8 @@ class SparkRepo @Inject constructor(
 
     /**
      * Records Spark's payments as activity. With [settleJournal], after a sync that just succeeded, a journaled
-     * withdrawal the list still lacks never sent, unless it is still being sent in this process.
+     * withdrawal the list still lacks never sent, unless it is still being sent in this process or started less than
+     * [UNLISTED_WITHDRAWAL_GRACE] ago.
      */
     private suspend fun syncActivities(settleJournal: Boolean) {
         val payments = sparkService.listPayments()
@@ -885,6 +897,8 @@ class SparkRepo @Inject constructor(
         val journal = cacheStore.data.first().pendingSparkWithdrawal ?: return
         // A listed withdrawal whose activity failed to save keeps its journal for the next sync to retry.
         if (payments.any { journal.matches(it) }) return
+        // Spark may list a withdrawal it just sent only on a later sync, so an unlisted one stays open for a while.
+        if (clock.now().epochSeconds < journal.startedAt + UNLISTED_WITHDRAWAL_GRACE.inWholeSeconds) return
         Logger.warn("Dropped Spark withdrawal to '${journal.address}' that Spark never sent", context = TAG)
         cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
     }
@@ -1035,6 +1049,8 @@ data class PendingSparkWithdrawal(
     /** Withdrawals to [address] listed before this attempt, which never settle it. */
     val earlierTxids: Set<String> = emptySet(),
     val tags: List<String> = emptyList(),
+    /** Epoch seconds the attempt started, which keeps it open while Spark may still list it. */
+    val startedAt: Long = 0,
 ) {
     fun matches(payment: Payment): Boolean {
         val withdraw = payment.details as? PaymentDetails.Withdraw ?: return false

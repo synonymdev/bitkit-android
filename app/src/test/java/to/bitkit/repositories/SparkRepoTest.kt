@@ -370,6 +370,30 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keeps an unlisted withdrawal open until its grace period passes`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any())).doSuspendableAnswer { throw SdkException.Generic("timeout") }
+
+        assertTrue(sut.withdraw("bcrt1qcontact", 20_000uL, null).isFailure)
+
+        assertEquals(now.epochSeconds, cacheData.value.pendingSparkWithdrawal?.startedAt)
+        assertEquals(
+            SparkWithdrawalOutcome.Unknown,
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+            "A sync right after the send may not list the withdrawal yet, so it is never released as unsent",
+        )
+        cacheData.update {
+            it.copy(
+                pendingSparkWithdrawal = it.pendingSparkWithdrawal?.copy(
+                    startedAt = now.epochSeconds - 10.minutes.inWholeSeconds,
+                ),
+            )
+        }
+        sut.start(0).getOrThrow()
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
     fun `keeps a journaled withdrawal Spark lists when its activity fails to save on start`() = test {
         cacheData.update {
             it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
