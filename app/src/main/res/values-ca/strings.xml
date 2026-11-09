@@ -269,6 +269,7 @@
     <string name="onboarding__restore_failed_header">Error del saldo &lt;accent&gt;de despesa&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit ha restaurat els teus estalvis, però no ha pogut restaurar el teu saldo de despesa actual (estat Lightning) i les dades de la cartera.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Restaura&lt;/accent&gt;\nla teva cartera</string>
+    <string name="onboarding__restore_incomplete_text">La teva cartera i el teu saldo s\'han recuperat, però Bitkit no ha pogut restaurar: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">La suma de verificació de la frase de recuperació sembla incorrecta. Si us plau, verifica la teva frase de recuperació.</string>
     <string name="onboarding__restore_no_backup_button">Continuar sense còpia de seguretat</string>
     <string name="onboarding__restore_no_backup_warn">Si tenies una còpia de seguretat Lightning anteriorment, es sobreescriurà i es perdrà. Això podria resultar en una pèrdua de fons.</string>
@@ -784,7 +785,7 @@
     <string name="usdt__from_address">Adreça d\'origen</string>
     <string name="usdt__hide_details">Amagar detalls</string>
     <string name="usdt__intro_decline">No, gràcies</string>
-    <string name="usdt__intro_description">Bitcoin de cor. Dòlars quan els necessitis. Activa USDT (Tether) per enviar i rebre dòlars digitals amb Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin de cor. Dòlars quan els necessitis. Activa USDT (Tether) per enviar i rebre dòlars digitals ràpidament amb Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DÒLARS?&lt;/accent&gt;\nTU DECIDEIXES</string>
     <string name="usdt__intro_title">Novetat: USDT</string>
     <string name="usdt__maximum_total">Càrrec total màx.</string>
@@ -1122,7 +1123,7 @@
     <string name="contacts__add_error_fetch">No s\'ha pogut obtenir la informació del contacte. Comprova la clau pública i torna-ho a provar.</string>
     <string name="contacts__add_error_invalid_key">Format de clau pubky no vàlid. Comprova-ho i torna-ho a provar.</string>
     <string name="contacts__add_error_self">No pots afegir el teu propi pubky com a contacte.</string>
-    <string name="contacts__add_privacy_notice">Tingues en compte que tu i %1$s us heu d\'afegir mútuament com a contactes per pagar-vos de forma privada. Altrament, el pagament serà visible públicament.</string>
+    <string name="contacts__add_privacy_notice">Tingues en compte que tu i %1$s us heu d\'afegir mútuament com a contactes abans de poder pagar-vos de forma privada. Si pagues sense desar, el pagament serà visible públicament.</string>
     <string name="contacts__add_pay">Pagar</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Enganxa un pubky</string>
@@ -1153,6 +1154,7 @@
     <string name="contacts__intro_title">Contactes\n&lt;accent&gt;dinàmics&lt;/accent&gt;</string>
     <string name="contacts__my_profile">EL MEU PERFIL</string>
     <string name="contacts__nav_title">Contactes</string>
+    <string name="contacts__pay_private_link_pending">Bitkit encara està configurant una connexió privada amb aquest contacte. Assegura\'t que també t\'ha afegit com a contacte o demana-li que t\'enviï una sol·licitud de pagament.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Enganxa un QR o un enllaç</string>
     <string name="contacts__scanner_status">ESCANEJANT QR I NFC</string>
@@ -1350,8 +1352,10 @@
     <string name="profile__pay_contacts_error_wallet">La cartera encara s\'està iniciant. Torna-ho a provar d\'aquí a un moment.</string>
     <string name="profile__pay_contacts_headline">Deixa que els\nteus contactes\n&lt;accent&gt;et paguin&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar contactes</string>
+    <string name="profile__private_payments_toggle">Pagaments privats amb contactes</string>
     <string name="profile__pubky_copied">pubky copiat al porta-retalls</string>
     <string name="profile__public_key">Clau pública</string>
+    <string name="profile__public_payments_toggle">Pagaments públics</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">La sessió del teu perfil ha caducat. Torna a connectar-te per restaurar el teu perfil.</string>
     <string name="profile__sign_out">Desconnectar</string>
@@ -1397,7 +1401,6 @@
     <string name="settings__es__server_error_certificate">El certificat d\'aquest servidor no és de confiança. Utilitza un servidor amb un certificat de confiança o connecta\'t al seu port TCP.</string>
     <string name="settings__es__server_error_network">Aquest servidor és d\'una xarxa Bitcoin diferent. Tria un servidor per a la xarxa que utilitza Bitkit.</string>
     <string name="settings__es__server_error_protocol">Ha fallat la connexió segura. Comprova que el protocol (TCP o TLS) coincideix amb el port del servidor.</string>
-    <string name="settings__general__enable_contact_payments">Activar pagaments amb contactes</string>
     <string name="settings__hardware_wallets__add_button">Afegir cartera de maquinari</string>
     <string name="settings__hardware_wallets__name_label">Nom</string>
     <string name="settings__hardware_wallets__nav_title">Carteres de maquinari</string>
@@ -1459,6 +1462,10 @@
     <string name="subscriptions__allowances">Assignacions</string>
     <string name="subscriptions__allowances_empty_description">Pots establir límits de despesa per pagar automàticament les sol·licituds de pagament de contactes de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configura\n&lt;accent&gt;assignacions&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Els teus registres d\'assignacions són més antics que altres que aquest moneder ja ha fet servir. Les sol·licituds demanaran la teva aprovació fins que reprenguis.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Aquest moneder s\'ha restaurat des d\'una còpia de seguretat. Les sol·licituds demanaran la teva aprovació fins que reprenguis.</string>
+    <string name="subscriptions__allowances_paused_resume">Reprèn</string>
+    <string name="subscriptions__allowances_paused_title">Pagaments automàtics en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancel·lar subscripció</string>
     <string name="subscriptions__choose_recipient">Triar destinatari</string>
     <string name="subscriptions__content_too_long">Escurça el nom o la descripció de la subscripció i torna-ho a provar.</string>

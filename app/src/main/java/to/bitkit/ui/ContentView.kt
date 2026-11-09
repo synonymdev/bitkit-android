@@ -52,6 +52,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterNotNull
@@ -482,6 +483,9 @@ fun ContentView(
     } else if (restoreState is RestoreState.Completed) {
         WalletRestoreSuccessView(
             onContinue = { walletViewModel.onRestoreContinue() },
+            failedCategories = remember(restoreState) {
+                (restoreState as? RestoreState.Completed)?.failedCategories.orEmpty().toImmutableList()
+            },
         )
         return
     }
@@ -932,11 +936,23 @@ private fun RootNavHost(
         composableWithDefaultTransitions<Routes.Subscriptions> { backStackEntry ->
             PaykitRouteGuard(settingsViewModel, navController) {
                 val route = backStackEntry.toRoute<Routes.Subscriptions>()
+                val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+                val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+                val scope = rememberCoroutineScope()
                 SubscriptionsScreen(
                     appViewModel = appViewModel,
                     onBack = { navController.popBackStack() },
-                    onRequestPayment = {
-                        appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
+                    onRequestPayment = appViewModel::showPaymentRequestRecipient,
+                    onAddContact = {
+                        when {
+                            isAuthenticated -> navController.navigateTo(Routes.Contacts(showAddContactSheet = true))
+                            else -> scope.launch {
+                                navController.navigateToProfile(
+                                    settingsViewModel.pubkyIdentityExists,
+                                    hasSeenProfileIntro,
+                                )
+                            }
+                        }
                     },
                     onCreateSubscription = appViewModel::showSubscriptionCreator,
                     onDetails = {
@@ -1438,9 +1454,14 @@ private fun NavGraphBuilder.contacts(
                         popUpTo(Routes.AddContact(publicKey)) { inclusive = true }
                     }
                 },
-                onPayContact = { paymentRequest, publicKey, endpoints ->
+                onPayContact = { paymentRequest, publicKey, privatePaymentContext, endpoints ->
                     navController.popBackStack()
-                    appViewModel.openContactPayment(paymentRequest, publicKey, endpoints = endpoints)
+                    appViewModel.openContactPayment(
+                        paymentRequest,
+                        publicKey,
+                        privatePaymentContext,
+                        endpoints = endpoints,
+                    )
                 },
             )
         }

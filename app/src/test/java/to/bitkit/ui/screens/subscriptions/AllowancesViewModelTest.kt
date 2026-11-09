@@ -78,6 +78,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
         whenever(allowanceRepo.entries).thenReturn(entries)
         whenever(settingsStore.data).thenReturn(settings)
         whenever(allowanceRepo.autoPaidSats).thenReturn(autoPaidSats)
+        whenever(allowanceRepo.automaticPaymentPause).thenReturn(MutableStateFlow(null))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever(paymentRequestRepo.eligibleTargets).thenReturn(targets)
         whenever(paymentRequestRepo.paymentRequestHistory)
@@ -226,6 +227,22 @@ class AllowancesViewModelTest : BaseUnitTest() {
 
         verify(allowanceRepo).propose(eq(LEO_KEY), any())
         assertTrue(saved)
+        assertNull(loadedState().authorization)
+    }
+
+    @Test
+    fun `resuming automatic payments asks for the pin first when payments require it`() = test {
+        settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, isBiometricEnabled = true)
+        whenever(allowanceRepo.resumeAutomaticPayments()).thenReturn(Result.success(Unit))
+
+        sut.resumeAutomaticPayments()
+
+        assertEquals(AllowanceAuthorization(useBiometrics = true), loadedState().authorization)
+        verify(allowanceRepo, never()).resumeAutomaticPayments()
+
+        sut.onAuthorized()
+
+        verify(allowanceRepo).resumeAutomaticPayments()
         assertNull(loadedState().authorization)
     }
 

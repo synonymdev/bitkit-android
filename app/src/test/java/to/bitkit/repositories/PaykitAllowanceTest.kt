@@ -32,6 +32,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.SubscriptionClockOffset
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -114,6 +115,31 @@ class PaykitAllowanceTest : BaseUnitTest() {
         assertFalse(received.isAllower)
         assertFalse(received.isProposedByMe)
         assertTrue(received.isAnswerable)
+    }
+
+    @Test
+    fun `terms with only a per-payment cap and one monthly amount limit are checked by this wallet`() {
+        val allowance = checkNotNull(PaykitAllowance.from(fixtures.record()))
+
+        assertFalse(allowance.hasUncheckedLimits)
+    }
+
+    @Test
+    fun `terms with a lifetime, count or other period limit are flagged unchecked`() {
+        val unchecked = listOf(
+            fixtures.terms(lifetimeAmountLimit = "0.001"),
+            fixtures.terms(monthlyPaymentCountLimit = 3uL),
+            fixtures.terms(otherPeriodLimits = listOf(fixtures.periodLimit("0.0001", unit = "week"))),
+            fixtures.terms(otherPeriodLimits = listOf(fixtures.periodLimit("0.0002"))),
+            fixtures.terms(otherPeriodLimits = listOf(fixtures.periodLimit(null, paymentCountLimit = 5uL))),
+        )
+
+        for (terms in unchecked) {
+            val allowance = checkNotNull(PaykitAllowance.from(fixtures.record(terms = terms)))
+            assertTrue(allowance.hasUncheckedLimits)
+            assertEquals(5_000uL, allowance.perPaymentMaxSats)
+            assertEquals(50_000uL, allowance.monthlyLimitSats)
+        }
     }
 
     @Test
@@ -290,6 +316,23 @@ class PaykitAllowanceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `capacity counts the ledger's and this wallet's own payments together`() {
+        val ledger = listOf(fixtures.capacityAttempt(sats = 25_000uL, at = "2026-09-05T10:00:00Z", attemptId = "a"))
+        val local = listOf(fixtures.capacityAttempt(sats = 21_000uL, at = "2026-09-12T10:00:00Z", attemptId = "b"))
+
+        assertTrue(PaykitAllowanceCapacity.fits(4_000uL, fixtures.allowance(), ledger, fixtures.now, local))
+        assertFalse(PaykitAllowanceCapacity.fits(4_001uL, fixtures.allowance(), ledger, fixtures.now, local))
+    }
+
+    @Test
+    fun `capacity counts a payment both sides hold once`() {
+        val ledger = listOf(fixtures.capacityAttempt(sats = 45_000uL, at = "2026-09-05T10:00:00Z", attemptId = "a"))
+        val local = listOf(fixtures.capacityAttempt(sats = 45_000uL, at = "2026-09-05T10:00:00Z", attemptId = "a"))
+
+        assertTrue(PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(), ledger, fixtures.now, local))
+    }
+
+    @Test
     fun `capacity rejects over the per payment maximum`() {
         val allowance = fixtures.allowance()
 
@@ -380,9 +423,9 @@ class PaykitAllowanceTest : BaseUnitTest() {
         val walletId = PaykitAllowanceFixtures.ALLOWANCE_ID
         assertEquals(
             listOf(
-                attempt(walletId, 10_000uL, "2026-09-02T10:00:00Z", isLive = false),
-                attempt(walletId, 10_000uL, "2026-09-03T10:00:00Z", isLive = true),
-                attempt(walletId, 2_000uL, "2026-09-05T10:00:00Z", isLive = true),
+                attempt("failed", walletId, 10_000uL, "2026-09-02T10:00:00Z", isLive = false),
+                attempt("paid", walletId, 10_000uL, "2026-09-03T10:00:00Z", isLive = true),
+                attempt("open", walletId, 2_000uL, "2026-09-05T10:00:00Z", isLive = true),
             ),
             attempts,
         )
@@ -518,7 +561,14 @@ class PaykitAllowanceTest : BaseUnitTest() {
 }
 
 /** Shared builders for the Allowance suites. */
-private fun attempt(allowanceId: String, sats: ULong, at: String, isLive: Boolean) = PaykitAllowanceCapacity.Attempt(
+private fun attempt(
+    attemptId: String,
+    allowanceId: String,
+    sats: ULong,
+    at: String,
+    isLive: Boolean,
+) = PaykitAllowanceCapacity.Attempt(
+    attemptId = attemptId,
     counterparty = PaykitAllowanceFixtures.counterpartyKey,
     allowanceId = allowanceId,
     amountSats = sats,
@@ -552,6 +602,9 @@ internal object PaykitAllowanceFixtures {
         expiresAt: String? = null,
         asset: String = PaykitIssuerInterop.BITCOIN_ASSET,
         allowedPaymentEndpointIdentifiers: List<String>? = listOf(lightningIdentifier),
+        lifetimeAmountLimit: String? = null,
+        monthlyPaymentCountLimit: ULong? = null,
+        otherPeriodLimits: List<AllowancePeriodLimit> = emptyList(),
     ): AllowanceTerms {
         val termsAsset = asset
         val termsActiveFrom = activeFrom
@@ -564,25 +617,39 @@ internal object PaykitAllowanceFixtures {
                 on { maximum() } doReturn max
             }
         }
-        val monthlyPeriod = mock<AllowancePeriod> {
-            on { kind() } doReturn "anchored"
-            on { every() } doReturn 1uL
-            on { unit() } doReturn "month"
-            on { anchor() } doReturn periodAnchor
-        }
-        val periodLimit = mock<AllowancePeriodLimit> {
-            on { amountLimit() } doReturn monthlyLimit
-            on { paymentCountLimit() } doReturn null
-            on { period() } doReturn monthlyPeriod
-        }
+        val monthly = periodLimit(monthlyLimit, anchor = periodAnchor, paymentCountLimit = monthlyPaymentCountLimit)
+        val lifetimeLimit = lifetimeAmountLimit
         return mock {
             on { asset() } doReturn termsAsset
             on { perPaymentAmount() } doReturn range
-            on { periodLimits() } doReturn listOf(periodLimit)
-            on { lifetimeAmountLimit() } doReturn null
+            on { periodLimits() } doReturn listOf(monthly) + otherPeriodLimits
+            on { lifetimeAmountLimit() } doReturn lifetimeLimit
             on { activeFrom() } doReturn termsActiveFrom
             on { expiresAt() } doReturn termsExpiresAt
             on { allowedPaymentEndpointIdentifiers() } doReturn allowlist
+        }
+    }
+
+    fun periodLimit(
+        amountLimit: String?,
+        unit: String = "month",
+        anchor: String? = "2026-09-01T00:00:00Z",
+        paymentCountLimit: ULong? = null,
+    ): AllowancePeriodLimit {
+        val limitAmount = amountLimit
+        val periodUnit = unit
+        val periodAnchor = anchor
+        val countLimit = paymentCountLimit
+        val limitPeriod = mock<AllowancePeriod> {
+            on { kind() } doReturn "anchored"
+            on { every() } doReturn 1uL
+            on { unit() } doReturn periodUnit
+            on { anchor() } doReturn periodAnchor
+        }
+        return mock {
+            on { amountLimit() } doReturn limitAmount
+            on { paymentCountLimit() } doReturn countLimit
+            on { period() } doReturn limitPeriod
         }
     }
 
@@ -634,6 +701,7 @@ internal object PaykitAllowanceFixtures {
         expiresAt: Instant? = null,
         lastEventAt: Instant? = null,
         isProposedByMe: Boolean = role == PaykitAllowance.Role.ALLOWER,
+        hasUncheckedLimits: Boolean = false,
     ) = PaykitAllowance(
         id = PaykitAllowance.Id(counterparty, allowanceId),
         role = role,
@@ -645,6 +713,7 @@ internal object PaykitAllowanceFixtures {
         expiresAt = expiresAt,
         allowedPaymentEndpointIdentifiers = listOf(lightningIdentifier),
         lastEventAt = lastEventAt,
+        hasUncheckedLimits = hasUncheckedLimits,
     )
 
     fun capacityAttempt(
@@ -653,7 +722,8 @@ internal object PaykitAllowanceFixtures {
         sats: ULong,
         at: String,
         isLive: Boolean = true,
-    ) = PaykitAllowanceCapacity.Attempt(counterparty, allowanceId, sats, Instant.parse(at), isLive)
+        attemptId: String = UUID.randomUUID().toString(),
+    ) = PaykitAllowanceCapacity.Attempt(attemptId, counterparty, allowanceId, sats, Instant.parse(at), isLive)
 
     fun usedSats(attempts: List<PaykitAllowanceCapacity.Attempt>): ULong =
         PaykitAllowanceCapacity.usedSats(counterpartyKey, ALLOWANCE_ID, attempts, septemberAnchor, now)

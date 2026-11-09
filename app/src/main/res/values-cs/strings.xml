@@ -272,6 +272,7 @@
     <string name="onboarding__restore_failed_header">&lt;accent&gt;Chyba&lt;/accent&gt; disponibilního zůstatku</string>
     <string name="onboarding__restore_failed_text">Bitkit obnovil vaše úspory, ale neobnovil váš aktuální disponibilní zůstatek (stav lightning) a data peněženky.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Obnovte&lt;/accent&gt;svou peněženku</string>
+    <string name="onboarding__restore_incomplete_text">Vaše peněženka a zůstatek jsou zpět, ale Bitkit nedokázal obnovit: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Kontrolní součet pro frázi pro obnovení se zdá být nesprávný. Zkontrolujte prosím svou frázi pro obnovení.</string>
     <string name="onboarding__restore_no_backup_button">Pokračovat bez zálohy</string>
     <string name="onboarding__restore_no_backup_warn">Pokud jste dříve měli lightning zálohu, bude přepsána a ztracena. To by mohlo vést ke ztrátě finančních prostředků.</string>
@@ -788,7 +789,7 @@
     <string name="usdt__from_address">Z adresy</string>
     <string name="usdt__hide_details">Skrýt podrobnosti</string>
     <string name="usdt__intro_decline">Ne, děkuji</string>
-    <string name="usdt__intro_description">V srdci bitcoin. Dolary, když je potřebujete. Zapněte USDT (Tether) a posílejte a přijímejte digitální dolary s Bitkit.</string>
+    <string name="usdt__intro_description">V srdci bitcoin. Dolary, když je potřebujete. Zapněte USDT (Tether) a rychle posílejte a přijímejte digitální dolary s Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLARY?&lt;/accent&gt;\nVAŠE VOLBA</string>
     <string name="usdt__intro_title">Novinka: USDT</string>
     <string name="usdt__maximum_total">Max. stržená částka</string>
@@ -1129,7 +1130,7 @@
     <string name="contacts__add_error_fetch">Nelze načíst informace o kontaktu. Zkontrolujte prosím veřejný klíč a zkuste to znovu.</string>
     <string name="contacts__add_error_invalid_key">Neplatný formát klíče pubky. Zkontrolujte ho prosím a zkuste to znovu.</string>
     <string name="contacts__add_error_self">Nemůžete přidat svůj vlastní pubky jako kontakt.</string>
-    <string name="contacts__add_privacy_notice">Upozorňujeme, že vy a %1$s se musíte navzájem přidat jako kontakty, abyste si mohli platit soukromě. Jinak bude platba veřejně viditelná.</string>
+    <string name="contacts__add_privacy_notice">Upozorňujeme, že vy a %1$s se musíte navzájem přidat jako kontakty, než si budete moci platit soukromě. Pokud zaplatíte bez uložení, platba bude veřejně viditelná.</string>
     <string name="contacts__add_pay">Zaplatit</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Vložte pubky</string>
@@ -1159,6 +1160,7 @@
     <string name="contacts__intro_description">Plaťte svým kontaktům jedním klepnutím. Posílejte platby přímo, komukoli a kdekoli.</string>
     <string name="contacts__my_profile">MŮJ PROFIL</string>
     <string name="contacts__nav_title">Kontakty</string>
+    <string name="contacts__pay_private_link_pending">Bitkit stále nastavuje soukromé spojení s tímto kontaktem. Ujistěte se, že si vás kontakt také přidal, nebo ho požádejte, aby vám poslal žádost o platbu.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Vložit QR nebo odkaz</string>
     <string name="contacts__scanner_status">SKENOVÁNÍ QR A NFC</string>
@@ -1352,8 +1354,10 @@
     <string name="profile__pay_contacts_error_wallet">Peněženka se stále spouští. Zkuste to za chvíli znovu.</string>
     <string name="profile__pay_contacts_headline">Nechte své\nkontakty\n&lt;accent&gt;platit vám&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Platby kontaktům</string>
+    <string name="profile__private_payments_toggle">Soukromé platby s kontakty</string>
     <string name="profile__pubky_copied">pubky zkopírován do schránky</string>
     <string name="profile__public_key">Veřejný klíč</string>
+    <string name="profile__public_payments_toggle">Veřejné platby</string>
     <string name="profile__restore_nav_title">Obnovit profil</string>
     <string name="profile__session_expired">Platnost relace vašeho profilu vypršela. Pro obnovení profilu se prosím znovu připojte.</string>
     <string name="profile__sign_out">Odpojit</string>
@@ -1399,7 +1403,6 @@
     <string name="settings__es__server_error_certificate">Certifikát tohoto serveru není důvěryhodný. Použijte server s důvěryhodným certifikátem, nebo se připojte k jeho TCP portu.</string>
     <string name="settings__es__server_error_network">Tento server je v jiné síti Bitcoin. Vyberte server pro síť, kterou Bitkit používá.</string>
     <string name="settings__es__server_error_protocol">Zabezpečené připojení se nezdařilo. Zkontrolujte, zda protokol (TCP nebo TLS) odpovídá portu serveru.</string>
-    <string name="settings__general__enable_contact_payments">Povolit platby s kontakty</string>
     <string name="settings__hardware_wallets__add_button">Přidat hardwarovou peněženku</string>
     <string name="settings__hardware_wallets__name_label">Název</string>
     <string name="settings__hardware_wallets__nav_title">Hardwarové peněženky</string>
@@ -1461,6 +1464,10 @@
     <string name="subscriptions__allowances">Rozpočty</string>
     <string name="subscriptions__allowances_empty_description">Můžete nastavit limity útraty pro automatické vyřizování žádostí o platbu od důvěryhodných kontaktů.</string>
     <string name="subscriptions__allowances_empty_headline">Nastavte si\n&lt;accent&gt;rozpočty&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Záznamy vašich rozpočtů jsou starší než ty, které tato peněženka už použila. Požadavky budou čekat na vaše schválení, dokud platby neobnovíte.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Tato peněženka byla obnovena ze zálohy. Požadavky budou čekat na vaše schválení, dokud platby neobnovíte.</string>
+    <string name="subscriptions__allowances_paused_resume">Obnovit</string>
+    <string name="subscriptions__allowances_paused_title">Automatické platby pozastaveny</string>
     <string name="subscriptions__cancel_subscription">Zrušit předplatné</string>
     <string name="subscriptions__choose_recipient">Vybrat příjemce</string>
     <string name="subscriptions__content_too_long">Zkraťte název nebo popis předplatného a zkuste to znovu.</string>

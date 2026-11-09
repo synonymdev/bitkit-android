@@ -14,6 +14,7 @@ import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -1439,6 +1440,47 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lastKnownChannels should keep channels after stop`() = test {
+        val channels = listOf(createChannelDetails().copy(channelId = "channel_1"))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(channels)
+        sut.syncState()
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        sut.stop()
+
+        assertTrue(sut.lightningState.value.channels.isEmpty())
+        assertEquals(channels, sut.lastKnownChannels.value)
+    }
+
+    @Test
+    fun `lastKnownChannels should keep channels when synced while stopped`() = test {
+        val channels = listOf(createChannelDetails().copy(channelId = "channel_1"))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(channels)
+        sut.syncState()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+
+        sut.syncState()
+
+        assertEquals(channels, sut.lastKnownChannels.value)
+    }
+
+    @Test
+    fun `lastKnownChannels should be empty after storage wipe`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails()))
+        sut.syncState()
+        assertEquals(1, sut.lastKnownChannels.value.size)
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        assertTrue(sut.wipeStorage(0).isSuccess)
+
+        assertTrue(sut.lastKnownChannels.value.isEmpty())
+    }
+
+    @Test
     fun `awaitNodeId should return last known id when restart after stop fails`() = test {
         val testNodeId = "test_node_id"
         whenever(lightningService.nodeId).thenReturn(testNodeId)
@@ -1535,6 +1577,132 @@ class LightningRepoTest : BaseUnitTest() {
         sut.syncState()
 
         assertFalse(sut.canSend(1000uL))
+    }
+
+    @Test
+    fun `waitForUsableChannels refreshes received capacity on an already usable channel`() = test {
+        val cached = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 0u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        val received = cached.copy(nextOutboundHtlcLimitMsat = 9_000_000u)
+        whenever(lightningService.channels).thenReturn(listOf(received))
+        clearInvocations(lightningService)
+
+        sut.waitForUsableChannels()
+
+        assertEquals(listOf(received), sut.lightningState.value.channels)
+        assertTrue(sut.canSend(9_000uL))
+        assertFalse(sut.canSend(9_001uL))
+        verify(lightningService, never()).balances
+    }
+
+    @Test
+    fun `waitForUsableChannels refreshes reduced capacity on an already usable channel`() = test {
+        val cached = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 9_000_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        val reduced = cached.copy(nextOutboundHtlcLimitMsat = 1_000_000u)
+        whenever(lightningService.channels).thenReturn(listOf(reduced))
+        clearInvocations(lightningService)
+
+        sut.waitForUsableChannels()
+
+        assertEquals(listOf(reduced), sut.lightningState.value.channels)
+        assertTrue(sut.canSend(1_000uL))
+        assertFalse(sut.canSend(1_001uL))
+        verify(lightningService, never()).balances
+    }
+
+    @Test
+    fun `waitForUsableChannels waits when a cached usable channel becomes unusable`() = test {
+        val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        val unavailable = cached.copy(isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(unavailable))
+
+        val wait = async { sut.waitForUsableChannels() }
+        runCurrent()
+
+        assertFalse(wait.isCompleted)
+        assertEquals(listOf(unavailable), sut.lightningState.value.channels)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY)
+        runCurrent()
+        assertTrue(wait.isCompleted)
+    }
+
+    @Test
+    fun `waitForUsableChannels handles a removed channel without reading balances`() = test {
+        val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(emptyList())
+        clearInvocations(lightningService)
+
+        val wait = async { sut.waitForUsableChannels() }
+        runCurrent()
+
+        assertTrue(sut.lightningState.value.channels.isEmpty())
+        assertFalse(wait.isCompleted)
+        verify(lightningService, never()).balances
+        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS)
+        runCurrent()
+        assertTrue(wait.isCompleted)
+        verify(lightningService, never()).balances
+    }
+
+    @Test
+    fun `waitForUsableChannels rechecks lifecycle when the node stops during refresh`() = test {
+        val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        var stopped = false
+        whenever(lightningService.channels).thenAnswer {
+            if (!stopped) {
+                stopped = true
+                launch(start = CoroutineStart.UNDISPATCHED) { sut.stop() }
+            }
+            listOf(cached)
+        }
+
+        val wait = async { sut.waitForUsableChannels() }
+        runCurrent()
+
+        assertTrue(stopped)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+        assertFalse(wait.isCompleted)
+        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS)
+        runCurrent()
+        assertTrue(wait.isCompleted)
+    }
+
+    @Test
+    fun `waitForUsableChannels keeps the last usable snapshot when refreshing fails`() = test {
+        val cached = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 9_000_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenThrow(IllegalStateException("read failed"))
+        clearInvocations(lightningService)
+
+        sut.waitForUsableChannels()
+
+        assertEquals(listOf(cached), sut.lightningState.value.channels)
+        assertTrue(sut.canSend(9_000uL))
+        assertFalse(sut.canSend(9_001uL))
+        verify(lightningService, never()).balances
     }
 
     @Test

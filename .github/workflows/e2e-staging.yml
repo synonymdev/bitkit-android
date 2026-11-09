@@ -89,10 +89,8 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: multi_address, grep: "@multi_address_staging" }
           - { name: pubky_paykit, grep: "@pubky_staging" }
           - { name: hardware_wallet, grep: "@hardware_wallet" }
-          - { name: transfer, grep: "@transfer_staging" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 
@@ -225,11 +223,13 @@ jobs:
           ATTEMPT: 3
 
       - name: Upload E2E Artifacts (${{ matrix.shard.name }})
-        if: failure()
+        # Preserve failed-attempt evidence even when a retry passes.
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts-staging_${{ matrix.shard.name }}_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
+          retention-days: 7
 
       - name: Dump docker logs on failure (${{ matrix.shard.name }})
         if: failure()

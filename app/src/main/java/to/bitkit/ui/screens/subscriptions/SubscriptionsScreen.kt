@@ -114,6 +114,7 @@ import to.bitkit.ui.screens.paymentrequests.hasPaymentEvidence
 import to.bitkit.ui.screens.paymentrequests.paymentRequestDate
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.sheets.TransactionConfetti
@@ -135,6 +136,7 @@ fun SubscriptionsScreen(
     appViewModel: AppViewModel,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
+    onAddContact: () -> Unit,
     onCreateSubscription: () -> Unit,
     onDetails: (PaykitSubscriptionId) -> Unit,
     onPaymentRequestDetails: (PaykitPaymentRequestId) -> Unit,
@@ -144,48 +146,53 @@ fun SubscriptionsScreen(
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val pendingPaymentRequests by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
+    val showAllowances = settingsViewModel?.areAllowancesEnabled?.collectAsStateWithLifecycle()?.value == true
     val now = rememberSubscriptionNow(subscriptions.toImmutableList())
 
-    SubscriptionsContent(
-        subscriptions = subscriptions.toImmutableList(),
-        contacts = contacts.toImmutableList(),
-        acceptedAt = appViewModel::subscriptionAcceptedAt,
-        now = now,
-        onBack = onBack,
-        initialTab = if (showPayments) SubscriptionTab.Payments else SubscriptionTab.Overview,
-        pendingPaymentRequestCount = pendingPaymentRequests.size,
-        onSubscription = { subscription ->
-            if (subscription.isPayer && subscription.isProposalVisible(now)) {
-                appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
-            } else {
-                onDetails(subscription.id)
-            }
-        },
-        onCreateSubscription = onCreateSubscription,
-        paymentsContent = { topPadding ->
-            val autoPaidRequestIds by allowancesViewModel.autoPaidRequestIds.collectAsStateWithLifecycle()
-            PaymentRequestsScreen(
-                appViewModel = appViewModel,
-                onBack = onBack,
-                onRequestPayment = onRequestPayment,
-                onDetails = onPaymentRequestDetails,
-                showsNavigationBar = false,
-                topPadding = topPadding,
-                autoPaidRequestIds = autoPaidRequestIds,
-            )
-        },
-        allowancesContent = { topPadding ->
-            AllowancesScreen(
-                topPadding = topPadding,
-                onClickAdd = { appViewModel.showSheet(Sheet.Allowance(AllowanceRoute.Set)) },
-                onClickAllowance = {
-                    val route = if (it.isAnswerable) AllowanceRoute.Review(it.id) else AllowanceRoute.Details(it.id)
-                    appViewModel.showSheet(Sheet.Allowance(route))
-                },
-                viewModel = allowancesViewModel,
-            )
-        },
-    )
+    AllowanceAuthorizationHost(viewModel = allowancesViewModel) {
+        SubscriptionsContent(
+            subscriptions = subscriptions.toImmutableList(),
+            contacts = contacts.toImmutableList(),
+            acceptedAt = appViewModel::subscriptionAcceptedAt,
+            now = now,
+            onBack = onBack,
+            initialTab = if (showPayments) SubscriptionTab.Payments else SubscriptionTab.Overview,
+            showAllowances = showAllowances,
+            pendingPaymentRequestCount = pendingPaymentRequests.size,
+            onSubscription = { subscription ->
+                if (subscription.isPayer && subscription.isProposalVisible(now)) {
+                    appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
+                } else {
+                    onDetails(subscription.id)
+                }
+            },
+            onCreateSubscription = onCreateSubscription,
+            paymentsContent = { topPadding ->
+                val autoPaidRequestIds by allowancesViewModel.autoPaidRequestIds.collectAsStateWithLifecycle()
+                PaymentRequestsScreen(
+                    appViewModel = appViewModel,
+                    onBack = onBack,
+                    onRequestPayment = onRequestPayment,
+                    onAddContact = onAddContact,
+                    onDetails = onPaymentRequestDetails,
+                    showsNavigationBar = false,
+                    topPadding = topPadding,
+                    autoPaidRequestIds = autoPaidRequestIds,
+                )
+            },
+            allowancesContent = { topPadding ->
+                AllowancesScreen(
+                    topPadding = topPadding,
+                    onClickAdd = { appViewModel.showSheet(Sheet.Allowance(AllowanceRoute.Set)) },
+                    onClickAllowance = {
+                        val route = if (it.isAnswerable) AllowanceRoute.Review(it.id) else AllowanceRoute.Details(it.id)
+                        appViewModel.showSheet(Sheet.Allowance(route))
+                    },
+                    viewModel = allowancesViewModel,
+                )
+            },
+        )
+    }
 }
 
 @Composable
@@ -197,6 +204,7 @@ internal fun SubscriptionsContent(
     onBack: () -> Unit,
     initialTab: SubscriptionTab,
     pendingPaymentRequestCount: Int,
+    showAllowances: Boolean = true,
     onSubscription: (PaykitSubscription) -> Unit,
     onCreateSubscription: () -> Unit,
     paymentsContent: @Composable (topPadding: Dp) -> Unit,
@@ -206,8 +214,9 @@ internal fun SubscriptionsContent(
     val hasVisibleSubscriptions = with(sections) {
         proposals.isNotEmpty() || active.isNotEmpty() || expired.isNotEmpty() || created.isNotEmpty()
     }
+    val tabs = SubscriptionTab.entries.filter { showAllowances || it != SubscriptionTab.Allowances }.toImmutableList()
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTab.ordinal) }
-    val selectedTab = SubscriptionTab.entries[selectedTabIndex]
+    val selectedTab = SubscriptionTab.entries[selectedTabIndex].takeIf { it in tabs } ?: SubscriptionTab.Overview
 
     val hazeState = rememberHazeState()
     val density = LocalDensity.current
@@ -298,6 +307,7 @@ internal fun SubscriptionsContent(
                 actions = { DrawerNavIcon() },
             )
             SubscriptionTabs(
+                tabs = tabs,
                 selectedTab = selectedTab,
                 pendingPaymentRequestCount = pendingPaymentRequestCount,
                 onTabChange = { selectedTabIndex = it.ordinal },
@@ -380,13 +390,14 @@ private fun LazyListScope.subscriptionSection(
 
 @Composable
 private fun SubscriptionTabs(
+    tabs: ImmutableList<SubscriptionTab>,
     selectedTab: SubscriptionTab,
     pendingPaymentRequestCount: Int,
     onTabChange: (SubscriptionTab) -> Unit,
 ) {
     CustomTabRowWithSpacing(
-        tabs = persistentListOf(SubscriptionTab.Overview, SubscriptionTab.Allowances, SubscriptionTab.Payments),
-        currentTabIndex = selectedTab.ordinal,
+        tabs = tabs,
+        currentTabIndex = tabs.indexOf(selectedTab),
         selectedColor = Colors.White,
         onTabChange = onTabChange,
         badgeCount = { tab -> pendingPaymentRequestCount.takeIf { tab == SubscriptionTab.Payments } },

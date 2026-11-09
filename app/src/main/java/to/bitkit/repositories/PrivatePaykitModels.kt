@@ -80,6 +80,7 @@ internal data class StoredPaymentEntry(
 internal data class PrivatePaykitBackup(
     val sdkState: String,
     val consumedPrivatePaymentListVersions: Map<String, ULong>,
+    val consumedPrivatePaymentListOwners: Map<String, String> = emptyMap(),
 )
 
 internal data class StoredInvoice(

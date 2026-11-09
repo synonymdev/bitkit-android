@@ -11,10 +11,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -24,6 +27,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -31,8 +35,10 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -45,6 +51,8 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PrivatePaykitReservationData
+import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
@@ -61,19 +69,26 @@ import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.withPublicSharingDisabledForRestore
 import to.bitkit.di.json
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.MetadataBackupV1
+import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitUsdtStateBackup
+import to.bitkit.models.PubkySessionBackupKind
+import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.models.WidgetsBackupV1
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
@@ -121,6 +136,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val paykitPaymentProofStore = mock<PaykitPaymentProofStore>()
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitPresentationStore = mock<PaykitPaymentRequestPresentationStore>()
+    private val paykitAllowanceStore = mock<PaykitAllowanceStore>()
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
     private val vssStoreIdProvider = mock<to.bitkit.data.backup.VssStoreIdProvider>()
@@ -191,7 +207,11 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(usdtRepo.state).thenReturn(MutableStateFlow(UsdtWalletState()))
         whenever(paykitUsdtPaymentRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPresentationStore.backupSnapshot()).thenReturn(emptyMap())
-        whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }.thenReturn(Result.success(Unit))
+        whenever(paykitAllowanceStore.backupSnapshot()).thenReturn(emptyMap())
+        whenever(privatePaykitAddressReservationRepo.preparePublicAddressRestore()).thenReturn(false)
+        whenever { privatePaykitAddressReservationRepo.restoreBackup(anyOrNull(), any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitAddressReservationRepo.quarantinedPublicAddressesSnapshot() }.thenReturn(emptySet())
         whenever { privatePaykitAddressReservationRepo.backupSnapshot() }.thenReturn(Result.success(null))
         whenever(privatePaykitAddressReservationRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever {
@@ -213,7 +233,7 @@ class BackupRepoTest : BaseUnitTest() {
             false
         }
         Executors.newSingleThreadExecutor().asCoroutineDispatcher().use { ioDispatcher ->
-            sut = createSut(ioDispatcher)
+            sut = createSut(ioDispatcher = ioDispatcher)
             try {
                 val read = async(Dispatchers.Main) { sut.hasPendingWalletRestore() }
                 val storageThread = withContext(Dispatchers.Default) {
@@ -664,6 +684,109 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restore brings back each identity's allowance journal and history`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(
+            journal = listOf(
+                PaykitAllowanceStateBackup.JournalEntry(
+                    attemptId = "attempt-1",
+                    isAutomatic = true,
+                    requestId = PaykitPaymentRequestId("request-1", "pubky" + "y".repeat(52)),
+                    allowanceId = "allowance-1",
+                    amountSats = 1_000uL,
+                    paymentEndpointIdentifier = "btc-lightning-bolt11",
+                    paymentHash = "ab".repeat(32),
+                    stage = "sent",
+                    createdAt = "2026-10-27T01:00:00Z",
+                ),
+            ),
+            autoPaidSatsByAllowance = mapOf("pubky${"y".repeat(52)}/allowance-1" to 3_000uL),
+        )
+        stubWalletBackup(
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+    }
+
+    @Test
+    fun `wallet restore pauses automatic allowance payments before restoring wallet state`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL)
+        stubWalletBackup(
+            paykitSdkBackupState = "saved-sdk-state",
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        val order = inOrder(paykitAllowanceStore, privatePaykitRepo)
+        order.verify(paykitAllowanceStore).pauseAfterRestore()
+        order.verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+        order.verify(privatePaykitRepo).restoreBackup("saved-sdk-state")
+    }
+
+    @Test
+    fun `wallet restore without allowance state still pauses automatic allowance payments`() = test {
+        stubWalletBackup(paykitSdkBackupState = "saved-sdk-state")
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitAllowanceStore, never()).restoreBackup(any())
+        verify(paykitAllowanceStore).pauseAfterRestore()
+    }
+
+    @Test
+    fun `restore without Paykit state drops the ledger floor`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL, endedAllowanceIds = setOf("ended"))
+        stubWalletBackup(
+            paykitSdkBackupState = null,
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        val captor = argumentCaptor<Map<String, PaykitAllowanceLocalState>>()
+        verify(paykitAllowanceStore).restoreBackup(captor.capture())
+        val restored = captor.firstValue.getValue(identity)
+        assertNull(restored.ledgerRevisionFloor)
+        assertEquals(setOf("ended"), restored.endedAllowanceIds)
+    }
+
+    @Test
+    fun `restore with Paykit state keeps the ledger floor`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL)
+        stubWalletBackup(
+            paykitSdkBackupState = "saved-sdk-state",
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+    }
+
+    @Test
     fun `restored accepted Shop reconciles after proof and private state`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
@@ -1081,7 +1204,7 @@ class BackupRepoTest : BaseUnitTest() {
     @Test
     fun `full restore should fail when private Paykit reservations fail to restore`() = test {
         stubWalletBackup()
-        whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }
+        whenever { privatePaykitAddressReservationRepo.restoreBackup(anyOrNull(), any()) }
             .thenReturn(Result.failure(BackupRepoTestError("restore failed")))
 
         val result = sut.performFullRestoreFromLatestBackup()
@@ -1164,6 +1287,528 @@ class BackupRepoTest : BaseUnitTest() {
         assertFalse(sut.isRestoring.value)
         assertEquals("", retained)
         assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+    }
+
+    @Test
+    fun `restore initializes storage before metadata and retains recovery guards on setup failure`() = test {
+        stubPublicAddressRestore("bcrt1qpublic")
+        whenever { vssBackupClient.setup() }.thenReturn(
+            Result.failure(BackupRepoTestError("storage unavailable")),
+            Result.success(Unit),
+        )
+
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+
+        assertTrue(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name))
+        assertTrue(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name))
+        assertTrue(sut.hasPendingWalletRestore())
+        verify(vssBackupClient, never()).getObject(any())
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertFalse(sut.hasPendingWalletRestore())
+        assertFalse(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name))
+    }
+
+    @Test
+    fun `metadata quarantine failure blocks restore and replacement backups until retry retains exposure`() = test {
+        val publicAddress = "bcrt1qpublic"
+        val reservationStore = stubPublicAddressRestore(
+            publicAddress,
+            quarantineFailure = BackupRepoTestError("reservation store unavailable"),
+        )
+        var cacheRestored = false
+
+        val result = sut.performFullRestoreFromLatestBackup(onCacheRestored = { cacheRestored = true })
+
+        assertTrue(result.isFailure)
+        assertFalse(sut.isRestoring.value)
+        assertFalse(cacheRestored)
+        assertFalse(settingsData.value.backupVerified)
+        assertTrue(sut.hasPendingWalletRestore())
+        assertEquals("", keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name))
+        assertTrue(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name))
+        assertEquals(publicAddress, pendingPublicAddressRestoreRecord("address")["address"]?.jsonPrimitive?.content)
+        assertEquals("", cacheData.value.onchainAddress)
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        BackupCategory.entries.filterNot { it == BackupCategory.METADATA }.forEach {
+            verify(vssBackupClient, never()).getObject(it.name)
+        }
+        verify(privatePaykitRepo, never()).restoreBackup(anyOrNull())
+        verify(settingsStore, never()).restoreFromBackup(any())
+        verify(settingsStore, never()).update(any())
+        verify(keychain, never()).delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
+
+        sut = createSut(createReservationRepo(reservationStore))
+        assertTrue(sut.hasPendingWalletRestore())
+        assertTrue(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name))
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        assertTrue(sut.persistWalletBackup().isFailure)
+        verify(vssBackupClient, never()).putObject(any(), any())
+
+        sut.performFullRestoreFromLatestBackup(onCacheRestored = { cacheRestored = true }).getOrThrow()
+
+        assertTrue(cacheRestored)
+        assertTrue(settingsData.value.backupVerified)
+        assertTrue(settingsData.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsData.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsData.value.legacyPublicAddressQuarantinePending)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertFalse(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name))
+        assertNull(keychain.loadString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+        assertEquals("", cacheData.value.onchainAddress)
+        assertEquals(setOf(publicAddress), reservationStore.data.first().quarantinedPublicAddresses)
+        verify(privatePaykitRepo).restoreBackup(null)
+
+        val restartedReservations = createReservationRepo(reservationStore)
+        assertTrue(restartedReservations.isUnavailableForReusableReceive(publicAddress))
+        sut = createSut(restartedReservations)
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+
+        val uploaded = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), uploaded.capture())
+        val walletBackup = json.decodeFromString<WalletBackupV1>(uploaded.firstValue.decodeToString())
+        assertEquals(listOf(publicAddress), walletBackup.publicPaykitLegacyAddresses)
+    }
+
+    @Test
+    fun `pending public address restore retains exposure when retry metadata is unavailable`() = test {
+        val publicAddress = "bcrt1qpublic"
+        val reservationStore = stubPublicAddressRestore(
+            publicAddress,
+            quarantineFailure = BackupRepoTestError("reservation store unavailable"),
+        )
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        assertTrue(sut.hasPendingWalletRestore())
+        assertFalse(settingsData.value.backupVerified)
+
+        sut = createSut(createReservationRepo(reservationStore))
+        whenever(vssBackupClient.getObject(BackupCategory.METADATA.name))
+            .thenReturn(Result.failure(BackupRepoTestError("metadata download unavailable")))
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertFalse(sut.isRestoring.value)
+        if (result.isSuccess) {
+            assertEquals(setOf(publicAddress), reservationStore.data.first().quarantinedPublicAddresses)
+            assertTrue(settingsData.value.backupVerified)
+            assertFalse(sut.hasPendingWalletRestore())
+            val restartedReservations = createReservationRepo(reservationStore)
+            assertTrue(restartedReservations.isUnavailableForReusableReceive(publicAddress))
+            sut = createSut(restartedReservations)
+            sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+
+            val uploaded = argumentCaptor<ByteArray>()
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), uploaded.capture())
+            val walletBackup = json.decodeFromString<WalletBackupV1>(uploaded.firstValue.decodeToString())
+            assertEquals(listOf(publicAddress), walletBackup.publicPaykitLegacyAddresses)
+        } else {
+            assertFalse(settingsData.value.backupVerified)
+            assertTrue(sut.hasPendingWalletRestore())
+            assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        }
+    }
+
+    @Test
+    fun `pending public address restore blocks metadata uploads after the transient gate clears`() = test {
+        val reservationStore = stubPublicAddressRestore(
+            "bcrt1qpublic",
+            quarantineFailure = BackupRepoTestError("reservation store unavailable"),
+        )
+        sut.setRestorePending(true)
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        sut.setRestorePending(false)
+        assertFalse(sut.isRestoring.value)
+        assertTrue(sut.hasPendingWalletRestore())
+        assertFalse(settingsData.value.backupVerified)
+        assertEquals("", cacheData.value.onchainAddress)
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+
+        val result = sut.triggerBackup(BackupCategory.METADATA)
+
+        assertTrue(result.isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+        assertTrue(sut.hasPendingWalletRestore())
+        assertFalse(settingsData.value.backupVerified)
+    }
+
+    @Test
+    fun `first unavailable metadata download remains optional without a pending exposure`() = test {
+        val reservationStore = stubPublicAddressRestore("bcrt1qpublic")
+        whenever(vssBackupClient.getObject(BackupCategory.METADATA.name))
+            .thenReturn(Result.failure(BackupRepoTestError("metadata download unavailable")))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertNull(keychain.loadString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+        verify(vssBackupClient).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `cancelled metadata download permits absent metadata on retry`() = test {
+        assertCancelledMetadataDownloadCanRetry(null)
+    }
+
+    @Test
+    fun `cancelled metadata download permits valid blank metadata on retry`() = test {
+        assertCancelledMetadataDownloadCanRetry(metadataEnvelope())
+    }
+
+    @Test
+    fun `captured blank metadata source requires matching bytes before recovery completes`() = test {
+        val reservationStore = stubPublicAddressRestore("")
+        val metadata = metadataEnvelope()
+        val reservations = createReservationRepo(reservationStore)
+        assertFalse(reservations.preparePublicAddressRestore())
+        reservations.capturePublicAddressRestoreSource(metadata.toByteArray())
+        val source = pendingPublicAddressRestoreRecord("source")
+        sut = createSut(createReservationRepo(reservationStore))
+
+        for (download in listOf(null, "$metadata ")) {
+            whenever(vssBackupClient.getObject(BackupCategory.METADATA.name)).thenReturn(
+                Result.success(
+                    download?.let {
+                        VssItem(key = BackupCategory.METADATA.name, value = it.toByteArray(), version = 1)
+                    },
+                ),
+            )
+            assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+            assertFalse(settingsData.value.backupVerified)
+            assertTrue(sut.hasPendingWalletRestore())
+            assertEquals(source, pendingPublicAddressRestoreRecord("source"))
+            assertTrue(sut.triggerBackup(BackupCategory.METADATA).isFailure)
+        }
+        verify(vssBackupClient, never()).getObject(BackupCategory.WALLET.name)
+        verify(vssBackupClient, never()).putObject(any(), any())
+
+        stubMetadataRestore(envelope = metadata)
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertNull(keychain.loadString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+    }
+
+    @Test
+    fun `failed metadata source capture leaves reading guard without interpreting payload`() = test {
+        val failure = BackupRepoTestError("source record unavailable")
+        val reservationStore = stubPublicAddressRestore("bcrt1qpublic", sourceRecordFailure = failure)
+        stubRestoreEnvelope(BackupCategory.METADATA, "{")
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertEquals(failure, result.exceptionOrNull()?.cause)
+        pendingPublicAddressRestoreRecord("reading")
+        assertFalse(settingsData.value.backupVerified)
+        assertTrue(sut.hasPendingWalletRestore())
+        assertEquals("", cacheData.value.onchainAddress)
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        verify(reservationStore, never()).update(any())
+        verify(preActivityMetadataRepo, never()).migrateBackupPreActivityMetadataJson(any())
+        verify(vssBackupClient, never()).getObject(BackupCategory.WALLET.name)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        assertTrue(sut.triggerBackup(BackupCategory.METADATA).isFailure)
+        verify(vssBackupClient, never()).putObject(any(), any())
+
+        sut = createSut(createReservationRepo(reservationStore))
+        stubMetadataRestore(envelope = metadataEnvelope())
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+    }
+
+    @Test
+    fun `failed exposure recording keeps retry blocked until metadata recovers the address`() = test {
+        val publicAddress = "bcrt1qpublic"
+        val reservationStore = stubPublicAddressRestore(
+            publicAddress,
+            addressRecordFailure = BackupRepoTestError("keychain unavailable"),
+        )
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        val source = pendingPublicAddressRestoreRecord("source")
+        assertTrue(source.getValue("fingerprint").jsonPrimitive.content.isNotBlank())
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        verify(vssBackupClient, never()).getObject(BackupCategory.WALLET.name)
+
+        sut = createSut(createReservationRepo(reservationStore))
+        val missingMetadata = listOf(
+            Result.failure<VssItem?>(BackupRepoTestError("metadata download unavailable")),
+            Result.success(null),
+            Result.success(
+                VssItem(
+                    key = BackupCategory.METADATA.name,
+                    value = metadataEnvelope().toByteArray(),
+                    version = 1,
+                ),
+            ),
+            Result.success(
+                VssItem(
+                    key = BackupCategory.METADATA.name,
+                    value = metadataEnvelope(cache = AppCacheData(onchainAddress = publicAddress)).toByteArray(),
+                    version = 1,
+                ),
+            ),
+        )
+        for (download in missingMetadata) {
+            whenever(vssBackupClient.getObject(BackupCategory.METADATA.name)).thenReturn(download)
+            assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+            assertFalse(settingsData.value.backupVerified)
+            assertTrue(sut.hasPendingWalletRestore())
+            assertEquals(source, pendingPublicAddressRestoreRecord("source"))
+            assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+            assertTrue(sut.triggerBackup(BackupCategory.METADATA).isFailure)
+        }
+        verify(vssBackupClient, never()).putObject(any(), any())
+
+        stubMetadataRestore(
+            envelope = metadataEnvelope(
+                metadata = listOf(preActivityMetadata()),
+                cache = AppCacheData(onchainAddress = publicAddress),
+            ),
+        )
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertEquals(setOf(publicAddress), reservationStore.data.first().quarantinedPublicAddresses)
+        assertNull(keychain.loadString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+    }
+
+    @Test
+    fun `cancelled exposure recording retains its prearmed recovery guard after restart`() = test {
+        val reservationStore = stubPublicAddressRestore(
+            "bcrt1qpublic",
+            addressRecordFailure = CancellationException("cancelled"),
+        )
+
+        assertFailsWith<CancellationException> { sut.performFullRestoreFromLatestBackup() }
+
+        assertFalse(sut.isRestoring.value)
+        assertFalse(settingsData.value.backupVerified)
+        pendingPublicAddressRestoreRecord("source")
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        sut = createSut(createReservationRepo(reservationStore))
+        whenever(vssBackupClient.getObject(BackupCategory.METADATA.name))
+            .thenReturn(Result.failure(BackupRepoTestError("metadata download unavailable")))
+
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        assertTrue(sut.hasPendingWalletRestore())
+        assertFalse(settingsData.value.backupVerified)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        assertTrue(sut.triggerBackup(BackupCategory.METADATA).isFailure)
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
+    fun `cancelled metadata quarantine preserves cancellation and the replacement backup guard`() = test {
+        val reservationStore = stubPublicAddressRestore(
+            "bcrt1qpublic",
+            quarantineFailure = CancellationException("cancelled"),
+        )
+        var cacheRestored = false
+
+        assertFailsWith<CancellationException> {
+            sut.performFullRestoreFromLatestBackup(onCacheRestored = { cacheRestored = true })
+        }
+
+        assertFalse(sut.isRestoring.value)
+        assertFalse(cacheRestored)
+        assertFalse(settingsData.value.backupVerified)
+        assertTrue(sut.hasPendingWalletRestore())
+        assertEquals("", keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name))
+        assertTrue(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name))
+        assertEquals("bcrt1qpublic", pendingPublicAddressRestoreRecord("address")["address"]?.jsonPrimitive?.content)
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        verify(vssBackupClient, never()).getObject(BackupCategory.SETTINGS.name)
+        verify(vssBackupClient, never()).getObject(BackupCategory.WALLET.name)
+        verify(settingsStore, never()).update(any())
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
+    fun `metadata cache failure remains optional after public address quarantine succeeds`() = test {
+        val publicAddress = "bcrt1qpublic"
+        val reservationStore = stubPublicAddressRestore(publicAddress)
+        var failCacheWrite = true
+        doAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            val updated = transform(cacheData.value)
+            if (failCacheWrite && updated.backupStatuses == cacheData.value.backupStatuses) {
+                failCacheWrite = false
+                throw BackupRepoTestError("cache store unavailable")
+            }
+            cacheData.update { updated }
+        }.whenever(cacheStore).update(any())
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertFalse(settingsData.value.legacyPublicAddressQuarantinePending)
+        assertEquals(setOf(publicAddress), reservationStore.data.first().quarantinedPublicAddresses)
+        verify(privatePaykitRepo).restoreBackup(null)
+        assertTrue(createReservationRepo(reservationStore).isUnavailableForReusableReceive(publicAddress))
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `restored exposure stays pending when backup requirement persistence fails`() = test {
+        val publicAddress = "bcrt1qpublic"
+        val reservationStore = stubPublicAddressRestore(publicAddress)
+        var failRequirementWrite = true
+        doAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            val updated = transform(cacheData.value)
+            if (failRequirementWrite && updated.backupStatuses[BackupCategory.WALLET]?.isRequired == true) {
+                failRequirementWrite = false
+                throw BackupRepoTestError("backup status store unavailable")
+            }
+            cacheData.update { updated }
+        }.whenever(cacheStore).update(any())
+
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        assertFalse(settingsData.value.backupVerified)
+        assertTrue(sut.hasPendingWalletRestore())
+        assertEquals(setOf(publicAddress), reservationStore.data.first().quarantinedPublicAddresses)
+        assertEquals(publicAddress, pendingPublicAddressRestoreRecord("address")["address"]?.jsonPrimitive?.content)
+
+        sut = createSut(createReservationRepo(reservationStore))
+        whenever(vssBackupClient.getObject(BackupCategory.METADATA.name))
+            .thenReturn(Result.failure(BackupRepoTestError("metadata download unavailable")))
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.WALLET).isRequired)
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.METADATA).isRequired)
+        assertTrue(sut.triggerBackup(BackupCategory.METADATA).isFailure)
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
+    fun `metadata replacement waits for normal wallet upload after local exposure restore`() = test {
+        val publicAddress = "bcrt1qpublic"
+        val reservationStore = stubPublicAddressRestore(publicAddress)
+        val legacyMetadata = envelopeWithRawField(
+            base = metadataEnvelope(cache = AppCacheData(onchainAddress = publicAddress)),
+            field = "tagMetadata",
+            rawJson = LEGACY_METADATA_JSON,
+        )
+        val remote = mutableMapOf(
+            BackupCategory.METADATA.name to legacyMetadata.toByteArray(),
+            BackupCategory.WALLET.name to """{"version":1,"createdAt":123,"transfers":[]}""".toByteArray(),
+        )
+        whenever(vssBackupClient.getObject(any())).doSuspendableAnswer {
+            val key = it.getArgument<String>(0)
+            Result.success(remote[key]?.let { value -> VssItem(key = key, value = value, version = 1) })
+        }
+        var walletUploadAvailable = false
+        val uploadedCategories = mutableListOf<String>()
+        whenever(vssBackupClient.putObject(any(), any())).doSuspendableAnswer {
+            val key = it.getArgument<String>(0)
+            val value = it.getArgument<ByteArray>(1)
+            if (key == BackupCategory.WALLET.name && !walletUploadAvailable) {
+                Result.failure(BackupRepoTestError("wallet upload unavailable"))
+            } else {
+                remote[key] = value
+                uploadedCategories += key
+                Result.success(VssItem(key = key, value = value, version = 1))
+            }
+        }
+        val connectionStatus = BackupItemStatus(synced = 10, required = 20)
+        cacheData.update {
+            it.copy(backupStatuses = mapOf(BackupCategory.LIGHTNING_CONNECTIONS to connectionStatus))
+        }
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertEquals(setOf(publicAddress), reservationStore.data.first().quarantinedPublicAddresses)
+        assertEquals(legacyMetadata, remote.getValue(BackupCategory.METADATA.name).decodeToString())
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.WALLET).isRequired)
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.METADATA).isRequired)
+        assertEquals(connectionStatus, cacheData.value.backupStatuses[BackupCategory.LIGHTNING_CONNECTIONS])
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+        sut.triggerBackup(BackupCategory.METADATA)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        sut.triggerBackup(BackupCategory.METADATA)
+        assertEquals(legacyMetadata, remote.getValue(BackupCategory.METADATA.name).decodeToString())
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.WALLET).isRequired)
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.METADATA).isRequired)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+
+        walletUploadAvailable = true
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+        val wallet = json.decodeFromString<WalletBackupV1>(remote.getValue(BackupCategory.WALLET.name).decodeToString())
+        assertEquals(listOf(publicAddress), wallet.publicPaykitLegacyAddresses)
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+        val metadata = json.decodeFromString<MetadataBackupV1>(
+            remote.getValue(BackupCategory.METADATA.name).decodeToString(),
+        )
+        assertEquals("", metadata.cache.onchainAddress)
+        assertEquals(BackupCategory.WALLET.name, uploadedCategories.first())
+        assertTrue(uploadedCategories.indexOf(BackupCategory.METADATA.name) > 0)
+        assertFalse(cacheData.value.backupStatuses.getValue(BackupCategory.WALLET).isRequired)
+        assertFalse(cacheData.value.backupStatuses.getValue(BackupCategory.METADATA).isRequired)
+    }
+
+    @Test
+    fun `metadata restore waits for admitted metadata capture and upload to drain`() = test {
+        stubMetadataBackupReads()
+        val captureStarted = CompletableDeferred<Unit>()
+        val finishCapture = CompletableDeferred<Unit>()
+        val uploadStarted = CompletableDeferred<Unit>()
+        val finishUpload = CompletableDeferred<Unit>()
+        val metadataRead = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.snapshotSessionBackupState()).doSuspendableAnswer {
+            captureStarted.complete(Unit)
+            finishCapture.await()
+            Result.success(null)
+        }
+        whenever(vssBackupClient.putObject(eq(BackupCategory.METADATA.name), any())).doSuspendableAnswer {
+            uploadStarted.complete(Unit)
+            finishUpload.await()
+            Result.success(VssItem(key = BackupCategory.METADATA.name, value = it.getArgument(1), version = 1))
+        }
+        whenever(vssBackupClient.getObject(BackupCategory.METADATA.name)).doSuspendableAnswer {
+            metadataRead.complete(Unit)
+            Result.success(null)
+        }
+        val backup = async { sut.triggerBackup(BackupCategory.METADATA) }
+        captureStarted.await()
+        val restore = async { sut.performFullRestoreFromLatestBackup() }
+        try {
+            runCurrent()
+            assertFalse(metadataRead.isCompleted)
+            assertFalse(restore.isCompleted)
+            finishCapture.complete(Unit)
+            runCurrent()
+            assertTrue(uploadStarted.isCompleted)
+            assertFalse(metadataRead.isCompleted)
+            assertFalse(restore.isCompleted)
+
+            finishUpload.complete(Unit)
+            backup.await().getOrThrow()
+            restore.await().getOrThrow()
+            assertTrue(metadataRead.isCompleted)
+        } finally {
+            finishCapture.complete(Unit)
+            finishUpload.complete(Unit)
+            backup.cancelAndJoin()
+            restore.cancelAndJoin()
+        }
     }
 
     @Test
@@ -1505,6 +2150,25 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wallet backup round trips public address exclusions alongside reservation floors`() = test {
+        val legacy = setOf("bcrt1qpublic")
+        val floors = mapOf("nativeSegwit" to 8)
+        whenever(privatePaykitAddressReservationRepo.quarantinedPublicAddressesSnapshot()).thenReturn(legacy)
+        whenever(privatePaykitAddressReservationRepo.backupSnapshot()).thenReturn(Result.success(floors))
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+        val bytes = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), bytes.capture())
+        val payload = json.decodeFromString<WalletBackupV1>(bytes.firstValue.decodeToString())
+        assertEquals(legacy.toList(), payload.publicPaykitLegacyAddresses)
+        assertEquals(floors, payload.privatePaykitHighestReservedReceiveIndexByAddressType)
+        whenever(vssBackupClient.getObject(BackupCategory.WALLET.name)).thenReturn(
+            Result.success(VssItem(BackupCategory.WALLET.name, bytes.firstValue, 1)),
+        )
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        verify(privatePaykitAddressReservationRepo).restoreBackup(floors, legacy)
+    }
+
+    @Test
     fun `wallet restore restores watch-only accounts and allocator before runtime reconciliation`() = test {
         val account = watchOnlyAccount()
         val allocationState = WatchOnlyAccountAllocationState(
@@ -1573,6 +2237,41 @@ class BackupRepoTest : BaseUnitTest() {
         val metadataCaptor = argumentCaptor<List<PreActivityMetadata>>()
         verifyBlocking(preActivityMetadataRepo) { upsertPreActivityMetadata(metadataCaptor.capture()) }
         assertEquals(listOf(preActivityMetadata()), metadataCaptor.firstValue)
+    }
+
+    @Test
+    fun `iOS metadata backup restores the Pubky profile session`() = test {
+        stubWalletBackup()
+        val envelope = iosFixture("metadata")
+        stubMetadataRestore(
+            envelope = envelope,
+            migratedMetadataJson = json.parseToJsonElement(envelope).jsonObject["tagMetadata"].toString(),
+        )
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(emptySet(), failed)
+        verifyBlocking(pubkyRepo) { restoreSessionBackupState(PubkySessionBackupV1(PubkySessionBackupKind.LocalSeed)) }
+        val metadataCaptor = argumentCaptor<List<PreActivityMetadata>>()
+        verifyBlocking(preActivityMetadataRepo) { upsertPreActivityMetadata(metadataCaptor.capture()) }
+        assertEquals(2, metadataCaptor.firstValue.size)
+    }
+
+    @Test
+    fun `full restore reports the categories it could not restore`() = test {
+        stubWalletBackup()
+        stubMetadataRestore(envelope = iosFixture("metadata"))
+        whenever { pubkyRepo.restoreSessionBackupState(anyOrNull()) }
+            .thenReturn(Result.failure(BackupRepoTestError("pubky")))
+        stubRestoreEnvelope(BackupCategory.BLOCKTANK, iosFixture("blocktank"))
+        whenever { blocktankRepo.restoreFromBackup(any()) }.thenReturn(Result.failure(BackupRepoTestError("core")))
+        val widgetsEnvelope = json.encodeToString(WidgetsBackupV1(createdAt = 1, widgets = WidgetsData()))
+        stubRestoreEnvelope(BackupCategory.WIDGETS, widgetsEnvelope)
+        whenever { widgetsStore.restoreFromBackup(any()) }.thenReturn(Result.failure(BackupRepoTestError("disk")))
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(setOf(BackupCategory.METADATA, BackupCategory.WIDGETS, BackupCategory.BLOCKTANK), failed)
     }
 
     @Test
@@ -1848,6 +2547,115 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scheduled activity backup skips an unchanged payload`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        val backupStatuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(backupStatuses, CompletableDeferred<Unit>().apply { complete(Unit) }) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+
+            // Every wallet sync announces a change, even when no activity was added or updated.
+            whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(2_000))
+            activitiesChanged.update { 2L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+            val status = backupStatuses.value.getValue(BackupCategory.ACTIVITY)
+            assertFalse(status.isRequired)
+            assertFalse(status.running)
+
+            whenever(activityRepo.getAllActivitiesTags()).thenReturn(Result.success(listOf(defaultTag())))
+            activitiesChanged.update { 3L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `scheduled activity backup uploads a reverted payload after a failed upload`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred<Unit>().apply { complete(Unit) }) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+
+            // The server can commit a write whose response never reaches the client.
+            whenever(activityRepo.getAllActivitiesTags()).thenReturn(Result.success(listOf(defaultTag())))
+            whenever(vssBackupClient.putObject(any(), any())).thenReturn(Result.failure(BackupRepoTestError("io")))
+            assertTrue(sut.triggerBackup(BackupCategory.ACTIVITY).isFailure)
+
+            val uploaded = VssItem(key = BackupCategory.ACTIVITY.name, value = byteArrayOf(), version = 2)
+            whenever(vssBackupClient.putObject(any(), any())).thenReturn(Result.success(uploaded))
+            whenever(activityRepo.getAllActivitiesTags()).thenReturn(Result.success(emptyList()))
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(3)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `scheduled activity backup uploads an unchanged payload after reset`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred<Unit>().apply { complete(Unit) }) {}
+        sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+
+        sut.reset()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `explicit activity backup uploads an unchanged payload`() = test {
+        stubActivityBackupReads()
+
+        sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+        sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+
+        verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+    }
+
+    @Test
     fun `pending restore stops gating uploads once it expires`() = test {
         val activitiesChanged = MutableStateFlow(0L)
         stubBackupObservers()
@@ -1942,7 +2750,7 @@ class BackupRepoTest : BaseUnitTest() {
 
         val result = sut.performFullRestoreFromLatestBackup()
 
-        assertTrue(result.isSuccess)
+        assertEquals(setOf(BackupCategory.ACTIVITY), result.getOrThrow())
         // Rewriting here would replace the legacy backup with whatever Core happens to hold.
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
     }
@@ -1956,8 +2764,8 @@ class BackupRepoTest : BaseUnitTest() {
 
         val result = sut.performFullRestoreFromLatestBackup()
 
-        // Only WALLET is fatal, so the restore still reports success overall.
-        assertTrue(result.isSuccess)
+        // Only WALLET is fatal, so the restore still succeeds and reports the category.
+        assertEquals(setOf(BackupCategory.ACTIVITY), result.getOrThrow())
         // The legacy slice stays unmigrated and no longer decodes, so nothing of this category is applied.
         verifyBlocking(activityRepo, never()) { restoreFromBackup(any()) }
         // Nothing was restored, so the stored backup must not be replaced.
@@ -1969,6 +2777,166 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { activityRepo.getClosedChannels() }.thenReturn(Result.success(emptyList()))
         whenever { activityRepo.getAllActivitiesTags() }.thenReturn(Result.success(emptyList()))
     }
+
+    private fun pendingPublicAddressRestoreRecord(type: String): JsonObject {
+        val stored = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+        return json.parseToJsonElement(stored).jsonObject.also {
+            assertEquals(type, it["type"]?.jsonPrimitive?.content)
+        }
+    }
+
+    private suspend fun assertCancelledMetadataDownloadCanRetry(metadataOnRetry: String?) = coroutineScope {
+        val reservationStore = stubPublicAddressRestore("")
+        whenever(preActivityMetadataRepo.migrateBackupPreActivityMetadataJson(any())).thenAnswer {
+            Result.success(it.getArgument<String>(0))
+        }
+        whenever(preActivityMetadataRepo.getAllPreActivityMetadata()).thenReturn(Result.success(emptyList()))
+        val downloadStarted = CompletableDeferred<Unit>()
+        var holdDownload = true
+        val metadata = metadataOnRetry?.let {
+            VssItem(key = BackupCategory.METADATA.name, value = it.toByteArray(), version = 1)
+        }
+        whenever(vssBackupClient.getObject(BackupCategory.METADATA.name)).doSuspendableAnswer {
+            if (holdDownload) {
+                downloadStarted.complete(Unit)
+                awaitCancellation()
+            }
+            Result.success(metadata)
+        }
+        val restore = async { sut.performFullRestoreFromLatestBackup() }
+        try {
+            downloadStarted.await()
+        } finally {
+            restore.cancelAndJoin()
+        }
+
+        assertTrue(restore.isCancelled)
+        assertFalse(sut.isRestoring.value)
+        assertFalse(settingsData.value.backupVerified)
+        assertTrue(sut.hasPendingWalletRestore())
+        pendingPublicAddressRestoreRecord("reading")
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        verify(vssBackupClient, never()).getObject(BackupCategory.WALLET.name)
+
+        holdDownload = false
+        val restartedReservations = createReservationRepo(reservationStore)
+        sut = createSut(restartedReservations)
+        sut.setRestorePending(false)
+        assertTrue(sut.performFullRestoreFromLatestBackup().isSuccess)
+
+        assertTrue(settingsData.value.backupVerified)
+        assertFalse(sut.hasPendingWalletRestore())
+        assertNull(keychain.loadString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+        assertTrue(reservationStore.data.first().quarantinedPublicAddresses.isEmpty())
+        whenever(lightningRepo.newAddressInfoForType(any()))
+            .thenReturn(Result.success(AddressDerivationInfo("bcrt1qreceive", 0)))
+        assertEquals("bcrt1qreceive", restartedReservations.nextReusableReceiveAddress().getOrThrow())
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+        verify(vssBackupClient).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    private fun stubPublicAddressRestore(
+        address: String,
+        quarantineFailure: Throwable? = null,
+        addressRecordFailure: Throwable? = null,
+        sourceRecordFailure: Throwable? = null,
+    ): PrivatePaykitReservationStore {
+        stubMetadataRestore(
+            envelope = metadataEnvelope(
+                metadata = listOf(preActivityMetadata()),
+                cache = AppCacheData(onchainAddress = address),
+            ),
+        )
+        stubRestoreEnvelope(BackupCategory.WALLET, """{"version":1,"createdAt":123,"transfers":[]}""")
+        stubRestoreEnvelope(
+            BackupCategory.SETTINGS,
+            json.encodeToString(
+                SettingsBackupV1(
+                    createdAt = 123,
+                    settings = SettingsData(
+                        sharesPrivatePaykitEndpoints = true,
+                        sharesPublicPaykitEndpoints = true,
+                        hasConfirmedPublicPaykitEndpoints = true,
+                    ),
+                ),
+            ),
+        )
+        whenever { settingsStore.restoreFromBackup(any()) }.thenAnswer {
+            val payload = it.getArgument<SettingsBackupV1>(0)
+            settingsData.update { payload.settings.withPublicSharingDisabledForRestore() }
+            Result.success(Unit)
+        }
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsData.update(transform)
+        }
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.update(transform)
+        }
+        whenever(cacheStore.backupStatuses).thenReturn(cacheData.map { it.backupStatuses })
+        whenever { cacheStore.updateBackupStatus(any(), any()) }.thenAnswer {
+            val category = it.getArgument<BackupCategory>(0)
+            val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+            cacheData.update { cache ->
+                val status = cache.backupStatuses[category] ?: BackupItemStatus()
+                cache.copy(backupStatuses = cache.backupStatuses + (category to transform(status)))
+            }
+        }
+        val retained = mutableMapOf<String, String>()
+        var nextRecordFailure = addressRecordFailure
+        var nextSourceFailure = sourceRecordFailure
+        whenever(keychain.exists(any())).thenAnswer { it.getArgument<String>(0) in retained }
+        whenever(keychain.loadString(any())).thenAnswer { retained[it.getArgument<String>(0)] }
+        whenever { keychain.upsertString(any(), any()) }.thenAnswer {
+            val key = it.getArgument<String>(0)
+            val value = it.getArgument<String>(1)
+            if (key == Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name) {
+                when (json.parseToJsonElement(value).jsonObject["type"]?.jsonPrimitive?.content) {
+                    "source" -> nextSourceFailure?.let { failure ->
+                        nextSourceFailure = null
+                        throw failure
+                    }
+                    "address" -> nextRecordFailure?.let { failure ->
+                        nextRecordFailure = null
+                        throw failure
+                    }
+                }
+            }
+            retained[key] = value
+            Unit
+        }
+        whenever { keychain.delete(any()) }.thenAnswer {
+            retained.remove(it.getArgument<String>(0))
+            Unit
+        }
+        val reservationStore = mock<PrivatePaykitReservationStore>()
+        val reservationData = MutableStateFlow(PrivatePaykitReservationData())
+        var nextFailure = quarantineFailure
+        whenever(reservationStore.data).thenReturn(reservationData)
+        whenever { reservationStore.update(any()) }.thenAnswer {
+            nextFailure?.let { failure ->
+                nextFailure = null
+                throw failure
+            }
+            val transform = it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0)
+            reservationData.update(transform)
+        }
+        sut = createSut(createReservationRepo(reservationStore))
+        return reservationStore
+    }
+
+    private fun createReservationRepo(
+        reservationStore: PrivatePaykitReservationStore,
+    ) = PrivatePaykitAddressReservationRepo(
+        ioDispatcher = testDispatcher,
+        reservationStore = reservationStore,
+        settingsStore = settingsStore,
+        coreService = coreService,
+        lightningRepo = lightningRepo,
+        cacheStore = cacheStore,
+        keychain = keychain,
+    )
 
     private fun stubMetadataBackupReads() {
         whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
@@ -2011,6 +2979,9 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { pubkyRepo.snapshotSessionBackupState() }.thenReturn(Result.success(null))
         whenever { pubkyRepo.snapshotContactProfileOverrides() }.thenReturn(Result.success(null))
     }
+
+    private fun iosFixture(name: String) =
+        requireNotNull(javaClass.getResourceAsStream("/ios-backup/$name.json")).bufferedReader().readText()
 
     private fun stubRestoreEnvelope(category: BackupCategory, envelope: String) {
         whenever { vssBackupClient.getObject(category.name) }.thenReturn(
@@ -2155,6 +3126,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(privatePaykitAddressReservationRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPaymentProofStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPresentationStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitAllowanceStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(preActivityMetadataRepo.preActivityMetadataChanged).thenReturn(MutableStateFlow(0L))
         whenever(lightningService.syncStatusChanged).thenReturn(MutableSharedFlow())
     }
@@ -2175,7 +3147,10 @@ class BackupRepoTest : BaseUnitTest() {
         verify(vssBackupClient, never()).getObject(any())
     }
 
-    private fun createSut(ioDispatcher: CoroutineDispatcher = testDispatcher) = BackupRepo(
+    private fun createSut(
+        reservationRepo: PrivatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+        ioDispatcher: CoroutineDispatcher = testDispatcher,
+    ) = BackupRepo(
         context = context,
         ioDispatcher = ioDispatcher,
         cacheStore = cacheStore,
@@ -2192,13 +3167,14 @@ class BackupRepoTest : BaseUnitTest() {
         pubkyRepo = pubkyRepo,
         paykitSdkService = paykitSdkService,
         privatePaykitRepo = Provider { privatePaykitRepo },
-        privatePaykitAddressReservationRepo = Provider { privatePaykitAddressReservationRepo },
+        privatePaykitAddressReservationRepo = Provider { reservationRepo },
         paykitPaymentProofRepo = Provider { paykitPaymentProofRepo },
         paykitUsdtPaymentRepo = Provider { paykitUsdtPaymentRepo },
         usdtRepo = Provider { usdtRepo },
         paykitPaymentProofStore = paykitPaymentProofStore,
         paykitPaymentRequestRepo = Provider { paykitPaymentRequestRepo },
         paykitPresentationStore = paykitPresentationStore,
+        paykitAllowanceStore = paykitAllowanceStore,
         keychain = keychain,
         onchainSendAttemptStore = onchainSendAttemptStore,
         lightningRepo = Provider { lightningRepo },

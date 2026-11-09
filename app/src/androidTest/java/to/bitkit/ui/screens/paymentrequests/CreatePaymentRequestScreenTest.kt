@@ -8,14 +8,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalInspectionMode
-import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -25,12 +26,10 @@ import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
 import org.junit.Test
-import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
-import to.bitkit.models.USD_SYMBOL
 import to.bitkit.repositories.AmountInputHandler
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.MethodId
@@ -150,15 +149,10 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestNumberPad").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestNote").assertDoesNotExist()
-        composeTestRule.onAllNodesWithText(USD_SYMBOL, substring = true, useUnmergedTree = true).assertCountEquals(1)
-
-        composeTestRule.onNodeWithTag("PaymentRequestAmountUnit").performClick()
-
-        composeTestRule.onAllNodesWithText(
-            BITCOIN_SYMBOL,
-            substring = true,
-            useUnmergedTree = true
-        ).assertCountEquals(1)
+        val unitButton = composeTestRule.onNodeWithTag("PaymentRequestAmountUnit", useUnmergedTree = true)
+        unitButton.assert(hasAnyDescendant(hasText("BITCOIN"))).performClick()
+        unitButton.assert(hasAnyDescendant(hasText("USD")))
+        composeTestRule.runOnIdle { assertEquals(PrimaryDisplay.FIAT, currencies.primaryDisplay) }
     }
 
     @Test

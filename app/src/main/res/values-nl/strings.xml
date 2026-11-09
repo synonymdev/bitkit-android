@@ -269,6 +269,7 @@
     <string name="onboarding__restore_failed_header">Bestedingssaldo &lt;accent&gt;fout&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit heeft je spaargeld hersteld, maar kon je huidige bestedingssaldo (Lightning-status) en wallet-gegevens niet herstellen.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Herstel&lt;/accent&gt;\nje wallet</string>
+    <string name="onboarding__restore_incomplete_text">Je wallet en saldo zijn terug, maar Bitkit kon het volgende niet herstellen: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">De checksum van de herstelzin lijkt onjuist te zijn. Controleer je herstelzin nogmaals.</string>
     <string name="onboarding__restore_no_backup_button">Doorgaan zonder backup</string>
     <string name="onboarding__restore_no_backup_warn">Als je eerder een Lightning-backup had, wordt deze overschreven en verloren. Dit kan leiden tot verlies van geld.</string>
@@ -782,7 +783,7 @@
     <string name="usdt__from_address">Van adres</string>
     <string name="usdt__hide_details">Details verbergen</string>
     <string name="usdt__intro_decline">Nee, bedankt</string>
-    <string name="usdt__intro_description">Bitcoin in hart en nieren. Dollars wanneer u ze nodig heeft. Schakel USDT (Tether) in om digitale dollars te verzenden en ontvangen met Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin in hart en nieren. Dollars wanneer u ze nodig heeft. Schakel USDT (Tether) in om snel digitale dollars te verzenden en ontvangen met Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nU BESLIST</string>
     <string name="usdt__intro_title">Nieuw: USDT</string>
     <string name="usdt__maximum_total">Max. afschrijving</string>
@@ -1121,7 +1122,7 @@
     <string name="contacts__add_error_fetch">Kon contactgegevens niet ophalen. Controleer de publieke sleutel en probeer het opnieuw.</string>
     <string name="contacts__add_error_invalid_key">Ongeldig formaat van pubky-sleutel. Controleer en probeer het opnieuw.</string>
     <string name="contacts__add_error_self">U kunt uw eigen pubky niet als contact toevoegen.</string>
-    <string name="contacts__add_privacy_notice">Let op: u en %1$s moeten elkaar als contact toevoegen om elkaar privé te kunnen betalen. Anders is de betaling openbaar zichtbaar.</string>
+    <string name="contacts__add_privacy_notice">Let op: u en %1$s moeten elkaar als contact toevoegen voordat u elkaar privé kunt betalen. Als u betaalt zonder op te slaan, is de betaling openbaar zichtbaar.</string>
     <string name="contacts__add_pay">Betalen</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Plak een pubky</string>
@@ -1152,6 +1153,7 @@
     <string name="contacts__intro_description">Betaal uw contacten met één tik. Verstuur betalingen direct, naar iedereen, overal.</string>
     <string name="contacts__intro_title">Dynamische\n&lt;accent&gt;contacten&lt;/accent&gt;</string>
     <string name="contacts__my_profile">MIJN PROFIEL</string>
+    <string name="contacts__pay_private_link_pending">Bitkit is nog een privéverbinding met dit contact aan het instellen. Zorg dat het contact u ook heeft toegevoegd, of vraag het contact u een betaalverzoek te sturen.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">QR of link plakken</string>
     <string name="contacts__scanner_status">QR &amp; NFC SCANNEN</string>
@@ -1350,8 +1352,10 @@
     <string name="profile__pay_contacts_error_wallet">Wallet wordt nog gestart. Probeer het zo opnieuw.</string>
     <string name="profile__pay_contacts_headline">Laat uw\ncontacten\n&lt;accent&gt;u betalen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Contacten betalen</string>
+    <string name="profile__private_payments_toggle">Privébetalingen met contacten</string>
     <string name="profile__pubky_copied">pubky gekopieerd naar klembord</string>
     <string name="profile__public_key">Publieke sleutel</string>
+    <string name="profile__public_payments_toggle">Openbare betalingen</string>
     <string name="profile__restore_nav_title">Profiel herstellen</string>
     <string name="profile__session_expired">Uw profielsessie is verlopen. Verbind opnieuw om uw profiel te herstellen.</string>
     <string name="profile__sign_out">Ontkoppelen</string>
@@ -1396,7 +1400,6 @@
     <string name="settings__es__server_error_certificate">Het certificaat van deze server wordt niet vertrouwd. Gebruik een server met een vertrouwd certificaat, of maak verbinding met de TCP-poort.</string>
     <string name="settings__es__server_error_network">Deze server zit op een ander Bitcoin-netwerk. Kies een server voor het netwerk dat Bitkit gebruikt.</string>
     <string name="settings__es__server_error_protocol">Beveiligde verbinding mislukt. Controleer of het protocol (TCP of TLS) overeenkomt met de serverpoort.</string>
-    <string name="settings__general__enable_contact_payments">Betalingen met contacten inschakelen</string>
     <string name="settings__hardware_wallets__add_button">Hardwarewallet toevoegen</string>
     <string name="settings__hardware_wallets__name_label">Naam</string>
     <string name="settings__hardware_wallets__nav_title">Hardwarewallets</string>
@@ -1459,6 +1462,10 @@
     <string name="subscriptions__allowances">Toelagen</string>
     <string name="subscriptions__allowances_empty_description">U kunt bestedingslimieten instellen om betaalverzoeken van vertrouwde contacten automatisch te voldoen.</string>
     <string name="subscriptions__allowances_empty_headline">Stel\n&lt;accent&gt;toelagen&lt;/accent&gt; in</string>
+    <string name="subscriptions__allowances_paused_description">Je toelagengegevens zijn ouder dan gegevens die deze wallet al heeft gebruikt. Verzoeken vragen om je goedkeuring tot je hervat.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Deze wallet is hersteld vanuit een back-up. Verzoeken vragen om je goedkeuring tot je hervat.</string>
+    <string name="subscriptions__allowances_paused_resume">Hervatten</string>
+    <string name="subscriptions__allowances_paused_title">Automatische betalingen gepauzeerd</string>
     <string name="subscriptions__cancel_subscription">Abonnement opzeggen</string>
     <string name="subscriptions__choose_recipient">Ontvanger kiezen</string>
     <string name="subscriptions__content_too_long">Maak de naam of beschrijving van het abonnement korter en probeer het opnieuw.</string>

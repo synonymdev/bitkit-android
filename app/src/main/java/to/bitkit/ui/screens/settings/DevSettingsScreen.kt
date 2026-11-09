@@ -55,6 +55,7 @@ fun DevSettingsScreen(
     val settings = settingsViewModel ?: return
     val context = LocalContext.current
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    val areAllowancesEnabled by settings.areAllowancesEnabled.collectAsStateWithLifecycle()
     val disableAllToasts by settings.disableAllToasts.collectAsStateWithLifecycle()
     val isSavingsSwapEnabled by settings.isSavingsSwapEnabled.collectAsStateWithLifecycle()
     val subscriptionClockOffsetDays by settings.subscriptionClockOffsetDays.collectAsStateWithLifecycle()
@@ -114,6 +115,12 @@ fun DevSettingsScreen(
                         }
                     },
                     switchTestTag = "PaykitUiToggle",
+                )
+                SettingsSwitchRow(
+                    title = "Enable Allowances",
+                    isChecked = areAllowancesEnabled,
+                    onClick = { settings.setAreAllowancesEnabled(!areAllowancesEnabled) },
+                    switchTestTag = "AllowancesToggle",
                 )
                 if (SubscriptionClockOffset.isAvailable) {
                     SubscriptionClockOffsetRow(

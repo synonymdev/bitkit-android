@@ -254,6 +254,7 @@
     <string name="notification__service__stop">App stoppen</string>
     <string name="onboarding__connection_saved">Gespeichert. Versuche es erneut, um die Wiederherstellung fortzusetzen.</string>
     <string name="onboarding__connection_settings">Verbindungseinstellungen</string>
+    <string name="onboarding__restore_incomplete_text">Deine Wallet und dein Guthaben sind zurück, aber Bitkit konnte Folgendes nicht wiederherstellen: %1$s.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;Nutzungs-bedingungen&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Nutzungsbedingungen</string>
     <string name="onboarding__tos_checkbox_value">Durch Fortfahren erklärst du, dass du die Nutzungsbedingungen gelesen und akzeptiert hast.</string>
@@ -786,7 +787,7 @@
     <string name="usdt__from_address">Absenderadresse</string>
     <string name="usdt__hide_details">Details ausblenden</string>
     <string name="usdt__intro_decline">Nein danke</string>
-    <string name="usdt__intro_description">Im Herzen Bitcoin. Dollar, wenn du sie brauchst. Aktiviere USDT (Tether), um mit Bitkit digitale Dollar zu senden und zu empfangen.</string>
+    <string name="usdt__intro_description">Im Herzen Bitcoin. Dollar, wenn du sie brauchst. Aktiviere USDT (Tether), um mit Bitkit schnell digitale Dollar zu senden und zu empfangen.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLAR?&lt;/accent&gt;\nDU ENTSCHEIDEST</string>
     <string name="usdt__intro_title">Neu: USDT</string>
     <string name="usdt__maximum_total">Max. Abbuchung</string>
@@ -1126,7 +1127,7 @@
     <string name="contacts__add_error_fetch">Kontaktinformationen konnten nicht abgerufen werden. Bitte überprüfe den öffentlichen Schlüssel und versuche es erneut.</string>
     <string name="contacts__add_error_invalid_key">Ungültiges Format des pubky-Schlüssels. Bitte überprüfe ihn und versuche es erneut.</string>
     <string name="contacts__add_error_self">Du kannst deinen eigenen pubky nicht als Kontakt hinzufügen.</string>
-    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, um euch privat bezahlen zu können. Andernfalls ist die Zahlung öffentlich sichtbar.</string>
+    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, bevor ihr euch privat bezahlen könnt. Wenn du ohne Speichern bezahlst, ist die Zahlung öffentlich sichtbar.</string>
     <string name="contacts__add_pay">Bezahlen</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">pubky einfügen</string>
@@ -1156,6 +1157,7 @@
     <string name="contacts__intro_description">Bezahle deine Kontakte mit nur einem Tippen. Sende Zahlungen direkt, an jeden, überall.</string>
     <string name="contacts__my_profile">MEIN PROFIL</string>
     <string name="contacts__nav_title">Kontakte</string>
+    <string name="contacts__pay_private_link_pending">Bitkit richtet noch eine private Verbindung mit diesem Kontakt ein. Stelle sicher, dass der Kontakt dich ebenfalls hinzugefügt hat, oder bitte ihn, dir eine Zahlungsanforderung zu senden.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">QR-Code oder Link einfügen</string>
     <string name="contacts__scanner_status">SCANNE QR &amp; NFC</string>
@@ -1350,8 +1352,10 @@
     <string name="profile__pay_contacts_error_wallet">Das Wallet startet noch. Versuche es gleich noch einmal.</string>
     <string name="profile__pay_contacts_headline">Lass deine\nKontakte\n&lt;accent&gt;dich bezahlen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Kontakte bezahlen</string>
+    <string name="profile__private_payments_toggle">Private Kontaktzahlungen</string>
     <string name="profile__pubky_copied">pubky in die Zwischenablage kopiert</string>
     <string name="profile__public_key">Öffentlicher Schlüssel</string>
+    <string name="profile__public_payments_toggle">Öffentliche Zahlungen</string>
     <string name="profile__restore_nav_title">Profil wiederherstellen</string>
     <string name="profile__session_expired">Deine Profilsitzung ist abgelaufen. Bitte verbinde dich erneut, um dein Profil wiederherzustellen.</string>
     <string name="profile__sign_out">Trennen</string>
@@ -1397,7 +1401,6 @@
     <string name="settings__es__server_error_certificate">Das Zertifikat dieses Servers ist nicht vertrauenswürdig. Verwende einen Server mit vertrauenswürdigem Zertifikat oder verbinde dich mit seinem TCP-Port.</string>
     <string name="settings__es__server_error_network">Dieser Server befindet sich in einem anderen Bitcoin-Netzwerk. Wähle einen Server für das Netzwerk, das Bitkit verwendet.</string>
     <string name="settings__es__server_error_protocol">Sichere Verbindung fehlgeschlagen. Überprüfe, ob das Protokoll (TCP oder TLS) zum Server-Port passt.</string>
-    <string name="settings__general__enable_contact_payments">Zahlungen mit Kontakten aktivieren</string>
     <string name="settings__hardware_wallets__add_button">Hardware-Wallet hinzufügen</string>
     <string name="settings__hardware_wallets__name_label">Name</string>
     <string name="settings__hardware_wallets__nav_title">Hardware-Wallets</string>
@@ -1460,6 +1463,10 @@
     <string name="subscriptions__allowances">Budgets</string>
     <string name="subscriptions__allowances_empty_description">Lege Ausgabenlimits fest, um Zahlungsanforderungen von vertrauenswürdigen Kontakten automatisch zu erfüllen.</string>
     <string name="subscriptions__allowances_empty_headline">Richte deine\n&lt;accent&gt;Budgets&lt;/accent&gt; ein</string>
+    <string name="subscriptions__allowances_paused_description">Deine Budgetdaten sind älter als Daten, die diese Wallet bereits verwendet hat. Anfragen warten auf deine Bestätigung, bis du fortsetzt.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Diese Wallet wurde aus einem Backup wiederhergestellt. Anfragen warten auf deine Bestätigung, bis du fortsetzt.</string>
+    <string name="subscriptions__allowances_paused_resume">Fortsetzen</string>
+    <string name="subscriptions__allowances_paused_title">Automatische Zahlungen pausiert</string>
     <string name="subscriptions__cancel_subscription">Abonnement kündigen</string>
     <string name="subscriptions__choose_recipient">Empfänger wählen</string>
     <string name="subscriptions__content_too_long">Kürze den Namen oder die Beschreibung des Abonnements und versuche es erneut.</string>

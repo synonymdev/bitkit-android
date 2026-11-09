@@ -143,7 +143,6 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
@@ -670,18 +669,12 @@ private fun WalletPage(
                 sats = headlineSats,
                 isUnavailable = usdtSats == null,
                 showEyeIcon = true,
+                isLoading = balanceUpdating,
                 testTag = "TotalBalance",
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("TotalBalance")
             )
-            if (balanceUpdating) {
-                Caption13Up(
-                    text = stringResource(R.string.wallet__balance_updating),
-                    color = Colors.White64,
-                    modifier = Modifier.padding(top = 8.dp).testTag("TotalBalanceUpdating")
-                )
-            }
             VerticalSpacer(32.dp)
             BalancesSection(
                 balances = balances,

@@ -50,6 +50,10 @@ val Context.bluetoothManager: BluetoothManager
 val Context.isBluetoothEnabled: Boolean
     get() = bluetoothManager.adapter?.isEnabled == true
 
+/** True when the user turned animations off (animator duration scale 0). */
+val Context.areAnimationsDisabled: Boolean
+    get() = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+
 val Context.powerManager: PowerManager
     get() = getSystemService(Context.POWER_SERVICE) as PowerManager
 

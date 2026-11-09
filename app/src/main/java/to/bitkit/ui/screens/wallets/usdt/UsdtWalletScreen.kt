@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -56,6 +54,8 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BiometricsView
@@ -134,9 +134,20 @@ fun UsdtWalletScreen(
     var selectedTransferId by rememberSaveable(initialTransferId) { mutableStateOf(initialTransferId) }
     var recipient by rememberSaveable { mutableStateOf(initialRecipient) }
     var amount by rememberSaveable { mutableStateOf(initialAmount) }
+    // The recipient whose scanned or linked request named the amount; the payee set it, so it cannot be edited.
+    var fixedAmountRecipient by rememberSaveable {
+        mutableStateOf(initialRecipient.takeIf { isPositiveUsdtAmount(initialAmount) })
+    }
+    val isAmountFixed = fixedAmountRecipient != null
     var maximumAmount by rememberSaveable { mutableStateOf<String?>(null) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(UsdtDestination.ARBITRUM) }
+    InitialUsdtQuoteEffect(
+        payment = InitialUsdtPayment(page, recipient, amount, destination, hasQuote = state.quote != null),
+        initialRecipient = initialRecipient,
+        initialAmount = initialAmount,
+        onQuote = { viewModel.quote(recipient, amount, destination) },
+    )
     val dismissalBlocked = state.busy || state.authenticationRequired
     val dismiss = {
         if (!dismissalBlocked) {
@@ -149,7 +160,11 @@ fun UsdtWalletScreen(
             state.busy -> Unit
             state.authenticationRequired -> viewModel.cancelAuthentication()
             state.submitted -> dismiss()
-            state.quote != null -> viewModel.edit()
+            state.quote != null -> {
+                viewModel.edit()
+                // Amount cannot change a fixed amount, so Back leaves it as well.
+                if (isAmountFixed) page = UsdtPage.MANUAL
+            }
             page in listOf(UsdtPage.AMOUNT, UsdtPage.MANUAL) -> {
                 viewModel.edit()
                 page = if (page == UsdtPage.AMOUNT) UsdtPage.MANUAL else UsdtPage.RECIPIENT
@@ -193,6 +208,7 @@ fun UsdtWalletScreen(
                 app?.requestUsdtEnable {
                     recipient = ""
                     amount = ""
+                    fixedAmountRecipient = null
                     viewModel.edit()
                     page = UsdtPage.RECIPIENT
                 }
@@ -269,9 +285,13 @@ fun UsdtWalletScreen(
                         onRecipientContinue = { value ->
                             viewModel.validateRecipient(value, destination) { request ->
                                 if (request.chainId != null) destination = UsdtDestination.ARBITRUM
+                                val requestAmount = request.amount?.let { usdtFormatAmount(it) }
+                                fixedAmountRecipient =
+                                    fixedUsdtAmountRecipient(request.recipient, requestAmount, fixedAmountRecipient)
                                 recipient = request.recipient
-                                amount = request.amount?.let { usdtFormatAmount(it) } ?: amount
+                                amount = requestAmount ?: amount
                                 page = UsdtPage.AMOUNT
+                                if (fixedAmountRecipient != null) viewModel.quote(recipient, amount, destination)
                             }
                         },
                         onPageChange = {
@@ -290,6 +310,8 @@ fun UsdtWalletScreen(
                         onConfirm = { viewModel.confirm() }, onRetryRecovery = { viewModel.retryRecovery() },
                         onDone = dismiss,
                         hideBalance = settings.hideBalance,
+                        amountEditable = !isAmountFixed,
+                        isScannedAmount = isAmountFixed,
                         onDetails = {
                             selectedTransferId = state.quote?.id
                             dismiss()
@@ -300,6 +322,50 @@ fun UsdtWalletScreen(
         }
     }
 }
+
+@Composable
+private fun InitialUsdtQuoteEffect(
+    payment: InitialUsdtPayment,
+    initialRecipient: String,
+    initialAmount: String,
+    onQuote: () -> Unit,
+) {
+    var isRequested by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (isRequested) return@LaunchedEffect
+        isRequested = true
+        val isInitialPayment = payment.page == UsdtPage.AMOUNT && payment.recipient == initialRecipient &&
+            payment.amount == initialAmount && payment.destination == UsdtDestination.ARBITRUM && !payment.hasQuote
+        if (isInitialPayment && shouldQuoteInitialUsdtPayment(initialRecipient, initialAmount)) onQuote()
+    }
+}
+
+private data class InitialUsdtPayment(
+    val page: UsdtPage,
+    val recipient: String,
+    val amount: String,
+    val destination: UsdtDestination,
+    val hasQuote: Boolean,
+)
+
+/** A payment request with a recipient and a positive amount opens on its review, as tapping Review would. */
+internal fun shouldQuoteInitialUsdtPayment(recipient: String, amount: String): Boolean =
+    recipient.isNotEmpty() && isPositiveUsdtAmount(amount)
+
+internal fun isPositiveUsdtAmount(amount: String): Boolean =
+    runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount) }.isSuccess
+
+/**
+ * The recipient whose request fixes the amount. A positive requested amount fixes it for that recipient.
+ * Continuing with the same recipient and no amount, as after Back from review, keeps it; any other recipient
+ * clears it.
+ */
+internal fun fixedUsdtAmountRecipient(recipient: String, requestAmount: String?, fixedRecipient: String?): String? =
+    when {
+        requestAmount != null -> recipient.takeIf { isPositiveUsdtAmount(requestAmount) }
+        fixedRecipient.equals(recipient, ignoreCase = true) -> fixedRecipient
+        else -> null
+    }
 
 @Composable
 internal fun rememberUsdtPage(initialRecipient: String, state: UsdtSendState): MutableState<UsdtPage> {
@@ -378,14 +444,11 @@ internal fun UsdtWalletContent(
 
 @Composable
 internal fun UsdtCoinIllustration(modifier: Modifier = Modifier) {
-    Box(contentAlignment = Alignment.Center, modifier = modifier.size(256.dp)) {
-        Image(
-            painterResource(R.drawable.tether_coin),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.requiredSize(width = 304.76.dp, height = 228.57.dp)
-        )
-    }
+    Image(
+        painterResource(R.drawable.tether_coin),
+        contentDescription = null,
+        modifier = modifier.size(256.dp).offset(y = 32.dp)
+    )
 }
 
 internal val UsdtDestination.label: String get() = when (this) {

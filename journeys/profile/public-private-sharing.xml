@@ -1,0 +1,29 @@
+<journey name="independent public and private sharing">
+  <description>
+    Use an unfunded test wallet with a signed-in, locally created Pubky profile and
+    private contact payments enabled through onboarding. Public payments must not
+    have been enabled. Keep the network available, resolve any unrelated USDT
+    introduction first, and do not receive payments during this journey.
+    Remote endpoint contents, controlled network failures and backup restoration
+    require the manual checks in this suite's README.
+  </description>
+  <actions>
+    <action>Open Receive, select Savings and record the Bitcoin address</action>
+    <action>Open Settings and select General</action>
+    <action>Scroll to the payment sharing settings</action>
+    <action>Verify Private contact payments (identifier "PrivateContactPaymentsToggle") is on and Public payments (identifier "PublicPaymentsToggle") is off</action>
+    <action>Verify Public payments uses a label and switch without a permanent description, matching the neighboring settings rows.</action>
+    <action>Turn Public payments on and wait for the operation to finish</action>
+    <action>Verify both sharing switches are on</action>
+    <action>Turn Private contact payments off and wait for the operation to finish</action>
+    <action>Verify Private contact payments is off and Public payments remains on</action>
+    <action>Turn Public payments off and wait for the operation to finish</action>
+    <action>Verify both sharing switches are off</action>
+    <action>Turn Private contact payments on and wait for the operation to finish</action>
+    <action>Verify Private contact payments is on and Public payments remains off</action>
+    <action>Close and reopen Bitkit without clearing app data, then reopen Settings General</action>
+    <action>Scroll to the payment sharing settings</action>
+    <action>Verify Private contact payments is still on and Public payments is still off</action>
+    <action>Open Receive, select Savings and verify the Bitcoin address is unchanged from the recorded address</action>
+  </actions>
+</journey>

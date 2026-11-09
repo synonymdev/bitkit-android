@@ -160,8 +160,8 @@ class ContentViewTest {
             assertTrue(shouldPresentWalletRecovery(false, restore, null))
             assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, restore, false))
         }
-        assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed, true))
-        assertTrue(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed, false))
+        assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed(), true))
+        assertTrue(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed(), false))
     }
 
     @Test

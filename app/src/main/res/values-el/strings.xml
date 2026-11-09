@@ -265,6 +265,7 @@
     <string name="onboarding__restore_failed_header">Σφάλμα υπολοίπου &lt;accent&gt;δαπανών&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Το Bitkit επανέφερε τις αποταμιεύσεις σου, αλλά απέτυχε να επαναφέρει το τρέχον υπόλοιπο δαπανών (κατάσταση Lightning) και τα δεδομένα πορτοφολιού.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Επαναφορά&lt;/accent&gt;\nτου πορτοφολιού σου</string>
+    <string name="onboarding__restore_incomplete_text">Το πορτοφόλι και το υπόλοιπό σας επανήλθαν, αλλά το Bitkit δεν μπόρεσε να επαναφέρει: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Το checksum της φράσης ανάκτησης φαίνεται να είναι λανθασμένο. Έλεγξε ξανά τη φράση ανάκτησης.</string>
     <string name="onboarding__restore_no_backup_button">Συνέχεια χωρίς αντίγραφο ασφαλείας</string>
     <string name="onboarding__restore_no_backup_warn">Αν είχες προηγουμένως αντίγραφο ασφαλείας lightning, θα αντικατασταθεί και θα χαθεί. Αυτό μπορεί να οδηγήσει σε απώλεια κεφαλαίων.</string>
@@ -768,7 +769,7 @@
     <string name="usdt__from_address">Από διεύθυνση</string>
     <string name="usdt__hide_details">Απόκρυψη λεπτομερειών</string>
     <string name="usdt__intro_decline">Όχι, ευχαριστώ</string>
-    <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις ψηφιακά δολάρια με το Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις γρήγορα ψηφιακά δολάρια με το Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;ΔΟΛΑΡΙΑ;&lt;/accent&gt;\nΔΙΚΗ ΣΟΥ ΕΠΙΛΟΓΗ</string>
     <string name="usdt__intro_title">Νέο: USDT</string>
     <string name="usdt__maximum_total">Μέγ. συνολική χρέωση</string>
@@ -1101,7 +1102,7 @@
     <string name="contacts__add_error_fetch">Δεν ήταν δυνατή η λήψη των στοιχείων της επαφής. Έλεγξε το δημόσιο κλειδί και δοκίμασε ξανά.</string>
     <string name="contacts__add_error_invalid_key">Μη έγκυρη μορφή κλειδιού pubky. Έλεγξε και δοκίμασε ξανά.</string>
     <string name="contacts__add_error_self">Δεν μπορείς να προσθέσεις το δικό σου pubky ως επαφή.</string>
-    <string name="contacts__add_privacy_notice">Σημείωσε ότι εσύ και ο/η %1$s πρέπει να προσθέσετε ο ένας τον άλλον ως επαφές για να πληρώνεστε ιδιωτικά. Διαφορετικά, η πληρωμή θα είναι δημόσια ορατή.</string>
+    <string name="contacts__add_privacy_notice">Σημείωσε ότι εσύ και ο/η %1$s πρέπει να προσθέσετε ο ένας τον άλλον ως επαφές πριν μπορέσετε να πληρώνεστε ιδιωτικά. Αν πληρώσεις χωρίς αποθήκευση, η πληρωμή θα είναι δημόσια ορατή.</string>
     <string name="contacts__add_pay">Πληρωμή</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Επικόλληση pubky</string>
@@ -1135,6 +1136,7 @@
     <string name="contacts__intro_title">Δυναμικές\n&lt;accent&gt;επαφές&lt;/accent&gt;</string>
     <string name="contacts__my_profile">ΤΟ ΠΡΟΦΙΛ ΜΟΥ</string>
     <string name="contacts__nav_title">Επαφές</string>
+    <string name="contacts__pay_private_link_pending">Το Bitkit ρυθμίζει ακόμα μια ιδιωτική σύνδεση με αυτή την επαφή. Βεβαιώσου ότι σε έχει προσθέσει κι εκείνη ως επαφή ή ζήτησέ της να σου στείλει αίτημα πληρωμής.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Επικόλληση QR ή συνδέσμου</string>
     <string name="contacts__scanner_status">ΣΑΡΩΣΗ QR ΚΑΙ NFC</string>
@@ -1335,8 +1337,10 @@
     <string name="profile__pay_contacts_error_wallet">Το πορτοφόλι ξεκινά ακόμα. Δοκίμασε ξανά σε λίγο.</string>
     <string name="profile__pay_contacts_headline">Άφησε τις\nεπαφές σου\n&lt;accent&gt;να σε πληρώνουν&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Πληρωμή επαφών</string>
+    <string name="profile__private_payments_toggle">Ιδιωτικές πληρωμές επαφών</string>
     <string name="profile__pubky_copied">Το pubky αντιγράφηκε στο πρόχειρο</string>
     <string name="profile__public_key">Δημόσιο κλειδί</string>
+    <string name="profile__public_payments_toggle">Δημόσιες πληρωμές</string>
     <string name="profile__restore_nav_title">Επαναφορά προφίλ</string>
     <string name="profile__session_expired">Η συνεδρία του προφίλ σου έληξε. Σύνδεσε ξανά για να επαναφέρεις το προφίλ σου.</string>
     <string name="profile__sign_out">Αποσύνδεση</string>
@@ -1390,7 +1394,6 @@
     <string name="settings__es__server_error_certificate">Το πιστοποιητικό αυτού του διακομιστή δεν είναι αξιόπιστο. Χρησιμοποίησε διακομιστή με αξιόπιστο πιστοποιητικό ή σύνδεσου στη θύρα TCP του.</string>
     <string name="settings__es__server_error_network">Αυτός ο διακομιστής είναι σε διαφορετικό δίκτυο Bitcoin. Επίλεξε διακομιστή για το δίκτυο που χρησιμοποιεί το Bitkit.</string>
     <string name="settings__es__server_error_protocol">Η ασφαλής σύνδεση απέτυχε. Έλεγξε ότι το πρωτόκολλο (TCP ή TLS) αντιστοιχεί στη θύρα του διακομιστή.</string>
-    <string name="settings__general__enable_contact_payments">Ενεργοποίηση πληρωμών με επαφές</string>
     <string name="settings__hardware_wallets__add_button">Προσθήκη πορτοφολιού υλικού</string>
     <string name="settings__hardware_wallets__name_label">Όνομα</string>
     <string name="settings__hardware_wallets__nav_title">Πορτοφόλια υλικού</string>
@@ -1453,6 +1456,10 @@
     <string name="subscriptions__allowances">Προϋπολογισμοί</string>
     <string name="subscriptions__allowances_empty_description">Μπορείς να ορίσεις όρια δαπανών για να εκπληρώνονται αυτόματα αιτήματα πληρωμής από αξιόπιστες επαφές.</string>
     <string name="subscriptions__allowances_empty_headline">Ρύθμισε\n&lt;accent&gt;προϋπολογισμούς&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Τα αρχεία των προϋπολογισμών σου είναι παλαιότερα από αρχεία που έχει ήδη χρησιμοποιήσει αυτό το πορτοφόλι. Τα αιτήματα θα ζητούν την έγκρισή σου μέχρι να συνεχίσεις.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Αυτό το πορτοφόλι επαναφέρθηκε από αντίγραφο ασφαλείας. Τα αιτήματα θα ζητούν την έγκρισή σου μέχρι να συνεχίσεις.</string>
+    <string name="subscriptions__allowances_paused_resume">Συνέχεια</string>
+    <string name="subscriptions__allowances_paused_title">Οι αυτόματες πληρωμές έχουν παυθεί</string>
     <string name="subscriptions__cancel_subscription">Ακύρωση συνδρομής</string>
     <string name="subscriptions__choose_recipient">Επιλογή παραλήπτη</string>
     <string name="subscriptions__content_too_long">Συντόμευσε το όνομα ή την περιγραφή της συνδρομής και δοκίμασε ξανά.</string>

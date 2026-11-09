@@ -271,6 +271,7 @@
     <string name="onboarding__restore_failed_header">Error en saldo &lt;accent&gt;de gasto&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit restauró tus ahorros, pero no pudo restaurar tu saldo de gasto actual (estado Lightning) y datos del monedero.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Restaurar&lt;/accent&gt;\ntu monedero</string>
+    <string name="onboarding__restore_incomplete_text">Tu monedero y tu saldo han vuelto, pero Bitkit no ha podido restaurar: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">La suma de comprobación de la frase de recuperación parece ser incorrecta. Por favor, vuelva a comprobar su frase de recuperación.</string>
     <string name="onboarding__restore_no_backup_button">Proceder sin respaldo de la copia de seguridad</string>
     <string name="onboarding__restore_no_backup_warn">Si anteriormente tenía una copia de seguridad Lightning, ésta se sobrescribirá y se perderá. Esto podría provocar una pérdida de fondos.</string>
@@ -786,7 +787,7 @@
     <string name="usdt__from_address">Origen</string>
     <string name="usdt__hide_details">Ocultar detalles</string>
     <string name="usdt__intro_decline">No, gracias</string>
-    <string name="usdt__intro_description">Bitcoin en esencia. Dólares cuando los necesites. Activa USDT (Tether) para enviar y recibir dólares digitales con Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin en esencia. Dólares cuando los necesites. Activa USDT (Tether) para enviar y recibir dólares digitales rápidamente con Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;¿DÓLARES?&lt;/accent&gt;\nTÚ DECIDES</string>
     <string name="usdt__intro_title">Nuevo: USDT</string>
     <string name="usdt__maximum_total">Cargo total máx.</string>
@@ -1122,7 +1123,7 @@
     <string name="contacts__add_error_fetch">No se pudo obtener la información del contacto. Comprueba la clave pública e inténtalo de nuevo.</string>
     <string name="contacts__add_error_invalid_key">Formato de clave pubky no válido. Compruébalo e inténtalo de nuevo.</string>
     <string name="contacts__add_error_self">No puedes añadir tu propio pubky como contacto.</string>
-    <string name="contacts__add_privacy_notice">Ten en cuenta que tú y %1$s debéis añadiros mutuamente como contactos para pagaros de forma privada. De lo contrario, el pago será visible públicamente.</string>
+    <string name="contacts__add_privacy_notice">Ten en cuenta que tú y %1$s debéis añadiros mutuamente como contactos antes de poder pagaros de forma privada. Si pagas sin guardar, el pago será visible públicamente.</string>
     <string name="contacts__add_pay">Pagar</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Pegar un pubky</string>
@@ -1152,6 +1153,7 @@
     <string name="contacts__intro_description">Paga a tus contactos con un solo toque. Envía pagos directamente, a cualquiera, en cualquier lugar.</string>
     <string name="contacts__my_profile">MI PERFIL</string>
     <string name="contacts__nav_title">Contactos</string>
+    <string name="contacts__pay_private_link_pending">Bitkit todavía está configurando una conexión privada con este contacto. Asegúrate de que también te haya añadido como contacto o pídele que te envíe una solicitud de pago.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Pegar QR o enlace</string>
     <string name="contacts__scanner_status">ESCANEANDO QR Y NFC</string>
@@ -1348,8 +1350,10 @@
     <string name="profile__pay_contacts_error_wallet">El monedero aún se está iniciando. Inténtalo de nuevo en un momento.</string>
     <string name="profile__pay_contacts_headline">Deja que\ntus contactos\n&lt;accent&gt;te paguen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar a contactos</string>
+    <string name="profile__private_payments_toggle">Pagos privados con contactos</string>
     <string name="profile__pubky_copied">pubky copiado al portapapeles</string>
     <string name="profile__public_key">Clave pública</string>
+    <string name="profile__public_payments_toggle">Pagos públicos</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">La sesión de tu perfil ha caducado. Vuelve a conectarte para restaurar tu perfil.</string>
     <string name="profile__sign_out">Desconectar</string>
@@ -1394,7 +1398,6 @@
     <string name="settings__es__server_error_certificate">El certificado de este servidor no es de confianza. Usa un servidor con un certificado de confianza o conéctate a su puerto TCP.</string>
     <string name="settings__es__server_error_network">Este servidor está en otra red de Bitcoin. Elige un servidor para la red que usa Bitkit.</string>
     <string name="settings__es__server_error_protocol">Error en la conexión segura. Comprueba que el protocolo (TCP o TLS) coincide con el puerto del servidor.</string>
-    <string name="settings__general__enable_contact_payments">Habilitar pagos con contactos</string>
     <string name="settings__hardware_wallets__add_button">Añadir monedero de hardware</string>
     <string name="settings__hardware_wallets__name_label">Nombre</string>
     <string name="settings__hardware_wallets__nav_title">Monederos de hardware</string>
@@ -1457,6 +1460,10 @@
     <string name="subscriptions__allowances">Asignaciones</string>
     <string name="subscriptions__allowances_empty_description">Puedes establecer límites de gasto para pagar automáticamente las solicitudes de pago de contactos de confianza.</string>
     <string name="subscriptions__allowances_empty_headline">Configura\n&lt;accent&gt;asignaciones&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Tus registros de asignaciones son más antiguos que otros que este monedero ya ha usado. Las solicitudes pedirán tu aprobación hasta que reanudes.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Este monedero se ha restaurado desde una copia de seguridad. Las solicitudes pedirán tu aprobación hasta que reanudes.</string>
+    <string name="subscriptions__allowances_paused_resume">Reanudar</string>
+    <string name="subscriptions__allowances_paused_title">Pagos automáticos en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancelar suscripción</string>
     <string name="subscriptions__choose_recipient">Elegir destinatario</string>
     <string name="subscriptions__content_too_long">Acorta el nombre o la descripción de la suscripción e inténtalo de nuevo.</string>

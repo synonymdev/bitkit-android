@@ -107,7 +107,7 @@
     <string name="contacts__add_error_fetch">Could not retrieve contact info. Please check the public key and try again.</string>
     <string name="contacts__add_error_invalid_key">Invalid pubky key format. Please check and try again.</string>
     <string name="contacts__add_error_self">You can\'t add your own pubky as a contact.</string>
-    <string name="contacts__add_privacy_notice">Please note that you and %1$s must add each other as contacts to pay each other privately. Otherwise, the payment will be visible publicly.</string>
+    <string name="contacts__add_privacy_notice">Please note that you and %1$s must add each other as contacts before you can pay each other privately. If you pay without saving, the payment is visible publicly.</string>
     <string name="contacts__add_pay">Pay</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Paste a pubky</string>
@@ -143,6 +143,7 @@
     <string name="contacts__intro_title">Dynamic\n&lt;accent&gt;contacts&lt;/accent&gt;</string>
     <string name="contacts__my_profile">MY PROFILE</string>
     <string name="contacts__nav_title">Contacts</string>
+    <string name="contacts__pay_private_link_pending">Bitkit is still setting up a private connection with this contact. Make sure they\'ve added you as a contact too, or ask them to send you a payment request.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Paste QR Or Link</string>
     <string name="contacts__scanner_status">SCANNING QR &amp; NFC</string>
@@ -432,6 +433,7 @@
     <string name="onboarding__restore_failed_header">Spending balance &lt;accent&gt;error&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit restored your savings, but failed to restore your current spending balance (Lightning state) and wallet data.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Restore&lt;/accent&gt;\nyour wallet</string>
+    <string name="onboarding__restore_incomplete_text">Your wallet and balance are back, but Bitkit could not restore: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">The checksum for the recovery phrase appears to be incorrect. Please double check your recovery phrase.</string>
     <string name="onboarding__restore_no_backup_button">Proceed Without Backup</string>
     <string name="onboarding__restore_no_backup_warn">If you previously had a lightning backup it will be overwritten and lost. This could result in a loss of funds.</string>
@@ -660,8 +662,10 @@
     <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pay Contacts</string>
+    <string name="profile__private_payments_toggle">Private contact payments</string>
     <string name="profile__pubky_copied">pubky copied to clipboard</string>
     <string name="profile__public_key">Public Key</string>
+    <string name="profile__public_payments_toggle">Public payments</string>
     <string name="profile__restore_nav_title">Restore Profile</string>
     <string name="profile__retry_load">Try Again</string>
     <string name="profile__session_expired">Your profile session has expired. Please reconnect to restore your profile.</string>
@@ -848,8 +852,8 @@
     <string name="settings__advanced_title">Advanced</string>
     <string name="settings__backup__category_connection_receipts">Connection Receipts</string>
     <string name="settings__backup__category_connections">Connections</string>
-    <string name="settings__backup__category_contacts" tools:ignore="UnusedResources">Contacts</string>
-    <string name="settings__backup__category_profile" tools:ignore="UnusedResources">Profile</string>
+    <string name="settings__backup__category_contacts">Contacts</string>
+    <string name="settings__backup__category_profile">Profile</string>
     <string name="settings__backup__category_settings">Settings</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_transaction_log">Transaction Log</string>
@@ -925,7 +929,6 @@
     <string name="settings__general__denomination_classic">Classic (₿ 0.00010000)</string>
     <string name="settings__general__denomination_label">Bitcoin denomination</string>
     <string name="settings__general__denomination_modern">Modern (₿ 10 000)</string>
-    <string name="settings__general__enable_contact_payments">Enable payments with contacts</string>
     <string name="settings__general__section_interface">Interface</string>
     <string name="settings__general__section_payments">Payments</string>
     <string name="settings__general__speed">Transaction Speed</string>
@@ -1082,6 +1085,10 @@
     <string name="subscriptions__allowances">Allowances</string>
     <string name="subscriptions__allowances_empty_description">You can set spending limits to automatically fulfill payment requests from trusted peers.</string>
     <string name="subscriptions__allowances_empty_headline"><![CDATA[Set up\n<accent>allowances</accent>]]></string>
+    <string name="subscriptions__allowances_paused_description">Your allowance records are older than ones this wallet has already used. Requests ask for your approval until you resume.</string>
+    <string name="subscriptions__allowances_paused_restore_description">This wallet was restored from a backup. Requests ask for your approval until you resume.</string>
+    <string name="subscriptions__allowances_paused_resume">Resume</string>
+    <string name="subscriptions__allowances_paused_title">Automatic payments paused</string>
     <string name="subscriptions__cancel">Cancel</string>
     <string name="subscriptions__cancel_subscription">Cancel Subscription</string>
     <string name="subscriptions__choose_recipient">Choose Recipient</string>
@@ -1236,7 +1243,7 @@
     <string name="usdt__from_address">From address</string>
     <string name="usdt__hide_details">Hide details</string>
     <string name="usdt__intro_decline">No Thanks</string>
-    <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to send and receive digital dollars with Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to quickly send and receive digital dollars with Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nYOUR CALL</string>
     <string name="usdt__intro_title">New: USDT</string>
     <string name="usdt__maximum_total">Max total debit</string>
