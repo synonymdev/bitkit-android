@@ -668,6 +668,26 @@ class SparkRepo @Inject constructor(
         !sparkService.isSupported || (sparkService.isConnected && _state.value.hasSynced)
 
     /**
+     * The status that settles each of Spark's Lightning sends, by payment hash; empty where Spark is unsupported and
+     * null while it can't list its payments, so a send it may hold is never read as one it never made.
+     */
+    suspend fun lightningSendStatuses(): Map<String, PaymentStatus>? = withContext(bgDispatcher) {
+        if (!sparkService.isSupported) return@withContext emptyMap()
+        if (!canListPayments()) return@withContext null
+        val payments = runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+            .getOrElse { return@withContext null }
+        payments
+            .mapNotNull { payment ->
+                (payment.details as? PaymentDetails.Lightning)
+                    ?.takeIf { payment.paymentType == SparkPaymentType.SEND }
+                    ?.htlcDetails?.paymentHash
+            }
+            .distinct()
+            .associateWith { hash -> requireNotNull(payments.latestSend(hash)).status }
+    }
+
+    /**
      * Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed.
      * [SparkLightningSend.Unavailable] while Spark is supported but cannot list its payments, so a send it may hold
      * is never read as one it never made.
