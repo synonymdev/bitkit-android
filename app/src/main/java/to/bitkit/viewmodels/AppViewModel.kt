@@ -475,7 +475,7 @@ class AppViewModel @Inject constructor(
     private val processedPayments = mutableSetOf<String>()
     private val contactPaymentContextLock = Any()
 
-    /** The Paykit router picked this payment's way on Continue or a request's confirm step, so a switch reroutes. */
+    /** The Paykit router was asked for this payment's way on Continue or a request's confirm, so a switch reroutes. */
     @Volatile
     private var paykitRouteDecided = false
     private var activeContactPaymentContext: ContactPaymentContext? = null
@@ -4709,7 +4709,9 @@ class AppViewModel @Inject constructor(
             toast(it)
             return PaykitRouteOutcome.Refused
         }
-        paykitRouteDecided = picked !is PaykitRoute.None
+        // Once the router answered, even with no route, every later source switch asks it again: a stale source
+        // must never fall through to a payment the router never picked.
+        paykitRouteDecided = true
         return when (picked) {
             is PaykitRoute.Direct -> {
                 payDirectEndpoint(route, picked.endpoint)

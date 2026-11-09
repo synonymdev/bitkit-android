@@ -12392,6 +12392,49 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spending retried after a refused reroute and a switch back routes through spark again`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 10_000u)
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any()))
+            .thenReturn(Result.success("txid"))
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
+        setActiveContactPaymentContext(testPublicKey, privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+            ),
+        )
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.None("Spark quote failed")))
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+
+        assertEquals(
+            leg,
+            sut.sendUiState.value.routedPaykitRoute?.serviceLeg,
+            "the quote recovered, so Spark carries it",
+        )
+        confirmCurrentPayment()
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), any())
+    }
+
+    @Test
     fun `spark leg fees count in the payment warnings`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact").copy(deliveredSat = 1_000uL, debitSat = 2_000uL)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
