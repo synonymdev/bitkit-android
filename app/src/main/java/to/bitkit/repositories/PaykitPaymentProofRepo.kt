@@ -120,6 +120,12 @@ data class PaykitOnchainPaymentProofResolution(
     val amountSats: ULong? = null,
 )
 
+/** A request whose uncertain Spark withdrawal Spark showed never sent, so its pending payment can fail. */
+data class PaykitSparkWithdrawalRelease(
+    val identity: String,
+    val requestId: PaykitPaymentRequestId,
+)
+
 @Singleton
 class PaykitPaymentProofRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -186,6 +192,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
     private val _onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     val onchainPaymentResolutions = _onchainPaymentResolutions.asStateFlow()
+    private val _sparkWithdrawalReleases = MutableStateFlow<List<PaykitSparkWithdrawalRelease>>(emptyList())
+    val sparkWithdrawalReleases = _sparkWithdrawalReleases.asStateFlow()
 
     suspend fun prepare(
         request: PaykitPaymentRequest,
@@ -451,6 +459,9 @@ class PaykitPaymentProofRepo @Inject constructor(
                 Logger.info("Released a Paykit proof whose Spark withdrawal never sent", context = TAG)
                 releaseDeniedPrivateConsumption(proof)
                 removeProofsLocked { it == proof }
+                // The pending screen of an uncertain Spark send waits on this to fail it.
+                val release = PaykitSparkWithdrawalRelease(proof.identity, proof.requestId)
+                _sparkWithdrawalReleases.update { if (release in it) it else it + release }
                 false
             }
             SparkWithdrawalOutcome.Unknown -> false
@@ -1581,6 +1592,10 @@ class PaykitPaymentProofRepo @Inject constructor(
         _onchainPaymentResolutions.update { resolutions ->
             if (resolution in resolutions) resolutions else resolutions + resolution
         }
+    }
+
+    fun consumeSparkWithdrawalRelease(release: PaykitSparkWithdrawalRelease) {
+        _sparkWithdrawalReleases.update { it - release }
     }
 
     fun consumeOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {

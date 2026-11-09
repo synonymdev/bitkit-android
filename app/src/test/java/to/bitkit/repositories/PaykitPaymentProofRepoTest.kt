@@ -991,6 +991,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a spark withdrawal found unsent on reconcile fails the pending payment`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
+        val identity = storedProofs.single().identity
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unsent)
+
+        repo.reconcile()
+
+        assertEquals(listOf(PaykitSparkWithdrawalRelease(identity, request.id)), repo.sparkWithdrawalReleases.value)
+    }
+
+    @Test
     fun `a spark withdrawal proof that never sent gives back its private list on reconcile`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.P2wpkh.rawValue)

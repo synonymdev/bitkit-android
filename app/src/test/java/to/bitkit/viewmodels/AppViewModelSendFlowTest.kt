@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -192,6 +193,7 @@ import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitRouteRepo
+import to.bitkit.repositories.PaykitSparkWithdrawalRelease
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaykitSubscriptionMetadata
@@ -258,6 +260,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -351,6 +354,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
+    private val sparkWithdrawalReleases = MutableStateFlow<List<PaykitSparkWithdrawalRelease>>(emptyList())
     private val proofStateVersion = MutableStateFlow(0L)
     private val usdtStateVersion = MutableStateFlow(0L)
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
@@ -833,6 +837,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isExpired(any())).thenReturn(false)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
         whenever(paykitPaymentProofRepo.onchainPaymentResolutions).thenReturn(onchainPaymentResolutions)
+        whenever(paykitPaymentProofRepo.sparkWithdrawalReleases).thenReturn(sparkWithdrawalReleases)
         whenever(paykitAllowanceRepo.events).thenReturn(MutableSharedFlow())
         whenever(paykitAllowanceRepo.isUpdatingFlow).thenReturn(allowanceUpdating)
         whenever(paykitAllowanceRepo.offersToAnnounce).thenReturn(MutableStateFlow(emptyList()))
@@ -12217,6 +12222,59 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             verify(paykitPaymentProofRepo).completeSparkOnchainPayment(request, txid)
         }
+    }
+
+    @Test
+    fun `a pending spark send of a request fails once its withdrawal is found unsent`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedrequest")
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val release = PaykitSparkWithdrawalRelease(testPublicKey, request.id)
+        val privateContext = privatePaymentContext(7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.captureOriginalOnchainPayer(request)).thenReturn(Result.success(testPublicKey))
+        whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
+        whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).thenReturn(false)
+        whenever(lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unknown)
+        whenever(
+            paykitPaymentProofRepo.markSparkOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull(), any()),
+        )
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any())).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+            onBeforeSend()
+            Result.failure(AppError("send outcome lost"))
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+        val effects = mutableListOf<SendEffect>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.sendEffect.collect { effects += it } }
+
+        confirmCurrentPayment()
+        val pending = assertIs<SendEffect.NavigateToPending>(effects.last())
+        sut.showSheet(Sheet.Send(SendRoute.Pending(pending.paymentHash, pending.amount, false, isOnchain = true)))
+        pubkyPublicKey.value = testPublicKey
+        sparkWithdrawalReleases.value = listOf(release)
+        runCurrent()
+
+        assertIs<SendEffect.NavigateToError>(effects.last(), "a withdrawal that never sent can be tried again")
+        verify(paykitPaymentProofRepo).consumeSparkWithdrawalRelease(release)
     }
 
     @Test

@@ -205,6 +205,7 @@ import to.bitkit.repositories.PaykitPaymentRequestRefreshMode
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitRouteRepo
+import to.bitkit.repositories.PaykitSparkWithdrawalRelease
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionDraft
 import to.bitkit.repositories.PaykitSubscriptionId
@@ -792,6 +793,7 @@ class AppViewModel @Inject constructor(
         observePaykitPaymentRequestConnectivity()
         observeIncomingPaykitPaymentRequests()
         observePaykitOnchainPaymentResolution()
+        observePaykitSparkWithdrawalReleases()
         observePaykitAllowanceEvents()
         observeSendEvents()
         viewModelScope.launch {
@@ -1161,6 +1163,27 @@ class AppViewModel @Inject constructor(
                 resolutions.forEach(::handlePaykitOnchainPaymentResolution)
             }
         }
+    }
+
+    private fun observePaykitSparkWithdrawalReleases() {
+        viewModelScope.launch {
+            combine(paykitPaymentProofRepo.sparkWithdrawalReleases, pubkyRepo.publicKey) { releases, _ ->
+                releases
+            }.collect { releases ->
+                releases.forEach(::handlePaykitSparkWithdrawalRelease)
+            }
+        }
+    }
+
+    private fun handlePaykitSparkWithdrawalRelease(release: PaykitSparkWithdrawalRelease) {
+        if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, release.identity)) return
+        paykitPaymentProofRepo.consumeSparkWithdrawalRelease(release)
+        if (uncertainOnchainPaymentRequestId != release.requestId || _currentSheet.value !is Sheet.Send) return
+        uncertainOnchainPaymentRequestId = null
+        // Spark never sent it and its proof is released, so the request can be tried again.
+        setSendEffect(
+            SendEffect.NavigateToError(SparkError.WithdrawalNotSent().toSendFailureDetails(context)),
+        )
     }
 
     private fun handlePaykitOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
