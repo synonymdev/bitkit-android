@@ -146,6 +146,12 @@ class CacheStore internal constructor(
         }
     }
 
+    suspend fun removeSparkSendHash(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash !in store.data.first().sparkSendHashes) return
+        store.updateData { it.copy(sparkSendHashes = it.sparkSendHashes - hash) }
+    }
+
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
         it.copy(backgroundReceive = details)
     }
