@@ -1208,9 +1208,11 @@ private fun NavGraphBuilder.home(
         SavingsWalletScreen(
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navToActivityDetail(
-                activityListViewModel.resolvePublishedRbfActivity(it)
-            ) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
             onBackClick = { navController.popBackStack() },
@@ -1226,9 +1228,11 @@ private fun NavGraphBuilder.home(
             channels = lightningState.channels,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navToActivityDetail(
-                activityListViewModel.resolvePublishedRbfActivity(it)
-            ) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSavingsClick = {
                 if (!hasSeenSavingsIntro) {
@@ -1245,9 +1249,11 @@ private fun NavGraphBuilder.home(
         val walletId = it.toRoute<Routes.HardwareWallet>().walletId
         HardwareWalletScreen(
             walletId = walletId,
-            onActivityItemClick = { navController.navToActivityDetail(
-                activityListViewModel.resolvePublishedRbfActivity(it)
-            ) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
             onTransferToSpendingClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
             onBackClick = { navController.popBackStack() },
         )
@@ -1262,9 +1268,11 @@ private fun NavGraphBuilder.allActivity(
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = { navController.popBackStack() },
-            onActivityItemClick = { navController.navToActivityDetail(
-                activityListViewModel.resolvePublishedRbfActivity(it)
-            ) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
         )
     }
 }
@@ -1446,9 +1454,11 @@ private fun NavGraphBuilder.contacts(
             ContactActivityScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onActivityItemClick = { navController.navToActivityDetail(
-                    listViewModel?.resolvePublishedRbfActivity(it) ?: it
-                ) },
+                onActivityItemClick = {
+                    navController.navToActivityDetail(
+                        listViewModel?.resolvePublishedRbfActivity(it) ?: it
+                    )
+                },
             )
         }
     }
