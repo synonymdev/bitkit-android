@@ -21,6 +21,10 @@ import com.synonym.bitkitcore.LnurlAddressData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.PaykitEndpoint
+import com.synonym.bitkitcore.PaykitRoute
+import com.synonym.bitkitcore.PubkySwapRoutePayment
+import com.synonym.bitkitcore.PubkySwapRouteQuote
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
@@ -16784,6 +16788,243 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         return privateContext
     }
 
+    @Test
+    fun `swap routed contact payment finishes once on the claim and tags the hold payment`() = test {
+        val activityV1 = mock<LightningActivity> {
+            on { value } doReturn SWAP_DEBIT_SATS
+            on { fee } doReturn 0u
+        }
+        val activity = mock<BitkitActivity.Lightning> { on { v1 } doReturn activityV1 }
+        whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
+            .thenReturn(Result.success(activity))
+        whenever(pendingPaymentRepo.isPending(SWAP_HOLD_HASH)).thenReturn(false)
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).thenReturn(Result.success(SWAP_CLAIM_TXID))
+        whenever(
+            preActivityMetadataRepo.savePreActivityMetadata(
+                id = eq(SWAP_HOLD_HASH),
+                paymentHash = eq(SWAP_HOLD_HASH),
+                txId = anyOrNull(),
+                address = eq(REGTEST_ADDRESS),
+                isReceive = eq(false),
+                tags = eq(listOf("rent")),
+                feeRate = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                walletId = any(),
+            ),
+        ).thenReturn(Result.success(Unit))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+            sut.addTagToSelected("rent")
+            confirmCurrentPayment()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+            assertEquals(SWAP_CLAIM_TXID, sut.successSendUiState.value.paymentHashOrTxId)
+
+            emitNodeEvent(
+                Event.PaymentSuccessful(
+                    paymentId = SWAP_HOLD_HASH,
+                    paymentHash = SWAP_HOLD_HASH,
+                    paymentPreimage = "preimage",
+                    feePaidMsat = 0uL,
+                ),
+            )
+            advanceUntilIdle()
+            expectNoEvents()
+            assertEquals(SWAP_CLAIM_TXID, sut.successSendUiState.value.paymentHashOrTxId)
+        }
+        verify(preActivityMetadataRepo).savePreActivityMetadata(
+            id = eq(SWAP_HOLD_HASH),
+            paymentHash = eq(SWAP_HOLD_HASH),
+            txId = anyOrNull(),
+            address = eq(REGTEST_ADDRESS),
+            isReceive = eq(false),
+            tags = eq(listOf("rent")),
+            feeRate = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            walletId = any(),
+        )
+    }
+
+    @Test
+    fun `swap route quote failure stays on the amount screen`() = test {
+        openSwapRoutedContactPayment(quote = Result.failure(AppError("no provider")))
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+        assertFalse(sut.sendUiState.value.isLoading)
+        verify(pubkySwapsRouteRepo, never()).commit(any())
+    }
+
+    @Test
+    fun `swap route hold payment failure never awaits the claim`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.failure(AppError("no route")))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmCurrentPayment()
+            expectNoEvents()
+        }
+        assertNull(sut.currentSheet.value)
+        verify(pubkySwapsRouteRepo, never()).awaitClaim(any(), any())
+    }
+
+    @Test
+    fun `swap route claim failure shows no success`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).thenReturn(Result.failure(AppError("refunded")))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmCurrentPayment()
+            expectNoEvents()
+        }
+        assertNull(sut.currentSheet.value)
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `swap route answered direct switches the payment to savings`() = test {
+        openSwapRoutedContactPayment(
+            quote = Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNull(sut.sendUiState.value.paykitSwapRoute)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+    }
+
+    @Test
+    fun `swap route quote for a replaced send is discarded`() = test {
+        val quoted = CompletableDeferred<Result<PaykitRoute>>()
+        openSwapRoutedContactPayment()
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quoted.await() }
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            runCurrent()
+            sut.resetSendState()
+            quoted.complete(Result.success(PaykitRoute.Swap(swapRouteQuote())))
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNull(sut.sendUiState.value.paykitSwapRoute)
+    }
+
+    @Test
+    fun `swap route quote after a wallet change is discarded without blocking continue`() = test {
+        val quoted = CompletableDeferred<Result<PaykitRoute>>()
+        openSwapRoutedContactPayment()
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quoted.await() }
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            runCurrent()
+            walletGeneration++
+            quoted.complete(Result.success(PaykitRoute.Swap(swapRouteQuote())))
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertFalse(sut.sendUiState.value.isLoading)
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+    }
+
+    @Test
+    fun `swap routed contact returns to spending after picking savings`() = test {
+        openSwapRoutedContactPayment()
+
+        val spending = sut.sendUiState.value.fundingOptions.single { it.source == SendFundingSource.Spending }
+        assertTrue(spending.enabled)
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        advanceUntilIdle()
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        advanceUntilIdle()
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+        assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+    }
+
+    private suspend fun TestScope.openSwapRoutedContactPayment(
+        quote: Result<PaykitRoute> = Result.success(PaykitRoute.Swap(swapRouteQuote())),
+    ) {
+        whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(quote)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(coreService.decode(SWAP_HOLD_INVOICE)).thenReturn(
+            Scanner.Lightning(lightningInvoice(SWAP_HOLD_INVOICE, amountSats = SWAP_DEBIT_SATS)),
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = testPublicKey,
+            endpoints = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
+        )
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AmountChange(SWAP_DELIVERED_SATS))
+        advanceUntilIdle()
+    }
+
+    private fun swapRouteQuote() = PubkySwapRouteQuote(
+        providerPubky = testPublicKey,
+        quoteId = SWAP_QUOTE_ID,
+        endpoint = PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS),
+        deliveredSat = SWAP_DELIVERED_SATS,
+        lockSat = SWAP_DELIVERED_SATS,
+        debitSat = SWAP_DEBIT_SATS,
+        serviceFeeSat = 100u,
+        providerOnchainFeeSat = 0u,
+        claimFeeSat = 0u,
+        totalFeeSat = 100u,
+        atomicity = "htlc",
+        validUntilUnix = 0u,
+        providersQuoted = 1u,
+    )
+
+    private fun swapRoutePayment() = PubkySwapRoutePayment(
+        swapId = SWAP_ID,
+        invoice = SWAP_HOLD_INVOICE,
+        debitSat = SWAP_DEBIT_SATS,
+        deliveredSat = SWAP_DELIVERED_SATS,
+        destinationAddress = REGTEST_ADDRESS,
+        htlcAddress = REGTEST_ADDRESS,
+        timeoutBlockHeight = 0u,
+    )
+
     private fun lightningInvoice(
         bolt11: String,
         amountSats: ULong,
@@ -18252,5 +18493,14 @@ private const val SAMROCK_SETUP_URL =
 private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
+private const val SWAP_QUOTE_ID = "swap-quote"
+private const val SWAP_ID = "swap"
+private const val SWAP_HOLD_INVOICE = "lnbcrt1swaphold"
+
+/** The hex of [lightningInvoice]'s payment hash. */
+private const val SWAP_HOLD_HASH = "010203"
+private const val SWAP_CLAIM_TXID = "claimtxid"
+private const val SWAP_DELIVERED_SATS = 20_000uL
+private const val SWAP_DEBIT_SATS = 20_100uL
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
 private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
