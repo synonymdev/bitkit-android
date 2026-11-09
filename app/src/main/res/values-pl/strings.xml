@@ -275,6 +275,7 @@
     <string name="lightning__setting_up__not_seen">Spark jeszcze nie widzi Twojego przelewu. Zostanie dodany po 3 potwierdzeniach; możesz opuścić ten ekran.</string>
     <string name="lightning__setting_up__pay">Zapłać ₿ {amount}</string>
     <string name="lightning__setting_up__repriced">Natychmiast kosztuje teraz ₿ {amount}. Zapłać albo poczekaj na 3 potwierdzenia, około 30 minut, z niższą opłatą.</string>
+    <string name="lightning__setting_up__speed">Prędkość: {speed}</string>
     <string name="lightning__setting_up__step_adding">Dodawanie do wydatków</string>
     <string name="lightning__setting_up__step_seen">Widziany przez Spark</string>
     <string name="lightning__setting_up__step_sent">Przelew wysłany</string>
