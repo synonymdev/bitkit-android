@@ -67,6 +67,7 @@ import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.ext.rawId
 import to.bitkit.ext.walletId
+import to.bitkit.models.HwWalletBalance
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
@@ -1127,6 +1128,7 @@ private fun RootNavHost(
             }
             deepLinkableComposable<Routes.Funding> {
                 val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
+                val balances = LocalBalances.current
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 FundingScreen(
                     canFundWithSpark = sparkState.isUsable,
@@ -1139,6 +1141,11 @@ private fun RootNavHost(
                         }
                     },
                     onManual = { navController.navigateTo(Routes.ExternalNav) },
+                    onHardware = {
+                        fundingHardwareRoute(balances.hardwareWallets, hasSeenSpendingIntro)
+                            ?.let { navController.navigateTo(it) }
+                            ?: appViewModel.showSheet(Sheet.Hardware())
+                    },
                     onBackClick = { navController.popBackStack() },
                 )
             }
@@ -2382,6 +2389,12 @@ internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes =
 
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean, walletId: String) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, walletId))
+
+/** Where Funding's hardware row starts Transfer to Spending, from a funded wallet first; null when none is paired. */
+internal fun fundingHardwareRoute(wallets: List<HwWalletBalance>, hasSeenSpendingIntro: Boolean): Routes? {
+    val wallet = wallets.firstOrNull { it.sats > 0uL } ?: wallets.firstOrNull() ?: return null
+    return transferSpendingStartRoute(hasSeenSpendingIntro, wallet.id)
+}
 
 internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean, walletId: String): Routes = when {
     hasSeenSpendingIntro -> Routes.SpendingAmountHw(walletId)

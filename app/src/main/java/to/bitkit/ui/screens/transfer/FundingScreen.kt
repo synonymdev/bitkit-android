@@ -43,6 +43,7 @@ fun FundingScreen(
     onTransfer: () -> Unit = {},
     onFund: () -> Unit = {},
     onManual: () -> Unit = {},
+    onHardware: () -> Unit = {},
     onBackClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -113,7 +114,8 @@ fun FundingScreen(
                 R.string.lightning__funding__button_hw,
                 R.drawable.ic_device_tablet_speaker,
                 16.25.dp,
-                "FundHardware"
+                "FundHardware",
+                onHardware.takeIf { canFundWithSpark },
             )
             if (!canFundWithSpark) {
                 FundingOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")
