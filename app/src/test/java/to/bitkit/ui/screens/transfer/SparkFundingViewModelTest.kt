@@ -49,6 +49,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     private val currencyRepo = mock<CurrencyRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
+    private val attemptUpdates = MutableStateFlow(0L)
 
     private fun createSut() =
         SparkFundingViewModel(context, walletRepo, lightningRepo, sparkRepo, currencyRepo, hwWalletRepo)
@@ -61,6 +62,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.lightning__spending_amount__error_balance__title)).thenReturn("Short")
         whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(BalanceState(maxSendOnchainSats = 100_000u)))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         whenever(currencyRepo.currencyState).thenReturn(MutableStateFlow(CurrencyState()))
         whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(emptyMap()))
         whenever { sparkRepo.depositAddress() }.thenReturn(Result.success("bcrt1qspark"))
@@ -224,6 +226,44 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         assertTrue(toasts.isEmpty())
         assertEquals(SideEffect.FundingPending(retained), effects.last())
         verify(sparkRepo, never()).onDepositBroadcast(any(), any())
+    }
+
+    @Test
+    fun `a retained funding that completes later leaves the confirm screen for setting up`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
+        val retained = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(retained)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        val effects = mutableListOf<SideEffect>()
+        backgroundScope.launch { sut.effects.collect { effects += it } }
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        val confirmed = retained.copy(evidence = OnchainSendEvidence.Observed, localFollowupComplete = true)
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(confirmed)
+        attemptUpdates.value++
+        advanceUntilIdle()
+
+        assertEquals(SideEffect.Sent, effects.last())
+        assertEquals("txid", sut.uiState.value.txid)
+        verify(sparkRepo).onDepositBroadcast("txid", 50_000uL)
+        verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 1_350uL)
     }
 
     @Test
