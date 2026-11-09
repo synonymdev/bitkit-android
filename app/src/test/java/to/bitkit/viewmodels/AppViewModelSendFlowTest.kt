@@ -241,6 +241,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -258,6 +259,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -16933,19 +16935,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.AmountContinue)
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
-            confirmCurrentPayment()
-            emitNodeEvent(
-                Event.PaymentFailed(
-                    paymentId = SWAP_HOLD_HASH,
-                    paymentHash = SWAP_HOLD_HASH,
-                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
-                ),
-            )
-            advanceUntilIdle()
+            confirmSwapRoutedPayment()
+            assertFalse(claimCancelled)
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
             assertTrue(awaitItem() is SendEffect.NavigateToError)
         }
         assertTrue(claimCancelled)
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `swap route hold payment failure retries from the amount without recommitting the quote`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendRetryRoute.Amount, assertIs<SendEffect.NavigateToError>(awaitItem()).retryRoute)
+            assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            confirmSwapRoutedPayment()
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+        }
+        verify(pubkySwapsRouteRepo, times(1)).commit(SWAP_QUOTE_ID)
+    }
+
+    @Test
+    fun `swap route refused commit clears the quote`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.failure(AppError("quote_expired")))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertNotNull(sut.sendUiState.value.paykitSwapRoute)
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
     }
 
     @Test
@@ -17020,10 +17058,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.AmountContinue)
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
-            sut.setSendEvent(SendEvent.SwipeToPay)
-            advanceBeforeHoldWatchDeadline()
-            sut.setSendEvent(SendEvent.PayConfirmed)
-            advanceBeforeHoldWatchDeadline()
+            confirmSwapRoutedPayment()
             cancelAndIgnoreRemainingEvents()
         }
         verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any())
@@ -17044,6 +17079,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceTimeBy(1.days)
         runCurrent()
     }
+
+    private fun TestScope.confirmSwapRoutedPayment() {
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceBeforeHoldWatchDeadline()
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceBeforeHoldWatchDeadline()
+    }
+
+    private suspend fun emitSwapHoldPaymentFailed() = emitNodeEvent(
+        Event.PaymentFailed(
+            paymentId = SWAP_HOLD_HASH,
+            paymentHash = SWAP_HOLD_HASH,
+            reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+        ),
+    )
 
     @Test
     fun `swap route answered direct switches the payment to savings`() = test {

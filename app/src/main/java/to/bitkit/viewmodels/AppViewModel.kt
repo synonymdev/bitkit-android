@@ -252,6 +252,7 @@ import to.bitkit.ui.pushNotification
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -2855,10 +2856,16 @@ class AppViewModel @Inject constructor(
 
         setSendEffect(
             SendEffect.NavigateToError(
-                reason.toSendFailureDetails(
+                failure = reason.toSendFailureDetails(
                     context = context,
                     paymentRequest = _sendUiState.value.currentLightningPaymentRequest(),
-                )
+                ),
+                // The swap provider consumed the committed quote, so a retry re-quotes from the amount.
+                retryRoute = if (_sendUiState.value.activePaykitSwapRoute != null) {
+                    SendRetryRoute.Amount
+                } else {
+                    SendRetryRoute.Confirm
+                },
             )
         )
         return true
@@ -6785,6 +6792,7 @@ class AppViewModel @Inject constructor(
         val sendGeneration = sendStateGeneration
         val isSendCurrent = { sendGeneration == sendStateGeneration }
         val payment = pubkySwapsRouteRepo.commit(quote.quoteId).getOrElse {
+            clearSwapRouteQuote(isSendCurrent())
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
@@ -6796,6 +6804,7 @@ class AppViewModel @Inject constructor(
                 "Swap hold invoice is not a Lightning invoice"
             }.paymentHash.toHex()
         }.getOrElse {
+            clearSwapRouteQuote(isSendCurrent())
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
@@ -6820,6 +6829,7 @@ class AppViewModel @Inject constructor(
             }
             // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
             lightningRepo.payInvoice(payment.invoice).getOrElse {
+                clearSwapRouteQuote(isSendCurrent())
                 if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
                 releasePrivatePaymentListIfNeeded(contactPaymentContext)
                 finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
@@ -6827,6 +6837,7 @@ class AppViewModel @Inject constructor(
                 return
             }
             val claimTxid = awaitSwapClaim(payment, holdFailure).getOrElse {
+                clearSwapRouteQuote(isSendCurrent())
                 finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
                 if (it is LightningPaymentFailedError) {
                     if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
@@ -6857,6 +6868,13 @@ class AppViewModel @Inject constructor(
         } finally {
             holdFailure.cancel()
             clearPendingContactPaymentContext(holdPaymentHash)
+        }
+    }
+
+    private fun clearSwapRouteQuote(isSendCurrent: Boolean) {
+        if (!isSendCurrent) return
+        _sendUiState.update {
+            it.copy(paykitSwapRoute = it.paykitSwapRoute?.copy(quote = null, providerName = null), lightningFeeSats = 0)
         }
     }
 
@@ -9444,7 +9462,10 @@ sealed class SendEffect {
     data object NavigateToContacts : SendEffect()
     data object NavigateToComingSoon : SendEffect()
     data object PaymentSuccess : SendEffect()
-    data class NavigateToError(val failure: SendFailureDetails) : SendEffect()
+    data class NavigateToError(
+        val failure: SendFailureDetails,
+        val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
+    ) : SendEffect()
     data class NavigateToPending(
         val paymentHash: String,
         val amount: Long,
