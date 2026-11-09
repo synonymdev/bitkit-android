@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -79,6 +81,7 @@ class SparkFundingViewModel @Inject constructor(
 
     private var maxJob: Job? = null
     private var quoteJob: Job? = null
+    private var retainedFundingJob: Job? = null
 
     /** The fee rates the shown quote was priced at, so the transfer pays exactly what the screen shows. */
     private var quotedFeeRates: FeeRates? = null
@@ -297,24 +300,18 @@ class SparkFundingViewModel @Inject constructor(
             ).getOrThrow()
             if (outcome !is OnchainSendOutcome.Accepted) {
                 Logger.warn("Spark funding was not accepted: '$outcome'", context = TAG)
-                if (showRetainedFunding()) return@runSuspendCatching
+                if (showRetainedFunding(quote)) return@runSuspendCatching
                 error("Spark funding was not accepted: '$outcome'")
             }
             withContext(NonCancellable) {
                 runSuspendCatching {
                     lightningRepo.completeAcceptedTransferFollowup(orderId = null, txid = outcome.txid)
                 }.onFailure { Logger.warn("Failed to finish Spark funding locally", it, context = TAG) }
-                sparkRepo.onDepositBroadcast(outcome.txid, outcome.amountSats ?: quote.amountSats.toULong())
-                sparkRepo.followDepositClaim(outcome.txid, state.speed, quote.instantFeeSats.toULong())
             }
-            Logger.info("Funded Spark with '${quote.amountSats}' sats in '${outcome.txid}'", context = TAG)
-            _uiState.update {
-                it.copy(txid = outcome.txid, claim = sparkRepo.depositClaims.value[outcome.txid] ?: it.claim)
-            }
-            _effects.emit(SideEffect.Sent)
+            onFundingAccepted(outcome.txid, outcome.amountSats ?: quote.amountSats.toULong(), quote)
         }.onFailure {
             Logger.error("Failed to fund Spark", it, context = TAG)
-            if (it is OnchainSendBlockedError && showRetainedFunding()) return@onFailure
+            if (it is OnchainSendBlockedError && showRetainedFunding(quote)) return@onFailure
             toast(
                 title = R.string.lightning__close_error,
                 description = context.getString(R.string.wallet__send_error_create_tx),
@@ -323,12 +320,39 @@ class SparkFundingViewModel @Inject constructor(
         _uiState.update { it.copy(isSending = false) }
     }
 
+    private suspend fun onFundingAccepted(txid: String, amountSats: ULong, quote: Quote) {
+        val speed = _uiState.value.speed
+        withContext(NonCancellable) {
+            sparkRepo.onDepositBroadcast(txid, amountSats)
+            sparkRepo.followDepositClaim(txid, speed, quote.instantFeeSats.toULong())
+        }
+        Logger.info("Funded Spark with '$amountSats' sats in '$txid'", context = TAG)
+        _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
+        _effects.emit(SideEffect.Sent)
+    }
+
     // A signed funding that was not accepted is kept; Payment Pending shows it and retries it at a new fee.
-    private suspend fun showRetainedFunding(): Boolean {
+    private suspend fun showRetainedFunding(quote: Quote): Boolean {
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
         if (attempt == null || !attempt.isTransfer || !attempt.blocksNextSend) return false
+        watchRetainedFunding(attempt, quote)
         _effects.emit(SideEffect.FundingPending(attempt))
         return true
+    }
+
+    // Payment Pending can be dismissed, so the confirm screen leaves for Setting Up once the kept funding completes.
+    private fun watchRetainedFunding(retained: OnchainSendAttempt, quote: Quote) {
+        retainedFundingJob?.cancel()
+        retainedFundingJob = viewModelScope.launch {
+            val completed = lightningRepo.onchainSendAttemptUpdates
+                .map { runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull() }
+                .filterNotNull()
+                .first {
+                    it.attemptId == retained.attemptId && it.address == quote.address &&
+                        it.hasPositiveEvidence && it.localFollowupComplete && it.txid != null
+                }
+            onFundingAccepted(requireNotNull(completed.txid), completed.amountSats, quote)
+        }
     }
 
     fun onPayRepriced() {
