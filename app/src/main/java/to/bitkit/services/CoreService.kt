@@ -886,9 +886,10 @@ class ActivityService(
         ) {
             return
         }
-        // A newer pending attempt, such as a Spark retry, stays until it settles; an older failure can't end it.
+        // A Spark retry of the invoice stays pending until Spark settles it; the channel's failure can't end it.
+        // Spark records the hash before it sends and drops it only once it reports the send failed or unknown.
         if (existingActivity is Activity.Lightning && existingActivity.v1.status == PaymentState.PENDING &&
-            state == PaymentState.FAILED && (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
+            state == PaymentState.FAILED && payment.id.lowercase() in cacheStore.data.first().sparkSendHashes
         ) {
             return
         }
