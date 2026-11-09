@@ -4259,7 +4259,9 @@ class AppViewModel @Inject constructor(
         val state = _sendUiState.value
         if (state.paykitUsesUsdt) return false
         val lnurl = state.lnurl as? LnurlParams.LnurlPay
-        if (state.payMethod == SendMethod.LIGHTNING && lnurl != null && state.amount < lnurl.data.minSendableSat()) {
+        if (state.payMethod == SendMethod.LIGHTNING && lnurl != null && state.routedPaykitRoute?.serviceLeg == null &&
+            state.amount < lnurl.data.minSendableSat()
+        ) {
             return false
         }
         return reviewPaykitAmount()
@@ -4700,6 +4702,21 @@ class AppViewModel @Inject constructor(
         if (!prepareCoinSelection()) return
 
         val lnurl = _sendUiState.value.lnurl
+        if (lnurl is LnurlParams.LnurlWithdraw) {
+            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            return
+        }
+        // A Spark leg pays the on-chain endpoint, so the unselected LNURL's limits never apply to it.
+        _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
+            when (routePaykitPayment(it)) {
+                PaykitRouteOutcome.Leg -> {
+                    setSendEffect(SendEffect.NavigateToConfirm)
+                    return
+                }
+                PaykitRouteOutcome.Refused, PaykitRouteOutcome.Stale -> return
+                PaykitRouteOutcome.Direct -> Unit
+            }
+        }
         if (lnurl is LnurlParams.LnurlPay) {
             val minSendable = lnurl.data.minSendableSat()
             if (_sendUiState.value.amount < minSendable) {
@@ -4711,20 +4728,6 @@ class AppViewModel @Inject constructor(
                     testTag = "LnurlPayAmountTooLowToast",
                 )
                 return
-            }
-        }
-        if (lnurl is LnurlParams.LnurlWithdraw) {
-            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
-            return
-        }
-        _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
-            when (routePaykitPayment(it)) {
-                PaykitRouteOutcome.Leg -> {
-                    setSendEffect(SendEffect.NavigateToConfirm)
-                    return
-                }
-                PaykitRouteOutcome.Refused, PaykitRouteOutcome.Stale -> return
-                PaykitRouteOutcome.Direct -> Unit
             }
         }
 
@@ -6499,7 +6502,8 @@ class AppViewModel @Inject constructor(
         val amount = _sendUiState.value.amount
 
         val lnurl = _sendUiState.value.lnurl
-        val isLnurlPay = lnurl is LnurlParams.LnurlPay
+        // A Spark leg pays the on-chain endpoint, so it fetches no invoice from the unselected LNURL.
+        val isLnurlPay = lnurl is LnurlParams.LnurlPay && _sendUiState.value.routedPaykitRoute?.serviceLeg == null
 
         if (isLnurlPay) {
             val amountMsats = lnurl.data.callbackAmountMsats(amount)

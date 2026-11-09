@@ -12373,6 +12373,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark leg to the onchain endpoint ignores the unselected lnurl's limits`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val lnurl = LnurlPayData(
+            uri = "lnurl1contact",
+            callback = "https://example.com/callback",
+            minSendable = 5_000_000uL,
+            maxSendable = 100_000_000uL,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 10_000u)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any()))
+            .thenReturn(Result.success("txid"))
+        setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(lnurl),
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg, "the lnurl's minimum is not the leg's")
+        confirmCurrentPayment()
+
+        verify(lightningRepo, never()).fetchLnurlInvoice(any(), any(), anyOrNull())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())
+    }
+
+    @Test
     fun `spark route saves the tags picked on confirmation`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), any()))
