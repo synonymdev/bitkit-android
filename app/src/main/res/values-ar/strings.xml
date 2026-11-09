@@ -238,6 +238,7 @@
     <string name="lightning__setting_up__not_seen">لم يرَ Spark تحويلك بعد. يُضاف بعد 3 تأكيدات؛ يمكنك مغادرة هذه الشاشة.</string>
     <string name="lightning__setting_up__pay">ادفع ₿ {amount}</string>
     <string name="lightning__setting_up__repriced">أصبح الفوري يكلّف الآن ₿ {amount}. ادفعه، أو انتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
+    <string name="lightning__setting_up__speed">السرعة: {speed}</string>
     <string name="lightning__setting_up__step_adding">جارٍ الإضافة إلى الإنفاق</string>
     <string name="lightning__setting_up__step_seen">رآه Spark</string>
     <string name="lightning__setting_up__step_sent">تم إرسال التحويل</string>

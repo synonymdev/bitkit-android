@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -166,6 +167,10 @@ class BackupRepo @Inject constructor(
     private var isObserving = false
     private var lastNotificationTime = 0L
 
+    /** Spark's current connection was backed up once ready, so a restart of the observers doesn't upload it again. */
+    @Volatile
+    private var hasBackedUpSparkConnection = false
+
     private val _isRestoring = MutableStateFlow(false)
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
 
@@ -180,7 +185,10 @@ class BackupRepo @Inject constructor(
         vssBackupClientLdk.reset()
     }
 
-    fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
+    fun setWiping(isWiping: Boolean) {
+        if (isWiping) hasBackedUpSparkConnection = false
+        _isWiping.update { isWiping }
+    }
 
     /**
      * Holds ordinary uploads from the moment a restore is announced, closing the window between the
@@ -196,6 +204,9 @@ class BackupRepo @Inject constructor(
         restorePendingUntil.update { if (isPending) currentTimeMillis() + RESTORE_PENDING_TIMEOUT_MS else 0L }
         Logger.debug("Set restore pending to '$isPending'", context = TAG)
     }
+
+    /** A restore was announced and its backup is not applied yet. */
+    fun isRestoreInProgress(): Boolean = _isRestoring.value || isRestorePending()
 
     suspend fun hasPendingWalletRestore(): Boolean = withContext(ioDispatcher) {
         keychain.hasPendingWalletRestore()
@@ -439,15 +450,17 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
-        // SPARK_EXIT - back up once Spark is ready and synced, which replays when observing starts after that,
-        // and again whenever Spark announces its unilateral exit data changed
+        // SPARK_EXIT - back up once per Spark connection when it is ready and synced, even if observing starts after
+        // that, and again whenever Spark announces its unilateral exit data changed
         dataListenerJobs.add(
             scope.launch {
-                merge(
-                    sparkRepo.state.map { it.isReady && it.hasSynced }.distinctUntilChanged().filter { it },
-                    sparkRepo.exitStateChanged,
-                ).collect {
+                val isReady = sparkRepo.state.map { it.isReady && it.hasSynced }.distinctUntilChanged()
+                    .onEach { if (!it) hasBackedUpSparkConnection = false }
+                    .filter { it }
+                merge(isReady, sparkRepo.exitStateChanged.map { false }).collect { isReadyTrigger ->
+                    if (isReadyTrigger && hasBackedUpSparkConnection) return@collect
                     if (shouldSkipBackup()) return@collect
+                    if (isReadyTrigger) hasBackedUpSparkConnection = true
                     markBackupRequired(BackupCategory.SPARK_EXIT)
                 }
             }

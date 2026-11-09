@@ -242,6 +242,7 @@
     <string name="lightning__setting_up__not_seen">Spark heeft je overboeking nog niet gezien. Hij wordt toegevoegd na 3 bevestigingen; je kunt dit scherm verlaten.</string>
     <string name="lightning__setting_up__pay">Betaal ₿ {amount}</string>
     <string name="lightning__setting_up__repriced">Direct kost nu ₿ {amount}. Betaal het, of wacht op 3 bevestigingen, ongeveer 30 minuten, tegen lagere kosten.</string>
+    <string name="lightning__setting_up__speed">Snelheid: {speed}</string>
     <string name="lightning__setting_up__step_adding">Toevoegen aan besteding</string>
     <string name="lightning__setting_up__step_seen">Gezien door Spark</string>
     <string name="lightning__setting_up__step_sent">Overboeking verzonden</string>

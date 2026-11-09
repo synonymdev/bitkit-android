@@ -51,7 +51,6 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
-import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
@@ -307,7 +306,8 @@ private fun SpeedItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .height(72.dp)
+                .heightIn(min = 72.dp)
+                .padding(vertical = 8.dp)
         ) {
             Icon(
                 painter = painterResource(icon),
@@ -316,12 +316,13 @@ private fun SpeedItem(
                 modifier = Modifier.size(32.dp),
             )
             HorizontalSpacer(16.dp)
-            Column {
+            // The text wraps, so the fee keeps its one line at the end of the row.
+            Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(title, color = MaterialTheme.colorScheme.primary)
                 BodySSB(description, color = MaterialTheme.colorScheme.secondary)
             }
-            FillWidth()
             if (feeSats != null) {
+                HorizontalSpacer(8.dp)
                 Row {
                     BodySSB("$feePrefix ", color = Colors.White64)
                     MoneySSB(sats = feeSats, showSymbol = true)

@@ -276,6 +276,7 @@ class SparkRepo @Inject constructor(
                 throw PaymentPendingException(paymentHash)
             }
             val sent = try {
+                cacheStore.addSparkSendHash(paymentHash)
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
@@ -305,6 +306,7 @@ class SparkRepo @Inject constructor(
                     .onSuccess { _state.update { it.copy(hasSynced = true) } }
                 when (val send = lightningSend(paymentHash)) {
                     SparkLightningSend.NotFound -> {
+                        cacheStore.removeSparkSendHash(paymentHash)
                         val reason = PaymentFailureReason.UNEXPECTED_ERROR
                         _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, reason))
                         return@launch
@@ -312,6 +314,7 @@ class SparkRepo @Inject constructor(
                     // A pending send ends with its own payment event.
                     is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@launch
                     is SparkLightningSend.Found -> {
+                        if (send.status == PaymentStatus.FAILED) cacheStore.removeSparkSendHash(paymentHash)
                         settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
                         return@launch
                     }
@@ -665,6 +668,26 @@ class SparkRepo @Inject constructor(
         !sparkService.isSupported || (sparkService.isConnected && _state.value.hasSynced)
 
     /**
+     * The status that settles each of Spark's Lightning sends, by payment hash; empty where Spark is unsupported and
+     * null while it can't list its payments, so a send it may hold is never read as one it never made.
+     */
+    suspend fun lightningSendStatuses(): Map<String, PaymentStatus>? = withContext(bgDispatcher) {
+        if (!sparkService.isSupported) return@withContext emptyMap()
+        if (!canListPayments()) return@withContext null
+        val payments = runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+            .getOrElse { return@withContext null }
+        payments
+            .mapNotNull { payment ->
+                (payment.details as? PaymentDetails.Lightning)
+                    ?.takeIf { payment.paymentType == SparkPaymentType.SEND }
+                    ?.htlcDetails?.paymentHash
+            }
+            .distinct()
+            .associateWith { hash -> requireNotNull(payments.latestSend(hash)).status }
+    }
+
+    /**
      * Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed.
      * [SparkLightningSend.Unavailable] while Spark is supported but cannot list its payments, so a send it may hold
      * is never read as one it never made.
@@ -683,17 +706,23 @@ class SparkRepo @Inject constructor(
     /**
      * Spark's pending or paid send of [bolt11], matched by the invoice or its [paymentHash], so the node never pays it
      * again; a send still inside Spark's send call is pending. Null when Spark's send failed or none is known.
+     * While Spark can't list its payments, a send it started for [paymentHash] counts as pending, since it may be live.
      */
     suspend fun earlierLightningSend(bolt11: String, paymentHash: String?): EarlierSend? =
         withContext(bgDispatcher) {
             sendsInFlight.entries
                 .firstOrNull { it.value.equals(bolt11, ignoreCase = true) || it.key == paymentHash?.lowercase() }
                 ?.let { return@withContext EarlierSend.Pending(it.key) }
-            if (!sparkService.isConnected) return@withContext null
-            val send = runSuspendCatching { sparkService.listPayments() }
-                .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
-                .getOrNull()
-                ?.latestSend {
+            val payments = if (sparkService.isConnected) {
+                runSuspendCatching { sparkService.listPayments() }
+                    .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+                    .getOrNull()
+            } else {
+                null
+            }
+            if (payments == null) return@withContext startedSend(paymentHash)?.let { EarlierSend.Pending(it) }
+            val send = payments
+                .latestSend {
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
@@ -705,6 +734,11 @@ class SparkRepo @Inject constructor(
                 PaymentStatus.FAILED -> null
             }
         }
+
+    private suspend fun startedSend(paymentHash: String?): String? {
+        val hash = paymentHash?.lowercase() ?: return null
+        return hash.takeIf { it in cacheStore.data.first().sparkSendHashes }
+    }
 
     private fun List<Payment>.latestSend(paymentHash: String): Payment? =
         latestSend { it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true) }
@@ -735,8 +769,18 @@ class SparkRepo @Inject constructor(
     }
 
     private suspend fun syncActivities() {
-        sparkService.listPayments().forEach { recordActivity(it) }
+        val payments = sparkService.listPayments()
+        payments.forEach { recordActivity(it) }
+        // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
+        // retry of it is still live.
+        payments.mapNotNull { it.failedSendHash() }.distinct()
+            .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
+            .forEach { cacheStore.removeSparkSendHash(it) }
     }
+
+    private fun Payment.failedSendHash(): String? = (details as? PaymentDetails.Lightning)
+        ?.takeIf { paymentType == SparkPaymentType.SEND && status == PaymentStatus.FAILED }
+        ?.htlcDetails?.paymentHash
 
     private suspend fun onSdkEvent(event: SdkEvent) {
         runSuspendCatching {
@@ -767,6 +811,12 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
+        payment.failedSendHash()?.let { hash ->
+            val latest = lightningSend(hash)
+            val isReleased = latest == SparkLightningSend.NotFound ||
+                (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
+            if (isReleased) cacheStore.removeSparkSendHash(hash)
+        }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
@@ -779,6 +829,8 @@ class SparkRepo @Inject constructor(
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
         // A receive sharing its hash with a channel send is a move to Spark, which Activity shows as that send.
         if (payment.paymentType == SparkPaymentType.RECEIVE && existing?.txType == PaymentType.SENT) return
+        // Another attempt of the same invoice, on either rail, already paid it.
+        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
@@ -794,7 +846,8 @@ class SparkRepo @Inject constructor(
             invoice = lightning.invoice,
             timestamp = payment.timestamp,
             fee = payment.fees.toLong().toULong(),
-            message = lightning.description.orEmpty(),
+            // A note stored on the activity, such as an LNURL comment, outlives the invoice's description.
+            message = existing?.message?.takeIf { it.isNotEmpty() } ?: lightning.description.orEmpty(),
             preimage = lightning.htlcDetails.preimage,
             contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,

@@ -17,6 +17,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.models.HwWalletBalance
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.navigateIfNotCurrent
@@ -282,6 +283,17 @@ class ContentViewTest {
 
         assertEquals(Routes.SpendingIntroHw(walletId), transferSpendingStartRoute(false, walletId))
         assertEquals(Routes.SpendingAmountHw(walletId), transferSpendingStartRoute(true, walletId))
+    }
+
+    @Test
+    fun `funding hardware row opens the funded wallet transfer or pairing without a wallet`() {
+        assertNull(fundingHardwareRoute(emptyList(), hasSeenSpendingIntro = true))
+        val wallets = listOf(HwWalletBalance("empty", 0uL), HwWalletBalance("funded", 5_000uL))
+
+        assertEquals(Routes.SpendingAmountHw("funded"), fundingHardwareRoute(wallets, hasSeenSpendingIntro = true))
+        assertEquals(Routes.SpendingIntroHw("funded"), fundingHardwareRoute(wallets, hasSeenSpendingIntro = false))
+        val unfunded = wallets.take(1)
+        assertEquals(Routes.SpendingAmountHw("empty"), fundingHardwareRoute(unfunded, hasSeenSpendingIntro = true))
     }
 
     @Test

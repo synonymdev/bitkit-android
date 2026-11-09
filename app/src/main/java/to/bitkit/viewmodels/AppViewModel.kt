@@ -6671,7 +6671,20 @@ class AppViewModel @Inject constructor(
                 val current = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (current != original || !current.isTransfer || current.requestId != null) return@runSuspendCatching
                 if (!current.hasPositiveEvidence || !current.localFollowupComplete) return@runSuspendCatching
-                if (current.txid == null || current.transferContext == null) return@runSuspendCatching
+                if (current.txid == null) return@runSuspendCatching
+                if (current.isSparkFunding && lightningRepo.isFundingFollowedOnScreen(current.attemptId)) {
+                    // The open funding screen settles it at the speed the user chose and moves on to Setting Up.
+                    hideSheet()
+                    return@runSuspendCatching
+                }
+                if (current.isSparkFunding) {
+                    lightningRepo.followRecoveredSparkFunding(current)
+                    hideSheet()
+                    // Leave the funding flow, whose confirm screen would offer the sent transfer again.
+                    mainScreenEffect(MainScreenEffect.Navigate(Routes.Home, clearStack = true))
+                    return@runSuspendCatching
+                }
+                if (current.transferContext == null) return@runSuspendCatching
                 val orderId = current.orderId ?: return@runSuspendCatching
                 hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))

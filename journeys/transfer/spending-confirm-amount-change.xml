@@ -7,9 +7,10 @@
     the next swipe pays them. The higher-total case needs a spend of the wallet's own UTXO outside the app,
     or a fee rate rise, which the Capabilities table does not list, so unit tests and a manual test cover it.
 
-    The amount changes through coin selection: Spending Confirm sizes the network fee for two inputs,
-    then a larger UTXO confirms before the swipe, so the transfer priced at swipe spends one input and
-    pays a lower network fee, at once.
+    A larger UTXO confirms while Spending Confirm is open, so the transfer is priced at swipe against a
+    changed wallet. Coin selection may keep two inputs (150 000 + 150 000, or 150 000 + 500 000) at the
+    same fee, or spend the new UTXO alone at a lower fee; either way the fresh price costs no more than the
+    one shown, so the swipe pays at once.
 
     Precondition: a freshly onboarded dev wallet with Spark connected on its regtest, no channel and
     exactly two confirmed on-chain UTXOs of 150 000 sats each (two ./lsp deposits to the wallet's
@@ -28,6 +29,6 @@
     <action>Verify the confirm screen still shows the amounts noted before the deposit</action>
     <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
     <action>Verify no "Fees changed" toast appears and the setting up screen (testTag "LightningSettingUp") opens within 90s</action>
-    <action>Tap "Continue Using Bitkit" (testTag "TransferSuccess-button"), open the newest transfer in the activity list and verify its fee is lower than the "Network Fees" amount noted</action>
+    <action>Tap "Continue Using Bitkit" (testTag "TransferSuccess-button"), open the newest transfer in the activity list and verify its fee is no higher than the "Network Fees" amount noted</action>
   </actions>
 </journey>

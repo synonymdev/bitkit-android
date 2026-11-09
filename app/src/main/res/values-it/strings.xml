@@ -243,6 +243,7 @@
     <string name="lightning__setting_up__not_seen">Spark non ha ancora visto il tuo trasferimento. Viene aggiunto dopo 3 conferme; puoi lasciare questa schermata.</string>
     <string name="lightning__setting_up__pay">Paga ₿ {amount}</string>
     <string name="lightning__setting_up__repriced">Istantanea ora costa ₿ {amount}. Pagala, oppure attendi 3 conferme, circa 30 minuti, con una commissione più bassa.</string>
+    <string name="lightning__setting_up__speed">Velocità: {speed}</string>
     <string name="lightning__setting_up__step_adding">Aggiunta alle spese</string>
     <string name="lightning__setting_up__step_seen">Visto da Spark</string>
     <string name="lightning__setting_up__step_sent">Trasferimento inviato</string>

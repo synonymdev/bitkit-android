@@ -1359,9 +1359,13 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
         requireWalletRestoreComplete()
-        // Spark invoices hold whole sats, so a sub-sat part rounds up rather than dropping the amount.
+        // An LNURL withdrawal is paid at exactly this amount, which a whole-sat Spark invoice can't hold unless it
+        // has no sub-sat part; the channels take such an amount when they can, else it is refused before the callback.
         val amountSats = (amountMsats.safe() + (MSATS_PER_SAT - 1uL).safe()) / MSATS_PER_SAT
         if (shouldReceiveWithSpark(amountSats)) {
+            if (amountMsats % MSATS_PER_SAT != 0uL) {
+                return@executeWhenNodeRunning Result.failure(SubSatAmountUnsupportedError(amountMsats))
+            }
             val invoiceSats = amountSats.takeIf { it > 0uL }
             return@executeWhenNodeRunning sparkRepo.createInvoice(invoiceSats, description, expirySeconds)
         }
@@ -1510,6 +1514,12 @@ class LightningRepo @Inject constructor(
                 }
         }
         return payInvoiceWithLdk(bolt11, sats, paymentHash, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
+    }
+
+    /** Pays [bolt11] from the node's channels only, for a send quoted on them that must never fall back to Spark. */
+    suspend fun payInvoiceWithNode(bolt11: String): Result<PaymentId> {
+        val paymentHash = runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
+        return payInvoiceWithLdk(bolt11, null, paymentHash, null, null) { true }
     }
 
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
@@ -2051,6 +2061,25 @@ class LightningRepo @Inject constructor(
             finishOnchainSendLocally(attempt)
             onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         }
+    }
+
+    private val fundingsFollowedOnScreen = ConcurrentHashMap.newKeySet<String>()
+
+    /** The funding screen settles the kept Spark funding [attemptId] itself while it stays open. */
+    fun followFundingOnScreen(attemptId: String, isFollowed: Boolean) {
+        if (isFollowed) fundingsFollowedOnScreen.add(attemptId) else fundingsFollowedOnScreen.remove(attemptId)
+    }
+
+    /** Whether the funding screen settles the kept Spark funding [attemptId], so its recovery leaves it alone. */
+    fun isFundingFollowedOnScreen(attemptId: String): Boolean = attemptId in fundingsFollowedOnScreen
+
+    /** Hands an accepted Spark funding recovered from Payment Pending to Spark, which claims it once it matures. */
+    fun followRecoveredSparkFunding(attempt: OnchainSendAttempt) {
+        if (!attempt.isSparkFunding || !attempt.hasPositiveEvidence) return
+        val txid = attempt.txid ?: return
+        sparkRepo.onDepositBroadcast(txid, attempt.amountSats)
+        // The funding screen may already follow the claim at the speed the user chose.
+        if (sparkRepo.depositClaims.value[txid] == null) sparkRepo.waitForMatureClaim(txid)
     }
 
     // A change signal only: consumers must reread and validate the original attempt.
@@ -3078,3 +3107,7 @@ sealed interface EarlierSend {
 
     data class Paid(override val paymentHash: String) : EarlierSend
 }
+
+/** Spark invoices hold whole sats, so an exact msat amount the channels can't receive has nowhere to go. */
+class SubSatAmountUnsupportedError(amountMsats: ULong) :
+    AppError("Spark can only receive whole sats, not '$amountMsats' msat, and the channels can't receive it")

@@ -245,6 +245,7 @@
     <string name="lightning__setting_up__not_seen">Spark tvůj převod zatím neviděl. Připíše se po 3 potvrzeních; tuto obrazovku můžeš opustit.</string>
     <string name="lightning__setting_up__pay">Zaplatit ₿ {amount}</string>
     <string name="lightning__setting_up__repriced">Okamžitě nyní stojí ₿ {amount}. Zaplať, nebo počkej na 3 potvrzení, asi 30 minut, s nižším poplatkem.</string>
+    <string name="lightning__setting_up__speed">Rychlost: {speed}</string>
     <string name="lightning__setting_up__step_adding">Přidávání do výdajů</string>
     <string name="lightning__setting_up__step_seen">Viděno Sparkem</string>
     <string name="lightning__setting_up__step_sent">Převod odeslán</string>

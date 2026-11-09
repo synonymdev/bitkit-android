@@ -197,6 +197,57 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovered spark funding hands only an accepted spark deposit to spark`() = test {
+        val txid = "ab".repeat(32)
+        val funding = pendingSendAttempt().copy(isTransfer = true, txid = txid)
+        whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(emptyMap()))
+
+        sut.followRecoveredSparkFunding(funding)
+        sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed, orderId = "order"))
+        verify(sparkRepo, never()).onDepositBroadcast(any(), any())
+
+        sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed))
+
+        verify(sparkRepo).onDepositBroadcast(txid, 1_000uL)
+        verify(sparkRepo).waitForMatureClaim(txid)
+    }
+
+    @Test
+    fun `a recovered spark funding keeps the claim the funding screen chose`() = test {
+        val txid = "ab".repeat(32)
+        val funding = pendingSendAttempt().copy(isTransfer = true, txid = txid, evidence = OnchainSendEvidence.Observed)
+        whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf(txid to SparkDepositClaim.Looking)))
+
+        sut.followRecoveredSparkFunding(funding)
+
+        verify(sparkRepo).onDepositBroadcast(txid, 1_000uL)
+        verify(sparkRepo, never()).waitForMatureClaim(any())
+    }
+
+    @Test
+    fun `a sub-sat withdrawal amount never gets a spark invoice for a different amount`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+
+        for (amountMsats in listOf(222_538uL, 999uL)) {
+            assertIs<SubSatAmountUnsupportedError>(sut.createInvoiceMsats(amountMsats, "withdraw").exceptionOrNull())
+        }
+
+        verify(sparkRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `a whole-sat withdrawal amount is received on spark at its exact amount`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success("spark-invoice"))
+
+        assertEquals("spark-invoice", sut.createInvoiceMsats(222_000uL, "withdraw").getOrThrow())
+
+        verify(sparkRepo).createInvoice(eq(222uL), eq("withdraw"), any())
+    }
+
+    @Test
     fun `node startup failures do not dispatch invoice payment`() = test {
         var dispatched = false
         val beforeSend: suspend () -> Boolean = {
@@ -246,6 +297,7 @@ class LightningRepoTest : BaseUnitTest() {
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
             sparkRepo = sparkRepo,
+            backupRepo = mock(),
         )
     }
 
@@ -1144,6 +1196,25 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertEquals("hash", result.getOrThrow())
         verify(sparkRepo).payInvoice(eq("invoice"), eq(1_000uL), eq(deadline), eq(10_000uL), any())
+    }
+
+    @Test
+    fun `a node-only payment fails instead of falling back to spark`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("spark-hash"))
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenAnswer { throw AppError("Route not found") }
+        // The unrestricted entry picks Spark when the channels cannot carry the amount.
+        assertEquals("spark-hash", sut.payInvoice("bolt11", 1_000uL).getOrThrow())
+
+        val result = sut.payInvoiceWithNode("bolt11")
+
+        assertTrue(result.isFailure)
+        verify(sparkRepo, times(1)).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightningService).send(eq("bolt11"), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     @Test

@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -91,6 +92,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val onchainService = mock<OnchainService>()
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val backupRepo = mock<BackupRepo>()
     private val connectionRecovery = connectionRecoveryFixture(settingsStore)
 
     companion object Fixtures {
@@ -175,6 +177,7 @@ class WalletRepoTest : BaseUnitTest() {
     private fun createSut(
         dispatcher: CoroutineDispatcher = testDispatcher,
         reservationRepo: PrivatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+        spark: SparkRepo = sparkRepo,
     ) = WalletRepo(
         bgDispatcher = dispatcher,
         keychain = keychain,
@@ -190,7 +193,8 @@ class WalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
         connectionRecovery = connectionRecovery,
-        sparkRepo = sparkRepo,
+        sparkRepo = spark,
+        backupRepo = backupRepo,
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
@@ -204,6 +208,40 @@ class WalletRepoTest : BaseUnitTest() {
         networkType = NetworkType.REGTEST,
         payeeNodeId = null,
     )
+
+    @Test
+    fun `spark becoming ready during a restore reveals no receive address`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(backupRepo.isRestoreInProgress()).thenReturn(true)
+        val sparkState = MutableStateFlow(SparkState())
+        sut = createSut(spark = sparkRepoWith(sparkState))
+        testScheduler.runCurrent()
+
+        sparkState.update { it.copy(isReady = true) }
+        testScheduler.runCurrent()
+
+        verify(privatePaykitAddressReservationRepo, never()).nextReusableReceiveAddress()
+    }
+
+    @Test
+    fun `spark becoming ready outside a restore refreshes the receive address`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(backupRepo.isRestoreInProgress()).thenReturn(false)
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        val sparkState = MutableStateFlow(SparkState())
+        sut = createSut(spark = sparkRepoWith(sparkState))
+        testScheduler.runCurrent()
+
+        sparkState.update { it.copy(isReady = true) }
+        testScheduler.runCurrent()
+
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
+    }
+
+    private fun sparkRepoWith(state: MutableStateFlow<SparkState>): SparkRepo = mock {
+        on { this.state } doReturn state
+        on { nodeEvents } doReturn MutableSharedFlow()
+    }
 
     @Test
     fun `concurrent cache loads keep receive pending until both complete`() = test {

@@ -238,6 +238,7 @@
     <string name="lightning__setting_up__not_seen">Το Spark δεν έχει δει ακόμα τη μεταφορά σου. Προστίθεται μετά από 3 επιβεβαιώσεις· μπορείς να φύγεις από αυτή την οθόνη.</string>
     <string name="lightning__setting_up__pay">Πλήρωσε ₿ {amount}</string>
     <string name="lightning__setting_up__repriced">Το Άμεσα κοστίζει τώρα ₿ {amount}. Πλήρωσέ το ή περίμενε 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
+    <string name="lightning__setting_up__speed">Ταχύτητα: {speed}</string>
     <string name="lightning__setting_up__step_adding">Προσθήκη στις δαπάνες</string>
     <string name="lightning__setting_up__step_seen">Το είδε το Spark</string>
     <string name="lightning__setting_up__step_sent">Η μεταφορά στάλθηκε</string>

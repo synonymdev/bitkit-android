@@ -32,7 +32,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
@@ -46,10 +48,12 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
@@ -163,6 +167,162 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertEquals(EarlierSend.Pending("hash"), earlier)
     }
+
+    @Test
+    fun `an unreadable history holds the node off an invoice spark started sending`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever(sparkService.isConnected).thenReturn(false)
+        val sut = createSut()
+
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "HASH"))
+
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenAnswer { throw IllegalStateException("offline") }
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `an unreadable history lets the node pay an invoice spark never sent`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("other"))
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `a readable history without a live attempt lets the node pay a recorded invoice`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+
+        assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `a spark send is recorded before it goes out`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.listPayments() }.thenReturn(emptyList())
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+
+        createSut().payInvoice("lnbc1280n1send", 128uL).getOrThrow()
+
+        inOrder(cacheStore, sparkService) {
+            verifyBlocking(cacheStore) { addSparkSendHash("hash") }
+            verifyBlocking(sparkService) { send(any()) }
+        }
+    }
+
+    @Test
+    fun `a send spark failed is not held from the node while spark is disconnected`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentFailed(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `a send that failed while the app was closed is released when spark syncs on start`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `a failed send does not release a hash its retry still holds pending`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(id = "first", status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed, retry))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `an uncertain send spark never recorded is no longer held from the node`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw IllegalStateException("lost") }
+        val sut = createSut()
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1280n1send", 128uL).exceptionOrNull())
+        advanceTimeBy(15_000)
+        runCurrent()
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `replaying a send keeps the payment note stored on its activity`() = test {
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.SUCCEEDED, message = "for coffee"))))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("for coffee", (activity.firstValue as Activity.Lightning).v1.message)
+    }
+
+    @Test
+    fun `replaying a failed spark attempt never downgrades a payment that succeeded`() = test {
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.SUCCEEDED))))
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        verify(activityRepo, never()).upsertActivity(any())
+    }
+
+    private fun storedSend(status: PaymentState, message: String = "") = LightningActivity.create(
+        id = "hash",
+        txType = ActivityPaymentType.SENT,
+        status = status,
+        value = 128uL,
+        invoice = "lnbc1280n1send",
+        timestamp = 1uL,
+        message = message,
+    )
 
     @Test
     fun `records a send's fee once a sync reports it`() = test {
