@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.PaykitRoute
 import com.synonym.bitkitcore.PaykitRouteRequest
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteState
+import com.synonym.bitkitcore.PubkySwapSentPayment
 import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.pubkySwapsAdvance
 import com.synonym.bitkitcore.pubkySwapsCommitRoute
@@ -13,6 +14,9 @@ import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -82,12 +86,15 @@ class PubkySwapsRouteRepo @Inject constructor(
 
     /**
      * Rebuilds the swaps this wallet started from each provider's listing, after a restore from the seed. The listing
-     * does not carry the contact's address, so a restored swap claims to a fresh Savings address. Returns the swap ids.
+     * does not carry the contact's address, so a restored swap claims to a fresh Savings address. bitkit-core checks
+     * each listed lockup against the Lightning payment this node sent for its hash. Returns the ids to drive: the
+     * swaps restored now and those already on record.
      */
     suspend fun restoreSwaps(): Result<List<String>> = withSecrets { mnemonic, passphrase ->
         val payoutAddress = lightningRepo.newAddress().getOrThrow()
-        pubkySwapsRestore(
+        val report = pubkySwapsRestore(
             providers = candidates(),
+            sentPayments = sentPayments(),
             electrumUrl = Env.electrumServerUrl,
             payoutAddress = payoutAddress,
             feeRateSatVb = CLAIM_FEE_RATE_SAT_VB,
@@ -95,7 +102,26 @@ class PubkySwapsRouteRepo @Inject constructor(
             mnemonic = mnemonic,
             bip39Passphrase = passphrase,
         )
+        if (report.incompleteProviders.isNotEmpty()) {
+            Logger.warn("Swap lists incomplete from '${report.incompleteProviders}'", context = TAG)
+        }
+        report.restored + report.known
     }
+
+    /** The Lightning payments this node sent, pending or settled, by hash and the amount paid to the payee. */
+    private suspend fun sentPayments(): List<PubkySwapSentPayment> =
+        lightningRepo.getPayments().getOrThrow().mapNotNull { payment ->
+            val kind = payment.kind as? PaymentKind.Bolt11 ?: return@mapNotNull null
+            val amountMsat = payment.amountMsat ?: return@mapNotNull null
+            if (payment.direction != PaymentDirection.OUTBOUND || payment.status == PaymentStatus.FAILED) {
+                return@mapNotNull null
+            }
+            PubkySwapSentPayment(
+                paymentHashHex = kind.hash,
+                amountSat = amountMsat / 1000u,
+                settled = payment.status == PaymentStatus.SUCCEEDED,
+            )
+        }
 
     /** Providers come from the user's own graph: every contact is asked for its swap offer. */
     private fun candidates(): List<String> = pubkyRepo.contacts.value.map { it.publicKey } + Env.pubkySwapsProviders
