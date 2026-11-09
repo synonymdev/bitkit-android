@@ -230,6 +230,23 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a send that failed while the app was closed is released when spark syncs on start`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
     fun `an uncertain send spark never recorded is no longer held from the node`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->

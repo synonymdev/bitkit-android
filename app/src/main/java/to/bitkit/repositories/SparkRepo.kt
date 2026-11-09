@@ -781,9 +781,6 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
-        val failedSend = (payment.details as? PaymentDetails.Lightning)
-            ?.takeIf { payment.paymentType == SparkPaymentType.SEND && payment.status == PaymentStatus.FAILED }
-        failedSend?.let { cacheStore.removeSparkSendHash(it.htlcDetails.paymentHash) }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
@@ -793,6 +790,10 @@ class SparkRepo @Inject constructor(
             return
         }
         val id = lightning.htlcDetails.paymentHash
+        // A failed send no longer holds the node off its invoice, also when it failed while the app was closed.
+        if (payment.paymentType == SparkPaymentType.SEND && payment.status == PaymentStatus.FAILED) {
+            cacheStore.removeSparkSendHash(id)
+        }
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
         val activity = LightningActivity.create(
             id = id,
