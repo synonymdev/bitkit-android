@@ -467,7 +467,8 @@ class PaykitPaymentProofRepo @Inject constructor(
             onchainAcceptanceVerified = true,
         )
         proofs[index] = completed
-        return persistAndSubmit(listOf(completed), proofs)
+        // The pending screen of an uncertain Spark send waits on this resolution.
+        return persistAndSubmit(listOf(completed), proofs).also { publishOnchainResolution(completed, txid) }
     }
 
     suspend fun completeLightningPayment(paymentHash: String, preimage: String?) = withContext(ioDispatcher) {
