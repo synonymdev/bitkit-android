@@ -1691,6 +1691,7 @@ class ActivityService(
     suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
         ServiceQueue.CORE.background {
             runSuspendCatching {
+                markReplacedActivity(txid, getActivityByTxId(defaultWalletId, txid), conflicts)
                 for (conflictTxid in conflicts) getOrCreateReplacementActivity(conflictTxid)
                 val cache = cacheStore.data.first()
                 val replacedActivity = getActivityByTxId(defaultWalletId, txid)
@@ -1704,7 +1705,6 @@ class ActivityService(
                         cache.isContactDetached(replacement.id, defaultWalletId),
                     )
                 }
-                markReplacedActivity(txid, replacedActivity, conflicts)
             }.onFailure {
                 Logger.error("Failed to handle replacement for '$txid'", it, context = TAG)
             }

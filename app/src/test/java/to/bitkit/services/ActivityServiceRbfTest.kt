@@ -98,6 +98,22 @@ class ActivityServiceRbfTest : BaseUnitTest() {
     }
 
     @Test
+    fun `external replacement retires original even if metadata fails and repairs on retry`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        withActivities(failFirstTagWrite = true) { saved, tags ->
+            saved["a"] = saved.getValue("a").copy(txType = PaymentType.RECEIVED)
+            saved["b"] = saved.getValue("b").copy(txType = PaymentType.RECEIVED)
+            sut.handleOnchainTransactionReplaced("a", listOf("b"))
+            assertFalse(saved.getValue("a").doesExist)
+            assertFalse(saved.getValue("b").isBoosted)
+            sut.handleOnchainTransactionReplaced("a", listOf("b"))
+            assertTrue(saved.getValue("b").isBoosted)
+            assertEquals(PaymentType.RECEIVED, saved.getValue("b").txType)
+            assertEquals(setOf("original-tag", "replacement-tag"), tags.getValue("payment-b"))
+        }
+    }
+
+    @Test
     fun `manual contact detachment and existing replacement metadata survive publication`() = test {
         whenever(cache.data).thenReturn(
             flowOf(
