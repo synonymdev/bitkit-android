@@ -261,8 +261,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -16966,6 +16968,84 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swap route claim after dismissal leaves the next contact send untouched`() = test {
+        val claim = CompletableDeferred<Result<String>>()
+        val contactPaymentContextB = startSwapRoutedPaymentThenOpenNextContactSend(claim)
+
+        sut.sendEffect.test {
+            claim.complete(Result.success(SWAP_CLAIM_TXID))
+            advanceBeforeHoldWatchDeadline()
+            expectNoEvents()
+        }
+        assertSame(contactPaymentContextB, activeContactPaymentContext())
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+        verify(toastManager).enqueue(check { assertEquals("PendingPaymentSucceededToast", it.testTag) })
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+        verify(activityRepo, never()).setContact(
+            contactPublicKey = eq(SWAP_NEXT_CONTACT_PUBLIC_KEY),
+            forPaymentId = any(),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+    }
+
+    @Test
+    fun `swap route claim failure after dismissal keeps the next send open`() = test {
+        val claim = CompletableDeferred<Result<String>>()
+        val contactPaymentContextB = startSwapRoutedPaymentThenOpenNextContactSend(claim)
+        val sheetB = sut.currentSheet.value
+
+        claim.complete(Result.failure(AppError("refunded")))
+        advanceBeforeHoldWatchDeadline()
+
+        assertTrue(sheetB is Sheet.Send)
+        assertSame(sheetB, sut.currentSheet.value)
+        assertSame(contactPaymentContextB, activeContactPaymentContext())
+    }
+
+    private suspend fun TestScope.startSwapRoutedPaymentThenOpenNextContactSend(
+        claim: CompletableDeferred<Result<String>>,
+    ): ContactPaymentContext? {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceBeforeHoldWatchDeadline()
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceBeforeHoldWatchDeadline()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any())
+        sut.hideSheet()
+        advanceBeforeHoldWatchDeadline()
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = SWAP_NEXT_CONTACT_PUBLIC_KEY,
+            endpoints = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
+        )
+        advanceBeforeHoldWatchDeadline()
+        return activeContactPaymentContext().also {
+            assertEquals(SWAP_NEXT_CONTACT_PUBLIC_KEY, it?.publicKey)
+        }
+    }
+
+    private fun TestScope.advanceBeforeHoldWatchDeadline() {
+        advanceTimeBy(1.days)
+        runCurrent()
+    }
+
+    @Test
     fun `swap route answered direct switches the payment to savings`() = test {
         openSwapRoutedContactPayment(
             quote = Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))),
@@ -18604,5 +18684,6 @@ private const val SWAP_HOLD_HASH = "010203"
 private const val SWAP_CLAIM_TXID = "claimtxid"
 private const val SWAP_DELIVERED_SATS = 20_000uL
 private const val SWAP_DEBIT_SATS = 20_100uL
+private const val SWAP_NEXT_CONTACT_PUBLIC_KEY = "pubky8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
 private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"

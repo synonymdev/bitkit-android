@@ -6782,10 +6782,12 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
+        val sendGeneration = sendStateGeneration
+        val isSendCurrent = { sendGeneration == sendStateGeneration }
         val payment = pubkySwapsRouteRepo.commit(quote.quoteId).getOrElse {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext)
+            handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
             return
         }
         Logger.info("Committed Pubky Swaps route '${payment.swapId}' to '${payment.destinationAddress}'", context = TAG)
@@ -6796,7 +6798,7 @@ class AppViewModel @Inject constructor(
         }.getOrElse {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext)
+            handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
             return
         }
         // Only the claim finishes the send: the hold invoice's own success event is skipped as already processed.
@@ -6813,12 +6815,15 @@ class AppViewModel @Inject constructor(
             }
         }
         try {
+            contactPaymentContext?.let {
+                synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
+            }
             // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
             lightningRepo.payInvoice(payment.invoice).getOrElse {
                 if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
                 releasePrivatePaymentListIfNeeded(contactPaymentContext)
                 finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-                handlePaymentPreparationFailure(it, contactPaymentContext)
+                handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
                 return
             }
             val claimTxid = awaitSwapClaim(payment, holdFailure).getOrElse {
@@ -6828,13 +6833,18 @@ class AppViewModel @Inject constructor(
                     releasePrivatePaymentListIfNeeded(contactPaymentContext)
                     return
                 }
-                handlePaymentPreparationFailure(it, contactPaymentContext)
+                handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
                 return
             }
             finishManualAllowancePayment(allowanceAttemptId, succeeded = true)
             Logger.info("Claimed Pubky Swaps route '${payment.swapId}' in '$claimTxid'", context = TAG)
             // The claim pays the contact's address: the wallet's own record of the payment is the hold invoice's debit.
-            syncContactForActivity(holdPaymentHash)
+            if (contactPaymentContext != null) syncContactForActivity(holdPaymentHash)
+            if (!isSendCurrent()) {
+                notifyPendingPaymentSucceeded()
+                return
+            }
+            synchronized(contactPaymentContextLock) { activeContactPaymentContext = null }
             onSendSuccess(
                 NewTransactionSheetDetails(
                     type = NewTransactionSheetType.LIGHTNING,
@@ -6846,6 +6856,7 @@ class AppViewModel @Inject constructor(
             )
         } finally {
             holdFailure.cancel()
+            clearPendingContactPaymentContext(holdPaymentHash)
         }
     }
 
@@ -8837,8 +8848,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun handlePaymentPreparationFailure(error: Throwable, contactPaymentContext: ContactPaymentContext?) {
-        if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
+    private fun handlePaymentPreparationFailure(
+        error: Throwable,
+        contactPaymentContext: ContactPaymentContext?,
+        isSendCurrent: Boolean = true,
+    ) {
+        if (isSendCurrent && contactPaymentContext?.isInitialSubscriptionPayment == true) {
             setSendEffect(
                 SendEffect.NavigateToError(
                     error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
@@ -8846,7 +8861,7 @@ class AppViewModel @Inject constructor(
             )
         } else {
             toast(error)
-            hideSheet()
+            if (isSendCurrent) hideSheet()
         }
         if (contactPaymentContext?.incomingPaymentRequest != null) {
             viewModelScope.launch {
