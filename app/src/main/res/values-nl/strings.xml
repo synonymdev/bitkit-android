@@ -1047,6 +1047,8 @@
     <string name="wallet__boost_fee_custom">Je transactie kan sneller afgehandeld worden als je een extra netwerkvergoeding toevoegt. Stel hieronder je aangepaste vergoeding in.</string>
     <string name="wallet__boost_fee_recomended">Je transactie kan sneller afgehandeld worden als je een extra netwerkvergoeding toevoegt. Hier is een aanbeveling:</string>
     <string name="wallet__boost_increase_fee">Vergoeding verhogen</string>
+    <string name="wallet__boost_pending_msg">De versnelling is in behandeling. De bijgewerkte transactiegegevens zijn nog niet beschikbaar.</string>
+    <string name="wallet__boost_pending_title">Versnelling in behandeling</string>
     <string name="wallet__boost_recomended_button">Aanbevolen vergoeding gebruiken</string>
     <string name="wallet__boost_success_msg">De transactie is succesvol geboost.</string>
     <string name="wallet__boost_success_title">Geboost!</string>

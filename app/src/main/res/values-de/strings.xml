@@ -1178,6 +1178,8 @@
     <string name="wallet__boost_error_msg">Bitkit konnte die Transaktion nicht beschleunigen.</string>
     <string name="wallet__boost_fee_custom">Deine Transaktion könnte schneller abgeschlossen werden, wenn du eine zusätzliche Netzwerkgebühr einbeziehst. Lege deine benutzerdefinierte Gebühr unten fest.</string>
     <string name="wallet__boost_fee_recomended">Deine Transaktion könnte schneller abgeschlossen werden, wenn du eine zusätzliche Netzwerkgebühr einbeziehst. Hier ist eine Empfehlung:</string>
+    <string name="wallet__boost_pending_msg">Die Beschleunigung steht noch aus. Die aktualisierten Transaktionsdetails sind noch nicht verfügbar.</string>
+    <string name="wallet__boost_pending_title">Beschleunigung ausstehend</string>
     <string name="wallet__boost_recomended_button">Empfohlene Gebühr verwenden</string>
     <string name="wallet__boost_decrease_fee">Gebühr reduzieren</string>
     <string name="wallet__boost_increase_fee">Gebühr erhöhen</string>

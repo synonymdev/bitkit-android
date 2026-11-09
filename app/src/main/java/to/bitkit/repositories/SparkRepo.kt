@@ -159,10 +159,13 @@ class SparkRepo @Inject constructor(
     private val _nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 64)
     val nodeEvents: SharedFlow<Event> = _nodeEvents.asSharedFlow()
 
-    private val _exitStateChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val _exitStateGeneration = MutableStateFlow(0L)
 
-    /** Fires once Spark connects and whenever its unilateral exit data changes, so the exit data backup is redone. */
-    val exitStateChanged: SharedFlow<Unit> = _exitStateChanged.asSharedFlow()
+    /**
+     * Counts Spark's connections and changes to its unilateral exit data, so the exit data backup is redone whenever it
+     * moved past the one last backed up, also when it moved while nothing observed it.
+     */
+    val exitStateGeneration: StateFlow<Long> = _exitStateGeneration.asStateFlow()
 
     /** The wallet Spark last started for. */
     @Volatile
@@ -189,7 +192,7 @@ class SparkRepo @Inject constructor(
             runSuspendCatching { sparkService.syncWallet() }
                 .onSuccess { _state.update { it.copy(hasSynced = true) } }
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
-            if (connected) _exitStateChanged.emit(Unit)
+            if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
             if (!hasSyncedActivities) syncActivities().also { hasSyncedActivities = true }
         }.onFailure {
@@ -925,7 +928,7 @@ class SparkRepo @Inject constructor(
                     context = TAG,
                 )
                 is SdkEvent.NewDeposits -> refresh()
-                is SdkEvent.UnilateralExitStateChanged -> _exitStateChanged.emit(Unit)
+                is SdkEvent.UnilateralExitStateChanged -> _exitStateGeneration.update { it + 1 }
                 is SdkEvent.ClaimedDeposits -> refresh()
                 is SdkEvent.AutoOptimization -> onOptimization(event.optimizationEvent)
                 else -> Unit

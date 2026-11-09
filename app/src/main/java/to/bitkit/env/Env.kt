@@ -130,6 +130,16 @@ internal object Env {
         }
 
     /** Esplora REST that Spark reads the chain from; null keeps the SDK's default, on staging and regtest. */
+    /**
+     * Whether the node's chain is the one Spark watches, so an on-chain funding of Spark from Savings or a hardware
+     * wallet reaches it. On regtest Spark runs on Lightspark's own chain, which the node joins only through the
+     * Spark regtest Esplora proxy.
+     */
+    fun sparkSharesNodeChain(network: Network, regtestEsploraUrl: String?): Boolean =
+        network != Network.REGTEST || regtestEsploraUrl != null
+
+    val sparkSharesNodeChain: Boolean get() = sparkSharesNodeChain(network, regtestEsploraUrl)
+
     fun sparkChainServiceUrl(network: Network): String? = when (network) {
         Network.BITCOIN -> bitkitEsploraUrl
         else -> null

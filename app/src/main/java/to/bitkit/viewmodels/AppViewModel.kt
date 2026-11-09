@@ -3075,6 +3075,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) {
         val isReceive = activityRepo.isReceivedTransaction(event.txid)
+        if (activityRepo.isLocalRbfBoost(event.txid)) return
         toast(
             type = Toast.ToastType.INFO,
             title = when (isReceive) {

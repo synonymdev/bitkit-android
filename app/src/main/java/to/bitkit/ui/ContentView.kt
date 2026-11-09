@@ -1132,6 +1132,7 @@ private fun RootNavHost(
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 FundingScreen(
                     canFundWithSpark = sparkState.isUsable,
+                    canFundOnChain = Env.sparkSharesNodeChain,
                     onTransfer = { navController.navigateToTransferSpendingStart(hasSeenSpendingIntro) },
                     onFund = {
                         scope.launch {
@@ -1371,10 +1372,14 @@ private fun NavGraphBuilder.home(
         SavingsWalletScreen(
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navToActivityDetail(it) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
-                if (sparkState.isUsable) {
+                if (sparkState.isUsable && Env.sparkSharesNodeChain) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -1396,7 +1401,11 @@ private fun NavGraphBuilder.home(
             hasSparkBalance = sparkState.spendingSats > 0uL,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navToActivityDetail(it) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSavingsClick = {
                 if (!hasSeenSavingsIntro) {
@@ -1406,7 +1415,7 @@ private fun NavGraphBuilder.home(
                 }
             },
             onTransferFromSavingsClick = {
-                if (sparkState.isUsable) {
+                if (sparkState.isUsable && Env.sparkSharesNodeChain) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -1421,9 +1430,13 @@ private fun NavGraphBuilder.home(
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             walletId = walletId,
-            onActivityItemClick = { navController.navToActivityDetail(it) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
             onTransferToSpendingClick = { walletId ->
-                if (sparkState.isUsable) {
+                if (sparkState.isUsable && Env.sparkSharesNodeChain) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, walletId)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -1442,7 +1455,11 @@ private fun NavGraphBuilder.allActivity(
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = { navController.popBackStack() },
-            onActivityItemClick = { navController.navToActivityDetail(it) },
+            onActivityItemClick = {
+                navController.navToActivityDetail(
+                    activityListViewModel.resolvePublishedRbfActivity(it)
+                )
+            },
         )
     }
 }
@@ -1618,12 +1635,17 @@ private fun NavGraphBuilder.contacts(
         }
     }
     deepLinkableComposable<Routes.ContactActivity> {
+        val listViewModel = activityListViewModel
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: ContactActivityViewModel = hiltViewModel()
             ContactActivityScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onActivityItemClick = { navController.navToActivityDetail(it) },
+                onActivityItemClick = {
+                    navController.navToActivityDetail(
+                        listViewModel?.resolvePublishedRbfActivity(it) ?: it
+                    )
+                },
             )
         }
     }

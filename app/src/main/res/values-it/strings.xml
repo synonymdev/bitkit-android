@@ -1052,6 +1052,8 @@
     <string name="wallet__boost_fee_custom">La transazione può essere regolata più velocemente se include una commissione di rete aggiuntiva. Imposta la tua tariffa personalizzata qui sotto.</string>
     <string name="wallet__boost_fee_recomended">La transazione può essere regolata più velocemente se includi una fee di rete aggiuntiva. Ecco una raccomandazione:</string>
     <string name="wallet__boost_increase_fee">Aumenta commissione</string>
+    <string name="wallet__boost_pending_msg">L’accelerazione è in sospeso. I dettagli aggiornati della transazione non sono ancora disponibili.</string>
+    <string name="wallet__boost_pending_title">Accelerazione in attesa</string>
     <string name="wallet__boost_recomended_button">Utilizza la tariffa suggerita</string>
     <string name="wallet__boost_success_msg">La transazione è stata potenziata con successo.</string>
     <string name="wallet__boost_success_title">Potenziata!</string>

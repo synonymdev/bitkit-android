@@ -8,6 +8,8 @@ import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOnchain
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -16,9 +18,11 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -237,6 +241,235 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         verify(lightningRepo).syncAsync()
         verify(activityRepo).updateActivity(any(), any(), any())
         verify(activityRepo, never()).deleteActivity(any(), any())
+    }
+
+    @Test
+    fun `RBF success waits for publication and never overwrites the original fee`() = runTest {
+        prepareRbf()
+        val published = CompletableDeferred<Unit>()
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId)).doSuspendableAnswer {
+            published.await()
+            Result.success(Unit)
+        }
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            sut.onConfirmBoost()
+            assertTrue(sut.uiState.value.boosting)
+            expectNoEvents()
+            published.complete(Unit)
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+            assertFalse(sut.uiState.value.boosting)
+        }
+        verify(lightningRepo, times(1)).bumpFeeByRbf(mockTxId, feeRate.coerceAtLeast(12u))
+        verify(activityRepo, never()).updateActivity(any(), any(), any())
+    }
+
+    @Test
+    fun `RBF publication failure does not report success or broadcast again`() = runTest {
+        prepareRbf()
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId))
+            .thenReturn(Result.failure(IllegalStateException("not published")))
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostPending, awaitItem())
+            expectNoEvents()
+        }
+        verify(lightningRepo, times(1)).bumpFeeByRbf(any(), any())
+        verify(lightningRepo).syncAsync()
+        assertFalse(sut.uiState.value.boosting)
+    }
+
+    @Test
+    fun `reopening the original while broadcast is pending shares the same broadcast`() = runTest {
+        prepareRbf()
+        val broadcast = CompletableDeferred<Unit>()
+        whenever(lightningRepo.bumpFeeByRbf(any(), any())).doSuspendableAnswer {
+            broadcast.await()
+            Result.success(newTxId)
+        }
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId)).thenReturn(Result.success(Unit))
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            sut.setupActivity(activitySent)
+            sut.onConfirmBoost()
+            broadcast.complete(Unit)
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+            expectNoEvents()
+        }
+        verify(lightningRepo, times(1)).bumpFeeByRbf(any(), any())
+    }
+
+    @Test
+    fun `cancelled broadcast can be explicitly retried after reopening`() = runTest {
+        prepareRbf()
+        var attempts = 0
+        whenever(lightningRepo.bumpFeeByRbf(any(), any())).doSuspendableAnswer {
+            if (attempts++ == 0) throw CancellationException("node stopped before broadcast")
+            Result.success(newTxId)
+        }
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId)).thenReturn(Result.success(Unit))
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            expectNoEvents()
+            assertEquals(1, attempts)
+            sut.setupActivity(activitySent)
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+        }
+        assertEquals(2, attempts)
+    }
+
+    @Test
+    fun `retry after publication failure reuses the broadcast replacement`() = runTest {
+        prepareRbf()
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId))
+            .thenReturn(Result.failure(IllegalStateException("storage failed")), Result.success(Unit))
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostPending, awaitItem())
+            expectNoEvents()
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+        }
+        verify(lightningRepo, times(1)).bumpFeeByRbf(any(), any())
+        verify(activityRepo, times(2)).publishRbfBoost(mockTxId, newTxId)
+    }
+
+    @Test
+    fun `publication retry keeps the approved fee quote after reopening and ignores fee edits`() = runTest {
+        prepareRbf()
+        val approvedRate = sut.uiState.value.feeRate
+        val approvedFee = sut.uiState.value.totalFeeSats
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId))
+            .thenReturn(Result.failure(IllegalStateException("sync failed")), Result.success(Unit))
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostPending, awaitItem())
+            whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(25uL))
+            sut.setupActivity(activitySent)
+            sut.onClickEdit()
+            sut.onChangeAmount(increase = true)
+            sut.onChangeAmount(increase = true)
+            sut.onClickUseSuggestedFee()
+            assertEquals(approvedRate, sut.uiState.value.feeRate)
+            assertEquals(approvedFee, sut.uiState.value.totalFeeSats)
+            assertTrue(sut.uiState.value.feeLocked)
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+        }
+        verify(lightningRepo, times(1)).bumpFeeByRbf(mockTxId, approvedRate)
+        verify(activityRepo, times(2)).publishRbfBoost(mockTxId, newTxId)
+    }
+
+    @Test
+    fun `late fee calculation cannot change the quote of an existing broadcast`() = runTest {
+        prepareRbf()
+        val estimated = CompletableDeferred<ULong>()
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { Result.success(estimated.await()) }
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId))
+            .thenReturn(Result.failure(IllegalStateException("sync failed")))
+        sut.onChangeAmount(increase = true)
+        val approved = sut.uiState.value
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostPending, awaitItem())
+            estimated.complete(2_000uL)
+            assertEquals(approved.feeRate, sut.uiState.value.feeRate)
+            assertEquals(approved.totalFeeSats, sut.uiState.value.totalFeeSats)
+            assertTrue(sut.uiState.value.feeLocked)
+            expectNoEvents()
+        }
+        verify(lightningRepo).bumpFeeByRbf(mockTxId, approved.feeRate)
+    }
+
+    @Test
+    fun `definite broadcast failure unlocks fee changes for a new attempt`() = runTest {
+        prepareRbf()
+        whenever(lightningRepo.bumpFeeByRbf(any(), any()))
+            .thenReturn(Result.failure(IllegalStateException("broadcast rejected")), Result.success(newTxId))
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId)).thenReturn(Result.success(Unit))
+        val firstRate = sut.uiState.value.feeRate
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostFailed, awaitItem())
+            assertFalse(sut.uiState.value.feeLocked)
+            sut.onClickEdit()
+            sut.onChangeAmount(increase = true)
+            assertEquals(firstRate + 1uL, sut.uiState.value.feeRate)
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+        }
+        verify(lightningRepo).bumpFeeByRbf(mockTxId, firstRate)
+        verify(lightningRepo).bumpFeeByRbf(mockTxId, firstRate + 1uL)
+    }
+
+    @Test
+    fun `reopening without confirming again unlocks when the shared broadcast fails or cancels`() = runTest {
+        for (cancelled in listOf(false, true)) {
+            prepareRbf()
+            val broadcast = CompletableDeferred<Result<String>>()
+            whenever(lightningRepo.bumpFeeByRbf(any(), any())).doSuspendableAnswer { broadcast.await() }
+            sut.boostTransactionEffect.test {
+                sut.onConfirmBoost()
+                sut.setupActivity(activitySent)
+                assertTrue(sut.uiState.value.feeLocked)
+                if (cancelled) {
+                    broadcast.cancel()
+                } else {
+                    broadcast.complete(Result.failure(IllegalStateException("broadcast rejected")))
+                }
+                assertFalse(sut.uiState.value.feeLocked)
+                assertFalse(sut.uiState.value.boosting)
+                val previousRate = sut.uiState.value.feeRate
+                sut.onClickEdit()
+                sut.onChangeAmount(increase = true)
+                assertEquals(previousRate + 1uL, sut.uiState.value.feeRate)
+                expectNoEvents()
+            }
+        }
+    }
+
+    @Test
+    fun `RBF publication cancellation is not converted into boost failure or success`() = runTest {
+        prepareRbf()
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId)).doSuspendableAnswer {
+            throw CancellationException("dismissed")
+        }
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            expectNoEvents()
+        }
+        sut.setupActivity(activitySent.copy(v1 = onchainActivity.copy(txId = "next")))
+        assertFalse(sut.uiState.value.boosting)
+        verify(lightningRepo, times(1)).bumpFeeByRbf(any(), any())
+    }
+
+    @Test
+    fun `pending RBF keeps original ownership when another activity opens`() = runTest {
+        prepareRbf()
+        val published = CompletableDeferred<Unit>()
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId)).doSuspendableAnswer {
+            published.await()
+            Result.success(Unit)
+        }
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            sut.setupActivity(Activity.Onchain(onchainActivity.copy(id = "other", txId = "other-tx")))
+            assertFalse(sut.uiState.value.boosting)
+            published.complete(Unit)
+            expectNoEvents()
+        }
+        verify(activityRepo).publishRbfBoost(mockTxId, newTxId)
+        verify(lightningRepo, times(1)).bumpFeeByRbf(any(), any())
+    }
+
+    private suspend fun prepareRbf() {
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(feeRate))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+        whenever(lightningRepo.bumpFeeByRbf(any(), any())).thenReturn(Result.success(newTxId))
+        sut.setupActivity(activitySent)
     }
 
     // region estimateTime dynamic tier tests
