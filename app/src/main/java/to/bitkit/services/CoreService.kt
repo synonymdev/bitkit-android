@@ -886,6 +886,12 @@ class ActivityService(
         ) {
             return
         }
+        // A newer pending attempt, such as a Spark retry, stays until it settles; an older failure can't end it.
+        if (existingActivity is Activity.Lightning && existingActivity.v1.status == PaymentState.PENDING &&
+            state == PaymentState.FAILED && (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
+        ) {
+            return
+        }
         if (existingActivity is Activity.Lightning) {
             val statusChanging = existingActivity.v1.status != state
             val needsPrivateContactAttribution = existingActivity.v1.contact == null &&
