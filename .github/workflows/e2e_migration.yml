@@ -131,6 +131,7 @@ jobs:
     name: android - ${{ matrix.scenario.version }} - ${{ matrix.scenario.name }}
     env:
       BACKEND: regtest
+      BLOCKTANK_REGTEST_AUTH: ${{ secrets.BLOCKTANK_REGTEST_AUTH }}
       MIGRATION_EXTENDED: ${{ inputs.extended_rn || false }}
 
     steps:

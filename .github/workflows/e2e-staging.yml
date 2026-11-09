@@ -186,6 +186,7 @@ jobs:
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           BACKEND: regtest
+          BLOCKTANK_REGTEST_AUTH: ${{ secrets.BLOCKTANK_REGTEST_AUTH }}
           RECORD_VIDEO: true
           ATTEMPT: 1
 
@@ -204,6 +205,7 @@ jobs:
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           BACKEND: regtest
+          BLOCKTANK_REGTEST_AUTH: ${{ secrets.BLOCKTANK_REGTEST_AUTH }}
           RECORD_VIDEO: true
           ATTEMPT: 2
 
@@ -221,6 +223,7 @@ jobs:
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           BACKEND: regtest
+          BLOCKTANK_REGTEST_AUTH: ${{ secrets.BLOCKTANK_REGTEST_AUTH }}
           RECORD_VIDEO: true
           ATTEMPT: 3
 
