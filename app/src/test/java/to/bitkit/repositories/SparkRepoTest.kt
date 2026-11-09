@@ -192,7 +192,10 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.listPayments() }
             .thenReturn(listOf(sentPayment(fees = 2).copy(status = PaymentStatus.PENDING)))
 
-        val earlier = createSut().earlierLightningSend("lnbc1280n1send", null)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        val earlier = sut.earlierLightningSend("lnbc1280n1send", null)
 
         assertEquals(EarlierSend.Pending("hash"), earlier)
     }
@@ -211,6 +214,15 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an empty history spark has not synced yet holds the node off an invoice spark started sending`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenReturn(emptyList())
+
+        assertEquals(EarlierSend.Pending("hash"), createSut().earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
     fun `an unreadable history lets the node pay an invoice spark never sent`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("other"))
         whenever(sparkService.isConnected).thenReturn(false)
@@ -224,8 +236,10 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.listPayments() }
             .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
 
-        assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash"))
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
     }
 
     @Test

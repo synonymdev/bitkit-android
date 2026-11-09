@@ -834,7 +834,8 @@ class SparkRepo @Inject constructor(
             sendsInFlight.entries
                 .firstOrNull { it.value.equals(bolt11, ignoreCase = true) || it.key == paymentHash?.lowercase() }
                 ?.let { return@withContext EarlierSend.Pending(it.key) }
-            val payments = if (sparkService.isConnected) {
+            // Before Spark's first sync its local list can be empty although a restored send is live.
+            val payments = if (sparkService.isSupported && canListPayments()) {
                 runSuspendCatching { sparkService.listPayments() }
                     .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
                     .getOrNull()
