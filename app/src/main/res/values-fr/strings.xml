@@ -1098,6 +1098,8 @@
     <string name="wallet__boost_increase_fee">Augmenter les frais</string>
     <string name="wallet__boost_fee_custom">Votre transaction peut être confirmée plus rapidement si vous incluez des frais de réseau supplémentaires. Définissez vos frais personnalisés ci-dessous.</string>
     <string name="wallet__boost_fee_recomended">Votre transaction peut être confirmée plus rapidement si vous incluez des frais de réseau supplémentaires. Voici une recommandation :</string>
+    <string name="wallet__boost_pending_msg">L’accélération est en attente. Les détails mis à jour de la transaction ne sont pas encore disponibles.</string>
+    <string name="wallet__boost_pending_title">Accélération en attente</string>
     <string name="wallet__boost_recomended_button">Utilise les frais suggérés</string>
     <string name="wallet__boost_swipe">Balayer pour booster</string>
     <string name="wallet__payment_received">Bitcoin reçus</string>

@@ -40,6 +40,7 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun FundingScreen(
     canFundWithSpark: Boolean = false,
+    canFundOnChain: Boolean = true,
     onTransfer: () -> Unit = {},
     onFund: () -> Unit = {},
     onManual: () -> Unit = {},
@@ -85,7 +86,7 @@ fun FundingScreen(
                     R.drawable.ic_transfer,
                     20.dp,
                     "FundTransfer",
-                    { if (hasSavings) onTransfer() else showNoFundsAlert = true },
+                    { if (hasSavings) onTransfer() else showNoFundsAlert = true }.takeIf { canFundOnChain },
                 )
                 FundingOption(
                     R.string.lightning__funding__button2,
@@ -115,7 +116,7 @@ fun FundingScreen(
                 R.drawable.ic_device_tablet_speaker,
                 16.25.dp,
                 "FundHardware",
-                onHardware.takeIf { canFundWithSpark },
+                onHardware.takeIf { canFundWithSpark && canFundOnChain },
             )
             if (!canFundWithSpark) {
                 FundingOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")

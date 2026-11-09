@@ -985,6 +985,8 @@
     <string name="wallet__boost_fee_custom">Tu transacción podría confirmarse más rápido si incluyes una comisión de red adicional. Establece tu comisión personalizada abajo.</string>
     <string name="wallet__boost_fee_recomended">Tu transacción podría confirmarse más rápido si incluyes una comisión de red adicional. Aquí tienes una recomendación:</string>
     <string name="wallet__boost_increase_fee">Aumentar comisión</string>
+    <string name="wallet__boost_pending_msg">La aceleración está pendiente. Los detalles actualizados de la transacción aún no están listos.</string>
+    <string name="wallet__boost_pending_title">Aceleración pendiente</string>
     <string name="wallet__boost_recomended_button">Usar Tasa sugerida</string>
     <string name="wallet__boost_success_msg">La transacción fue impulsada con éxito.</string>
     <string name="wallet__boost_success_title">¡Impulsada!</string>
