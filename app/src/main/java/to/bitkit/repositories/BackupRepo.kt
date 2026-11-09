@@ -84,7 +84,10 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -146,6 +149,7 @@ class BackupRepo @Inject constructor(
 ) {
     private val walletBackupMutex = Mutex()
     private val usdtBackupMutex = Mutex()
+    private val activityBackupMutex = Mutex()
     private val usdtRecoveryBackup = UsdtRecoveryBackupStore(vssBackupClient)
     private val scope = appScope(ioDispatcher, TAG)
 
@@ -162,6 +166,9 @@ class BackupRepo @Inject constructor(
     private var isObserving = false
     private var lastNotificationTime = 0L
 
+    private val uploadedActivityDigest = AtomicReference<ByteArray?>(null)
+    private val activityDigestEpoch = AtomicLong(0)
+
     private val _isRestoring = MutableStateFlow(false)
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
 
@@ -172,6 +179,7 @@ class BackupRepo @Inject constructor(
 
     fun reset() {
         stopObservingBackups()
+        clearUploadedActivityDigest()
         vssBackupClient.reset()
         vssBackupClientLdk.reset()
     }
@@ -482,7 +490,7 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    private fun scheduleBackup(category: BackupCategory) {
+    private fun scheduleBackup(category: BackupCategory, skipUnchangedActivity: Boolean = true) {
         backupJobs[category]?.cancel()
 
         Logger.verbose("Scheduling backup for: '$category'", context = TAG)
@@ -498,7 +506,7 @@ class BackupRepo @Inject constructor(
 
             val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
             if (status.isRequired && !shouldSkipBackup(category)) {
-                triggerBackup(category)
+                triggerBackup(category, skipUnchangedActivity)
             } else {
                 Logger.debug("Backup no longer needed for: '$category'", context = TAG)
                 runningBackups -= category
@@ -559,15 +567,20 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = triggerBackup(category, false)
+
+    private suspend fun triggerBackup(
+        category: BackupCategory,
+        skipUnchangedActivity: Boolean,
+    ): Result<Unit> = withContext(ioDispatcher) {
         if (category == BackupCategory.WALLET || category == BackupCategory.METADATA) {
-            walletBackupMutex.withLock { performBackup(category) }
+            walletBackupMutex.withLock { performBackup(category, skipUnchangedActivity) }
         } else {
-            performBackup(category)
+            performBackup(category, skipUnchangedActivity)
         }
     }
 
-    private suspend fun performBackup(category: BackupCategory): Result<Unit> {
+    private suspend fun performBackup(category: BackupCategory, skipUnchangedActivity: Boolean): Result<Unit> {
         Logger.debug("Backup starting for: '$category'", context = TAG)
         var backupRequired = currentTimeMillis()
         runningBackups += category
@@ -579,14 +592,16 @@ class BackupRepo @Inject constructor(
             }
 
             val upload = when (category) {
-                BackupCategory.WALLET -> uploadWalletBackup()
-                BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup()
+                BackupCategory.WALLET -> uploadWalletBackup().map { true }
+                BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup().map { true }
+                BackupCategory.ACTIVITY -> uploadActivityBackup(skipUnchangedActivity)
                 else -> runSuspendCatching {
                     vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
+                    true
                 }
             }
             return upload
-                .onSuccess {
+                .onSuccess { uploaded ->
                     withContext(NonCancellable) {
                         cacheStore.updateBackupStatus(category) {
                             it.copy(running = false, synced = backupRequired)
@@ -606,7 +621,11 @@ class BackupRepo @Inject constructor(
                         temporaryFailureRetries -= category
                         temporaryFailureSince -= category
                     }
-                    Logger.info("Backup succeeded for: '$category'", context = TAG)
+                    if (uploaded) {
+                        Logger.info("Backup succeeded for: '$category'", context = TAG)
+                    } else {
+                        Logger.debug("Skipped backup for: '$category', payload unchanged", context = TAG)
+                    }
                 }
                 .onFailure { markBackupFailed(category, backupRequired, it) }
                 .map {}
@@ -735,23 +754,42 @@ class BackupRepo @Inject constructor(
             json.encodeToString(payload).toByteArray()
         }
 
-        BackupCategory.ACTIVITY -> {
-            val activities = activityRepo.getActivities().getOrDefault(emptyList())
-            val closedChannels = activityRepo.getClosedChannels().getOrDefault(emptyList())
-            val activityTags = activityRepo.getAllActivitiesTags().getOrDefault(emptyList())
-
-            val payload = ActivityBackupV1(
-                createdAt = currentTimeMillis(),
-                activities = activities,
-                activityTags = activityTags,
-                closedChannels = closedChannels,
-            )
-
-            json.encodeToString(payload).toByteArray()
-        }
+        BackupCategory.ACTIVITY -> json.encodeToString(getActivityBackupPayload()).toByteArray()
 
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
         BackupCategory.USDT_RECOVERY -> throw UsdtException.BackupUnavailable()
+    }
+
+    private suspend fun getActivityBackupPayload(): ActivityBackupV1 = ActivityBackupV1(
+        createdAt = currentTimeMillis(),
+        activities = activityRepo.getActivities().getOrDefault(emptyList()),
+        activityTags = activityRepo.getAllActivitiesTags().getOrDefault(emptyList()),
+        closedChannels = activityRepo.getClosedChannels().getOrDefault(emptyList()),
+    )
+
+    private suspend fun uploadActivityBackup(skipIfUnchanged: Boolean): Result<Boolean> = runSuspendCatching {
+        activityBackupMutex.withLock { uploadActivityBackupLocked(skipIfUnchanged) }
+    }
+
+    private suspend fun uploadActivityBackupLocked(skipIfUnchanged: Boolean): Boolean {
+        val payload = getActivityBackupPayload()
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(json.encodeToString(payload.copy(createdAt = 0)).toByteArray())
+        if (skipIfUnchanged && digest.contentEquals(uploadedActivityDigest.get())) return false
+
+        val epoch = activityDigestEpoch.get()
+        uploadedActivityDigest.set(null)
+        vssBackupClient.putObject(
+            key = BackupCategory.ACTIVITY.name,
+            data = json.encodeToString(payload).toByteArray(),
+        ).getOrThrow()
+        if (activityDigestEpoch.get() == epoch) uploadedActivityDigest.set(digest)
+        return true
+    }
+
+    private fun clearUploadedActivityDigest() {
+        activityDigestEpoch.incrementAndGet()
+        uploadedActivityDigest.set(null)
     }
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
@@ -900,6 +938,7 @@ class BackupRepo @Inject constructor(
         Logger.debug("Full restore starting", context = TAG)
 
         _isRestoring.update { true }
+        clearUploadedActivityDigest()
 
         // Mutated only by the sequential restore steps below, inside this single coroutine.
         val categoriesNeedingRewrite = mutableSetOf<BackupCategory>()
@@ -1246,7 +1285,7 @@ class BackupRepo @Inject constructor(
         BackupCategory.entries
             .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
             .forEach {
-                scheduleBackup(it)
+                scheduleBackup(it, skipUnchangedActivity = false)
             }
     }
 
