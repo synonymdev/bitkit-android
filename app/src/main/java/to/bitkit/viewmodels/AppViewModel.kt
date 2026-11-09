@@ -6661,6 +6661,8 @@ class AppViewModel @Inject constructor(
                 if (current.isSparkFunding) {
                     lightningRepo.followRecoveredSparkFunding(current)
                     hideSheet()
+                    // Leave the funding flow, whose confirm screen would offer the sent transfer again.
+                    mainScreenEffect(MainScreenEffect.Navigate(Routes.Home, clearStack = true))
                     return@runSuspendCatching
                 }
                 if (current.transferContext == null) return@runSuspendCatching
