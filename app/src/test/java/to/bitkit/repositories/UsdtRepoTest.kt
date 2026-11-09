@@ -583,10 +583,12 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.syncHistory()).thenReturn(false)
         val consumed = incoming("consumed").copy(timestamp = 1_800_000_000uL)
         val queued = incoming("queued").copy(timestamp = 1_800_000_000uL)
-        var history = listOf(consumed, queued)
+        var history = emptyList<UsdtTransfer>()
         whenever(wallet.history()).thenAnswer { history }
         whenever(wallet.refreshTransfers()).thenAnswer { history }
         val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
+        repo.refresh(true, force = true).getOrThrow()
+        history = listOf(consumed, queued)
         repo.refresh(true, force = true).getOrThrow()
         assertEquals(listOf(consumed, queued), repo.state.value.pendingReceipts)
         assertTrue(repo.consumeReceipt(consumed.id))
@@ -595,6 +597,37 @@ class UsdtRepoTest : BaseUnitTest() {
         assertTrue(repo.state.value.pendingReceipts.isEmpty())
         repo.refresh(true, force = true).getOrThrow()
         assertEquals(listOf(queued), repo.state.value.pendingReceipts)
+    }
+
+    @Test
+    fun `receipt consumed before a relaunch does not celebrate again`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("address")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.balance()).thenReturn(1_000_000uL)
+        whenever(wallet.syncHistory()).thenReturn(false)
+        var history = emptyList<UsdtTransfer>()
+        whenever(wallet.history()).thenAnswer { history }
+        whenever(wallet.refreshTransfers()).thenAnswer { history }
+        val cache = CacheStore(InMemoryDataStore(AppCacheData()))
+        val repo = UsdtRepo(service, cache, testDispatcher, clock)
+        repo.refresh(true, force = true).getOrThrow()
+        val received = incoming("received").copy(timestamp = 1_800_000_002uL)
+        history = listOf(received)
+        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.consumeReceipt(received.id))
+
+        now = Instant.fromEpochSeconds(1_800_000_010)
+        val relaunched = UsdtRepo(service, cache, testDispatcher, clock)
+        relaunched.refresh(true, force = true).getOrThrow()
+        assertTrue(relaunched.state.value.pendingReceipts.isEmpty())
+
+        val next = incoming("next").copy(timestamp = 1_800_000_012uL)
+        history = listOf(next, received)
+        relaunched.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(next), relaunched.state.value.pendingReceipts)
     }
 
     @Test

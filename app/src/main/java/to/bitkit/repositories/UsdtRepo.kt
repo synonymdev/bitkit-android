@@ -76,6 +76,9 @@ class UsdtRepo @Inject constructor(
      */
     private var receiptsSince = receiptBaseline()
     private val announcedReceiptIds = mutableSetOf<String>()
+
+    /** Receipts saved before this launch were already celebrated, so the first refresh marks them announced. */
+    private var seedAnnouncedReceipts = true
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
     val recoveryGeneration: Long get() = service.recoveryGeneration
@@ -108,6 +111,10 @@ class UsdtRepo @Inject constructor(
                     }
                     val previous = _state.value.transfers.takeIf { _state.value.historyComplete }
                     val saved = wallet.history().toImmutableList()
+                    if (seedAnnouncedReceipts) {
+                        announcedReceiptIds += saved.receiptIds()
+                        seedAnnouncedReceipts = false
+                    }
                     _state.update { it.copy(receiveUri = wallet.receiveUri(), transfers = saved) }
                     val settlement = runSuspendCatching {
                         val balance = wallet.balance()
@@ -145,15 +152,17 @@ class UsdtRepo @Inject constructor(
 
     private fun receiptBaseline() = (clock.now() - RECEIPT_CLOCK_MARGIN).epochSeconds.coerceAtLeast(0).toULong()
 
-    /** A restore keeps [announcedReceiptIds], so a receipt celebrated just before it is not celebrated again. */
-    private fun resetReceiptBaseline(keepAnnounced: Boolean = false) {
+    private fun resetReceiptBaseline() {
         receiptsSince = receiptBaseline()
-        if (!keepAnnounced) announcedReceiptIds.clear()
+        announcedReceiptIds.clear()
+        seedAnnouncedReceipts = true
     }
 
+    private fun List<UsdtTransfer>.receiptIds() =
+        filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }.map { it.id }.toSet()
+
     private fun announceNewReceipts(previous: List<UsdtTransfer>?, current: List<UsdtTransfer>) {
-        val knownIds = previous.orEmpty().filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }
-            .map { it.id }.toSet()
+        val knownIds = previous.orEmpty().receiptIds()
         val received = current.filter {
             it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u &&
                 it.id !in knownIds && it.id !in announcedReceiptIds &&
@@ -225,7 +234,7 @@ class UsdtRepo @Inject constructor(
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
                 clearDisplayBalance()
-                resetReceiptBaseline(keepAnnounced = true)
+                receiptsSince = receiptBaseline()
                 // Restore drops queued receipts, so let them be announced again.
                 announcedReceiptIds -= _state.value.pendingReceipts.map { it.id }.toSet()
                 _state.update {
