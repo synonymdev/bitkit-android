@@ -570,11 +570,13 @@ class SparkRepo @Inject constructor(
                 // The user confirmed the leg's debit; a quote that rose since then needs a new confirmation.
                 if (maxDebitSats != null && debitSats > maxDebitSats) throw SparkError.WithdrawalFeeChanged()
                 val earlierTxids = withdrawalTxidsTo(address)
-                if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-                val journal = PendingSparkWithdrawal(address, amountSats, contact, earlierTxids, tags)
-                cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
+                // The proof onBeforeSend starts has no journal yet, so the attempt reads as in flight from here on and
+                // a reconcile meanwhile never drops that proof as unsent.
                 isWithdrawing = true
                 val sent = try {
+                    if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
+                    val journal = PendingSparkWithdrawal(address, amountSats, contact, earlierTxids, tags)
+                    cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
                     runSuspendCatching { sparkService.send(prepared) }
                 } finally {
                     isWithdrawing = false

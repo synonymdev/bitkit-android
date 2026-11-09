@@ -394,6 +394,20 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal whose proof is starting reads as in flight before its journal is written`() = test {
+        val sut = journaledSpark()
+        var outcomeWhileStarting: SparkWithdrawalOutcome? = null
+
+        sut.withdraw("bcrt1qcontact", 20_000uL, null, onBeforeSend = {
+            // A reconcile in this window must not drop the proof the send is about to pay.
+            outcomeWhileStarting = sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet())
+            true
+        })
+
+        assertEquals(SparkWithdrawalOutcome.Unknown, outcomeWhileStarting)
+    }
+
+    @Test
     fun `a withdrawal to a contact is not marked as a transfer`() = test {
         val sent = OnchainActivity.create(
             id = "withdrawal",
