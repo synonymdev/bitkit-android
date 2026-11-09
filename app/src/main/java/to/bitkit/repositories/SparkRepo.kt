@@ -125,6 +125,9 @@ class SparkRepo @Inject constructor(
 
     private val sendsInFlight = ConcurrentHashMap.newKeySet<String>()
 
+    @Volatile
+    private var hasSyncedActivities = false
+
     /** The remote exit data backup was merged in, or there was none, so an upload cannot drop what it held. */
     @Volatile
     var hasMergedRemoteExitState = false
@@ -155,15 +158,15 @@ class SparkRepo @Inject constructor(
             if (isCollectingEvents.compareAndSet(false, true)) {
                 scope.launch { sparkService.events.collect { onSdkEvent(it) } }
             }
-            sparkService.connect(walletIndex)
+            val connected = sparkService.connect(walletIndex)
             importRestoredExitState(walletIndex)
             // The SDK starts syncing inside build(), before the listener exists, so its first Synced can be missed.
             runSuspendCatching { sparkService.syncWallet() }
                 .onSuccess { _state.update { it.copy(hasSynced = true) } }
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
-            _exitStateChanged.emit(Unit)
+            if (connected) _exitStateChanged.emit(Unit)
             refresh()
-            syncActivities()
+            if (!hasSyncedActivities) syncActivities().also { hasSyncedActivities = true }
         }.onFailure {
             Logger.error("Failed to start Spark wallet", it, context = TAG)
         }
@@ -184,6 +187,7 @@ class SparkRepo @Inject constructor(
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
         sendsInFlight.clear()
+        hasSyncedActivities = false
         hasMergedRemoteExitState = false
         _depositClaims.update { emptyMap() }
         _state.update { SparkState(isSupported = sparkService.isSupported) }

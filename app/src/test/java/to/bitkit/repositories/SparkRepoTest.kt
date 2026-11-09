@@ -110,6 +110,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.listUnclaimedDeposits() }.thenReturn(emptyList())
         whenever { sparkService.listPayments() }.thenReturn(emptyList())
         whenever(sparkService.events).thenReturn(sparkEvents)
+        whenever { sparkService.connect(any()) }.thenReturn(true)
         whenever { activityRepo.getActivity(any(), any()) }.thenReturn(Result.success(null))
         whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
         whenever(sparkService.isSupported).thenReturn(true)
@@ -130,6 +131,24 @@ class SparkRepoTest : BaseUnitTest() {
 
         verify(sparkService).importExitState("state")
         assertFalse(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a start while already connected neither redoes the exit backup nor rewrites every activity`() = test {
+        whenever(sparkService.isConnected).thenReturn(false, true)
+        whenever(sparkService.connect(0)).thenReturn(true, false)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        val sut = createSut()
+        val exitSignals = mutableListOf<Unit>()
+        backgroundScope.launch { sut.exitStateChanged.collect { exitSignals += it } }
+        runCurrent()
+
+        sut.start(0).getOrThrow()
+        sut.start(0).getOrThrow()
+        runCurrent()
+
+        assertEquals(1, exitSignals.size, "exit data backup signals after two starts")
+        verify(activityRepo, times(1)).upsertActivity(any())
     }
 
     @Test
