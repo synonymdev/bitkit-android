@@ -141,7 +141,14 @@ class SparkExitDriver(
                 if (record.isDrivingWhileFunding) record = driveWhileFunding(record)
                 record = lookForOwnPayment(record)
                 val sdk = recovering
-                if (sdk != null && record.phase.requiredFundingSats != null) {
+                val since = record.retrySince
+                if (record.isFundingWaitingLeaves && since != null && tip != null &&
+                    SparkExitMath.isRetryReleased(since, tip)
+                ) {
+                    // A skipped leaf's fee funding that never came: let go after the same week as its retries.
+                    Logger.warn("Releasing Spark exit leaves '${record.waitingLeafIds}' unfunded", context = TAG)
+                    record = end(record.ended(), record)
+                } else if (sdk != null && record.phase.requiredFundingSats != null) {
                     val shortfall = record.fundingShortfallSats
                     // Nothing to fund when every leaf is recovered cooperatively.
                     val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
@@ -603,7 +610,12 @@ class SparkExitDriver(
                 if (needsFunding) makeSigner() else null,
             )
         }
-        (result.exceptionOrNull() as? SdkException.InsufficientCpfpFunds)?.let { return askForFunding(record, it) }
+        (result.exceptionOrNull() as? SdkException.InsufficientCpfpFunds)?.let { error ->
+            val asked = askForFunding(record, error)
+            // Unasked while the address can't be read: the next tick tries again, not the next retry gap.
+            if (asked.phase is SparkExitRecord.Phase.NeedsFunding) return asked
+            return asked.copy(retrySince = start.retrySince, retriedAt = start.retriedAt)
+        }
         val built = result
             .onFailure { Logger.warn("Failed to build waiting Spark exit leaves '$ids'", it, context = TAG) }
             .getOrNull()

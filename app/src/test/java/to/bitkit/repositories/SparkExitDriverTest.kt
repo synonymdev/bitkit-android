@@ -1126,6 +1126,38 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a skipped leaf's fee ask nobody pays is let go after about a week`() = test {
+        var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.Unverified))
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(3_000uL, "")
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.NeedsFunding(3_136uL), record.phase)
+
+        record = driver(tip = 2_007u).tick(record)
+        assertEquals(Phase.NeedsFunding(3_136uL), record.phase)
+        record = driver(tip = 2_008u).tick(record)
+        assertEquals(Phase.Done, record.phase)
+        assertTrue(record.waitingLeafIds.isEmpty())
+    }
+
+    @Test
+    fun `a skipped leaf's fee ask waits only a tick when the funding address can't be read`() = test {
+        val funded = partialBuild(SkippedLeafReason.Unverified).let {
+            it.copy(funding = listOf(it.funding.single().copy(txid = "f0", vout = 0u, valueSats = 20_000uL)))
+        }
+        var record = driver(tip = 1_000u).tick(funded)
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
+        repeat(2) { sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "") }
+        chain.utxosError = SparkExitChainError("timeout")
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.Running, record.phase)
+
+        chain.utxosError = null
+        record = driver(tip = 1_001u).tick(record)
+        assertIs<Phase.NeedsFunding>(record.phase, "the next tick asks")
+    }
+
+    @Test
     fun `a leaf skipped while another builds is let go after about a week`() = test {
         var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.FundsNotFound))
         sdk.preparedResponse = sdk.preparedResponse.copy(leaves = emptyList())
