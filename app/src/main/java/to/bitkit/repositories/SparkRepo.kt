@@ -789,6 +789,26 @@ class SparkRepo @Inject constructor(
         !sparkService.isSupported || (sparkService.isConnected && _state.value.hasSynced)
 
     /**
+     * The status that settles each of Spark's Lightning sends, by payment hash; empty where Spark is unsupported and
+     * null while it can't list its payments, so a send it may hold is never read as one it never made.
+     */
+    suspend fun lightningSendStatuses(): Map<String, PaymentStatus>? = withContext(bgDispatcher) {
+        if (!sparkService.isSupported) return@withContext emptyMap()
+        if (!canListPayments()) return@withContext null
+        val payments = runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+            .getOrElse { return@withContext null }
+        payments
+            .mapNotNull { payment ->
+                (payment.details as? PaymentDetails.Lightning)
+                    ?.takeIf { payment.paymentType == SparkPaymentType.SEND }
+                    ?.htlcDetails?.paymentHash
+            }
+            .distinct()
+            .associateWith { hash -> requireNotNull(payments.latestSend(hash)).status }
+    }
+
+    /**
      * Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed.
      * [SparkLightningSend.Unavailable] while Spark is supported but cannot list its payments, so a send it may hold
      * is never read as one it never made.
@@ -870,8 +890,18 @@ class SparkRepo @Inject constructor(
     }
 
     private suspend fun syncActivities() {
-        sparkService.listPayments().forEach { recordActivity(it) }
+        val payments = sparkService.listPayments()
+        payments.forEach { recordActivity(it) }
+        // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
+        // retry of it is still live.
+        payments.mapNotNull { it.failedSendHash() }.distinct()
+            .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
+            .forEach { cacheStore.removeSparkSendHash(it) }
     }
+
+    private fun Payment.failedSendHash(): String? = (details as? PaymentDetails.Lightning)
+        ?.takeIf { paymentType == SparkPaymentType.SEND && status == PaymentStatus.FAILED }
+        ?.htlcDetails?.paymentHash
 
     private suspend fun onSdkEvent(event: SdkEvent) {
         runSuspendCatching {
@@ -903,9 +933,12 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
-        val failedSend = (payment.details as? PaymentDetails.Lightning)
-            ?.takeIf { payment.paymentType == SparkPaymentType.SEND && payment.status == PaymentStatus.FAILED }
-        failedSend?.let { cacheStore.removeSparkSendHash(it.htlcDetails.paymentHash) }
+        payment.failedSendHash()?.let { hash ->
+            val latest = lightningSend(hash)
+            val isReleased = latest == SparkLightningSend.NotFound ||
+                (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
+            if (isReleased) cacheStore.removeSparkSendHash(hash)
+        }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
@@ -916,6 +949,8 @@ class SparkRepo @Inject constructor(
         }
         val id = lightning.htlcDetails.paymentHash
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
+        // Another attempt of the same invoice, on either rail, already paid it.
+        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
@@ -931,7 +966,8 @@ class SparkRepo @Inject constructor(
             invoice = lightning.invoice,
             timestamp = payment.timestamp,
             fee = payment.fees.toLong().toULong(),
-            message = lightning.description.orEmpty(),
+            // A note stored on the activity, such as an LNURL comment, outlives the invoice's description.
+            message = existing?.message?.takeIf { it.isNotEmpty() } ?: lightning.description.orEmpty(),
             preimage = lightning.htlcDetails.preimage,
             contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,

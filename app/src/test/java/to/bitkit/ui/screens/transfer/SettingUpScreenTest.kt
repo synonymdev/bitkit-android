@@ -45,6 +45,20 @@ class SettingUpScreenTest {
         composeRule.onNodeWithText("SPEED: LATER").assertExists()
     }
 
+    @Test
+    fun `a transfer added after 3 confirmations shows the later speed`() {
+        setContent(SparkDepositClaim.Unavailable, SparkClaimSpeed.Instant)
+
+        composeRule.onNodeWithText("SPEED: LATER").assertExists()
+    }
+
+    @Test
+    fun `a transfer spark has not seen yet shows the later speed`() {
+        setContent(SparkDepositClaim.NotSeen, SparkClaimSpeed.Instant)
+
+        composeRule.onNodeWithText("SPEED: LATER").assertExists()
+    }
+
     private fun setContent(claim: SparkDepositClaim, speed: SparkClaimSpeed) {
         composeRule.setContent { AppThemeSurface { Content(claim = claim, speed = speed) } }
     }

@@ -6679,6 +6679,11 @@ class AppViewModel @Inject constructor(
                 if (current != original || !current.isTransfer || current.requestId != null) return@runSuspendCatching
                 if (!current.hasPositiveEvidence || !current.localFollowupComplete) return@runSuspendCatching
                 if (current.txid == null) return@runSuspendCatching
+                if (current.isSparkFunding && lightningRepo.isFundingFollowedOnScreen(current.attemptId)) {
+                    // The open funding screen settles it at the speed the user chose and moves on to Setting Up.
+                    hideSheet()
+                    return@runSuspendCatching
+                }
                 if (current.isSparkFunding) {
                     lightningRepo.followRecoveredSparkFunding(current)
                     hideSheet()
