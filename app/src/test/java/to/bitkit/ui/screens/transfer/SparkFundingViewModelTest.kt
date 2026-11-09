@@ -13,6 +13,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -264,6 +265,10 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         assertEquals("txid", sut.uiState.value.txid)
         verify(sparkRepo).onDepositBroadcast("txid", 50_000uL)
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 1_350uL)
+        inOrder(lightningRepo) {
+            verify(lightningRepo).followFundingOnScreen("attempt", true)
+            verify(lightningRepo).followFundingOnScreen("attempt", false)
+        }
     }
 
     @Test

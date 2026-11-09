@@ -2039,6 +2039,16 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    private val fundingsFollowedOnScreen = ConcurrentHashMap.newKeySet<String>()
+
+    /** The funding screen settles the kept Spark funding [attemptId] itself while it stays open. */
+    fun followFundingOnScreen(attemptId: String, isFollowed: Boolean) {
+        if (isFollowed) fundingsFollowedOnScreen.add(attemptId) else fundingsFollowedOnScreen.remove(attemptId)
+    }
+
+    /** Whether the funding screen settles the kept Spark funding [attemptId], so its recovery leaves it alone. */
+    fun isFundingFollowedOnScreen(attemptId: String): Boolean = attemptId in fundingsFollowedOnScreen
+
     /** Hands an accepted Spark funding recovered from Payment Pending to Spark, which claims it once it matures. */
     fun followRecoveredSparkFunding(attempt: OnchainSendAttempt) {
         if (!attempt.isSparkFunding || !attempt.hasPositiveEvidence) return
