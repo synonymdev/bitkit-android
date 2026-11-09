@@ -877,6 +877,20 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a higher fee at which the prepare skips an exiting leaf for its fee is refused`() = test {
+        val record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
+            .copy(leafIds = listOf("leaf-1", "leaf-2"))
+        sdk.preparedResponse = SparkExitFixtures.prepared(
+            funding = null,
+            skipped = listOf(SkippedLeaf("leaf-2", 2_000uL, SkippedLeafReason.FeeExceedsValue)),
+        )
+
+        val refused = assertFailsWith<SparkExitFeeBumpLeavesBehind> { driver().feeBumpShortfall(record, 9uL) }
+
+        assertEquals(2_000uL, refused.sats)
+    }
+
+    @Test
     fun `a higher fee at which a leaf can't pay its own exit is refused, the live exit unchanged`() = test {
         val record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
             .copy(leafIds = listOf("leaf-1", "leaf-2"))

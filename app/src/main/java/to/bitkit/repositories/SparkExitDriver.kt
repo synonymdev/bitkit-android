@@ -491,6 +491,13 @@ class SparkExitDriver(
         // A rate at which a leaf can't pay its own exit would leave that leaf on Spark: never offered.
         val dropped = priced.leftBehindLeaves.drop(record.leftBehindLeaves.size)
         if (dropped.isNotEmpty() || prepared == null) throw SparkExitFeeBumpLeavesBehind(leavesSats(record, dropped))
+        // A prepare that succeeds can still skip an exiting leaf whose exit costs more than it holds at this rate.
+        val unpaid = prepared.skipped.filter {
+            it.leafId in priced.exitLeafIds && it.reason == SkippedLeafReason.FeeExceedsValue
+        }
+        if (unpaid.isNotEmpty()) {
+            throw SparkExitFeeBumpLeavesBehind(unpaid.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() })
+        }
         if (prepared.funding == null) return 0uL
         val built =
             runSuspendCatching { sdk.recover(RecoverFundsRequest(prepared, priced.fundingInputs), makeSigner()) }
