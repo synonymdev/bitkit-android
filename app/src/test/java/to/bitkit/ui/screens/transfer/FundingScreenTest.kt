@@ -48,4 +48,15 @@ class FundingScreenTest {
 
         assertEquals(0, clicks)
     }
+
+    @Test
+    fun `on-chain funding rows stay disabled when spark watches another chain`() {
+        composeRule.setContent {
+            AppThemeSurface { FundingScreen(canFundWithSpark = true, canFundOnChain = false) }
+        }
+
+        composeRule.onNodeWithTag("FundTransfer").performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("FundHardware").performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("FundReceive").performScrollTo().assertIsEnabled()
+    }
 }

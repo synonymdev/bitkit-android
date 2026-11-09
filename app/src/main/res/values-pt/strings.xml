@@ -920,6 +920,8 @@
     <string name="wallet__boost_error_msg">A Bitkit não conseguiu acelerar a transação.</string>
     <string name="wallet__boost_fee_custom">Sua transação pode ser confirmada mais rapidamente se você incluir uma taxa adicional de rede. Configure sua taxa personalizada abaixo.</string>
     <string name="wallet__boost_fee_recomended">Sua transação pode ser confirmada mais rapidamente se você incluir uma taxa adicional de rede. Aqui está uma recomendação:</string>
+    <string name="wallet__boost_pending_msg">A aceleração está pendente. Os detalhes atualizados da transação ainda não estão disponíveis.</string>
+    <string name="wallet__boost_pending_title">Aceleração pendente</string>
     <string name="wallet__boost_recomended_button">Usar Taxa Sugerida</string>
     <string name="wallet__boost_swipe">Arraste para acelerar</string>
     <string name="wallet__boost_increase_fee">Aumentar taxa</string>

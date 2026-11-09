@@ -149,15 +149,11 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.connect(0)).thenReturn(true, false)
         whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
         val sut = createSut()
-        val exitSignals = mutableListOf<Unit>()
-        backgroundScope.launch { sut.exitStateChanged.collect { exitSignals += it } }
-        runCurrent()
-
         sut.start(0).getOrThrow()
         sut.start(0).getOrThrow()
         runCurrent()
 
-        assertEquals(1, exitSignals.size, "exit data backup signals after two starts")
+        assertEquals(1L, sut.exitStateGeneration.value, "exit data backup signals after two starts")
         verify(activityRepo, times(1)).upsertActivity(any())
     }
 

@@ -162,14 +162,17 @@ class SparkRepo @Inject constructor(
     private val _nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 64)
     val nodeEvents: SharedFlow<Event> = _nodeEvents.asSharedFlow()
 
-    private val _exitStateChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val _exitStateGeneration = MutableStateFlow(0L)
     private val _withdrawalSettlements = MutableSharedFlow<SparkWithdrawalSettlement>(extraBufferCapacity = 8)
 
     /** How each journaled contact withdrawal closed, which a pending send screen waits on. */
     val withdrawalSettlements: SharedFlow<SparkWithdrawalSettlement> = _withdrawalSettlements.asSharedFlow()
 
-    /** Fires once Spark connects and whenever its unilateral exit data changes, so the exit data backup is redone. */
-    val exitStateChanged: SharedFlow<Unit> = _exitStateChanged.asSharedFlow()
+    /**
+     * Counts Spark's connections and changes to its unilateral exit data, so the exit data backup is redone whenever it
+     * moved past the one last backed up, also when it moved while nothing observed it.
+     */
+    val exitStateGeneration: StateFlow<Long> = _exitStateGeneration.asStateFlow()
 
     suspend fun start(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext Result.success(Unit)
@@ -184,7 +187,7 @@ class SparkRepo @Inject constructor(
                 .onSuccess { _state.update { it.copy(hasSynced = true) } }
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
                 .isSuccess
-            if (connected) _exitStateChanged.emit(Unit)
+            if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
             // Only a full sync settles a pending withdrawal journal, so the sync runs until the journal clears.
             if (!hasSyncedActivities || cacheStore.data.first().pendingSparkWithdrawal != null) {
@@ -970,7 +973,7 @@ class SparkRepo @Inject constructor(
                     context = TAG,
                 )
                 is SdkEvent.NewDeposits -> refresh()
-                is SdkEvent.UnilateralExitStateChanged -> _exitStateChanged.emit(Unit)
+                is SdkEvent.UnilateralExitStateChanged -> _exitStateGeneration.update { it + 1 }
                 is SdkEvent.ClaimedDeposits -> refresh()
                 else -> Unit
             }
