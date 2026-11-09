@@ -22,8 +22,8 @@
     <action>Relaunch the app, wait on Home and verify the sheet does not show again</action>
     <action>Open the Spending wallet and verify the "Move To Spark" button (testTag "MoveToSpark") shows</action>
     <action>Tap "Move To Spark" and verify the screen shows an amount (testTag "MoveToSparkAmount") and a routing fee (testTag "MoveToSparkFee")</action>
-    <action>Swipe to move (testTag "MoveToSparkSwipe") and verify "Moved to Spark" shows the moved amount (testTag "MoveToSparkMoved") and "Close Connection" (testTag "MoveToSparkClose")</action>
-    <action>Tap "Close Connection", then "Close" on the close confirmation, and verify Lightning Connections shows no open connection and the Spark balance grew by the moved amount</action>
+    <action>Swipe to move (testTag "MoveToSparkSwipe") and verify "Moved to Spark" shows the moved amount (testTag "MoveToSparkMoved") and "Close" (testTag "MoveToSparkClose")</action>
+    <action>Tap "Close" (testTag "MoveToSparkClose"), then "Close" on the close confirmation, and verify Lightning Connections shows no open connection and the Spark balance grew by the moved amount</action>
     <action>Go back to Home, open Spending and verify the "Move To Spark" button is gone</action>
   </actions>
 </journey>
