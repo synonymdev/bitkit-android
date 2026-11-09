@@ -967,6 +967,41 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertTrue(record.needsDriving)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a higher fee paid while the exit starts rebuilding stays watched`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        val gate = CompletableDeferred<Unit>()
+        stubFunding {
+            gate.await()
+            Result.success(OnchainSendOutcome.Unknown("bump"))
+        }
+        val sdk = FakeSparkExitRecovering().apply {
+            checks += CheckRecoverFundsResponse(
+                runningRecord().recovery!!,
+                RecoveryVerdict.Redo(RecoveryRedoReason.ON_CHAIN_STATE_DIVERGED),
+            )
+            prepareErrors += SdkException.SparkException("connection reset")
+        }
+        val sut = quotedSut(sdk)
+        sut.load().getOrThrow()
+
+        val payment = async { sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)) }
+        advanceUntilIdle()
+        // A tick starts a rebuild while savings sends.
+        sut.tick()
+        assertTrue(assertNotNull(sut.state.value.record).isRebuilding)
+        gate.complete(Unit)
+        payment.await().getOrThrow()
+        advanceUntilIdle()
+
+        val record = assertNotNull(store.load())
+        assertEquals("bump", record.fundingPaymentTxid)
+        // Should the exit end before the payment is adopted, the ended exit keeps watching it.
+        assertTrue(record.copy(phase = Phase.Done).isEndedPaymentPending)
+    }
+
     @Test
     fun `fee bump rates are priced without broadcasting, leaving out a rate the sdk refuses a leaf at`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))

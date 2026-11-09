@@ -555,8 +555,10 @@ class SparkExitRepo @Inject constructor(
         tickMutex.withLock {
             val current = _state.value.record ?: return@withLock
             if (current.isRebuilding && current.isActive) {
-                // It started rebuilding meanwhile: the rebuild adopts or the leftover sweep returns the payment.
+                // It started rebuilding meanwhile: the rebuild adopts the payment, and an exit that ends before it
+                // does keeps watching it until its outputs join the leftover.
                 Logger.warn("Not applying a higher fee to a Spark exit that started rebuilding", context = TAG)
+                txid?.let { watchPayment(current, it) }
                 return@withLock
             }
             if (!current.isActive) {
@@ -564,13 +566,7 @@ class SparkExitRepo @Inject constructor(
                 // joins the leftover the sweep sends back to savings.
                 val paid = txid ?: return@withLock
                 Logger.warn("Watching higher fee '$paid' paid after the Spark exit ended", context = TAG)
-                val watched = current.copy(
-                    fundingPaymentTxid = paid,
-                    fundingPaymentSeenAtHeight = null,
-                    fundingPaymentMissingSince = null,
-                )
-                saveRecord(watched)
-                _state.update { it.copy(record = watched) }
+                watchPayment(current, paid)
                 return@withLock
             }
             val bumped = current.applyFeeBump(option.rateSatPerVbyte, option.extraSats, txid)
@@ -585,6 +581,16 @@ class SparkExitRepo @Inject constructor(
             context = TAG,
         )
         scope.launch { tick() }
+    }
+
+    private fun watchPayment(record: SparkExitRecord, txid: String) {
+        val watched = record.copy(
+            fundingPaymentTxid = txid,
+            fundingPaymentSeenAtHeight = null,
+            fundingPaymentMissingSince = null,
+        )
+        saveRecord(watched)
+        _state.update { it.copy(record = watched) }
     }
 
     // Each fee-bumped transaction gets a UTXO of its own, so one lost fee race strands one step's funding, not the
