@@ -1105,6 +1105,27 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a skipped leaf whose retry needs more fees asks for them and retries once they come`() = test {
+        // Unfunded: the record's funding has no coin yet, so the shortfall is the SDK's total plus one input's fee.
+        var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.Unverified))
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(3_000uL, "")
+
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.NeedsFunding(3_136uL), record.phase)
+        assertEquals(listOf("leaf-2"), record.waitingLeafIds)
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f9", value = 3_136uL))
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2")))
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(listOf("leaf-2"), (sdk.prepareRequests.last().selection as ExitLeafSelection.Specific).leafIds)
+        assertEquals(listOf("n1", "n2"), chain.broadcasts.map { it.txid })
+        assertTrue(record.fundingInputs.isNotEmpty())
+    }
+
+    @Test
     fun `a leaf skipped while another builds is let go after about a week`() = test {
         var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.FundsNotFound))
         sdk.preparedResponse = sdk.preparedResponse.copy(leaves = emptyList())

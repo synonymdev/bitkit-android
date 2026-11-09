@@ -260,7 +260,12 @@ data class SparkExitRecord(
 
     /** A higher fee's top-up, not a diverged rebuild: the generation out there is still driven while it confirms. */
     val isDrivingWhileFunding: Boolean
-        get() = phase is Phase.NeedsFunding && recovery != null && !isRebuilding
+        get() = phase is Phase.NeedsFunding && recovery != null && !isRebuilding && !isFundingWaitingLeaves
+
+    /** Fee funding asked for [waitingLeafIds] once every step of the recovery confirmed. */
+    val isFundingWaitingLeaves: Boolean
+        get() = phase is Phase.NeedsFunding && waitingLeafIds.isNotEmpty() &&
+            recovery?.transactions?.all { it.status is ExitTransactionStatus.Confirmed } == true
 
     /**
      * [fundingPaymentTxid] at [tip], when [isKnown] says whether a host knows it: forgotten once missing for a block,

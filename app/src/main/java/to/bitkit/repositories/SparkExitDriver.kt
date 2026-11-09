@@ -145,7 +145,13 @@ class SparkExitDriver(
                     val shortfall = record.fundingShortfallSats
                     // Nothing to fund when every leaf is recovered cooperatively.
                     val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
-                    record = if (funded != null) build(funded, sdk) else countShortOwnPayment(record)
+                    record = when {
+                        funded == null -> countShortOwnPayment(record)
+                        // Funding for leaves a partial build skipped: only they are built, once it arrived.
+                        funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
+                            ?: end(funded.ended(), funded)
+                        else -> build(funded, sdk)
+                    }
                 }
             }
             SparkExitRecord.Phase.Running if record.isRebuilding -> {
@@ -227,17 +233,7 @@ class SparkExitDriver(
                 return record.leaveBehind(refusal.leafId, refusal.reason).copy(isRebuilding = true, lastBuildAt = null)
             }
             if (it !is SdkException.InsufficientCpfpFunds) throw it
-            // The SDK names the total its funding inputs must hold (CPFP cost plus change dust), not what is missing.
-            // After a Redo the inputs are partly spent, so what the address still holds decides the shortfall.
-            Logger.warn("Needs '${it.requiredSats}' sats of fee funding in total for the Spark exit", context = TAG)
-            val held = record.funding.firstOrNull()?.address?.let { address ->
-                runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, record) }
-            }
-            // Without a reading of the address the shortfall is unknown; the next tick builds again.
-            if (held == null && record.fundedSats > 0uL) return record
-            val inputFee = SparkExitMath.inputFeeSats(record.feeRateSatPerVbyte)
-            val needed = SparkExitMath.neededFunding(it.requiredSats, record.fundedSats, held, inputFee)
-            return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(needed))
+            return askForFunding(record, it)
         }
         if (built.transactions.isEmpty()) {
             // A first build of only cooperative leaves the operators could not co-sign is kept: they are retried for a
@@ -548,11 +544,34 @@ class SparkExitDriver(
     }
 
     /**
-     * Leaves a build skipped while they may still move, tried again on their own once the rest of the exit is done:
-     * at once, then at doubling gaps, until they build or about a week passed. Null once nothing waits, so the exit
-     * can end.
+     * The SDK names the total its funding inputs must hold (CPFP cost plus change dust), not what is missing. After a
+     * Redo the inputs are partly spent, so what the address still holds decides the shortfall.
      */
-    private suspend fun retryWaitingLeaves(start: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord? {
+    private suspend fun askForFunding(
+        record: SparkExitRecord,
+        error: SdkException.InsufficientCpfpFunds,
+    ): SparkExitRecord {
+        Logger.warn("Needs '${error.requiredSats}' sats of fee funding in total for the Spark exit", context = TAG)
+        val held = record.funding.firstOrNull()?.address?.let { address ->
+            runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, record) }
+        }
+        // Without a reading of the address the shortfall is unknown; the next tick builds again.
+        if (held == null && record.fundedSats > 0uL) return record
+        val inputFee = SparkExitMath.inputFeeSats(record.feeRateSatPerVbyte)
+        val needed = SparkExitMath.neededFunding(error.requiredSats, record.fundedSats, held, inputFee)
+        return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(needed))
+    }
+
+    /**
+     * Leaves a build skipped while they may still move, tried again on their own once the rest of the exit is done:
+     * at once, then at doubling gaps, until they build or about a week passed. One that needs more fee funding asks
+     * for it and is built as soon as it arrives ([isFunded]). Null once nothing waits, so the exit can end.
+     */
+    private suspend fun retryWaitingLeaves(
+        start: SparkExitRecord,
+        sdk: SparkExitRecovering,
+        isFunded: Boolean = false,
+    ): SparkExitRecord? {
         val ids = start.waitingLeafIds.filter { it in start.exitLeafIds }
         if (ids.isEmpty()) return null
         val height = tip ?: return start
@@ -561,8 +580,12 @@ class SparkExitDriver(
             Logger.warn("Releasing Spark exit leaves '$ids' that did not move in about a week", context = TAG)
             return null
         }
-        if (since != null && !SparkExitMath.isRetryDue(since, start.retriedAt, height)) return start
-        var record = start.copy(retrySince = since ?: height, retriedAt = height)
+        if (!isFunded && since != null && !SparkExitMath.isRetryDue(since, start.retriedAt, height)) return start
+        var record = start.copy(
+            phase = SparkExitRecord.Phase.Running,
+            retrySince = since ?: height,
+            retriedAt = height,
+        )
         val prepared = runSuspendCatching {
             record = withExitState(record, sdk)
             sdk.prepare(prepareRequest(record, ExitLeafSelection.Specific(ids)))
@@ -574,12 +597,15 @@ class SparkExitDriver(
         val still = waitingLeafIds(record, prepared.skipped, stopped)
         if (prepared.leaves.isEmpty()) return record.takeIf { still.isNotEmpty() }?.copy(waitingLeafIds = still)
         val needsFunding = prepared.funding != null
-        val built = runSuspendCatching {
+        val result = runSuspendCatching {
             sdk.recover(
                 RecoverFundsRequest(prepared, if (needsFunding) record.fundingInputs else emptyList()),
                 if (needsFunding) makeSigner() else null,
             )
-        }.onFailure { Logger.warn("Failed to build waiting Spark exit leaves '$ids'", it, context = TAG) }
+        }
+        (result.exceptionOrNull() as? SdkException.InsufficientCpfpFunds)?.let { return askForFunding(record, it) }
+        val built = result
+            .onFailure { Logger.warn("Failed to build waiting Spark exit leaves '$ids'", it, context = TAG) }
             .getOrNull()
         if (built == null || built.transactions.isEmpty()) return record
         val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = still)
