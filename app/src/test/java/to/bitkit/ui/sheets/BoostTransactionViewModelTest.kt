@@ -365,7 +365,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     fun `late fee calculation cannot change the quote of an existing broadcast`() = runTest {
         prepareRbf()
         val estimated = CompletableDeferred<ULong>()
-        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .doSuspendableAnswer { Result.success(estimated.await()) }
         whenever(activityRepo.publishRbfBoost(mockTxId, newTxId))
             .thenReturn(Result.failure(IllegalStateException("sync failed")))
@@ -466,7 +466,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     private suspend fun prepareRbf() {
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(feeRate))
-        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.success(totalFee))
         whenever(lightningRepo.bumpFeeByRbf(any(), any())).thenReturn(Result.success(newTxId))
         sut.setupActivity(activitySent)
