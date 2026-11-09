@@ -827,8 +827,14 @@ class SparkRepo @Inject constructor(
         }
         val id = lightning.htlcDetails.paymentHash
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
-        // A receive sharing its hash with a channel send is a move to Spark, which Activity shows as that send.
-        if (payment.paymentType == SparkPaymentType.RECEIVE && existing?.txType == PaymentType.SENT) return
+        // A receive sharing its hash with a channel send is a move to Spark, which Activity shows as that send;
+        // the completed receive proves the send settled.
+        if (payment.paymentType == SparkPaymentType.RECEIVE && existing?.txType == PaymentType.SENT) {
+            if (payment.status == PaymentStatus.COMPLETED && existing.status != PaymentState.SUCCEEDED) {
+                activityRepo.get().upsertActivity(Activity.Lightning(existing.copy(status = PaymentState.SUCCEEDED)))
+            }
+            return
+        }
         // Another attempt of the same invoice, on either rail, already paid it.
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return
         val activity = LightningActivity.create(

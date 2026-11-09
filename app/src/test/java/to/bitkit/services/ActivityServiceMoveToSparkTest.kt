@@ -51,6 +51,24 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
             assertEquals(ROUTING_FEE_SATS, stored.fee)
         }
 
+    @Test
+    fun `a pending move to spark send leaves its spark receive until the send succeeds`() = coreTest {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        row = Activity.Lightning(sparkReceive())
+
+        sut().syncLdkNodePaymentsToActivities(listOf(channelSend(PaymentStatus.PENDING)))
+
+        assertEquals(sparkReceive(), (row as Activity.Lightning).v1)
+
+        sut().syncLdkNodePaymentsToActivities(listOf(channelSend()))
+
+        val stored = (row as Activity.Lightning).v1
+        assertEquals(PaymentType.SENT, stored.txType)
+        assertEquals(PaymentState.SUCCEEDED, stored.status)
+        assertEquals(MOVED_SATS, stored.value)
+        assertEquals(ROUTING_FEE_SATS, stored.fee)
+    }
+
     private fun coreTest(block: suspend () -> Unit) = test {
         ServiceQueue.CORE.background {
             mockStatic(Class.forName(BITKIT_CORE_FFI_CLASS)).use { native ->
@@ -86,7 +104,7 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
         fee = 0uL,
     )
 
-    private fun channelSend() = PaymentDetails(
+    private fun channelSend(status: PaymentStatus = PaymentStatus.SUCCEEDED) = PaymentDetails(
         id = HASH,
         kind = PaymentKind.Bolt11(
             hash = HASH,
@@ -98,7 +116,7 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
         amountMsat = MOVED_SATS * 1_000uL,
         feePaidMsat = ROUTING_FEE_SATS * 1_000uL,
         direction = PaymentDirection.OUTBOUND,
-        status = PaymentStatus.SUCCEEDED,
+        status = status,
         latestUpdateTimestamp = 200uL,
     )
 }

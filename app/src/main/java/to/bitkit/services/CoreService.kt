@@ -879,14 +879,16 @@ class ActivityService(
         val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
             ?.let { cacheStore.data.first().pendingLightningMessages[it] }
 
-        // A send whose hash we received in Spark paid our own invoice, a move to Spark, so it replaces that receive.
+        // A send whose hash we received in Spark paid our own invoice, a move to Spark; once it succeeds it replaces
+        // that receive.
         val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)?.takeUnless {
             it is Activity.Lightning && it.v1.txType == PaymentType.RECEIVED &&
-                payment.direction == PaymentDirection.OUTBOUND && state != PaymentState.FAILED
+                payment.direction == PaymentDirection.OUTBOUND && state == PaymentState.SUCCEEDED
         }
-        // A Spark retry of an invoice the node failed shares its hash; the earlier failure never undoes its success.
+        // Another attempt of the same invoice, or the Spark receive of a move, already settled it; a pending or failed
+        // update never undoes that success.
         if (existingActivity is Activity.Lightning && existingActivity.v1.status == PaymentState.SUCCEEDED &&
-            state == PaymentState.FAILED
+            state != PaymentState.SUCCEEDED
         ) {
             return
         }

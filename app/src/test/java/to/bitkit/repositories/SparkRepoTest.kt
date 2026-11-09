@@ -363,6 +363,29 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a move to spark received after its pending channel send marks the send succeeded`() = test {
+        val send = LightningActivity.create(
+            id = "hash",
+            txType = ActivityPaymentType.SENT,
+            status = PaymentState.PENDING,
+            value = 128uL,
+            invoice = "lnbc1280n1send",
+            timestamp = 1uL,
+            fee = 3uL,
+        )
+        whenever(activityRepo.getActivity(any(), any())).thenReturn(Result.success(Activity.Lightning(send)))
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals(send.copy(status = PaymentState.SUCCEEDED), (activity.firstValue as Activity.Lightning).v1)
+    }
+
+    @Test
     fun `marks a withdrawal's arrival as a transfer by the txid its send returned`() = test {
         val arrival = OnchainActivity.create(
             id = "arrival",
