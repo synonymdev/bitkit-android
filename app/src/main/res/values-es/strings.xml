@@ -1016,6 +1016,8 @@
     <string name="wallet__boost_error_msg">Bitkit no pudo potenciar la transacción.</string>
     <string name="wallet__boost_fee_custom">Su transacción puede liquidarse más rápidamente si incluye una tasa de red adicional. Establezca su tarifa personalizada a continuación.</string>
     <string name="wallet__boost_fee_recomended">Su transacción puede liquidarse más rápidamente si incluye una comisión de red adicional. He aquí una recomendación:</string>
+    <string name="wallet__boost_pending_msg">La aceleración está pendiente. Los detalles actualizados de la transacción aún no están listos.</string>
+    <string name="wallet__boost_pending_title">Aceleración pendiente</string>
     <string name="wallet__boost_recomended_button">Usar Comisión Sugerida</string>
     <string name="wallet__boost_swipe">Deslizar para impulsar</string>
     <string name="wallet__instant_payment_received">Recibido Bitcoin Instantáneo</string>

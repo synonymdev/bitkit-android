@@ -1669,20 +1669,58 @@ class ActivityService(
         }
     }
 
+    suspend fun publishRbfBoost(originalTxId: String, replacementTxId: String): Activity.Onchain =
+        ServiceQueue.CORE.background {
+            require(originalTxId.isNotBlank() && replacementTxId.isNotBlank() && originalTxId != replacementTxId) {
+                "RBF must replace the original transaction"
+            }
+            checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) { "RBF original is not available" }
+            if (getOrCreateReplacementActivity(replacementTxId) == null) {
+                // RBF returns after broadcast, before wallet sync discovers the new payment.
+                lightningService.sync()
+                checkNotNull(getOrCreateReplacementActivity(replacementTxId)) { "RBF replacement is not available" }
+            }
+            val cache = cacheStore.data.first()
+            val original = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId))
+            val replacement = checkNotNull(getActivityByTxId(defaultWalletId, replacementTxId))
+            check(original.txType == PaymentType.SENT && replacement.txType == PaymentType.SENT)
+            check(!cache.isActivityDeleted(original.id, defaultWalletId))
+            check(!cache.isActivityDeleted(replacement.id, defaultWalletId))
+            val updated = updateReplacementActivity(
+                originalTxId,
+                replacementTxId,
+                replacement,
+                original,
+                cache.isContactDetached(replacement.id, defaultWalletId),
+            )
+            markReplacedActivity(originalTxId, original, listOf(replacementTxId))
+            updated
+        }
+
     suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
         ServiceQueue.CORE.background {
-            runCatching {
-                val replacedActivity = getOnchainActivityByTxId(txid)
-                markReplacedActivity(txid, replacedActivity, conflicts)
-
+            runSuspendCatching {
+                markReplacedActivity(txid, getActivityByTxId(defaultWalletId, txid), conflicts)
                 for (conflictTxid in conflicts) {
-                    val replacementActivity = getOrCreateReplacementActivity(conflictTxid)
-                    if (replacementActivity != null && !replacementActivity.boostTxIds.contains(txid)) {
-                        updateReplacementActivity(txid, conflictTxid, replacementActivity, replacedActivity)
+                    runSuspendCatching {
+                        getOrCreateReplacementActivity(conflictTxid) ?: return@runSuspendCatching
+                        val cache = cacheStore.data.first()
+                        val replacedActivity = getActivityByTxId(defaultWalletId, txid)
+                        val replacement = getActivityByTxId(defaultWalletId, conflictTxid)
+                            ?: return@runSuspendCatching
+                        updateReplacementActivity(
+                            txid,
+                            conflictTxid,
+                            replacement,
+                            replacedActivity,
+                            cache.isContactDetached(replacement.id, defaultWalletId),
+                        )
+                    }.onFailure {
+                        Logger.error("Failed to handle replacement '$conflictTxid' for '$txid'", it, context = TAG)
                     }
                 }
-            }.onFailure { e ->
-                Logger.error("Error handling onchain transaction replaced for $txid", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to handle replacement for '$txid'", it, context = TAG)
             }
         }
     }
@@ -1702,7 +1740,7 @@ class ActivityService(
             val updatedActivity = replacedActivity.copy(
                 doesExist = false,
                 isBoosted = false,
-                updatedAt = System.currentTimeMillis().toULong() / 1000u
+                updatedAt = nowTimestamp().epochSecond.toULong()
             )
             paykitActivityRevision++
             updateActivity(activityId = replacedActivity.id, activity = Activity.Onchain(updatedActivity))
@@ -1717,82 +1755,43 @@ class ActivityService(
     }
 
     private suspend fun getOrCreateReplacementActivity(conflictTxid: String): OnchainActivity? {
-        var replacementActivity = getOnchainActivityByTxId(conflictTxid)
-
-        if (replacementActivity == null) {
-            val payments = lightningService.listPayments()
-            val replacementPayment = payments?.firstOrNull { payment ->
-                (payment.kind as? PaymentKind.Onchain)?.txid == conflictTxid
-            }
-
-            if (replacementPayment != null) {
-                Logger.info(
-                    "Processing replacement transaction $conflictTxid that was already in payments list",
-                    context = TAG
-                )
-                val processResult = runCatching {
-                    processOnchainPayment(
-                        kind = replacementPayment.kind as PaymentKind.Onchain,
-                        payment = replacementPayment,
-                        forceUpdate = false,
-                        channelId = null,
-                    )
-                    getOnchainActivityByTxId(conflictTxid)
-                }
-                processResult.onFailure { e ->
-                    Logger.error(
-                        "Failed to process replacement transaction $conflictTxid",
-                        e,
-                        context = TAG
-                    )
-                }
-                replacementActivity = processResult.getOrNull()
-            }
-        }
-
-        return replacementActivity
+        getActivityByTxId(defaultWalletId, conflictTxid)?.let { return it }
+        val payment = lightningService.listPayments()?.firstOrNull {
+            (it.kind as? PaymentKind.Onchain)?.txid == conflictTxid
+        } ?: return null
+        processOnchainPayment(
+            kind = payment.kind as PaymentKind.Onchain,
+            payment = payment,
+            forceUpdate = false,
+            channelId = null,
+        )
+        return getActivityByTxId(defaultWalletId, conflictTxid)
     }
 
-    private suspend fun updateReplacementActivity(
+    private fun updateReplacementActivity(
         txid: String,
         conflictTxid: String,
         replacementActivity: OnchainActivity,
         replacedActivity: OnchainActivity?,
-    ) {
-        val updatedActivity = replacementActivity.copy(
-            boostTxIds = replacementActivity.boostTxIds + txid,
-            isBoosted = true,
-            contact = replacementActivity.contact ?: replacedActivity?.contact,
-            updatedAt = System.currentTimeMillis().toULong() / 1000u,
-        )
-        update(replacementActivity.id, Activity.Onchain(updatedActivity))
-
-        if (replacedActivity != null) {
-            copyTagsFromReplacedActivity(txid, conflictTxid, replacedActivity.id, replacementActivity.id)
-        }
-
-        Logger.info("Updated replacement transaction $conflictTxid with boostTxId $txid", context = TAG)
-    }
-
-    private suspend fun copyTagsFromReplacedActivity(
-        txid: String,
-        conflictTxid: String,
-        replacedActivityId: String,
-        replacementActivityId: String,
-    ) {
-        runCatching {
-            val replacedTags = tags(replacedActivityId)
-            if (replacedTags.isNotEmpty()) {
-                appendTags(replacementActivityId, replacedTags)
-            }
-        }.onFailure { e ->
-            Logger.error(
-                "Failed to copy tags from replaced transaction $txid " +
-                    "to replacement transaction $conflictTxid",
-                e,
-                context = TAG
+        contactDetached: Boolean,
+    ): Activity.Onchain {
+        if (txid in replacementActivity.boostTxIds) return Activity.Onchain(replacementActivity)
+        val updated = Activity.Onchain(
+            replacementActivity.copy(
+                boostTxIds = (replacementActivity.boostTxIds + txid).distinct(),
+                isBoosted = true,
+                contact = replacementActivity.contact ?: replacedActivity?.contact.takeUnless { contactDetached },
+                updatedAt = nowTimestamp().epochSecond.toULong(),
             )
+        )
+        if (replacedActivity != null) {
+            val tags = getTags(defaultWalletId, replacedActivity.id)
+            if (tags.isNotEmpty()) addTags(defaultWalletId, replacementActivity.id, tags)
         }
+        paykitActivityRevision++
+        updateActivity(replacementActivity.id, updated)
+        Logger.info("Updated replacement '$conflictTxid' with boostTxId '$txid'", context = TAG)
+        return updated
     }
 
     suspend fun handleOnchainTransactionReorged(txid: String) {
