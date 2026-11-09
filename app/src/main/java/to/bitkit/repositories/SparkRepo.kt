@@ -773,8 +773,14 @@ class SparkRepo @Inject constructor(
         payments.forEach { recordActivity(it) }
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.
-        payments.mapNotNull { it.failedSendHash() }.distinct()
+        val failed = payments.mapNotNull { it.failedSendHash() }.distinct()
             .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
+        if (failed.isEmpty()) return
+        // A retry can start while the list is recorded, so the release reads Spark's sends again first.
+        val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return
+        failed
+            .filter { !sendsInFlight.containsKey(it.lowercase()) }
+            .filter { current.latestSend(it)?.status == PaymentStatus.FAILED }
             .forEach { cacheStore.removeSparkSendHash(it) }
     }
 
