@@ -64,6 +64,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.nullableArgumentCaptor
 import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -1005,6 +1006,24 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertIs<PubkyProfileChangedError>(result.exceptionOrNull())
         verifyBlocking(pubkyService, times(1)) { publishPubkyProfile(any(), anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `createIdentity does not restore against a profile from an earlier lookup after a failed one`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY))
+            .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(bio = "Existing bio")))
+        checkNotNull(sut.fetchRemoteProfile(VALID_SELF_KEY).getOrThrow())
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY))
+            .thenAnswer { throw TestAppError("offline") }
+        assertTrue(sut.fetchRemoteProfile(VALID_SELF_KEY).isFailure)
+        clearInvocations(pubkyService)
+
+        sut.createIdentity("New Name", "", emptyList(), emptyList(), null)
+
+        val revision = nullableArgumentCaptor<String>()
+        verifyBlocking(pubkyService) { publishPubkyProfile(any(), revision.capture(), any()) }
+        assertEquals(null, revision.firstValue)
     }
 
     @Test

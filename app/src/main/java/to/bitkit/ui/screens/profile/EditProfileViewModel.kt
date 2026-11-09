@@ -228,11 +228,7 @@ class EditProfileViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__edit_save_error),
-                    description = when {
-                        changed -> context.getString(R.string.profile__edit_changed_error)
-                        it is PubkyProfileTagsNotSavedError -> context.getString(R.string.profile__edit_tags_error)
-                        else -> it.message
-                    },
+                    description = it.profileSaveErrorText(context),
                 )
                 if (changed) reloadAfterExternalEdit()
                 // The other fields are on pubky.app, so a retry starts from their revision.
@@ -379,4 +375,10 @@ sealed interface EditProfileEffect {
     data object SaveSuccess : EditProfileEffect
     data object DeleteSuccess : EditProfileEffect
     data object DisconnectSuccess : EditProfileEffect
+}
+
+internal fun Throwable.profileSaveErrorText(context: Context): String? = when (this) {
+    is PubkyProfileChangedError -> context.getString(R.string.profile__edit_changed_error)
+    is PubkyProfileTagsNotSavedError -> context.getString(R.string.profile__edit_tags_error)
+    else -> message
 }

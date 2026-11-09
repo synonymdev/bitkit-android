@@ -921,8 +921,9 @@ class PubkyRepo @Inject constructor(
             val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(prefixedKey) }
                 .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
             val paykitData = paykitRead.getOrNull()?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
-            val snapshot = readRetryingOnce(prefixedKey) { pubkyService.fetchPubkyProfileWithRevision(prefixedKey) }
+            // Cleared before the read, so a failed lookup never leaves an earlier visit's base to save against.
             restoreBase = null
+            val snapshot = readRetryingOnce(prefixedKey) { pubkyService.fetchPubkyProfileWithRevision(prefixedKey) }
             if (snapshot == null) {
                 paykitRead.getOrThrow()
                 return@withContext paykitData?.toPubkyProfile(prefixedKey)?.also {
