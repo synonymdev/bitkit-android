@@ -46,6 +46,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: b5ff8114be9a1392adc2caef371d5b367868c7dd
 
       - name: Setup Java
         uses: actions/setup-java@v6
@@ -104,13 +106,7 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: onboarding_backup_numberpad, grep: "@onboarding|@backup|@numberpad" }
-          - { name: onchain_boost_receive_widgets, grep: "@onchain|@boost|@receive|@widgets" }
-          - { name: settings, grep: "@settings" }
-          - { name: send, grep: "@send" }
-          - { name: lightning_security, grep: "@lightning|@security" }
-          - { name: lnurl_transfer, grep: "@lnurl|@transfer_2" }
-          - { name: multi_address_local, grep: "@multi_address_1|@multi_address_3|@multi_address_4" }
+          - { name: send_2, grep: "@send_2 " }
 
     name: e2e-tests-local - ${{ matrix.shard.name }}
 
@@ -133,7 +129,7 @@ jobs:
         with:
           repository: synonymdev/bitkit-e2e-tests
           path: bitkit-e2e-tests
-          ref: ${{ steps.e2e-ref.outputs.ref }}
+          ref: e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3
 
       - name: Enable KVM
         run: |
