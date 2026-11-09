@@ -321,6 +321,19 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keeps a journaled withdrawal Spark lists when its activity fails to save on start`() = test {
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(AppError("disk full")))
+
+        journaledSpark()
+
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+    }
+
+    @Test
     fun `a withdrawal refused right before it sends writes no journal`() = test {
         val sut = journaledSpark()
 
