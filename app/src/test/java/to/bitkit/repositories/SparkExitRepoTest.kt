@@ -1139,6 +1139,30 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertTrue(record.copy(phase = Phase.Done).isEndedPaymentPending)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a higher fee pays at the rates its total was priced at`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("bump")) }
+        val rates = FeeRates(fast = 12u, mid = 8u, slow = 2u)
+        val sdk = FakeSparkExitRecovering().apply { preparedResponse = SparkExitFixtures.prepared(funding = null) }
+        val sut = quotedSut(sdk)
+        sut.load().getOrThrow()
+        whenever(lightning.getFeeRates()).thenReturn(Result.success(rates))
+
+        assertTrue(sut.feeBumpOptions().getOrThrow().all { it.feeRates == rates })
+
+        sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL, rates)).getOrThrow()
+        advanceUntilIdle()
+        verify(lightning).sendOnChain(
+            eq(funding), eq(6_000uL), anyOrNull(), anyOrNull(), eq(rates), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
     @Test
     fun `fee bump rates are priced without broadcasting, leaving out a rate the sdk refuses a leaf at`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))

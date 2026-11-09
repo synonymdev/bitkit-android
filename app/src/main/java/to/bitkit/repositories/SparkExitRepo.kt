@@ -504,15 +504,18 @@ class SparkExitRepo @Inject constructor(
             val fees = requireNotNull(_state.value.networkFees) { "No network fee rates" }
             val driver = driver(chain, recovering, record, _state.value.tipHeight)
             val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
+            // The rates every option's savings payment is priced at, and later sent at.
+            val feeRates = lightningRepo.getFeeRates().getOrThrow()
             val priced = SparkExitFeeBumpOption.rates(record.feeRateSatPerVbyte, fees).map { (speed, rate) ->
                 runSuspendCatching {
                     val extra = driver.feeBumpShortfall(record, rate)
                     val paymentFee = if (extra == 0uL) {
                         0uL
                     } else {
-                        lightningRepo.calculateTotalFee(extra, address, TransactionSpeed.Fast).getOrThrow()
+                        lightningRepo.calculateTotalFee(extra, address, TransactionSpeed.Fast, feeRates = feeRates)
+                            .getOrThrow()
                     }
-                    SparkExitFeeBumpOption(speed, rate, extra, extra.safe() + paymentFee.safe())
+                    SparkExitFeeBumpOption(speed, rate, extra, extra.safe() + paymentFee.safe(), feeRates)
                 }
             }
             // A rate at which a leaf can't pay its own exit is not offered. With no rate left only for that reason,
@@ -552,7 +555,7 @@ class SparkExitRepo @Inject constructor(
     private suspend fun payHigherFeeLocked(option: SparkExitFeeBumpOption) {
         val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
         val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
-        val txid = if (option.extraSats > 0uL) sendFunding(address, option.extraSats) else null
+        val txid = if (option.extraSats > 0uL) sendFunding(address, option.extraSats, option.feeRates) else null
         tickMutex.withLock {
             val current = _state.value.record ?: return@withLock
             if (current.isRebuilding && current.isActive) {

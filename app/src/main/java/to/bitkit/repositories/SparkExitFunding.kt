@@ -5,6 +5,7 @@ import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.RecoverFundsResponse
 import breez_sdk_spark.RecoveryTransaction
 import breez_sdk_spark.RecoveryTxKind
+import com.synonym.bitkitcore.FeeRates
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.FeeRate
 import to.bitkit.models.safe
@@ -514,6 +515,8 @@ data class SparkExitFeeBumpOption(
     val rateSatPerVbyte: ULong,
     val extraSats: ULong,
     val totalSats: ULong,
+    /** The rates [totalSats] was priced at, which the payment sends at, so it never costs more than shown. */
+    val feeRates: FeeRates? = null,
 ) {
     companion object {
         /**
