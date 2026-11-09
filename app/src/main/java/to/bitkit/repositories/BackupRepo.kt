@@ -1026,7 +1026,7 @@ class BackupRepo @Inject constructor(
         val recoveryKey = Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name
         if (!isUsdtRestorePending()) keychain.upsertString(recoveryKey, "")
         paykitUsdtPaymentRepo.get().pauseForRecoveryRestore()
-        usdtRepo.get().waitForRecoveryIdle()
+        usdtRepo.get().prepareForRecoveryRestore()
         usdtBackupMutex.withLock { }
         walletBackupMutex.withLock { }
         vssBackupClient.setup().getOrThrow()
