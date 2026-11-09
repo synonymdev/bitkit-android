@@ -1112,6 +1112,7 @@ private fun RootNavHost(
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 FundingScreen(
                     canFundWithSpark = sparkState.isReady,
+                    canFundOnChain = Env.sparkSharesNodeChain,
                     onTransfer = { navController.navigateToTransferSpendingStart(hasSeenSpendingIntro) },
                     onFund = {
                         scope.launch {
@@ -1358,7 +1359,7 @@ private fun NavGraphBuilder.home(
             },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
-                if (sparkState.isReady) {
+                if (sparkState.isReady && Env.sparkSharesNodeChain) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -1394,7 +1395,7 @@ private fun NavGraphBuilder.home(
                 }
             },
             onTransferFromSavingsClick = {
-                if (sparkState.isReady) {
+                if (sparkState.isReady && Env.sparkSharesNodeChain) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
@@ -1415,7 +1416,7 @@ private fun NavGraphBuilder.home(
                 )
             },
             onTransferToSpendingClick = { walletId ->
-                if (sparkState.isReady) {
+                if (sparkState.isReady && Env.sparkSharesNodeChain) {
                     navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, walletId)
                 } else {
                     appViewModel.showSheet(Sheet.TransferUnavailable)
