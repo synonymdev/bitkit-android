@@ -827,6 +827,8 @@ class SparkRepo @Inject constructor(
         }
         val id = lightning.htlcDetails.paymentHash
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
+        // Another attempt of the same invoice, on either rail, already paid it.
+        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {

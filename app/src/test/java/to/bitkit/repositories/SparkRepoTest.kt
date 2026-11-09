@@ -301,6 +301,19 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals("for coffee", (activity.firstValue as Activity.Lightning).v1.message)
     }
 
+    @Test
+    fun `replaying a failed spark attempt never downgrades a payment that succeeded`() = test {
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.SUCCEEDED))))
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        verify(activityRepo, never()).upsertActivity(any())
+    }
+
     private fun storedSend(status: PaymentState, message: String = "") = LightningActivity.create(
         id = "hash",
         txType = ActivityPaymentType.SENT,
