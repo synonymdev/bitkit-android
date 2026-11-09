@@ -842,19 +842,20 @@ class SparkExitRepo @Inject constructor(
         runSuspendCatching {
             if (!paymentMutex.tryLock()) throw SparkExitError("A Spark exit payment is already running")
             try {
-                val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
-                val refused = savingsSend(record)?.takeIf { SparkExitMath.isSavingsPaymentRefused(record, it) }
-                    ?: throw SparkExitError("No refused savings payment to pay again")
-                val outcome = lightningRepo.retryOriginalOnchainSend(
-                    attemptId = refused.attemptId,
-                    walletId = refused.walletId,
-                    feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
-                ) { original -> check(original.attemptId == refused.attemptId && original.address == refused.address) }
-                    .getOrThrow()
-                val txid = fundingTxid(outcome, refused.amountSats)
+                // Under the tick lock from the check to the saved txid, as the start's payment: a cancel either ends
+                // the exit before savings pays again or finds the payment and refuses.
                 tickMutex.withLock {
-                    val current = _state.value.record
-                    if (current == null || current.createdAt != record.createdAt) return@withLock
+                    val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
+                    val refused = savingsSend(record)?.takeIf { SparkExitMath.isSavingsPaymentRefused(record, it) }
+                        ?: throw SparkExitError("No refused savings payment to pay again")
+                    val outcome = lightningRepo.retryOriginalOnchainSend(
+                        attemptId = refused.attemptId,
+                        walletId = refused.walletId,
+                        feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
+                    ) { check(it.attemptId == refused.attemptId && it.address == refused.address) }
+                        .getOrThrow()
+                    val txid = fundingTxid(outcome, refused.amountSats)
+                    val current = _state.value.record ?: return@withLock
                     val paid = current.copy(fundingPaymentTxid = txid)
                     saveRecord(paid)
                     _state.update {

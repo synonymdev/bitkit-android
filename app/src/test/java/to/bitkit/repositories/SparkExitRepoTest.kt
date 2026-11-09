@@ -1030,6 +1030,40 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.onAppBackgrounded()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a cancel while savings pays again waits for the payment and then keeps the exit`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val refused = refusedSavingsPayment()
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
+        val gate = CompletableDeferred<Unit>()
+        whenever(
+            lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).doSuspendableAnswer {
+            // Savings accepted it: the attempt is no longer unresolved, but the exit has not recorded it yet.
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refused.copy(evidence = OnchainSendEvidence.Accepted, txid = "again"))
+            gate.await()
+            Result.success(OnchainSendOutcome.Accepted("again"))
+        }
+        whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+
+        val retry = async { sut.retrySavingsPayment() }
+        runCurrent()
+        val cancel = async { sut.cancel() }
+        runCurrent()
+        gate.complete(Unit)
+        retry.await().getOrThrow()
+
+        assertTrue(cancel.await().isFailure, "savings paid this exit: it stays")
+        assertEquals("again", assertNotNull(store.load()).fundingPaymentTxid)
+        sut.onAppBackgrounded()
+    }
+
     @Test
     fun `cancel keeps funding that reached the address and sends it back to savings`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
