@@ -373,7 +373,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `onTransferToSavingsConfirm clears the outcome of an earlier swap`() = test {
         stubSavingsSwapHappyPath()
-        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        whenever(lightningRepo.payInvoiceWithNode(any())).thenReturn(Result.failure(AppError(PAY_ERROR)))
         sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
         sut.startSavingsSwap()
@@ -442,7 +442,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap fails when the invoice payment fails`() = test {
         stubSavingsSwapHappyPath()
-        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        whenever(lightningRepo.payInvoiceWithNode(any())).thenReturn(Result.failure(AppError(PAY_ERROR)))
         sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
@@ -467,7 +467,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
         verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
-        verify(lightningRepo).payInvoice(any(), anyOrNull())
+        verify(lightningRepo).payInvoiceWithNode(any())
     }
 
     @Test
@@ -480,7 +480,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         sut.startSavingsSwap()
         runCurrent()
-        // payInvoice returns as soon as the HTLC is dispatched; the routing failure lands later.
+        // payInvoiceWithNode returns as soon as the HTLC is dispatched; the routing failure lands later.
         nodeEvents.emit(
             Event.PaymentFailed(
                 paymentId = PAYMENT_ID,
@@ -511,7 +511,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
         verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
-        verify(lightningRepo).payInvoice(any(), anyOrNull())
+        verify(lightningRepo).payInvoiceWithNode(any())
     }
 
     private suspend fun stubSavingsSwapHappyPath() {
@@ -520,7 +520,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.newAddress()).thenReturn(Result.success(CLAIM_ADDRESS))
         whenever(boltzService.createReverseSwap(any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(reverseSwapResponse())
-        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_ID))
+        whenever(lightningRepo.payInvoiceWithNode(any())).thenReturn(Result.success(PAYMENT_ID))
     }
 
     private fun reverseLimits() = BoltzPairInfo(

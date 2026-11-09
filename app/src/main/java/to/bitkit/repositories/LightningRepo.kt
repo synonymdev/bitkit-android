@@ -1512,6 +1512,12 @@ class LightningRepo @Inject constructor(
         return payInvoiceWithLdk(bolt11, sats, paymentHash, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
     }
 
+    /** Pays [bolt11] from the node's channels only, for a send quoted on them that must never fall back to Spark. */
+    suspend fun payInvoiceWithNode(bolt11: String): Result<PaymentId> {
+        val paymentHash = runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
+        return payInvoiceWithLdk(bolt11, null, paymentHash, null, null) { true }
+    }
+
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val send = listPaymentsOrNull()?.firstOrNull {
             val kind = it.kind as? PaymentKind.Bolt11 ?: return@firstOrNull false
