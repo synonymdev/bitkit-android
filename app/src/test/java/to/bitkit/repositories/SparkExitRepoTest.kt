@@ -775,6 +775,35 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a requote whose transfer fails goes on with the confirmed quote and still reconnects`() = test {
+        val sdk = FakeSparkExitRecovering()
+        val sut = quotedSut(sdk)
+        sut.loadQuote().getOrThrow()
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
+        whenever(
+            transferRepo.createTransfer(
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull()
+            )
+        ).thenReturn(Result.success("transfer-1"), Result.failure(SparkExitError("database locked")))
+
+        sut.start(fundFromSavings = false).getOrThrow()
+
+        val record = assertNotNull(sut.state.value.record)
+        assertEquals(listOf("leaf-1"), record.leafIds)
+        assertEquals("transfer-1", record.transferId)
+        verify(transferRepo, never()).markSettled("transfer-1")
+        verify(sparkRepo).setExiting(true, true)
+        sut.onAppBackgrounded()
+    }
+
+    @Test
     fun `savings never pays more than the confirmed funding when the start quotes again`() = test {
         stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
         val sdk = FakeSparkExitRecovering()

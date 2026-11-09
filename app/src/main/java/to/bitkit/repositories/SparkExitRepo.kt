@@ -684,22 +684,10 @@ class SparkExitRepo @Inject constructor(
             if (!isStarting(createdAt)) return@withLock false
             // An optimization since the quote swapped leaves: the exit is quoted again over the leaves Spark holds now.
             requote(pending)?.let { fresh ->
+                // A failed write goes on with the confirmed quote, as a failed requote does.
+                val requoted = writeRequote(requireNotNull(_state.value.record), fresh) ?: return@let
                 quote = fresh
-                val current = requireNotNull(_state.value.record)
-                transferRepo.markSettled(transferId)
-                val freshTransfer = transferRepo.createTransfer(
-                    TransferType.SPARK_EXIT,
-                    fresh.incomingSats.toLong(),
-                ).getOrThrow()
-                record = current.copy(
-                    phase = SparkExitRecord.Phase.AwaitingFunding(fresh.fundingSats),
-                    leafIds = fresh.leafIds,
-                    expectedSats = fresh.incomingSats,
-                    skippedLeafCount = fresh.prepared.skipped.size,
-                    leafTotalSats = fresh.leafTotalSats,
-                    transferId = freshTransfer,
-                )
-                saveRecord(record)
+                record = requoted
                 _state.update { it.copy(record = record) }
             }
             // Under the lock, so a cancel can't release Spark between the check and taking it off Lightning.
@@ -715,6 +703,32 @@ class SparkExitRepo @Inject constructor(
         // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
         val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
         if (fundFromSavings && savingsSats > 0uL) payFunding(createdAt, key.address, savingsSats)
+    }
+
+    /**
+     * The started exit moved onto [fresh]: a transfer for its amount, saved, then the confirmed quote's transfer
+     * settled. Null when that write fails, with a transfer made for it settled again.
+     */
+    private suspend fun writeRequote(current: SparkExitRecord, fresh: SparkExitQuote): SparkExitRecord? {
+        val freshTransfer = transferRepo.createTransfer(TransferType.SPARK_EXIT, fresh.incomingSats.toLong())
+            .onFailure { Logger.warn("Failed to create the requoted Spark exit transfer", it, context = TAG) }
+            .getOrNull()
+            ?: return null
+        val requoted = current.copy(
+            phase = SparkExitRecord.Phase.AwaitingFunding(fresh.fundingSats),
+            leafIds = fresh.leafIds,
+            expectedSats = fresh.incomingSats,
+            skippedLeafCount = fresh.prepared.skipped.size,
+            leafTotalSats = fresh.leafTotalSats,
+            transferId = freshTransfer,
+        )
+        runCatching { saveRecord(requoted) }.onFailure {
+            Logger.warn("Failed to save the requoted Spark exit", it, context = TAG)
+            transferRepo.markSettled(freshTransfer)
+            return null
+        }
+        current.transferId?.let { transferRepo.markSettled(it) }
+        return requoted
     }
 
     /** The exit created at [createdAt] is still the one on record and running: no cancel or wipe ended it. */
