@@ -276,6 +276,7 @@ class SparkRepo @Inject constructor(
                 throw PaymentPendingException(paymentHash)
             }
             val sent = try {
+                cacheStore.addSparkSendHash(paymentHash)
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
@@ -683,17 +684,23 @@ class SparkRepo @Inject constructor(
     /**
      * Spark's pending or paid send of [bolt11], matched by the invoice or its [paymentHash], so the node never pays it
      * again; a send still inside Spark's send call is pending. Null when Spark's send failed or none is known.
+     * While Spark can't list its payments, a send it started for [paymentHash] counts as pending, since it may be live.
      */
     suspend fun earlierLightningSend(bolt11: String, paymentHash: String?): EarlierSend? =
         withContext(bgDispatcher) {
             sendsInFlight.entries
                 .firstOrNull { it.value.equals(bolt11, ignoreCase = true) || it.key == paymentHash?.lowercase() }
                 ?.let { return@withContext EarlierSend.Pending(it.key) }
-            if (!sparkService.isConnected) return@withContext null
-            val send = runSuspendCatching { sparkService.listPayments() }
-                .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
-                .getOrNull()
-                ?.latestSend {
+            val payments = if (sparkService.isConnected) {
+                runSuspendCatching { sparkService.listPayments() }
+                    .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+                    .getOrNull()
+            } else {
+                null
+            }
+            if (payments == null) return@withContext startedSend(paymentHash)?.let { EarlierSend.Pending(it) }
+            val send = payments
+                .latestSend {
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
@@ -705,6 +712,11 @@ class SparkRepo @Inject constructor(
                 PaymentStatus.FAILED -> null
             }
         }
+
+    private suspend fun startedSend(paymentHash: String?): String? {
+        val hash = paymentHash?.lowercase() ?: return null
+        return hash.takeIf { it in cacheStore.data.first().sparkSendHashes }
+    }
 
     private fun List<Payment>.latestSend(paymentHash: String): Payment? =
         latestSend { it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true) }

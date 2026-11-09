@@ -22,6 +22,9 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** How many Spark send hashes to keep; an older send's invoice has long expired, so the node cannot pay it again. */
+private const val MAX_SPARK_SEND_HASHES = 100
+
 private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
     fileName = "app_cache.json",
     serializer = AppCacheSerializer
@@ -136,6 +139,13 @@ class CacheStore internal constructor(
         store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages - paymentHash) }
     }
 
+    suspend fun addSparkSendHash(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            it.copy(sparkSendHashes = (it.sparkSendHashes - hash + hash).takeLast(MAX_SPARK_SEND_HASHES))
+        }
+    }
+
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
         it.copy(backgroundReceive = details)
     }
@@ -169,6 +179,8 @@ data class AppCacheData(
     val quickPayLedger: QuickPayLedger? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
+    val sparkSendHashes: List<String> = listOf(),
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts
