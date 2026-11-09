@@ -321,6 +321,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit nemohl načíst uložený průběh tohoto odchodu, proto jej obnovuje z blockchainu.</string>
     <string name="lightning__spark_exit__receive">Obdržíte přibližně</string>
     <string name="lightning__spark_exit__savings_fee">Poplatek za platbu z úspor</string>
+    <string name="lightning__spark_exit__savings_refused">Vaše platba z úspor neprošla. Zaplaťte znovu, nebo financujte z jiné peněženky.</string>
     <string name="lightning__spark_exit__savings_total">Celkem z úspor</string>
     <string name="lightning__spark_exit__step_funding">Potvrzení financování poplatků</string>
     <string name="lightning__spark_exit__step_publish">Zveřejnění transakcí odchodu</string>

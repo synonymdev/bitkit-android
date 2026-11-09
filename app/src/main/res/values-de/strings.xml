@@ -197,6 +197,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit konnte den gespeicherten Fortschritt dieses Ausstiegs nicht lesen und stellt ihn daher aus der Blockchain wieder her.</string>
     <string name="lightning__spark_exit__receive">Du erhältst etwa</string>
     <string name="lightning__spark_exit__savings_fee">Gebühr für Zahlung vom Sparkonto</string>
+    <string name="lightning__spark_exit__savings_refused">Deine Zahlung vom Sparkonto ist nicht durchgegangen. Zahle erneut oder finanziere aus einer anderen Wallet.</string>
     <string name="lightning__spark_exit__savings_total">Gesamt vom Sparkonto</string>
     <string name="lightning__spark_exit__step_funding">Gebührenfinanzierung wird bestätigt</string>
     <string name="lightning__spark_exit__step_publish">Ausstiegstransaktionen werden veröffentlicht</string>

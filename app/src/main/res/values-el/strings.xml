@@ -314,6 +314,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Το Bitkit δεν μπόρεσε να διαβάσει την αποθηκευμένη πρόοδο αυτής της εξόδου, οπότε την ανακατασκευάζει από το blockchain.</string>
     <string name="lightning__spark_exit__receive">Λαμβάνετε περίπου</string>
     <string name="lightning__spark_exit__savings_fee">Τέλος πληρωμής από αποταμιεύσεις</string>
+    <string name="lightning__spark_exit__savings_refused">Η πληρωμή σας από αποταμιεύσεις δεν ολοκληρώθηκε. Πληρώστε ξανά ή χρηματοδοτήστε από άλλο πορτοφόλι.</string>
     <string name="lightning__spark_exit__savings_total">Σύνολο από αποταμιεύσεις</string>
     <string name="lightning__spark_exit__step_funding">Επιβεβαίωση χρηματοδότησης τελών</string>
     <string name="lightning__spark_exit__step_publish">Δημοσίευση συναλλαγών εξόδου</string>

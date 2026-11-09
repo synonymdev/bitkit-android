@@ -198,6 +198,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit nie mógł odczytać zapisanego postępu tego wyjścia, więc odtwarza go z łańcucha.</string>
     <string name="lightning__spark_exit__receive">Otrzymasz około</string>
     <string name="lightning__spark_exit__savings_fee">Opłata za płatność z Oszczędności</string>
+    <string name="lightning__spark_exit__savings_refused">Twoja płatność z Oszczędności nie przeszła. Zapłać ponownie lub sfinansuj z innego portfela.</string>
     <string name="lightning__spark_exit__savings_total">Razem z Oszczędności</string>
     <string name="lightning__spark_exit__step_funding">Potwierdzanie finansowania opłat</string>
     <string name="lightning__spark_exit__step_publish">Publikowanie transakcji wyjścia</string>

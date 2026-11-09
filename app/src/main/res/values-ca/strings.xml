@@ -318,6 +318,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit no ha pogut llegir el progrés desat d\'aquesta sortida, així que el reconstrueix a partir de la cadena.</string>
     <string name="lightning__spark_exit__receive">Rebràs aproximadament</string>
     <string name="lightning__spark_exit__savings_fee">Comissió del pagament dels estalvis</string>
+    <string name="lightning__spark_exit__savings_refused">El teu pagament dels estalvis no s\'ha completat. Torna a pagar o finança des d\'un altre moneder.</string>
     <string name="lightning__spark_exit__savings_total">Total dels estalvis</string>
     <string name="lightning__spark_exit__step_funding">Es confirma el finançament de comissions</string>
     <string name="lightning__spark_exit__step_publish">Publicant les transaccions de sortida</string>

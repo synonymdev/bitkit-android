@@ -262,6 +262,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit no pudo leer el progreso guardado de esta salida, así que lo reconstruye a partir de la cadena.</string>
     <string name="lightning__spark_exit__receive">Recibes aproximadamente</string>
     <string name="lightning__spark_exit__savings_fee">Comisión del pago desde ahorros</string>
+    <string name="lightning__spark_exit__savings_refused">Tu pago desde ahorros no se completó. Paga de nuevo o financia desde otro monedero.</string>
     <string name="lightning__spark_exit__savings_total">Total desde ahorros</string>
     <string name="lightning__spark_exit__step_funding">Confirmación de la financiación de comisiones</string>
     <string name="lightning__spark_exit__step_publish">Publicando transacciones de salida</string>

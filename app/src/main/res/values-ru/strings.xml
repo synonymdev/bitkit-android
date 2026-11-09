@@ -330,6 +330,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit не смог прочитать сохранённый прогресс этого выхода, поэтому восстанавливает его по блокчейну.</string>
     <string name="lightning__spark_exit__receive">Вы получите примерно</string>
     <string name="lightning__spark_exit__savings_fee">Комиссия платежа из сбережений</string>
+    <string name="lightning__spark_exit__savings_refused">Платёж из сбережений не прошёл. Оплатите снова или пополните с другого кошелька.</string>
     <string name="lightning__spark_exit__savings_total">Всего из сбережений</string>
     <string name="lightning__spark_exit__step_funding">Подтверждение средств на комиссии</string>
     <string name="lightning__spark_exit__step_publish">Публикация транзакций выхода</string>

@@ -196,6 +196,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit n\'a pas pu lire la progression enregistrée de cette sortie, il la reconstruit donc depuis la chaîne.</string>
     <string name="lightning__spark_exit__receive">Vous recevez environ</string>
     <string name="lightning__spark_exit__savings_fee">Frais du paiement depuis l\'épargne</string>
+    <string name="lightning__spark_exit__savings_refused">Votre paiement depuis l\'épargne n\'a pas abouti. Payez à nouveau ou financez depuis un autre portefeuille.</string>
     <string name="lightning__spark_exit__savings_total">Total depuis l\'épargne</string>
     <string name="lightning__spark_exit__step_funding">Confirmation du financement des frais</string>
     <string name="lightning__spark_exit__step_publish">Publication des transactions de sortie</string>

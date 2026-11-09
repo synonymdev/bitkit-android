@@ -314,6 +314,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">تعذّر على Bitkit قراءة التقدم المحفوظ لهذا الخروج، لذا يعيد بناءه من السلسلة.</string>
     <string name="lightning__spark_exit__receive">ستستلم نحو</string>
     <string name="lightning__spark_exit__savings_fee">رسوم الدفع من المدخرات</string>
+    <string name="lightning__spark_exit__savings_refused">لم يكتمل دفعك من المدخرات. ادفع مرة أخرى، أو موّل من محفظة أخرى.</string>
     <string name="lightning__spark_exit__savings_total">الإجمالي من المدخرات</string>
     <string name="lightning__spark_exit__step_funding">تأكيد تمويل الرسوم</string>
     <string name="lightning__spark_exit__step_publish">نشر معاملات الخروج</string>

@@ -318,6 +318,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit kon de opgeslagen voortgang van deze exit niet lezen en bouwt die daarom opnieuw op vanuit de blockchain.</string>
     <string name="lightning__spark_exit__receive">Je ontvangt ongeveer</string>
     <string name="lightning__spark_exit__savings_fee">Kosten voor betaling uit spaargeld</string>
+    <string name="lightning__spark_exit__savings_refused">Je betaling uit spaargeld is niet gelukt. Betaal opnieuw of financier vanuit een andere wallet.</string>
     <string name="lightning__spark_exit__savings_total">Totaal uit spaargeld</string>
     <string name="lightning__spark_exit__step_funding">Kostenfinanciering wordt bevestigd</string>
     <string name="lightning__spark_exit__step_publish">Exittransacties publiceren</string>
