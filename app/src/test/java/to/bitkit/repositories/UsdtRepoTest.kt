@@ -572,8 +572,8 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restore does not repeat a consumed receipt but keeps an unconsumed one`() = test {
-        val now = Instant.fromEpochSeconds(1_800_000_000)
+    fun `restore keeps an unconsumed receipt and does not repeat a consumed one`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
         val clock = object : Clock { override fun now() = now }
         whenever(service.wallet()).thenReturn(wallet)
         whenever(service.wallet(requiresNetwork = false)).thenReturn(wallet)
@@ -593,10 +593,41 @@ class UsdtRepoTest : BaseUnitTest() {
         assertEquals(listOf(consumed, queued), repo.state.value.pendingReceipts)
         assertTrue(repo.consumeReceipt(consumed.id))
 
+        now = Instant.fromEpochSeconds(1_800_000_061)
+        repo.prepareForRecoveryRestore()
         repo.restoreBackup("snapshot").getOrThrow()
-        assertTrue(repo.state.value.pendingReceipts.isEmpty())
+        assertEquals(listOf(queued), repo.state.value.pendingReceipts)
         repo.refresh(true, force = true).getOrThrow()
         assertEquals(listOf(queued), repo.state.value.pendingReceipts)
+    }
+
+    @Test
+    fun `receipt confirmed while restore downloads backups celebrates`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(service.wallet(requiresNetwork = false)).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("address")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.balance()).thenReturn(1_000_000uL)
+        whenever(wallet.syncHistory()).thenReturn(true, false)
+        var history = emptyList<UsdtTransfer>()
+        whenever(wallet.history()).thenAnswer { history }
+        whenever(wallet.refreshTransfers()).thenAnswer { history }
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
+        repo.refresh(true, force = true).getOrThrow()
+
+        now = Instant.fromEpochSeconds(1_800_001_000)
+        repo.prepareForRecoveryRestore()
+        now = Instant.fromEpochSeconds(1_800_001_090)
+        val beforeRestore = incoming("before restore").copy(timestamp = 1_800_000_500uL)
+        history = listOf(beforeRestore)
+        repo.restoreBackup("snapshot").getOrThrow()
+
+        val received = incoming("received").copy(timestamp = 1_800_001_003uL)
+        history = listOf(received, beforeRestore)
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(received), repo.state.value.pendingReceipts)
     }
 
     @Test

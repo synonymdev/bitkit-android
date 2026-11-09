@@ -71,8 +71,8 @@ class UsdtRepo @Inject constructor(
 
     /**
      * Before the first complete history sync, a confirmed receipt counts as new only if its block
-     * time is after this point (first refresh of a wallet, or restore). Older entries are history the
-     * sync is still discovering.
+     * time is after this point (first refresh of a wallet, or the start of a restore). Older entries
+     * are history the sync is still discovering.
      */
     private var receiptsSince = receiptBaseline()
     private val announcedReceiptIds = mutableSetOf<String>()
@@ -217,7 +217,11 @@ class UsdtRepo @Inject constructor(
 
     val isRecoveryRestorePending: Boolean get() = service.isRecoveryRestorePending
 
-    suspend fun waitForRecoveryIdle() = mutex.withLock { }
+    /**
+     * Waits for wallet work to finish and starts the receipt window, so a receipt that confirms while
+     * the backups download still celebrates.
+     */
+    suspend fun prepareForRecoveryRestore() = mutex.withLock { receiptsSince = receiptBaseline() }
 
     suspend fun retryTransfer(id: String): Result<Unit> = paymentOperation {
         val wallet = wallet()
@@ -234,18 +238,19 @@ class UsdtRepo @Inject constructor(
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
                 clearDisplayBalance()
-                receiptsSince = receiptBaseline()
-                // Restore drops queued receipts, so let them be announced again.
-                announcedReceiptIds -= _state.value.pendingReceipts.map { it.id }.toSet()
+                val address = wallet.receiveAddress()
+                val restored = wallet.history().toImmutableList()
+                // Restored history is not new. Queued receipts of the same wallet still celebrate.
+                announcedReceiptIds += restored.receiptIds()
                 _state.update {
                     it.copy(
-                        address = wallet.receiveAddress(),
+                        address = address,
                         balance = null,
                         cachedBalance = null,
                         balanceIsStale = true,
-                        transfers = wallet.history().toImmutableList(),
+                        transfers = restored,
                         historyComplete = false,
-                        pendingReceipts = persistentListOf(),
+                        pendingReceipts = if (it.address == address) it.pendingReceipts else persistentListOf(),
                         pendingDepositIds = persistentSetOf(),
                     )
                 }
