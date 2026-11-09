@@ -9,6 +9,7 @@ import breez_sdk_spark.RecoveryRedoReason
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.RecoveryVerdict
 import breez_sdk_spark.SdkException
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
@@ -34,6 +35,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeastOnce
@@ -804,6 +806,42 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay from savings fails when the fee rates cannot be read`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        whenever(lightning.getFeeRates()).thenReturn(Result.failure(SparkExitError("no estimates")))
+        // What the fee helper falls back to once it cannot price.
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
+
+        assertTrue(sut.savingsFundingFee().isFailure)
+    }
+
+    @Test
+    fun `pay from savings sends at the rate its fee was priced at`() = test {
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
+        val rates = FeeRates(fast = 7u, mid = 4u, slow = 1u)
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        whenever(lightning.getFeeRates()).thenReturn(Result.success(rates))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(300uL))
+        whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
+        sut.savingsFundingFee().getOrThrow()
+
+        sut.start(fundFromSavings = true).getOrThrow()
+        sut.onAppBackgrounded()
+
+        verify(lightning).sendOnChain(
+            eq(funding), any(), anyOrNull(), anyOrNull(), eq(rates), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `savings never pays more than the confirmed funding when the start quotes again`() = test {
         stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
         val sdk = FakeSparkExitRecovering()
@@ -929,6 +967,15 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertIs<SparkExitCancelUnreadable>(sut.cancel().exceptionOrNull())
         assertNotNull(store.load())
     }
+
+    private fun balances(spendable: ULong) = BalanceDetails(
+        totalOnchainBalanceSats = spendable,
+        spendableOnchainBalanceSats = spendable,
+        totalAnchorChannelsReserveSats = 0u,
+        totalLightningBalanceSats = 0u,
+        lightningBalances = emptyList(),
+        pendingBalancesFromChannelClosures = emptyList(),
+    )
 
     private suspend fun stubFunding(answer: suspend () -> Result<OnchainSendOutcome>) {
         whenever {

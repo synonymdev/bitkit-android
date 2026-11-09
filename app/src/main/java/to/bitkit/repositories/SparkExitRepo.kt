@@ -8,6 +8,7 @@ import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.singleKeyCpfpSigner
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.FeeRates
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -598,13 +599,23 @@ class SparkExitRepo @Inject constructor(
         selection = ExitLeafSelection.All,
     )
 
-    /** The fee Savings pays to send the fee funding at the fast rate, or null when it cannot. */
+    /**
+     * The fee Savings pays to send the fee funding at the fast rate. Fails when the rates cannot be read; the rates it
+     * priced are the ones the payment at the start sends at.
+     */
     suspend fun savingsFundingFee(): Result<SparkExitSavingsFunding> = withContext(bgDispatcher) {
         runSuspendCatching {
             val pending = requireNotNull(_state.value.pending) { "No Spark exit quote" }
             val address = requireNotNull(_state.value.fundingAddress) { "No Spark exit funding address" }
             val fundingSats = pending.quote.fundingSats
-            val feeSats = lightningRepo.calculateTotalFee(fundingSats, address, TransactionSpeed.Fast).getOrThrow()
+            val feeRates = lightningRepo.getFeeRates().getOrThrow()
+            val feeSats = lightningRepo.calculateTotalFee(
+                amountSats = fundingSats,
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            ).getOrThrow()
+            _state.update { it.copy(pending = it.pending?.copy(savingsFeeRates = feeRates)) }
             val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
             SparkExitSavingsFunding(
                 feeSats = feeSats,
@@ -702,7 +713,9 @@ class SparkExitRepo @Inject constructor(
         onAppForegrounded()
         // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
         val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
-        if (fundFromSavings && savingsSats > 0uL) payFunding(createdAt, key.address, savingsSats)
+        if (fundFromSavings && savingsSats > 0uL) {
+            payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates)
+        }
     }
 
     /**
@@ -748,7 +761,7 @@ class SparkExitRepo @Inject constructor(
         return fresh.copy(sparkBalanceSats = sparkRepo.state.value.balanceSats)
     }
 
-    private suspend fun payFunding(createdAt: Long, address: String, sats: ULong) {
+    private suspend fun payFunding(createdAt: Long, address: String, sats: ULong, feeRates: FeeRates?) {
         // Under the tick lock from the check to the saved txid: a cancel either ends the exit before anything is paid
         // or finds the payment and refuses. After the tick in flight, so its save cannot drop the txid.
         tickMutex.withLock {
@@ -756,7 +769,7 @@ class SparkExitRepo @Inject constructor(
                 Logger.info("Spark exit ended before savings paid its funding; nothing is paid", context = TAG)
                 return@withLock
             }
-            val txid = sendFunding(address, sats)
+            val txid = sendFunding(address, sats, feeRates)
             val record = _state.value.record ?: return@withLock
             val paid = record.copy(fundingPaymentTxid = txid)
             saveRecord(paid)
@@ -772,11 +785,12 @@ class SparkExitRepo @Inject constructor(
         return attempt?.address == address && attempt.isUnresolved
     }
 
-    private suspend fun sendFunding(address: String, sats: ULong): String {
+    private suspend fun sendFunding(address: String, sats: ULong, feeRates: FeeRates? = null): String {
         val outcome = lightningRepo.sendOnChain(
             address = address,
             sats = sats,
             speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
         ).getOrThrow()
         if (outcome is OnchainSendOutcome.Rejected) {
             throw SparkExitError("Spark exit funding was not accepted: '$outcome'")
@@ -915,6 +929,8 @@ data class SparkExitPending(
     val feeRate: ULong,
     /** The funding key index this exit takes. */
     val fundingIndex: UInt,
+    /** The rates the fee of paying the funding from savings was priced at, which that payment sends at. */
+    val savingsFeeRates: FeeRates? = null,
 )
 
 data class SparkExitSavingsFunding(
