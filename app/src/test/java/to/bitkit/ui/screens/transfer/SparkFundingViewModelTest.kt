@@ -1,6 +1,10 @@
 package to.bitkit.ui.screens.transfer
 
 import android.content.Context
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.synonym.bitkitcore.FeeRates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +17,6 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -265,10 +268,47 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         assertEquals("txid", sut.uiState.value.txid)
         verify(sparkRepo).onDepositBroadcast("txid", 50_000uL)
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 1_350uL)
-        inOrder(lightningRepo) {
-            verify(lightningRepo).followFundingOnScreen("attempt", true)
-            verify(lightningRepo).followFundingOnScreen("attempt", false)
-        }
+        verify(lightningRepo).followFundingOnScreen("attempt", true)
+        verify(lightningRepo, never()).followFundingOnScreen("attempt", false)
+    }
+
+    @Test
+    fun `the funding screen owns a kept funding until it closes`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
+        val retained = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(retained)
+        val store = ViewModelStore()
+        val sut = ViewModelProvider.create(
+            store,
+            viewModelFactory { initializer { createSut() } },
+        )[SparkFundingViewModel::class]
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onConfirm()
+        advanceUntilIdle()
+        whenever { lightningRepo.currentOnchainSendAttempt() }
+            .thenReturn(retained.copy(evidence = OnchainSendEvidence.Observed, localFollowupComplete = true))
+        attemptUpdates.value++
+        advanceUntilIdle()
+        verify(lightningRepo, never()).followFundingOnScreen("attempt", false)
+
+        store.clear()
+
+        verify(lightningRepo).followFundingOnScreen("attempt", false)
     }
 
     @Test
