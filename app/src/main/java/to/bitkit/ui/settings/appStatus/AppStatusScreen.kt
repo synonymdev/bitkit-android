@@ -64,6 +64,7 @@ fun AppStatusScreen(
         onNodeClick = { navController.navigateTo(Routes.NodeInfo) },
         onChannelsClick = { navController.navigateTo(Routes.LightningConnections) },
         onBackupClick = { navController.navigateTo(Routes.BackupSettings) },
+        onExitClick = { navController.navigateTo(Routes.SparkExitProgress) },
     )
 }
 
@@ -76,6 +77,7 @@ private fun Content(
     onNodeClick: () -> Unit = {},
     onChannelsClick: () -> Unit = {},
     onBackupClick: () -> Unit = {},
+    onExitClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -152,6 +154,22 @@ private fun Content(
                 ),
                 onClick = onChannelsClick,
             )
+
+            uiState.exitStep?.let { exitStep ->
+                StatusItem(
+                    statusUi = StatusUi(
+                        id = "spark_exit",
+                        title = stringResource(R.string.settings__status__exit__title),
+                        subtitle = when (exitStep) {
+                            ExitStep.FUNDING -> stringResource(R.string.settings__status__exit__funding)
+                            ExitStep.RUNNING -> stringResource(R.string.settings__status__exit__pending)
+                        },
+                        iconRes = R.drawable.ic_warning,
+                        state = HealthState.PENDING,
+                    ),
+                    onClick = onExitClick,
+                )
+            }
 
             StatusItem(
                 statusUi = StatusUi(
@@ -262,6 +280,7 @@ private fun Preview() {
                 ),
                 backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
                 nodeSubtitle = "Running",
+                exitStep = ExitStep.RUNNING,
             ),
         )
     }

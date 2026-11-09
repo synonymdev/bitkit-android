@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -18,6 +19,9 @@ import to.bitkit.repositories.AppHealthState
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.SparkExitRecord
+import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 
@@ -25,6 +29,7 @@ class AppStatusViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val healthRepo: HealthRepo = mock()
     private val lightningRepo: LightningRepo = mock()
+    private val sparkExitRepo: SparkExitRepo = mock()
     private val cacheStore: CacheStore = mock()
 
     private lateinit var sut: AppStatusViewModel
@@ -44,6 +49,7 @@ class AppStatusViewModelTest : BaseUnitTest() {
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(cacheStore.backupStatuses).thenReturn(flowOf(emptyMap()))
+        whenever(sparkExitRepo.state).thenReturn(MutableStateFlow(SparkExitState()))
     }
 
     private fun createSut(): AppStatusViewModel {
@@ -51,6 +57,7 @@ class AppStatusViewModelTest : BaseUnitTest() {
             context = context,
             healthRepo = healthRepo,
             lightningRepo = lightningRepo,
+            sparkExitRepo = sparkExitRepo,
             cacheStore = cacheStore,
         )
     }
@@ -176,5 +183,37 @@ class AppStatusViewModelTest : BaseUnitTest() {
 
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `exit step is null without a running exit`() {
+        assertEquals(null, (null as SparkExitRecord?).exitStep())
+        assertEquals(null, exitRecord(SparkExitRecord.Phase.Done, isActive = false).exitStep())
+        assertEquals(null, exitRecord(SparkExitRecord.Phase.Failed("reason"), isActive = false).exitStep())
+    }
+
+    @Test
+    fun `exit step maps running and funding phases`() {
+        assertEquals(ExitStep.RUNNING, exitRecord(SparkExitRecord.Phase.Running).exitStep())
+        assertEquals(ExitStep.FUNDING, exitRecord(SparkExitRecord.Phase.AwaitingFunding(1_000uL)).exitStep())
+        assertEquals(ExitStep.FUNDING, exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL)).exitStep())
+    }
+
+    @Test
+    fun `ui state shows the step of a running exit`() = test {
+        val record = exitRecord(SparkExitRecord.Phase.Running)
+        whenever(sparkExitRepo.state).thenReturn(MutableStateFlow(SparkExitState(record = record)))
+
+        sut = createSut()
+
+        sut.uiState.test {
+            assertEquals(ExitStep.RUNNING, awaitItem().exitStep)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    private fun exitRecord(phase: SparkExitRecord.Phase, isActive: Boolean = true) = mock<SparkExitRecord> {
+        on { this.phase } doReturn phase
+        on { this.isActive } doReturn isActive
     }
 }
