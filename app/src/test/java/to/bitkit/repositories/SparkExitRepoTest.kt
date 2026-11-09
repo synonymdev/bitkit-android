@@ -760,6 +760,28 @@ class SparkExitRepoTest : BaseUnitTest() {
         verify(sparkRepo, never()).setExiting(true, true)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `no tick drives the exit while its start waits for the optimization`() = test {
+        val gate = CompletableDeferred<Unit>()
+        whenever(sparkRepo.awaitOptimizationIdle()).doSuspendableAnswer { gate.await() }
+        val utxo = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":30000,"status":{"confirmed":true}}]"""
+        val sdk = FakeSparkExitRecovering()
+        val sut = quotedSut(sdk, fundingChain(utxo))
+        sut.loadQuote().getOrThrow()
+        val quotes = sdk.prepareRequests.size
+
+        val start = async { sut.start(fundFromSavings = false) }
+        runCurrent()
+        sut.tick()
+
+        assertEquals(quotes, sdk.prepareRequests.size, "nothing is built while optimization may still swap leaves")
+        assertNull(sut.state.value.record?.recovery)
+        gate.complete(Unit)
+        start.await().getOrThrow()
+        sut.onAppBackgrounded()
+    }
+
     @Test
     fun `a leaf swap between the quote and the start quotes the exit again`() = test {
         val sdk = FakeSparkExitRecovering()

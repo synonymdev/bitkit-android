@@ -82,6 +82,10 @@ class SparkExitRepo @Inject constructor(
     private val scope = appScope(bgDispatcher, TAG)
     private val tickMutex = Mutex()
 
+    /** The exit a start is still settling: no tick drives it until its optimization wait, requote and reconnect end. */
+    @Volatile
+    private var startingCreatedAt: Long? = null
+
     /** One start or fee payment at a time: a second tap never pays or creates twice. */
     private val paymentMutex = Mutex()
     private var foregroundJob: Job? = null
@@ -221,7 +225,8 @@ class SparkExitRepo @Inject constructor(
 
     /** Moves the exit one step forward; a tick already running makes this one a no-op. */
     suspend fun tick(): Result<SparkExitRecord?> = withContext(bgDispatcher) {
-        if (!tickMutex.tryLock()) return@withContext Result.success(_state.value.record)
+        val isStarting = _state.value.record?.let { it.createdAt == startingCreatedAt } == true
+        if (isStarting || !tickMutex.tryLock()) return@withContext Result.success(_state.value.record)
         try {
             runSuspendCatching { tickLocked() }
                 .onFailure {
@@ -685,25 +690,31 @@ class SparkExitRepo @Inject constructor(
         val transferId = transferRepo.createTransfer(TransferType.SPARK_EXIT, quote.incomingSats.toLong()).getOrThrow()
         record = record.copy(transferId = transferId)
         saveRecord(record)
+        val createdAt = record.createdAt
+        // Published for the screens and a cancel, but driven only once the start settled the leaves it exits.
+        startingCreatedAt = createdAt
         _state.update { it.copy(record = record, pending = null, fundingAddress = key.address) }
         isLoaded = true
         // Reconnecting for the exit disconnects Spark, which would cut a running leaf optimization short.
-        sparkRepo.awaitOptimizationIdle()
-        val createdAt = record.createdAt
-        // A cancel during the wait ended this exit: nothing more of the start runs, and nothing is paid.
-        val isCurrent = tickMutex.withLock {
-            if (!isStarting(createdAt)) return@withLock false
-            // An optimization since the quote swapped leaves: the exit is quoted again over the leaves Spark holds now.
-            requote(pending)?.let { fresh ->
-                // A failed write goes on with the confirmed quote, as a failed requote does.
-                val requoted = writeRequote(requireNotNull(_state.value.record), fresh) ?: return@let
-                quote = fresh
-                record = requoted
-                _state.update { it.copy(record = record) }
+        val isCurrent = try {
+            sparkRepo.awaitOptimizationIdle()
+            // A cancel during the wait ended this exit: nothing more of the start runs, and nothing is paid.
+            tickMutex.withLock {
+                if (!isStarting(createdAt)) return@withLock false
+                // An optimization since the quote swapped leaves: the exit is quoted again over the leaves Spark holds.
+                requote(pending)?.let { fresh ->
+                    // A failed write goes on with the confirmed quote, as a failed requote does.
+                    val requoted = writeRequote(requireNotNull(_state.value.record), fresh) ?: return@let
+                    quote = fresh
+                    record = requoted
+                    _state.update { it.copy(record = record) }
+                }
+                // Under the lock, so a cancel can't release Spark between the check and taking it off Lightning.
+                sparkRepo.setExiting(true, reconnect = true)
+                true
             }
-            // Under the lock, so a cancel can't release Spark between the check and taking it off Lightning.
-            sparkRepo.setExiting(true, reconnect = true)
-            true
+        } finally {
+            startingCreatedAt = null
         }
         if (!isCurrent) throw SparkExitStartCancelled()
         work.schedulePeriodic()
