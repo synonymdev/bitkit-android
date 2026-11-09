@@ -356,14 +356,16 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.awaitClaim(eq("swap"), any())).thenReturn(Result.success("txid"))
         whenever(context.getString(any())).thenReturn("text")
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(
+            Result.success(emptySet())
+        )
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
 
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
         verify(pubkySwapsRouteRepo).restoreSwaps()
         verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any())
     }
@@ -372,14 +374,16 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `leaves swap routes alone after a restore while they are off`() = test {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(false)
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(
+            Result.success(emptySet())
+        )
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
 
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
         verify(pubkySwapsRouteRepo, never()).restoreSwaps()
     }
 
