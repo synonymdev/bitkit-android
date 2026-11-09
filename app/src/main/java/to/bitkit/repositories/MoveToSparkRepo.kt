@@ -23,6 +23,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -131,10 +132,17 @@ class MoveToSparkRepo @Inject constructor(
         coroutineScope {
             // LDK can report a failure without its hash, so the payment's id identifies it too once it is known.
             val paymentId = AtomicReference<String?>(null)
+            // A failure without a hash can arrive before the send returns its id, so it is kept until the id is known.
+            val hashlessFailures = ConcurrentLinkedQueue<Event.PaymentFailed>()
             val settled = async(start = CoroutineStart.UNDISPATCHED) {
-                lightningRepo.nodeEvents.first { it.settles(paymentHash, paymentId.get()) }
+                lightningRepo.nodeEvents.first {
+                    if (it is Event.PaymentFailed && it.paymentHash == null && paymentId.get() == null) {
+                        hashlessFailures += it
+                    }
+                    it.settles(paymentHash, paymentId.get())
+                }
             }
-            lightningRepo.payInvoiceOverLdk(
+            val sentId = lightningRepo.payInvoiceOverLdk(
                 bolt11 = quote.invoice,
                 sats = quote.amountSats,
                 maxTotalRoutingFeeMsat = MoveToSparkMath.feeCapMsat(quote.feeSats),
@@ -143,7 +151,9 @@ class MoveToSparkRepo @Inject constructor(
                 val isNoRoute = it.isNoRoute() || it.isSendWithoutRoute(quote.invoice)
                 throw if (isNoRoute) MoveToSparkError.TooLarge(quote.amountSats, it) else it
             }
-            val event = withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }
+            val earlyFailure = hashlessFailures.firstOrNull { it.paymentId == sentId }
+            val event = earlyFailure?.also { settled.cancel() }
+                ?: withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }
             if (event != null) reportedPaymentHashes += paymentHash
             when (event) {
                 is Event.PaymentSuccessful -> MoveToSparkOutcome.Moved(
