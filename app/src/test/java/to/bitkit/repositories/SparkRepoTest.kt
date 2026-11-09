@@ -272,6 +272,32 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a retry spark is still sending keeps its hash held through the activity sync`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sending = CompletableDeferred<Unit>()
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            sending.await()
+            sentPayment(fees = 0).copy(status = PaymentStatus.PENDING)
+        }
+        val sut = createSut()
+        backgroundScope.launch { sut.payInvoice("lnbc1280n1send", 128uL) }
+        runCurrent()
+
+        sut.start(0).getOrThrow()
+
+        assertTrue("hash" in cacheData.value.sparkSendHashes)
+        sending.complete(Unit)
+    }
+
+    @Test
     fun `an uncertain send spark never recorded is no longer held from the node`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->

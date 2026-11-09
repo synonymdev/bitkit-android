@@ -12,7 +12,7 @@ version: 0.1.0
 
 Blocktank is the Lightning Service Provider (LSP) used by Bitkit. This skill provides full knowledge of its REST API and a utility script to call any endpoint from the command line.
 
-No authentication is required. All requests and responses use JSON.
+All requests and responses use JSON. Staging's `/regtest/*` routes need basic auth: set `BLOCKTANK_REGTEST_AUTH=user:password` and the script sends it; without it they return `401`. Other routes need no authentication.
 
 ## Configuration
 
