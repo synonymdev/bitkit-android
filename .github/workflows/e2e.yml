@@ -131,7 +131,7 @@ jobs:
         with:
           repository: synonymdev/bitkit-e2e-tests
           path: bitkit-e2e-tests
-          ref: fa6ff5ce606528c1af8b48bb8a8f86042f146790
+          ref: 38b12555b12857e760567fa727dcabd1b1923df3
 
       - name: Enable KVM
         run: |
