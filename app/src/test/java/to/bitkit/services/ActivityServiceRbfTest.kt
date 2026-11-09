@@ -13,7 +13,10 @@ import org.junit.Test
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppCacheData
@@ -61,6 +64,69 @@ class ActivityServiceRbfTest : BaseUnitTest() {
             assertTrue(result.isBoosted)
             assertEquals(listOf("a"), result.boostTxIds)
             assertEquals(setOf("original-tag", "replacement-tag"), tags.getValue("payment-b"))
+            verify(lightning, never()).sync()
+        }
+    }
+
+    @Test
+    fun `publication waits for wallet sync to discover the broadcast replacement`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        whenever(lightning.listPayments()).thenReturn(emptyList())
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        withActivities { saved, tags ->
+            val replacement = saved.remove("b")!!
+            whenever(lightning.sync()).doSuspendableAnswer {
+                entered.complete(Unit)
+                resume.await()
+                saved["b"] = replacement
+            }
+            val publishing = async { sut.publishRbfBoost("a", "b") }
+            entered.await()
+            assertFalse(publishing.isCompleted)
+            assertTrue(saved.getValue("a").doesExist)
+            assertFalse("b" in saved)
+            saved["a"] = saved.getValue("a").copy(contact = "edited-during-sync")
+            val result = publishing.also { resume.complete(Unit) }.await().v1
+            assertEquals("b", result.txId)
+            assertEquals(422uL, result.fee)
+            assertEquals("edited-during-sync", result.contact)
+            assertEquals(listOf("a"), result.boostTxIds)
+            assertTrue(result.isBoosted)
+            assertFalse(saved.getValue("a").doesExist)
+            assertEquals(141uL, saved.getValue("a").fee)
+            assertEquals(setOf("original-tag", "replacement-tag"), tags.getValue("payment-b"))
+            verify(lightning).sync()
+        }
+    }
+
+    @Test
+    fun `wallet sync failure preserves original and can retry publication without a broadcast`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        whenever(lightning.listPayments()).thenReturn(emptyList())
+        withActivities { saved, _ ->
+            val replacement = saved.remove("b")!!
+            val original = saved.getValue("a")
+            whenever(lightning.sync()).thenThrow(IllegalStateException("sync unavailable"))
+            assertFailsWith<Exception> { sut.publishRbfBoost("a", "b") }
+            assertEquals(original, saved.getValue("a"))
+            saved["b"] = replacement
+            assertEquals("b", sut.publishRbfBoost("a", "b").v1.txId)
+            verify(lightning).sync()
+        }
+    }
+
+    @Test
+    fun `cancellation while discovering the replacement does not publish it`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        whenever(lightning.listPayments()).thenReturn(emptyList())
+        whenever(lightning.sync()).thenThrow(CancellationException("cancelled sync"))
+        withActivities { saved, _ ->
+            saved.remove("b")
+            val original = saved.getValue("a")
+            assertFailsWith<CancellationException> { sut.publishRbfBoost("a", "b") }
+            assertEquals(original, saved.getValue("a"))
+            assertFalse("b" in saved)
         }
     }
 

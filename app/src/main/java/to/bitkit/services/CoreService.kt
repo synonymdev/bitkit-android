@@ -1670,7 +1670,11 @@ class ActivityService(
                 "RBF must replace the original transaction"
             }
             checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) { "RBF original is not available" }
-            checkNotNull(getOrCreateReplacementActivity(replacementTxId)) { "RBF replacement is not available" }
+            if (getOrCreateReplacementActivity(replacementTxId) == null) {
+                // RBF returns after broadcast, before wallet sync discovers the new payment.
+                lightningService.sync()
+                checkNotNull(getOrCreateReplacementActivity(replacementTxId)) { "RBF replacement is not available" }
+            }
             val cache = cacheStore.data.first()
             val original = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId))
             val replacement = checkNotNull(getActivityByTxId(defaultWalletId, replacementTxId))
