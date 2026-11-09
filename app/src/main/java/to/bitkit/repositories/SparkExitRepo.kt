@@ -702,7 +702,9 @@ class SparkExitRepo @Inject constructor(
         // Driven before paying, so a failed payment from savings still leaves the exit watching its address.
         scope.launch { tick() }
         onAppForegrounded()
-        if (fundFromSavings && quote.fundingSats > 0uL) payFunding(createdAt, key.address, quote.fundingSats)
+        // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
+        val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
+        if (fundFromSavings && savingsSats > 0uL) payFunding(createdAt, key.address, savingsSats)
     }
 
     /** The exit created at [createdAt] is still the one on record and running: no cancel or wipe ended it. */

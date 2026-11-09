@@ -691,6 +691,27 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.onAppBackgrounded()
     }
 
+    @Test
+    fun `savings never pays more than the confirmed funding when the start quotes again`() = test {
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
+        val sdk = FakeSparkExitRecovering()
+        val sut = quotedSut(sdk)
+        val shown = sut.loadQuote().getOrThrow().fundingSats
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = 35_000uL, leaves = listOf("leaf-1", "leaf-2"))
+
+        sut.start(fundFromSavings = true).getOrThrow()
+        // Stops the foreground loop even when the check fails, or runTest drives it forever.
+        sut.onAppBackgrounded()
+
+        assertEquals(20_000uL, shown)
+        verify(lightning).sendOnChain(
+            eq(funding), eq(shown), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
     private fun awaitingRecord(paidTxid: String? = null) = SparkExitFixtures.record().copy(
         funding = listOf(SparkExitRecord.Funding(0u, funding, "02ab")),
         fundingPaymentTxid = paidTxid,
