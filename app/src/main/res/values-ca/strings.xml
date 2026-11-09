@@ -217,6 +217,7 @@
     <string name="lightning__setting_up__not_seen">Spark encara no ha vist la teva transferència. S\'afegeix després de 3 confirmacions; pots sortir d\'aquesta pantalla.</string>
     <string name="lightning__setting_up__pay">Paga ₿ {amount}</string>
     <string name="lightning__setting_up__repriced">Instant ara costa ₿ {amount}. Paga-ho o espera 3 confirmacions, uns 30 minuts, amb una comissió més baixa.</string>
+    <string name="lightning__setting_up__speed">Velocitat: {speed}</string>
     <string name="lightning__setting_up__step_adding">Afegint a despesa</string>
     <string name="lightning__setting_up__step_seen">Vist per Spark</string>
     <string name="lightning__setting_up__step_sent">Transferència enviada</string>

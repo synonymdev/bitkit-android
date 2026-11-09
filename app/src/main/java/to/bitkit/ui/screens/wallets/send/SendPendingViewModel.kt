@@ -99,7 +99,7 @@ class SendPendingViewModel @Inject constructor(
     private fun observeOriginalCompletion(original: OnchainSendAttempt) {
         // Shop completion has its own proof resolution route.
         if (original.requestId != null) return
-        if (original.isTransfer && (original.orderId == null || original.transferContext == null)) return
+        if (original.isBlocktankFunding && original.transferContext == null) return
         viewModelScope.launch {
             lightningRepo.onchainSendAttemptUpdates.collect {
                 runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.onSuccess { current ->

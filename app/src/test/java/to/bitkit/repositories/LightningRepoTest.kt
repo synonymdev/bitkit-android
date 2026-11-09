@@ -197,6 +197,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovered spark funding hands only an accepted spark deposit to spark`() = test {
+        val txid = "ab".repeat(32)
+        val funding = pendingSendAttempt().copy(isTransfer = true, txid = txid)
+
+        sut.followRecoveredSparkFunding(funding)
+        sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed, orderId = "order"))
+        verify(sparkRepo, never()).onDepositBroadcast(any(), any())
+
+        sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed))
+
+        verify(sparkRepo).onDepositBroadcast(txid, 1_000uL)
+        verify(sparkRepo).waitForMatureClaim(txid)
+    }
+
+    @Test
     fun `node startup failures do not dispatch invoice payment`() = test {
         var dispatched = false
         val beforeSend: suspend () -> Boolean = {
@@ -246,6 +261,7 @@ class LightningRepoTest : BaseUnitTest() {
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
             sparkRepo = sparkRepo,
+            backupRepo = mock(),
         )
     }
 
@@ -1144,6 +1160,25 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertEquals("hash", result.getOrThrow())
         verify(sparkRepo).payInvoice(eq("invoice"), eq(1_000uL), eq(deadline), eq(10_000uL), any())
+    }
+
+    @Test
+    fun `a node-only payment fails instead of falling back to spark`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("spark-hash"))
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenAnswer { throw AppError("Route not found") }
+        // The unrestricted entry picks Spark when the channels cannot carry the amount.
+        assertEquals("spark-hash", sut.payInvoice("bolt11", 1_000uL).getOrThrow())
+
+        val result = sut.payInvoiceWithNode("bolt11")
+
+        assertTrue(result.isFailure)
+        verify(sparkRepo, times(1)).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightningService).send(eq("bolt11"), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     @Test

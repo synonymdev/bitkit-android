@@ -1,7 +1,11 @@
 package to.bitkit.ui.screens.transfer
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -21,9 +25,11 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.SparkClaimOffer
+import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -44,6 +50,9 @@ private const val MATURE_CONFIRMATIONS = 3
 /** About how long [MATURE_CONFIRMATIONS] take. */
 private const val MATURE_MINUTES = 30
 
+/** The arrows' share of the illustration, as on iOS, so the inner circle shows around them. */
+private const val FIGURE_FRACTION = 0.85f
+
 @Composable
 fun SettingUpScreen(
     viewModel: SparkFundingViewModel,
@@ -61,6 +70,7 @@ fun SettingUpScreen(
 
     Content(
         claim = state.claim,
+        speed = state.speed,
         onPayClick = viewModel::onPayRepriced,
         onWaitClick = viewModel::onWait,
         onContinueClick = onContinueClick,
@@ -68,8 +78,9 @@ fun SettingUpScreen(
 }
 
 @Composable
-private fun Content(
+internal fun Content(
     claim: SparkDepositClaim,
+    speed: SparkClaimSpeed = SparkClaimSpeed.Instant,
     onPayClick: () -> Unit = {},
     onWaitClick: () -> Unit = {},
     onContinueClick: () -> Unit = {},
@@ -107,6 +118,14 @@ private fun Content(
                         .fillMaxWidth()
                         .testTag("SettingUpText")
                 )
+                VerticalSpacer(8.dp)
+                Caption13Up(
+                    text = speedText(claim, speed),
+                    color = Colors.White64,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("SettingUpSpeed")
+                )
             } else {
                 Display(
                     text = stringResource(R.string.lightning__transfer_success__title_spending)
@@ -122,11 +141,19 @@ private fun Content(
             }
             VerticalSpacer(28.dp)
             if (inProgress) {
-                TransferAnimationView(
-                    largeCircleRes = R.drawable.ln_sync_large,
-                    smallCircleRes = R.drawable.ln_sync_small,
-                    modifier = Modifier.weight(1f)
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    TransferAnimationView(
+                        largeCircleRes = R.drawable.ln_sync_large,
+                        smallCircleRes = R.drawable.ln_sync_small,
+                        contentWidthFraction = FIGURE_FRACTION,
+                        modifier = Modifier.aspectRatio(1f)
+                    )
+                }
                 VerticalSpacer(16.dp)
                 val steps = persistentListOf(
                     stringResource(R.string.lightning__setting_up__step_sent),
@@ -151,18 +178,26 @@ private fun Content(
             }
 
             if (claim is SparkDepositClaim.Repriced) {
-                PrimaryButton(
-                    text = stringResource(R.string.lightning__setting_up__pay)
-                        .replace("{amount}", claim.offer.earlyFeeSats.formatToModernDisplay()),
-                    onClick = onPayClick,
-                    modifier = Modifier.testTag("SettingUpPay")
-                )
-                VerticalSpacer(16.dp)
-                SecondaryButton(
-                    text = stringResource(R.string.lightning__spark_deposit__wait_button),
-                    onClick = onWaitClick,
-                    modifier = Modifier.testTag("SettingUpWait")
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    SecondaryButton(
+                        text = stringResource(R.string.lightning__spark_deposit__wait_button),
+                        onClick = onWaitClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("SettingUpWait")
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.lightning__setting_up__pay)
+                            .replace("{amount}", claim.offer.earlyFeeSats.formatToModernDisplay()),
+                        onClick = onPayClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("SettingUpPay")
+                    )
+                }
             } else {
                 val randomOkText = localizedRandom(R.string.common__ok_random)
                 PrimaryButton(
@@ -189,6 +224,15 @@ private fun claimText(claim: SparkDepositClaim): String = when (claim) {
         .replace("{minutes}", MATURE_MINUTES.toString())
 
     SparkDepositClaim.NotSeen -> stringResource(R.string.lightning__setting_up__not_seen)
+}
+
+@Composable
+private fun speedText(claim: SparkDepositClaim, speed: SparkClaimSpeed): String {
+    val isLater = speed == SparkClaimSpeed.Later || claim == SparkDepositClaim.Later
+    return stringResource(R.string.lightning__setting_up__speed).replace(
+        "{speed}",
+        stringResource(if (isLater) R.string.common__later else R.string.fee__instant__title),
+    )
 }
 
 private fun SparkDepositClaim.stepIndex(): Int = when (this) {
