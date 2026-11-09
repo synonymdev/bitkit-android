@@ -919,6 +919,8 @@ class SparkRepo @Inject constructor(
                 is SdkEvent.Synced -> {
                     _state.update { it.copy(hasSynced = true) }
                     refresh()
+                    // A journal left open past its grace period would block every later withdrawal until a restart.
+                    if (cacheStore.data.first().pendingSparkWithdrawal != null) syncActivities(settleJournal = true)
                 }
                 is SdkEvent.PaymentSucceeded -> onPayment(event.payment)
                 is SdkEvent.PaymentFailed -> onPayment(event.payment)

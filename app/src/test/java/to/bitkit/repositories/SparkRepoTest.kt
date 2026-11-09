@@ -477,6 +477,18 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a sync in a long foreground session closes an expired unlisted withdrawal`() = test {
+        val sut = journaledSpark()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+
+        assertNull(cacheData.value.pendingSparkWithdrawal, "An expired journal must not block later withdrawals")
+        assertNull(sut.withdraw("bcrt1qcontact", 20_000uL, null).exceptionOrNull() as? SparkError.WithdrawalPending)
+    }
+
+    @Test
     fun `keeps a journaled withdrawal Spark lists when its activity fails to save on start`() = test {
         cacheData.update {
             it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
