@@ -2033,6 +2033,14 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Hands an accepted Spark funding recovered from Payment Pending to Spark, which claims it once it matures. */
+    fun followRecoveredSparkFunding(attempt: OnchainSendAttempt) {
+        if (!attempt.isSparkFunding || !attempt.hasPositiveEvidence) return
+        val txid = attempt.txid ?: return
+        sparkRepo.onDepositBroadcast(txid, attempt.amountSats)
+        sparkRepo.waitForMatureClaim(txid)
+    }
+
     // A change signal only: consumers must reread and validate the original attempt.
     val onchainSendAttemptUpdates get() = onchainSendAttemptStore.backupStateVersion
 

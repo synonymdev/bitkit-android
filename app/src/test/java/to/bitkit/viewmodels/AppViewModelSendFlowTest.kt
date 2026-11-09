@@ -15238,6 +15238,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `completed original spark funding closes payment pending and hands the deposit to spark`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original-spark-funding", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 1_000uL,
+            isMaxAmount = false, feeRateSatsPerVByte = 2uL, isTransfer = true,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Observed,
+            txid = "ab".repeat(32), localFollowupComplete = true,
+        )
+        sut.showPendingTransfer(original.copy(localFollowupComplete = false))
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+
+        sut.onRecoveredTransfer(original)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(lightningRepo).followRecoveredSparkFunding(original)
+    }
+
+    @Test
     fun `retry fee approval works without USD rate and keeps the Bitcoin fee warning`() = test {
         val original = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "original", requestId = null, orderId = null,

@@ -121,6 +121,10 @@ data class OnchainSendAttempt(
     val highestCandidateFee: ULong
         get() = maxOf(candidateMiningFees.values.maxOrNull() ?: 0uL, verifiedWinningFeeSats ?: 0uL)
 
+    /** A transfer from the node wallet to its Spark deposit address, which pays no order. */
+    val isSparkFunding: Boolean
+        get() = requestId == null && isTransfer && orderId == null
+
     /** A transfer to spending that pays a Blocktank order, which Bitkit no longer buys. */
     val isBlocktankFunding: Boolean
         get() = requestId == null && isTransfer && orderId != null

@@ -197,6 +197,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovered spark funding hands only an accepted spark deposit to spark`() = test {
+        val txid = "ab".repeat(32)
+        val funding = pendingSendAttempt().copy(isTransfer = true, txid = txid)
+
+        sut.followRecoveredSparkFunding(funding)
+        sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed, orderId = "order"))
+        verify(sparkRepo, never()).onDepositBroadcast(any(), any())
+
+        sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed))
+
+        verify(sparkRepo).onDepositBroadcast(txid, 1_000uL)
+        verify(sparkRepo).waitForMatureClaim(txid)
+    }
+
+    @Test
     fun `node startup failures do not dispatch invoice payment`() = test {
         var dispatched = false
         val beforeSend: suspend () -> Boolean = {
