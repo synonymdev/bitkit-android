@@ -1164,6 +1164,21 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a fee bump whose savings payment can't be priced is not offered at a placeholder fee`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        val rates = FeeRates(fast = 12u, mid = 8u, slow = 2u)
+        // The fee helper's placeholder once it cannot price, and the failure it reports without it.
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), eq(true)))
+            .thenReturn(Result.success(1_000uL))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), eq(false)))
+            .thenReturn(Result.failure(SparkExitError("no estimates")))
+
+        val priced = runCatching { sut.feeBumpOption(FeeRate.FAST, 9uL, 6_000uL, funding, rates) }
+
+        assertTrue(priced.isFailure)
+    }
+
+    @Test
     fun `fee bump rates are priced without broadcasting, leaving out a rate the sdk refuses a leaf at`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(runningRecord())

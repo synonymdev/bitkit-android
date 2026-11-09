@@ -32,6 +32,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.FeeRate
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
@@ -508,14 +509,7 @@ class SparkExitRepo @Inject constructor(
             val feeRates = lightningRepo.getFeeRates().getOrThrow()
             val priced = SparkExitFeeBumpOption.rates(record.feeRateSatPerVbyte, fees).map { (speed, rate) ->
                 runSuspendCatching {
-                    val extra = driver.feeBumpShortfall(record, rate)
-                    val paymentFee = if (extra == 0uL) {
-                        0uL
-                    } else {
-                        lightningRepo.calculateTotalFee(extra, address, TransactionSpeed.Fast, feeRates = feeRates)
-                            .getOrThrow()
-                    }
-                    SparkExitFeeBumpOption(speed, rate, extra, extra.safe() + paymentFee.safe(), feeRates)
+                    feeBumpOption(speed, rate, driver.feeBumpShortfall(record, rate), address, feeRates)
                 }
             }
             // A rate at which a leaf can't pay its own exit is not offered. With no rate left only for that reason,
@@ -550,6 +544,32 @@ class SparkExitRepo @Inject constructor(
         }.onFailure {
             Logger.error("Failed to raise the Spark exit fee", it, context = TAG)
         }
+    }
+
+    /**
+     * The option at [rate]: [extraSats] more at the funding address,
+     * and what savings pays to send it at [feeRates].
+     */
+    internal suspend fun feeBumpOption(
+        speed: FeeRate,
+        rate: ULong,
+        extraSats: ULong,
+        address: String,
+        feeRates: FeeRates,
+    ): SparkExitFeeBumpOption {
+        val paymentFee = if (extraSats == 0uL) {
+            0uL
+        } else {
+            // A placeholder fee would show and approve a total the payment does not keep to: any error fails it.
+            lightningRepo.calculateTotalFee(
+                amountSats = extraSats,
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+                allowFallback = false,
+            ).getOrThrow()
+        }
+        return SparkExitFeeBumpOption(speed, rate, extraSats, extraSats.safe() + paymentFee.safe(), feeRates)
     }
 
     private suspend fun payHigherFeeLocked(option: SparkExitFeeBumpOption) {
