@@ -1696,18 +1696,23 @@ class ActivityService(
         ServiceQueue.CORE.background {
             runSuspendCatching {
                 markReplacedActivity(txid, getActivityByTxId(defaultWalletId, txid), conflicts)
-                for (conflictTxid in conflicts) getOrCreateReplacementActivity(conflictTxid)
-                val cache = cacheStore.data.first()
-                val replacedActivity = getActivityByTxId(defaultWalletId, txid)
                 for (conflictTxid in conflicts) {
-                    val replacement = getActivityByTxId(defaultWalletId, conflictTxid) ?: continue
-                    updateReplacementActivity(
-                        txid,
-                        conflictTxid,
-                        replacement,
-                        replacedActivity,
-                        cache.isContactDetached(replacement.id, defaultWalletId),
-                    )
+                    runSuspendCatching {
+                        getOrCreateReplacementActivity(conflictTxid) ?: return@runSuspendCatching
+                        val cache = cacheStore.data.first()
+                        val replacedActivity = getActivityByTxId(defaultWalletId, txid)
+                        val replacement = getActivityByTxId(defaultWalletId, conflictTxid)
+                            ?: return@runSuspendCatching
+                        updateReplacementActivity(
+                            txid,
+                            conflictTxid,
+                            replacement,
+                            replacedActivity,
+                            cache.isContactDetached(replacement.id, defaultWalletId),
+                        )
+                    }.onFailure {
+                        Logger.error("Failed to handle replacement '$conflictTxid' for '$txid'", it, context = TAG)
+                    }
                 }
             }.onFailure {
                 Logger.error("Failed to handle replacement for '$txid'", it, context = TAG)

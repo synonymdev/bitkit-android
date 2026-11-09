@@ -180,6 +180,62 @@ class ActivityServiceRbfTest : BaseUnitTest() {
     }
 
     @Test
+    fun `external replacement metadata failures do not skip later conflicts and remain repairable`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        for (failRead in listOf(false, true)) {
+            withActivities(failFirstTagWrite = !failRead, failFirstTagRead = failRead) { saved, tags ->
+                sut.handleOnchainTransactionReplaced("a", listOf("b", "c"))
+                assertFalse(saved.getValue("a").doesExist)
+                assertFalse(saved.getValue("b").isBoosted)
+                assertEquals(emptyList(), saved.getValue("b").boostTxIds)
+                assertTrue(saved.getValue("c").isBoosted)
+                assertEquals(listOf("a"), saved.getValue("c").boostTxIds)
+                assertEquals("original", saved.getValue("c").contact)
+                assertEquals(setOf("original-tag"), tags.getValue("payment-c"))
+                saved["c"] = saved.getValue("c").copy(contact = "edited-contact")
+                tags["payment-c"] = setOf("edited-tag")
+                sut.handleOnchainTransactionReplaced("a", listOf("b", "c"))
+                assertTrue(saved.getValue("b").isBoosted)
+                assertEquals(listOf("a"), saved.getValue("b").boostTxIds)
+                assertEquals(setOf("original-tag", "replacement-tag"), tags.getValue("payment-b"))
+                assertEquals("edited-contact", saved.getValue("c").contact)
+                assertEquals(setOf("edited-tag"), tags.getValue("payment-c"))
+                assertEquals(141uL, saved.getValue("a").fee)
+                assertEquals(422uL, saved.getValue("c").fee)
+            }
+        }
+    }
+
+    @Test
+    fun `external replacement discovery failure does not skip an available later conflict`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        whenever(lightning.listPayments()).thenThrow(IllegalStateException("payments unavailable"))
+        withActivities { saved, tags ->
+            saved.remove("b")
+            sut.handleOnchainTransactionReplaced("a", listOf("b", "c"))
+            assertFalse(saved.getValue("a").doesExist)
+            assertFalse("b" in saved)
+            assertTrue(saved.getValue("c").isBoosted)
+            assertEquals(listOf("a"), saved.getValue("c").boostTxIds)
+            assertEquals("original", saved.getValue("c").contact)
+            assertEquals(setOf("original-tag"), tags.getValue("payment-c"))
+        }
+    }
+
+    @Test
+    fun `external replacement cancellation stops processing later conflicts`() = test {
+        whenever(cache.data).thenReturn(flow { throw CancellationException("cancelled") })
+        withActivities { saved, _ ->
+            assertFailsWith<CancellationException> {
+                sut.handleOnchainTransactionReplaced("a", listOf("b", "c"))
+            }
+            assertFalse(saved.getValue("a").doesExist)
+            assertFalse(saved.getValue("b").isBoosted)
+            assertFalse(saved.getValue("c").isBoosted)
+        }
+    }
+
+    @Test
     fun `manual contact detachment and existing replacement metadata survive publication`() = test {
         whenever(cache.data).thenReturn(
             flowOf(
@@ -223,6 +279,7 @@ class ActivityServiceRbfTest : BaseUnitTest() {
 
     private suspend fun withActivities(
         failFirstTagWrite: Boolean = false,
+        failFirstTagRead: Boolean = false,
         block: suspend CoroutineScope.(MutableMap<String, OnchainActivity>, MutableMap<String, Set<String>>) -> Unit,
     ) = ServiceQueue.CORE.background {
         val wallet = WalletScope.default
@@ -235,6 +292,7 @@ class ActivityServiceRbfTest : BaseUnitTest() {
         }.toMutableMap()
         val tags = mutableMapOf("payment-a" to setOf("original-tag"), "payment-b" to setOf("replacement-tag"))
         var failTags = failFirstTagWrite
+        var failTagRead = failFirstTagRead
         val getByTx = binding.getMethod("getActivityByTxId", String::class.java, String::class.java)
         val update = binding.getMethod("updateActivity", String::class.java, Activity::class.java)
         val getTags = binding.getMethod("getTags", String::class.java, String::class.java)
@@ -249,6 +307,10 @@ class ActivityServiceRbfTest : BaseUnitTest() {
                 Unit
             }
             native.`when`<Any?> { getTags.invoke(null, anyString(), anyString()) }.thenAnswer {
+                if (failTagRead) {
+                    failTagRead = false
+                    error("tag read failed")
+                }
                 tags[it.getArgument<String>(1)].orEmpty().toList()
             }
             native.`when`<Any?> { addTags.invoke(null, anyString(), anyString(), any<List<String>>()) }.thenAnswer {
