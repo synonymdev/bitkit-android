@@ -420,6 +420,7 @@ class SparkRepo @Inject constructor(
                     .onSuccess { _state.update { it.copy(hasSynced = true) } }
                 when (val send = lightningSend(paymentHash)) {
                     SparkLightningSend.NotFound -> {
+                        cacheStore.removeSparkSendHash(paymentHash)
                         val reason = PaymentFailureReason.UNEXPECTED_ERROR
                         _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, reason))
                         return@launch
@@ -427,6 +428,7 @@ class SparkRepo @Inject constructor(
                     // A pending send ends with its own payment event.
                     is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@launch
                     is SparkLightningSend.Found -> {
+                        if (send.status == PaymentStatus.FAILED) cacheStore.removeSparkSendHash(paymentHash)
                         settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
                         return@launch
                     }
@@ -901,6 +903,9 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
+        val failedSend = (payment.details as? PaymentDetails.Lightning)
+            ?.takeIf { payment.paymentType == SparkPaymentType.SEND && payment.status == PaymentStatus.FAILED }
+        failedSend?.let { cacheStore.removeSparkSendHash(it.htlcDetails.paymentHash) }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
