@@ -249,6 +249,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment spark received reaches the node event stream`() = test {
+        startNodeForTesting()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        val received = Event.PaymentReceived("hash", "hash", 1_000_000uL, emptyList())
+
+        @Suppress("UNCHECKED_CAST")
+        (sparkRepo.nodeEvents as MutableSharedFlow<Event>).emit(received)
+        runCurrent()
+
+        assertTrue(received in events)
+    }
+
+    @Test
     fun `node startup failures do not dispatch invoice payment`() = test {
         var dispatched = false
         val beforeSend: suspend () -> Boolean = {
