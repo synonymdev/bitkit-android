@@ -24,6 +24,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.FeeRate
 import to.bitkit.models.Toast
+import to.bitkit.models.safe
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitCancel
 import to.bitkit.repositories.SparkExitCancelUnreadable
@@ -292,6 +293,14 @@ data class SparkExitUiState(
     val networkFees: SparkExitNetworkFees? = null,
     val feeBump: SparkExitFeeBumpUiState = SparkExitFeeBumpUiState(),
 ) {
+    /** What leaves savings when it pays the fee funding: the funding and the fee of the payment that sends it. */
+    val savingsTotalSats: ULong?
+        get() {
+            val fundingSats = quote?.fundingSats?.takeIf { fundFromSavings && it > 0uL } ?: return null
+            val feeSats = savingsFeeSats ?: return null
+            return fundingSats.safe() + feeSats.safe()
+        }
+
     /** Progress offers Pay a higher fee. */
     val canPayHigherFee: Boolean get() = record?.canPayHigherFee(tipHeight, networkFees) == true
 

@@ -75,6 +75,9 @@ private fun Content(
             )
             VerticalSpacer(32.dp)
             uiState.quote?.let { SparkExitQuoteRows(it) }
+            uiState.savingsTotalSats?.let { total ->
+                uiState.savingsFeeSats?.let { fee -> SparkExitSavingsRows(fee, total) }
+            }
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {

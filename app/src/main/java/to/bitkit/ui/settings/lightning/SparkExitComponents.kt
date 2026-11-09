@@ -56,6 +56,15 @@ internal fun SparkExitQuoteRows(quote: SparkExitQuote) {
     }
 }
 
+/** What paying the fee funding from savings costs: the fee of that payment and all that leaves savings. */
+@Composable
+internal fun SparkExitSavingsRows(feeSats: ULong, totalSats: ULong) {
+    Column {
+        SparkExitAmountRow(stringResource(R.string.lightning__spark_exit__savings_fee), feeSats)
+        SparkExitAmountRow(stringResource(R.string.lightning__spark_exit__savings_total), totalSats)
+    }
+}
+
 @Composable
 private fun SparkExitAmountRow(label: String, sats: ULong) {
     SectionRow(name = label, valueContent = { MoneyCaptionB(sats = sats.toLong(), symbol = true) })

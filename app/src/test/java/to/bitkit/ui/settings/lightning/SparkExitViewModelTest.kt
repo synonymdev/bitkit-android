@@ -118,6 +118,16 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirm shows what leaves savings only when savings pays the fee funding`() {
+        val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
+        val state = SparkExitUiState(quote = quote, savingsFeeSats = 300uL, fundFromSavings = true)
+
+        assertEquals(20_300uL, state.savingsTotalSats)
+        assertNull(state.copy(fundFromSavings = false).savingsTotalSats)
+        assertNull(state.copy(savingsFeeSats = null).savingsTotalSats)
+    }
+
+    @Test
     fun `progress asks for at least dust before the funding address was read`() {
         val record = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(68uL))
 
