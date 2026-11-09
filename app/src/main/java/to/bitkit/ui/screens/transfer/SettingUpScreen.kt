@@ -228,7 +228,9 @@ private fun claimText(claim: SparkDepositClaim): String = when (claim) {
 
 @Composable
 private fun speedText(claim: SparkDepositClaim, speed: SparkClaimSpeed): String {
-    val isLater = speed == SparkClaimSpeed.Later || claim == SparkDepositClaim.Later
+    // Unavailable and not seen add the transfer after 3 confirmations, whatever speed the user chose.
+    val isLater = speed == SparkClaimSpeed.Later || claim == SparkDepositClaim.Later ||
+        claim == SparkDepositClaim.Unavailable || claim == SparkDepositClaim.NotSeen
     return stringResource(R.string.lightning__setting_up__speed).replace(
         "{speed}",
         stringResource(if (isLater) R.string.common__later else R.string.fee__instant__title),
