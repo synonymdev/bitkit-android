@@ -444,6 +444,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             is SparkWithdrawalOutcome.Sent -> completeSparkOnchainProofLocked(proof, outcome.txid)
             SparkWithdrawalOutcome.Unsent -> {
                 Logger.info("Released a Paykit proof whose Spark withdrawal never sent", context = TAG)
+                releaseDeniedPrivateConsumption(proof)
                 removeProofsLocked { it == proof }
                 false
             }

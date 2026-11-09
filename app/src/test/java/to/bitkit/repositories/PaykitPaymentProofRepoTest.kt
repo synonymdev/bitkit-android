@@ -931,6 +931,89 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a spark withdrawal proof that never sent gives back its private list on reconcile`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL))
+            .thenReturn(Result.success(Unit))
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(
+            request,
+            ONCHAIN_ADDRESS,
+            request.amount.atomic,
+            privatePaymentListVersion = 7uL,
+            previousPrivatePaymentListVersion = 6uL,
+        ).getOrThrow()
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unsent)
+
+        paymentProofRepo().reconcile()
+
+        assertTrue(storedProofs.isEmpty())
+        verify(privatePaykitRepo).releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL)
+    }
+
+    @Test
+    fun `a spark withdrawal released on reconcile lets the request pay from the private list again`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL))
+            .thenReturn(Result.success(Unit))
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(
+            request,
+            ONCHAIN_ADDRESS,
+            request.amount.atomic,
+            privatePaymentListVersion = 7uL,
+            previousPrivatePaymentListVersion = 6uL,
+        ).getOrThrow()
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unsent)
+        val relaunched = paymentProofRepo()
+        relaunched.reconcile()
+
+        relaunched.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        relaunched.markSparkOnchainPaymentStarted(
+            request,
+            ONCHAIN_ADDRESS,
+            request.amount.atomic,
+            privatePaymentListVersion = 7uL,
+            previousPrivatePaymentListVersion = 6uL,
+        ).getOrThrow()
+
+        assertEquals(7uL, storedProofs.single().privatePaymentListVersion)
+        verify(privatePaykitRepo, times(1)).releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL)
+    }
+
+    @Test
+    fun `a spark withdrawal proof keeps its private list when the release fails on reconcile`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL))
+            .thenReturn(Result.failure(AppError("homeserver unavailable")))
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(
+            request,
+            ONCHAIN_ADDRESS,
+            request.amount.atomic,
+            privatePaymentListVersion = 7uL,
+            previousPrivatePaymentListVersion = 6uL,
+        ).getOrThrow()
+        whenever(lightningRepo.sparkWithdrawalOutcome(ONCHAIN_ADDRESS, request.amount.atomic, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Unsent)
+
+        paymentProofRepo().reconcile()
+
+        assertEquals(7uL, storedProofs.single().privatePaymentListVersion)
+    }
+
+    @Test
     fun `a spark retry decides a lightning proof the node failed`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.Bolt11.rawValue)
