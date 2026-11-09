@@ -1,10 +1,15 @@
 package to.bitkit.repositories
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
@@ -29,12 +34,15 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     private val sparkRepo = mock<SparkRepo>()
     private val sparkState = MutableStateFlow(SparkState(isReady = true))
     private val lightningState = MutableStateFlow(LightningState())
+    private val nodeEvents = MutableSharedFlow<Event>()
+    private val inFlight = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash", paymentId = "id")
     private lateinit var sut: MoveToSparkRepo
 
     @Before
     fun setUp() {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(sparkRepo.state).thenReturn(sparkState)
+        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         sut = MoveToSparkRepo(testDispatcher, lightningRepo, sparkRepo)
     }
 
@@ -152,5 +160,33 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         assertEquals(32uL, feeSats)
         assertEquals(32_000uL, MoveToSparkMath.feeCapMsat(feeSats))
         assertEquals(1_000_000uL, MoveToSparkMath.amountAfterFee(1_000_000uL, 30uL) + feeSats)
+    }
+
+    @Test
+    fun `an in-flight move that fails later matches its payment id when the hash is missing`() = test {
+        val settled = async(start = CoroutineStart.UNDISPATCHED) { sut.awaitSettled(inFlight) }
+
+        nodeEvents.emit(Event.PaymentFailed(paymentId = "other", paymentHash = null, reason = null))
+        nodeEvents.emit(
+            Event.PaymentFailed(paymentId = "id", paymentHash = null, reason = PaymentFailureReason.RETRIES_EXHAUSTED),
+        )
+
+        assertIs<MoveToSparkError.PaymentFailed>(settled.await().exceptionOrNull())
+    }
+
+    @Test
+    fun `an in-flight move that succeeds later reports the fee paid`() = test {
+        val settled = async(start = CoroutineStart.UNDISPATCHED) { sut.awaitSettled(inFlight) }
+
+        nodeEvents.emit(
+            Event.PaymentSuccessful(
+                paymentId = "id",
+                paymentHash = "hash",
+                paymentPreimage = null,
+                feePaidMsat = 7_000uL,
+            ),
+        )
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 7uL), settled.await().getOrThrow())
     }
 }

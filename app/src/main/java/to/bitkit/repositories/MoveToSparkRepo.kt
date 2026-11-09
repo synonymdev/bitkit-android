@@ -156,17 +156,28 @@ class MoveToSparkRepo @Inject constructor(
                 ?: withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }
             if (event != null) reportedPaymentHashes += paymentHash
             when (event) {
-                is Event.PaymentSuccessful -> MoveToSparkOutcome.Moved(
-                    amountSats = quote.amountSats,
-                    feeSats = (event.feePaidMsat ?: 0uL) / 1000uL,
-                )
+                is Event.PaymentSuccessful -> event.moved(quote.amountSats)
                 is Event.PaymentFailed if event.reason in NO_ROUTE_REASONS ->
                     throw MoveToSparkError.TooLarge(quote.amountSats, reason = event.reason)
                 is Event.PaymentFailed -> throw MoveToSparkError.PaymentFailed(event.reason)
                 else -> {
                     settled.cancel()
-                    MoveToSparkOutcome.InFlight(quote.amountSats)
+                    MoveToSparkOutcome.InFlight(quote.amountSats, paymentHash, sentId)
                 }
+            }
+        }
+
+    /** Waits for the payment of a move still [inFlight] to settle after the move stopped waiting. */
+    suspend fun awaitSettled(inFlight: MoveToSparkOutcome.InFlight): Result<MoveToSparkOutcome.Moved> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val event = lightningRepo.nodeEvents.first { it.settles(inFlight.paymentHash, inFlight.paymentId) }
+                when (event) {
+                    is Event.PaymentSuccessful -> event.moved(inFlight.amountSats)
+                    else -> throw MoveToSparkError.PaymentFailed((event as? Event.PaymentFailed)?.reason)
+                }
+            }.onFailure {
+                Logger.warn("Failed to move '${inFlight.amountSats}' sats to Spark after the wait", it, context = TAG)
             }
         }
 
@@ -179,6 +190,11 @@ class MoveToSparkRepo @Inject constructor(
             (this as? LdkError)?.compactType == NodeException.PaymentSendingFailed::class.simpleName
         return isSendingFailed && runCatching { !Bolt11Invoice.fromStr(invoice).isExpired() }.getOrDefault(false)
     }
+
+    private fun Event.PaymentSuccessful.moved(amountSats: ULong) = MoveToSparkOutcome.Moved(
+        amountSats = amountSats,
+        feeSats = (feePaidMsat ?: 0uL) / 1000uL,
+    )
 
     private fun Event.settles(paymentHash: String, paymentId: String?): Boolean = when (this) {
         is Event.PaymentSuccessful -> this.paymentHash == paymentHash
@@ -245,7 +261,11 @@ sealed interface MoveToSparkOutcome {
     data class Moved(override val amountSats: ULong, val feeSats: ULong) : MoveToSparkOutcome
 
     /** The payment left but had not settled when the move stopped waiting; Spark shows it once it does. */
-    data class InFlight(override val amountSats: ULong) : MoveToSparkOutcome
+    data class InFlight(
+        override val amountSats: ULong,
+        val paymentHash: String,
+        val paymentId: String,
+    ) : MoveToSparkOutcome
 }
 
 sealed class MoveToSparkError(message: String, cause: Throwable? = null) : AppError(message, cause) {

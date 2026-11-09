@@ -4,6 +4,8 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -28,6 +30,8 @@ class MoveToSparkViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<MoveToSparkUiState>(MoveToSparkUiState.Quoting)
     val uiState = _uiState.asStateFlow()
 
+    private var moveGeneration = 0
+
     init {
         quote()
     }
@@ -48,17 +52,39 @@ class MoveToSparkViewModel @Inject constructor(
         if (confirm.isMoving) return
         val quote = confirm.quote
         _uiState.update { MoveToSparkUiState.Confirm(quote, isMoving = true) }
+        val generation = ++moveGeneration
         viewModelScope.launch {
             moveToSparkRepo.move(quote).fold(
                 onSuccess = { outcome ->
-                    walletRepo.syncNodeAndWallet()
-                    val hasRest = MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
-                    _uiState.update { MoveToSparkUiState.Done(outcome, emptiedChannelId(), hasRest) }
+                    val settled = (outcome as? MoveToSparkOutcome.InFlight)?.let {
+                        async(start = CoroutineStart.UNDISPATCHED) { moveToSparkRepo.awaitSettled(it) }
+                    }
+                    val done = done(outcome)
+                    _uiState.update { done }
+                    settled?.await()?.let { showLateOutcome(it, generation) }
                 },
                 onFailure = { error -> _uiState.update { error.toUiState() } },
             )
         }
     }
+
+    private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done {
+        walletRepo.syncNodeAndWallet()
+        val hasRest = MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
+        return MoveToSparkUiState.Done(outcome, emptiedChannelId(), hasRest)
+    }
+
+    private suspend fun showLateOutcome(settled: Result<MoveToSparkOutcome.Moved>, generation: Int) {
+        if (generation != moveGeneration || !uiState.value.isInFlight()) return
+        val late = settled.fold(
+            onSuccess = { done(it) },
+            onFailure = { MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN) },
+        )
+        _uiState.update { if (generation == moveGeneration && it.isInFlight()) late else it }
+    }
+
+    private fun MoveToSparkUiState.isInFlight(): Boolean =
+        this is MoveToSparkUiState.Done && outcome is MoveToSparkOutcome.InFlight
 
     /** The channel to close after the move, when exactly one is open; with several, the user picks in Connections. */
     private fun emptiedChannelId(): String? = lightningRepo.lightningState.value.channels.filterOpen()
