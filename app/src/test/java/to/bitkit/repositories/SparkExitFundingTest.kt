@@ -1,5 +1,7 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.CooperativeRecoveryError
+import breez_sdk_spark.CooperativeRecoveryFailure
 import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PerBranchFunding
@@ -588,7 +590,23 @@ class SparkExitFundingTest {
         )
         assertTrue(slow.canPayHigherFee(1_000u, calm))
         assertFalse(slow.copy(isRebuilding = true).canPayHigherFee(1_000u, rising))
-        assertFalse(slow.copy(failedLeafRetrySince = 1_000u).canPayHigherFee(1_000u, rising))
+        // A retry of failed leaves that built its own recovery can be sped up; one waiting on the operators can't.
+        assertTrue(slow.copy(failedLeafRetrySince = 1_000u).canPayHigherFee(1_000u, rising))
+        val waitingOnOperators = record.adopt(
+            SparkExitFixtures.recovery(
+                emptyList(),
+                failed = listOf(
+                    CooperativeRecoveryFailure(
+                        "leaf-1",
+                        "o",
+                        0u,
+                        CooperativeRecoveryError.OperatorsUnavailable("down"),
+                    ),
+                ),
+            ),
+            0L,
+        ).copy(failedLeafRetrySince = 1_000u)
+        assertFalse(waitingOnOperators.canPayHigherFee(1_000u, rising))
         assertFalse(SparkExitFixtures.record().canPayHigherFee(1_000u, rising))
     }
 

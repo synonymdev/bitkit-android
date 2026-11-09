@@ -422,12 +422,17 @@ data class SparkExitRecord(
     )
 
     /**
-     * Whether the user may raise the exit's fee rate: it runs on a built recovery, is not rebuilding or retrying leaves
-     * the operators moved, and the network finds its rate too low ([underpricedStep]) or asks more for the next block
-     * ([fees]).
+     * Whether the user may raise the exit's fee rate: it runs on a built recovery (a failed-leaf retry once it built
+     * steps of its own), is not rebuilding, and the network finds its rate too low ([underpricedStep]) or asks more
+     * for the next block ([fees]).
      */
     fun canPayHigherFee(tip: UInt?, fees: SparkExitNetworkFees?): Boolean {
-        if (phase != Phase.Running || isRebuilding || recovery == null || isRetryingFailedLeaves) return false
+        val live = recovery ?: return false
+        if (phase != Phase.Running || isRebuilding) return false
+        // A failed-leaf retry that built a recovery of its own can be sped up, its timing kept for the leaves still
+        // outstanding; one waiting only on the operators has nothing to speed up.
+        val hasStepToConfirm = live.transactions.any { it.status !is ExitTransactionStatus.Confirmed }
+        if (isRetryingFailedLeaves && !hasStepToConfirm) return false
         return underpricedStep(tip) != null || isBelowNetwork(fees)
     }
 
