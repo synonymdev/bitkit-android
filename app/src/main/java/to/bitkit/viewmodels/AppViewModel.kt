@@ -5390,6 +5390,8 @@ class AppViewModel @Inject constructor(
     ) {
         isSubmittingPaymentRequest = false
         uncertainOnchainPaymentRequestId = null
+        // A closed send never takes a late Spark settlement onto the next one.
+        uncertainSparkWithdrawal = null
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
             if (request != null && !retryIncomingRequest) completePaymentRequestPresentation(request)

@@ -12345,13 +12345,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertIs<SendEffect.NavigateToError>(effects.last(), "a withdrawal that never sent can be tried again")
     }
 
+    @Test
+    fun `a late spark settlement leaves a send sheet opened after its pending one closed`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val effects = uncertainContactSparkSend(leg, SparkWithdrawalOutcome.Unknown)
+        val pending = assertIs<SendEffect.NavigateToPending>(effects.last())
+        sut.showSheet(Sheet.Send(SendRoute.Pending(pending.paymentHash, pending.amount, false, isOnchain = true)))
+        sut.hideSheet()
+        runCurrent()
+        sut.showSheet(Sheet.Send(SendRoute.Amount))
+        val before = effects.size
+
+        sparkWithdrawalSettlements.emit(SparkWithdrawalSettlement(leg.endpoint.value, leg.deliveredSat, null))
+        runCurrent()
+
+        assertEquals(before, effects.size, "the settlement belongs to the closed pending screen")
+    }
+
     private suspend fun TestScope.uncertainContactSparkSend(
         leg: ServiceRouteLeg,
         outcome: SparkWithdrawalOutcome,
+        whileOutcomeIsRead: suspend () -> Unit = {},
     ): List<SendEffect> {
         whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
         whenever(lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, emptySet()))
-            .thenReturn(outcome)
+            .doSuspendableAnswer {
+                whileOutcomeIsRead()
+                outcome
+            }
         whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())).doSuspendableAnswer {
             val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
             onBeforeSend()
