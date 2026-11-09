@@ -133,6 +133,17 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an invoice spark is still paying is reported pending`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 2).copy(status = PaymentStatus.PENDING)))
+
+        val earlier = createSut().earlierLightningSend("lnbc1280n1send", null)
+
+        assertEquals(EarlierSend.Pending("hash"), earlier)
+    }
+
+    @Test
     fun `records a send's fee once a sync reports it`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val sut = createSut()

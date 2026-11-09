@@ -673,9 +673,35 @@ class SparkRepo @Inject constructor(
             ?: SparkLightningSend.NotFound
     }
 
-    private fun List<Payment>.latestSend(paymentHash: String): Payment? = filter {
-        val hash = (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash
-        it.paymentType == SparkPaymentType.SEND && hash.equals(paymentHash, ignoreCase = true)
+    /**
+     * Spark's pending or paid send of [bolt11], matched by the invoice or its [paymentHash], so the node never pays it
+     * again; null when Spark's send failed or none is known.
+     */
+    suspend fun earlierLightningSend(bolt11: String, paymentHash: String?): EarlierSend? =
+        withContext(bgDispatcher) {
+            if (!sparkService.isConnected) return@withContext null
+            val send = runSuspendCatching { sparkService.listPayments() }
+                .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+                .getOrNull()
+                ?.latestSend {
+                    it.invoice.equals(bolt11, ignoreCase = true) ||
+                        it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
+                }
+                ?: return@withContext null
+            val hash = (send.details as PaymentDetails.Lightning).htlcDetails.paymentHash
+            when (send.status) {
+                PaymentStatus.PENDING -> EarlierSend.Pending(hash)
+                PaymentStatus.COMPLETED -> EarlierSend.Paid(hash)
+                PaymentStatus.FAILED -> null
+            }
+        }
+
+    private fun List<Payment>.latestSend(paymentHash: String): Payment? =
+        latestSend { it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true) }
+
+    private fun List<Payment>.latestSend(matches: (PaymentDetails.Lightning) -> Boolean): Payment? = filter {
+        val details = it.details as? PaymentDetails.Lightning
+        it.paymentType == SparkPaymentType.SEND && details != null && matches(details)
     }
         // A retry of a failed send shares its hash, so the outcome that settles it wins.
         .minByOrNull { SEND_STATUS_PRIORITY.indexOf(it.status) }
