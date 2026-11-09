@@ -82,7 +82,9 @@ class MoveToSparkRepo @Inject constructor(
         runSuspendCatching {
             val limitSats = movableSats()
             val wantedSats = targetSats?.coerceAtMost(limitSats) ?: limitSats
-            if (wantedSats < MoveToSparkMath.MIN_MOVE_SATS) throw MoveToSparkError.NothingToMove()
+            if (wantedSats < MoveToSparkMath.MIN_MOVE_SATS || !MoveToSparkMath.hasMovableBalance(limitSats)) {
+                throw MoveToSparkError.NothingToMove()
+            }
             if (!MoveToSparkMath.isSparkUsable(sparkRepo.state.value)) throw MoveToSparkError.SparkUnavailable()
 
             val invoice = sparkRepo.createInvoice(null, INVOICE_DESCRIPTION, INVOICE_EXPIRY_SECS).getOrThrow()
@@ -188,7 +190,10 @@ object MoveToSparkMath {
 
     /** Whether the channels hold a balance worth moving to a usable Spark wallet. */
     fun canMove(channels: List<ChannelDetails>?, spark: SparkState): Boolean =
-        isSparkUsable(spark) && movableSats(channels) >= MIN_MOVE_SATS
+        isSparkUsable(spark) && hasMovableBalance(movableSats(channels))
+
+    /** Whether [limitSats] still leaves at least [MIN_MOVE_SATS] to quote once the first fee guess is reserved. */
+    fun hasMovableBalance(limitSats: ULong): Boolean = firstCandidate(limitSats, limitSats) >= MIN_MOVE_SATS
 
     /** The first amount to quote: [wantedSats] when it leaves room for fees, else the limit less a guessed fee. */
     fun firstCandidate(wantedSats: ULong, limitSats: ULong): ULong {

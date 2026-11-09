@@ -127,6 +127,20 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a move is offered only when the minimum fits beside the fee reserve`() {
+        assertTrue(!MoveToSparkMath.hasMovableBalance(1_011uL))
+        assertTrue(MoveToSparkMath.hasMovableBalance(1_012uL))
+    }
+
+    @Test
+    fun `quote fails with nothing to move when the fee reserve leaves under the minimum`() = test {
+        sendable(1_011uL)
+
+        assertIs<MoveToSparkError.NothingToMove>(sut.quote().exceptionOrNull())
+        verify(sparkRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
     fun `smaller amount halves until the minimum`() {
         assertEquals(50_000uL, MoveToSparkMath.smallerAmount(100_000uL))
         assertNull(MoveToSparkMath.smallerAmount(MoveToSparkMath.MIN_MOVE_SATS))

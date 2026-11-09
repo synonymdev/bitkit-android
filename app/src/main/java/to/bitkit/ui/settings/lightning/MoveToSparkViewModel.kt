@@ -52,7 +52,7 @@ class MoveToSparkViewModel @Inject constructor(
             moveToSparkRepo.move(quote).fold(
                 onSuccess = { outcome ->
                     walletRepo.syncNodeAndWallet()
-                    val hasRest = moveToSparkRepo.movableSats() >= MoveToSparkMath.MIN_MOVE_SATS
+                    val hasRest = MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
                     _uiState.update { MoveToSparkUiState.Done(outcome, emptiedChannelId(), hasRest) }
                 },
                 onFailure = { error -> _uiState.update { error.toUiState() } },
