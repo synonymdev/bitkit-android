@@ -8,12 +8,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 /**
  * Funds and mines on the local regtest bitcoind from bitkit-docker. The wallet under test reaches
  * that chain through the stack's electrs in an `E2E=true` build (see `Env.electrumUrlForNetwork`).
  */
 object LocalRegtest {
+    private const val SATS_PER_BTC = 100_000_000uL
+
     private val rpcUrl: String
         get() = InstrumentationRegistry.getArguments().getString("bitcoinRpcUrl") ?: "http://10.0.2.2:43782"
     private val rpcAuth = Base64.encodeToString("polaruser:polarpass".toByteArray(), Base64.NO_WRAP)
@@ -34,7 +37,10 @@ object LocalRegtest {
                 .put("params", JSONArray(params.toList()))
             connection.outputStream.use { it.write(body.toString().toByteArray()) }
             val stream = if (connection.responseCode < 400) connection.inputStream else connection.errorStream
-            val response = JSONObject(stream.bufferedReader().use { it.readText() })
+            val text = checkNotNull(stream) { "bitcoind $method failed: HTTP ${connection.responseCode}" }
+                .bufferedReader().use { it.readText() }
+            val response = runCatching { JSONObject(text) }
+                .getOrElse { error("bitcoind $method failed: HTTP ${connection.responseCode} $text") }
             val error = response.optJSONObject("error")
             check(error == null) { "bitcoind $method failed: ${error?.optString("message")}" }
             response.get("result")
@@ -44,8 +50,12 @@ object LocalRegtest {
     }
 
     /** Sends [amountSat] to [address] from the bitcoind wallet and returns the txid. */
-    suspend fun deposit(address: String, amountSat: ULong): String =
-        call("sendtoaddress", address, amountSat.toDouble() / 100_000_000) as String
+    suspend fun deposit(address: String, amountSat: ULong): String {
+        val whole = (amountSat / SATS_PER_BTC).toLong()
+        val fraction = (amountSat % SATS_PER_BTC).toLong()
+        val btc = "%d.%08d".format(Locale.ROOT, whole, fraction)
+        return call("sendtoaddress", address, btc) as String
+    }
 
     suspend fun mine(count: UInt = 1u) {
         val address = call("getnewaddress") as String

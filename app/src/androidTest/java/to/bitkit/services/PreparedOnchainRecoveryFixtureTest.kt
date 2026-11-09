@@ -39,7 +39,6 @@ class PreparedOnchainRecoveryFixtureTest {
     @Inject
     lateinit var lightningService: LightningService
 
-
     @Inject
     lateinit var keychain: Keychain
 
