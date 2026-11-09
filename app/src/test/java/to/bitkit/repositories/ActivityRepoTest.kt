@@ -165,6 +165,67 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `RBF publishes only a complete replacement and resolves stale rows across repeated boosts`() = test {
+        val original = createOnchainActivity(id = "a", txId = "tx-a", walletId = WalletScope.default)
+        val replacement = createOnchainActivity(id = "b", txId = "tx-b", walletId = WalletScope.default)
+        val latest = createOnchainActivity(id = "c", txId = "tx-c", walletId = WalletScope.default)
+        val published = CompletableDeferred<Unit>()
+        whenever(coreService.activity.publishRbfBoost("tx-a", "tx-b")).doSuspendableAnswer {
+            published.await()
+            replacement
+        }
+        val tagsBefore = sut.activityTagsChanged.value
+        val pending = async { sut.publishRbfBoost("tx-a", "tx-b") }
+        assertEquals(original, sut.resolvePublishedRbfActivity(original))
+        assertFalse(sut.isLocalRbfBoost("tx-a"))
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+        published.complete(Unit)
+        assertTrue(pending.await().isSuccess)
+        assertEquals(replacement, sut.resolvePublishedRbfActivity(original))
+        assertTrue(sut.isLocalRbfBoost("tx-a"))
+        assertTrue(sut.activityTagsChanged.value > tagsBefore)
+        whenever(coreService.activity.publishRbfBoost("tx-b", "tx-c")).thenReturn(latest)
+        sut.publishRbfBoost("tx-b", "tx-c").getOrThrow()
+        sut.publishRbfBoost("tx-a", "tx-b").getOrThrow()
+        assertEquals(latest, sut.resolvePublishedRbfActivity(original))
+        assertEquals(latest, sut.resolvePublishedRbfActivity(replacement))
+        val foreign = original.copy(v1 = original.v1.copy(walletId = "hardware"))
+        assertEquals(foreign, sut.resolvePublishedRbfActivity(foreign))
+        sut.resetState()
+        assertEquals(original, sut.resolvePublishedRbfActivity(original))
+        assertFalse(sut.isLocalRbfBoost("tx-a"))
+    }
+
+    @Test
+    fun `wallet reset rejects completion from the old RBF publication`() = test {
+        val published = CompletableDeferred<Unit>()
+        val replacement = createOnchainActivity(txId = "tx-b", walletId = WalletScope.default)
+        whenever(coreService.activity.publishRbfBoost("tx-a", "tx-b")).doSuspendableAnswer {
+            published.await()
+            replacement
+        }
+        val pending = async { sut.publishRbfBoost("tx-a", "tx-b") }
+        sut.resetState()
+        published.complete(Unit)
+        assertTrue(pending.await().isFailure)
+        assertFalse(sut.isLocalRbfBoost("tx-a"))
+    }
+
+    @Test
+    fun `failed or cancelled RBF publication never publishes a replacement route`() = test {
+        val original = createOnchainActivity(txId = "tx-a", walletId = WalletScope.default)
+        whenever(coreService.activity.publishRbfBoost("tx-a", "tx-b"))
+            .thenThrow(IllegalStateException("storage failed"), CancellationException("cancelled"))
+        val before = sut.activitiesChanged.value
+        assertTrue(sut.publishRbfBoost("tx-a", "tx-b").isFailure)
+        assertEquals(before, sut.activitiesChanged.value)
+        assertEquals(original, sut.resolvePublishedRbfActivity(original))
+        assertFalse(sut.isLocalRbfBoost("tx-a"))
+        assertFailsWith<CancellationException> { sut.publishRbfBoost("tx-a", "tx-b") }
+        assertEquals(before, sut.activitiesChanged.value)
+    }
+
+    @Test
     fun `observed hardware payment completes only after original Sent activity is durable`() = test {
         val txid = "ab".repeat(32)
         val wallet = "original-hardware-wallet"

@@ -48,6 +48,7 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.ext.walletId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -80,6 +81,8 @@ class ActivityRepo @Inject constructor(
     private val syncMutex = Mutex()
     private var activeSync: CompletableDeferred<Result<Unit>>? = null
 
+    private val publishedRbfReplacements = MutableStateFlow(RbfPublications())
+
     private val _state = MutableStateFlow(ActivityState())
     val state: StateFlow<ActivityState> = _state
 
@@ -105,6 +108,7 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun resetState() = withContext(bgDispatcher) {
+        publishedRbfReplacements.update { RbfPublications(generation = it.generation + 1) }
         _state.update { ActivityState() }
         notifyActivitiesChanged()
         Logger.debug("Activity state reset", context = TAG)
@@ -320,9 +324,41 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    suspend fun publishRbfBoost(originalTxId: String, replacementTxId: String): Result<Unit> {
+        val generation = publishedRbfReplacements.value.generation
+        return withContext(bgDispatcher) {
+            runSuspendCatching {
+                val replacement = coreService.activity.publishRbfBoost(originalTxId, replacementTxId)
+                publishedRbfReplacements.update {
+                    check(it.generation == generation) { "Wallet activity reset during RBF publication" }
+                    it.copy(
+                        replacements = it.replacements +
+                            (scopedActivityId(replacement.v1.walletId, originalTxId) to replacement)
+                    )
+                }
+                notifyActivitiesChanged(tagsChanged = true)
+            }
+        }
+    }
+
+    fun isLocalRbfBoost(txid: String): Boolean =
+        scopedActivityId(WalletScope.default, txid) in publishedRbfReplacements.value.replacements
+
+    fun resolvePublishedRbfActivity(activity: Activity): Activity {
+        val replacements = publishedRbfReplacements.value.replacements
+        val visited = mutableSetOf<String>()
+        var current = activity
+        while (current is Activity.Onchain) {
+            val key = scopedActivityId(current.v1.walletId, current.v1.txId)
+            if (!visited.add(key)) return current
+            current = replacements[key] ?: return current
+        }
+        return current
+    }
+
     suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
         coreService.activity.handleOnchainTransactionReplaced(txid, conflicts)
-        notifyActivitiesChanged()
+        notifyActivitiesChanged(tagsChanged = true)
     }
 
     suspend fun handleOnchainTransactionReorged(txid: String) {
@@ -1221,3 +1257,8 @@ private fun OnchainActivity.toPreActivityMetadata(tags: List<String>): PreActivi
 }
 
 private data class SyncedDuplicate(val synced: OnchainActivity, val restoredId: String)
+
+private data class RbfPublications(
+    val generation: Long = 0,
+    val replacements: Map<String, Activity.Onchain> = emptyMap(),
+)
