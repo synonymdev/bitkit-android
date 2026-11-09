@@ -2824,6 +2824,209 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scheduled activity backup skips an unchanged payload`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        val backupStatuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(backupStatuses, CompletableDeferred<Unit>().apply { complete(Unit) }) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+
+            // Every wallet sync announces a change, even when no activity was added or updated.
+            whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(2_000))
+            activitiesChanged.update { 2L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+            val status = backupStatuses.value.getValue(BackupCategory.ACTIVITY)
+            assertFalse(status.isRequired)
+            assertFalse(status.running)
+
+            whenever(activityRepo.getAllActivitiesTags()).thenReturn(Result.success(listOf(defaultTag())))
+            activitiesChanged.update { 3L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `a full backup upgrades a pending activity upload for the same wallet`() = test {
+        val category = BackupCategory.ACTIVITY
+        val changes = MutableStateFlow(0L)
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(changes)
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            sut.triggerBackup(category).getOrThrow()
+            changes.update { it + 1 }
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            sut.scheduleFullBackup()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `a full backup requested during unchanged activity capture still uploads`() = test {
+        val category = BackupCategory.ACTIVITY
+        val changes = MutableStateFlow(0L)
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(changes)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred(Unit)) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            sut.triggerBackup(category).getOrThrow()
+            whenever(activityRepo.getActivities()).doSuspendableAnswer {
+                entered.complete(Unit)
+                resume.await()
+                Result.success(emptyList())
+            }
+            changes.update { it + 1 }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+            assertTrue(entered.isCompleted)
+
+            sut.scheduleFullBackup()
+            advanceTimeBy(10_000)
+            runCurrent()
+            resume.complete(Unit)
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+        } finally {
+            resume.complete(Unit)
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `a new wallet owner uploads activity even if its payload matches the previous owner`() = test {
+        val category = BackupCategory.ACTIVITY
+        val changes = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(changes)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred(Unit)) {}
+
+        sut.triggerBackup(category).getOrThrow()
+        vssClients.withSuspendedClients(shutdown = {}) {}
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            changes.update { it + 1 }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `scheduled activity backup uploads a reverted payload after a failed upload`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred<Unit>().apply { complete(Unit) }) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+
+            // The server can commit a write whose response never reaches the client.
+            whenever(activityRepo.getAllActivitiesTags()).thenReturn(Result.success(listOf(defaultTag())))
+            whenever(vssBackupClient.putObject(any(), any())).thenReturn(Result.failure(BackupRepoTestError("io")))
+            assertTrue(sut.triggerBackup(BackupCategory.ACTIVITY).isFailure)
+
+            val uploaded = VssItem(key = BackupCategory.ACTIVITY.name, value = byteArrayOf(), version = 2)
+            whenever(vssBackupClient.putObject(any(), any())).thenReturn(Result.success(uploaded))
+            whenever(activityRepo.getAllActivitiesTags()).thenReturn(Result.success(emptyList()))
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(3)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `scheduled activity backup uploads an unchanged payload after reset`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred<Unit>().apply { complete(Unit) }) {}
+        sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+
+        sut.reset()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `explicit activity backup uploads an unchanged payload`() = test {
+        stubActivityBackupReads()
+
+        sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+        sut.triggerBackup(BackupCategory.ACTIVITY).getOrThrow()
+
+        verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.ACTIVITY.name), any())
+    }
+
+    @Test
     fun `pending restore stops gating uploads once it expires`() = test {
         val activitiesChanged = MutableStateFlow(0L)
         stubBackupObservers()

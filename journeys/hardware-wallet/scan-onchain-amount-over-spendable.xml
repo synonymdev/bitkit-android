@@ -1,0 +1,22 @@
+<journey name="scan onchain amount over hardware spendable">
+  <description>
+    Verifies that an on-chain BIP21 request whose amount a paired hardware wallet's balance covers,
+    but not once the network fee is taken, shows the Insufficient Savings toast instead of opening
+    the Send Amount screen with a fixed amount that cannot be changed or continued. Nothing is
+    broadcast.
+    Precondition: an onboarded dev wallet with 0 sats in Savings and a paired Bridge emulator (see
+    README.md) whose native-segwit account holds a confirmed regtest balance B of at least 10 000
+    sats, read from its home tile. Use an amount between B minus 100 sats and B, which the balance
+    covers but the balance minus any non-zero fee does not, and a regtest address the wallet does
+    not own. Start on the wallet home screen.
+    The Send Amount screen is identified by its number field (testTag "SendNumberField"), the
+    Confirm screen by its amount (testTag "ReviewAmount").
+  </description>
+  <actions>
+    <action>Read the paired Trezor's balance B from its home tile and pick an amount A with B - 100 &lt; A &lt; B, written in BTC</action>
+    <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;regtest address&gt;?amount=&lt;A&gt;" to.bitkit.dev</action>
+    <action>Verify the Insufficient Savings toast (testTag "InsufficientSavingsToast") appears (screenshot), and neither the Send Amount screen (testTag "SendNumberField") nor the Confirm screen (testTag "ReviewAmount") opens</action>
+    <action>Pick an amount below B by at least 2 000 sats and run the same deep link with it</action>
+    <action>Verify the Confirm screen opens with the Trezor as the funding source and the amount shown (testTag "ReviewAmount"); close the sheet without sending</action>
+  </actions>
+</journey>
