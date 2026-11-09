@@ -15814,9 +15814,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showPendingTransfer(original.copy(localFollowupComplete = false))
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
 
-        sut.onRecoveredTransfer(original)
-        advanceUntilIdle()
+        sut.mainScreenEffect.test {
+            sut.onRecoveredTransfer(original)
+            advanceUntilIdle()
 
+            assertEquals(MainScreenEffect.Navigate(Routes.Home, clearStack = true), expectMostRecentItem())
+        }
         assertNull(sut.currentSheet.value)
         verify(lightningRepo).followRecoveredSparkFunding(original)
     }
