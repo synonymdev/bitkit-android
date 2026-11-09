@@ -200,6 +200,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `recovered spark funding hands only an accepted spark deposit to spark`() = test {
         val txid = "ab".repeat(32)
         val funding = pendingSendAttempt().copy(isTransfer = true, txid = txid)
+        whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(emptyMap()))
 
         sut.followRecoveredSparkFunding(funding)
         sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed, orderId = "order"))
@@ -209,6 +210,18 @@ class LightningRepoTest : BaseUnitTest() {
 
         verify(sparkRepo).onDepositBroadcast(txid, 1_000uL)
         verify(sparkRepo).waitForMatureClaim(txid)
+    }
+
+    @Test
+    fun `a recovered spark funding keeps the claim the funding screen chose`() = test {
+        val txid = "ab".repeat(32)
+        val funding = pendingSendAttempt().copy(isTransfer = true, txid = txid, evidence = OnchainSendEvidence.Observed)
+        whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf(txid to SparkDepositClaim.Looking)))
+
+        sut.followRecoveredSparkFunding(funding)
+
+        verify(sparkRepo).onDepositBroadcast(txid, 1_000uL)
+        verify(sparkRepo, never()).waitForMatureClaim(any())
     }
 
     @Test

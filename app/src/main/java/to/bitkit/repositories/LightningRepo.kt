@@ -2044,7 +2044,8 @@ class LightningRepo @Inject constructor(
         if (!attempt.isSparkFunding || !attempt.hasPositiveEvidence) return
         val txid = attempt.txid ?: return
         sparkRepo.onDepositBroadcast(txid, attempt.amountSats)
-        sparkRepo.waitForMatureClaim(txid)
+        // The funding screen may already follow the claim at the speed the user chose.
+        if (sparkRepo.depositClaims.value[txid] == null) sparkRepo.waitForMatureClaim(txid)
     }
 
     // A change signal only: consumers must reread and validate the original attempt.
