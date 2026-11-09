@@ -902,7 +902,7 @@
     <string name="wallet__boost_fee_custom">La teva transacció podria confirmar-se més ràpid si inclouen una tarifa de xarxa addicional. Estableix la teva tarifa personalitzada a continuació.</string>
     <string name="wallet__boost_fee_recomended">La teva transacció podria confirmar-se més ràpid si inclouen una tarifa de xarxa addicional. Aquí tens una recomanació:</string>
     <string name="wallet__boost_increase_fee">Augmentar tarifa</string>
-    <string name="wallet__boost_pending_msg">S’ha transmès l’acceleració. El registre d’activitat encara no està llest.</string>
+    <string name="wallet__boost_pending_msg">L’acceleració està pendent. Els detalls actualitzats de la transacció encara no estan llestos.</string>
     <string name="wallet__boost_pending_title">Acceleració pendent</string>
     <string name="wallet__boost_recomended_button">Usar tarifa suggerida</string>
     <string name="wallet__boost_success_msg">La transacció s\'ha impulsat correctament.</string>

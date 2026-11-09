@@ -883,7 +883,7 @@
     <string name="wallet__boost_fee_custom">Η συναλλαγή σου μπορεί να ολοκληρωθεί πιο γρήγορα αν συμπεριλάβεις επιπλέον τέλος δικτύου. Όρισε το προσαρμοσμένο τέλος παρακάτω.</string>
     <string name="wallet__boost_fee_recomended">Η συναλλαγή σου μπορεί να ολοκληρωθεί πιο γρήγορα αν συμπεριλάβεις επιπλέον τέλος δικτύου. Εδώ είναι μια πρόταση:</string>
     <string name="wallet__boost_increase_fee">Αύξηση τέλους</string>
-    <string name="wallet__boost_pending_msg">Η επιτάχυνση μεταδόθηκε. Η εγγραφή δραστηριότητας δεν είναι ακόμη έτοιμη.</string>
+    <string name="wallet__boost_pending_msg">Η επιτάχυνση εκκρεμεί. Οι ενημερωμένες λεπτομέρειες της συναλλαγής δεν είναι ακόμη έτοιμες.</string>
     <string name="wallet__boost_pending_title">Εκκρεμής επιτάχυνση</string>
     <string name="wallet__boost_recomended_button">Χρήση προτεινόμενου τέλους</string>
     <string name="wallet__boost_success_msg">Η συναλλαγή ενισχύθηκε επιτυχώς.</string>
