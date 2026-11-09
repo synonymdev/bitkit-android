@@ -842,7 +842,8 @@ class SparkRepo @Inject constructor(
             invoice = lightning.invoice,
             timestamp = payment.timestamp,
             fee = payment.fees.toLong().toULong(),
-            message = lightning.description.orEmpty(),
+            // A note stored on the activity, such as an LNURL comment, outlives the invoice's description.
+            message = existing?.message?.takeIf { it.isNotEmpty() } ?: lightning.description.orEmpty(),
             preimage = lightning.htlcDetails.preimage,
             contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,

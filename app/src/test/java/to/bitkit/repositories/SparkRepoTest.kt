@@ -24,7 +24,9 @@ import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -284,6 +286,30 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
     }
+
+    @Test
+    fun `replaying a send keeps the payment note stored on its activity`() = test {
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.SUCCEEDED, message = "for coffee"))))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("for coffee", (activity.firstValue as Activity.Lightning).v1.message)
+    }
+
+    private fun storedSend(status: PaymentState, message: String = "") = LightningActivity.create(
+        id = "hash",
+        txType = ActivityPaymentType.SENT,
+        status = status,
+        value = 128uL,
+        invoice = "lnbc1280n1send",
+        timestamp = 1uL,
+        message = message,
+    )
 
     @Test
     fun `records a send's fee once a sync reports it`() = test {
