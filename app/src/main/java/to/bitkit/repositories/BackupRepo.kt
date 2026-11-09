@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -188,6 +189,11 @@ class BackupRepo @Inject constructor(
     val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
 
     private val restorePendingUntil = MutableStateFlow(0L)
+
+    /** Whether a restore is announced and its backup not applied yet, as [isRestoreInProgress], as it changes. */
+    val restoreInProgress: Flow<Boolean> = combine(_isRestoring, restorePendingUntil) { isRestoring, pendingUntil ->
+        isRestoring || currentTimeMillis() < pendingUntil
+    }.distinctUntilChanged()
 
     fun reset() {
         stopObservingBackups()
