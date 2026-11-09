@@ -486,6 +486,25 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal spark returns as failed is not reported as sent`() = test {
+        val sut = journaledSpark()
+        val failed = contactWithdrawal().copy(status = PaymentStatus.FAILED)
+        whenever(sparkService.send(any())).thenReturn(failed)
+        whenever(sparkService.listPayments()).thenReturn(emptyList(), listOf(failed))
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertNull(result.getOrNull())
+        assertIs<SparkError.WithdrawalNotSent>(result.exceptionOrNull())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        assertEquals(
+            SparkWithdrawalOutcome.Unsent,
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+            "The proof, private list and allowance attempt are released as for any unsent withdrawal",
+        )
+    }
+
+    @Test
     fun `a withdrawal to a contact is not marked as a transfer`() = test {
         val sent = OnchainActivity.create(
             id = "withdrawal",

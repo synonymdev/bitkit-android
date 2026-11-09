@@ -604,6 +604,9 @@ class SparkRepo @Inject constructor(
                 runSuspendCatching { refresh() }.onFailure {
                     Logger.warn("Failed to refresh Spark after withdrawal '${payment.id}'", it, context = TAG)
                 }
+                // A failed withdrawal paid nothing: its journal closed as recorded, so the caller sees it unsent and
+                // releases the proof, private list and allowance attempt instead of showing success.
+                if (payment.status == PaymentStatus.FAILED) throw SparkError.WithdrawalNotSent()
                 (payment.details as? PaymentDetails.Withdraw)?.txId ?: payment.id
             }.onFailure {
                 Logger.error("Failed to withdraw to a Paykit contact with Spark", it, context = TAG)
