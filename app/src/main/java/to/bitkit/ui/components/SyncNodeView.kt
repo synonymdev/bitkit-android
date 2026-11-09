@@ -19,7 +19,10 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 @Composable
-fun SyncNodeView(modifier: Modifier) {
+fun SyncNodeView(
+    modifier: Modifier,
+    variant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
+) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -27,17 +30,18 @@ fun SyncNodeView(modifier: Modifier) {
         FillHeight()
 
         TransferAnimationView(
-            largeCircleRes = R.drawable.ln_sync_large,
-            smallCircleRes = R.drawable.ln_sync_small,
-            contentRes = R.drawable.lightning,
-            rotateContent = false
+            largeCircleRes = variant.largeCircleRes,
+            smallCircleRes = variant.smallCircleRes,
+            contentRes = variant.contentRes,
+            rotateContent = false,
+            contentWidthFraction = variant.contentWidthFraction,
         )
 
         FillHeight()
 
         Display(
             text = stringResource(R.string.lightning__sync_connecting)
-                .withAccent(accentColor = Colors.Purple),
+                .withAccent(accentColor = variant.accentColor),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
@@ -46,7 +50,7 @@ fun SyncNodeView(modifier: Modifier) {
         VerticalSpacer(8.dp)
 
         BodyM(
-            text = stringResource(R.string.lightning__wait_text_top),
+            text = stringResource(variant.textRes),
             color = Colors.White64,
             modifier = Modifier
                 .fillMaxWidth()
@@ -68,6 +72,19 @@ fun SyncNodeView(modifier: Modifier) {
 private fun Preview() {
     AppThemeSurface {
         SyncNodeView(
+            modifier = Modifier
+                .fillMaxSize()
+                .gradientBackground()
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewBitcoin() {
+    AppThemeSurface {
+        SyncNodeView(
+            variant = SyncNodeVariant.BITCOIN,
             modifier = Modifier
                 .fillMaxSize()
                 .gradientBackground()

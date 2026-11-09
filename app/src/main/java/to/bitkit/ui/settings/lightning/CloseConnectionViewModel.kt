@@ -36,7 +36,7 @@ class CloseConnectionViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     fun closeChannel(channelId: String) {
-        val channel = lightningRepo.lightningState.value.channels
+        val channel = lightningRepo.lastKnownChannels.value
             .find { it.channelId == channelId }
             ?: run {
                 Logger.error("No channel found for closing: '$channelId'", context = TAG)

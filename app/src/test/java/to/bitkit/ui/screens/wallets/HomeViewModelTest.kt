@@ -16,6 +16,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.data.WidgetsData
 import to.bitkit.env.Env
 import to.bitkit.models.BalanceState
@@ -116,6 +117,8 @@ class HomeViewModelTest : BaseUnitTest() {
 
     @Test
     fun `empty state follows the enabled USDT balance`() = test {
+        val settings = MutableStateFlow(SettingsData(usdtPreference = UsdtPreference.ENABLED))
+        whenever(settingsStore.data).thenReturn(settings)
         val sut = createViewModel()
         advanceUntilIdle()
         assertTrue(sut.uiState.value.showEmptyState)
@@ -123,6 +126,19 @@ class HomeViewModelTest : BaseUnitTest() {
         usdtState.value = UsdtWalletState(balance = 50_000uL)
         advanceUntilIdle()
         assertEquals(!Env.isUsdtEnabled, sut.uiState.value.showEmptyState)
+
+        usdtState.value = UsdtWalletState(cachedBalance = 50_000uL)
+        advanceUntilIdle()
+        assertEquals(!Env.isUsdtEnabled, sut.uiState.value.showEmptyState)
+
+        usdtState.value = UsdtWalletState(balance = 0uL, cachedBalance = 50_000uL)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showEmptyState)
+
+        usdtState.value = UsdtWalletState(cachedBalance = 50_000uL)
+        settings.value = SettingsData(usdtPreference = UsdtPreference.DISABLED)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showEmptyState)
     }
 
     @Test

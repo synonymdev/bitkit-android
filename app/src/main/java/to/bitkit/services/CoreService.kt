@@ -5,15 +5,13 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.BlocktankException
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ClosedChannelDetails
-import com.synonym.bitkitcore.CreateCjitOptions
-import com.synonym.bitkitcore.CreateOrderOptions
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.GetAddressesResponse
-import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
@@ -30,17 +28,15 @@ import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.ValidationResult
 import com.synonym.bitkitcore.WordCount
 import com.synonym.bitkitcore.addTags
-import com.synonym.bitkitcore.createCjitEntry
-import com.synonym.bitkitcore.createOrder
 import com.synonym.bitkitcore.deleteActivitiesByWalletId
 import com.synonym.bitkitcore.deleteActivityById
 import com.synonym.bitkitcore.deleteTransactionDetails
 import com.synonym.bitkitcore.deriveOnchainDescriptor
-import com.synonym.bitkitcore.estimateOrderFeeFull
 import com.synonym.bitkitcore.getActivities
 import com.synonym.bitkitcore.getActivityById
 import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getAllClosedChannels
+import com.synonym.bitkitcore.getAllTransactionDetails
 import com.synonym.bitkitcore.getAllUniqueTags
 import com.synonym.bitkitcore.getCjitEntries
 import com.synonym.bitkitcore.getInfo
@@ -65,11 +61,11 @@ import com.synonym.bitkitcore.upsertInfo
 import com.synonym.bitkitcore.upsertOrders
 import com.synonym.bitkitcore.upsertTransactionDetails
 import com.synonym.bitkitcore.wipeAllDatabases
-import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ConfirmationStatus
@@ -121,12 +117,12 @@ import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
 @Singleton
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
-    private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
     private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
 ) {
-    private var walletIndex: Int = 0
+    internal var walletIndex: Int = 0
+        private set
 
     val activity: ActivityService by lazy {
         ActivityService(
@@ -171,44 +167,6 @@ class CoreService @Inject constructor(
         }
     }
 
-    @Suppress("KotlinConstantConditions")
-    suspend fun isGeoBlocked(): Boolean {
-        val tag = "GeoCheck"
-        if (!Env.isGeoblockingEnabled) {
-            Logger.verbose("Geoblocking disabled via build config", context = tag)
-            return false
-        }
-
-        return ServiceQueue.CORE.background {
-            runCatching {
-                Logger.verbose("Checking geo status…", context = tag)
-                val response = httpClient.get(Env.geoCheckUrl)
-
-                when (response.status.value) {
-                    HttpStatusCode.OK.value -> {
-                        Logger.verbose("Region allowed", context = tag)
-                        false
-                    }
-
-                    HttpStatusCode.Forbidden.value -> {
-                        Logger.warn("Region blocked", context = tag)
-                        true
-                    }
-
-                    else -> {
-                        Logger.warn(
-                            "Unexpected status code: ${response.status.value}, defaulting to false",
-                            context = tag
-                        )
-                        false
-                    }
-                }
-            }.onFailure {
-                Logger.warn("Error. defaulting isGeoBlocked to false", context = tag)
-            }.getOrDefault(false)
-        }
-    }
-
     suspend fun wipeData(): Result<Unit> = ServiceQueue.CORE.background {
         runCatching {
             activity.invalidatePaykitContactBackfill()
@@ -220,8 +178,32 @@ class CoreService @Inject constructor(
     }
 
     suspend fun isAddressUsed(address: String): Boolean = ServiceQueue.CORE.background {
-        com.synonym.bitkitcore.isAddressUsed(address = address)
+        com.synonym.bitkitcore.isAddressUsed(address = address) || getAllTransactionDetails().any { transaction ->
+            transaction.outputs.any { it.scriptpubkeyAddress == address }
+        }
     }
+
+    /** Checks each address using activity matches and at most one stored transaction history read. */
+    suspend fun getAddressUsage(addresses: Collection<String>): Map<String, Result<Boolean>> =
+        ServiceQueue.CORE.background {
+            val activityUsage = addresses.distinct().associateWith { address ->
+                runSuspendCatching { com.synonym.bitkitcore.isAddressUsed(address = address) }
+            }
+            val unusedAddresses = activityUsage.filterValues { it.getOrNull() == false }.keys
+            if (unusedAddresses.isEmpty()) return@background activityUsage
+
+            val usedOutputAddresses = runSuspendCatching { usedTransactionOutputAddresses(unusedAddresses) }
+            activityUsage.mapValues { (address, usage) ->
+                if (usage.getOrNull() == false) usedOutputAddresses.map { address in it } else usage
+            }
+        }
+
+    private fun usedTransactionOutputAddresses(addresses: Set<String>): Set<String> =
+        getAllTransactionDetails().asSequence()
+            .flatMap { it.outputs.asSequence() }
+            .mapNotNull { it.scriptpubkeyAddress }
+            .filter { it in addresses }
+            .toSet()
 
     suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {
         com.synonym.bitkitcore.decode(input)
@@ -550,8 +532,19 @@ class ActivityService(
     suspend fun getTransactionDetails(
         txid: String,
         walletId: String = defaultWalletId,
-    ): BitkitCoreTransactionDetails? = ServiceQueue.CORE.background {
-        getBitkitCoreTransactionDetails(walletId = walletId, txId = txid)
+    ): BitkitCoreTransactionDetails? {
+        val cached = ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(walletId = walletId, txId = txid)
+        }
+        if (cached != null) return cached
+        if (walletId != defaultWalletId || txid.length != 64 ||
+            txid.any { it !in '0'..'9' && it !in 'a'..'f' && it !in 'A'..'F' }
+        ) {
+            return null
+        }
+        return lightningService.getTransactionDetails(txid, coreService.walletIndex)?.let {
+            mapToCoreTransactionDetails(txid, it)
+        }
     }
 
     suspend fun getActivity(id: String, walletId: String = defaultWalletId): Activity? = ServiceQueue.CORE.background {
@@ -966,7 +959,9 @@ class ActivityService(
      * Returns the first address found in pre-activity metadata that matches a transaction output
      */
     private suspend fun fetchTransactionDetails(txid: String): BitkitCoreTransactionDetails? = runCatching {
-        getTransactionDetails(txid)
+        ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(walletId = defaultWalletId, txId = txid)
+        }
     }.onFailure {
         Logger.warn("Failed to fetch stored transaction details for '$txid'", it, context = TAG)
     }.getOrNull()
@@ -2161,36 +2156,38 @@ class BlocktankService(
     }
 
     suspend fun getFees(): Result<FeeRates> {
-        var fees = fees(refresh = true)
+        val fresh = runSuspendCatching { fees(refresh = true) }
+        val error = fresh.exceptionOrNull()
+        if (error != null && !isInfoBadGateway(error)) throw error
+        var fees = fresh.getOrNull()
         if (fees == null) {
+            currentCoroutineContext().ensureActive()
             Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
             fees = fees(refresh = false)
+            currentCoroutineContext().ensureActive()
         }
         if (fees == null) {
-            return Result.failure(AppError("Fees unavailable from bitkit-core"))
+            return Result.failure(error ?: AppError("Fees unavailable from bitkit-core"))
         }
 
         return Result.success(fees)
     }
 
-    suspend fun createCjit(
-        channelSizeSat: ULong,
-        invoiceSat: ULong,
-        invoiceDescription: String,
-        nodeId: String,
-        channelExpiryWeeks: UInt,
-        options: CreateCjitOptions,
-    ): IcJitEntry {
-        return ServiceQueue.CORE.background {
-            createCjitEntry(
-                channelSizeSat = channelSizeSat,
-                invoiceSat = invoiceSat,
-                invoiceDescription = invoiceDescription,
-                nodeId = nodeId,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options
-            )
+    private fun isInfoBadGateway(error: Throwable): Boolean {
+        var cause = error
+        repeat(8) {
+            when (val current = cause) {
+                is BlocktankException.DataException -> {
+                    val prefix = "Failed to fetch info from Blocktank: Blocktank error: " +
+                        "Failed to get info: Client error: "
+                    return current.errorDetails.startsWith(prefix + "Request failed with status 502 Bad Gateway:") ||
+                        current.errorDetails.startsWith(prefix + "Request failed (502 Bad Gateway):")
+                }
+                is AppError -> cause = current.cause ?: return false
+                else -> return false
+            }
         }
+        return false
     }
 
     suspend fun cjitEntries(
@@ -2203,30 +2200,6 @@ class BlocktankService(
                 refreshActiveCjitEntries()
             }
             getCjitEntries(entryIds = entryIds, filter = filter, refresh = refresh)
-        }
-    }
-
-    suspend fun newOrder(
-        lspBalanceSat: ULong,
-        channelExpiryWeeks: UInt,
-        options: CreateOrderOptions,
-    ): IBtOrder {
-        return ServiceQueue.CORE.background {
-            createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
-        }
-    }
-
-    suspend fun estimateFee(
-        lspBalanceSat: ULong,
-        channelExpiryWeeks: UInt,
-        options: CreateOrderOptions? = null,
-    ): IBtEstimateFeeResponse2 {
-        return ServiceQueue.CORE.background {
-            estimateOrderFeeFull(
-                lspBalanceSat = lspBalanceSat,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options,
-            )
         }
     }
 

@@ -16,8 +16,7 @@ import javax.inject.Singleton
 
 /**
  * Builds the user-facing "Payment Received" notification content, applying the same currency
- * formatting rules everywhere a received payment is surfaced (foreground service, in-app handler,
- * and the background [to.bitkit.fcm.WakeNodeWorker] push path).
+ * formatting rules everywhere a received payment is surfaced (foreground service and in-app handler).
  */
 @Singleton
 class ReceivedNotificationContent @Inject constructor(

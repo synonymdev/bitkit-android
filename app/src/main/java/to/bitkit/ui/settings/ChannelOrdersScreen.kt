@@ -15,7 +15,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,7 +37,6 @@ import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.coroutines.launch
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
 import to.bitkit.ui.blocktankViewModel
@@ -46,7 +44,6 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Footnote
-import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.DetailRow
 import to.bitkit.ui.components.settings.InfoCard
@@ -59,7 +56,6 @@ import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
-import to.bitkit.utils.Logger
 
 @Composable
 fun ChannelOrdersScreen(
@@ -140,22 +136,9 @@ fun OrderDetailScreen(
     val blocktank = blocktankViewModel ?: return
     val orders by blocktank.orders.collectAsStateWithLifecycle()
     val order = orders.find { it.id == orderItem.id } ?: return
-    val coroutineScope = rememberCoroutineScope()
-
     OrderDetailContent(
         order = order,
         onBack = onBackClick,
-        onClickOpen = {
-            coroutineScope.launch {
-                Logger.info("Opening channel for order ${order.id}")
-                try {
-                    blocktank.openChannel(orderId = order.id)
-                    Logger.info("Channel opened for order ${order.id}")
-                } catch (e: Throwable) {
-                    Logger.error("Error opening channel for order ${order.id}", e)
-                }
-            }
-        },
     )
 }
 
@@ -163,7 +146,6 @@ fun OrderDetailScreen(
 private fun OrderDetailContent(
     order: IBtOrder,
     onBack: () -> Unit = {},
-    onClickOpen: () -> Unit = {},
 ) {
     Scaffold(
         topBar = { AppTopBar(titleText = "Order Details", onBackClick = onBack) }
@@ -221,15 +203,6 @@ private fun OrderDetailContent(
                 InfoCard(header = "Timestamps") {
                     DetailRow("Created", order.createdAt)
                     DetailRow("Updated", order.updatedAt)
-                }
-            }
-            if (order.state2 == BtOrderState2.PAID) {
-                item {
-                    PrimaryButton(
-                        text = "Open Channel",
-                        onClick = onClickOpen,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
                 }
             }
         }

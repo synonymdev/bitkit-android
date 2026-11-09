@@ -39,6 +39,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import javax.inject.Provider
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -112,6 +113,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             firebaseMessaging = firebaseMessaging,
             migrationService = migrationService,
             paykitSdkService = paykitSdkService,
+            connectionRecovery = connectionRecoveryFixture(settingsStore),
         )
     }
 

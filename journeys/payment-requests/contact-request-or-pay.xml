@@ -1,6 +1,6 @@
 <journey name="Contact Request Or Pay">
   <description>
-    Verifies that Pay on a linked contact offers Request or Pay, that paying shows progress on the sheet until the amount screen opens within a few seconds, and that Request opens the Payment Request amount screen. Requires two Bitkit instances saved as each other's contacts and linked as identities, with the payer funded; see README.md. Let the payer run for a minute after launch before starting, so start-up Paykit work does not dominate the timings. Open the contact with adb shell am start -a android.intent.action.VIEW -d "bitkit://contact?pubky=&lt;requester-public-key&gt;" to.bitkit.dev.
+    Verifies that Pay on a linked contact offers Request or Pay, that paying shows progress on the sheet until the amount screen opens within a few seconds, and that Request opens the Payment Request amount screen. Requires two Bitkit instances saved as each other's contacts and linked as identities, with the payer funded; see README.md. Also save a third linked contact that publishes no payment endpoints, for the resolution-failure check. Let the payer run for a minute after launch before starting, so start-up Paykit work does not dominate the timings. Open the contact with adb shell am start -a android.intent.action.VIEW -d "bitkit://contact?pubky=&lt;requester-public-key&gt;" to.bitkit.dev.
   </description>
   <actions>
     <action>Open bitkit://contact?pubky=&lt;requester-public-key&gt; on the payer</action>
@@ -16,5 +16,6 @@
     <action>Verify the Request or Pay sheet (testTag "RequestOrPaySheet") appears</action>
     <action>Tap Request on the sheet</action>
     <action>Verify the Payment Request amount screen (testTag "PaymentRequestAmount") opens</action>
+    <action>Open Send and choose Contact. Tap a saved contact and verify only its row shows loading while payment details resolve; all contact rows are disabled meanwhile. Try selecting another contact and verify no second payment flow opens. When resolution finishes, verify the amount screen opens. Cancel without paying. Reopen Send, choose Contact and select the prepared contact with no payment endpoints. Verify the error is shown and contact selection becomes available for retry. Select the original payable contact and verify its amount screen opens, then cancel without paying.</action>
   </actions>
 </journey>

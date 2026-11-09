@@ -43,7 +43,6 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
-import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
@@ -206,9 +205,6 @@ class MigrationService internal constructor(
     private var pendingRemoteMetadata: RNMetadata? = null
 
     @Volatile
-    private var pendingRemotePaidOrders: Map<String, String>? = null
-
-    @Volatile
     private var pendingBlocktankOrderIds: List<String>? = null
 
     suspend fun needsPostMigrationSync(): Boolean {
@@ -241,10 +237,10 @@ class MigrationService internal constructor(
 
         prefs[stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY)]?.let { data ->
             runCatching {
-                pendingRemotePaidOrders = json.decodeFromString<Map<String, String>>(data)
-                Logger.debug("Loaded ${pendingRemotePaidOrders?.size} pending paid orders", context = TAG)
+                val paidOrderIds = json.decodeFromString<Map<String, String>>(data).keys
+                pendingBlocktankOrderIds = (pendingBlocktankOrderIds.orEmpty() + paidOrderIds).distinct()
             }.onFailure {
-                Logger.warn("Failed to load pending paid orders", it, context = TAG)
+                Logger.warn("Failed to load pending paid order IDs", it, context = TAG)
             }
         }
 
@@ -285,14 +281,6 @@ class MigrationService internal constructor(
         Logger.info("Persisted ${orderIds.size} Blocktank order IDs for retry", context = TAG)
     }
 
-    private suspend fun persistPaidOrders(paidOrders: Map<String, String>) {
-        val key = stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY)
-        rnMigrationStore.edit {
-            it[key] = json.encodeToString(paidOrders)
-        }
-        pendingRemotePaidOrders = paidOrders
-    }
-
     private suspend fun persistMetadata(metadata: RNMetadata) {
         val key = stringPreferencesKey(RN_PENDING_METADATA_KEY)
         rnMigrationStore.edit {
@@ -326,7 +314,6 @@ class MigrationService internal constructor(
             it.remove(stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY))
         }
         pendingBlocktankOrderIds = null
-        pendingRemotePaidOrders = null
         Logger.debug("Cleared persisted Blocktank data", context = TAG)
     }
 
@@ -364,7 +351,6 @@ class MigrationService internal constructor(
             it.remove(stringPreferencesKey(RN_PENDING_BOOSTS_KEY))
         }
         pendingBlocktankOrderIds = null
-        pendingRemotePaidOrders = null
         pendingRemoteMetadata = null
         pendingRemoteTransfers = null
         pendingRemoteBoosts = null
@@ -405,7 +391,7 @@ class MigrationService internal constructor(
 
     val canCleanupAfterMigration: Boolean
         get() {
-            if (pendingBlocktankOrderIds != null || pendingRemotePaidOrders != null) {
+            if (pendingBlocktankOrderIds != null) {
                 Logger.debug("Cannot cleanup: pending Blocktank data exists", context = TAG)
                 return false
             }
@@ -913,7 +899,7 @@ class MigrationService internal constructor(
         }
     }
 
-    private fun extractRNBlocktank(mmkvData: Map<String, String>): Pair<List<String>, Map<String, String>>? {
+    private fun extractRNBlocktank(mmkvData: Map<String, String>): List<String>? {
         val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
         return runCatching {
@@ -925,7 +911,6 @@ class MigrationService internal constructor(
 
             val blocktankData = json.parseToJsonElement(blocktankJsonString).jsonObject
             val orderIds = mutableListOf<String>()
-            val paidOrdersMap = mutableMapOf<String, String>()
 
             blocktankData["orders"]?.jsonArray?.forEach { orderElement ->
                 orderElement.jsonObject["id"]?.jsonPrimitive?.content?.let { id ->
@@ -933,23 +918,16 @@ class MigrationService internal constructor(
                 }
             }
 
-            blocktankData["paidOrders"]?.jsonObject?.forEach { (orderId, txIdElement) ->
-                val txId = txIdElement.jsonPrimitive.content
-                paidOrdersMap[orderId] = txId
+            blocktankData["paidOrders"]?.jsonObject?.keys?.forEach { orderId ->
                 if (orderId !in orderIds) {
                     orderIds.add(orderId)
                 }
             }
 
-            if (orderIds.isEmpty() && paidOrdersMap.isEmpty()) {
-                return@runCatching null
-            }
+            if (orderIds.isEmpty()) return@runCatching null
 
-            Logger.info(
-                "Extracted ${orderIds.size} order IDs and ${paidOrdersMap.size} paid orders from local blocktank",
-                context = TAG,
-            )
-            Pair(orderIds, paidOrdersMap)
+            Logger.info("Extracted ${orderIds.size} order IDs from local blocktank", context = TAG)
+            orderIds
         }.onFailure {
             Logger.error("Failed to decode RN blocktank: $it", it, context = TAG)
         }.getOrNull()
@@ -1021,8 +999,6 @@ class MigrationService internal constructor(
                 isBiometricEnabled = settings.biometrics ?: current.isBiometricEnabled,
                 quickPayIntroSeen = settings.quickpayIntroSeen ?: current.quickPayIntroSeen,
                 hasSeenShopIntro = settings.shopIntroSeen ?: current.hasSeenShopIntro,
-                hasSeenTransferIntro = settings.transferIntroSeen ?: current.hasSeenTransferIntro,
-                hasSeenSpendingIntro = settings.spendingIntroSeen ?: current.hasSeenSpendingIntro,
                 hasSeenSavingsIntro = settings.savingsIntroSeen ?: current.hasSeenSavingsIntro,
             )
         }
@@ -1343,32 +1319,20 @@ class MigrationService internal constructor(
             applyRNTodos(todos)
         }
 
-        extractRNBlocktank(mmkvData)?.let { (orderIds, paidOrders) ->
-            applyRNBlocktank(orderIds, paidOrders)
+        extractRNBlocktank(mmkvData)?.let { orderIds ->
+            applyRNBlocktank(orderIds)
         }
     }
 
-    private suspend fun applyRNBlocktank(orderIds: List<String>, paidOrders: Map<String, String>) {
+    private suspend fun applyRNBlocktank(orderIds: List<String>) {
         if (orderIds.isEmpty()) return
-
-        paidOrders.forEach { (orderId, txId) ->
-            cacheStore.addPaidOrder(orderId, txId)
-        }
 
         runCatching {
             val fetchedOrders = fetchOrdersChunked(orderIds)
-            if (fetchedOrders.isNotEmpty()) {
-                coreService.blocktank.upsertOrderList(fetchedOrders)
-                if (paidOrders.isNotEmpty()) {
-                    createTransfersForPaidOrders(paidOrders, fetchedOrders)
-                }
-            }
+            if (fetchedOrders.isNotEmpty()) coreService.blocktank.upsertOrderList(fetchedOrders)
         }.onFailure { e ->
             Logger.warn("Failed to fetch and upsert local Blocktank orders", e, context = TAG)
             persistBlocktankOrderIds(orderIds)
-            if (paidOrders.isNotEmpty()) {
-                persistPaidOrders(paidOrders)
-            }
             Logger.info("Stored ${orderIds.size} Blocktank order IDs for retry", context = TAG)
         }
     }
@@ -1451,10 +1415,7 @@ class MigrationService internal constructor(
             val peers = json.decodeFromString<List<BackupPeerEntry>>(String(data))
             if (peers.isEmpty()) return emptyList()
 
-            val trustedIds = Env.trustedLnPeers.map { it.nodeId }.toSet()
-            val uris = peers
-                .filter { it.pubKey !in trustedIds }
-                .map { "${it.pubKey}@${it.address}:${it.port}" }
+            val uris = peers.map { "${it.pubKey}@${it.address}:${it.port}" }
 
             Logger.info("Migration peer recovery: fetched ${uris.size} peer(s) from remote backup", context = TAG)
             uris
@@ -1699,61 +1660,12 @@ class MigrationService internal constructor(
         runCatching {
             val backup = decodeBackupData<RNRemoteBlocktankBackup>(data)
 
-            backup.paidOrders?.let { paidOrders ->
-                paidOrders.forEach { (orderId, txId) ->
-                    cacheStore.addPaidOrder(orderId, txId)
-                }
-                if (paidOrders.isNotEmpty()) {
-                    pendingRemotePaidOrders = paidOrders
-                }
+            val paidOrderIds = backup.paidOrders?.keys.orEmpty()
+            if (paidOrderIds.isNotEmpty()) {
+                persistBlocktankOrderIds((pendingBlocktankOrderIds.orEmpty() + paidOrderIds).distinct())
             }
         }.onFailure { e ->
             Logger.warn("Failed to decode RN remote blocktank backup: $e", context = TAG)
-        }
-    }
-
-    private suspend fun createTransfersForPaidOrders(
-        paidOrdersMap: Map<String, String>,
-        orders: List<com.synonym.bitkitcore.IBtOrder>,
-    ) {
-        val now = System.currentTimeMillis() / 1000
-        val transfers = paidOrdersMap.mapNotNull { (orderId, txId) ->
-            val order = orders.find { it.id == orderId }
-            when {
-                order == null -> {
-                    Logger.warn("Paid order $orderId not found in fetched orders", context = TAG)
-                    null
-                }
-
-                order.state2 != BtOrderState2.PAID -> {
-                    Logger.debug(
-                        "Skipping order $orderId with state ${order.state2} for transfer creation",
-                        context = TAG,
-                    )
-                    null
-                }
-
-                else -> TransferEntity(
-                    id = txId,
-                    type = TransferType.TO_SPENDING,
-                    amountSats = order.clientBalanceSat.toLong(),
-                    channelId = null,
-                    fundingTxId = null,
-                    lspOrderId = orderId,
-                    isSettled = false,
-                    createdAt = now,
-                    settledAt = null,
-                )
-            }
-        }
-
-        if (transfers.isNotEmpty()) {
-            runCatching {
-                transferDao.upsert(transfers)
-                Logger.info("Created ${transfers.size} transfers for paid Blocktank orders", context = TAG)
-            }.onFailure { e ->
-                Logger.error("Failed to create transfers for paid orders: $e", context = TAG)
-            }
         }
     }
 
@@ -1811,7 +1723,6 @@ class MigrationService internal constructor(
             }
         }
 
-        var blocktankFetchFailed = false
         pendingBlocktankOrderIds?.let { orderIds ->
             if (orderIds.isNotEmpty()) {
                 Logger.info("Retrying ${orderIds.size} pending Blocktank orders", context = TAG)
@@ -1820,47 +1731,16 @@ class MigrationService internal constructor(
                     if (fetchedOrders.isNotEmpty()) {
                         coreService.blocktank.upsertOrderList(fetchedOrders)
                         Logger.info("Upserted ${fetchedOrders.size} Blocktank orders after retry", context = TAG)
-
-                        pendingRemotePaidOrders?.let { paidOrders ->
-                            if (paidOrders.isNotEmpty()) {
-                                Logger.info("Creating transfers for ${paidOrders.size} paid orders", context = TAG)
-                                createTransfersForPaidOrders(paidOrders, fetchedOrders)
-                            }
-                        }
                     }
                     pendingBlocktankOrderIds = null
-                    pendingRemotePaidOrders = null
                     clearPersistedBlocktankData()
                 }.onFailure { e ->
                     Logger.warn("Still unable to fetch Blocktank orders", e, context = TAG)
-                    blocktankFetchFailed = true
                 }
             }
         }
 
-        if (!blocktankFetchFailed) {
-            pendingRemotePaidOrders?.let { paidOrders ->
-                applyRemotePaidOrders(paidOrders)
-                pendingRemotePaidOrders = null
-            }
-        }
         recordPendingMigrationRetry()
-    }
-
-    private suspend fun applyRemotePaidOrders(paidOrders: Map<String, String>) {
-        if (paidOrders.isEmpty()) return
-
-        val orderIds = paidOrders.keys.toList()
-
-        runCatching {
-            val fetchedOrders = fetchOrdersChunked(orderIds)
-            if (fetchedOrders.isNotEmpty()) {
-                coreService.blocktank.upsertOrderList(fetchedOrders)
-                createTransfersForPaidOrders(paidOrders, fetchedOrders)
-            }
-        }.onFailure { e ->
-            Logger.warn("Failed to fetch and process remote paid orders: $e", context = TAG)
-        }
     }
 
     internal suspend fun applyRemoteTransfers(transfers: Map<String, String>): Map<String, String> {
@@ -2264,8 +2144,6 @@ data class RNSettings(
     val hideBalanceOnOpen: Boolean? = null,
     val quickpayIntroSeen: Boolean? = null,
     val shopIntroSeen: Boolean? = null,
-    val transferIntroSeen: Boolean? = null,
-    val spendingIntroSeen: Boolean? = null,
     val savingsIntroSeen: Boolean? = null,
     val selectedAddressType: String? = null,
     val addressTypesToMonitor: List<String>? = null,

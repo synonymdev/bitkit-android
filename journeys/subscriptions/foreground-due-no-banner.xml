@@ -1,0 +1,15 @@
+<journey name="Foreground Due No Banner">
+  <description>
+    A subscription payment that falls due while Bitkit is in the foreground opens the payment due
+    sheet and posts no "Subscription Payment Due" banner for it; the banner is only for Bitkit in
+    the background. Requires a payer wallet with an accepted monthly subscription and the payer's
+    notification permission granted.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on the payer with an accepted monthly subscription and notification permission granted</action>
+    <action>Open Dev Settings, set the subscription clock offset to 62 days, and return to Bitkit with it in the foreground</action>
+    <action>Verify the payment due sheet opens for the subscription</action>
+    <action>Wait five seconds and verify no "Subscription Payment Due" banner was posted, and none is listed for Bitkit in `adb shell dumpsys notification --noredact`</action>
+    <action>Dismiss the sheet and reset the subscription clock offset in Dev Settings</action>
+  </actions>
+</journey>

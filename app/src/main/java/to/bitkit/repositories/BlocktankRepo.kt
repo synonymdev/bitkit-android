@@ -1,40 +1,21 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
-import com.synonym.bitkitcore.AddressType
-import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
-import com.synonym.bitkitcore.ChannelLiquidityOptions
-import com.synonym.bitkitcore.ChannelLiquidityParams
-import com.synonym.bitkitcore.CreateCjitOptions
-import com.synonym.bitkitcore.CreateOrderOptions
-import com.synonym.bitkitcore.DefaultLspBalanceParams
-import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
-import com.synonym.bitkitcore.calculateChannelLiquidityOptions
-import com.synonym.bitkitcore.getDefaultLspBalance
-import com.synonym.bitkitcore.giftOrder
-import com.synonym.bitkitcore.giftPay
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
@@ -43,54 +24,28 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.Event
-import to.bitkit.async.ServiceQueue
 import to.bitkit.async.appScope
-import to.bitkit.data.BlocktankRefundAddress
-import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.calculateRemoteBalance
-import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
-import to.bitkit.models.CjitQuoteValidator
-import to.bitkit.models.EUR
-import to.bitkit.models.msatCeilOf
-import to.bitkit.models.safe
 import to.bitkit.services.CoreService
-import to.bitkit.services.LightningService
-import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
-import java.math.BigDecimal
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
-import kotlin.math.ceil
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class BlocktankRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
-    private val lightningService: LightningService,
-    private val currencyRepo: CurrencyRepo,
-    private val cacheStore: CacheStore,
     @Named("enablePolling") private val enablePolling: Boolean,
-    private val lightningRepo: LightningRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
-    private val refundAddressMutex = Mutex()
 
     private val _blocktankState = MutableStateFlow(BlocktankState())
     val blocktankState: StateFlow<BlocktankState> = _blocktankState.asStateFlow()
@@ -100,7 +55,6 @@ class BlocktankRepo @Inject constructor(
 
     init {
         startPolling()
-        observePaidOrders()
 
         repoScope.launch {
             refreshInfo()
@@ -118,22 +72,6 @@ class BlocktankRepo @Inject constructor(
         }.flowOn(bgDispatcher)
             .onEach { refreshOrders() }
             .launchIn(repoScope)
-    }
-
-    private fun observePaidOrders() {
-        repoScope.launch {
-            cacheStore.data
-                .map { it.paidOrders }
-                .distinctUntilChanged()
-                .map { it.keys }
-                .collect { paidOrderIds ->
-                    _blocktankState.update { state ->
-                        state.copy(
-                            paidOrders = state.orders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
-                        )
-                    }
-                }
-        }
     }
 
     suspend fun getCjitEntry(channel: ChannelDetails): IcJitEntry? = withContext(bgDispatcher) {
@@ -204,8 +142,6 @@ class BlocktankRepo @Inject constructor(
         runCatching {
             Logger.verbose("Refreshing blocktank orders…", context = TAG)
 
-            val paidOrderIds = cacheStore.data.first().paidOrders.keys
-
             // Sync instantly from cache
             val cachedOrders = coreService.blocktank.orders(refresh = false)
             val cachedCjitEntries = coreService.blocktank.cjitEntries(refresh = false)
@@ -213,7 +149,6 @@ class BlocktankRepo @Inject constructor(
                 state.copy(
                     orders = cachedOrders.toImmutableList(),
                     cjitEntries = cachedCjitEntries.toImmutableList(),
-                    paidOrders = cachedOrders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
                 )
             }
 
@@ -224,234 +159,15 @@ class BlocktankRepo @Inject constructor(
                 state.copy(
                     orders = orders.toImmutableList(),
                     cjitEntries = cjitEntries.toImmutableList(),
-                    paidOrders = orders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
                 )
             }
 
             Logger.debug(
-                "Orders refreshed: ${orders.size} orders, " +
-                    "${cjitEntries.size} cjit entries, " +
-                    "${_blocktankState.value.paidOrders.size} paid orders",
+                "Orders refreshed: ${orders.size} orders, ${cjitEntries.size} cjit entries",
                 context = TAG
             )
-            openChannelWithPaidOrders()
         }.also {
             isRefreshing = false
-        }
-    }
-
-    suspend fun refreshMinCjitSats() = withContext(bgDispatcher) {
-        runCatching {
-            val lspBalance = getDefaultLspBalance(clientBalance = 0u)
-            val fees = estimateOrderFee(spendingBalanceSats = 0u, receivingBalanceSats = lspBalance).getOrThrow()
-
-            val minimum = (ceil(fees.feeSat.toDouble() * 1.1 / 1000) * 1000).toInt()
-            _blocktankState.update { it.copy(minCjitSats = minimum) }
-
-            Logger.debug("Updated minCjitSats to: $minimum", context = TAG)
-        }.onFailure {
-            Logger.error("Failed to refresh minCjitSats", it, context = TAG)
-        }
-    }
-
-    suspend fun createCjit(
-        amountSats: ULong,
-        description: String = "",
-    ): Result<IcJitEntry> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
-            val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
-            val maxChannelSizeSat = freshMaxChannelSizeSat()
-            if (maxChannelSizeSat != null && amountSats > maxChannelSizeSat) {
-                throw ServiceError.ChannelSizeExceedsMaximum()
-            }
-            val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
-            if (!canFitChannelSize(amountSats, lspBalance)) {
-                throw ServiceError.ChannelSizeExceedsMaximum()
-            }
-            val channelSizeSat = amountSats.safe() + lspBalance.safe()
-
-            val cjitEntry = coreService.blocktank.createCjit(
-                channelSizeSat = channelSizeSat,
-                invoiceSat = amountSats,
-                invoiceDescription = description,
-                nodeId = nodeId,
-                channelExpiryWeeks = DEFAULT_CHANNEL_EXPIRY_WEEKS,
-                options = CreateCjitOptions(source = DEFAULT_SOURCE, discountCode = null)
-            )
-            CjitQuoteValidator.validate(
-                invoiceSat = amountSats,
-                feeSat = cjitEntry.feeSat,
-                channelSizeSat = cjitEntry.channelSizeSat,
-            ).getOrThrow()
-
-            repoScope.launch { refreshOrders() }
-
-            return@runSuspendCatching cjitEntry
-        }.fold(
-            onSuccess = { Result.success(it) },
-            onFailure = { Result.failure(it.toCjitError()) },
-        ).onFailure {
-            Logger.error("Failed to create CJIT", it, context = TAG)
-        }
-    }
-
-    suspend fun maxCjitAmountSats(): Result<ULong?> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runSuspendCatching null
-            var lowerBound = 0uL
-            var upperBound = maxChannelSizeSat
-
-            while (lowerBound < upperBound) {
-                val distance = upperBound.safe() - lowerBound.safe()
-                val step = (distance.safe() + 1uL.safe()) / 2uL
-                val candidate = lowerBound.safe() + step.safe()
-                if (canCreateCjit(candidate, maxChannelSizeSat)) {
-                    lowerBound = candidate
-                } else {
-                    upperBound = candidate - 1uL
-                }
-            }
-
-            lowerBound
-        }.onFailure {
-            Logger.error("Failed to calculate max CJIT amount", it, context = TAG)
-        }
-    }
-
-    suspend fun createOrder(
-        spendingBalanceSats: ULong,
-        receivingBalanceSats: ULong = spendingBalanceSats * 2u,
-        channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
-    ): Result<IBtOrder> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
-            if (lightningService.nodeId == null) throw ServiceError.NodeNotStarted()
-
-            currentCoroutineContext().ensureActive()
-            val refundAddress = getBlocktankRefundAddress()
-            currentCoroutineContext().ensureActive()
-            val baseOptions = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
-            val options = baseOptions.copy(refundOnchainAddress = refundAddress)
-            currentCoroutineContext().ensureActive()
-
-            Logger.info(
-                "Buying channel with " +
-                    "clientBalanceSat: '$spendingBalanceSats', " +
-                    "lspBalanceSat: '$receivingBalanceSats', " +
-                    "channelExpiryWeeks: '$channelExpiryWeeks', " +
-                    "zeroConf: '${options.zeroConf}', " +
-                    "zeroReserve: '${options.zeroReserve}', " +
-                    "announceChannel: '${options.announceChannel}'",
-                context = TAG,
-            )
-
-            val order = coreService.blocktank.newOrder(
-                lspBalanceSat = receivingBalanceSats,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options,
-            )
-
-            repoScope.launch { refreshOrders() }
-
-            return@runSuspendCatching order
-        }.onFailure {
-            Logger.error("Failed to create order", it, context = TAG)
-        }
-    }
-
-    private suspend fun getBlocktankRefundAddress(): String = refundAddressMutex.withLock {
-        val cached = cacheStore.data.first().blocktankRefundAddress
-        if (cached == null) return@withLock allocateBlocktankRefundAddress()
-
-        if (cached.index !in 0..Int.MAX_VALUE.toLong()) {
-            throw AppError("Invalid cached Blocktank refund address index")
-        }
-        if (cached.address.isBlank()) {
-            throw AppError("Invalid cached Blocktank refund address")
-        }
-
-        val index = cached.index.toInt()
-        val derived = lightningRepo.addressInfoForType(AddressType.P2WPKH, index).getOrThrow()
-        if (derived.index != index || derived.address != cached.address) {
-            throw AppError("Cached Blocktank refund address does not belong to the active wallet")
-        }
-
-        lightningRepo.revealReceiveAddresses(index, AddressType.P2WPKH).getOrThrow()
-        if (!coreService.isAddressUsed(cached.address)) return@withLock cached.address
-
-        allocateBlocktankRefundAddress(afterIndex = index)
-    }
-
-    private suspend fun allocateBlocktankRefundAddress(afterIndex: Int? = null): String {
-        var previousIndex = afterIndex
-        repeat(REFUND_ADDRESS_ALLOCATION_LIMIT) {
-            val derived = lightningRepo.newAddressInfoForType(AddressType.P2WPKH).getOrThrow()
-            val lastIndex = previousIndex
-            val hasInvalidIndex = derived.index !in 0..Int.MAX_VALUE
-            val didNotAdvance = lastIndex != null && derived.index <= lastIndex
-            if (hasInvalidIndex || derived.address.isBlank() || didNotAdvance) {
-                throw AppError("Failed to allocate a valid advancing Blocktank refund address")
-            }
-            previousIndex = derived.index
-
-            if (coreService.isAddressUsed(derived.address)) return@repeat
-
-            cacheStore.update {
-                it.copy(
-                    blocktankRefundAddress = BlocktankRefundAddress(
-                        address = derived.address,
-                        index = derived.index.toLong(),
-                    ),
-                )
-            }
-            return derived.address
-        }
-
-        throw AppError("Failed to allocate an unused Blocktank refund address")
-    }
-
-    suspend fun estimateOrderFee(
-        spendingBalanceSats: ULong,
-        receivingBalanceSats: ULong,
-        channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
-    ): Result<IBtEstimateFeeResponse2> = withContext(bgDispatcher) {
-        Logger.info("Estimating order fee for spendingSats=$spendingBalanceSats, receivingSats=$receivingBalanceSats")
-
-        runCatching {
-            val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
-
-            val estimate = coreService.blocktank.estimateFee(
-                lspBalanceSat = receivingBalanceSats,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options,
-            )
-
-            Logger.debug("Estimated order fee: '$estimate'")
-
-            return@runCatching estimate
-        }.onFailure {
-            Logger.error("Failed to estimate order fee", it, context = TAG)
-        }
-    }
-
-    suspend fun openChannel(orderId: String): Result<IBtOrder> = withContext(bgDispatcher) {
-        runCatching {
-            Logger.debug("Opening channel for order: '$orderId'", context = TAG)
-            val order = coreService.blocktank.open(orderId)
-
-            // Update the order in state
-            val updatedOrders = _blocktankState.value.orders.toMutableList()
-            val index = updatedOrders.indexOfFirst { it.id == order.id }
-            if (index != -1) {
-                updatedOrders[index] = order
-            }
-
-            _blocktankState.update { state -> state.copy(orders = updatedOrders.toImmutableList()) }
-
-            return@runCatching order
-        }.onFailure {
-            Logger.error("Failed to open channel for order: $orderId", it, context = TAG)
         }
     }
 
@@ -487,108 +203,6 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    private suspend fun openChannelWithPaidOrders() = withContext(bgDispatcher) {
-        _blocktankState.value.paidOrders.filter { it.state2 == BtOrderState2.PAID }.forEach { order ->
-            openChannel(order.id)
-        }
-    }
-
-    private suspend fun defaultCreateOrderOptions(clientBalanceSat: ULong): CreateOrderOptions {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
-        val timestamp = nowTimestamp().toString()
-        val signature = lightningService.sign("channelOpen-$timestamp")
-
-        return CreateOrderOptions(
-            clientBalanceSat = clientBalanceSat,
-            lspNodeId = null,
-            couponCode = "",
-            source = DEFAULT_SOURCE,
-            discountCode = null,
-            zeroConf = true,
-            zeroConfPayment = false,
-            zeroReserve = true,
-            clientNodeId = nodeId,
-            signature = signature,
-            timestamp = timestamp,
-            refundOnchainAddress = null,
-            announceChannel = false,
-        )
-    }
-
-    suspend fun getDefaultLspBalance(clientBalance: ULong): ULong = withContext(bgDispatcher) {
-        if (_blocktankState.value.info == null) {
-            refreshInfo()
-        }
-
-        val satsPerEur = getSatsPerEur()
-            ?: throw ServiceError.CurrencyRateUnavailable()
-
-        val params = DefaultLspBalanceParams(
-            clientBalanceSat = clientBalance,
-            maxChannelSizeSat = _blocktankState.value.info?.options?.maxChannelSizeSat ?: 0uL,
-            satsPerEur = satsPerEur
-        )
-
-        return@withContext getDefaultLspBalance(params)
-    }
-
-    private suspend fun freshMaxChannelSizeSat(): ULong? {
-        refreshInfo()
-
-        return _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
-    }
-
-    private suspend fun canCreateCjit(amountSats: ULong, maxChannelSizeSat: ULong): Boolean {
-        if (amountSats > maxChannelSizeSat) return false
-
-        val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
-        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
-        return lspBalance <= remainingCapacity
-    }
-
-    private fun canFitChannelSize(amountSats: ULong, lspBalance: ULong): Boolean {
-        val maxChannelSizeSat = _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
-            ?: return true
-
-        if (amountSats > maxChannelSizeSat) return false
-
-        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
-        return lspBalance <= remainingCapacity
-    }
-
-    fun calculateLiquidityOptions(clientBalanceSat: ULong): Result<ChannelLiquidityOptions> {
-        val blocktankInfo = blocktankState.value.info
-            ?: return Result.failure(ServiceError.BlocktankInfoUnavailable())
-
-        val satsPerEur = getSatsPerEur()
-            ?: return Result.failure(ServiceError.CurrencyRateUnavailable())
-
-        val existingChannelsTotalSat = totalBtChannelsValueSats(blocktankInfo)
-
-        val params = ChannelLiquidityParams(
-            clientBalanceSat = clientBalanceSat,
-            existingChannelsTotalSat = existingChannelsTotalSat,
-            minChannelSizeSat = blocktankInfo.options.minChannelSizeSat,
-            maxChannelSizeSat = blocktankInfo.options.maxChannelSizeSat,
-            satsPerEur = satsPerEur
-        )
-
-        return Result.success(calculateChannelLiquidityOptions(params))
-    }
-
-    private fun getSatsPerEur(): ULong? {
-        return currencyRepo.convertFiatToSats(BigDecimal(1), EUR).getOrNull()
-    }
-
-    private fun totalBtChannelsValueSats(info: IBtInfo?): ULong {
-        val channels = lightningRepo.getChannels() ?: return 0u
-        val btNodeIds = info?.nodes?.map { it.pubkey } ?: return 0u
-
-        val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
-
-        return btChannels.sumOf { it.channelValueSats }
-    }
-
     suspend fun resetState() = withContext(bgDispatcher) {
         _blocktankState.update { BlocktankState() }
         Logger.debug("Blocktank state reset", context = TAG)
@@ -603,7 +217,6 @@ class BlocktankRepo @Inject constructor(
             }
 
             // We don't refresh orders here because we rely on the polling mechanism.
-            // We also don't restore `paidOrders` the refresh interval uses restored paidOrderIds to rebuild the list.
 
             _blocktankState.update {
                 it.copy(
@@ -617,192 +230,17 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    suspend fun claimGiftCode(
-        code: String,
-        amount: ULong,
-        waitTimeout: Duration = TIMEOUT_GIFT_CODE,
-    ): Result<GiftClaimResult> = withContext(bgDispatcher) {
-        runCatching {
-            require(code.isNotBlank()) { "Gift code cannot be blank" }
-            require(amount > 0u) { "Gift amount must be positive" }
-
-            Logger.debug("Starting gift code claim: amount=$amount, timeout=$waitTimeout", context = TAG)
-
-            lightningRepo.executeWhenNodeRunning(
-                operationName = "claimGiftCode",
-                waitTimeout = waitTimeout,
-            ) {
-                delay(PEER_CONNECTION_DELAY_MS)
-
-                val channels = lightningRepo.getChannelsAsync().getOrThrow()
-                val maxInboundCapacity = channels.calculateRemoteBalance()
-
-                Logger.debug(
-                    "Liquidity check: maxInbound=$maxInboundCapacity, required=$amount",
-                    context = TAG
-                )
-
-                if (maxInboundCapacity >= amount) {
-                    Logger.debug("Sufficient liquidity available, claiming with existing channel", context = TAG)
-                    Result.success(claimGiftCodeWithLiquidity(code, amount))
-                } else {
-                    Logger.debug("Insufficient liquidity, opening new channel", context = TAG)
-                    Result.success(claimGiftCodeWithoutLiquidity(code, amount))
-                }
-            }.getOrThrow()
-        }.onFailure {
-            Logger.error("Failed to claim gift code", it, context = TAG)
-        }
-    }
-
-    private suspend fun claimGiftCodeWithLiquidity(code: String, amount: ULong): GiftClaimResult = coroutineScope {
-        val invoice = lightningRepo.createInvoice(
-            amountSats = null,
-            description = "blocktank-gift-code:$code",
-            expirySeconds = 1.hours.inWholeSeconds.toUInt(),
-        ).getOrThrow()
-
-        val expectedPaymentHash = Bolt11Invoice.fromStr(invoice).paymentHash()
-
-        Logger.debug("Created invoice for gift code, requesting payment from LSP", context = TAG)
-
-        val paymentReceivedDeferred = async(start = CoroutineStart.UNDISPATCHED) {
-            lightningRepo.nodeEvents
-                .filterIsInstance<Event.PaymentReceived>()
-                .first { it.paymentHash == expectedPaymentHash }
-        }
-
-        val giftResponse = ServiceQueue.CORE.background {
-            giftPay(invoice = invoice)
-        }
-
-        Logger.debug(
-            "Gift payment request completed: id='${giftResponse.id}', awaiting LDK PaymentReceived",
-            context = TAG,
-        )
-
-        val paymentReceived = withTimeoutOrNull(GIFT_PAYMENT_RECEIVE_TIMEOUT) {
-            paymentReceivedDeferred.await()
-        }
-
-        if (paymentReceived == null) {
-            paymentReceivedDeferred.cancel()
-            throw ServiceError.GiftClaimPaymentNotReceived()
-        }
-
-        Logger.debug(
-            "Gift payment confirmed by LDK: hash='${paymentReceived.paymentHash}', " +
-                "amountMsat='${paymentReceived.amountMsat}'",
-            context = TAG,
-        )
-
-        val receivedSats = msatCeilOf(paymentReceived.amountMsat).toLong()
-
-        GiftClaimResult.SuccessWithLiquidity(
-            paymentHashOrTxId = paymentReceived.paymentHash,
-            sats = receivedSats.takeIf { it > 0 } ?: amount.toLong(),
-            invoice = invoice,
-            code = code,
-        )
-    }
-
-    private suspend fun claimGiftCodeWithoutLiquidity(code: String, amount: ULong): GiftClaimResult {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
-
-        Logger.debug("Creating gift order for code (insufficient liquidity)", context = TAG)
-
-        val order = ServiceQueue.CORE.background {
-            giftOrder(clientNodeId = nodeId, code = "blocktank-gift-code:$code")
-        }
-
-        val orderId = checkNotNull(order.orderId) { "Order ID is null after gift order creation" }
-        Logger.debug("Gift order created: $orderId", context = TAG)
-
-        val openedOrder = openChannel(orderId).getOrThrow()
-        Logger.debug("Channel opened for gift order: ${openedOrder.id}", context = TAG)
-
-        val fundingTxId = openedOrder.channel?.fundingTx?.id
-        if (fundingTxId == null) {
-            Logger.warn("Channel opened but funding transaction ID is null", context = TAG)
-        }
-
-        return GiftClaimResult.SuccessWithoutLiquidity(
-            paymentHashOrTxId = fundingTxId ?: orderId,
-            sats = amount.toLong(),
-            invoice = openedOrder.payment?.bolt11Invoice?.request ?: "",
-            code = code,
-        )
-    }
-
     companion object {
         private const val TAG = "BlocktankRepo"
-        private const val REFUND_ADDRESS_ALLOCATION_LIMIT = 20
-        private const val DEFAULT_CHANNEL_EXPIRY_WEEKS = 6u
-        private const val DEFAULT_SOURCE = "bitkit-android"
-        private const val PEER_CONNECTION_DELAY_MS = 2_000L
-        private val TIMEOUT_GIFT_CODE = 30.seconds
-        private val GIFT_PAYMENT_RECEIVE_TIMEOUT = 45.seconds
         private const val CJIT_REFRESH_ATTEMPTS = 3
         private val CJIT_REFRESH_TIMEOUT = 5.seconds
         private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
     }
 }
 
-internal fun Throwable.toCjitError(): Throwable {
-    if (this is ServiceError.ChannelSizeExceedsMaximum ||
-        this is ServiceError.CjitQuoteInvalid ||
-        this is ServiceError.NodeCapacityUnavailable
-    ) {
-        return this
-    }
-
-    return when {
-        isNodeCapacityError() -> ServiceError.NodeCapacityUnavailable()
-        isMaxChannelSizeError() -> ServiceError.ChannelSizeExceedsMaximum()
-        else -> this
-    }
-}
-
-private fun Throwable.isNodeCapacityError(): Boolean {
-    return toString().contains("capacity is above our capacity limit", ignoreCase = true)
-}
-
-private fun Throwable.isMaxChannelSizeError(): Boolean {
-    val description = toString()
-    val maximumErrors = listOf(
-        "Channel size is too big",
-        "channelSizeExceedsMaximum",
-        "maxChannelSizeSat",
-    )
-    return maximumErrors.any { description.contains(it, ignoreCase = true) }
-}
-
 @Stable
 data class BlocktankState(
     val orders: ImmutableList<IBtOrder> = persistentListOf(),
-    val paidOrders: ImmutableList<IBtOrder> = persistentListOf(),
     val cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     val info: IBtInfo? = null,
-    val minCjitSats: Int? = null,
 )
-
-sealed class GiftClaimResult {
-    abstract val paymentHashOrTxId: String
-    abstract val sats: Long
-    abstract val invoice: String
-    abstract val code: String
-
-    data class SuccessWithLiquidity(
-        override val paymentHashOrTxId: String,
-        override val sats: Long,
-        override val invoice: String,
-        override val code: String,
-    ) : GiftClaimResult()
-
-    data class SuccessWithoutLiquidity(
-        override val paymentHashOrTxId: String,
-        override val sats: Long,
-        override val invoice: String,
-        override val code: String,
-    ) : GiftClaimResult()
-}

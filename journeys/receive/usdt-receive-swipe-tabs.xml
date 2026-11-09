@@ -7,7 +7,7 @@
     tooltip.
 
     Precondition: onboarded dev wallet with USDT enabled (introductory sheet or Settings, General,
-    Payments), no CJIT invoice pending, start on the wallet home screen. The USDT address loads
+    Payments), start on the wallet home screen. The USDT address loads
     without funding; wait for the QR before swiping.
 
     The copy shows as a tooltip over the QR for about two seconds, so a check for "no copy" reads a

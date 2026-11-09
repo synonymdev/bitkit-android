@@ -1,7 +1,7 @@
 <journey name="Hardware Wallet Detail Overview">
   <description>
     Opens the hardware wallet detail screen from the home tile and verifies its overview:
-    the top bar, balance header, the Transfer To Spending entry when funds are present,
+    the top bar, balance header and device artwork, the Transfer To Spending entry when funds are present,
     the grouped activity list, and the Remove device confirm dialog. The final
     Remove step forgets the device, so run this last (re-run connect-home-tile.xml to pair
     again). Requires a paired Bridge emulator (run connect-home-tile.xml first).
@@ -14,7 +14,7 @@
       Tap the hardware wallet tile beneath the SAVINGS and SPENDING tiles
     </action>
     <action>
-      Verify the hardware wallet detail screen opens (testTag "HardwareWalletScreen"), showing the device name with a blue bitcoin icon in the top bar and a balance header
+      Verify the hardware wallet detail screen opens (testTag "HardwareWalletScreen"), showing the device name with a blue bitcoin icon in the top bar and a balance header, and verify by screenshot that the Trezor Safe 7 artwork peeks in from the trailing edge with its screen readable and not covering the balance
     </action>
     <action>
       If a "Transfer To Spending" button is shown (testTag "HardwareTransferToSpending"), tap it, verify the transfer amount screen opens (testTag "HardwareTransferAmount") titled "TRANSFER TO SPENDING", then navigate back to the hardware wallet detail screen; otherwise skip this step

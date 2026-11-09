@@ -24,6 +24,17 @@ fun LightningBalance.channelId(): String {
     }
 }
 
+fun LightningBalance.counterpartyNodeId(): String {
+    return when (this) {
+        is LightningBalance.ClaimableOnChannelClose -> this.counterpartyNodeId
+        is LightningBalance.ClaimableAwaitingConfirmations -> this.counterpartyNodeId
+        is LightningBalance.ContentiousClaimable -> this.counterpartyNodeId
+        is LightningBalance.MaybeTimeoutClaimableHtlc -> this.counterpartyNodeId
+        is LightningBalance.MaybePreimageClaimableHtlc -> this.counterpartyNodeId
+        is LightningBalance.CounterpartyRevokedOutputClaimable -> this.counterpartyNodeId
+    }
+}
+
 fun LightningBalance.claimableAtHeight(): UInt? = when (this) {
     is LightningBalance.ClaimableAwaitingConfirmations -> this.confirmationHeight
     is LightningBalance.ContentiousClaimable -> this.timeoutHeight

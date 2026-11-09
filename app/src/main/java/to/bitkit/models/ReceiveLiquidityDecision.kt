@@ -8,18 +8,15 @@ enum class ReceiveLiquiditySource {
 
 sealed interface ReceiveAdditionalLiquidityAction {
     data object None : ReceiveAdditionalLiquidityAction
-    data object ChooseAmount : ReceiveAdditionalLiquidityAction
-    data class CreateCjit(val amountSats: ULong) : ReceiveAdditionalLiquidityAction
-    data object GeoBlocked : ReceiveAdditionalLiquidityAction
+
+    /** More inbound capacity needs a new channel, and Blocktank no longer sells them. */
+    data object TransferUnavailable : ReceiveAdditionalLiquidityAction
 }
 
 data class ReceiveAdditionalLiquidityParams(
     val source: ReceiveLiquiditySource,
     val invoiceAmountSats: ULong,
     val inboundCapacitySats: ULong?,
-    val minCjitSats: ULong?,
-    val maxCjitAmountSats: ULong?,
-    val isGeoBlocked: Boolean,
 )
 
 object ReceiveLiquidityDecision {
@@ -43,23 +40,8 @@ object ReceiveLiquidityDecision {
             !needsInboundLiquidity(params.invoiceAmountSats, params.inboundCapacitySats) ->
                 ReceiveAdditionalLiquidityAction.None
             (params.inboundCapacitySats ?: 0uL) == 0uL -> ReceiveAdditionalLiquidityAction.None
-            params.isGeoBlocked -> ReceiveAdditionalLiquidityAction.GeoBlocked
-            shouldChooseAmount(params) -> ReceiveAdditionalLiquidityAction.ChooseAmount
-            else -> ReceiveAdditionalLiquidityAction.CreateCjit(params.invoiceAmountSats)
+            else -> ReceiveAdditionalLiquidityAction.TransferUnavailable
         }
-    }
-
-    fun needsCjitLimitsForAdditionalLiquidity(
-        source: ReceiveLiquiditySource,
-        invoiceAmountSats: ULong,
-        inboundCapacitySats: ULong?,
-        isGeoBlocked: Boolean,
-    ): Boolean {
-        if (source != ReceiveLiquiditySource.SPENDING) return false
-        if (!needsInboundLiquidity(invoiceAmountSats, inboundCapacitySats)) return false
-        if ((inboundCapacitySats ?: 0uL) == 0uL) return false
-
-        return !isGeoBlocked
     }
 
     fun needsInboundLiquidity(
@@ -73,13 +55,5 @@ object ReceiveLiquidityDecision {
         }
 
         return invoiceAmountSats > inbound
-    }
-
-    private fun shouldChooseAmount(params: ReceiveAdditionalLiquidityParams): Boolean {
-        val min = params.minCjitSats ?: 0uL
-        val max = params.maxCjitAmountSats?.takeIf { it > 0uL } ?: return true
-        if (params.invoiceAmountSats == 0uL || min == 0uL) return true
-
-        return params.invoiceAmountSats < min || params.invoiceAmountSats > max
     }
 }

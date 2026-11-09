@@ -126,6 +126,7 @@ fun SendPendingScreen(
     AbandonExpiredPayment(
         abandonError = uiState.abandonErrorMessage(),
         isAbandoned = uiState.abandoned,
+        isTransfer = uiState.abandonableAttempt?.isBlocktankFunding == true,
         showConfirmation = showAbandonConfirmation,
         onConfirm = { requiresPin, useBiometrics ->
             showAbandonConfirmation = false
@@ -173,6 +174,7 @@ fun SendPendingScreen(
 private fun AbandonExpiredPayment(
     abandonError: String?,
     isAbandoned: Boolean,
+    isTransfer: Boolean,
     showConfirmation: Boolean,
     onConfirm: (requiresPin: Boolean, useBiometrics: Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -197,7 +199,13 @@ private fun AbandonExpiredPayment(
     if (showConfirmation) {
         AppAlertDialog(
             title = stringResource(R.string.wallet__send_pending__abandon),
-            text = stringResource(R.string.wallet__send_pending__abandon_note),
+            text = stringResource(
+                if (isTransfer) {
+                    R.string.wallet__send_pending__abandon_transfer_note
+                } else {
+                    R.string.wallet__send_pending__abandon_note
+                }
+            ),
             confirmText = stringResource(R.string.common__continue),
             dismissText = stringResource(R.string.common__cancel),
             onConfirm = { onConfirm(isPinEnabled && pinForPayments, isBiometricEnabled && isBiometrySupported) },

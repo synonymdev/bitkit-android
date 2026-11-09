@@ -1,0 +1,25 @@
+<journey name="save a new pubky profile">
+  <description>
+    Precondition: a disposable, unfunded wallet with Paykit enabled, no Pubky identity,
+    PIN off, an English device and a reachable configured signup service.
+    This checks name-only profile creation. Record the build, network and time from
+    tapping Save to Pay Contacts appearing. Do not enable contact payments for this check.
+    After relaunch, Android may show the cached name while the public profile loads;
+    persistence is verified only once the full profile name appears.
+  </description>
+  <actions>
+    <action>Open Profile using "ProfileButton"</action>
+    <action>If the profile introduction appears, tap its Continue button ("ProfileIntro-button")</action>
+    <action>On the Pubky choice screen, tap "PubkyChoiceCreate"</action>
+    <action>Wait for "CreateProfileUsername", enter "Profile Save Test" and dismiss the keyboard</action>
+    <action>Tap "CreateProfileSave" and record the time</action>
+    <action>Wait for "PayContactsContinue" and record the elapsed saving time</action>
+    <action>Take a screenshot and verify no profile error is shown</action>
+    <action>Return Home without pressing "PayContactsContinue", then open Profile using "ProfileButton"</action>
+    <action>Verify "ProfileViewName" shows "Profile Save Test"</action>
+    <action>Relaunch the app and open Profile using "ProfileButton"</action>
+    <action>If "ProfileCachedName" appears while loading, verify it shows "Profile Save Test"; this is not yet the full profile</action>
+    <action>Wait for the full profile name (id "ProfileViewName", predicate exists). If loading does not finish, report the loading state and elapsed time without claiming the saved name was lost</action>
+    <action>Verify "ProfileViewName" shows "Profile Save Test" and "ProfileCachedHeader" is gone</action>
+  </actions>
+</journey>

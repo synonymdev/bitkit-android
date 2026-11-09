@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -79,7 +80,7 @@ fun QrCodeImage(
     val tooltipState = rememberTooltipState()
     val coroutineScope = rememberCoroutineScope()
 
-    Box(
+    BoxWithConstraints(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .aspectRatio(1f)
@@ -140,17 +141,18 @@ fun QrCodeImage(
         }
 
         logoPainter?.let {
+            val logoSize = minOf(68.dp, minOf(maxWidth, maxHeight) * 0.2f)
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(68.dp)
+                    .size(logoSize)
                     .background(Color.White, shape = CircleShape)
                     .align(Alignment.Center)
             ) {
                 Image(
                     painter = it,
                     contentDescription = null,
-                    modifier = Modifier.size(50.dp)
+                    modifier = Modifier.size(logoSize * (50.dp / 68.dp))
                 )
             }
         }

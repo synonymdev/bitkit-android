@@ -220,20 +220,31 @@ class PaykitUsdtPaymentRepo @Inject constructor(
             for (restored in backup.attempts) {
                 val key = restored.wallet to restored.quoteId
                 val local = attempts[key]
+                if (local != null && local.bindingState() != restored.bindingState()) {
+                    throw UsdtException.InvalidBackup()
+                }
                 attempts[key] = local?.copy(
-                    paymentStarted = local.paymentStarted || restored.paymentStarted,
-                    proof = local.proof ?: restored.proof,
+                    paymentStarted = local.paymentStarted || restored.paymentStarted ||
+                        restored.proof != null || restored.proofQueued,
                 ) ?: restored
             }
             save(
                 State(
-                    attempts = attempts.values.map { it.copy(proofQueued = false) },
+                    attempts = attempts.values.map {
+                        it.copy(
+                            paymentStarted = it.paymentStarted || it.proof != null || it.proofQueued,
+                            proof = null,
+                            proofQueued = false,
+                        )
+                    },
                     receipts = (state.receipts + backup.receipts.map { it.restored() })
-                        .distinctBy { it.wallet to it.paymentId },
+                        .distinctBy { it.wallet to it.paymentId }.map { it.copy(verified = false) },
                 )
             )
         }
     }
+
+    suspend fun pauseForRecoveryRestore() = mutex.withLock { stateGeneration++ }
 
     suspend fun resetForWipe() = withContext(ioDispatcher) {
         mutex.withLock {
@@ -510,7 +521,8 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         status !in setOf(UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED)
     }
 
-    suspend fun reconcile() = withContext(ioDispatcher) {
+    suspend fun reconcile(): Result<Unit> = withContext(ioDispatcher) {
+        if (usdt.isRecoveryRestorePending) return@withContext Result.success(Unit)
         runSuspendCatching {
             reconcileMutex.withLock {
                 val previousProtection = Triple(activeWallet, activeIdentity, _resumableRequests.value)

@@ -250,7 +250,7 @@ private fun RemoveHardwareWalletButton(
 
 private fun HwWalletVendor.detailIllustrationOffsetX(): Dp = when (this) {
     HwWalletVendor.TREZOR -> 119.dp
-    HwWalletVendor.BLOCKSTREAM -> 16.dp
+    HwWalletVendor.BLOCKSTREAM -> 96.dp
 }
 
 private fun previewWallet(

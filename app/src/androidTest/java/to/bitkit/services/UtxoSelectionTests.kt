@@ -17,8 +17,10 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.test.LocalRegtest
 import to.bitkit.test.annotations.CoreServiceIntegration
 import to.bitkit.test.annotations.DeviceIntegration
+import to.bitkit.test.awaitSpendableDeposits
 import javax.inject.Inject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -38,9 +40,6 @@ class UtxoSelectionTests {
 
     @Inject
     lateinit var lightningService: LightningService
-
-    @Inject
-    lateinit var coreService: CoreService
 
     @Inject
     lateinit var keychain: Keychain
@@ -120,7 +119,7 @@ class UtxoSelectionTests {
         // Fund the wallet with multiple transactions
         for ((index, depositAmount) in depositAmounts.withIndex()) {
             println("Depositing $depositAmount sats to wallet (transaction ${index + 1}/${depositAmounts.size})")
-            val txId = coreService.blocktank.regtestDeposit(address = depositAddress, amountSat = depositAmount)
+            val txId = LocalRegtest.deposit(address = depositAddress, amountSat = depositAmount)
             assertTrue(txId.isNotEmpty(), "Transaction ID should not be empty")
             transactionIds.add(txId)
             totalExpectedAmount += depositAmount
@@ -132,18 +131,10 @@ class UtxoSelectionTests {
 
         // Mine some blocks to confirm all transactions
         println("Mining 6 blocks to confirm all transactions")
-        coreService.blocktank.regtestMine(6u)
+        LocalRegtest.mine(6u)
         println("Blocks mined successfully")
 
-        // Sleep 15 seconds to ensure all blocks are processed
-        println("Waiting 15 seconds for blocks to be processed")
-        delay(15_000)
-        println("Wait completed")
-
-        // Sync the wallet to see the new balance
-        println("Syncing wallet to update balances")
-        lightningService.sync()
-        println("Wallet sync complete")
+        lightningService.awaitSpendableDeposits(transactionIds.zip(depositAmounts).toMap())
 
         // Verify updated balances after funding
         val updatedBalances = lightningService.balances
@@ -218,7 +209,7 @@ class UtxoSelectionTests {
 
         // Mine a block to confirm the transaction
         println("Mining 1 block to confirm the transaction")
-        coreService.blocktank.regtestMine(1u)
+        LocalRegtest.mine(1u)
         println("Block mined successfully")
 
         // Wait for the block to be processed
@@ -291,13 +282,15 @@ class UtxoSelectionTests {
 
         // Define different deposit amounts for testing coin selection algorithms
         val depositAmounts = listOf(5_000uL, 10_000uL, 20_000uL, 30_000uL, 50_000uL)
+        val deposits = mutableMapOf<String, ULong>()
         var totalExpectedAmount = 0uL
 
         // Fund the wallet with multiple transactions
         for ((index, depositAmount) in depositAmounts.withIndex()) {
             println("Depositing $depositAmount sats to wallet (transaction ${index + 1}/${depositAmounts.size})")
-            val txId = coreService.blocktank.regtestDeposit(address = depositAddress, amountSat = depositAmount)
+            val txId = LocalRegtest.deposit(address = depositAddress, amountSat = depositAmount)
             assertTrue(txId.isNotEmpty(), "Transaction ID should not be empty")
+            deposits[txId] = depositAmount
             totalExpectedAmount += depositAmount
             println("Deposit transaction ${index + 1} ID: $txId, Amount: $depositAmount sats")
         }
@@ -306,18 +299,10 @@ class UtxoSelectionTests {
 
         // Mine blocks to confirm all transactions
         println("Mining 6 blocks to confirm all transactions")
-        coreService.blocktank.regtestMine(6u)
+        LocalRegtest.mine(6u)
         println("Blocks mined successfully")
 
-        // Wait for blocks to be processed
-        println("Waiting 15 seconds for blocks to be processed")
-        delay(15_000)
-        println("Wait completed")
-
-        // Sync the wallet to see the new balance
-        println("Syncing wallet to update balances")
-        lightningService.sync()
-        println("Wallet sync complete")
+        lightningService.awaitSpendableDeposits(deposits)
 
         // Get all available UTXOs
         println("Listing all available UTXOs")

@@ -11,8 +11,15 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -22,6 +29,7 @@ import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -34,6 +42,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
 import to.bitkit.models.ActivityBackupV1
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.HwSnapshotResult
@@ -47,7 +56,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class ActivityRepoTest : BaseUnitTest() {
 
     private val coreService = mock<CoreService>()
@@ -242,6 +251,131 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `Paykit backfill preserves cancellation`() = test {
         whenever(coreService.activity.backfillPaykitContacts()).thenThrow(CancellationException("canceled"))
         assertFailsWith<CancellationException> { sut.backfillPaykitContacts() }
+    }
+
+    @Test
+    fun `simultaneous activity syncs share one operation and its failure`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        val failure = IllegalStateException("Node unavailable")
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val calls = List(256) { async { sut.syncActivities() } }
+        runCurrent()
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        response.complete(Result.failure(failure))
+        assertTrue(calls.awaitAll().all { it.exceptionOrNull() === failure })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `cancelled and timed out waiters cannot reset the active sync`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val cancelled = async { sut.syncActivities() }
+        val waiting = async { sut.syncActivities() }
+        runCurrent()
+        cancelled.cancel()
+        advanceTimeBy(40_001)
+        runCurrent()
+        assertTrue(waiting.await().isFailure)
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        val later = async { sut.syncActivities() }
+        runCurrent()
+        verify(lightningRepo, times(1)).getPayments()
+        owner.cancel()
+        runCurrent()
+        assertTrue(owner.isCancelled)
+        assertFalse(later.isCancelled)
+        val interrupted = later.await().exceptionOrNull()
+        assertTrue(interrupted is AppError)
+        assertTrue(interrupted.cause is CancellationException)
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        response.complete(Result.failure(IllegalStateException("Unavailable")))
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `successful overlap stays reserved through transfer updates`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val waiting = List(16) { async { sut.syncActivities() } }
+        runCurrent()
+        assertFalse(owner.isCompleted)
+        assertTrue(waiting.none { it.isCompleted })
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        assertTrue(waiting.awaitAll().all { it.isSuccess })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        assertTrue(sut.syncActivities().isSuccess)
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `fresh callers import payments added after the active snapshot`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val newPayments = listOf(testPaymentDetails)
+        val paymentResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { paymentResponse.await() }
+        val fresh = List(16) { async { sut.syncActivities(requireFresh = true) } }
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        paymentResponse.complete(Result.success(newPayments))
+        assertTrue(fresh.awaitAll().all { it.isSuccess })
+        verify(coreService.activity).syncLdkNodePaymentsToActivities(eq(newPayments), eq(false), any())
+        verify(lightningRepo, times(2)).getPayments()
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+    }
+
+    @Test
+    fun `fresh callers retry after cancelled or failed refreshes`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val responses = ArrayDeque<CompletableDeferred<Result<List<PaymentDetails>>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { responses.removeFirst().await() }
+        listOf(true, false).forEachIndexed { index, cancelOwner ->
+            val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+            val nextResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+            responses.addLast(response)
+            responses.addLast(nextResponse)
+            val owner = async { sut.syncActivities() }
+            runCurrent()
+            val fresh = async { sut.syncActivities(requireFresh = true) }
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+
+            if (cancelOwner) owner.cancel() else response.complete(Result.failure(AppError("Unavailable")))
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+            val payments = listOf(testPaymentDetails)
+            nextResponse.complete(Result.success(payments))
+            assertTrue(fresh.await().isSuccess)
+            if (cancelOwner) assertTrue(owner.isCancelled) else assertTrue(owner.await().isFailure)
+            verify(lightningRepo, times(2 * (index + 1))).getPayments()
+            verify(coreService.activity, times(index + 1)).syncLdkNodePaymentsToActivities(
+                eq(payments),
+                eq(false),
+                any(),
+            )
+            assertFalse(sut.isSyncingLdkNodePayments.value)
+        }
     }
 
     @Test
@@ -1162,6 +1296,85 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(coreService.activity).upsertTags(listOf(backupTags))
         verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
         assertTrue(sut.activityTagsChanged.value > tagsBefore)
+    }
+
+    @Test
+    fun `restoreFromBackup replaces the synced row of a restored on-chain transaction`() = test {
+        val synced = createOnchainActivity(id = "ldk-payment-id", txId = "txid", feeRate = 1u).v1
+        val restored = createOnchainActivity(id = "txid", txId = "txid", feeRate = 3u)
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(synced)
+        whenever(coreService.activity.tags(synced.id, synced.walletId)).thenReturn(listOf("synced-tag"))
+        whenever(coreService.activity.delete(synced.id, synced.walletId)).thenReturn(true)
+        whenever(coreService.activity.appendTags(any(), any(), any())).thenReturn(Result.success(Unit))
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isSuccess)
+        inOrder(coreService.activity) {
+            verify(coreService.activity).upsertList(listOf(restored))
+            verify(coreService.activity).appendTags("txid", listOf("synced-tag"), synced.walletId)
+            verify(coreService.activity).delete(synced.id, synced.walletId)
+        }
+    }
+
+    @Test
+    fun `restoreFromBackup does not wait for a sync blocked on node start`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val sync = async { sut.syncActivities() }
+        runCurrent()
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(createOnchainActivity())))
+
+        assertTrue(result.isSuccess)
+        assertEquals(0L, currentTime)
+        assertTrue(sync.isActive)
+        sync.cancel()
+    }
+
+    @Test
+    fun `restoreFromBackup waits for a sync while the node runs`() = test {
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val sync = async { sut.syncActivities() }
+        runCurrent()
+
+        val payload = backupPayload().copy(activities = listOf(createOnchainActivity()))
+        val restore = async { sut.restoreFromBackup(payload) }
+        runCurrent()
+
+        assertFalse(restore.isCompleted)
+        verify(coreService.activity, never()).upsertList(any())
+        response.complete(Result.success(emptyList()))
+        sync.await()
+        assertTrue(restore.await().isSuccess)
+    }
+
+    @Test
+    fun `restoreFromBackup keeps the synced row when saving the restored rows fails`() = test {
+        val synced = createOnchainActivity(id = "ldk-payment-id", txId = "txid").v1
+        val restored = createOnchainActivity(id = "txid", txId = "txid")
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(synced)
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isFailure)
+        verify(coreService.activity, never()).delete(any(), any())
+    }
+
+    @Test
+    fun `restoreFromBackup keeps a synced row that already has the restored id`() = test {
+        val restored = createOnchainActivity(id = "ldk-payment-id", txId = "txid")
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(restored.v1)
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity, never()).delete(any(), any())
+        verify(coreService.activity).upsertList(listOf(restored))
     }
 
     @Test

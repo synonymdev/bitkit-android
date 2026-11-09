@@ -1,0 +1,12 @@
+<journey name="usdt wallet receive layout">
+  <description>Use an onboarded wallet with USDT enabled. For the hardware label check, use a paired hardware test wallet. No funds or payment submission are required.</description>
+  <actions>
+    <action>Open Savings from Home and return. Open USDT from Home and return. Verify both wallets use the same slide transition without showing the Home contents through the destination.</action>
+    <action>If saved USDT activity or cross-network deposits exist, open their details and return. Verify the slide transition keeps an opaque background without showing the previous screen through the details.</action>
+    <action>Open Receive. Switch repeatedly between Savings, Spending and USDT. Verify Show Details stays at the same bottom position and no footer overlaps the system navigation area.</action>
+    <action>On USDT, verify Network: Arbitrum One is visible. Open network selection and return without creating a deposit. Verify the network remains visible and Show Details still opens details.</action>
+    <action>With a paired hardware wallet, switch between its receive tab and USDT. Verify the hardware tab retains its vendor name on every tab instead of changing to Hardware.</action>
+    <action>On a compact screen, verify the QR fits above Edit, Copy and Share without the Network button covering them. Tap Copy and verify the plain receiving address reaches the clipboard without opening network selection; scan the displayed QR and verify the payment link and selected network.</action>
+    <action>Repeat on a compact screen and with enlarged system text. Verify the selected network and bottom controls are visible or reachable and the hardware label remains consistent.</action>
+  </actions>
+</journey>

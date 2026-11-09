@@ -16,16 +16,20 @@ import com.synonym.bitkitcore.SortDirection
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -51,6 +55,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import java.util.concurrent.TimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -72,6 +77,8 @@ class ActivityRepo @Inject constructor(
     private val clock: Clock,
 ) {
     val isSyncingLdkNodePayments = MutableStateFlow(false)
+    private val syncMutex = Mutex()
+    private var activeSync: CompletableDeferred<Result<Unit>>? = null
 
     private val _state = MutableStateFlow(ActivityState())
     val state: StateFlow<ActivityState> = _state
@@ -99,7 +106,6 @@ class ActivityRepo @Inject constructor(
 
     suspend fun resetState() = withContext(bgDispatcher) {
         _state.update { ActivityState() }
-        isSyncingLdkNodePayments.update { false }
         notifyActivitiesChanged()
         Logger.debug("Activity state reset", context = TAG)
     }
@@ -110,37 +116,45 @@ class ActivityRepo @Inject constructor(
         }.onFailure { Logger.warn("Failed to backfill Paykit activity contacts", it, context = TAG) }
     }
 
-    suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("syncActivities called", context = TAG)
-
-        val result = runCatching {
-            withTimeout(MS_SYNC_TIMEOUT) {
-                Logger.debug("isSyncingLdkNodePayments = ${isSyncingLdkNodePayments.value}", context = TAG)
-                isSyncingLdkNodePayments.first { !it }
+    suspend fun syncActivities(requireFresh: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
+        var ownsSync = false
+        val sync = syncMutex.withLock {
+            activeSync ?: CompletableDeferred<Result<Unit>>().also {
+                activeSync = it
+                ownsSync = true
+                isSyncingLdkNodePayments.update { true }
             }
-
-            isSyncingLdkNodePayments.update { true }
-
-            lightningRepo.getPayments().mapCatching { payments ->
-                Logger.debug("Got payments with success, syncing activities", context = TAG)
+        }
+        if (!ownsSync) {
+            val result = withTimeoutOrNull(MS_SYNC_TIMEOUT) { sync.await() }
+                ?: return@withContext Result.failure(TimeoutException("Waiting for activity sync timed out"))
+            return@withContext if (requireFresh) syncActivities() else result
+        }
+        var cancellation: CancellationException? = null
+        val result = try {
+            runSuspendCatching {
+                val payments = lightningRepo.getPayments().getOrThrow()
                 syncLdkNodePayments(payments).getOrThrow()
                 boostPendingActivities()
                 transferRepo.syncTransferStates().getOrThrow()
-            }.onSuccess {
                 getAllAvailableTags().getOrNull()
-            }.getOrThrow()
-        }.onFailure { e ->
-            if (e is TimeoutCancellationException) {
-                Logger.warn("syncActivities timeout, forcing reset", context = TAG)
-            } else {
-                Logger.error("Failed to sync activities", e, context = TAG)
+                Unit
+            }.onFailure { Logger.error("Failed to sync activities", it, context = TAG) }
+        } catch (e: CancellationException) {
+            cancellation = e
+            Result.failure(AppError("Activity sync was interrupted", e))
+        } finally {
+            withContext(NonCancellable) {
+                syncMutex.withLock {
+                    activeSync = null
+                    isSyncingLdkNodePayments.update { false }
+                }
+                notifyActivitiesChanged()
             }
         }
-
-        isSyncingLdkNodePayments.update { false }
-        notifyActivitiesChanged()
-
-        return@withContext result
+        sync.complete(result)
+        cancellation?.let { throw it }
+        result
     }
 
     /**
@@ -421,7 +435,7 @@ class ActivityRepo @Inject constructor(
 
                 if (walletId == WalletScope.default) {
                     lightningRepo.sync().onSuccess { Logger.debug("Syncing LN node SUCCESS", context = TAG) }
-                    syncActivities().onSuccess {
+                    syncActivities(requireFresh = true).onSuccess {
                         Logger.debug(
                             "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
                             context = TAG,
@@ -610,7 +624,7 @@ class ActivityRepo @Inject constructor(
         if (activity != null) return activity
         if (!syncLdkPayments) return null
 
-        syncActivities().getOrThrow()
+        syncActivities(requireFresh = true).getOrThrow()
         return getActivityByPaymentId(forPaymentId, walletId)
     }
 
@@ -1070,17 +1084,26 @@ class ActivityRepo @Inject constructor(
      * [BackupRepo] from treating a partial restore as authoritative and rewriting a good backup with it.
      * Observers are notified whenever at least one slice was applied, and the tag signal only fires when the
      * tags slice itself was applied, so a rejected tags slice cannot mark the metadata backup as changed.
+     * A restored on-chain activity whose transaction the node sync already stored under another id (bitkit-ios keys
+     * sends by txid) replaces that row, which is deleted only after the restored one is saved and takes its tags.
      */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
-        val activities = runSuspendCatching { coreService.activity.upsertList(payload.activities) }
+        val activities = runSuspendCatching {
+            val syncedDuplicates = findSyncedOnchainDuplicates(payload.activities)
+            coreService.activity.upsertList(payload.activities)
+            syncedDuplicates
+        }
         val activityTags = runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) }
         val closedChannels = runSuspendCatching {
             coreService.activity.upsertClosedChannelList(payload.closedChannels)
         }
-        val results = listOf(
+        val results = listOfNotNull(
             "activities" to activities,
             "activityTags" to activityTags,
             "closedChannels" to closedChannels,
+            activities.getOrNull()?.let {
+                "syncedDuplicates" to runSuspendCatching { mergeSyncedOnchainDuplicates(it) }
+            },
         )
         val failures = results.mapNotNull { (slice, result) ->
             result.exceptionOrNull()?.also {
@@ -1098,6 +1121,27 @@ class ActivityRepo @Inject constructor(
             context = TAG,
         )
         return@withContext Result.success(Unit)
+    }
+
+    private suspend fun findSyncedOnchainDuplicates(activities: List<Activity>): List<SyncedDuplicate> {
+        // A sync still waiting for the node has stored nothing and later finds the restored rows by txid
+        if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+            syncMutex.withLock { activeSync }?.let { withTimeoutOrNull(MS_SYNC_TIMEOUT) { it.await() } }
+        }
+        return activities.filterIsInstance<Activity.Onchain>().map { it.v1 }.mapNotNull { restored ->
+            coreService.activity.getOnchainActivityByTxId(restored.txId, restored.walletId)
+                ?.takeIf { it.id != restored.id && it.txType == restored.txType }
+                ?.let { SyncedDuplicate(synced = it, restoredId = restored.id) }
+        }
+    }
+
+    private suspend fun mergeSyncedOnchainDuplicates(duplicates: List<SyncedDuplicate>) {
+        duplicates.forEach { (synced, restoredId) ->
+            val tags = coreService.activity.tags(synced.id, synced.walletId)
+            if (tags.isNotEmpty()) coreService.activity.appendTags(restoredId, tags, synced.walletId).getOrThrow()
+            coreService.activity.delete(synced.id, synced.walletId)
+            Logger.debug("Replaced synced activity '${synced.id}' with restored '$restoredId'", context = TAG)
+        }
     }
 
     suspend fun markAllUnseenActivitiesAsSeen(startedBefore: ULong? = null): Result<Unit> = withContext(bgDispatcher) {
@@ -1175,3 +1219,5 @@ private fun OnchainActivity.toPreActivityMetadata(tags: List<String>): PreActivi
         createdAt = timestamp * SECONDS_TO_MILLIS,
     )
 }
+
+private data class SyncedDuplicate(val synced: OnchainActivity, val restoredId: String)

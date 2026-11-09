@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.subscriptions
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,11 +62,11 @@ import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberSubscriptionNotificationsRequest
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import kotlin.time.Duration.Companion.seconds
@@ -85,6 +84,7 @@ fun AllowanceSheet(
     viewModel: AllowancesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val requestNotifications = rememberSubscriptionNotificationsRequest()
     // The view model outlives this sheet, so a check left open must never run in the next one.
     DisposableEffect(route) {
         onDispose { viewModel.onAuthorizationCancelled() }
@@ -128,7 +128,10 @@ fun AllowanceSheet(
                         allowance = allowance,
                         isWorking = uiState.isWorking,
                         onClickDecline = { viewModel.decline(allowance.id, onSuccess = appViewModel::hideSheet) },
-                        onClickAccept = { viewModel.accept(allowance.id, onSuccess = appViewModel::hideSheet) },
+                        onClickAccept = {
+                            requestNotifications()
+                            viewModel.accept(allowance.id, onSuccess = appViewModel::hideSheet)
+                        },
                         modifier = Modifier.sheetHeight()
                     )
                 }
@@ -151,18 +154,11 @@ fun AllowanceSheet(
             }
         }
         uiState.authorization?.let {
-            BackHandler(onBack = onAuthorizationCancel)
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
-            ) {
-                UsdtAuthentication(
-                    useBiometrics = it.useBiometrics,
-                    onCancel = onAuthorizationCancel,
-                    onVerified = viewModel::onAuthorized,
-                )
-            }
+            AllowanceAuthorizationOverlay(
+                authorization = it,
+                onCancel = onAuthorizationCancel,
+                onVerified = viewModel::onAuthorized,
+            )
         }
     }
 }

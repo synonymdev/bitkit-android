@@ -13,14 +13,12 @@ import to.bitkit.models.ReceiveAdditionalLiquidityAction
 import to.bitkit.models.ReceiveAdditionalLiquidityParams
 import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.ReceiveLiquiditySource
-import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.WalletRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class EditInvoiceVM @Inject constructor(
     private val walletRepo: WalletRepo,
-    private val blocktankRepo: BlocktankRepo,
 ) : ViewModel() {
 
     private val _editInvoiceEffect = MutableSharedFlow<EditInvoiceScreenEffects>(extraBufferCapacity = 1)
@@ -38,45 +36,20 @@ class EditInvoiceVM @Inject constructor(
     fun onClickContinue(
         source: ReceiveLiquiditySource,
         amountSats: ULong,
-        isGeoBlocked: Boolean,
     ) {
         viewModelScope.launch {
             _isLoading.update { true }
             val inboundCapacitySats = walletRepo.inboundLiquiditySats()
-            val maxCjitAmountSats = maxCjitAmountSats(source, amountSats, inboundCapacitySats, isGeoBlocked)
             val action = ReceiveLiquidityDecision.additionalLiquidityAction(
                 ReceiveAdditionalLiquidityParams(
                     source = source,
                     invoiceAmountSats = amountSats,
                     inboundCapacitySats = inboundCapacitySats,
-                    minCjitSats = blocktankRepo.blocktankState.value.minCjitSats?.toULong(),
-                    maxCjitAmountSats = maxCjitAmountSats,
-                    isGeoBlocked = isGeoBlocked,
                 )
             )
             editInvoiceEffect(EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(action))
             _isLoading.update { false }
         }
-    }
-
-    private suspend fun maxCjitAmountSats(
-        source: ReceiveLiquiditySource,
-        amountSats: ULong,
-        inboundCapacitySats: ULong,
-        isGeoBlocked: Boolean,
-    ): ULong? {
-        if (!ReceiveLiquidityDecision.needsCjitLimitsForAdditionalLiquidity(
-                source = source,
-                invoiceAmountSats = amountSats,
-                inboundCapacitySats = inboundCapacitySats,
-                isGeoBlocked = isGeoBlocked,
-            )
-        ) {
-            return null
-        }
-
-        blocktankRepo.refreshMinCjitSats()
-        return blocktankRepo.maxCjitAmountSats().getOrNull()
     }
 
     sealed interface EditInvoiceScreenEffects {

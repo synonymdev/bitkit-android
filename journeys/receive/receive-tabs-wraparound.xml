@@ -6,7 +6,7 @@
     the Receive sheet, also when it is released above the sheet, and a tap on a QR still copies it.
 
     Precondition: onboarded dev wallet with USDT enabled (introductory sheet or Settings, General,
-    Payments), no open Spending channel, no CJIT invoice pending and no hardware wallet paired, so the
+    Payments), no open Spending channel and no hardware wallet paired, so the
     tabs are Savings, Spending and USDT; a usable channel adds the Auto tab. Start on the wallet home
     screen. The USDT address loads without funding; wait for the QR before swiping.
 

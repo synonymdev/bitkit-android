@@ -36,7 +36,7 @@ import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.ServiceError
+import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -78,6 +78,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
         whenever(allowanceRepo.entries).thenReturn(entries)
         whenever(settingsStore.data).thenReturn(settings)
         whenever(allowanceRepo.autoPaidSats).thenReturn(autoPaidSats)
+        whenever(allowanceRepo.automaticPaymentPause).thenReturn(MutableStateFlow(null))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever(paymentRequestRepo.eligibleTargets).thenReturn(targets)
         whenever(paymentRequestRepo.paymentRequestHistory)
@@ -193,7 +194,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
     @Test
     fun `saving without a dollar rate proposes nothing`() = test {
         whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull()))
-            .thenReturn(Result.failure(ServiceError.CurrencyRateUnavailable()))
+            .thenReturn(Result.failure(AppError("Currency rate unavailable")))
 
         sut.propose(profile(LEO_KEY, "Leo"), perPaymentUsd = 5, monthlyUsd = 100) {}
 
@@ -226,6 +227,22 @@ class AllowancesViewModelTest : BaseUnitTest() {
 
         verify(allowanceRepo).propose(eq(LEO_KEY), any())
         assertTrue(saved)
+        assertNull(loadedState().authorization)
+    }
+
+    @Test
+    fun `resuming automatic payments asks for the pin first when payments require it`() = test {
+        settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, isBiometricEnabled = true)
+        whenever(allowanceRepo.resumeAutomaticPayments()).thenReturn(Result.success(Unit))
+
+        sut.resumeAutomaticPayments()
+
+        assertEquals(AllowanceAuthorization(useBiometrics = true), loadedState().authorization)
+        verify(allowanceRepo, never()).resumeAutomaticPayments()
+
+        sut.onAuthorized()
+
+        verify(allowanceRepo).resumeAutomaticPayments()
         assertNull(loadedState().authorization)
     }
 

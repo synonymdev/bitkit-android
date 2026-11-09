@@ -348,6 +348,8 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         appViewModel.onAppResumed()
+        // A permission dialog launched from a sheet that has since closed loses its result callback.
+        settingsViewModel.setNotificationPreference(areNotificationsEnabled())
     }
 
     override fun onStop() {
@@ -456,10 +458,8 @@ private fun OnboardingNav(
         }
         composableWithDefaultTransitions<StartupRoutes.Slides> { navBackEntry ->
             val route = navBackEntry.toRoute<StartupRoutes.Slides>()
-            val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
             OnboardingSlidesScreen(
                 currentTab = route.tab,
-                isGeoBlocked = isGeoBlocked,
                 onAdvancedSetupClick = { startupNavController.navigateTo(StartupRoutes.Advanced) },
                 onCreateClick = {
                     scope.launch {

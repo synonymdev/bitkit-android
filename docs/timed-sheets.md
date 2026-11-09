@@ -7,7 +7,7 @@ The manager checks sheets two seconds after the home screen resumes and cancels 
 1. App update
 2. USDT
 3. Backup
-4. Background payments
+4. Notifications
 5. QuickPay
 6. High balance
 
@@ -55,15 +55,15 @@ Backup uses a snooze model instead of a permanent seen flag:
 
 After the one-day ask interval passes, the Backup timed sheet can appear again if the backup is still unverified and the wallet still has a balance.
 
-## Background Payments
+## Notifications
 
-The Background Payments timed sheet is eligible when notification permission has not been granted, the wallet has a Lightning balance, and `notificationsIgnoredMillis` is older than one week.
+The Notifications timed sheet is eligible when notification permission has not been granted, the wallet has at least one Paykit subscription, and `notificationsIgnoredMillis` is older than one week.
 
-- `Later` marks the background-payments intro as seen and dismisses the sheet. Dismissal records `notificationsIgnoredMillis`.
+- `Later` marks the notifications intro as seen and dismisses the sheet. Dismissal records `notificationsIgnoredMillis`.
 - `Enable` marks the intro as seen, dismisses the sheet, records `notificationsIgnoredMillis`, and requests notification permission.
 - A generic timed sheet dismissal records `notificationsIgnoredMillis` without marking the intro as seen.
 
-After the one-week ask interval passes, the timed sheet can appear again if notification permission is still not granted and the wallet still has a Lightning balance. The full-screen settings intro is a separate route with only an enable action.
+After the one-week ask interval passes, the timed sheet can appear again if notification permission is still not granted and the wallet still has a Paykit subscription. The full-screen settings intro is a separate route with only an enable action.
 
 ## High Balance
 

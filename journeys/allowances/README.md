@@ -4,8 +4,17 @@ Cover the Paykit allowance lifecycle between two Bitkit instances: the payer set
 contact, the payee's wallet accepts it by itself, requests within the limits are paid without asking, a request above a
 limit falls back to the normal Payment Request sheet, and either side ends it. The restart journey
 pins the one rule that must never break: a payment interrupted mid-flight is never paid twice.
+The restore journey checks that a payer restored from its recovery phrase keeps its allowance history.
+`allowance-paused-after-restore.xml` checks that a restored payer's automatic payments stay paused,
+also across a relaunch, until the payer taps Resume on the Allowances tab.
+
+A wallet restore leaves automatic payments paused until Resume. Journeys that restore, such as `restore-keeps-history.xml`, end with automatic payments paused, so tap Resume in Allowances before running an automatic payment journey on the same instance.
 
 ## Setup
+
+Allowances are on by default and can be turned off from Dev Settings ("Enable Allowances"). With them
+off the Allowances tab is hidden and every request opens as an ordinary Payment Request;
+`allowances-turned-off.xml` covers it.
 
 Run Bitkit against regtest with Paykit UI enabled on two instances that have each other saved as
 contacts and linked over Paykit, exactly as for
@@ -17,11 +26,16 @@ and the payee needs receiving capacity; fund both through the staging LSP.
 Grant both instances notification permission first (`adb shell pm grant to.bitkit.dev
 android.permission.POST_NOTIFICATIONS`): the payer's "Payment Executed" and "Limit Reached" events and
 the payee's "Allowance Added" event post a system notification when they can, and fall back to a toast
-that `android layout` cannot see.
+that `android layout` cannot see. "Limit Reached" posts nothing while Bitkit is in the foreground and
+unlocked, because the Payment Request sheet for the same request opens at the same time; behind the PIN
+screen the sheet waits, so the notification is posted.
 
 The journeys set $5 a payment and $50 a month, the second stop on each slider, and the cap journey
 sets $5 a payment and $10 a month, the first monthly stop. Requests are one-time Payment Requests
-created from the Payments tab of the payee, in the fiat unit. Dollar amounts on screen are converted
+created from the Payments tab of the payee, priced in bitcoin. On Android, enter the amount in sats:
+a request entered in the fiat unit is priced in USD, and allowances pay only bitcoin-priced requests, so it
+stays manual. iOS converts a dollar entry to a bitcoin amount when it creates the request, so the fiat unit
+works there. Dollar amounts on screen are converted
 at the current rate, so a sats amount next to them will differ between runs.
 
 ## Reference evidence
@@ -47,7 +61,8 @@ killed right after handing the payment to the node never paid twice after relaun
 - Detail sheet: `AllowanceDetail`, `AllowancePaidSoFar`, `AllowanceDetailStatus`
 - Payments tab: `Tab-payments`, `PaymentRequestCreate`, `PaymentRequestRow-<paymentRequestId>`
   whose subtitle ends with "· Auto-paid" for an automatic payment
-- Incoming request: `PaymentRequestsBell`, `PaymentRequestsSheet`
+- Incoming request: `PaymentRequestsBell`, `PaymentRequestsSheet`, or `PaymentRequestConfirm`
+  when the request opens straight on its confirm screen
 
 A payer who requires a PIN for payments sees the PIN pad (or biometrics) over the sheet when saving or ending
 an allowance, and when accepting an allowance a payee asked for; the payee's answers and automatic payments never

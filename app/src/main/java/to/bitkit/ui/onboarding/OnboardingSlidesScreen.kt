@@ -40,7 +40,6 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
@@ -54,7 +53,6 @@ private const val PAGE_COUNT = LAST_PAGE_INDEX + 1
 
 @Composable
 fun OnboardingSlidesScreen(
-    isGeoBlocked: Boolean,
     onAdvancedSetupClick: () -> Unit,
     onCreateClick: () -> Unit,
     onRestoreClick: () -> Unit,
@@ -87,7 +85,6 @@ fun OnboardingSlidesScreen(
                     title = stringResource(R.string.onboarding__slide1_header),
                     titleAccentColor = Colors.Purple,
                     text = stringResource(R.string.onboarding__slide1_text),
-                    disclaimerText = stringResource(R.string.onboarding__slide1_note).takeIf { isGeoBlocked },
                     modifier = Modifier.testTag("Slide1")
                 )
 
@@ -183,7 +180,6 @@ fun OnboardingTab(
     titleAccentColor: Color,
     text: String,
     modifier: Modifier = Modifier,
-    disclaimerText: String? = null,
 ) {
     Column(
         modifier = modifier.fillMaxSize()
@@ -212,10 +208,6 @@ fun OnboardingTab(
                 color = Colors.White64,
                 minLines = 3,
             )
-            disclaimerText?.let {
-                VerticalSpacer(4.dp)
-                Footnote(text = it, color = Colors.White32)
-            }
         }
     }
 }
@@ -229,7 +221,6 @@ private fun OnboardingViewPreview() {
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
-            isGeoBlocked = true
         )
     }
 }
@@ -243,21 +234,6 @@ private fun OnboardingViewPreview2() {
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
-            isGeoBlocked = true
-        )
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun OnboardingViewPreview3() {
-    AppThemeSurface {
-        OnboardingSlidesScreen(
-            currentTab = 1,
-            onAdvancedSetupClick = {},
-            onCreateClick = {},
-            onRestoreClick = {},
-            isGeoBlocked = false
         )
     }
 }
@@ -271,7 +247,6 @@ private fun OnboardingViewPreview4() {
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
-            isGeoBlocked = false
         )
     }
 }

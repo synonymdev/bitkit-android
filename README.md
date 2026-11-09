@@ -203,14 +203,6 @@ just e2e network assembleTnetRelease
 just e2e network assembleMainnetRelease
 ```
 
-#### Disable Geoblocking Checks
-
-By default, geoblocking checks via API are enabled. To disable at build time, use the `GEO` environment variable:
-
-```sh
-just e2e no geo
-```
-
 ## Contributing
 
 ### AI Code Review with Claude

@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -28,7 +27,6 @@ class HealthRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val connectivityRepo: ConnectivityRepo,
     private val lightningRepo: LightningRepo,
-    private val blocktankRepo: BlocktankRepo,
     private val cacheStore: CacheStore,
     private val clock: Clock,
 ) {
@@ -43,7 +41,6 @@ class HealthRepo @Inject constructor(
 
     init {
         collectState()
-        observePaidOrdersState()
         observeBackupStatus()
     }
 
@@ -118,24 +115,6 @@ class HealthRepo @Inject constructor(
         ConnectivityState.CONNECTED -> HealthState.READY
         ConnectivityState.CONNECTING -> HealthState.PENDING
         ConnectivityState.DISCONNECTED -> HealthState.ERROR
-    }
-
-    private fun observePaidOrdersState() {
-        repoScope.launch {
-            blocktankRepo.blocktankState.map { it.paidOrders }.distinctUntilChanged().collect { paidOrders ->
-                if (paidOrders.isNotEmpty()) {
-                    updateState { currentState ->
-                        // only override lightning connection to PENDING if it's currently ERROR
-                        val channelsStatus = when (currentState.channels) {
-                            HealthState.ERROR -> HealthState.PENDING
-                            else -> currentState.channels
-                        }
-
-                        currentState.copy(channels = channelsStatus)
-                    }
-                }
-            }
-        }
     }
 
     private fun observeBackupStatus() {

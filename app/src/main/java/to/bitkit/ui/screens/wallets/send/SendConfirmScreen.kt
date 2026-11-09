@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -73,7 +75,6 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
-import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PaymentRequestInvoiceNote
 import to.bitkit.ui.components.PaymentRequestSummary
@@ -82,6 +83,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.SwipeToConfirm
+import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.TextInput
@@ -120,6 +122,7 @@ fun SendConfirmScreen(
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onNavigateToPin: () -> Unit,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -186,6 +189,7 @@ fun SendConfirmScreen(
         isLoading = isLoading,
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
+        syncNodeVariant = syncNodeVariant,
         initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
         autoPayContent = autoPayContent,
         onBack = onBack,
@@ -213,7 +217,7 @@ fun SendConfirmScreen(
 }
 
 @Composable
-private fun AutoPayOverlay(
+internal fun AutoPayOverlay(
     isVisible: Boolean,
     content: (@Composable () -> Unit)?,
 ) {
@@ -238,6 +242,7 @@ internal fun SendConfirmContent(
     preparingContact: PubkyProfile? = null,
     canGoBack: Boolean = true,
     initialShowDetails: Boolean = false,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
     onBack: () -> Unit = {},
     onEvent: (SendEvent) -> Unit = {},
@@ -258,7 +263,13 @@ internal fun SendConfirmContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .gradientBackground()
+                .then(
+                    if (isPreparing || uiState.isPaymentRequest) {
+                        Modifier.background(Colors.Gray7)
+                    } else {
+                        Modifier.gradientBackground()
+                    }
+                )
                 .navigationBarsPadding()
         ) {
             val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
@@ -296,6 +307,7 @@ internal fun SendConfirmContent(
                 )
             } else {
                 SyncNodeView(
+                    variant = syncNodeVariant,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -357,13 +369,7 @@ private fun ContentRunning(
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when {
-        preparingRequest != null -> if (preparingRequest.acceptedPaymentEndpointIdentifiers.toSet() ==
-            setOf(MethodId.UsdtArbitrum.rawValue)
-        ) {
-            Colors.Usdt
-        } else {
-            Colors.White64
-        }
+        preparingRequest != null -> preparingRequest.preparingAccentColor()
         uiState.payMethod == SendMethod.LIGHTNING -> Colors.Purple
         else -> Colors.Brand
     }
@@ -386,11 +392,24 @@ private fun ContentRunning(
             BalanceHeaderView(
                 sats = (preparingRequest?.amount?.atomic ?: uiState.amount).toLong(),
                 useSwipeToHide = false,
-                onClick = { onEvent(SendEvent.BackToAmount) }.takeUnless { isPreparing },
+                onClick = {
+                    if (!isPreparing && uiState.isAmountEditable) onEvent(SendEvent.BackToAmount)
+                },
                 testTag = "ReviewAmount",
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("ReviewAmount")
+            )
+        }
+
+        if (!isPreparing && uiState.isPaymentRequest && uiState.canSwitchConfirmFundingSource && !showDetails) {
+            VerticalSpacer(16.dp)
+            SendFundingSourceButton(
+                uiState = uiState,
+                onClick = { onEvent(SendEvent.PaymentMethodSelect(it)) },
+                interactionsEnabled = !isLoading && !isHardwareFeeLoading,
+                confirmation = true,
+                modifier = Modifier.align(Alignment.End).testTag("SendConfirmAssetButton")
             )
         }
 
@@ -406,9 +425,9 @@ private fun ContentRunning(
                     .verticalScroll(rememberScrollState())
                     .heightIn(min = maxHeight)
             ) {
-                VerticalSpacer(if (isPreparing || uiState.isOneOffPaymentRequest && !isLnurlPay) 24.dp else 44.dp)
+                VerticalSpacer(if (isPreparing || uiState.isPaymentRequest) 24.dp else 44.dp)
 
-                if (isLnurlPay) {
+                if (isLnurlPay && !uiState.isPaymentRequest) {
                     LnurlPayDetails(uiState = uiState, onEvent = onEvent)
                 } else if (showDetails && !isPreparing) {
                     when (uiState.payMethod) {
@@ -420,7 +439,7 @@ private fun ContentRunning(
                             )
                             VerticalSpacer(16.dp)
                             TagsSection(uiState, onClickTag, onClickAddTag)
-                            uiState.oneOffPaymentRequestNote?.let {
+                            uiState.confirmationRequestNote?.let {
                                 VerticalSpacer(16.dp)
                                 PaymentRequestInvoiceNote(note = it)
                             }
@@ -434,26 +453,30 @@ private fun ContentRunning(
                                 onClickTag = onClickTag,
                                 onClickAddTag = onClickAddTag,
                             )
+                            if ((uiState.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed() == true) {
+                                LnurlCommentSection(uiState, onEvent)
+                            }
                         }
                     }
                 } else {
-                    if (isPreparing || uiState.isOneOffPaymentRequest) {
+                    if (isPreparing || uiState.isPaymentRequest) {
                         PaymentRequestSummary(
                             profile = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
-                            note = if (isPreparing) preparingRequest.note else uiState.oneOffPaymentRequestNote,
+                            note = if (isPreparing) preparingRequest.note else uiState.confirmationRequestNote,
                             accentColor = accentColor,
                         )
                         VerticalSpacer(16.dp)
                     }
                     PaymentReviewIllustration(
                         swipeProgress = { swipeProgress.floatValue },
+                        isPaymentRequest = isPreparing || uiState.isPaymentRequest,
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
         }
 
-        if (!isLnurlPay && !isPreparing) {
+        if ((!isLnurlPay || uiState.isPaymentRequest) && !isPreparing) {
             PrimaryButton(
                 text = stringResource(
                     if (showDetails) R.string.common__hide_details else R.string.common__show_details
@@ -499,7 +522,7 @@ private fun ContentRunning(
             color = accentColor,
             enabled = !isPreparing && uiState.isAmountInputValid &&
                 !uiState.isFundingSourceLoading &&
-                !isHardwareFeeLoading,
+                uiState.isHardwareFeeReady,
             loading = isPreparing || isLoading,
             confirmed = !isPreparing && isLoading,
             progress = swipeProgress,
@@ -585,24 +608,17 @@ private fun OnChainDetails(
                 caption = stringResource(R.string.wallet__send_from),
                 modifier = Modifier.weight(1f)
             ) {
-                NumberPadActionButton(
-                    text = if (uiState.hardwareWalletId != null) {
-                        uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
-                    } else {
-                        stringResource(R.string.wallet__savings__title)
-                    },
-                    color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
-                    enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
-                    isLoading = uiState.isFundingSourceLoading,
-                    clickable = interactionsEnabled && !uiState.isRetainedHardwarePayment,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
-                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                SendFundingSourceButton(
+                    uiState = uiState,
+                    onClick = { onEvent(SendEvent.PaymentMethodSelect(it)) },
+                    interactionsEnabled = interactionsEnabled,
+                    confirmation = true,
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
             }
             SendCell(
                 caption = stringResource(
-                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
+                    if (uiState.isPaymentRequest && !uiState.isMerchantPaymentRequest) {
                         R.string.wallet__payment_request_contact
                     } else {
                         R.string.wallet__send_to
@@ -741,19 +757,17 @@ private fun LightningDetails(
                 caption = stringResource(R.string.wallet__send_from),
                 modifier = Modifier.weight(1f)
             ) {
-                NumberPadActionButton(
-                    text = stringResource(R.string.wallet__spending__title),
-                    color = Colors.Purple,
-                    enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
-                    isLoading = uiState.isFundingSourceLoading,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
-                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                SendFundingSourceButton(
+                    uiState = uiState,
+                    onClick = { onEvent(SendEvent.PaymentMethodSelect(it)) },
+                    interactionsEnabled = interactionsEnabled,
+                    confirmation = true,
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
             }
             SendCell(
                 caption = stringResource(
-                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
+                    if (uiState.isPaymentRequest && !uiState.isMerchantPaymentRequest) {
                         R.string.wallet__payment_request_contact
                     } else {
                         R.string.wallet__send_to
@@ -854,7 +868,7 @@ private fun LightningDetails(
             }
         }
 
-        if (!isLnurlPay && !description.isNullOrEmpty() && description.trim() != uiState.oneOffPaymentRequestNote) {
+        if (!isLnurlPay && !description.isNullOrEmpty() && description.trim() != uiState.confirmationRequestNote) {
             SendCell(caption = stringResource(R.string.wallet__note)) {
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     BodySSB(text = description, maxLines = 1)
@@ -870,7 +884,7 @@ private fun LightningDetails(
             )
         }
 
-        uiState.oneOffPaymentRequestNote?.let {
+        uiState.confirmationRequestNote?.let {
             PaymentRequestInvoiceNote(note = it)
         }
     }
@@ -897,11 +911,8 @@ private fun ContactRecipient(
     }
 }
 
-private val SendUiState.isOneOffPaymentRequest: Boolean
-    get() = isPaymentRequest && !isSubscriptionPayment
-
-private val SendUiState.oneOffPaymentRequestNote: String?
-    get() = paymentRequestNote?.trim()?.takeIf { isOneOffPaymentRequest && it.isNotEmpty() }
+private val SendUiState.confirmationRequestNote: String?
+    get() = paymentRequestNote?.trim()?.takeIf { isPaymentRequest && it.isNotEmpty() }
 
 @Composable
 private fun LnurlPayDetails(
@@ -975,6 +986,17 @@ private fun sendUiState() = SendUiState(
         description = "Some invoice description",
     ),
 )
+
+private fun PaykitPaymentRequest.preparingAccentColor(): Color {
+    val methods = acceptedPaymentEndpointIdentifiers.mapNotNull(MethodId::fromRawValue)
+    return when {
+        methods.isEmpty() -> Colors.White64
+        methods.all { it == MethodId.UsdtArbitrum } -> Colors.Usdt
+        methods.all { it == MethodId.Bolt11 || it == MethodId.Lnurl } -> Colors.Purple
+        methods.all { it.isOnchain } -> Colors.Brand
+        else -> Colors.White64
+    }
+}
 
 @Preview(showSystemUi = true, group = "onchain")
 @Composable

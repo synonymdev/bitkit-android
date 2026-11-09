@@ -136,7 +136,7 @@ class HomeViewModel @Inject constructor(
         }.combine(
             combine(settingsStore.data, usdtRepo.state) { settings, usdt ->
                 Env.isUsdtEnabled && (settings.isUsdtEnabled || usdt.hasFundsOrPendingTransfers) &&
-                    ((usdt.balance ?: 0uL) > 0uL || usdt.transfers.isNotEmpty())
+                    ((usdt.balance ?: usdt.cachedBalance ?: 0uL) > 0uL || usdt.transfers.isNotEmpty())
             }
         ) { hasActivity, hasUsdtActivity ->
             hasActivity || hasUsdtActivity

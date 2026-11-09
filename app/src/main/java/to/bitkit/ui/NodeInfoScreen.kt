@@ -42,13 +42,13 @@ import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
-import to.bitkit.env.Peers
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.balanceUiText
 import to.bitkit.ext.channelId
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatToString
+import to.bitkit.ext.of
 import to.bitkit.ext.uri
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodePeer
@@ -476,10 +476,10 @@ private fun ChannelDetailRow(
 
 private fun previewPeers() = persistentListOf(
     NodePeer(
-        peerDetails = Peers.stag,
+        peerDetails = previewPeer,
         lspNode = ILspNode(
             alias = "Blocktank-LND1",
-            pubkey = Peers.stag.nodeId,
+            pubkey = previewPeer.nodeId,
             connectionStrings = listOf(),
             readonly = null,
         ),
@@ -532,7 +532,7 @@ private fun Preview() {
                     latestPathfindingScoresSyncTimestamp = null,
                 ),
                 nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                peers = persistentListOf(Peers.stag),
+                peers = persistentListOf(previewPeer),
                 channels = persistentListOf(
                     createChannelDetails().copy(
                         channelId = "abc123def456789012345678901234567890123456789012345678901234567890",
@@ -600,3 +600,7 @@ private fun Preview() {
         )
     }
 }
+
+private val previewPeer = PeerDetails.of(
+    "0248a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9@127.0.0.1:9735"
+)

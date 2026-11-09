@@ -28,6 +28,7 @@ import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -74,6 +75,7 @@ class WalletRepo @Inject constructor(
     private val transferRepo: TransferRepo,
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val connectionRecovery: WalletConnectionRecovery,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -88,6 +90,7 @@ class WalletRepo @Inject constructor(
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
     private var pendingReceiveCacheLoads = 0
+    private var receiveCacheValidationFailed = false
     private var pendingReceiveValidation: String? = null
     private var committedReceiveBip21 = ""
 
@@ -177,7 +180,19 @@ class WalletRepo @Inject constructor(
         changePendingReceiveCacheLoads(1)
         repoScope.launch {
             receiveStateMutex.withLock {
-                val cacheData = cacheStore.data.first()
+                var cacheData = cacheStore.data.first()
+                cacheData.balance?.let { balance -> _balanceState.update { balance } }
+                val unavailable = runSuspendCatching {
+                    privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(cacheData.onchainAddress)
+                }.getOrElse {
+                    receiveCacheValidationFailed = true
+                    Logger.warn("Failed to validate cached receive address", it, context = TAG)
+                    return@withLock
+                }
+                if (unavailable) {
+                    cacheData = cacheData.invalidateReceiveOnchainAddress()
+                    cacheStore.update { it.invalidateReceiveOnchainAddress() }
+                }
                 committedReceiveBip21 = cacheData.bip21
                 _walletState.update {
                     it.copy(
@@ -187,9 +202,7 @@ class WalletRepo @Inject constructor(
                     )
                 }
                 synchronized(receiveUpdateStatusLock) { updateReceivePendingState() }
-                cacheData.balance?.let { balance ->
-                    _balanceState.update { balance }
-                }
+                receiveCacheValidationFailed = false
             }
         }.invokeOnCompletion { changePendingReceiveCacheLoads(-1) }
     }
@@ -284,7 +297,6 @@ class WalletRepo @Inject constructor(
     ) {
         runSuspendCatching {
             lightningRepo.syncState()
-            lightningRepo.updateGeoBlockState()
             refreshBip21Locked().getOrThrow()
         }.onFailure {
             _walletState.update { state -> state.copy(hasReceiveInvoiceError = true) }
@@ -304,7 +316,6 @@ class WalletRepo @Inject constructor(
         return updateReceiveState {
             runSuspendCatching {
                 lightningRepo.syncState()
-                lightningRepo.updateGeoBlockState()
                 refreshAddressForInvoice().getOrThrow()
                 updateBip21InvoiceLocked(state.bip21AmountSats, state.bip21Description).getOrThrow()
             }.onFailure {
@@ -417,14 +428,14 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    /** Debounce syncs for [Event.SyncCompleted]. Rapid consecutive events are coalesced. */
-    fun debounceSyncByEvent() {
+    /** Coalesces event syncs, then runs [onActivitiesSynced] only after a successful fresh activity sync. */
+    fun debounceSyncByEvent(onActivitiesSynced: suspend () -> Unit = {}) {
         eventSyncJob?.cancel()
         eventSyncJob = repoScope.launch {
             delay(EVENT_SYNC_DEBOUNCE_MS)
             syncBalances()
             transferRepo.syncTransferStates()
-            activityRepo.syncActivities()
+            activityRepo.syncActivities(requireFresh = true).onSuccess { onActivitiesSynced() }
         }
     }
 
@@ -569,16 +580,32 @@ class WalletRepo @Inject constructor(
     }
 
     private suspend fun refreshReusableReceiveAddressOrThrow() {
-        val address = getOnchainAddress()
-        if (address.isEmpty()) {
-            newAddress().getOrThrow()
-        } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
-            replaceReusableOnchainAddress().getOrThrow()
-        } else {
-            val wasUsed = checkAddressUsage(address).getOrThrow()
-            if (wasUsed) {
-                replaceReusableOnchainAddress().getOrThrow()
-            }
+        val retryCache = getOnchainAddress().isEmpty() && receiveCacheValidationFailed
+        if (retryCache) changePendingReceiveCacheLoads(1)
+        try {
+            do {
+                val address = if (retryCache) cacheStore.data.first().onchainAddress else getOnchainAddress()
+                if (address.isEmpty()) {
+                    newAddress().getOrThrow()
+                } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
+                    replaceReusableOnchainAddress().getOrThrow()
+                } else {
+                    val wasUsed = checkAddressUsage(address).getOrThrow()
+                    if (wasUsed) {
+                        replaceReusableOnchainAddress().getOrThrow()
+                    } else if (retryCache) {
+                        cacheStore.update { current ->
+                            if (current.onchainAddress == address) {
+                                _walletState.update { it.copy(onchainAddress = address) }
+                            }
+                            current
+                        }
+                    }
+                }
+            } while (retryCache && getOnchainAddress().isEmpty())
+            receiveCacheValidationFailed = false
+        } finally {
+            if (retryCache) changePendingReceiveCacheLoads(-1)
         }
     }
 
@@ -604,17 +631,19 @@ class WalletRepo @Inject constructor(
 
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
-        runCatching {
-            val mnemonic = generateEntropyMnemonic()
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-            if (bip39Passphrase != null) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
-            settingsStore.update {
-                it.copy(
-                    selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
-                    addressTypesToMonitor = listOf(DEFAULT_ADDRESS_TYPE_STRING),
-                )
+        runSuspendCatching {
+            connectionRecovery.withIdentityChange {
+                val mnemonic = generateEntropyMnemonic()
+                keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+                if (bip39Passphrase != null) {
+                    keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+                }
+                settingsStore.update {
+                    it.copy(
+                        selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
+                        addressTypesToMonitor = listOf(DEFAULT_ADDRESS_TYPE_STRING),
+                    )
+                }
             }
             setWalletExistsState()
         }.onFailure {
@@ -624,16 +653,18 @@ class WalletRepo @Inject constructor(
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
-        runCatching {
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-            if (bip39Passphrase != null) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
-            settingsStore.update {
-                it.copy(
-                    selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
-                    addressTypesToMonitor = ALL_ADDRESS_TYPE_STRINGS,
-                )
+        runSuspendCatching {
+            connectionRecovery.withIdentityChange {
+                keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+                if (bip39Passphrase != null) {
+                    keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+                }
+                settingsStore.update {
+                    it.copy(
+                        selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
+                        addressTypesToMonitor = ALL_ADDRESS_TYPE_STRINGS,
+                    )
+                }
             }
             setWalletExistsState()
         }.onFailure {

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "createdAt": 1793351855000,
+  "settings": {
+    "enableSendAmountWarning": false,
+    "addressTypesToMonitor": "nativeSegwit,taproot",
+    "isQuickPayEnabled": false,
+    "coinSelectPreference": "LargestFirst",
+    "displayUnit": "classic",
+    "hideBalance": false,
+    "hideBalanceOnOpen": false,
+    "backupVerified": true,
+    "notificationsGranted": false,
+    "enableSwipeToHideBalance": true,
+    "quickPayAmount": 5,
+    "electrumServer": "tcp://192.168.1.10:60001",
+    "isDevModeEnabled": true,
+    "defaultTransactionSpeed": "fast",
+    "coinSelectAuto": false,
+    "enableAutoReadClipboard": false,
+    "usdtPreference": "undecided",
+    "primaryDisplay": "Fiat",
+    "showWidgets": true,
+    "quickPayDailyLimitMultiplier": 5,
+    "selectedAddressType": "nativeSegwit",
+    "rgsServerUrl": "https://rgs.blocktank.to/snapshot",
+    "selectedCurrency": "USD"
+  }
+}

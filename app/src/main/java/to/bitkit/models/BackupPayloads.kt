@@ -21,6 +21,7 @@ data class WalletBackupV1(
     val createdAt: Long,
     val transfers: List<TransferEntity>,
     val privatePaykitHighestReservedReceiveIndexByAddressType: Map<String, Int>? = null,
+    val publicPaykitLegacyAddresses: List<String>? = null,
     val paykitSdkBackupState: String? = null,
     val watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
     val watchOnlyAccountAllocationState: WatchOnlyAccountAllocationState? = null,
@@ -42,7 +43,8 @@ data class MetadataBackupV1(
 
 @Serializable
 data class PubkySessionBackupV1(
-    val kind: PubkySessionBackupKind,
+    /** Null when bitkit-ios wrote a kind it no longer restores, which it then encodes as `{}`. */
+    val kind: PubkySessionBackupKind? = null,
 )
 
 @Serializable

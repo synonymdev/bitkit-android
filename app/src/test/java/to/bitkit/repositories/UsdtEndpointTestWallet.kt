@@ -8,8 +8,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.UsdtService
+import to.bitkit.test.InMemoryDataStore
 
 internal class UsdtEndpointTestWallet(dispatcher: CoroutineDispatcher) : AutoCloseable {
     companion object {
@@ -22,7 +25,7 @@ internal class UsdtEndpointTestWallet(dispatcher: CoroutineDispatcher) : AutoClo
     var derivationAvailable = true
     private val keychain = mock<Keychain>()
     private val native = mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt"))
-    val repo = UsdtRepo(UsdtService(keychain, mock()), dispatcher)
+    val repo = UsdtRepo(UsdtService(keychain, mock()), CacheStore(InMemoryDataStore(AppCacheData())), dispatcher)
 
     init {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenAnswer {

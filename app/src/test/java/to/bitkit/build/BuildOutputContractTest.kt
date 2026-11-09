@@ -84,7 +84,6 @@ class BuildOutputContractTest {
             "E2E_HOMEGATE_URL",
             "TREZOR_BRIDGE",
             "TREZOR_BRIDGE_URL",
-            "GEO",
             "FEATURE_PAYKIT_UI_DISABLED",
             "LOCALES",
             "NETWORK",

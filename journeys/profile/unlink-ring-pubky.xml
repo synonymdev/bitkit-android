@@ -1,0 +1,37 @@
+<journey name="unlink ring pubky">
+  <description>
+    Verifies that a pubky adopted from Pubky Ring is removed from Bitkit as "Unlink pubky" rather than
+    "Delete Profile": the action deletes Bitkit's Paykit data for it and unlinks it, returns to profile
+    onboarding, and leaves the identity in Pubky Ring so it can be adopted again.
+
+    Precondition, outside the Capabilities table in journeys/README.md: Pubky Ring (package
+    to.pubky.ring) installed on the same emulator or device and signed with the same key as the
+    Bitkit build, so Bitkit can read Ring's shared pubky provider; a dev build needs a Ring build
+    signed with this repository's app/debug.keystore. It holds a disposable identity that Bitkit
+    adopted through its Ring row on the Pubky choice screen (testTag "PubkyChoiceIdentity", told
+    apart by the truncated key caption of &lt;ring-pubky&gt;), with a profile saved in Bitkit.
+    Unlinking deletes that identity's Paykit data, so do not use a personal identity. Without Pubky
+    Ring, run these steps as a manual test and name the missing capability in the PR.
+    &lt;ring-pubky&gt; is the adopted identity's bare z32 key without the "pubky" prefix.
+
+    A profile created in Bitkit itself keeps the "DELETE" caption, the trash icon and "Delete Profile"
+    on the same button (testTag "ProfileEditDelete"); journeys/profile/delete-profile.xml covers that
+    path. The button keeps the testTag "ProfileEditDelete" for both labels.
+
+    Android differs from iOS only in identifiers and the Ring launch command: every Ring choice row
+    carries the same testTag, so the row for &lt;ring-pubky&gt; is told apart by its key caption, as the
+    Identifiers table in journeys/README.md records. See README.md.
+  </description>
+  <actions>
+    <action>Open the existing profile from the Home header (testTag "ProfileButton")</action>
+    <action>Open Edit Profile (testTag "ProfileEdit")</action>
+    <action>Scroll to the bottom of Edit Profile</action>
+    <action>Verify the section caption above the button reads "UNLINK", and the button (testTag "ProfileEditDelete") reads "Unlink pubky" with a link icon rather than a trash icon. The icon has no identifier, so check it from a screenshot</action>
+    <action>Tap Unlink pubky (testTag "ProfileEditDelete")</action>
+    <action>Verify the alert title reads "Unlink pubky?" and its message reads "This will delete your Paykit data and unlink this pubky from Bitkit. It will still be available in Pubky Ring."</action>
+    <action>Tap "Yes, Unlink"</action>
+    <action>Wait for unlinking to finish and verify profile onboarding is shown: the Pubky choice screen, or the Profile intro (testTag "ProfileIntro") if it has not been seen; tap Continue (testTag "ProfileIntro-button") in that case</action>
+    <action>Verify the Pubky choice screen still offers the same Ring identity (testTag "PubkyChoiceIdentity", told apart by the key caption of &lt;ring-pubky&gt;)</action>
+    <action>Run `adb shell am start -n to.pubky.ring/to.pubkyring.MainActivity` and verify Pubky Ring still lists the identity</action>
+  </actions>
+</journey>

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package to.bitkit.ui.screens.paymentrequests
 
 import com.synonym.paykit.PaymentRequestLifecycleState
@@ -5,12 +7,15 @@ import org.junit.Test
 import to.bitkit.R
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 class PaymentRequestPresentationTest {
     @Test
@@ -64,6 +69,39 @@ class PaymentRequestPresentationTest {
         assertEquals(
             R.string.wallet__payment_request_status_unavailable,
             proposedPaymentRequestStatusRes(request = request, isPending = false),
+        )
+    }
+
+    @Test
+    fun `unpaid subscription period shows waiting only while payable`() {
+        val request = paymentRequest(lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING).copy(
+            amount = PaykitAmount(PaykitAsset.USDT, 2_000_000uL),
+            acceptedPaymentEndpointIdentifiers = listOf("usdt-arbitrum"),
+            billingPeriod = PaykitBillingPeriod(
+                startsAt = Instant.parse("2027-01-01T00:00:00Z"),
+                endsAt = Instant.parse("2027-02-01T00:00:00Z"),
+            ),
+        )
+
+        assertEquals(
+            R.string.wallet__payment_request_status_expired,
+            paymentRequestLifecycleStatusRes(request.copy(paymentDeadlineAt = Instant.DISTANT_PAST), true),
+        )
+        assertEquals(R.string.wallet__payment_request_waiting, paymentRequestLifecycleStatusRes(request, true))
+        assertEquals(
+            R.string.wallet__payment_request_status_unavailable,
+            paymentRequestLifecycleStatusRes(request, false),
+        )
+        assertEquals(
+            R.string.wallet__payment_request_status_unavailable,
+            paymentRequestLifecycleStatusRes(request.copy(billingPeriod = null), true),
+        )
+        assertEquals(
+            R.string.wallet__payment_request_status_proof_submitted,
+            paymentRequestLifecycleStatusRes(
+                request.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED),
+                false,
+            ),
         )
     }
 

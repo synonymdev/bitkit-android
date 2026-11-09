@@ -62,6 +62,7 @@ import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyAuthRequestError
+import to.bitkit.models.PubkyModerationBot
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
@@ -303,12 +304,16 @@ class PubkyRepo @Inject constructor(
         private val labelOnly = contacts.filter { it.showsLabelOnly }.associateBy { it.profile.publicKey }
 
         val job = SupervisorJob(scope.coroutineContext.job)
+
+        val refreshScope = CoroutineScope(scope.coroutineContext + job)
         val pendingResults = mutableMapOf<String, RefreshedContact>()
         var scheduledApply: Job? = null
         private val bulkLookups = contacts.associate {
-            it.profile.publicKey to scope.launch(job, CoroutineStart.LAZY) { lookUp(this@ContactProfileRefresh, it) }
+            it.profile.publicKey to refreshScope.launch(start = CoroutineStart.LAZY) {
+                lookUp(this@ContactProfileRefresh, it)
+            }
         }
-        private val finish = scope.launch(job, CoroutineStart.LAZY) {
+        private val finish = refreshScope.launch(start = CoroutineStart.LAZY) {
             bulkLookups.values.joinAll()
             onFinished(this@ContactProfileRefresh)
         }
@@ -922,11 +927,13 @@ class PubkyRepo @Inject constructor(
         }
 
         val publicKey = result.getOrElse { return Result.failure(it) }
-        return runSuspendCatching {
-            if (_publicKey.value != publicKey) return@runSuspendCatching
-            loadProfile()
-            loadContacts()
+        val signIn = currentSignIn()?.takeIf { it.publicKey == publicKey }
+        if (signIn != null) {
+            scope.launch {
+                if (isCurrent(signIn)) loadContacts()
+            }
         }
+        return Result.success(Unit)
     }
 
     private suspend fun createLocalIdentitySession(markSessionCreated: () -> Unit): String {
@@ -1459,8 +1466,9 @@ class PubkyRepo @Inject constructor(
     }
 
     /**
-     * Looks up the signed-in identity's follows for the import overview, leaving out its own key, resolving each
-     * follow's profile once and keeping a follow it cannot resolve as a placeholder. Its lookups use the interactive
+     * Looks up the signed-in identity's follows for the import overview, leaving out its own key and the pubky.app
+     * moderation account, resolving each follow's profile once and keeping a follow it cannot resolve as a
+     * placeholder. Its lookups use the interactive
      * read lane, since the user waits on the Pubky Ring choice row until it returns, and each one still running
      * [IMPORT_FOLLOW_LOOKUP_TIMEOUT] after it got its read slot is cancelled and treated as failed; waiting for a read
      * slot does not count.
@@ -1471,7 +1479,8 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val canonicalOwnKey = PubkyPublicKeyFormat.canonicalized(pk)
             val contactKeys = pubkyService.getContacts(pk).filterNot {
-                canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey
+                (canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey) ||
+                    PubkyModerationBot.matches(it)
             }
             Logger.debug("Discovered '${contactKeys.size}' contacts for import", context = TAG)
 
@@ -1548,6 +1557,15 @@ class PubkyRepo @Inject constructor(
     suspend fun hasLocalSecretKey(): Boolean = withContext(ioDispatcher) {
         keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name) && !keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)
     }
+
+    /** Whether the signed-in pubky was adopted from Pubky Ring, so removing it from Bitkit only unlinks it. */
+    suspend fun isRingAdoptedIdentity(): Boolean = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val publicKey = _publicKey.value ?: return@withContext false
+            val adoptedPubky = adoptedRingPubky() ?: return@withContext false
+            PubkyPublicKeyFormat.matches(adoptedPubky, publicKey)
+        }
+    }.getOrDefault(false)
 
     /**
      * The identity of the key Bitkit stores for the saved session, read without restoring the session.
@@ -1915,7 +1933,7 @@ class PubkyRepo @Inject constructor(
     private fun queueRefreshedContact(refresh: ContactProfileRefresh, refreshed: RefreshedContact) {
         refresh.pendingResults[refreshed.contact.profile.publicKey] = refreshed
         if (refresh.scheduledApply != null) return
-        refresh.scheduledApply = scope.launch(refresh.job) {
+        refresh.scheduledApply = refresh.refreshScope.launch {
             delay(CONTACT_REFRESH_BATCH_WINDOW)
             synchronized(contactsLock) { applyRefreshResults(refresh) }
         }
@@ -2097,11 +2115,13 @@ class PubkyRepo @Inject constructor(
         null
     }
 
-    private suspend fun adoptedSecretKeyHex(): String? {
-        val pubky = runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
+    private suspend fun adoptedRingPubky(): String? =
+        runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
             ?.substringAfter(SharedPubkyContract.RING_SOURCE_PREFIX, "")
             ?.takeIf { it.isNotBlank() }
-            ?: return null
+
+    private suspend fun adoptedSecretKeyHex(): String? {
+        val pubky = adoptedRingPubky() ?: return null
         return sharedPubkyClient.ringCredential(pubky)
             .onFailure { Logger.warn("Failed to read adopted ring credential", it, context = TAG) }
             .getOrNull()

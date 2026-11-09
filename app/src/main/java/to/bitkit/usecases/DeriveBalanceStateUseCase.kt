@@ -40,19 +40,13 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channels = lightningRepo.getChannels().orEmpty()
             val activeTransfers = transferRepo.activeTransfers.first()
 
-            val paidOrdersSats = getOrderPaymentsSats(activeTransfers, channels, balanceDetails)
             val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
 
             val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
             val coopCloseSavingsSats = getCoopCloseTransferSats(activeTransfers, channels, balanceDetails)
             val lingeringCoopCloseSats = getLingeringCoopCloseSats(activeTransfers, channels, balanceDetails)
-            val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
-            val orderPaymentsOnchainToSubtract = getOrderPaymentOnchainToSubtract(
-                activeTransfers = activeTransfers,
-                currentOnchainSats = balanceDetails.totalOnchainBalanceSats,
-            )
 
-            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats.safe() - orderPaymentsOnchainToSubtract.safe()
+            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
@@ -65,7 +59,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
                 maxSendOnchainSats = getMaxSendAmount(balanceDetails),
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
-                balanceInTransferToSpending = toSpendingAmount,
+                balanceInTransferToSpending = pendingChannelsSats,
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
             )
 
@@ -76,48 +70,6 @@ class DeriveBalanceStateUseCase @Inject constructor(
 
             return@runCatching balanceState
         }
-    }
-
-    private suspend fun getOrderPaymentsSats(
-        transfers: List<TransferEntity>,
-        channels: List<ChannelDetails>,
-        balances: BalanceDetails,
-    ): ULong {
-        var amount = 0uL
-        val paidOrders = transfers.filter { it.type.isToSpending() && it.lspOrderId != null }
-
-        for (transfer in paidOrders) {
-            val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
-            val channelBalance = channelId?.let { id ->
-                balances.lightningBalances.find { it.channelId() == id }
-            }
-            if (channelBalance == null) {
-                amount = amount.safe() + transfer.amountSats.toULong().safe()
-            }
-        }
-
-        return amount
-    }
-
-    private fun getOrderPaymentOnchainToSubtract(
-        activeTransfers: List<TransferEntity>,
-        currentOnchainSats: ULong,
-    ): ULong {
-        var amount = 0uL
-        val orderPayments = activeTransfers.filter {
-            it.type.isToSpending() && it.fundingTxId != null && it.lspOrderId != null
-        }
-
-        for (transfer in orderPayments) {
-            val txTotalSats = transfer.txTotalSats?.takeIf { it > 0 }?.toULong()
-            val preTransferOnchainSats = transfer.preTransferOnchainSats?.takeIf { it > 0 }?.toULong()
-
-            if (txTotalSats != null && preTransferOnchainSats != null && currentOnchainSats >= preTransferOnchainSats) {
-                amount = amount.safe() + txTotalSats.safe()
-            }
-        }
-
-        return amount
     }
 
     private suspend fun getPendingChannelsSats(

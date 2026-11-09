@@ -76,14 +76,6 @@ fun SavingsProgressScreen(
                 onSuccess = { progressState = SavingsProgressState.SUCCESS },
                 onInterrupted = { progressState = SavingsProgressState.INTERRUPTED },
                 onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
-                onUnavailable = {
-                    app.toast(
-                        type = Toast.ToastType.ERROR,
-                        title = resources.getString(R.string.lightning__close_error),
-                        description = resources.getString(R.string.lightning__close_error_msg),
-                    )
-                    onTransferUnavailable()
-                },
             )
         }
     }
@@ -130,7 +122,6 @@ private suspend fun runChannelClose(
     onSuccess: () -> Unit,
     onInterrupted: () -> Unit,
     onGiveUp: () -> Unit,
-    onUnavailable: () -> Unit,
 ) {
     val channelsFailedToCoopClose = transfer.closeSelectedChannels()
 
@@ -141,21 +132,12 @@ private suspend fun runChannelClose(
         return
     }
 
-    // Check if any channels can be retried (filter out trusted peers)
-    val (_, nonTrustedChannels) = transfer.separateTrustedChannels(channelsFailedToCoopClose)
-
-    if (nonTrustedChannels.isEmpty()) {
-        // All channels are trusted peers - show error and navigate back immediately
-        onUnavailable()
-    } else {
-        transfer.startCoopCloseRetries(
-            channels = nonTrustedChannels,
-            onGiveUp = onGiveUp,
-            onTransferUnavailable = onUnavailable,
-        )
-        delay(2500)
-        onInterrupted()
-    }
+    transfer.startCoopCloseRetries(
+        channels = channelsFailedToCoopClose,
+        onGiveUp = onGiveUp,
+    )
+    delay(2500)
+    onInterrupted()
 }
 
 @Composable

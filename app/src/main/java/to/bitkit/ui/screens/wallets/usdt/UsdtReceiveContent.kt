@@ -49,6 +49,7 @@ internal fun ColumnScope.UsdtReceiveContent(
     var showDetails by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showDetails) { showDetails = false }
     val networkTitle = stringResource(R.string.usdt__receive_network, network)
+    val copyMessage = stringResource(R.string.usdt__receive_copied)
     val shareContent = listOfNotNull(networkTitle, address, amount.takeIf { it.isNotEmpty() }?.let { "$it USDT" })
         .joinToString("\n")
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -68,6 +69,7 @@ internal fun ColumnScope.UsdtReceiveContent(
                         accentColor = Colors.Usdt,
                         shareContent = shareContent,
                         shareQrContent = uri,
+                        copyMessage = copyMessage,
                     )
                 }
             } else {
@@ -78,6 +80,7 @@ internal fun ColumnScope.UsdtReceiveContent(
                     onClickEditInvoice = onEdit,
                     accentColor = Colors.Usdt,
                     shareContent = shareContent,
+                    copyMessage = copyMessage,
                     modifier = Modifier.fillMaxWidth().height(
                         minOf(maxHeight, maxWidth + ButtonSize.Small.height + 32.dp)
                     )

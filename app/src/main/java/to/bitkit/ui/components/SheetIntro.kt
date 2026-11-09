@@ -38,6 +38,7 @@ fun SheetIntro(
     continueLoading: Boolean = false,
     cancelText: String? = null,
     onCancel: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
     testTag: String = "SheetIntro",
     cancelTestTag: String = "${testTag}Cancel",
     continueTestTag: String = "${testTag}Continue",
@@ -49,7 +50,7 @@ fun SheetIntro(
             .navigationBarsPadding()
             .testTag(testTag)
     ) {
-        SheetTopBar(navTitle)
+        SheetTopBar(navTitle, onBack = onBack)
 
         Column(
             modifier = Modifier.padding(horizontal = 32.dp),

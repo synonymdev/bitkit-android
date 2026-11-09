@@ -106,9 +106,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
-        .asStateFlow(initialValue = false)
-
     val notificationsGranted = settingsStore.data.map { it.notificationsGranted }
         .asStateFlow(initialValue = false)
 
@@ -127,27 +124,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setHasSeenSpendingIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenSpendingIntro = value) }
-        }
-    }
-
     val hasSeenWidgetsIntro = settingsStore.data.map { it.hasSeenWidgetsIntro }
         .asStateFlow(initialValue = false)
 
     fun setHasSeenWidgetsIntro(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(hasSeenWidgetsIntro = value) }
-        }
-    }
-
-    val hasSeenTransferIntro = settingsStore.data.map { it.hasSeenTransferIntro }
-        .asStateFlow(initialValue = false)
-
-    fun setHasSeenTransferIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenTransferIntro = value) }
         }
     }
 
@@ -262,6 +244,13 @@ class SettingsViewModel @Inject constructor(
     val isPaykitStateLoaded = settingsStore.isPaykitEnabled.map { true }
         .asStateFlow(initialValue = false)
 
+    val areAllowancesEnabled = settingsStore.areAllowancesEnabled
+        .asStateFlow(initialValue = PaykitFeatureFlags.areAllowancesEnabledByDefault)
+
+    fun setAreAllowancesEnabled(value: Boolean) {
+        viewModelScope.launch { settingsStore.setAreAllowancesEnabled(value) }
+    }
+
     val subscriptionClockOffsetDays = settingsStore.subscriptionClockOffsetDays
         .map { SubscriptionClockOffset.clampedOffsetDays(it) }
         .asStateFlow(initialValue = 0)
@@ -274,24 +263,35 @@ class SettingsViewModel @Inject constructor(
 
     val contactPaymentsEnabled = contactPaymentSettingsRepo.isEnabled
         .asStateFlow(initialValue = false)
+    val publicPaymentsEnabled = contactPaymentSettingsRepo.isPublicEnabled
+        .asStateFlow(initialValue = false)
 
     private val _isUpdatingContactPayments = MutableStateFlow(false)
     val isUpdatingContactPayments = _isUpdatingContactPayments.asStateFlow()
 
-    fun setContactPaymentsEnabled(value: Boolean) {
-        if (_isUpdatingContactPayments.value) return
+    fun setPublicPaymentsEnabled(value: Boolean) = updatePaymentSharing {
+        contactPaymentSettingsRepo.setPublicEnabled(value)
+    }
 
+    fun setContactPaymentsEnabled(value: Boolean) = updatePaymentSharing {
+        contactPaymentSettingsRepo.setEnabled(value)
+    }
+
+    private fun updatePaymentSharing(update: suspend () -> Result<Unit>) {
+        if (_isUpdatingContactPayments.value) return
         viewModelScope.launch {
             _isUpdatingContactPayments.update { true }
-            contactPaymentSettingsRepo.setEnabled(value)
-                .onFailure {
+            try {
+                update().onFailure {
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
                         description = contactPaymentSyncErrorMessage(it),
                     )
                 }
-            _isUpdatingContactPayments.update { false }
+            } finally {
+                _isUpdatingContactPayments.update { false }
+            }
         }
     }
 

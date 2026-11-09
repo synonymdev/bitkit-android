@@ -39,6 +39,7 @@ import to.bitkit.repositories.PaykitAllowance
 import to.bitkit.repositories.PaykitAllowanceEntry
 import to.bitkit.repositories.PaykitAllowanceError
 import to.bitkit.repositories.PaykitAllowanceLimits
+import to.bitkit.repositories.PaykitAllowancePause
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
@@ -110,13 +111,15 @@ class AllowancesViewModel @Inject constructor(
         contactChoices,
         isWorking,
         authorization,
-    ) { allowances, contacts, isWorking, authorization ->
+        allowanceRepo.automaticPaymentPause,
+    ) { allowances, contacts, isWorking, authorization, pause ->
         AllowancesUiState(
             isLoaded = true,
             allowances = allowances,
             contacts = contacts,
             isWorking = isWorking,
             authorization = authorization,
+            automaticPaymentPause = pause,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -157,6 +160,10 @@ class AllowancesViewModel @Inject constructor(
 
     fun end(entryId: String, onSuccess: () -> Unit) = authorizeThen(isGated = isAllower(entryId)) {
         runAction(onSuccess) { allowanceRepo.end(entryId) }
+    }
+
+    fun resumeAutomaticPayments() = authorizeThen(isGated = true) {
+        runAction(onSuccess = {}) { allowanceRepo.resumeAutomaticPayments() }
     }
 
     fun onAuthorized() {
@@ -342,6 +349,7 @@ data class AllowancesUiState(
     val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val isWorking: Boolean = false,
     val authorization: AllowanceAuthorization? = null,
+    val automaticPaymentPause: PaykitAllowancePause? = null,
 )
 
 /** A pending PIN or biometric check before a gated allowance action. */

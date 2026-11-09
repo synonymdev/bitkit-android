@@ -21,18 +21,23 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import to.bitkit.data.CacheStore
+import to.bitkit.data.CachedUsdtBalance
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.UsdtService
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
+import java.security.MessageDigest
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import javax.inject.Inject
@@ -44,17 +49,42 @@ import kotlin.time.Instant
 @Singleton
 class UsdtRepo @Inject constructor(
     private val service: UsdtService,
+    private val cacheStore: CacheStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val clock: Clock = Clock.System,
 ) {
+    companion object {
+        private const val TAG = "UsdtRepo"
+
+        /** Allows for block timestamps that trail the device clock. */
+        private val RECEIPT_CLOCK_MARGIN = 60.seconds
+    }
+
+    private val displayCacheNetwork = MessageDigest.getInstance("SHA-256")
+        .digest("${Env.network}:${Env.usdtRpcUrl}:${Env.usdtBundlerUrl}".encodeToByteArray()).contentToString()
     private val mutex = Mutex()
 
     @Volatile var isSendPresented = false
 
     private var nextRefresh = 0L
     private var rateLimitedUntil = 0L
+
+    /**
+     * Before the first complete history sync, a confirmed receipt counts as new only if its block
+     * time is after this point (first refresh of a wallet, or the start of a restore). Older entries
+     * are history the sync is still discovering.
+     */
+    private var receiptsSince = receiptBaseline()
+    private val announcedReceiptIds = mutableSetOf<String>()
+
+    /** Receipts saved before this launch were already celebrated, so the first refresh marks them announced. */
+    private var seedAnnouncedReceipts = true
+
+    /** Set when a restore starts, so the window survives a refresh that first sets the restored address. */
+    private var restoreReceiptsSince: ULong? = null
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
+    val recoveryGeneration: Long get() = service.recoveryGeneration
     fun consumeReceipt(id: String): Boolean = _state.getAndUpdate {
         it.copy(pendingReceipts = it.pendingReceipts.filterNot { receipt -> receipt.id == id }.toImmutableList())
     }.pendingReceipts.any { it.id == id }
@@ -65,46 +95,85 @@ class UsdtRepo @Inject constructor(
             if (clock.now().toEpochMilliseconds() < refreshAfter) {
                 return@withLock if (force) Result.failure(UsdtException.RateLimited()) else Result.success(Unit)
             }
-            runSuspendCatching {
-                val wallet = service.wallet()
-                val address = wallet.receiveAddress()
-                if (_state.value.address != address) _state.update { UsdtWalletState(address = address) }
-                val previous = _state.value.transfers.takeIf { _state.value.historyComplete }
-                val saved = wallet.history().toImmutableList()
-                _state.update { it.copy(receiveUri = wallet.receiveUri(), transfers = saved) }
-                val settlement = runSuspendCatching {
-                    val balance = wallet.balance()
-                    _state.update { it.copy(balance = balance) }
-                    val transfers = wallet.refreshTransfers().toImmutableList()
-                    _state.update { it.copy(transfers = transfers) }
+            _state.update { it.copy(refreshing = true, balanceIsStale = true) }
+            try {
+                runSuspendCatching {
+                    val wallet = service.wallet()
+                    val address = wallet.receiveAddress()
+                    if (_state.value.address != address) {
+                        _state.update { UsdtWalletState(address = address, refreshing = true) }
+                        resetReceiptBaseline()
+                    }
+                    if (_state.value.balance == null) {
+                        runSuspendCatching { cacheStore.data.first().usdtDisplayBalance }
+                            .onSuccess { cached ->
+                                _state.update {
+                                    it.copy(cachedBalance = cached?.balanceFor(address, displayCacheNetwork))
+                                }
+                            }.onFailure { Logger.warn("Failed to load display balance", it, context = TAG) }
+                    }
+                    val previous = _state.value.transfers.takeIf { _state.value.historyComplete }
+                    val saved = wallet.history().toImmutableList()
+                    if (seedAnnouncedReceipts) {
+                        announcedReceiptIds += saved.receiptIds()
+                        seedAnnouncedReceipts = false
+                    }
+                    _state.update { it.copy(receiveUri = wallet.receiveUri(), transfers = saved) }
+                    val settlement = runSuspendCatching {
+                        val balance = wallet.balance()
+                        _state.update { it.copy(balance = balance, balanceIsStale = false) }
+                        runSuspendCatching {
+                            cacheStore.update {
+                                it.copy(usdtDisplayBalance = CachedUsdtBalance(address, displayCacheNetwork, balance))
+                            }
+                        }.onFailure { Logger.warn("Failed to cache display balance", it, context = TAG) }
+                        val transfers = wallet.refreshTransfers().toImmutableList()
+                        _state.update { it.copy(transfers = transfers) }
+                    }
+                    if (settlement.exceptionOrNull() is UsdtException.RateLimited) settlement.getOrThrow()
+                    if (history && !isSendPresented) {
+                        val complete = wallet.syncHistory()
+                        val current = wallet.history().toImmutableList()
+                        _state.update { it.copy(historyComplete = it.historyComplete || complete, transfers = current) }
+                        announceNewReceipts(previous, current)
+                    }
+                    settlement.getOrThrow()
+                }.also {
+                    if (it.exceptionOrNull() is UsdtException.RateLimited) {
+                        rateLimitedUntil = clock.now().toEpochMilliseconds() + 60.seconds.inWholeMilliseconds
+                    }
+                    nextRefresh = maxOf(
+                        rateLimitedUntil,
+                        clock.now().toEpochMilliseconds() + 10.seconds.inWholeMilliseconds
+                    )
                 }
-                if (settlement.exceptionOrNull() is UsdtException.RateLimited) settlement.getOrThrow()
-                if (history && !isSendPresented) {
-                    val complete = wallet.syncHistory()
-                    val current = wallet.history().toImmutableList()
-                    _state.update { it.copy(historyComplete = it.historyComplete || complete, transfers = current) }
-                    announceNewReceipts(previous, current)
-                }
-                settlement.getOrThrow()
-            }.also {
-                if (it.exceptionOrNull() is UsdtException.RateLimited) {
-                    rateLimitedUntil = clock.now().toEpochMilliseconds() + 60.seconds.inWholeMilliseconds
-                }
-                nextRefresh = maxOf(
-                    rateLimitedUntil,
-                    clock.now().toEpochMilliseconds() + 10.seconds.inWholeMilliseconds
-                )
+            } finally {
+                _state.update { it.copy(refreshing = false) }
             }
         }
     }
 
+    private fun receiptBaseline() = (clock.now() - RECEIPT_CLOCK_MARGIN).epochSeconds.coerceAtLeast(0).toULong()
+
+    private fun resetReceiptBaseline() {
+        receiptsSince = restoreReceiptsSince ?: receiptBaseline()
+        restoreReceiptsSince = null
+        announcedReceiptIds.clear()
+        seedAnnouncedReceipts = true
+    }
+
+    private fun List<UsdtTransfer>.receiptIds() =
+        filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }.map { it.id }.toSet()
+
     private fun announceNewReceipts(previous: List<UsdtTransfer>?, current: List<UsdtTransfer>) {
-        if (previous == null) return
-        val knownIds = previous.filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }
-            .map { it.id }.toSet()
+        val knownIds = previous.orEmpty().receiptIds()
         val received = current.filter {
-            it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u && it.id !in knownIds
+            it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u &&
+                it.id !in knownIds && it.id !in announcedReceiptIds &&
+                (previous != null || it.timestamp >= receiptsSince)
         }
+        if (received.isEmpty()) return
+        announcedReceiptIds += received.map { it.id }
         _state.update {
             it.copy(
                 pendingReceipts = (it.pendingReceipts + received).distinctBy { receipt -> receipt.id }.toImmutableList()
@@ -150,17 +219,46 @@ class UsdtRepo @Inject constructor(
 
     fun backupSnapshot(): String? = service.backupSnapshot()
 
+    val isRecoveryRestorePending: Boolean get() = service.isRecoveryRestorePending
+
+    /**
+     * Waits for wallet work to finish and starts the receipt window, so a receipt that confirms while
+     * the backups download still celebrates.
+     */
+    suspend fun prepareForRecoveryRestore() = mutex.withLock {
+        receiptsSince = receiptBaseline()
+        restoreReceiptsSince = receiptsSince
+    }
+
+    suspend fun retryTransfer(id: String): Result<Unit> = paymentOperation {
+        val wallet = wallet()
+        val transfer = wallet.history().firstOrNull { it.id == id } ?: throw UsdtException.InvalidBackup()
+        if (transfer.status == UsdtTransferStatus.PENDING) {
+            val transfers = wallet.refreshTransfers().toImmutableList()
+            _state.update { it.copy(transfers = transfers) }
+        }
+    }
+
     suspend fun restoreBackup(snapshot: String) = withContext(ioDispatcher) {
         mutex.withLock {
             runSuspendCatching {
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
+                clearDisplayBalance()
+                restoreReceiptsSince = null
+                val address = wallet.receiveAddress()
+                val restored = wallet.history().toImmutableList()
+                // Restored history is not new. Queued receipts of the same wallet still celebrate.
+                announcedReceiptIds += restored.receiptIds()
                 _state.update {
                     it.copy(
-                        address = wallet.receiveAddress(),
-                        transfers = wallet.history().toImmutableList(),
+                        address = address,
+                        balance = null,
+                        cachedBalance = null,
+                        balanceIsStale = true,
+                        transfers = restored,
                         historyComplete = false,
-                        pendingReceipts = persistentListOf(),
+                        pendingReceipts = if (it.address == address) it.pendingReceipts else persistentListOf(),
                         pendingDepositIds = persistentSetOf(),
                     )
                 }
@@ -194,13 +292,20 @@ class UsdtRepo @Inject constructor(
 
     suspend fun wipe(clearCredentials: suspend () -> Unit = {}) = withContext(ioDispatcher) {
         mutex.withLock {
+            clearDisplayBalance()
             clearCredentials()
             runSuspendCatching { service.wipe() }.also {
                 _state.update { UsdtWalletState() }
+                restoreReceiptsSince = null
                 nextRefresh = 0L
                 rateLimitedUntil = 0L
             }
         }
+    }
+
+    private suspend fun clearDisplayBalance() {
+        runSuspendCatching { cacheStore.update { it.copy(usdtDisplayBalance = null) } }
+            .onFailure { Logger.warn("Failed to clear display balance", it, context = TAG) }
     }
 
     suspend fun quote(
@@ -264,6 +369,9 @@ data class UsdtWalletState(
     val address: String = "",
     val receiveUri: String = "",
     val balance: ULong? = null,
+    val cachedBalance: ULong? = null,
+    val balanceIsStale: Boolean = true,
+    val refreshing: Boolean = false,
     val transfers: ImmutableList<UsdtTransfer> = persistentListOf(),
     val historyComplete: Boolean = false,
     val pendingReceipts: ImmutableList<UsdtTransfer> = persistentListOf(),

@@ -81,7 +81,6 @@ val e2eHomegateUrlEnv = providers.environmentVariable("E2E_HOMEGATE_URL")
     .orElse(e2eLocalHostEnv.map { "http://$it:6288" })
 val e2eHomeserverPubkyEnv = providers.environmentVariable("E2E_HOMESERVER_PUBKY").orElse("")
 val e2eHomegateOverrideEnv = providers.environmentVariable("E2E_HOMEGATE_URL").orElse("")
-val geoEnv = envFlag("GEO", default = true)
 val paykitUiDisabledEnv = envFlag("PAYKIT_UI_DISABLED", default = false)
 val trezorBridgeEnv = localProp("TREZOR_BRIDGE").map { it.toBoolean().toString() }.orElse("false")
 val trezorBridgeUrlEnv = localProp("TREZOR_BRIDGE_URL").orElse("http://10.0.2.2:21325")
@@ -181,14 +180,14 @@ val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
 
 android {
     namespace = "to.bitkit"
-    compileSdk = 36
+    compileSdk = 37
     requestedNdkVersion?.let { ndkVersion = it }
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 195
-        versionName = "3.0.1"
+        versionCode = 196
+        versionName = "3.1.0"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         bitkitAndroidTestAnnotation?.let {
             testInstrumentationRunnerArguments["annotation"] = it
@@ -363,9 +362,12 @@ androidComponents {
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_OVERRIDE", e2eHomegateOverrideEnv.stringField())
+        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL")) {
+            val value = if (variant.buildType == "debug") localProp(key).orElse("") else provider { "" }
+            buildConfigFields.put(key, value.stringField())
+        }
         buildConfigFields.put("TREZOR_BRIDGE", trezorBridgeEnv.booleanField())
         buildConfigFields.put("TREZOR_BRIDGE_URL", trezorBridgeUrlEnv.stringField())
-        buildConfigFields.put("GEO", geoEnv.booleanField())
         buildConfigFields.put("FEATURE_PAYKIT_UI_DISABLED", paykitUiDisabledEnv.booleanField())
         buildConfigFields.put("LOCALES", provider { bcp47Locales.joinToString(",") }.stringField())
         buildConfigFields.put(
@@ -506,7 +508,7 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
-val nativeDebugSymbols by configurations.creating {
+val nativeDebugSymbols = configurations.create("nativeDebugSymbols") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
@@ -523,7 +525,7 @@ fun Provider<MinimalExternalModuleDependency>.nativeDebugSymbolsArtifact(): Stri
     return "${dependency.module.group}:${dependency.module.name}:$version:native-debug-symbols@zip"
 }
 
-val syncNativeDebugSymbolArtifacts by tasks.registering(Sync::class) {
+tasks.register<Sync>("syncNativeDebugSymbolArtifacts") {
     group = "build"
     description = "Downloads native debug symbol archives for release native dependencies."
 
@@ -558,7 +560,7 @@ dependencies {
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
     if (localBitkitCoreAar != null) {
         debugImplementation(files(localBitkitCoreAar))
-        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.23.1")
+        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.33.0")
         releaseImplementation(libs.bitkit.core)
     } else {
         implementation(libs.bitkit.core)

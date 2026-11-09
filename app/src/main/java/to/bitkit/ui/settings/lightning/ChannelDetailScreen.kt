@@ -164,7 +164,7 @@ private fun Content(
         is ChannelLoadState.Success -> {
             ChannelDetailContent(
                 channel = loadState.channel,
-                blocktankOrders = uiState.paidOrders,
+                blocktankOrders = uiState.orders,
                 cjitEntries = uiState.cjitEntries,
                 txTime = uiState.txTime,
                 isRefreshing = uiState.isRefreshing,

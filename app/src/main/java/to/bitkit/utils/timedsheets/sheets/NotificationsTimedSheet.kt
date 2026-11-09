@@ -3,7 +3,7 @@ package to.bitkit.utils.timedsheets.sheets
 import kotlinx.coroutines.flow.first
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.nowMillis
-import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.utils.Logger
 import to.bitkit.utils.timedsheets.ONE_WEEK_ASK_INTERVAL_MILLIS
@@ -14,7 +14,7 @@ import kotlin.time.ExperimentalTime
 
 class NotificationsTimedSheet @Inject constructor(
     private val settingsStore: SettingsStore,
-    private val walletRepo: WalletRepo,
+    private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
 ) : TimedSheetItem {
     override val type = TimedSheetType.NOTIFICATIONS
     override val priority = 3
@@ -22,7 +22,7 @@ class NotificationsTimedSheet @Inject constructor(
     override suspend fun shouldShow(): Boolean {
         val settings = settingsStore.data.first()
         if (settings.notificationsGranted) return false
-        if (walletRepo.balanceState.value.totalLightningSats == 0UL) return false
+        if (paykitPaymentRequestRepo.subscriptions.value.isEmpty()) return false
 
         return checkTimeout(
             lastIgnoredMillis = settings.notificationsIgnoredMillis,

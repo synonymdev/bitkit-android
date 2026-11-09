@@ -22,9 +22,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
-import to.bitkit.env.Peers
 import to.bitkit.ext.host
+import to.bitkit.ext.of
 import to.bitkit.ext.port
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
@@ -173,7 +174,7 @@ private fun InfoRow(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            uiState = LnurlChannelUiState(peer = Peers.stag),
+            uiState = LnurlChannelUiState(peer = previewPeer),
         )
     }
 }
@@ -187,3 +188,7 @@ private fun PreviewLoading() {
         )
     }
 }
+
+private val previewPeer = PeerDetails.of(
+    "0248a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9@127.0.0.1:9735"
+)

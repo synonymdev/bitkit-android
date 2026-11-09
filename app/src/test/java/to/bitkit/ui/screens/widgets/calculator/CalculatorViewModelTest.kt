@@ -20,7 +20,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.ServiceError
+import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -67,7 +67,7 @@ class CalculatorViewModelTest : BaseUnitTest() {
             )
         }
         whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull())).thenAnswer {
-            fiatToSatsValue ?: throw ServiceError.CurrencyRateUnavailable()
+            fiatToSatsValue ?: throw AppError("Currency rate unavailable")
         }
         whenever { widgetsRepo.updateCalculatorValues(any()) }.thenAnswer {
             updateCalculatorValuesCalls++

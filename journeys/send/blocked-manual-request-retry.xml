@@ -1,0 +1,22 @@
+<journey name="blocked manual request retry">
+  <description>
+    Requires two incoming one-time Bitcoin requests A and B in a funded disposable regtest wallet,
+    normal payment PIN enabled, and an unresolved software on-chain receipt belonging to A.
+    Creating the controlled unresolved receipt is a manual fixture prerequisite; a seeded receipt
+    must be labelled as state injection, not evidence of a native failure. A and B must have distinct
+    request identities. Record the original amount, recipient and transaction ID for A before starting.
+    The original-payment retry journey provides the existing recovery steps. Backend confirmation and
+    exactly-once payment verification remain manual checks. Never use real BTC or USDT for this fixture.
+  </description>
+  <actions>
+    <action>Open incoming request B and verify its requested amount and recipient on the confirmation screen</action>
+    <action>Swipe to pay and complete the normal payment PIN authorization without recording entered digits</action>
+    <action>Verify the retained original payment A is shown as pending and no success is reported for B</action>
+    <action>Verify A still shows its original amount and transaction ID</action>
+    <action>Complete A using its existing original-payment recovery flow and fresh fee and PIN approval when required</action>
+    <action>Reopen the unpaid request B from pending requests and verify its original amount and recipient</action>
+    <action>Swipe to pay and cancel the payment PIN; verify B remains unpaid</action>
+    <action>Reopen B, review its exact amount and fees, swipe to pay and complete a fresh payment PIN authorization</action>
+    <action>Verify B can complete once rather than failing because a previous manual payment is already recorded</action>
+  </actions>
+</journey>

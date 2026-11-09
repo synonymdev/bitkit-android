@@ -4,13 +4,12 @@
     reported as a received payment: no "Payment Received" notification, and never several duplicates.
     When the app is in the foreground the only feedback is the in-app "Spending balance ready" toast.
 
-    Precondition: onboarded regtest wallet connected to the LSP, with a positive on-chain balance to
-    fund the transfer. No CJIT entry is involved here — this is a manual/Transfer channel opening
-    (orderPaymentConfirmed), not a CJIT receive.
+    Precondition: onboarded regtest wallet with a positive on-chain balance to fund the channel. No
+    CJIT entry is involved here — this is a channel opened through Manual Setup, not a CJIT receive.
   </description>
   <actions>
     <action>Keep the app in the foreground on the wallet home screen</action>
-    <action>Open a regular spending channel via Transfer → Spending (fund some sats and confirm), OR open one through the lsp skill order flow</action>
+    <action>Open a regular spending channel through Settings › Advanced › Lightning Connections › add connection › Manual Setup (testTag "FundManual") to the staging LSP node from `./lsp GET /info`, funding it with some sats</action>
     <action>Mine confirmations if required: ./lsp POST /regtest/mine '{"count":3}'</action>
     <action>Wait for the ChannelReady event (~5-10s)</action>
     <action>Verify an in-app "Spending balance ready" toast appears (testTag "SpendingBalanceReadyToast")</action>

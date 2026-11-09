@@ -20,13 +20,13 @@
       Verify no hardware wallet tile is shown beneath the SAVINGS and SPENDING tiles
     </action>
     <action>
-      Scroll the suggestion cards horizontally until a card titled "Hardware" with the text "Connect device" is visible
+      Scroll the home screen until a card titled "Hardware" with the text "Connect device" is visible, and verify by screenshot that its artwork shows a Trezor Safe 7 (touchscreen device), not the Trezor Model One
     </action>
     <action>
       Tap the "Hardware" suggestion card
     </action>
     <action>
-      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HardwareWalletIntroScreen") showing hardware device illustrations
+      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HardwareWalletIntroScreen") showing hardware device illustrations, and verify by screenshot that the left illustration is a Trezor Safe 7 bleeding off the left edge
     </action>
     <action>
       Verify the headline reads "Add your hardware wallet" with the words "hardware wallet" in blue
@@ -38,7 +38,7 @@
       If Android shows a Nearby devices/Bluetooth permission prompt or Bluetooth enable prompt, allow it and continue waiting on the Searching step
     </action>
     <action>
-      Verify the sheet advances to the "Found Device" step (testTag "HardwareWalletFoundScreen") within 15 seconds, headed "Found Trezor" with a "Connect" button
+      Verify the sheet advances to the "Found Device" step (testTag "HardwareWalletFoundScreen") within 15 seconds, headed "Found Trezor" with a "Connect" button, and verify by screenshot that the device artwork is a Trezor Safe 7
     </action>
     <action>
       Tap the "Connect" button (testTag "HardwareWalletFoundConnect")

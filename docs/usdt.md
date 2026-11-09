@@ -1,6 +1,6 @@
 # USDT configuration
 
-Normal builds use published bitkit-core `0.8.0-rc6`, including its matching native libraries and generated bindings.
+Normal builds use published bitkit-core `0.8.0-rc11`, including its matching native libraries and generated bindings.
 
 USDT uses Arbitrum One regardless of the Bitcoin network setting. Builds use the credential-free Bitkit gateway by default:
 
@@ -57,9 +57,9 @@ Receipts require successful canonical execution, the correct chain/token/recipie
 
 ## Encrypted recovery backups
 
-The wallet backup includes core's portable USDT recovery snapshot alongside Paykit request bindings, pending proofs and received-payment identities. It contains signed operations and stable activity IDs, but no private keys or seed. The existing VSS client encrypts and authenticates the complete envelope. History cursors and unsigned quotes are rebuilt locally.
+Before broadcast, the app saves core's portable USDT recovery snapshot alongside local Paykit USDT request bindings, pending proofs and received-payment identities in an independent encrypted VSS record. This does not export unrelated Paykit state or acquire a Pubky lock. The complete wallet backup remains separate. Recovery snapshots contain signed operations and stable activity IDs, but no private keys or seed; history cursors and unsigned quotes are rebuilt locally. See [USDT recovery backups](usdt-recovery-backups.md) for restore ordering and compatibility limits.
 
-Core waits for the app to acknowledge a VSS upload before first submission or automatic rebroadcast. If backup is unavailable, the signed payment stays pending locally and no submission is attempted; recovery retries the same operation once backup is available, or reconciles its expiry against the chain. Wallet uploads are serialized so an older background snapshot cannot replace a payment's acknowledged backup.
+Core waits for the app to acknowledge a VSS upload before first submission or automatic rebroadcast. If backup is unavailable, the signed payment stays pending locally and no submission is attempted; recovery retries the same operation once backup is available, or reconciles its expiry against the chain. Recovery uploads use immutable records so an older background wallet snapshot cannot replace an acknowledged payment backup.
 
 Restore merges records for the derived account without overwriting newer local outcomes. Signed operations imported into an empty database are reconciled against chain evidence before retry; already discovered transactions retain their restored application IDs. A failed restore retains the downloaded envelope and blocks replacement backups. Bitcoin-only backups remain readable. Seed-only recovery restores account control and chain history, but cannot reconstruct a never-mined signed operation or its Paykit attribution. Missing evidence never authorizes a second payment.
 
