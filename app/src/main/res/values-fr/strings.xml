@@ -265,7 +265,8 @@
     <string name="lightning__move_to_spark__failed_title">Le déplacement\n&lt;accent&gt;a échoué&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Un problème est survenu pendant la préparation du déplacement. Réessayez.</string>
     <string name="lightning__move_to_spark__fee">Frais de routage</string>
-    <string name="lightning__move_to_spark__in_flight_text">Le paiement est en route et apparaîtra sur Spark une fois réglé. Fermez ensuite la connexion vidée pour rendre sa réserve à Épargnes.</string>
+    <string name="lightning__move_to_spark__in_flight_text">Le paiement est en route et apparaîtra dans Spark une fois réglé. S\'il échoue, le montant reste dans votre connexion.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Déplacement vers\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank ferme ses connexions Lightning. Déplacez votre solde vers Spark maintenant : c\'est l\'option la moins coûteuse, et il reste dans Dépenses.</string>
     <string name="lightning__move_to_spark__intro_title">Votre connexion\n&lt;accent&gt;se ferme&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Moitié</string>

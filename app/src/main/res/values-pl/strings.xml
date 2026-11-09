@@ -239,7 +239,8 @@
     <string name="lightning__move_to_spark__failed_title">Nie udało się\n&lt;accent&gt;przenieść&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Coś poszło nie tak podczas przygotowania przeniesienia. Spróbuj ponownie.</string>
     <string name="lightning__move_to_spark__fee">Opłata za routing</string>
-    <string name="lightning__move_to_spark__in_flight_text">Płatność jest w drodze i pojawi się w Spark po rozliczeniu. Następnie zamknij opróżnione połączenie, aby zwrócić jego rezerwę do Oszczędności.</string>
+    <string name="lightning__move_to_spark__in_flight_text">Płatność jest w drodze i pojawi się w Spark po rozliczeniu. Jeśli się nie powiedzie, kwota pozostanie w Twoim połączeniu.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Przenoszenie do\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank zamyka swoje połączenia Lightning. Przenieś teraz saldo do Spark: to opcja z najniższymi opłatami, a środki zostają w Wydatkach.</string>
     <string name="lightning__move_to_spark__intro_title">Twoje połączenie\n&lt;accent&gt;się zamyka&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Połowę</string>

@@ -182,7 +182,8 @@
     <string name="lightning__move_to_spark__failed_title">No s\'ha pogut\n&lt;accent&gt;moure&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Alguna cosa ha anat malament en preparar el moviment. Torna-ho a provar.</string>
     <string name="lightning__move_to_spark__fee">Tarifa d\'enrutament</string>
-    <string name="lightning__move_to_spark__in_flight_text">El pagament està en camí i apareixerà a Spark quan s\'hagi liquidat. Després tanca la connexió buida per tornar-ne la reserva als Estalvis.</string>
+    <string name="lightning__move_to_spark__in_flight_text">El pagament està en camí i apareixerà a Spark quan es liquidi. Si falla, l\'import es queda a la teva connexió.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Movent a\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank està tancant les seves connexions Lightning. Mou ara el teu saldo a Spark: és l\'opció amb menys tarifes i es manté a Despesa.</string>
     <string name="lightning__move_to_spark__intro_title">La teva connexió\n&lt;accent&gt;es tanca&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Moure meitat</string>

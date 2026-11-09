@@ -167,11 +167,18 @@ private fun ColumnScope.Done(
     onCloseChannel: (String?) -> Unit,
 ) {
     val outcome = uiState.outcome
+    val isInFlight = outcome is MoveToSparkOutcome.InFlight
     Header(
-        title = stringResource(R.string.lightning__move_to_spark__done_title),
+        title = stringResource(
+            if (isInFlight) {
+                R.string.lightning__move_to_spark__in_flight_title
+            } else {
+                R.string.lightning__move_to_spark__done_title
+            }
+        ),
         text = stringResource(
             when {
-                outcome is MoveToSparkOutcome.InFlight -> R.string.lightning__move_to_spark__in_flight_text
+                isInFlight -> R.string.lightning__move_to_spark__in_flight_text
                 uiState.hasRest -> R.string.lightning__move_to_spark__done_rest_text
                 else -> R.string.lightning__move_to_spark__done_text
             }
@@ -182,9 +189,9 @@ private fun ColumnScope.Done(
     if (outcome is MoveToSparkOutcome.Moved) {
         AmountRow(stringResource(R.string.lightning__move_to_spark__fee), outcome.feeSats, "MoveToSparkFeePaid")
     }
-    Illustration(R.drawable.check)
+    Illustration(if (isInFlight) R.drawable.lightning else R.drawable.check)
     // While the payment is in flight its amount may still return to the channel, so closing is not offered yet.
-    if (outcome is MoveToSparkOutcome.InFlight) {
+    if (isInFlight) {
         PrimaryButton(text = stringResource(R.string.common__ok), onClick = onDone)
         return
     }

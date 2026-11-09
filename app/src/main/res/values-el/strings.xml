@@ -178,7 +178,8 @@
     <string name="lightning__move_to_spark__failed_title">Η μεταφορά\n&lt;accent&gt;απέτυχε&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Κάτι πήγε στραβά κατά την προετοιμασία της μεταφοράς. Δοκιμάστε ξανά.</string>
     <string name="lightning__move_to_spark__fee">Τέλος δρομολόγησης</string>
-    <string name="lightning__move_to_spark__in_flight_text">Η πληρωμή βρίσκεται σε εξέλιξη και θα εμφανιστεί στο Spark μόλις διακανονιστεί. Έπειτα κλείστε την άδεια σύνδεση για να επιστρέψει το απόθεμά της στις Αποταμιεύσεις.</string>
+    <string name="lightning__move_to_spark__in_flight_text">Η πληρωμή είναι καθ\' οδόν και θα εμφανιστεί στο Spark μόλις ολοκληρωθεί. Αν αποτύχει, το ποσό παραμένει στη σύνδεσή σας.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Μεταφέρεται στο\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Το Blocktank κλείνει τις συνδέσεις Lightning του. Μεταφέρετε το υπόλοιπό σας στο Spark τώρα: είναι η επιλογή με τα χαμηλότερα τέλη και παραμένει στις Δαπάνες.</string>
     <string name="lightning__move_to_spark__intro_title">Η σύνδεσή σας\n&lt;accent&gt;κλείνει&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Το μισό</string>

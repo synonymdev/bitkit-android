@@ -237,7 +237,8 @@
     <string name="lightning__move_to_spark__failed_title">Das Verschieben\n&lt;accent&gt;schlug fehl&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Beim Vorbereiten der Verschiebung ist etwas schiefgelaufen. Versuchen Sie es erneut.</string>
     <string name="lightning__move_to_spark__fee">Routing-Gebühr</string>
-    <string name="lightning__move_to_spark__in_flight_text">Die Zahlung ist unterwegs und erscheint in Spark, sobald sie abgeschlossen ist. Schließen Sie dann die geleerte Verbindung, um deren Reserve an das Sparkonto zurückzugeben.</string>
+    <string name="lightning__move_to_spark__in_flight_text">Die Zahlung ist unterwegs und erscheint in Spark, sobald sie abgeschlossen ist. Schlägt sie fehl, bleibt der Betrag in deiner Verbindung.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Wird verschoben zu\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank schließt seine Lightning-Verbindungen. Verschieben Sie Ihr Guthaben jetzt zu Spark: Das ist die günstigste Option, und es bleibt im Ausgabenkonto.</string>
     <string name="lightning__move_to_spark__intro_title">Ihre Verbindung wird\n&lt;accent&gt;geschlossen&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Halb senden</string>

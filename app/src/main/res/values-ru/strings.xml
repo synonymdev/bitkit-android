@@ -194,7 +194,8 @@
     <string name="lightning__move_to_spark__failed_title">Не удалось\n&lt;accent&gt;перенести&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Что-то пошло не так при подготовке переноса. Попробуйте ещё раз.</string>
     <string name="lightning__move_to_spark__fee">Комиссия за маршрутизацию</string>
-    <string name="lightning__move_to_spark__in_flight_text">Платёж в пути и появится в Spark после завершения. Затем закройте опустевшее соединение, чтобы вернуть его резерв в Сбережения.</string>
+    <string name="lightning__move_to_spark__in_flight_text">Платеж в пути и появится в Spark после завершения. Если он не пройдет, сумма останется в вашем подключении.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Перенос в\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank закрывает свои соединения Lightning. Перенесите баланс в Spark сейчас: это вариант с самой низкой комиссией, и средства остаются в Расходах.</string>
     <string name="lightning__move_to_spark__intro_title">Ваше соединение\n&lt;accent&gt;закрывается&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Половину</string>

@@ -182,7 +182,8 @@
     <string name="lightning__move_to_spark__failed_title">Verplaatsen\n&lt;accent&gt;mislukt&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Er is iets misgegaan bij het voorbereiden van de verplaatsing. Probeer het opnieuw.</string>
     <string name="lightning__move_to_spark__fee">Routeringsvergoeding</string>
-    <string name="lightning__move_to_spark__in_flight_text">De betaling is onderweg en verschijnt in Spark zodra ze is afgerond. Sluit daarna de lege verbinding om de reserve terug te geven aan uw spaargeld.</string>
+    <string name="lightning__move_to_spark__in_flight_text">De betaling is onderweg en verschijnt in Spark zodra die is afgerond. Mislukt die, dan blijft het bedrag in je verbinding.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Verplaatsen naar\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank sluit zijn Lightning-verbindingen. Verplaats uw saldo nu naar Spark: dit is de goedkoopste optie en het blijft op uw bestedingssaldo.</string>
     <string name="lightning__move_to_spark__intro_title">Uw verbinding wordt\n&lt;accent&gt;gesloten&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Stuur helft</string>

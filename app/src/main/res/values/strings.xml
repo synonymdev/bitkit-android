@@ -332,7 +332,8 @@
     <string name="lightning__move_to_spark__failed_title">Could not\n&lt;accent&gt;move&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Something went wrong while preparing the move. Try again.</string>
     <string name="lightning__move_to_spark__fee">Routing fee</string>
-    <string name="lightning__move_to_spark__in_flight_text">The payment is on its way and shows in Spark once it settles. Then close the emptied connection to return its reserve to Savings.</string>
+    <string name="lightning__move_to_spark__in_flight_text">The payment is on its way and shows in Spark once it settles. If it fails, the amount stays in your connection.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Moving to\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank is closing its Lightning connections. Move your balance to Spark now: it is the lowest-fee option, and it stays in Spending.</string>
     <string name="lightning__move_to_spark__intro_title">Your connection\n&lt;accent&gt;is closing&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Move Half</string>

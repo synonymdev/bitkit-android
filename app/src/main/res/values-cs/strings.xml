@@ -185,7 +185,8 @@
     <string name="lightning__move_to_spark__failed_title">Přesun se\n&lt;accent&gt;nezdařil&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_unknown">Při přípravě přesunu se něco pokazilo. Zkuste to znovu.</string>
     <string name="lightning__move_to_spark__fee">Poplatek za směrování</string>
-    <string name="lightning__move_to_spark__in_flight_text">Platba je na cestě a ve Spark se zobrazí po vypořádání. Poté uzavřete vyprázdněné spojení, aby se jeho rezerva vrátila do Úspor.</string>
+    <string name="lightning__move_to_spark__in_flight_text">Platba je na cestě a ve Sparku se zobrazí po vypořádání. Pokud selže, částka zůstane ve vašem připojení.</string>
+    <string name="lightning__move_to_spark__in_flight_title">Přesouvání do\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__intro_text">Blocktank uzavírá svá spojení Lightning. Přesuňte svůj zůstatek do Spark hned: je to možnost s nejnižšími poplatky a zůstane v Útratách.</string>
     <string name="lightning__move_to_spark__intro_title">Vaše spojení\n&lt;accent&gt;se uzavírá&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__move_half">Přesun půlku</string>
