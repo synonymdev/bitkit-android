@@ -18,6 +18,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.test.LocalRegtest
 import to.bitkit.test.annotations.CoreServiceIntegration
 import to.bitkit.test.annotations.DeviceIntegration
 import to.bitkit.test.awaitSpendableDeposits
@@ -40,8 +41,6 @@ class TxBumpingTests {
     @Inject
     lateinit var lightningService: LightningService
 
-    @Inject
-    lateinit var coreService: CoreService
 
     @Inject
     lateinit var keychain: Keychain
@@ -116,8 +115,8 @@ class TxBumpingTests {
         // Fund the wallet with a single transaction
         val depositAmount = 100_000uL // 100,000 sats
         println("Depositing $depositAmount sats to wallet")
-        coreService.blocktank.regtestMine(1u)
-        val fundingTxId = coreService.blocktank.regtestDeposit(
+        LocalRegtest.mine(1u)
+        val fundingTxId = LocalRegtest.deposit(
             address = depositAddress,
             amountSat = depositAmount
         )
@@ -126,7 +125,7 @@ class TxBumpingTests {
 
         // Mine blocks to confirm the funding transaction
         println("Mining 6 blocks to confirm funding transaction")
-        coreService.blocktank.regtestMine(6u)
+        LocalRegtest.mine(6u)
         println("Blocks mined successfully")
 
         lightningService.awaitSpendableDeposits(mapOf(fundingTxId to depositAmount))
@@ -180,7 +179,7 @@ class TxBumpingTests {
 
         // Mine a block to confirm the replacement transaction
         println("Mining 1 block to confirm the replacement transaction")
-        coreService.blocktank.regtestMine(1u)
+        LocalRegtest.mine(1u)
         println("Block mined successfully")
 
         // Wait for the block to be processed
@@ -231,9 +230,9 @@ class TxBumpingTests {
         val incomingAmount = 100_000uL // 100,000 sats incoming
         println("Simulating incoming transaction with low fees: $incomingAmount sats")
 
-        // Use blocktank to send us funds with very low fees (simulating a stuck incoming transaction)
+        // Use the local bitcoind to send us funds with very low fees (simulating a stuck incoming transaction)
         // In a real scenario, this would be someone else sending us funds with insufficient fees
-        val stuckIncomingTxId = coreService.blocktank.regtestDeposit(
+        val stuckIncomingTxId = LocalRegtest.deposit(
             address = depositAddress,
             amountSat = incomingAmount
         )
@@ -295,7 +294,7 @@ class TxBumpingTests {
 
         // Mine blocks to confirm the CPFP child transaction
         println("Mining 2 blocks to confirm the CPFP child transaction")
-        coreService.blocktank.regtestMine(2u)
+        LocalRegtest.mine(2u)
         println("Blocks mined successfully - both transactions should now be confirmed")
 
         // Wait for the blocks to be processed
