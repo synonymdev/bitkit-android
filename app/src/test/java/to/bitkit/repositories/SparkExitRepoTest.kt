@@ -2,10 +2,14 @@ package to.bitkit.repositories
 
 import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.CpfpFundingStrategy
+import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.RecoveryRedoReason
+import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.RecoveryVerdict
 import breez_sdk_spark.SdkException
 import com.synonym.bitkitcore.GetAddressResponse
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -46,6 +50,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.ext.create
 import to.bitkit.models.FeeRate
 import to.bitkit.models.TransferType
 import to.bitkit.repositories.SparkExitRecord.Phase
@@ -88,6 +93,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         keychain: Keychain = mock<Keychain>(),
         coreService: CoreService = mock<CoreService>(),
         lightningRepo: LightningRepo = mock<LightningRepo>(),
+        activityRepo: ActivityRepo = mock<ActivityRepo>(),
     ) = SparkExitRepo(
         work = work,
         bgDispatcher = testDispatcher,
@@ -95,7 +101,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         sparkRepo = sparkRepo,
         lightningRepo = lightningRepo,
         transferRepo = transferRepo,
-        activityRepo = mock<ActivityRepo>(),
+        activityRepo = activityRepo,
         coreService = coreService,
         keychain = keychain,
         httpClient = httpClient,
@@ -163,6 +169,46 @@ class SparkExitRepoTest : BaseUnitTest() {
         verify(work).schedulePeriodic()
         assertEquals(record, SparkExitStore(file).load())
         assertEquals(original, File(file.parentFile, "spark-exit.unreadable-1800000000000.json").readText())
+    }
+
+    @Test
+    fun `a confirmed sweep settles the transfer, but not while failed cooperative leaves are retried`() = test {
+        val sweep = SparkExitFixtures.tx(
+            "s",
+            kind = RecoveryTxKind.SWEEP,
+            status = ExitTransactionStatus.Confirmed(50u),
+        )
+        val running = SparkExitFixtures.record(Phase.Running).adopt(SparkExitFixtures.recovery(listOf(sweep)), 0L)
+        val activity = OnchainActivity.create(
+            walletId = "wallet0",
+            id = "sweep",
+            txType = PaymentType.RECEIVED,
+            txId = "s",
+            value = 90_000uL,
+            fee = 0uL,
+            address = "bcrt1qdestination",
+            timestamp = 0uL,
+            feeRate = 1uL,
+        ).copy(isTransfer = true)
+        val activityRepo = mock<ActivityRepo>()
+        whenever(activityRepo.getOnchainActivityByTxId(any(), any())).thenReturn(activity)
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.markSettled(any())).thenReturn(Result.success(Unit))
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+
+        // Leaves the operators could not co-sign are still on their way: the transfer keeps counting them.
+        // Before and after the retry's own build, which no longer lists the landed sweep.
+        val retry = running.copy(failedLeafRetrySince = 900u)
+        listOf(retry, retry.adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2"))), 0L)).forEach {
+            store.save(it)
+            createSut(activityRepo = activityRepo).load().getOrThrow()
+        }
+        verify(transferRepo, never()).markSettled(any())
+
+        store.save(running)
+        createSut(activityRepo = activityRepo).load().getOrThrow()
+        verify(transferRepo).markSettled("transfer-1")
     }
 
     @Test

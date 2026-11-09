@@ -320,7 +320,11 @@ class SparkExitRepo @Inject constructor(
         }
         val transferId = record.transferId ?: return
         if (transferRepo.isSettled(transferId).getOrDefault(true)) return
-        if (!record.isActive || sweepActivity != null) transferRepo.markSettled(transferId)
+        // Leaves the operators could not co-sign are still on their way to savings while retried: the transfer keeps
+        // counting them, less what already confirmed.
+        if (!record.isActive || (sweepActivity != null && !record.isRetryingFailedLeaves)) {
+            transferRepo.markSettled(transferId)
+        }
     }
 
     private suspend fun settleOrphanedTransfers(record: SparkExitRecord?) {
