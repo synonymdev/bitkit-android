@@ -140,7 +140,8 @@ class MoveToSparkRepo @Inject constructor(
                 maxTotalRoutingFeeMsat = MoveToSparkMath.feeCapMsat(quote.feeSats),
             ).onSuccess { paymentId.set(it) }.getOrElse {
                 settled.cancel()
-                throw if (it.isNoRoute()) MoveToSparkError.TooLarge(quote.amountSats, it) else it
+                val isNoRoute = it.isNoRoute() || it.isSendWithoutRoute(quote.invoice)
+                throw if (isNoRoute) MoveToSparkError.TooLarge(quote.amountSats, it) else it
             }
             val event = withTimeoutOrNull(PAYMENT_TIMEOUT) { settled.await() }
             if (event != null) reportedPaymentHashes += paymentHash
@@ -161,6 +162,13 @@ class MoveToSparkRepo @Inject constructor(
 
     private fun Throwable.isNoRoute(): Boolean = this is NodeException.RouteNotFound ||
         (this as? LdkError)?.compactType == NodeException.RouteNotFound::class.simpleName
+
+    /** LDK reports a route lost since the quote, before any payment exists, as a sending failure on a live invoice. */
+    private fun Throwable.isSendWithoutRoute(invoice: String): Boolean {
+        val isSendingFailed = this is NodeException.PaymentSendingFailed ||
+            (this as? LdkError)?.compactType == NodeException.PaymentSendingFailed::class.simpleName
+        return isSendingFailed && runCatching { !Bolt11Invoice.fromStr(invoice).isExpired() }.getOrDefault(false)
+    }
 
     private fun Event.settles(paymentHash: String, paymentId: String?): Boolean = when (this) {
         is Event.PaymentSuccessful -> this.paymentHash == paymentHash
