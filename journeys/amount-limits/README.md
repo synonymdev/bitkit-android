@@ -50,3 +50,15 @@ External node).
 - External: funding `FundManual`; connection `NodeIdInput`/`HostInput`/`PortInput`/`ExternalContinue`;
   amount screen `ExternalAmount`, field `ExternalAmountNumberField`, 25% `ExternalAmountQuarter`,
   max `ExternalAmountMax`, continue `ExternalAmountContinue`.
+
+## Spending immediately after a Lightning receipt
+
+`send-spending-after-receive.xml` covers the Android channel-cache regression. A usable channel can
+retain its old outbound limit after a receipt even though the displayed Spending balance is fresh.
+Opening an amountless invoice must refresh that channel snapshot before deriving the input limit.
+The existing `@send_2` fixture in `synonymdev/bitkit-e2e-tests` prepares a fresh local LND channel,
+receives 10 000 sats, checks rejection of 10 001, then exercises normal payments and reentry. Keep
+its toast and retained-field assertions; an additional rejected digit can hide the original failure.
+
+This fixes Android repository state publication; no feature is being ported and iOS source is
+unchanged. The shared Send2 case already asserts the same over-limit behavior on iOS.

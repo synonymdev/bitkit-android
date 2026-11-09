@@ -26,7 +26,7 @@ native fixtures create/wipe wallets, and recovery fixtures retain state for UI w
 Use an AOSP image without Google Play Services, matching CI. Google APIs images can
 start FCM token delivery between test cases, when the Hilt test application has no
 active component, crashing the test process. This lane does not validate push delivery.
-The CI emulator is Pixel 4, API 30, AOSP (`default`), x86_64; dev/debug uses the staging regtest backend.
+The CI emulator is Pixel 4, API 30, AOSP (`default`), x86_64.
 
 Funding-dependent RBF, recovery, and UTXO-selection tests wait up to two minutes
 for every returned deposit transaction to be confirmed and for its exact amount
@@ -36,8 +36,17 @@ Timeout diagnostics include expected transaction amounts, wallet tip, balances,
 confirmed deposits, and spendable outpoints. The workflow's 45-minute timeout is a
 backstop for native calls that cannot be interrupted by coroutine cancellation.
 
-The existing bitkit-docker stack supplies Bitcoin/Electrum and LNURL fixtures,
-but does not supply the Blocktank regtest API used by these native tests' funding
-helpers. Moving only Electrum to localhost would fund a different chain. Keep this
-lane on staging until funding and wallet sync can both use isolated infrastructure;
-do not promote the combined suite to a required PR check merely after one green run.
+The integration lane funds and mines on a local bitcoind from bitkit-docker
+through `LocalRegtest`, and the wallet syncs from the same stack's electrs. Both need
+an `E2E=true` build, which points electrum at `tcp://10.0.2.2:60001`; without it the
+wallet syncs from staging and never sees the deposits. To run the lane locally:
+
+1. In a bitkit-docker checkout at the commit `ui-tests.yml` pins (bump it there on purpose), start the chain with
+   `docker compose up -d bitcoind bitcoinsetup electrs`, then mine 101 blocks with
+   `docker exec bitcoin bitcoin-cli -regtest -rpcport=43782 -rpcuser=polaruser -rpcpassword=polarpass -generate 101`.
+2. Run the tests with `E2E=true ANDROID_TEST_SUITES=integration bash .github/scripts/run-ui-tests.sh`
+   (or `E2E=true just test android`). The emulator reaches bitcoind RPC at
+   `http://10.0.2.2:43782`; set the `bitcoinRpcUrl` instrumentation argument to use
+   another host.
+
+Do not promote the combined suite to a required PR check merely after one green run.

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -82,6 +83,8 @@ class QuickPayRepo @Inject constructor(
                     if (running) reconcileAgainstLdk()
                 }
         }
+        // The lookup waits for Spark's history, so a first Spark sync after the node's runs the reconcile again.
+        scope.launch { lightningRepo.isSparkSynced.filter { it }.collect { reconcileAgainstLdk() } }
     }
 
     fun attach(session: QuickPaySession): Flow<QuickPaySessionEvent> {

@@ -83,6 +83,9 @@ class SparkFundingViewModel @Inject constructor(
     private var quoteJob: Job? = null
     private var retainedFundingJob: Job? = null
 
+    /** The kept funding this screen settles, held until the screen closes so its recovery never takes over. */
+    private var ownedFundingAttemptId: String? = null
+
     /** The fee rates the shown quote was priced at, so the transfer pays exactly what the screen shows. */
     private var quotedFeeRates: FeeRates? = null
 
@@ -343,6 +346,9 @@ class SparkFundingViewModel @Inject constructor(
     // Payment Pending can be dismissed, so the confirm screen leaves for Setting Up once the kept funding completes.
     private fun watchRetainedFunding(retained: OnchainSendAttempt, quote: Quote) {
         retainedFundingJob?.cancel()
+        ownedFundingAttemptId?.takeIf { it != retained.attemptId }
+            ?.let { lightningRepo.followFundingOnScreen(it, isFollowed = false) }
+        ownedFundingAttemptId = retained.attemptId
         lightningRepo.followFundingOnScreen(retained.attemptId, isFollowed = true)
         retainedFundingJob = viewModelScope.launch {
             val completed = lightningRepo.onchainSendAttemptUpdates
@@ -353,7 +359,12 @@ class SparkFundingViewModel @Inject constructor(
                         it.hasPositiveEvidence && it.localFollowupComplete && it.txid != null
                 }
             onFundingAccepted(requireNotNull(completed.txid), completed.amountSats, quote)
-        }.apply { invokeOnCompletion { lightningRepo.followFundingOnScreen(retained.attemptId, isFollowed = false) } }
+        }
+    }
+
+    override fun onCleared() {
+        ownedFundingAttemptId?.let { lightningRepo.followFundingOnScreen(it, isFollowed = false) }
+        super.onCleared()
     }
 
     fun onPayRepriced() {
