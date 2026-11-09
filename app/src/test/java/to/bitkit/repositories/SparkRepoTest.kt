@@ -604,6 +604,24 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a stale settle never clears a newer withdrawal's journal`() = test {
+        val newer = PendingSparkWithdrawal("bcrt1qcontact", 30_000uL, "pubkycontact", startedAt = now.epochSeconds)
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        // Another settle closes the older journal and the newer withdrawal writes its own while this one saves.
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            cacheData.update { it.copy(pendingSparkWithdrawal = newer) }
+            Result.success(Unit)
+        }
+
+        journaledSpark()
+
+        assertEquals(newer, cacheData.value.pendingSparkWithdrawal, "Losing the newer journal could pay it twice")
+    }
+
+    @Test
     fun `keeps a journaled withdrawal Spark lists when its activity fails to save on start`() = test {
         cacheData.update {
             it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
