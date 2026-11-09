@@ -64,8 +64,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, json.dumps(block_status(parts[1])).encode(), "application/json")
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0)) if self.command == "POST" else None
         request = urllib.request.Request(f"{UPSTREAM}{self.path}", data=body, method=self.command)
-        if self.headers.get("Content-Type"):
-            request.add_header("Content-Type", self.headers["Content-Type"])
+        # Without one, urllib sends form-urlencoded, which Lightspark's POST /tx refuses with a bare code -1: a raw
+        # transaction is text/plain, which LDK's Esplora client does not name.
+        if body is not None:
+            request.add_header("Content-Type", self.headers.get("Content-Type") or "text/plain")
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 self.reply(response.status, response.read(), response.headers.get("Content-Type"))
