@@ -440,9 +440,14 @@ class PaykitPaymentProofRepo @Inject constructor(
             amount,
             proof.onchainMatchingTransactionIdsBeforeAttempt,
         )
+        // The request's allowance attempt is settled first: a failed ledger write keeps the proof for the next pass.
         return when (outcome) {
-            is SparkWithdrawalOutcome.Sent -> completeSparkOnchainProofLocked(proof, outcome.txid)
+            is SparkWithdrawalOutcome.Sent -> {
+                allowanceExecutor.get().onchainSendSettled(proof.identity, proof.requestId, outcome.txid)
+                completeSparkOnchainProofLocked(proof, outcome.txid)
+            }
             SparkWithdrawalOutcome.Unsent -> {
+                allowanceExecutor.get().onchainSendReleased(proof.identity, proof.requestId)
                 Logger.info("Released a Paykit proof whose Spark withdrawal never sent", context = TAG)
                 releaseDeniedPrivateConsumption(proof)
                 removeProofsLocked { it == proof }
