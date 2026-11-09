@@ -364,7 +364,6 @@ class SparkFundingViewModel @Inject constructor(
 
     override fun onCleared() {
         ownedFundingAttemptId?.let { lightningRepo.followFundingOnScreen(it, isFollowed = false) }
-        super.onCleared()
     }
 
     fun onPayRepriced() {
