@@ -1536,7 +1536,14 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong?,
         maxTotalRoutingFeeMsat: ULong?,
-    ): Result<PaymentId> = payInvoiceWithLdk(bolt11, sats, null, maxTotalRoutingFeeMsat, onBeforeSend = { true })
+    ): Result<PaymentId> = payInvoiceWithLdk(
+        bolt11 = bolt11,
+        sats = sats,
+        paymentHash = null,
+        paymentDeadlineAt = null,
+        maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
+        onBeforeSend = { true },
+    )
 
     /** The routing fee for paying [amountSats] to [bolt11] from the channels, never quoted on Spark. */
     suspend fun estimateLdkRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
