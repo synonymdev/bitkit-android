@@ -631,6 +631,30 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `receipt confirmed during a restore without a usdt snapshot celebrates`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("address")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.balance()).thenReturn(1_000_000uL)
+        val received = incoming("received").copy(timestamp = 1_799_999_943uL)
+        var history = emptyList<UsdtTransfer>()
+        whenever(wallet.syncHistory()).thenAnswer {
+            history = listOf(received)
+            false
+        }
+        whenever(wallet.history()).thenAnswer { history }
+        whenever(wallet.refreshTransfers()).thenAnswer { history }
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
+
+        repo.prepareForRecoveryRestore()
+        now = Instant.fromEpochSeconds(1_800_000_090)
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(received), repo.state.value.pendingReceipts)
+    }
+
+    @Test
     fun `receipt consumed before a relaunch does not celebrate again`() = test {
         var now = Instant.fromEpochSeconds(1_800_000_000)
         val clock = object : Clock { override fun now() = now }

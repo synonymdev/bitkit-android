@@ -79,6 +79,9 @@ class UsdtRepo @Inject constructor(
 
     /** Receipts saved before this launch were already celebrated, so the first refresh marks them announced. */
     private var seedAnnouncedReceipts = true
+
+    /** Set when a restore starts, so the window survives a refresh that first sets the restored address. */
+    private var restoreReceiptsSince: ULong? = null
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
     val recoveryGeneration: Long get() = service.recoveryGeneration
@@ -153,7 +156,8 @@ class UsdtRepo @Inject constructor(
     private fun receiptBaseline() = (clock.now() - RECEIPT_CLOCK_MARGIN).epochSeconds.coerceAtLeast(0).toULong()
 
     private fun resetReceiptBaseline() {
-        receiptsSince = receiptBaseline()
+        receiptsSince = restoreReceiptsSince ?: receiptBaseline()
+        restoreReceiptsSince = null
         announcedReceiptIds.clear()
         seedAnnouncedReceipts = true
     }
@@ -221,7 +225,10 @@ class UsdtRepo @Inject constructor(
      * Waits for wallet work to finish and starts the receipt window, so a receipt that confirms while
      * the backups download still celebrates.
      */
-    suspend fun prepareForRecoveryRestore() = mutex.withLock { receiptsSince = receiptBaseline() }
+    suspend fun prepareForRecoveryRestore() = mutex.withLock {
+        receiptsSince = receiptBaseline()
+        restoreReceiptsSince = receiptsSince
+    }
 
     suspend fun retryTransfer(id: String): Result<Unit> = paymentOperation {
         val wallet = wallet()
@@ -238,6 +245,7 @@ class UsdtRepo @Inject constructor(
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
                 clearDisplayBalance()
+                restoreReceiptsSince = null
                 val address = wallet.receiveAddress()
                 val restored = wallet.history().toImmutableList()
                 // Restored history is not new. Queued receipts of the same wallet still celebrate.
@@ -288,6 +296,7 @@ class UsdtRepo @Inject constructor(
             clearCredentials()
             runSuspendCatching { service.wipe() }.also {
                 _state.update { UsdtWalletState() }
+                restoreReceiptsSince = null
                 nextRefresh = 0L
                 rateLimitedUntil = 0L
             }
