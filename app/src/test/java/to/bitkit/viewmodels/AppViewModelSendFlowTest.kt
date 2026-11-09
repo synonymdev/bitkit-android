@@ -896,7 +896,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .thenReturn(Result.success(100uL))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
@@ -6913,7 +6913,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val feeEstimateStarted = CompletableDeferred<Unit>()
         val finishFeeEstimate = CompletableDeferred<Unit>()
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .doSuspendableAnswer {
                 feeEstimateStarted.complete(Unit)
                 finishFeeEstimate.await()
@@ -7614,13 +7614,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(sheet, sut.currentSheet.value)
             assertFalse(sut.sendUiState.value.isLoading)
             assertFalse(sut.sendUiState.value.shouldConfirmPay)
-            verify(lightningRepo, never()).calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+            verify(lightningRepo, never()).calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any())
             assertNoNativeSend()
 
             blocked = false
             advanceUntilIdle()
             expectNoEvents()
-            verify(lightningRepo, never()).calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+            verify(lightningRepo, never()).calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any())
 
             sut.setSendEvent(SendEvent.AmountChange(2_000u))
             advanceUntilIdle()
@@ -7668,7 +7668,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             }
         }
         if (coinSelection) {
-            whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()))
+            whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()))
                 .doSuspendableAnswer { estimate() }
         } else {
             whenever(lightningRepo.estimateRoutingFeesForAmount(any(), any())).doSuspendableAnswer { estimate() }
@@ -7697,7 +7697,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             if (cancelScope) assertTrue(estimateCancelled)
             assertNoNativeSend()
 
-            whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()))
+            whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()))
                 .thenReturn(Result.success(100u))
             whenever(lightningRepo.estimateRoutingFeesForAmount(any(), any())).thenReturn(Result.success(7u))
             sut.setSendEvent(SendEvent.AmountChange(2_000u))
@@ -13738,7 +13738,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `initial onchain subscription payment stops at the fee warning`() = test {
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .thenReturn(Result.success(600uL))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
             Result.success(
@@ -13775,7 +13775,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `initial onchain subscription payment shows the fee warning without a usd rate`() = test {
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .thenReturn(Result.success(600uL))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(AppError("no rate")))
@@ -13809,9 +13809,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             finishSelection.await()
             selectedUtxos
         }
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .thenReturn(Result.success(150uL))
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), eq(selectedUtxos), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), eq(selectedUtxos), anyOrNull(), any()) }
             .thenReturn(Result.success(600uL))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
             Result.success(
@@ -15972,7 +15972,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `changing speed resets selected utxos from previous rate`() = test {
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .thenReturn(Result.success(200uL))
         whenever { lightningRepo.determineUtxosToSpend(any(), any()) }
             .thenReturn(null)
@@ -16003,7 +16003,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `changing speed keeps previous onchain fee while estimates refresh`() = test {
         val feeEstimateStarted = CompletableDeferred<Unit>()
         val finishFeeEstimate = CompletableDeferred<Unit>()
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .doSuspendableAnswer {
                 feeEstimateStarted.complete(Unit)
                 finishFeeEstimate.await()
@@ -17797,7 +17797,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `no-rate pay from toast keeps the confirmation fee refresh running`() = test {
         whenever(context.getString(R.string.wallet__payment_request_rate_unavailable)).thenReturn("Rates unavailable")
         val finishFeeEstimate = CompletableDeferred<Unit>()
-        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any()) }
             .doSuspendableAnswer {
                 if (sut.currentSheet.value == Sheet.Send(SendRoute.Confirm)) finishFeeEstimate.await()
                 Result.success(150uL)

@@ -69,7 +69,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(feeRates))
         whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balances(100_000uL)))
         whenever { lightningRepo.estimateSendAllFee(any(), any(), any()) }.thenReturn(Result.success(500uL))
-        whenever { lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), any()) }
+        whenever { lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), any(), any()) }
             .thenReturn(Result.success(500uL))
     }
 
@@ -129,7 +129,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         sut.onAmountChange(50_000)
         sut.onAmountContinue()
         advanceUntilIdle()
-        whenever { lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), any()) }
+        whenever { lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), any(), any()) }
             .thenReturn(Result.success(800uL))
 
         val toasts = collectToasts { sut.onConfirm() }

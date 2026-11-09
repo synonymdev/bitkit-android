@@ -619,6 +619,7 @@ class SparkExitRepo @Inject constructor(
                 address = address,
                 speed = TransactionSpeed.Fast,
                 feeRates = feeRates,
+                allowFallback = false,
             ).getOrThrow()
             _state.update { it.copy(pending = it.pending?.copy(savingsFeeRates = feeRates)) }
             val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats

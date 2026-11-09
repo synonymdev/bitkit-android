@@ -833,7 +833,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.loadQuote().getOrThrow()
         whenever(lightning.getFeeRates()).thenReturn(Result.failure(SparkExitError("no estimates")))
         // What the fee helper falls back to once it cannot price.
-        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.success(1_000uL))
         whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
 
@@ -847,10 +847,12 @@ class SparkExitRepoTest : BaseUnitTest() {
         val sut = quotedSut(FakeSparkExitRecovering())
         sut.loadQuote().getOrThrow()
         whenever(lightning.getFeeRates()).thenReturn(Result.success(rates))
-        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.success(300uL))
         whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
         sut.savingsFundingFee().getOrThrow()
+        // A placeholder fee would confirm a total savings can't pay: any pricing error fails instead.
+        verify(lightning).calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), eq(rates), eq(false))
 
         sut.start(fundFromSavings = true).getOrThrow()
         sut.onAppBackgrounded()

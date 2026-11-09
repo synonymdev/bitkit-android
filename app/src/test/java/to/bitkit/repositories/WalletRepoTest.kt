@@ -141,7 +141,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
         whenever(lightningRepo.nodeEventUpdates).thenReturn(MutableSharedFlow())
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
-        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull(), any()))
             .thenReturn(Result.success(SATS))
         whenever(lightningRepo.canReceive()).thenReturn(false)
         whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }

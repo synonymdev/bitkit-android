@@ -2200,6 +2200,8 @@ class LightningRepo @Inject constructor(
         speed: TransactionSpeed? = null,
         utxosToSpend: List<SpendableUtxo>? = null,
         feeRates: FeeRates? = null,
+        /** False when a placeholder fee would be shown as the real one: any error then fails the call. */
+        allowFallback: Boolean = true,
     ): Result<ULong> = withContext(bgDispatcher) {
         runCatching {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
@@ -2214,7 +2216,7 @@ class LightningRepo @Inject constructor(
             )
             return@runCatching fee
         }.recoverCatching {
-            if (it is CancellationException) throw it
+            if (it is CancellationException || !allowFallback) throw it
             val fallbackFee = 1000uL
             Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", it, context = TAG)
             return@recoverCatching fallbackFee
