@@ -1359,9 +1359,13 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
         requireWalletRestoreComplete()
-        // Spark invoices hold whole sats, so a sub-sat part rounds up rather than dropping the amount.
+        // An LNURL withdrawal is paid at exactly this amount, which a whole-sat Spark invoice can't hold unless it
+        // has no sub-sat part; the channels take such an amount when they can, else it is refused before the callback.
         val amountSats = (amountMsats.safe() + (MSATS_PER_SAT - 1uL).safe()) / MSATS_PER_SAT
         if (shouldReceiveWithSpark(amountSats)) {
+            if (amountMsats % MSATS_PER_SAT != 0uL) {
+                return@executeWhenNodeRunning Result.failure(SubSatAmountUnsupportedError(amountMsats))
+            }
             val invoiceSats = amountSats.takeIf { it > 0uL }
             return@executeWhenNodeRunning sparkRepo.createInvoice(invoiceSats, description, expirySeconds)
         }
@@ -3083,3 +3087,7 @@ sealed interface EarlierSend {
 
     data class Paid(override val paymentHash: String) : EarlierSend
 }
+
+/** Spark invoices hold whole sats, so an exact msat amount the channels can't receive has nowhere to go. */
+class SubSatAmountUnsupportedError(amountMsats: ULong) :
+    AppError("Spark can only receive whole sats, not '$amountMsats' msat, and the channels can't receive it")

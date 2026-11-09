@@ -225,6 +225,29 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a sub-sat withdrawal amount never gets a spark invoice for a different amount`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+
+        for (amountMsats in listOf(222_538uL, 999uL)) {
+            assertIs<SubSatAmountUnsupportedError>(sut.createInvoiceMsats(amountMsats, "withdraw").exceptionOrNull())
+        }
+
+        verify(sparkRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `a whole-sat withdrawal amount is received on spark at its exact amount`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canReceive()).thenReturn(true)
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success("spark-invoice"))
+
+        assertEquals("spark-invoice", sut.createInvoiceMsats(222_000uL, "withdraw").getOrThrow())
+
+        verify(sparkRepo).createInvoice(eq(222uL), eq("withdraw"), any())
+    }
+
+    @Test
     fun `node startup failures do not dispatch invoice payment`() = test {
         var dispatched = false
         val beforeSend: suspend () -> Boolean = {
