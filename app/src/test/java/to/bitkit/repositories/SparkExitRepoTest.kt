@@ -867,6 +867,60 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertTrue(ended.payHigherFee(option).isFailure)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a higher fee paid while the exit ends is watched until its outputs reach the address`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        val gate = CompletableDeferred<Unit>()
+        stubFunding {
+            gate.await()
+            Result.success(OnchainSendOutcome.Accepted("bump"))
+        }
+        var utxos = "[]"
+        val http = HttpClient(
+            MockEngine.create {
+                dispatcher = testDispatcher
+                addHandler { request ->
+                    val url = request.url.toString()
+                    when {
+                        url.endsWith("/address/$funding/utxo") -> respond(utxos)
+                        url.endsWith("/blocks/tip/height") -> respond("1000")
+                        url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
+                        url.endsWith("/tx/bump/hex") -> respond("02bump")
+                        else -> throw IOException("unreachable '$url'")
+                    }
+                }
+            },
+        ) { defaultRequest { contentType(ContentType.Application.Json) } }
+        val sdk = FakeSparkExitRecovering().apply {
+            checks += CheckRecoverFundsResponse(runningRecord().recovery!!, RecoveryVerdict.Done)
+        }
+        val sut = quotedSut(sdk, http)
+        sut.load().getOrThrow()
+
+        val payment = async { sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)) }
+        advanceUntilIdle()
+        // A tick ends the exit while savings sends, before any of the payment reached the address.
+        sut.tick().getOrThrow()
+        assertEquals(Phase.Done, sut.state.value.record?.phase)
+        gate.complete(Unit)
+        payment.await().getOrThrow()
+        advanceUntilIdle()
+
+        val watching = assertNotNull(store.load())
+        assertTrue(watching.needsDriving)
+        assertEquals("bump", watching.fundingPaymentTxid)
+        assertTrue(watching.leftover.isEmpty())
+
+        utxos = """[{"txid":"bump","vout":1,"value":6000,"status":{"confirmed":true}}]"""
+        sut.tick().getOrThrow()
+
+        val record = assertNotNull(store.load())
+        assertEquals(listOf(SparkExitRecord.Leftover("bump", 1u, 6_000uL)), record.leftover)
+        assertTrue(record.needsDriving)
+    }
+
     @Test
     fun `fee bump rates are priced without broadcasting, leaving out a rate the sdk refuses a leaf at`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))

@@ -556,12 +556,17 @@ class SparkExitRepo @Inject constructor(
                 return@withLock
             }
             if (!current.isActive) {
-                // The exit ended while savings paid: the payment is leftover the sweep sends back to savings.
-                Logger.warn("Sweeping a higher fee paid after the Spark exit ended", context = TAG)
-                val pending = txid?.let { listOf(SparkExitRecord.Leftover(it, 0u, option.extraSats)) }.orEmpty()
-                val swept = current.copy(leftover = current.leftover + pending, leftoverSweep = null)
-                saveRecord(swept)
-                _state.update { it.copy(record = swept) }
+                // The exit ended while savings paid: the payment is watched until its outputs reach the address, then
+                // joins the leftover the sweep sends back to savings.
+                val paid = txid ?: return@withLock
+                Logger.warn("Watching higher fee '$paid' paid after the Spark exit ended", context = TAG)
+                val watched = current.copy(
+                    fundingPaymentTxid = paid,
+                    fundingPaymentSeenAtHeight = null,
+                    fundingPaymentMissingSince = null,
+                )
+                saveRecord(watched)
+                _state.update { it.copy(record = watched) }
                 return@withLock
             }
             val bumped = current.applyFeeBump(option.rateSatPerVbyte, option.extraSats, txid)
