@@ -611,29 +611,53 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wallet upload retries after a client setup timeout`() = test {
+        assertSetupTimeoutRetries(BackupCategory.WALLET) { sut.triggerBackup(BackupCategory.WALLET) }
+        verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+    }
+
+    @Test
+    fun `USDT recovery upload retries the pending snapshot after a client setup timeout`() = test {
+        whenever { usdtRepo.backupSnapshot() }.thenReturn("pending-snapshot")
+        assertSetupTimeoutRetries(BackupCategory.USDT_RECOVERY) { sut.persistUsdtRecoveryBackup("pending-snapshot") }
+        val payload = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, payload.capture())
+        val backup = json.decodeFromString<UsdtRecoveryBackupV1>(payload.firstValue.decodeToString())
+        assertEquals("pending-snapshot", backup.usdtWallet)
+    }
+
+    @Test
     fun `cold explicit setup timeout keeps its retry without observation`() = test {
+        assertSetupTimeoutRetries(BackupCategory.SETTINGS) { sut.triggerBackup(BackupCategory.SETTINGS) }
+        verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), any())
+    }
+
+    private suspend fun TestScope.assertSetupTimeoutRetries(
+        category: BackupCategory,
+        upload: suspend () -> Result<Unit>,
+    ) {
         sut = createSut(dispatcher = StandardTestDispatcher(testScheduler))
         var setupAttempts = 0
-        val statuses = MutableStateFlow(mapOf(BackupCategory.SETTINGS to BackupItemStatus(required = 1_000)))
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
         stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
         whenever { vssBackupClient.setup(any()) }.doSuspendableAnswer {
             setupAttempts += 1
             if (setupAttempts == 1) runCatching { withTimeout(1) { awaitCancellation() } } else Result.success(Unit)
         }
         try {
-            val result = sut.triggerBackup(BackupCategory.SETTINGS)
+            val result = upload()
             assertTrue(result.exceptionOrNull()?.isTemporaryBackupFailure() == true, result.toString())
             verify(vssBackupClient, never()).putObject(any(), any())
-            assertTrue(statuses.value.getValue(BackupCategory.SETTINGS).isRequired)
+            assertTrue(statuses.value.getValue(category).isRequired)
             runCurrent()
             advanceTimeBy(10_000)
             runCurrent()
             verify(vssBackupClient, never()).putObject(any(), any())
+            verify(vssBackupClient, times(1)).setup(any())
             advanceTimeBy(5_000)
             runCurrent()
             verify(vssBackupClient, times(2)).setup(any())
-            verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), any())
-            assertFalse(statuses.value.getValue(BackupCategory.SETTINGS).isRequired)
+            assertFalse(statuses.value.getValue(category).isRequired)
         } finally {
             sut.reset()
         }

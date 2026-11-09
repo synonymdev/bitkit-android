@@ -28,7 +28,7 @@ class UsdtRecoveryBackupStore(
 ) {
     constructor(client: VssBackupClient) : this(
         put = { key, data ->
-            client.setup().getOrThrow()
+            client.ensureSetupForUpload()
             client.putObject(key, data).getOrThrow()
         },
         keys = {

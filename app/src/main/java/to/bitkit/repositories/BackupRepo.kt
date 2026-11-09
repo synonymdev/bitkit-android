@@ -12,7 +12,6 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
@@ -56,11 +55,13 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.backup.BackupClientSetupTimeout
 import to.bitkit.data.backup.UsdtRecoveryBackupStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.backup.VssStoreIdProvider
+import to.bitkit.data.backup.ensureSetupForUpload
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.hwWalletNames
 import to.bitkit.data.keychain.Keychain
@@ -830,11 +831,7 @@ class BackupRepo @Inject constructor(
             BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup(usdtSnapshot)
             else -> runSuspendCatching {
                 val data = getBackupDataBytes(category)
-                val setup = vssBackupClient.setup()
-                currentCoroutineContext().ensureActive()
-                setup.onFailure {
-                    if (it is TimeoutCancellationException) throw BackupClientSetupTimeout(it)
-                }.getOrThrow()
+                vssBackupClient.ensureSetupForUpload()
                 vssBackupClient.putObject(key = category.name, data = data).getOrThrow()
             }
         }
@@ -938,7 +935,7 @@ class BackupRepo @Inject constructor(
     private suspend fun uploadWalletBackup(): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
-            vssBackupClient.setup().getOrThrow()
+            vssBackupClient.ensureSetupForUpload()
             val data = getWalletBackupDataBytes()
             if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
             vssBackupClient.putObject(key = BackupCategory.WALLET.name, data = data).getOrThrow()
@@ -1698,8 +1695,6 @@ class BackupRepo @Inject constructor(
 }
 
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
-
-private class BackupClientSetupTimeout(cause: Throwable) : AppError("Backup client setup timed out", cause)
 
 private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
     "Failed to retain public address exclusion during restore",
