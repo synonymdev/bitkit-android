@@ -12362,6 +12362,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(before, effects.size, "the settlement belongs to the closed pending screen")
     }
 
+    @Test
+    fun `a journal that settles while the outcome is read still resolves the send`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val effects = uncertainContactSparkSend(leg, SparkWithdrawalOutcome.Unknown) {
+            sut.showSheet(Sheet.Send(SendRoute.Confirm))
+            sparkWithdrawalSettlements.emit(SparkWithdrawalSettlement(leg.endpoint.value, leg.deliveredSat, null))
+            // Reading the outcome suspends, so the settlement is handled before it returns.
+            yield()
+        }
+
+        assertIs<SendEffect.NavigateToError>(
+            effects.last(),
+            "the screen must not stay pending after the journal closed",
+        )
+    }
+
     private suspend fun TestScope.uncertainContactSparkSend(
         leg: ServiceRouteLeg,
         outcome: SparkWithdrawalOutcome,
