@@ -30,10 +30,39 @@ jobs:
   ui-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # The integration tests fund and mine on the local regtest stack started below; an E2E build
+    # points the wallet's electrum at it (Env.electrumUrlForNetwork). The ComposeUi suite needs neither.
+    env:
+      NEEDS_REGTEST: ${{ (inputs.suites || 'integration') != 'ComposeUi' }}
+      E2E: ${{ (inputs.suites || 'integration') != 'ComposeUi' }}
+      E2E_BACKEND: local
 
     steps:
+      # bitcoind RPC (43782) and electrs (60001) sit in Linux's ephemeral range, so an outbound
+      # connection made before `docker compose up` can take one and fail the bind.
+      - name: Reserve regtest host ports
+        if: env.NEEDS_REGTEST == 'true'
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=39388,43782,60001
+
       - name: Checkout the code
         uses: actions/checkout@v7
+
+      - name: Checkout bitkit-docker
+        if: env.NEEDS_REGTEST == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: synonymdev/bitkit-docker
+          ref: f5eae182db9ddecd61a0f1b5e9f48aee283bb3dc
+          path: bitkit-docker
+
+      - name: Start local regtest
+        if: env.NEEDS_REGTEST == 'true'
+        working-directory: bitkit-docker
+        timeout-minutes: 10
+        run: |
+          docker compose up -d bitcoind bitcoinsetup electrs
+          until docker exec bitcoin bitcoin-cli -regtest -rpcport=43782 -rpcuser=polaruser -rpcpassword=polarpass -generate 101; do sleep 2; done
+          until python3 -c 'import socket; s = socket.create_connection(("127.0.0.1", 60001), 10); s.sendall(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"blockchain.headers.subscribe\",\"params\":[]}\n"); assert b"height" in s.recv(4096)'; do sleep 5; done
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6

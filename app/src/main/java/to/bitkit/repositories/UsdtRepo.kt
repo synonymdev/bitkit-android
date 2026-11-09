@@ -55,6 +55,9 @@ class UsdtRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "UsdtRepo"
+
+        /** Allows for block timestamps that trail the device clock. */
+        private val RECEIPT_CLOCK_MARGIN = 60.seconds
     }
 
     private val displayCacheNetwork = MessageDigest.getInstance("SHA-256")
@@ -65,6 +68,20 @@ class UsdtRepo @Inject constructor(
 
     private var nextRefresh = 0L
     private var rateLimitedUntil = 0L
+
+    /**
+     * Before the first complete history sync, a confirmed receipt counts as new only if its block
+     * time is after this point (first refresh of a wallet, or the start of a restore). Older entries
+     * are history the sync is still discovering.
+     */
+    private var receiptsSince = receiptBaseline()
+    private val announcedReceiptIds = mutableSetOf<String>()
+
+    /** Receipts saved before this launch were already celebrated, so the first refresh marks them announced. */
+    private var seedAnnouncedReceipts = true
+
+    /** Set when a restore starts, so the window survives a refresh that first sets the restored address. */
+    private var restoreReceiptsSince: ULong? = null
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
     val recoveryGeneration: Long get() = service.recoveryGeneration
@@ -85,6 +102,7 @@ class UsdtRepo @Inject constructor(
                     val address = wallet.receiveAddress()
                     if (_state.value.address != address) {
                         _state.update { UsdtWalletState(address = address, refreshing = true) }
+                        resetReceiptBaseline()
                     }
                     if (_state.value.balance == null) {
                         runSuspendCatching { cacheStore.data.first().usdtDisplayBalance }
@@ -96,6 +114,10 @@ class UsdtRepo @Inject constructor(
                     }
                     val previous = _state.value.transfers.takeIf { _state.value.historyComplete }
                     val saved = wallet.history().toImmutableList()
+                    if (seedAnnouncedReceipts) {
+                        announcedReceiptIds += saved.receiptIds()
+                        seedAnnouncedReceipts = false
+                    }
                     _state.update { it.copy(receiveUri = wallet.receiveUri(), transfers = saved) }
                     val settlement = runSuspendCatching {
                         val balance = wallet.balance()
@@ -131,13 +153,27 @@ class UsdtRepo @Inject constructor(
         }
     }
 
+    private fun receiptBaseline() = (clock.now() - RECEIPT_CLOCK_MARGIN).epochSeconds.coerceAtLeast(0).toULong()
+
+    private fun resetReceiptBaseline() {
+        receiptsSince = restoreReceiptsSince ?: receiptBaseline()
+        restoreReceiptsSince = null
+        announcedReceiptIds.clear()
+        seedAnnouncedReceipts = true
+    }
+
+    private fun List<UsdtTransfer>.receiptIds() =
+        filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }.map { it.id }.toSet()
+
     private fun announceNewReceipts(previous: List<UsdtTransfer>?, current: List<UsdtTransfer>) {
-        if (previous == null) return
-        val knownIds = previous.filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }
-            .map { it.id }.toSet()
+        val knownIds = previous.orEmpty().receiptIds()
         val received = current.filter {
-            it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u && it.id !in knownIds
+            it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u &&
+                it.id !in knownIds && it.id !in announcedReceiptIds &&
+                (previous != null || it.timestamp >= receiptsSince)
         }
+        if (received.isEmpty()) return
+        announcedReceiptIds += received.map { it.id }
         _state.update {
             it.copy(
                 pendingReceipts = (it.pendingReceipts + received).distinctBy { receipt -> receipt.id }.toImmutableList()
@@ -185,7 +221,14 @@ class UsdtRepo @Inject constructor(
 
     val isRecoveryRestorePending: Boolean get() = service.isRecoveryRestorePending
 
-    suspend fun waitForRecoveryIdle() = mutex.withLock { }
+    /**
+     * Waits for wallet work to finish and starts the receipt window, so a receipt that confirms while
+     * the backups download still celebrates.
+     */
+    suspend fun prepareForRecoveryRestore() = mutex.withLock {
+        receiptsSince = receiptBaseline()
+        restoreReceiptsSince = receiptsSince
+    }
 
     suspend fun retryTransfer(id: String): Result<Unit> = paymentOperation {
         val wallet = wallet()
@@ -202,15 +245,20 @@ class UsdtRepo @Inject constructor(
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
                 clearDisplayBalance()
+                restoreReceiptsSince = null
+                val address = wallet.receiveAddress()
+                val restored = wallet.history().toImmutableList()
+                // Restored history is not new. Queued receipts of the same wallet still celebrate.
+                announcedReceiptIds += restored.receiptIds()
                 _state.update {
                     it.copy(
-                        address = wallet.receiveAddress(),
+                        address = address,
                         balance = null,
                         cachedBalance = null,
                         balanceIsStale = true,
-                        transfers = wallet.history().toImmutableList(),
+                        transfers = restored,
                         historyComplete = false,
-                        pendingReceipts = persistentListOf(),
+                        pendingReceipts = if (it.address == address) it.pendingReceipts else persistentListOf(),
                         pendingDepositIds = persistentSetOf(),
                     )
                 }
@@ -248,6 +296,7 @@ class UsdtRepo @Inject constructor(
             clearCredentials()
             runSuspendCatching { service.wipe() }.also {
                 _state.update { UsdtWalletState() }
+                restoreReceiptsSince = null
                 nextRefresh = 0L
                 rateLimitedUntil = 0L
             }
