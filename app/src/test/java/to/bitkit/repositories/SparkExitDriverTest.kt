@@ -1158,6 +1158,50 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a first build of only failed cooperative leaves keeps the leaf it skipped`() = test {
+        sdk.preparedResponse = SparkExitFixtures.prepared(
+            funding = null,
+            skipped = listOf(SkippedLeaf("leaf-2", 50_000uL, SkippedLeafReason.Unverified)),
+        )
+        val failed = listOf(
+            CooperativeRecoveryFailure("leaf-1", "o", 0u, CooperativeRecoveryError.OperatorsUnavailable("down")),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = failed)
+        val start = SparkExitFixtures.record(Phase.AwaitingFunding(0uL)).copy(leafIds = listOf("leaf-1", "leaf-2"))
+
+        val record = driver(tip = 1_000u).tick(start)
+
+        assertEquals(listOf("leaf-2"), record.waitingLeafIds)
+    }
+
+    @Test
+    fun `a failed-leaf retry that builds one leaf and skips another keeps the skipped one`() = test {
+        val coop2 = CooperativeRecoveryFailure("coop-2", "o", 1u, CooperativeRecoveryError.OperatorsUnavailable("down"))
+        val done = SparkExitFixtures.recovery(emptyList(), failed = listOf(operatorsDown, coop2))
+        var record = running(done).copy(leafIds = listOf("coop-1", "coop-2"))
+        sdk.preparedResponse = coopLeaf(16_384uL).copy(
+            skipped = listOf(SkippedLeaf("coop-2", 8_192uL, SkippedLeafReason.Unverified)),
+        )
+        val coop = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("coop", kind = RecoveryTxKind.COOPERATIVE)))
+        sdk.builds += coop
+
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(listOf("coop-2"), record.waitingLeafIds)
+
+        val landed = coop.copy(
+            transactions = coop.transactions.map { it.copy(status = ExitTransactionStatus.Confirmed(1_001u)) },
+        )
+        sdk.checks += check(landed, RecoveryVerdict.Done)
+        sdk.preparedResponse = coopLeaf(0uL).copy(
+            leaves = emptyList(),
+            skipped = listOf(SkippedLeaf("coop-2", 8_192uL, SkippedLeafReason.Unverified)),
+        )
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(Phase.Running, record.phase, "coop-2 may still move")
+        assertEquals(listOf("coop-2"), (sdk.prepareRequests.last().selection as ExitLeafSelection.Specific).leafIds)
+    }
+
+    @Test
     fun `a leaf skipped while another builds is let go after about a week`() = test {
         var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.FundsNotFound))
         sdk.preparedResponse = sdk.preparedResponse.copy(leaves = emptyList())

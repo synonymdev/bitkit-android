@@ -247,6 +247,7 @@ class SparkExitDriver(
             // week like any failed leaf. A rebuild like it keeps the recovery it has and tries again on the next tick.
             if (built.failed.isNotEmpty() && record.recovery == null) {
                 val adopted = record.adopt(built, nowMillis())
+                    .copy(waitingLeafIds = waitingLeafIds(record, prepared.skipped, stopped))
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
                 return adopted
@@ -526,6 +527,7 @@ class SparkExitDriver(
         }
         if (since != null && !SparkExitMath.isRetryDue(since, record.failedLeafRetriedAt, height)) return record
         record = record.copy(failedLeafRetrySince = since ?: height, failedLeafRetriedAt = height)
+        var skipped = emptyList<String>()
         val retried = runSuspendCatching {
             record = withExitState(record, sdk)
             val prepared = sdk.prepare(prepareRequest(record, ExitLeafSelection.Specific(failedIds)))
@@ -537,6 +539,9 @@ class SparkExitDriver(
                 failedLeaves = record.failedLeaves.map { it.copy(valueSats = values[it.leafId] ?: it.valueSats) },
             )
             if (prepared.leaves.isEmpty()) return@runSuspendCatching null
+            // A failed leaf the prepare skipped while it may still move is kept and tried again on its own.
+            val stopped = prepared.exitChainState.stoppedLeafIds.toSet()
+            skipped = waitingLeafIds(record.seeStopped(stopped), prepared.skipped, stopped)
             val needsFunding = prepared.funding != null
             sdk.recover(
                 RecoverFundsRequest(prepared, if (needsFunding) record.fundingInputs else emptyList()),
@@ -545,6 +550,7 @@ class SparkExitDriver(
         }.onFailure { Logger.warn("Failed to retry Spark exit leaves '$failedIds'", it, context = TAG) }.getOrNull()
         if (retried == null || retried.transactions.isEmpty()) return record
         val adopted = record.adopt(retried, nowMillis())
+            .copy(waitingLeafIds = (record.waitingLeafIds + skipped).distinct())
         save(adopted)
         Logger.info("Built a recovery of Spark exit leaves '$failedIds' as '${adopted.generation}'", context = TAG)
         return broadcastReady(adopted)
