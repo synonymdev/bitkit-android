@@ -1473,6 +1473,23 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a host's refusal cannot push the leftover sweep above the network's next-block rate`() = test {
+        // A host answers a 1 sat/vB sweep with an absurd ask: 22,000 sats for a ~110 vB transaction.
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 110 < 22000")
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        record = driver(tip = 1_000u).tick(record)
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        record = driver(tip = 1_001u).tick(record)
+
+        val sent = assertNotNull(record.leftoverSweep)
+        assertTrue(
+            (sent.feeRateSatPerVbyte ?: 0uL) <= chain.nextBlockRate!!,
+            "sweep rate '${sent.feeRateSatPerVbyte}' sat/vB, next block '${chain.nextBlockRate}', " +
+                "leftover 25000 sats, swept '${sent.valueSats}' sats",
+        )
+    }
+
+    @Test
     fun `a leftover sweep refused for another reason is final`() = test {
         chain.outcome = SparkExitBroadcastOutcome.Rejected("bad-txns-nonstandard-inputs")
         var record = driver(tip = 1_000u).tick(sweepDone())

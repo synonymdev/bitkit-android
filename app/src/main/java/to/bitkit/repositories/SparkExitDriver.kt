@@ -656,7 +656,11 @@ class SparkExitDriver(
             val total = all.fold(0uL) { sum, input -> sum.safe() + input.valueSats.safe() }
             return current.copy(leftoverSweep = SparkExitRecord.LeftoverSweep(null, null, total, isDustKept = true))
         }
-        val floor = built?.takeIf { it.isWaitingForFees }?.refusedFeeRate ?: 0uL
+        val refused = built?.takeIf { it.isWaitingForFees }?.refusedFeeRate ?: 0uL
+        // A refusal raises the rate up to the next block's or the exit's, never above: a node asking more is refused
+        // again, and the sweep waits a block for fees to drop.
+        val cap = if (refused > 0uL) maxOf(nextBlockRate() ?: 0uL, record.feeRateSatPerVbyte) else 0uL
+        val floor = minOf(refused, cap)
         val rate = maxOf(SparkExitMath.sweepFeeRate(economyRate(), record.feeRateSatPerVbyte), floor)
         val inputs = SparkExitSweep.worthSweeping(
             confirmed.map { SparkExitSweep.Input(it.txid, it.vout, it.value) },
@@ -717,6 +721,10 @@ class SparkExitDriver(
             ),
         )
     }
+
+    private suspend fun nextBlockRate(): ULong? = runSuspendCatching { chain.nextBlockFeeRate() }
+        .onFailure { Logger.warn("Failed to read the next-block fee rate for the leftover sweep", it, context = TAG) }
+        .getOrNull()
 
     private suspend fun economyRate(): ULong? = runSuspendCatching { chain.economyFeeRate() }
         .onFailure { Logger.warn("Failed to read the economy fee rate for the leftover sweep", it, context = TAG) }
