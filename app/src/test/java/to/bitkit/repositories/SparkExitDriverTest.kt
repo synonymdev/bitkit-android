@@ -1202,6 +1202,19 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a waiting leaf let go after a week adds to the leaves that stayed on spark`() = test {
+        var record = driver(tip = 1_000u).tick(
+            partialBuild(SkippedLeafReason.FundsNotFound).copy(skippedLeafCount = 13),
+        )
+        sdk.preparedResponse = sdk.preparedResponse.copy(leaves = emptyList())
+        record = driver(tip = 1_000u).tick(record)
+        record = driver(tip = 2_008u).tick(record)
+
+        assertEquals(Phase.Done, record.phase)
+        assertEquals(14, record.skippedLeafCount)
+    }
+
+    @Test
     fun `a leaf skipped while another builds is let go after about a week`() = test {
         var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.FundsNotFound))
         sdk.preparedResponse = sdk.preparedResponse.copy(leaves = emptyList())

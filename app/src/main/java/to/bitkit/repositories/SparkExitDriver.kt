@@ -636,7 +636,8 @@ class SparkExitDriver(
     private fun SparkExitRecord.ended() = copy(
         phase = SparkExitRecord.Phase.Done,
         failedLeaves = if (isFailedLeavesReleased) failedLeaves else emptyList(),
-        skippedLeafCount = maxOf(skippedLeafCount, waitingLeafIds.size),
+        // The quote's skips never were exit leaves: the leaves let go here add to them.
+        skippedLeafCount = skippedLeafCount + waitingLeafIds.size,
         waitingLeafIds = emptyList(),
         retrySince = null,
         retriedAt = null,
