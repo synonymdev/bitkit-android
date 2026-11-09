@@ -611,6 +611,24 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a failed-leaf retry with its own steps still to confirm is not waiting only on the operators`() {
+        val failed = listOf(
+            CooperativeRecoveryFailure("coop-2", "o", 0u, CooperativeRecoveryError.OperatorsUnavailable("down")),
+        )
+        val live = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
+            .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("c1")), failed = failed), 0L)
+            .copy(failedLeafRetrySince = 1_000u)
+        assertFalse(live.isWaitingForOperators, "c1 still has a deadline")
+
+        val landed = live.copy(
+            recovery = live.recovery?.copy(
+                transactions = listOf(SparkExitFixtures.tx("c1", status = ExitTransactionStatus.Confirmed(1_001u))),
+            ),
+        )
+        assertTrue(landed.isWaitingForOperators)
+    }
+
+    @Test
     fun `a new generation keeps the sweep that landed before it`() {
         val swept = SparkExitFixtures.recovery(
             listOf(

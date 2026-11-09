@@ -470,9 +470,13 @@ data class SparkExitRecord(
         get() = isRetryingFailedLeaves ||
             (isActive && (recovery?.failed?.isNotEmpty() == true || waitingLeafIds.isNotEmpty()))
 
-    /** While retrying, the current recovery still lists leaves the operators have not co-signed. */
+    /**
+     * While retrying, the current recovery still lists leaves the operators have not co-signed and has no step of its
+     * own left to confirm: one that does keeps its deadline.
+     */
     val isWaitingForOperators: Boolean
-        get() = isRetryingFailedLeaves && recovery?.failed?.isNotEmpty() == true
+        get() = isRetryingFailedLeaves && recovery?.failed?.isNotEmpty() == true &&
+            recovery.transactions.all { it.status is ExitTransactionStatus.Confirmed }
 
     val failedLeafSats: ULong get() = failedLeaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
 
