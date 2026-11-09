@@ -155,9 +155,10 @@ class SparkService @Inject constructor(
     /**
      * Connects the Spark wallet. While [isExiting], leaf optimization stays off: it swaps leaves with the operators,
      * which would hand the leaves an emergency exit is spending to someone else, whose refunds then confirm first.
+     * Returns true, or false when it was already connected.
      */
-    suspend fun connect(walletIndex: Int, isExiting: Boolean = false) = mutex.withLock {
-        if (sdk != null) return@withLock
+    suspend fun connect(walletIndex: Int, isExiting: Boolean = false): Boolean = mutex.withLock {
+        if (sdk != null) return@withLock false
         if (isWiping) throw SparkError.WipeInProgress()
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
@@ -180,6 +181,7 @@ class SparkService @Inject constructor(
         sdk = connected
         val chain = chainServiceUrl ?: "default"
         Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
+        true
     }
 
     suspend fun disconnect() = mutex.withLock {
