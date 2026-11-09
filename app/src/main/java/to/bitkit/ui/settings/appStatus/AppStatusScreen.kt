@@ -63,6 +63,7 @@ fun AppStatusScreen(
         onElectrumClick = { navController.navigateTo(Routes.ElectrumConfig) },
         onNodeClick = { navController.navigateTo(Routes.NodeInfo) },
         onChannelsClick = { navController.navigateTo(Routes.LightningConnections) },
+        onSparkClick = { navController.navigateTo(Routes.SparkDetail) },
         onBackupClick = { navController.navigateTo(Routes.BackupSettings) },
     )
 }
@@ -75,6 +76,7 @@ private fun Content(
     onElectrumClick: () -> Unit = {},
     onNodeClick: () -> Unit = {},
     onChannelsClick: () -> Unit = {},
+    onSparkClick: () -> Unit = {},
     onBackupClick: () -> Unit = {},
 ) {
     ScreenColumn {
@@ -142,16 +144,40 @@ private fun Content(
                 statusUi = StatusUi(
                     id = "lightning_connection",
                     title = stringResource(R.string.settings__status__lightning_connection__title),
-                    subtitle = when (uiState.health.channels) {
-                        HealthState.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
-                        HealthState.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
-                        HealthState.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
+                    subtitle = when {
+                        uiState.health.isLightningViaSpark ->
+                            stringResource(R.string.settings__status__lightning_connection__spark)
+
+                        uiState.health.channels == HealthState.READY ->
+                            stringResource(R.string.settings__status__lightning_connection__ready)
+
+                        uiState.health.channels == HealthState.PENDING ->
+                            stringResource(R.string.settings__status__lightning_connection__pending)
+
+                        else -> stringResource(R.string.settings__status__lightning_connection__error)
                     },
                     iconRes = R.drawable.ic_lightning,
                     state = uiState.health.channels,
                 ),
                 onClick = onChannelsClick,
             )
+
+            uiState.health.spark?.let { sparkHealth ->
+                StatusItem(
+                    statusUi = StatusUi(
+                        id = "spark",
+                        title = stringResource(R.string.settings__status__spark__title),
+                        subtitle = when (sparkHealth) {
+                            HealthState.READY -> stringResource(R.string.settings__status__spark__ready)
+                            HealthState.PENDING -> stringResource(R.string.settings__status__spark__pending)
+                            HealthState.ERROR -> stringResource(R.string.settings__status__spark__error)
+                        },
+                        iconRes = R.drawable.ic_asterisk,
+                        state = sparkHealth,
+                    ),
+                    onClick = onSparkClick,
+                )
+            }
 
             StatusItem(
                 statusUi = StatusUi(
@@ -257,7 +283,9 @@ private fun Preview() {
                     internet = HealthState.PENDING,
                     electrum = HealthState.READY,
                     node = HealthState.READY,
-                    channels = HealthState.PENDING,
+                    channels = HealthState.READY,
+                    isLightningViaSpark = true,
+                    spark = HealthState.READY,
                     backups = HealthState.READY,
                 ),
                 backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),

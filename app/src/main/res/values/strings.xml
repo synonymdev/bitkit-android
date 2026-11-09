@@ -1054,11 +1054,16 @@
     <string name="settings__status__lightning_connection__error">No open connections</string>
     <string name="settings__status__lightning_connection__pending">Opening...</string>
     <string name="settings__status__lightning_connection__ready">Open</string>
+    <string name="settings__status__lightning_connection__spark">Using Spark</string>
     <string name="settings__status__lightning_connection__title">Lightning Connection</string>
     <string name="settings__status__lightning_node__error">Could not initiate</string>
     <string name="settings__status__lightning_node__pending">Syncing...</string>
     <string name="settings__status__lightning_node__ready">Synced</string>
     <string name="settings__status__lightning_node__title">Lightning Node</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Connecting...</string>
+    <string name="settings__status__spark__ready">Connected</string>
+    <string name="settings__status__spark__title">Spark</string>
     <string name="settings__status__title">App Status</string>
     <string name="settings__support__help">Help Center</string>
     <string name="settings__support__label_address">Email address</string>
