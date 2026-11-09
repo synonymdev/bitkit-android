@@ -56,9 +56,11 @@ import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -1383,13 +1385,16 @@ class LightningRepo @Inject constructor(
 
     /** Pays with Spark when no channel has the outbound capacity for the invoice amount. */
     private fun shouldPayWithSpark(bolt11: String, sats: ULong?): Boolean {
-        val amountSats = sats ?: runCatching { Bolt11Invoice.fromStr(bolt11).amountMilliSatoshis() }.getOrNull()
-            ?.let { it / MSATS_PER_SAT } ?: return false
+        val amountSats = invoiceAmountSats(bolt11, sats) ?: return false
         val state = _lightningState.value
         val ldkCanSend = state.nodeLifecycleState.canRun() &&
             state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
         return !ldkCanSend && sparkRepo.canSend(amountSats)
     }
+
+    private fun invoiceAmountSats(bolt11: String, sats: ULong?): ULong? =
+        sats ?: runCatching { Bolt11Invoice.fromStr(bolt11).amountMilliSatoshis() }.getOrNull()
+            ?.let { it / MSATS_PER_SAT }
 
     suspend fun fetchLnurlInvoice(
         data: LnurlPayData,
@@ -1485,23 +1490,51 @@ class LightningRepo @Inject constructor(
         maxTotalRoutingFeeMsat: ULong?,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
+        // The rail is picked again on every attempt, so each one checks the other holds no live send of the invoice.
+        val paymentHash = runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
+            earlierNodeSend(bolt11, paymentHash)?.let { return it.toResult() }
             val authorizeSend: suspend () -> Boolean = {
                 onBeforeSend().also { if (it) requireWalletRestoreComplete() }
             }
-            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, authorizeSend)
+            // Without a caller's limit Spark keeps to the node's default, so a re-quote cannot raise the fee past it.
+            val maxTotalFeeMsat = maxTotalRoutingFeeMsat ?: invoiceAmountSats(bolt11, sats)?.let {
+                (it.safe() * MSATS_PER_SAT.safe() / DEFAULT_ROUTING_FEE_DIVISOR).safe() +
+                    DEFAULT_ROUTING_FEE_BASE_MSAT.safe()
+            }
+            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalFeeMsat, authorizeSend)
                 .onSuccess { recordSendRail(it, LightningRail.Spark) }
                 .onFailure {
                     if (it is PaymentPendingException) recordSendRail(it.paymentHash, LightningRail.Spark)
                 }
         }
-        return payInvoiceWithLdk(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
+        return payInvoiceWithLdk(bolt11, sats, paymentHash, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
+    }
+
+    private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
+        val send = listPaymentsOrNull()?.firstOrNull {
+            val kind = it.kind as? PaymentKind.Bolt11 ?: return@firstOrNull false
+            it.direction == PaymentDirection.OUTBOUND &&
+                (kind.bolt11.equals(bolt11, ignoreCase = true) || kind.hash.equals(paymentHash, ignoreCase = true))
+        } ?: return null
+        val hash = (send.kind as PaymentKind.Bolt11).hash
+        return when (send.status) {
+            PaymentStatus.PENDING -> EarlierSend.Pending(hash)
+            PaymentStatus.SUCCEEDED -> EarlierSend.Paid(hash)
+            PaymentStatus.FAILED -> null
+        }
+    }
+
+    private fun EarlierSend.toResult(): Result<PaymentId> = when (this) {
+        is EarlierSend.Pending -> Result.failure(PaymentPendingException(paymentHash))
+        is EarlierSend.Paid -> Result.success(paymentHash)
     }
 
     private suspend fun payInvoiceWithLdk(
         bolt11: String,
         sats: ULong?,
+        paymentHash: String?,
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong?,
         onBeforeSend: suspend () -> Boolean,
@@ -1509,6 +1542,7 @@ class LightningRepo @Inject constructor(
         requireWalletRestoreComplete()
         waitForUsableChannels()
         requireWalletRestoreComplete()
+        sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
@@ -2814,6 +2848,12 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val MSATS_PER_SAT = 1_000uL
 
+        /** LDK's default routing fee limit is 1% of the amount, this divisor, plus [DEFAULT_ROUTING_FEE_BASE_MSAT]. */
+        private const val DEFAULT_ROUTING_FEE_DIVISOR = 100uL
+
+        /** The flat 50 sats in LDK's default routing fee limit. */
+        private const val DEFAULT_ROUTING_FEE_BASE_MSAT = 50_000uL
+
         /** Inbound the node's ready channels need before an amountless contact endpoint goes to the node, not Spark. */
         private const val AMOUNTLESS_NODE_INBOUND_SATS = 1_000_000uL
 
@@ -3019,3 +3059,12 @@ internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong, requestedSyncSu
 
 /** The Lightning rail a send went out on. */
 enum class LightningRail { Ldk, Spark }
+
+/** A pending or paid send of an invoice on one rail, which a retry routed to the other must not repeat. */
+sealed interface EarlierSend {
+    val paymentHash: String
+
+    data class Pending(override val paymentHash: String) : EarlierSend
+
+    data class Paid(override val paymentHash: String) : EarlierSend
+}

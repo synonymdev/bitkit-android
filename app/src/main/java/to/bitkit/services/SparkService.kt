@@ -143,8 +143,9 @@ class SparkService @Inject constructor(
      */
     val prefersSpark: Boolean get() = Env.network == Network.REGTEST
 
-    suspend fun connect(walletIndex: Int) = mutex.withLock {
-        if (sdk != null) return@withLock
+    /** Connects the SDK and returns true, or false when it was already connected. */
+    suspend fun connect(walletIndex: Int): Boolean = mutex.withLock {
+        if (sdk != null) return@withLock false
         if (isWiping) throw SparkError.WipeInProgress()
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
@@ -166,6 +167,7 @@ class SparkService @Inject constructor(
         )
         sdk = connected
         Logger.info("Connected Spark wallet on '$network' with chain '${chainServiceUrl ?: "default"}'", context = TAG)
+        true
     }
 
     suspend fun disconnect() = mutex.withLock {
