@@ -47,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: 18b041cfae190dbf680b8125d5042f9063b7882a
+          ref: d28d15c54200679d2abd3c38a8a8d04068a14d77
 
       - name: Setup Java
         uses: actions/setup-java@v6
