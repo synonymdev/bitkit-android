@@ -16826,7 +16826,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.addTagToSelected("rent")
             confirmCurrentPayment()
             assertEquals(SendEffect.PaymentSuccess, awaitItem())
-            assertEquals(SWAP_CLAIM_TXID, sut.successSendUiState.value.paymentHashOrTxId)
+            assertEquals(SWAP_HOLD_HASH, sut.successSendUiState.value.paymentHashOrTxId)
+            assertEquals(NewTransactionSheetType.LIGHTNING, sut.successSendUiState.value.type)
 
             emitNodeEvent(
                 Event.PaymentSuccessful(
@@ -16838,8 +16839,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             advanceUntilIdle()
             expectNoEvents()
-            assertEquals(SWAP_CLAIM_TXID, sut.successSendUiState.value.paymentHashOrTxId)
+            assertEquals(SWAP_HOLD_HASH, sut.successSendUiState.value.paymentHashOrTxId)
         }
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
         verify(preActivityMetadataRepo).savePreActivityMetadata(
             id = eq(SWAP_HOLD_HASH),
             paymentHash = eq(SWAP_HOLD_HASH),
@@ -16851,6 +16858,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             isTransfer = any(),
             channelId = anyOrNull(),
             walletId = any(),
+        )
+    }
+
+    @Test
+    fun `swap route pairs the address with the method of the endpoint it came from`() = test {
+        val taprootAddress = "bcrt1ptaproot"
+        whenever(coreService.decode(taprootAddress)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(taprootAddress, 0u, null, null, null)),
+        )
+        openSwapRoutedContactPayment(
+            endpoints = listOf(
+                Endpoint(MethodId.P2tr, taprootAddress, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+            ),
+        )
+
+        assertEquals(
+            PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS),
+            sut.sendUiState.value.paykitSwapRoute?.endpoint,
         )
     }
 
@@ -16884,6 +16910,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         assertNull(sut.currentSheet.value)
         verify(pubkySwapsRouteRepo, never()).awaitClaim(any(), any())
+    }
+
+    @Test
+    fun `swap route hold payment failure event stops awaiting the claim`() = test {
+        var claimCancelled = false
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer {
+            try {
+                awaitCancellation()
+            } finally {
+                claimCancelled = true
+            }
+        }
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmCurrentPayment()
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = SWAP_HOLD_HASH,
+                    paymentHash = SWAP_HOLD_HASH,
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        assertTrue(claimCancelled)
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
     }
 
     @Test
@@ -16979,6 +17039,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private suspend fun TestScope.openSwapRoutedContactPayment(
         quote: Result<PaykitRoute> = Result.success(PaykitRoute.Swap(swapRouteQuote())),
+        endpoints: List<Endpoint> = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
     ) {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
         whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(quote)
@@ -16992,7 +17053,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.openContactPayment(
             paymentRequest = REGTEST_ADDRESS,
             publicKey = testPublicKey,
-            endpoints = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
+            endpoints = endpoints,
         )
         advanceUntilIdle()
         sut.setSendEvent(SendEvent.AmountChange(SWAP_DELIVERED_SATS))

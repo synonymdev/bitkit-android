@@ -577,12 +577,17 @@ class WalletViewModel @Inject constructor(
     private fun restorePubkySwaps() {
         if (!pubkySwapsRouteRepo.isEnabled) return
         viewModelScope.launch(bgDispatcher) {
-            val restored = pubkySwapsRouteRepo.restoreSwaps().getOrElse {
+            val swaps = pubkySwapsRouteRepo.restoreSwaps().getOrElse {
                 Logger.warn("Failed to restore Pubky Swaps routes", it, context = TAG)
                 return@launch
             }
-            Logger.info("Restored '${restored.size}' Pubky Swaps routes", context = TAG)
-            restored.forEach { swapId ->
+            Logger.info(
+                "Restored '${swaps.restored.size}' Pubky Swaps routes, '${swaps.known.size}' known",
+                context = TAG,
+            )
+            // A known swap keeps the destination it was committed with, such as the contact, so it is driven silently.
+            swaps.known.forEach { launch { pubkySwapsRouteRepo.awaitClaim(it) } }
+            swaps.restored.forEach { swapId ->
                 launch {
                     pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
                         // The claim also opens the received sheet above the toasts: stay until dismissed so the user

@@ -13,14 +13,16 @@ import com.synonym.bitkitcore.pubkySwapsRestore
 import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.async.appScope
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -51,7 +53,15 @@ class PubkySwapsRouteRepo @Inject constructor(
         private const val CLAIM_FEE_RATE_SAT_VB = 2uL
         private val POLL_INTERVAL = 2.seconds
         private val CLAIM_TIMEOUT = 10.minutes
+
+        /** How often a broadcast claim is advanced, so bitkit-core rebroadcasts it until it confirms. */
+        private val CONFIRMATION_POLL_INTERVAL = 30.seconds
+
+        /** How long a broadcast claim is advanced in the background before polling stops. */
+        private val CONFIRMATION_TIMEOUT = 60.minutes
     }
+
+    private val scope = appScope(ioDispatcher, TAG)
 
     val isEnabled: Boolean get() = Env.isPubkySwapsRouteEnabled
 
@@ -87,10 +97,10 @@ class PubkySwapsRouteRepo @Inject constructor(
     /**
      * Rebuilds the swaps this wallet started from each provider's listing, after a restore from the seed. The listing
      * does not carry the contact's address, so a restored swap claims to a fresh Savings address. bitkit-core checks
-     * each listed lockup against the Lightning payment this node sent for its hash. Returns the ids to drive: the
-     * swaps restored now and those already on record.
+     * each listed lockup against the Lightning payment this node sent for its hash. Swaps already on record keep the
+     * destination they were committed with.
      */
-    suspend fun restoreSwaps(): Result<List<String>> = withSecrets { mnemonic, passphrase ->
+    suspend fun restoreSwaps(): Result<RestoredPubkySwaps> = withSecrets { mnemonic, passphrase ->
         val payoutAddress = lightningRepo.newAddress().getOrThrow()
         val report = pubkySwapsRestore(
             providers = candidates(),
@@ -105,7 +115,7 @@ class PubkySwapsRouteRepo @Inject constructor(
         if (report.incompleteProviders.isNotEmpty()) {
             Logger.warn("Swap lists incomplete from '${report.incompleteProviders}'", context = TAG)
         }
-        report.restored + report.known
+        RestoredPubkySwaps(restored = report.restored, known = report.known)
     }
 
     /** The Lightning payments this node sent, pending or settled, by hash and the amount paid to the payee. */
@@ -124,27 +134,58 @@ class PubkySwapsRouteRepo @Inject constructor(
         }
 
     /** Providers come from the user's own graph: every contact is asked for its swap offer. */
-    private fun candidates(): List<String> = pubkyRepo.contacts.value.map { it.publicKey } + Env.pubkySwapsProviders
+    private fun candidates(): List<String> =
+        (Env.pubkySwapsProviders + pubkyRepo.contacts.value.map { it.publicKey }).distinct()
 
     suspend fun commit(quoteId: String): Result<PubkySwapRoutePayment> = withSecrets { mnemonic, passphrase ->
         pubkySwapsCommitRoute(quoteId, Env.electrumServerUrl, mnemonic, passphrase)
     }
 
-    /** Advance the swap until bitkit-core claims the lockup to the contact, returning the claim txid. */
+    /**
+     * Advance the swap until bitkit-core broadcasts the claim to the contact, returning the claim txid. The provider
+     * settles the hold invoice once it sees the claim, so the payment is done; the claim is still advanced in the
+     * background so bitkit-core rebroadcasts it until it confirms.
+     */
     suspend fun awaitClaim(swapId: String, timeout: Duration = CLAIM_TIMEOUT): Result<String> {
-        val deadline = nowMillis() + timeout.inWholeMilliseconds
+        var lastFailure: Throwable? = null
+        return withTimeoutOrNull(timeout) {
+            pollClaim(swapId, POLL_INTERVAL, untilConfirmed = false) { lastFailure = it }
+        }?.onSuccess {
+            scope.launch { withTimeoutOrNull(CONFIRMATION_TIMEOUT) { awaitConfirmation(swapId) } }
+        } ?: Result.failure(lastFailure ?: AppError("Swap '$swapId' not claimed yet"))
+    }
+
+    private suspend fun awaitConfirmation(swapId: String) {
+        pollClaim(swapId, CONFIRMATION_POLL_INTERVAL, untilConfirmed = true) {}
+            .onSuccess { Logger.info("Confirmed Pubky Swaps claim '$it' for '$swapId'", context = TAG) }
+            .onFailure { Logger.warn("Failed to confirm Pubky Swaps claim for '$swapId'", it, context = TAG) }
+    }
+
+    private suspend fun pollClaim(
+        swapId: String,
+        interval: Duration,
+        untilConfirmed: Boolean,
+        onPending: (Throwable) -> Unit,
+    ): Result<String> {
         while (true) {
-            val status = withSecrets { mnemonic, passphrase -> pubkySwapsAdvance(swapId, mnemonic, passphrase) }
-                .getOrElse { return Result.failure(it) }
-            when (val state = status.state) {
+            // A failed advance, such as a transient Electrum error, is retried: the swap is already funded.
+            val state = withSecrets { mnemonic, passphrase -> pubkySwapsAdvance(swapId, mnemonic, passphrase) }
+                .onFailure {
+                    Logger.warn("Failed to advance Pubky Swaps route '$swapId'", it, context = TAG)
+                    onPending(it)
+                }
+                .getOrNull()?.state
+            when (state) {
                 is PubkySwapRouteState.Claimed -> return Result.success(state.txid)
+                is PubkySwapRouteState.ClaimBroadcast if !untilConfirmed -> return Result.success(state.txid)
                 is PubkySwapRouteState.Failed -> return Result.failure(AppError(state.reason))
-                else -> Logger.debug("Pubky Swaps route '$swapId': $state", context = TAG)
+                null -> Unit
+                else -> {
+                    Logger.debug("Pubky Swaps route '$swapId': $state", context = TAG)
+                    onPending(AppError("Swap '$swapId' not claimed yet: '$state'"))
+                }
             }
-            if (nowMillis() > deadline) {
-                return Result.failure(AppError("Swap '$swapId' not claimed yet: '${status.state}'"))
-            }
-            delay(POLL_INTERVAL)
+            delay(interval)
         }
     }
 
@@ -157,3 +198,9 @@ class PubkySwapsRouteRepo @Inject constructor(
         }
     }
 }
+
+/** The swaps a restore found: those rebuilt now claim to Savings, those already on record keep their destination. */
+data class RestoredPubkySwaps(
+    val restored: List<String>,
+    val known: List<String>,
+)

@@ -33,6 +33,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
@@ -50,6 +51,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySwapsRouteRepo
+import to.bitkit.repositories.RestoredPubkySwaps
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -352,7 +354,8 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `restores swap routes once a wallet restore completes`() = test {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
-        whenever(pubkySwapsRouteRepo.restoreSwaps()).thenReturn(Result.success(listOf("swap")))
+        whenever(pubkySwapsRouteRepo.restoreSwaps())
+            .thenReturn(Result.success(RestoredPubkySwaps(listOf("swap"), emptyList())))
         whenever(pubkySwapsRouteRepo.awaitClaim(eq("swap"), any())).thenReturn(Result.success("txid"))
         whenever(context.getString(any())).thenReturn("text")
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
@@ -368,6 +371,28 @@ class WalletViewModelTest : BaseUnitTest() {
         assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
         verify(pubkySwapsRouteRepo).restoreSwaps()
         verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any())
+        verify(context).getString(R.string.wallet__swap_route_restored_title)
+    }
+
+    @Test
+    fun `drives known swap routes after a restore without the Savings notice`() = test {
+        whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
+        whenever(pubkySwapsRouteRepo.restoreSwaps())
+            .thenReturn(Result.success(RestoredPubkySwaps(emptyList(), listOf("swap"))))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq("swap"), any())).thenReturn(Result.success("txid"))
+        whenever(context.getString(any())).thenReturn("text")
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(
+            Result.success(emptySet())
+        )
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any())
+        verify(context, never()).getString(R.string.wallet__swap_route_restored_title)
     }
 
     @Test
