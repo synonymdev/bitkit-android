@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -174,6 +173,10 @@ class BackupRepo @Inject constructor(
     /** Spark's current connection was backed up once ready, so a restart of the observers doesn't upload it again. */
     @Volatile
     private var hasBackedUpSparkConnection = false
+
+    /** The last Spark exit-state generation marked for backup; it outlives the observers, so a gap is caught up. */
+    @Volatile
+    private var markedSparkExitGeneration = 0L
 
     private val uploadedActivityDigest = AtomicReference<ByteArray?>(null)
     private val activityDigestEpoch = AtomicLong(0)
@@ -465,10 +468,19 @@ class BackupRepo @Inject constructor(
                 val isReady = sparkRepo.state.map { it.isReady && it.hasSynced }.distinctUntilChanged()
                     .onEach { if (!it) hasBackedUpSparkConnection = false }
                     .filter { it }
-                merge(isReady, sparkRepo.exitStateChanged.map { false }).collect { isReadyTrigger ->
-                    if (isReadyTrigger && hasBackedUpSparkConnection) return@collect
-                    if (shouldSkipBackup()) return@collect
-                    if (isReadyTrigger) hasBackedUpSparkConnection = true
+                isReady.collect {
+                    if (hasBackedUpSparkConnection || shouldSkipBackup()) return@collect
+                    hasBackedUpSparkConnection = true
+                    markBackupRequired(BackupCategory.SPARK_EXIT)
+                }
+            }
+        )
+        // The generation replays on each start, so exit data that changed while nothing observed is backed up then.
+        dataListenerJobs.add(
+            scope.launch {
+                sparkRepo.exitStateGeneration.collect { generation ->
+                    if (generation <= markedSparkExitGeneration || shouldSkipBackup()) return@collect
+                    markedSparkExitGeneration = generation
                     markBackupRequired(BackupCategory.SPARK_EXIT)
                 }
             }

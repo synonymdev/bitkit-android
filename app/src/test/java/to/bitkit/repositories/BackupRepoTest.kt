@@ -142,6 +142,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
     private val sparkRepo = mock<SparkRepo>()
+    private val exitStateGeneration = MutableStateFlow(0L)
     private val vssStoreIdProvider = mock<to.bitkit.data.backup.VssStoreIdProvider>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lightningService = mock<LightningService>()
@@ -226,7 +227,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { sparkRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { sparkRepo.mergeRemoteExitBackup(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(true)
-        whenever(sparkRepo.exitStateChanged).thenReturn(MutableSharedFlow())
+        whenever(sparkRepo.exitStateGeneration).thenReturn(exitStateGeneration)
         whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
 
         sut = createSut()
@@ -328,6 +329,36 @@ class BackupRepoTest : BaseUnitTest() {
             runCurrent()
 
             verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `spark exit data that changed while observing was stopped uploads when observing restarts`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SPARK_EXIT to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isSupported = true, isReady = true, hasSynced = true))
+        )
+        val backup = SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state")
+        whenever(sparkRepo.exitBackup()).thenReturn(Result.success(backup))
+        exitStateGeneration.value = 1L
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            sut.stopObservingBackups()
+
+            exitStateGeneration.value = 2L
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
         } finally {
             sut.stopObservingBackups()
         }
