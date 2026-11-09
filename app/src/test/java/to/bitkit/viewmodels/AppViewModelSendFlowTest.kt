@@ -17037,6 +17037,47 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
     }
 
+    @Test
+    fun `swap route amount edited while quoting needs a new quote before paying`() = test {
+        val quoted = CompletableDeferred<Result<PaykitRoute>>()
+        openSwapRoutedContactPayment()
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quoted.await() }
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            runCurrent()
+            sut.setSendEvent(SendEvent.AmountChange(2_000uL))
+            quoted.complete(Result.success(PaykitRoute.Swap(swapRouteQuote())))
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertEquals(2_000uL, sut.sendUiState.value.amount)
+            assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+            confirmCurrentPayment()
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+        }
+        verify(pubkySwapsRouteRepo, never()).commit(any())
+    }
+
+    @Test
+    fun `swap route fee shows again when confirm returns to spending`() = test {
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(swapRouteQuote(), sut.sendUiState.value.activePaykitSwapRoute?.quote)
+        assertEquals(swapRouteQuote().totalFeeSat.toLong(), sut.sendUiState.value.lightningFeeSats)
+    }
+
     private suspend fun TestScope.openSwapRoutedContactPayment(
         quote: Result<PaykitRoute> = Result.success(PaykitRoute.Swap(swapRouteQuote())),
         endpoints: List<Endpoint> = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),

@@ -4204,10 +4204,18 @@ class AppViewModel @Inject constructor(
     private suspend fun onAmountChange(amount: ULong) {
         if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
         _sendUiState.update {
+            // A quote is for the amount it was made for, so a new amount needs a new quote.
+            val staleQuote = it.paykitSwapRoute?.quote?.let { quote -> quote.deliveredSat != amount } == true
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
                 confirmedWarnings = persistentListOf(),
+                paykitSwapRoute = if (staleQuote) {
+                    it.paykitSwapRoute.copy(quote = null, providerName = null)
+                } else {
+                    it.paykitSwapRoute
+                },
+                lightningFeeSats = if (staleQuote) 0 else it.lightningFeeSats,
             )
         }
         updateCanSwitchWallet()
@@ -4450,7 +4458,8 @@ class AppViewModel @Inject constructor(
                         hardwareWalletId = null,
                         hardwareWalletName = null,
                         hardwareAvailableSats = 0uL,
-                        lightningFeeSats = 0,
+                        // A quoted swap route pays the quote's fee on Spending.
+                        lightningFeeSats = it.paykitSwapRoute?.quote?.totalFeeSat?.toLong() ?: 0,
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
                         isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
@@ -6279,6 +6288,15 @@ class AppViewModel @Inject constructor(
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
+        _sendUiState.value.activePaykitSwapRoute?.let { route ->
+            if (route.quote?.deliveredSat == _sendUiState.value.amount) return@let
+            // The route must be quoted for the confirmed amount before it is committed.
+            _sendUiState.update {
+                it.copy(paykitSwapRoute = route.copy(quote = null, providerName = null), lightningFeeSats = 0)
+            }
+            setSendEffect(SendEffect.NavigateToAmount)
+            return
+        }
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
         val proofPreparation = preparePaymentProof(incomingPaymentRequest)
