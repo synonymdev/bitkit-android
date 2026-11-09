@@ -259,7 +259,7 @@ class SparkExitRepo @Inject constructor(
         tip?.let { height -> sparkExitTip.height.update { height } }
         refreshNetworkFees(chain)
         refreshFundingSeen(chain, current)
-        if (current.isActive) _state.update { it.copy(isSavingsSendUnresolved = isSavingsSending(current)) }
+        if (current.isActive) noteSavingsSend(current)
         val store = store
         val recovering = sparkService.exitRecovering()
         val driver = driver(chain, recovering, current, tip)
@@ -749,7 +749,10 @@ class SparkExitRepo @Inject constructor(
         // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
         val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
         if (fundFromSavings && savingsSats > 0uL) {
-            payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates)
+            runSuspendCatching { payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates) }
+                // A refused payment shows on progress at once, with the offer to pay again.
+                .onFailure { _state.value.record?.let { current -> noteSavingsSend(current) } }
+                .getOrThrow()
         }
     }
 
@@ -814,10 +817,60 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
-    private suspend fun isSavingsSending(record: SparkExitRecord): Boolean {
-        val address = record.funding.firstOrNull()?.address ?: return false
+    private suspend fun savingsSend(record: SparkExitRecord): OnchainSendAttempt? {
+        val address = record.funding.firstOrNull()?.address ?: return null
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
-        return attempt?.address == address && attempt.isUnresolved
+        return attempt?.takeIf { it.address == address }
+    }
+
+    private suspend fun noteSavingsSend(record: SparkExitRecord) {
+        val attempt = savingsSend(record)
+        _state.update {
+            it.copy(
+                isSavingsSendUnresolved = attempt?.isUnresolved == true,
+                isSavingsPaymentRefused = SparkExitMath.isSavingsPaymentRefused(record, attempt),
+            )
+        }
+    }
+
+    /**
+     * Pays the exit's fee funding from savings again after a node refused the payment: the same attempt, re-signed at
+     * the rate the user approved over the inputs it already spends. Every version spends those inputs, so at most one
+     * ever confirms, and it never needs the refused one to be known gone from the mempool first.
+     */
+    suspend fun retrySavingsPayment(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            if (!paymentMutex.tryLock()) throw SparkExitError("A Spark exit payment is already running")
+            try {
+                val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
+                val refused = savingsSend(record)?.takeIf { SparkExitMath.isSavingsPaymentRefused(record, it) }
+                    ?: throw SparkExitError("No refused savings payment to pay again")
+                val outcome = lightningRepo.retryOriginalOnchainSend(
+                    attemptId = refused.attemptId,
+                    walletId = refused.walletId,
+                    feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
+                ) { original -> check(original.attemptId == refused.attemptId && original.address == refused.address) }
+                    .getOrThrow()
+                val txid = fundingTxid(outcome, refused.amountSats)
+                tickMutex.withLock {
+                    val current = _state.value.record
+                    if (current == null || current.createdAt != record.createdAt) return@withLock
+                    val paid = current.copy(fundingPaymentTxid = txid)
+                    saveRecord(paid)
+                    _state.update {
+                        it.copy(
+                            record = paid,
+                            fundingState = SparkExitMath.fundingState(paid, utxos = null),
+                            isSavingsPaymentRefused = false,
+                        )
+                    }
+                }
+            } finally {
+                paymentMutex.unlock()
+            }
+        }.onFailure {
+            Logger.error("Failed to pay the Spark exit funding from savings again", it, context = TAG)
+        }
     }
 
     private suspend fun sendFunding(address: String, sats: ULong, feeRates: FeeRates? = null): String {
@@ -827,6 +880,10 @@ class SparkExitRepo @Inject constructor(
             speed = TransactionSpeed.Fast,
             feeRates = feeRates,
         ).getOrThrow()
+        return fundingTxid(outcome, sats)
+    }
+
+    private suspend fun fundingTxid(outcome: OnchainSendOutcome, sats: ULong): String {
         if (outcome is OnchainSendOutcome.Rejected) {
             throw SparkExitError("Spark exit funding was not accepted: '$outcome'")
         }
@@ -981,6 +1038,8 @@ data class SparkExitState(
     val fundingSeenSats: ULong = 0uL,
     /** A savings send to the funding address is unresolved and may be retried: cancel stays off. */
     val isSavingsSendUnresolved: Boolean = false,
+    /** A node refused the savings payment of the exit's fee funding: progress says so and offers to pay again. */
+    val isSavingsPaymentRefused: Boolean = false,
     /** How many payments make up [fundingSeenSats] before the exit starts: each adds its own input fee. */
     val fundingSeenCount: Int = 0,
     /** What progress shows while the exit needs fee funding. */

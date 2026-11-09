@@ -964,6 +964,72 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertNull(store.load())
     }
 
+    private fun refusedSavingsPayment() = OnchainSendAttempt(
+        walletId = "wallet",
+        attemptId = "attempt",
+        requestId = null,
+        orderId = null,
+        address = funding,
+        amountSats = 9_000uL,
+        isMaxAmount = false,
+        feeRateSatsPerVByte = 9uL,
+        isTransfer = false,
+        channelId = null,
+        tags = emptyList(),
+        evidence = OnchainSendEvidence.Rejected,
+        txid = "refused",
+        refusalReason = "sendrawtransaction RPC error: {\"code\":-1}",
+    )
+
+    @Test
+    fun `a refused savings payment is shown, and a payment still unanswered is not`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refusedSavingsPayment())
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+
+        sut.tick().getOrThrow()
+        assertTrue(sut.state.value.isSavingsPaymentRefused)
+        assertFalse(sut.canCancel, "the refused payment may still be sent, so the exit stays")
+
+        whenever(lightning.currentOnchainSendAttempt())
+            .thenReturn(refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown))
+        sut.tick().getOrThrow()
+        assertFalse(sut.state.value.isSavingsPaymentRefused)
+        sut.onAppBackgrounded()
+    }
+
+    @Test
+    fun `paying again from savings re-signs the refused payment over its own inputs`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val refused = refusedSavingsPayment()
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
+        whenever(
+            lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).thenReturn(Result.success(OnchainSendOutcome.Accepted("again")))
+        whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+
+        sut.retrySavingsPayment().getOrThrow()
+
+        // The same attempt at the rate the user approved: it spends the refused payment's inputs, so at most one of
+        // the two can ever confirm. No new payment picks other coins.
+        verify(lightning).retryOriginalOnchainSend(eq("attempt"), eq("wallet"), eq(9uL), anyOrNull(), any(), any())
+        verify(lightning, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+        assertEquals("again", assertNotNull(store.load()).fundingPaymentTxid)
+        assertFalse(sut.state.value.isSavingsPaymentRefused)
+        sut.onAppBackgrounded()
+    }
+
     @Test
     fun `cancel keeps funding that reached the address and sends it back to savings`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))

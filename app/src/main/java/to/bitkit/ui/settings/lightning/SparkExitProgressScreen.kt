@@ -71,6 +71,7 @@ fun SparkExitProgressScreen(
         onDone = onDone,
         onNotificationSettings = context::openNotificationSettings,
         onPayHigherFee = onPayHigherFee,
+        onRetrySavingsPayment = viewModel::retrySavingsPayment,
     )
 }
 
@@ -84,6 +85,7 @@ private fun Content(
     onDone: () -> Unit = {},
     onNotificationSettings: () -> Unit = {},
     onPayHigherFee: () -> Unit = {},
+    onRetrySavingsPayment: () -> Unit = {},
 ) {
     val record = uiState.record
     ScreenColumn {
@@ -127,6 +129,15 @@ private fun Content(
             }
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            if (uiState.isSavingsPaymentRefused) {
+                SecondaryButton(
+                    text = stringResource(R.string.lightning__spark_exit__fund_savings),
+                    onClick = onRetrySavingsPayment,
+                    isLoading = uiState.isRetryingSavingsPayment,
+                    testTag = "SparkExitRetrySavings",
+                )
+                VerticalSpacer(16.dp)
+            }
             if (uiState.canPayHigherFee) {
                 SecondaryButton(
                     text = stringResource(R.string.lightning__spark_exit__fee_bump_button),
@@ -183,6 +194,14 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
     }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
+    if (uiState.isSavingsPaymentRefused) {
+        VerticalSpacer(24.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__savings_refused),
+            color = Colors.Red,
+            modifier = Modifier.testTag("SparkExitSavingsRefused")
+        )
+    }
     if (funding != null && address != null) {
         VerticalSpacer(24.dp)
         when (funding) {

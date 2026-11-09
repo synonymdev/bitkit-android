@@ -319,6 +319,17 @@ object SparkExitMath {
     }
 
     /**
+     * A node refused the savings payment of [record]'s fee funding, and none was adopted since: only before the exit is
+     * funded, for the payment the start made.
+     */
+    fun isSavingsPaymentRefused(record: SparkExitRecord, attempt: OnchainSendAttempt?): Boolean {
+        if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return false
+        if (record.fundingPaymentTxid != null) return false
+        val address = record.funding.firstOrNull()?.address ?: return false
+        return attempt != null && attempt.address == address && attempt.evidence == OnchainSendEvidence.Rejected
+    }
+
+    /**
      * What progress shows while the exit still needs fee funding, or null when it does not. [utxos] is what the funding
      * address holds, null when it could not be read. A payment from savings that has not confirmed, or new funding
      * covering the shortfall that has not, is waited for; only what is still missing is asked for, at least dust.

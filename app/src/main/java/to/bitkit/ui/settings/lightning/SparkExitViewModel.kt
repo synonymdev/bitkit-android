@@ -85,6 +85,7 @@ class SparkExitViewModel @Inject constructor(
                 fundingState = exit.fundingState,
                 fundingAddress = exit.fundingAddress,
                 canCancel = sparkExitRepo.canCancel,
+                isSavingsPaymentRefused = exit.isSavingsPaymentRefused,
                 outsideExitSats = exit.outsideExitSats,
                 staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
                 isSettling = exit.isSettling,
@@ -231,6 +232,16 @@ class SparkExitViewModel @Inject constructor(
         }
     }
 
+    /** Pays the refused savings payment again, over the inputs it already spends. */
+    fun retrySavingsPayment() {
+        if (_uiState.value.isRetryingSavingsPayment) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRetryingSavingsPayment = true) }
+            sparkExitRepo.retrySavingsPayment().onFailure { ToastEventBus.send(it) }
+            _uiState.update { it.copy(isRetryingSavingsPayment = false) }
+        }
+    }
+
     fun refreshBackgroundLimits() {
         _uiState.update { it.copy(backgroundLimits = sparkExitRepo.backgroundLimits()) }
     }
@@ -279,6 +290,9 @@ data class SparkExitUiState(
     val fundingState: SparkExitFundingState? = null,
     val fundingAddress: String? = null,
     val canCancel: Boolean = false,
+    /** A node refused the savings payment of the fee funding: progress says so and offers to pay again. */
+    val isSavingsPaymentRefused: Boolean = false,
+    val isRetryingSavingsPayment: Boolean = false,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
     val outsideExitSats: ULong? = null,
     /** Spark's balance beyond the exit's leaves in any phase: what a stopped exit leaves on Spark. */
