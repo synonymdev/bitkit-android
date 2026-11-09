@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -445,6 +446,34 @@ class SparkRepoTest : BaseUnitTest() {
         }
         sut.start(0).getOrThrow()
         assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a journal that closes tells the pending send how its withdrawal ended`() = test {
+        val settlements = mutableListOf<SparkWithdrawalSettlement>()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = createSut()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            sut.withdrawalSettlements.collect { settlements += it }
+        }
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        whenever { sparkService.getInfo() }.thenReturn(info(50_000uL))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        sut.start(0).getOrThrow()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 5_000uL, null)) }
+        sut.start(0).getOrThrow()
+
+        assertEquals(
+            listOf(
+                SparkWithdrawalSettlement("bcrt1qcontact", 20_000uL, "withdrawal"),
+                SparkWithdrawalSettlement("bcrt1qcontact", 5_000uL, null),
+            ),
+            settlements,
+        )
     }
 
     @Test

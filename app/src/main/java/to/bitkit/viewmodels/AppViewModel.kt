@@ -227,6 +227,7 @@ import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SparkWithdrawalOutcome
+import to.bitkit.repositories.SparkWithdrawalSettlement
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -560,6 +561,10 @@ class AppViewModel @Inject constructor(
     private var deferredSubscriptionNotification: SubscriptionNotificationTarget? = null
     private var requestedPaymentRequestTags: ImmutableList<String> = persistentListOf()
     private var uncertainOnchainPaymentRequestId: PaykitPaymentRequestId? = null
+
+    /** The address and amount of the uncertain Spark withdrawal to a contact a pending screen waits on. */
+    @Volatile
+    private var uncertainSparkWithdrawal: Pair<String, ULong>? = null
     private var isPresentingPaymentRequest = false
     private val isPaymentRequestPollingStopped = MutableStateFlow(false)
     private var isPaymentRequestOverlayVisible = false
@@ -794,6 +799,7 @@ class AppViewModel @Inject constructor(
         observeIncomingPaykitPaymentRequests()
         observePaykitOnchainPaymentResolution()
         observePaykitSparkWithdrawalReleases()
+        observeSparkWithdrawalSettlements()
         observePaykitAllowanceEvents()
         observeSendEvents()
         viewModelScope.launch {
@@ -1164,6 +1170,31 @@ class AppViewModel @Inject constructor(
             }
         }
     }
+
+    private fun observeSparkWithdrawalSettlements() {
+        viewModelScope.launch {
+            lightningRepo.sparkWithdrawalSettlements.collect(::handleSparkWithdrawalSettlement)
+        }
+    }
+
+    private fun handleSparkWithdrawalSettlement(settlement: SparkWithdrawalSettlement) {
+        if (uncertainSparkWithdrawal != (settlement.address to settlement.amountSats)) return
+        uncertainSparkWithdrawal = null
+        if (_currentSheet.value !is Sheet.Send) return
+        val txid = settlement.txid
+        if (txid != null) {
+            onSendSuccess(sparkWithdrawalSent(txid, settlement.amountSats))
+            return
+        }
+        setSendEffect(SendEffect.NavigateToError(SparkError.WithdrawalNotSent().toSendFailureDetails(context)))
+    }
+
+    private fun sparkWithdrawalSent(txid: String, amountSats: ULong) = NewTransactionSheetDetails(
+        type = NewTransactionSheetType.ONCHAIN,
+        direction = NewTransactionSheetDirection.SENT,
+        paymentHashOrTxId = txid,
+        sats = amountSats.toLong(),
+    )
 
     private fun observePaykitSparkWithdrawalReleases() {
         viewModelScope.launch {
@@ -6932,6 +6963,7 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
+        uncertainSparkWithdrawal = null
         var earlierTxids: Set<String>? = null
         val txid = paykitRouteRepo.payServiceLeg(
             leg,
@@ -6991,12 +7023,19 @@ class AppViewModel @Inject constructor(
         allowanceAttemptId: String?,
     ) {
         incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(it) }
-        val unsent = earlierTxids == null ||
-            lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, earlierTxids) ==
-            SparkWithdrawalOutcome.Unsent
-        if (!unsent) {
+        val outcome = earlierTxids?.let {
+            lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, it)
+        }
+        if (outcome is SparkWithdrawalOutcome.Sent && incomingPaymentRequest == null) {
+            // Spark already lists it, so a contact payment without a request has no proof left to wait on.
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = true, transactionId = outcome.txid)
+            onSendSuccess(sparkWithdrawalSent(outcome.txid, leg.deliveredSat))
+            return
+        }
+        if (outcome != null && outcome != SparkWithdrawalOutcome.Unsent) {
             Logger.warn("Left a Spark withdrawal with an uncertain send result to Spark", error, context = TAG)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = null)
+            if (incomingPaymentRequest == null) uncertainSparkWithdrawal = leg.endpoint.value to leg.deliveredSat
             showUnresolvedOnchainSend(null, leg.deliveredSat, incomingPaymentRequest)
             return
         }

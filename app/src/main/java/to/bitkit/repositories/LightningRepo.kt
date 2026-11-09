@@ -152,6 +152,9 @@ class LightningRepo @Inject constructor(
     /** Whether Spark synced its payments since it connected, so its payment list is complete. */
     val isSparkSynced: Flow<Boolean> get() = sparkRepo.state.map { it.hasSynced }.distinctUntilChanged()
 
+    /** How each journaled Spark contact withdrawal closed. */
+    val sparkWithdrawalSettlements: Flow<SparkWithdrawalSettlement> get() = sparkRepo.withdrawalSettlements
+
     private val scope = appScope(bgDispatcher, TAG)
 
     private val _eventHandlers = ConcurrentHashMap.newKeySet<NodeEventHandler>()

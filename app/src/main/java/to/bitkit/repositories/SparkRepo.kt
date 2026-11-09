@@ -163,6 +163,10 @@ class SparkRepo @Inject constructor(
     val nodeEvents: SharedFlow<Event> = _nodeEvents.asSharedFlow()
 
     private val _exitStateChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val _withdrawalSettlements = MutableSharedFlow<SparkWithdrawalSettlement>(extraBufferCapacity = 8)
+
+    /** How each journaled contact withdrawal closed, which a pending send screen waits on. */
+    val withdrawalSettlements: SharedFlow<SparkWithdrawalSettlement> = _withdrawalSettlements.asSharedFlow()
 
     /** Fires once Spark connects and whenever its unilateral exit data changes, so the exit data backup is redone. */
     val exitStateChanged: SharedFlow<Unit> = _exitStateChanged.asSharedFlow()
@@ -906,6 +910,7 @@ class SparkRepo @Inject constructor(
         if (clock.now().epochSeconds < journal.startedAt + UNLISTED_WITHDRAWAL_GRACE.inWholeSeconds) return
         Logger.warn("Dropped Spark withdrawal to '${journal.address}' that Spark never sent", context = TAG)
         cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
+        _withdrawalSettlements.emit(SparkWithdrawalSettlement(journal.address, journal.amountSats, null))
     }
 
     private suspend fun onSdkEvent(event: SdkEvent) {
@@ -1014,6 +1019,13 @@ class SparkRepo @Inject constructor(
                     .onFailure { Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG) }
             }
             cacheStore.update { it.copy(pendingSparkWithdrawal = null) }
+            _withdrawalSettlements.emit(
+                SparkWithdrawalSettlement(
+                    journal.address,
+                    journal.amountSats,
+                    txid.takeIf { payment.status != PaymentStatus.FAILED },
+                ),
+            )
         }
     }
 
@@ -1067,6 +1079,13 @@ data class PendingSparkWithdrawal(
             withdraw.txId !in earlierTxids
     }
 }
+
+/** A journaled withdrawal to [address] closed: sent as [txid], or never sent when [txid] is null. */
+data class SparkWithdrawalSettlement(
+    val address: String,
+    val amountSats: ULong,
+    val txid: String?,
+)
 
 /** What became of a Spark withdrawal attempt, from Spark's payment list. */
 sealed interface SparkWithdrawalOutcome {

@@ -220,6 +220,7 @@ import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
 import to.bitkit.repositories.SparkWithdrawalOutcome
+import to.bitkit.repositories.SparkWithdrawalSettlement
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -355,6 +356,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     private val sparkWithdrawalReleases = MutableStateFlow<List<PaykitSparkWithdrawalRelease>>(emptyList())
+    private val sparkWithdrawalSettlements = MutableSharedFlow<SparkWithdrawalSettlement>(extraBufferCapacity = 8)
     private val proofStateVersion = MutableStateFlow(0L)
     private val usdtStateVersion = MutableStateFlow(0L)
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
@@ -735,6 +737,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
         whenever(lightningRepo.isSparkReady).thenReturn(isSparkReady)
+        whenever(lightningRepo.sparkWithdrawalSettlements).thenReturn(sparkWithdrawalSettlements)
         whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEventUpdates.map { it.event })
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
@@ -12315,6 +12318,58 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             "contact A's quote must not route B's payment",
         )
         assertEquals(endpointB.value, sut.sendUiState.value.address)
+    }
+
+    @Test
+    fun `an uncertain spark send to a contact that spark already lists opens success`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val effects = uncertainContactSparkSend(leg, SparkWithdrawalOutcome.Sent("ab".repeat(32)))
+
+        assertEquals(SendEffect.PaymentSuccess, effects.last())
+        assertEquals("ab".repeat(32), sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `an uncertain spark send to a contact settles from the spark journal`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val effects = uncertainContactSparkSend(leg, SparkWithdrawalOutcome.Unknown)
+        val pending = assertIs<SendEffect.NavigateToPending>(effects.last())
+        sut.showSheet(Sheet.Send(SendRoute.Pending(pending.paymentHash, pending.amount, false, isOnchain = true)))
+
+        sparkWithdrawalSettlements.emit(SparkWithdrawalSettlement("bcrt1qother", leg.deliveredSat, null))
+        runCurrent()
+        assertIs<SendEffect.NavigateToPending>(effects.last(), "another withdrawal's close leaves the screen")
+        sparkWithdrawalSettlements.emit(SparkWithdrawalSettlement(leg.endpoint.value, leg.deliveredSat, null))
+        runCurrent()
+
+        assertIs<SendEffect.NavigateToError>(effects.last(), "a withdrawal that never sent can be tried again")
+    }
+
+    private suspend fun TestScope.uncertainContactSparkSend(
+        leg: ServiceRouteLeg,
+        outcome: SparkWithdrawalOutcome,
+    ): List<SendEffect> {
+        whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
+        whenever(lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, emptySet()))
+            .thenReturn(outcome)
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+            onBeforeSend()
+            Result.failure(AppError("send outcome lost"))
+        }
+        setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+        val effects = mutableListOf<SendEffect>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.sendEffect.collect { effects += it } }
+        confirmCurrentPayment()
+        return effects
     }
 
     @Test
