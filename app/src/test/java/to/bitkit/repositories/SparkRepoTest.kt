@@ -24,7 +24,9 @@ import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -175,6 +177,29 @@ class SparkRepoTest : BaseUnitTest() {
         val activities = argumentCaptor<Activity>()
         verify(activityRepo, times(2)).upsertActivity(activities.capture())
         assertEquals(listOf(0uL, 2uL), activities.allValues.map { (it as Activity.Lightning).v1.fee })
+    }
+
+    @Test
+    fun `a move to spark received after its channel send keeps the send as its only activity`() = test {
+        val send = LightningActivity.create(
+            id = "hash",
+            txType = ActivityPaymentType.SENT,
+            status = PaymentState.SUCCEEDED,
+            value = 128uL,
+            invoice = "lnbc1280n1send",
+            timestamp = 1uL,
+            fee = 3uL,
+        )
+        whenever(activityRepo.getActivity(any(), any())).thenReturn(Result.success(Activity.Lightning(send)))
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+        whenever(sparkService.listPayments()).thenReturn(listOf(receivedPayment()))
+        sparkEvents.emit(SdkEvent.Synced)
+
+        verify(activityRepo, never()).upsertActivity(any())
     }
 
     @Test

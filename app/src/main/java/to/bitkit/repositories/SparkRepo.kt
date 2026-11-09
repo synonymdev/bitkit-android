@@ -777,6 +777,8 @@ class SparkRepo @Inject constructor(
         }
         val id = lightning.htlcDetails.paymentHash
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
+        // A receive sharing its hash with a channel send is a move to Spark, which Activity shows as that send.
+        if (payment.paymentType == SparkPaymentType.RECEIVE && existing?.txType == PaymentType.SENT) return
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
