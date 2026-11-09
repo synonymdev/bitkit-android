@@ -24,8 +24,10 @@ import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaykitEndpoint
+import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -251,6 +253,25 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed send does not release a hash its retry still holds pending`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(id = "first", status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed, retry))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
     fun `an uncertain send spark never recorded is no longer held from the node`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
@@ -269,6 +290,43 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
     }
+
+    @Test
+    fun `replaying a send keeps the payment note stored on its activity`() = test {
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.SUCCEEDED, message = "for coffee"))))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("for coffee", (activity.firstValue as Activity.Lightning).v1.message)
+    }
+
+    @Test
+    fun `replaying a failed spark attempt never downgrades a payment that succeeded`() = test {
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.SUCCEEDED))))
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        verify(activityRepo, never()).upsertActivity(any())
+    }
+
+    private fun storedSend(status: PaymentState, message: String = "") = LightningActivity.create(
+        id = "hash",
+        txType = ActivityPaymentType.SENT,
+        status = status,
+        value = 128uL,
+        invoice = "lnbc1280n1send",
+        timestamp = 1uL,
+        message = message,
+    )
 
     @Test
     fun `records a send's fee once a sync reports it`() = test {

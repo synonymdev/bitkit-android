@@ -343,6 +343,7 @@ class SparkFundingViewModel @Inject constructor(
     // Payment Pending can be dismissed, so the confirm screen leaves for Setting Up once the kept funding completes.
     private fun watchRetainedFunding(retained: OnchainSendAttempt, quote: Quote) {
         retainedFundingJob?.cancel()
+        lightningRepo.followFundingOnScreen(retained.attemptId, isFollowed = true)
         retainedFundingJob = viewModelScope.launch {
             val completed = lightningRepo.onchainSendAttemptUpdates
                 .map { runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull() }
@@ -352,7 +353,7 @@ class SparkFundingViewModel @Inject constructor(
                         it.hasPositiveEvidence && it.localFollowupComplete && it.txid != null
                 }
             onFundingAccepted(requireNotNull(completed.txid), completed.amountSats, quote)
-        }
+        }.apply { invokeOnCompletion { lightningRepo.followFundingOnScreen(retained.attemptId, isFollowed = false) } }
     }
 
     fun onPayRepriced() {
