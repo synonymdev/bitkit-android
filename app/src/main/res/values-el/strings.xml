@@ -1099,7 +1099,7 @@
     <string name="contacts__add_error_fetch">Δεν ήταν δυνατή η λήψη των στοιχείων της επαφής. Έλεγξε το δημόσιο κλειδί και δοκίμασε ξανά.</string>
     <string name="contacts__add_error_invalid_key">Μη έγκυρη μορφή κλειδιού pubky. Έλεγξε και δοκίμασε ξανά.</string>
     <string name="contacts__add_error_self">Δεν μπορείς να προσθέσεις το δικό σου pubky ως επαφή.</string>
-    <string name="contacts__add_privacy_notice">Σημείωσε ότι εσύ και ο/η %1$s πρέπει να προσθέσετε ο ένας τον άλλον ως επαφές για να πληρώνεστε ιδιωτικά. Διαφορετικά, η πληρωμή θα είναι δημόσια ορατή.</string>
+    <string name="contacts__add_privacy_notice">Σημείωσε ότι εσύ και ο/η %1$s πρέπει να προσθέσετε ο ένας τον άλλον ως επαφές πριν μπορέσετε να πληρώνεστε ιδιωτικά. Αν πληρώσεις χωρίς αποθήκευση, η πληρωμή θα είναι δημόσια ορατή.</string>
     <string name="contacts__add_pay">Πληρωμή</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Επικόλληση pubky</string>
@@ -1133,6 +1133,7 @@
     <string name="contacts__intro_title">Δυναμικές\n&lt;accent&gt;επαφές&lt;/accent&gt;</string>
     <string name="contacts__my_profile">ΤΟ ΠΡΟΦΙΛ ΜΟΥ</string>
     <string name="contacts__nav_title">Επαφές</string>
+    <string name="contacts__pay_private_link_pending">Το Bitkit ρυθμίζει ακόμα μια ιδιωτική σύνδεση με αυτή την επαφή. Βεβαιώσου ότι σε έχει προσθέσει κι εκείνη ως επαφή ή ζήτησέ της να σου στείλει αίτημα πληρωμής.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Επικόλληση QR ή συνδέσμου</string>
     <string name="contacts__scanner_status">ΣΑΡΩΣΗ QR ΚΑΙ NFC</string>
@@ -1453,6 +1454,7 @@
     <string name="subscriptions__allowances_empty_description">Μπορείς να ορίσεις όρια δαπανών για να εκπληρώνονται αυτόματα αιτήματα πληρωμής από αξιόπιστες επαφές.</string>
     <string name="subscriptions__allowances_empty_headline">Ρύθμισε\n&lt;accent&gt;προϋπολογισμούς&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Τα αρχεία των προϋπολογισμών σου είναι παλαιότερα από αρχεία που έχει ήδη χρησιμοποιήσει αυτό το πορτοφόλι. Τα αιτήματα θα ζητούν την έγκρισή σου μέχρι να συνεχίσεις.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Αυτό το πορτοφόλι επαναφέρθηκε από αντίγραφο ασφαλείας. Τα αιτήματα θα ζητούν την έγκρισή σου μέχρι να συνεχίσεις.</string>
     <string name="subscriptions__allowances_paused_resume">Συνέχεια</string>
     <string name="subscriptions__allowances_paused_title">Οι αυτόματες πληρωμές έχουν παυθεί</string>
     <string name="subscriptions__cancel_subscription">Ακύρωση συνδρομής</string>

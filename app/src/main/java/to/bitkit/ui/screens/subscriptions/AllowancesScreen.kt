@@ -44,6 +44,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.USD_SYMBOL
 import to.bitkit.repositories.PaykitAllowance
+import to.bitkit.repositories.PaykitAllowancePause
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -167,9 +168,13 @@ private fun AllowancesContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                if (uiState.isAutomaticPaymentPaused) {
+                uiState.automaticPaymentPause?.let { pause ->
                     item(key = "paused") {
-                        AutomaticPaymentsPaused(isWorking = uiState.isWorking, onClickResume = onClickResume)
+                        AutomaticPaymentsPaused(
+                            pause = pause,
+                            isWorking = uiState.isWorking,
+                            onClickResume = onClickResume,
+                        )
                     }
                 }
                 items(uiState.allowances, key = { it.id }) { allowance ->
@@ -228,7 +233,11 @@ private fun AllowancesEmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun AutomaticPaymentsPaused(isWorking: Boolean, onClickResume: () -> Unit) {
+private fun AutomaticPaymentsPaused(
+    pause: PaykitAllowancePause,
+    isWorking: Boolean,
+    onClickResume: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -239,7 +248,15 @@ private fun AutomaticPaymentsPaused(isWorking: Boolean, onClickResume: () -> Uni
     ) {
         BodyMSB(text = stringResource(R.string.subscriptions__allowances_paused_title))
         VerticalSpacer(4.dp)
-        BodyS(text = stringResource(R.string.subscriptions__allowances_paused_description), color = Colors.White64)
+        BodyS(
+            text = stringResource(
+                when (pause) {
+                    PaykitAllowancePause.LEDGER_BEHIND -> R.string.subscriptions__allowances_paused_description
+                    PaykitAllowancePause.RESTORED -> R.string.subscriptions__allowances_paused_restore_description
+                }
+            ),
+            color = Colors.White64,
+        )
         VerticalSpacer(16.dp)
         SecondaryButton(
             text = stringResource(R.string.subscriptions__allowances_paused_resume),
@@ -350,7 +367,7 @@ private fun Preview2() {
         AllowancesContent(
             uiState = AllowancesUiState(
                 isLoaded = true,
-                isAutomaticPaymentPaused = true,
+                automaticPaymentPause = PaykitAllowancePause.LEDGER_BEHIND,
                 allowances = persistentListOf(
                     previewAllowance(),
                     previewAllowance(id = "allowance-2", name = "Mia").copy(
@@ -364,6 +381,23 @@ private fun Preview2() {
                         canEnd = false,
                     ),
                 ),
+            ),
+            topPadding = 0.dp,
+            onClickAdd = {},
+            onClickAllowance = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewRestored() {
+    AppThemeSurface {
+        AllowancesContent(
+            uiState = AllowancesUiState(
+                isLoaded = true,
+                automaticPaymentPause = PaykitAllowancePause.RESTORED,
+                allowances = persistentListOf(previewAllowance()),
             ),
             topPadding = 0.dp,
             onClickAdd = {},

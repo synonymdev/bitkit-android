@@ -6,15 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.core.net.toUri
 import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.testing.TestNavHostController
+import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -38,7 +36,7 @@ class ScreenDeepLinkDetachmentTest {
     @get:Rule
     val composeTestRule = createEmptyComposeRule()
 
-    private lateinit var navController: TestNavHostController
+    private lateinit var navController: NavHostController
 
     @Test
     fun testAttachedScreenUriIsHandledByGraphWithoutGate() {
@@ -117,12 +115,7 @@ class ScreenDeepLinkDetachmentTest {
 
     @Composable
     private fun TestGraph() {
-        val context = LocalContext.current
-        val controller = remember {
-            TestNavHostController(context).apply {
-                navigatorProvider.addNavigator(ComposeNavigator())
-            }
-        }
+        val controller = rememberNavController()
         navController = controller
 
         NavHost(navController = controller, startDestination = Routes.Home) {

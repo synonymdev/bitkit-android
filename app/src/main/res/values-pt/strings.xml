@@ -1092,7 +1092,7 @@
     <string name="contacts__add_error_fetch">Não foi possível obter as informações do contacto. Verifique a chave pública e tente novamente.</string>
     <string name="contacts__add_error_invalid_key">Formato de chave pubky inválido. Verifique e tente novamente.</string>
     <string name="contacts__add_error_self">Não pode adicionar o seu próprio pubky como contacto.</string>
-    <string name="contacts__add_privacy_notice">Tenha em atenção que %1$s e o utilizador têm de se adicionar mutuamente como contactos para fazer pagamentos privados. Caso contrário, o pagamento será visível publicamente.</string>
+    <string name="contacts__add_privacy_notice">Tenha em atenção que %1$s e o utilizador têm de se adicionar mutuamente como contactos antes de poderem fazer pagamentos privados. Se pagar sem guardar, o pagamento será visível publicamente.</string>
     <string name="contacts__add_pay">Pagar</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Cole um pubky</string>
@@ -1125,6 +1125,7 @@
     <string name="contacts__intro_description">Pague aos seus contactos com um só toque. Envie pagamentos diretamente, a qualquer pessoa, em qualquer lugar.</string>
     <string name="contacts__intro_title">Contactos\n&lt;accent&gt;dinâmicos&lt;/accent&gt;</string>
     <string name="contacts__my_profile">O MEU PERFIL</string>
+    <string name="contacts__pay_private_link_pending">O Bitkit ainda está a configurar uma ligação privada com este contacto. Confirme que este também o adicionou como contacto ou peça-lhe que envie um pedido de pagamento.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Colar QR ou link</string>
     <string name="contacts__scanner_status">A LER QR E NFC</string>
@@ -1447,6 +1448,7 @@
     <string name="subscriptions__allowances_empty_description">Pode definir limites de gastos para pagar automaticamente pedidos de pagamento de contactos de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configure\n&lt;accent&gt;mesadas&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Os registos das suas mesadas são mais antigos do que outros que esta carteira já usou. Os pedidos vão pedir a sua aprovação até retomar.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Esta carteira foi restaurada a partir de uma cópia de segurança. Os pedidos vão pedir a sua aprovação até retomar.</string>
     <string name="subscriptions__allowances_paused_resume">Retomar</string>
     <string name="subscriptions__allowances_paused_title">Pagamentos automáticos em pausa</string>
     <string name="subscriptions__cancel_subscription">Cancelar subscrição</string>

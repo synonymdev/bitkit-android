@@ -13,6 +13,8 @@ import org.bouncycastle.asn1.x509.GeneralNames
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.junit.After
+import org.junit.AfterClass
+import org.junit.BeforeClass
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.ext.nowMillis
@@ -29,6 +31,8 @@ import java.net.SocketTimeoutException
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.Provider
+import java.security.Security
 import java.security.cert.CertPathValidatorException
 import java.security.cert.Certificate
 import java.security.cert.CertificateFactory
@@ -71,8 +75,37 @@ private val KEY_PASSWORD = "probe".toCharArray()
  */
 private const val JSSE_PROVIDER = "SunJSSE"
 
+private const val CONSCRYPT_PROVIDER = "Conscrypt"
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ElectrumProbeServiceTest : BaseUnitTest() {
+    companion object {
+        private var detachedConscrypt: Pair<Provider, Int>? = null
+
+        /**
+         * Naming SunJSSE is not enough: its first server socket initialises `NamedGroup`, which asks the
+         * provider list for EC parameters, and Conscrypt 2.6 (Robolectric 4.17) answers and then throws on
+         * binary-field curves. The class fails to initialise for the rest of the JVM, so Conscrypt is taken
+         * out of the list while these tests run and put back where it was afterwards.
+         */
+        @JvmStatic
+        @BeforeClass
+        fun detachConscrypt() {
+            val providers = Security.getProviders()
+            val index = providers.indexOfFirst { it.name == CONSCRYPT_PROVIDER }
+            if (index < 0) return
+            detachedConscrypt = providers[index] to index + 1
+            Security.removeProvider(CONSCRYPT_PROVIDER)
+        }
+
+        @JvmStatic
+        @AfterClass
+        fun restoreConscrypt() {
+            detachedConscrypt?.let { (provider, position) -> Security.insertProviderAt(provider, position) }
+            detachedConscrypt = null
+        }
+    }
+
     private var socketFactory: SSLSocketFactory =
         SSLContext.getInstance("TLS", JSSE_PROVIDER).apply { init(null, null, null) }.socketFactory
 

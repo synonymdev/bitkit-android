@@ -1127,7 +1127,7 @@
     <string name="contacts__add_error_fetch">Nelze načíst informace o kontaktu. Zkontrolujte prosím veřejný klíč a zkuste to znovu.</string>
     <string name="contacts__add_error_invalid_key">Neplatný formát klíče pubky. Zkontrolujte ho prosím a zkuste to znovu.</string>
     <string name="contacts__add_error_self">Nemůžete přidat svůj vlastní pubky jako kontakt.</string>
-    <string name="contacts__add_privacy_notice">Upozorňujeme, že vy a %1$s se musíte navzájem přidat jako kontakty, abyste si mohli platit soukromě. Jinak bude platba veřejně viditelná.</string>
+    <string name="contacts__add_privacy_notice">Upozorňujeme, že vy a %1$s se musíte navzájem přidat jako kontakty, než si budete moci platit soukromě. Pokud zaplatíte bez uložení, platba bude veřejně viditelná.</string>
     <string name="contacts__add_pay">Zaplatit</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Vložte pubky</string>
@@ -1157,6 +1157,7 @@
     <string name="contacts__intro_description">Plaťte svým kontaktům jedním klepnutím. Posílejte platby přímo, komukoli a kdekoli.</string>
     <string name="contacts__my_profile">MŮJ PROFIL</string>
     <string name="contacts__nav_title">Kontakty</string>
+    <string name="contacts__pay_private_link_pending">Bitkit stále nastavuje soukromé spojení s tímto kontaktem. Ujistěte se, že si vás kontakt také přidal, nebo ho požádejte, aby vám poslal žádost o platbu.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Vložit QR nebo odkaz</string>
     <string name="contacts__scanner_status">SKENOVÁNÍ QR A NFC</string>
@@ -1461,6 +1462,7 @@
     <string name="subscriptions__allowances_empty_description">Můžete nastavit limity útraty pro automatické vyřizování žádostí o platbu od důvěryhodných kontaktů.</string>
     <string name="subscriptions__allowances_empty_headline">Nastavte si\n&lt;accent&gt;rozpočty&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Záznamy vašich rozpočtů jsou starší než ty, které tato peněženka už použila. Požadavky budou čekat na vaše schválení, dokud platby neobnovíte.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Tato peněženka byla obnovena ze zálohy. Požadavky budou čekat na vaše schválení, dokud platby neobnovíte.</string>
     <string name="subscriptions__allowances_paused_resume">Obnovit</string>
     <string name="subscriptions__allowances_paused_title">Automatické platby pozastaveny</string>
     <string name="subscriptions__cancel_subscription">Zrušit předplatné</string>
