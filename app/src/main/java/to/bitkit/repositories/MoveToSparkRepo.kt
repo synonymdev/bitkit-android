@@ -15,6 +15,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
+import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -167,14 +168,32 @@ class MoveToSparkRepo @Inject constructor(
             }
         }
 
-    /** Waits for the payment of a move still [inFlight] to settle after the move stopped waiting. */
+    /**
+     * Waits for the payment of a move still [inFlight] to settle after the move stopped waiting. It listens first, then
+     * reads the node's stored payment, so an outcome that arrived after the move stopped listening is not missed.
+     */
     suspend fun awaitSettled(inFlight: MoveToSparkOutcome.InFlight): Result<MoveToSparkOutcome.Moved> =
         withContext(bgDispatcher) {
             runSuspendCatching {
-                val event = lightningRepo.nodeEvents.first { it.settles(inFlight.paymentHash, inFlight.paymentId) }
-                when (event) {
-                    is Event.PaymentSuccessful -> event.moved(inFlight.amountSats)
-                    else -> throw MoveToSparkError.PaymentFailed((event as? Event.PaymentFailed)?.reason)
+                coroutineScope {
+                    val settled = async(start = CoroutineStart.UNDISPATCHED) {
+                        lightningRepo.nodeEvents.first { it.settles(inFlight.paymentHash, inFlight.paymentId) }
+                    }
+                    val stored = lightningRepo.listPaymentsOrNull()?.firstOrNull { it.id == inFlight.paymentId }
+                    when (stored?.status) {
+                        PaymentStatus.SUCCEEDED -> {
+                            settled.cancel()
+                            MoveToSparkOutcome.Moved(inFlight.amountSats, (stored.feePaidMsat ?: 0uL) / 1000uL)
+                        }
+                        PaymentStatus.FAILED -> {
+                            settled.cancel()
+                            throw MoveToSparkError.PaymentFailed(null)
+                        }
+                        else -> when (val event = settled.await()) {
+                            is Event.PaymentSuccessful -> event.moved(inFlight.amountSats)
+                            else -> throw MoveToSparkError.PaymentFailed((event as? Event.PaymentFailed)?.reason)
+                        }
+                    }
                 }
             }.onFailure {
                 Logger.warn("Failed to move '${inFlight.amountSats}' sats to Spark after the wait", it, context = TAG)

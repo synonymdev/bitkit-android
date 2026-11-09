@@ -9,7 +9,11 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentFailureReason
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
@@ -189,4 +193,28 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 7uL), settled.await().getOrThrow())
     }
+
+    @Test
+    fun `an in-flight move that settled before the late listener started reads the stored payment`() = test {
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(nodeSend(PaymentStatus.SUCCEEDED)))
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 7uL), sut.awaitSettled(inFlight).getOrThrow())
+    }
+
+    @Test
+    fun `an in-flight move that failed before the late listener started reads the stored payment`() = test {
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(nodeSend(PaymentStatus.FAILED)))
+
+        assertIs<MoveToSparkError.PaymentFailed>(sut.awaitSettled(inFlight).exceptionOrNull())
+    }
+
+    private fun nodeSend(status: PaymentStatus) = PaymentDetails(
+        id = "id",
+        kind = PaymentKind.Bolt11(hash = "hash", preimage = null, secret = null, description = null, bolt11 = INVOICE),
+        amountMsat = 50_000_000uL,
+        feePaidMsat = 7_000uL,
+        direction = PaymentDirection.OUTBOUND,
+        status = status,
+        latestUpdateTimestamp = 0uL,
+    )
 }
