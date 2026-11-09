@@ -197,6 +197,20 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmed original is not redirected to its evicted replacement`() = test {
+        val replacement = createOnchainActivity(id = "b", txId = "tx-b", walletId = WalletScope.default)
+        whenever(coreService.activity.publishRbfBoost("tx-a", "tx-b")).thenReturn(replacement)
+        sut.publishRbfBoost("tx-a", "tx-b").getOrThrow()
+        val confirmedOriginal = createOnchainActivity(
+            id = "a",
+            txId = "tx-a",
+            walletId = WalletScope.default,
+            confirmed = true,
+        )
+        assertEquals(confirmedOriginal, sut.resolvePublishedRbfActivity(confirmedOriginal))
+    }
+
+    @Test
     fun `wallet reset rejects completion from the old RBF publication`() = test {
         val published = CompletableDeferred<Unit>()
         val replacement = createOnchainActivity(txId = "tx-b", walletId = WalletScope.default)

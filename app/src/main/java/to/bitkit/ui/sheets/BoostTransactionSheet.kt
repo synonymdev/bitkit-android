@@ -62,6 +62,7 @@ fun BoostTransactionSheet(
     viewModel: BoostTransactionViewModel = hiltViewModel(),
     onSuccess: () -> Unit,
     onFailure: () -> Unit,
+    onPending: () -> Unit,
     onMaxFee: () -> Unit,
     onMinFee: () -> Unit,
     onDismiss: () -> Unit,
@@ -81,6 +82,11 @@ fun BoostTransactionSheet(
                 BoostTransactionEffects.OnBoostFailed -> {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onFailure()
+                }
+
+                BoostTransactionEffects.OnBoostPending -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onPending()
                 }
 
                 BoostTransactionEffects.OnBoostSuccess -> {
@@ -202,7 +208,7 @@ private fun DefaultModeContent(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickableAlpha { onClickEdit() }
+                .clickableAlpha(enabled = !uiState.feeLocked) { onClickEdit() }
                 .testTag(BoostTransactionTestTags.EDIT_FEE_ROW)
         ) {
             Image(
@@ -272,7 +278,7 @@ private fun DefaultModeContent(
         FillHeight(min = 16.dp)
 
         SwipeToConfirm(
-            text = stringResource(R.string.wallet__boost_swipe),
+            text = stringResource(if (uiState.feeLocked) R.string.common__retry else R.string.wallet__boost_swipe),
             color = Colors.Yellow,
             endIcon = R.drawable.ic_timer_alt_yellow,
             onConfirm = onSwipe,
@@ -303,7 +309,7 @@ private fun CustomModeContent(
                 icon = painterResource(R.drawable.ic_minus),
                 iconColor = Colors.Red,
                 backgroundColor = Colors.Red16,
-                enabled = uiState.decreaseEnabled,
+                enabled = uiState.decreaseEnabled && !uiState.feeLocked,
                 onClick = { onChangeAmount(false) },
                 contentDescription = stringResource(R.string.wallet__boost_decrease_fee),
                 modifier = Modifier.testTag(BoostTransactionTestTags.DECREASE_FEE_BUTTON)
@@ -347,7 +353,7 @@ private fun CustomModeContent(
                 icon = painterResource(R.drawable.ic_plus),
                 iconColor = Colors.Green,
                 backgroundColor = Colors.Green16,
-                enabled = uiState.increaseEnabled,
+                enabled = uiState.increaseEnabled && !uiState.feeLocked,
                 onClick = { onChangeAmount(true) },
                 contentDescription = stringResource(R.string.wallet__boost_increase_fee),
                 modifier = Modifier.testTag(BoostTransactionTestTags.INCREASE_FEE_BUTTON)
@@ -360,6 +366,7 @@ private fun CustomModeContent(
             text = stringResource(R.string.wallet__boost_recomended_button),
             fullWidth = false,
             onClick = onClickUseSuggestedFee,
+            enabled = !uiState.feeLocked,
             size = ButtonSize.Small,
             modifier = Modifier.testTag(BoostTransactionTestTags.USE_SUGGESTED_FEE_BUTTON)
         )
@@ -367,7 +374,7 @@ private fun CustomModeContent(
         FillHeight(min = 16.dp)
 
         SwipeToConfirm(
-            text = stringResource(R.string.wallet__boost_swipe),
+            text = stringResource(if (uiState.feeLocked) R.string.common__retry else R.string.wallet__boost_swipe),
             color = Colors.Yellow,
             endIcon = R.drawable.ic_timer_alt_yellow,
             onConfirm = onSwipe,

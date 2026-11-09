@@ -906,6 +906,8 @@
     <string name="wallet__boost_fee_custom">Vaše transakce se může vypořádat rychleji, pokud zahrnete další síťový poplatek. Níže si nastavte vlastní poplatek.</string>
     <string name="wallet__boost_fee_recomended">Vaše transakce se může vypořádat rychleji, pokud zahrnete další síťový poplatek. Zde je doporučení:</string>
     <string name="wallet__boost_increase_fee">Zvýšit poplatek</string>
+    <string name="wallet__boost_pending_msg">Zrychlení bylo odvysíláno. Záznam aktivity zatím není připraven.</string>
+    <string name="wallet__boost_pending_title">Zrychlení čeká na dokončení</string>
     <string name="wallet__boost_recomended_button">Použít navrhovaný poplatek</string>
     <string name="wallet__boost_success_msg">Transakce byla úspěšně posílena.</string>
     <string name="wallet__boost_success_title">Posíleno!</string>

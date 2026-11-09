@@ -921,6 +921,8 @@
     <string name="wallet__boost_fee_custom">Ваша транзакция может быть подтверждена быстрее, если вы включите дополнительную комиссию. Установите значение ниже.</string>
     <string name="wallet__boost_fee_recomended">Ваша транзакция может быть подтверждена быстрее, если вы включите дополнительную комиссию. Вот рекомендация:</string>
     <string name="wallet__boost_increase_fee">Увеличить комиссию</string>
+    <string name="wallet__boost_pending_msg">Ускорение отправлено в сеть. Запись об операции ещё не готова.</string>
+    <string name="wallet__boost_pending_title">Ускорение ожидает обработки</string>
     <string name="wallet__boost_recomended_button">Использовать рекомендованную комиссию</string>
     <string name="wallet__boost_success_msg">Транзакция успешно ускорена.</string>
     <string name="wallet__boost_success_title">Ускорена!</string>

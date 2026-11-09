@@ -878,6 +878,8 @@
     <string name="wallet__boost_fee_custom">قد تتم تسوية معاملتك بشكل أسرع إذا أضفت رسوم شبكة إضافية. عيّن رسومك المخصصة أدناه.</string>
     <string name="wallet__boost_fee_recomended">قد تتم تسوية معاملتك بشكل أسرع إذا أضفت رسوم شبكة إضافية. إليك توصية:</string>
     <string name="wallet__boost_increase_fee">زيادة الرسوم</string>
+    <string name="wallet__boost_pending_msg">تم بث تسريع المعاملة. سجل النشاط غير جاهز بعد.</string>
+    <string name="wallet__boost_pending_title">تسريع المعاملة قيد الانتظار</string>
     <string name="wallet__boost_recomended_button">استخدم الرسوم المقترحة</string>
     <string name="wallet__boost_success_msg">تم تعزيز المعاملة بنجاح.</string>
     <string name="wallet__boost_success_title">تم التعزيز!</string>

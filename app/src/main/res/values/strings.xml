@@ -1362,6 +1362,8 @@
     <string name="wallet__boost_fee_custom">Your transaction may settle faster if you include an additional network fee. Set your custom fee below.</string>
     <string name="wallet__boost_fee_recomended">Your transaction may settle faster if you include an additional network fee. Here is a recommendation:</string>
     <string name="wallet__boost_increase_fee">Increase fee</string>
+    <string name="wallet__boost_pending_msg">The boost was broadcast. Its activity is not ready yet.</string>
+    <string name="wallet__boost_pending_title">Boost Pending</string>
     <string name="wallet__boost_recomended_button">Use Suggested Fee</string>
     <string name="wallet__boost_success_msg">The transaction was successfully boosted.</string>
     <string name="wallet__boost_success_title">Boosted!</string>

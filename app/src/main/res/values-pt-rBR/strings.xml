@@ -908,6 +908,8 @@
     <string name="wallet__boost_fee_custom">Sua transação pode ser confirmada mais rapidamente se você incluir uma taxa adicional de rede. Configure sua taxa personalizada abaixo.</string>
     <string name="wallet__boost_fee_recomended">Sua transação pode ser confirmada mais rapidamente se você incluir uma taxa adicional de rede. Aqui está uma recomendação:</string>
     <string name="wallet__boost_increase_fee">Aumentar taxa</string>
+    <string name="wallet__boost_pending_msg">A aceleração foi transmitida. O registro de atividade ainda não está pronto.</string>
+    <string name="wallet__boost_pending_title">Aceleração pendente</string>
     <string name="wallet__boost_recomended_button">Usar Taxa Sugerida</string>
     <string name="wallet__boost_success_msg">A transação foi acelerada com sucesso.</string>
     <string name="wallet__boost_success_title">Acelerado!</string>

@@ -349,6 +349,7 @@ class ActivityRepo @Inject constructor(
         val visited = mutableSetOf<String>()
         var current = activity
         while (current is Activity.Onchain) {
+            if (current.v1.confirmed) return current
             val key = scopedActivityId(current.v1.walletId, current.v1.txId)
             if (!visited.add(key)) return current
             current = replacements[key] ?: return current

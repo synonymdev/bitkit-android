@@ -1,6 +1,7 @@
 package to.bitkit.ui.sheets
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -59,7 +60,7 @@ class BoostTransactionViewModel @Inject constructor(
     private var feeRateRecommended: ULong = 0U
     private var minFeeRate: ULong = 2U
     private var activity: Activity.Onchain? = null
-    private val broadcastRbfReplacements = mutableMapOf<String, Deferred<Result<Txid>>>()
+    private val broadcastRbfReplacements = mutableMapOf<String, RbfBroadcastAttempt>()
 
     fun setupActivity(activity: Activity.Onchain) {
         Logger.debug("Setup activity $activity", context = TAG)
@@ -70,18 +71,29 @@ class BoostTransactionViewModel @Inject constructor(
                 loading = true,
                 boosting = false,
                 isRbf = activity.boostType() == BoostType.RBF,
+                feeLocked = false,
             )
         }
 
-        initializeFeeEstimates()
+        val broadcast = broadcastRbfReplacements[activity.v1.txId]
+        if (broadcast != null && activity.boostType() == BoostType.RBF) {
+            restoreBroadcastFee(broadcast)
+        } else {
+            initializeFeeEstimates()
+        }
+    }
+
+    private fun restoreBroadcastFee(broadcast: RbfBroadcastAttempt) {
+        _uiState.update { broadcast.quote.copy(boosting = it.boosting, loading = false, feeLocked = true) }
     }
 
     private fun initializeFeeEstimates() {
+        val origin = activity
         viewModelScope.launch {
-            runCatching {
-                val activityContent = activity?.v1 ?: run {
+            runSuspendCatching {
+                val activityContent = origin?.v1 ?: run {
                     handleError("Activity value is null")
-                    return@launch
+                    return@runSuspendCatching
                 }
 
                 // Calculate max fee (50% of transaction value)
@@ -116,6 +128,7 @@ class BoostTransactionViewModel @Inject constructor(
                     ),
                 )
 
+                if (activity !== origin) return@runSuspendCatching
                 when {
                     totalFeeResult.isSuccess && feeRateResult.isSuccess -> {
                         totalFeeSatsRecommended = totalFeeResult.getOrThrow()
@@ -131,16 +144,20 @@ class BoostTransactionViewModel @Inject constructor(
 
                     else -> {
                         val error = totalFeeResult.exceptionOrNull() ?: feeRateResult.exceptionOrNull()
-                        handleError("Failed to get fee estimates: ${error?.message}", error)
+                        handleError("Failed to get fee estimates: ${error?.message}", error, origin)
                     }
                 }
             }.onFailure {
-                handleError("Unexpected error during fee estimation", it)
+                handleError("Unexpected error during fee estimation", it, origin)
             }
         }
     }
 
     private fun updateUiStateWithFeeData(totalFee: ULong, feeRate: ULong) {
+        broadcastRbfReplacements[activity?.v1?.txId]?.let {
+            restoreBroadcastFee(it)
+            return
+        }
         val currentFee = activity?.v1?.fee ?: 0u
         val isIncreaseEnabled = totalFee < maxTotalFee && feeRate < MAX_FEE_RATE
         val isDecreaseEnabled = totalFee > currentFee && feeRate > minFeeRate
@@ -163,10 +180,12 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     fun onClickEdit() {
+        if (_uiState.value.feeLocked) return
         _uiState.update { it.copy(isDefaultMode = false) }
     }
 
     fun onClickUseSuggestedFee() {
+        if (_uiState.value.feeLocked) return
         updateUiStateWithFeeData(
             totalFee = totalFeeSatsRecommended,
             feeRate = feeRateRecommended
@@ -199,25 +218,35 @@ class BoostTransactionViewModel @Inject constructor(
     private suspend fun handleRbfBoost(activity: Activity.Onchain) {
         val txid = activity.v1.txId
         val broadcast = broadcastRbfReplacements.getOrPut(txid) {
-            val feeRate = _uiState.value.feeRate
-            viewModelScope.async {
-                lightningRepo.bumpFeeByRbf(satsPerVByte = feeRate, originalTxId = txid)
-            }
+            val quote = _uiState.value
+            RbfBroadcastAttempt(
+                quote = quote,
+                result = viewModelScope.async {
+                    lightningRepo.bumpFeeByRbf(satsPerVByte = quote.feeRate, originalTxId = txid)
+                },
+            )
         }
+        if (this.activity === activity) restoreBroadcastFee(broadcast)
         val result = try {
-            broadcast.await()
+            broadcast.result.await()
         } finally {
-            if (broadcast.isCancelled && broadcastRbfReplacements[txid] === broadcast) {
-                broadcastRbfReplacements.remove(txid)
-            }
+            if (broadcast.result.isCancelled) removeRbfBroadcast(txid, broadcast)
         }
         result.fold(
             onSuccess = { handleBoostSuccess(activity, it, isRBF = true) },
             onFailure = {
-                if (broadcastRbfReplacements[txid] === broadcast) broadcastRbfReplacements.remove(txid)
+                removeRbfBroadcast(txid, broadcast)
                 handleError("RBF boost failed", it, activity)
             },
         )
+    }
+
+    private fun removeRbfBroadcast(txid: String, broadcast: RbfBroadcastAttempt) {
+        if (broadcastRbfReplacements[txid] !== broadcast) return
+        broadcastRbfReplacements.remove(txid)
+        if (activity?.v1?.txId == txid) {
+            _uiState.update { it.copy(feeLocked = false, boosting = false) }
+        }
     }
 
     private suspend fun handleCpfpBoost(activity: Activity.Onchain) {
@@ -240,7 +269,11 @@ class BoostTransactionViewModel @Inject constructor(
         val result = updateActivity(origin, newTxId = newTxId, isRBF = isRBF)
         if (isRBF && result.isFailure) {
             lightningRepo.syncAsync()
-            handleError("Failed to publish RBF replacement", result.exceptionOrNull(), origin)
+            Logger.warn("Failed to publish RBF replacement", result.exceptionOrNull(), context = TAG)
+            if (activity === origin) {
+                _uiState.update { it.copy(boosting = false) }
+                setBoostTransactionEffect(BoostTransactionEffects.OnBoostPending, origin)
+            }
             return
         }
         result.onFailure { error ->
@@ -257,6 +290,8 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     fun onChangeAmount(increase: Boolean) {
+        if (_uiState.value.feeLocked) return
+        val origin = activity ?: return
         val currentFeeRate = _uiState.value.feeRate
         val newFeeRate = if (increase) {
             (currentFeeRate + FEE_RATE_STEP).coerceAtMost(MAX_FEE_RATE)
@@ -278,34 +313,34 @@ class BoostTransactionViewModel @Inject constructor(
         _uiState.update { it.copy(feeRate = newFeeRate) }
 
         viewModelScope.launch {
-            lightningRepo
-                .calculateTotalFee(
-                    amountSats = requireNotNull(activity).v1.value,
-                    speed = TransactionSpeed.Custom(newFeeRate.toUInt()),
-                )
-                .fold(
-                    onSuccess = { newTotalFee ->
-                        val currentFee = activity?.v1?.fee ?: 0u
-                        val maxFeeReached = newTotalFee >= maxTotalFee
-                        val minFeeReached = newTotalFee <= currentFee
+            val result = lightningRepo.calculateTotalFee(
+                amountSats = origin.v1.value,
+                speed = TransactionSpeed.Custom(newFeeRate.toUInt()),
+            )
+            if (activity !== origin || _uiState.value.feeLocked) return@launch
+            result.fold(
+                onSuccess = { newTotalFee ->
+                    val currentFee = activity?.v1?.fee ?: 0u
+                    val maxFeeReached = newTotalFee >= maxTotalFee
+                    val minFeeReached = newTotalFee <= currentFee
 
-                        updateUiStateWithFeeData(newTotalFee, newFeeRate)
+                    updateUiStateWithFeeData(newTotalFee, newFeeRate)
 
-                        // Send appropriate effect if we hit a limit
-                        when {
-                            maxFeeReached && increase -> {
-                                setBoostTransactionEffect(BoostTransactionEffects.OnMaxFee)
-                            }
-
-                            minFeeReached && !increase -> {
-                                setBoostTransactionEffect(BoostTransactionEffects.OnMinFee)
-                            }
+                    // Send appropriate effect if we hit a limit
+                    when {
+                        maxFeeReached && increase -> {
+                            setBoostTransactionEffect(BoostTransactionEffects.OnMaxFee)
                         }
-                    },
-                    onFailure = { error ->
-                        handleError("Failed to estimate fee for rate $newFeeRate", error)
+
+                        minFeeReached && !increase -> {
+                            setBoostTransactionEffect(BoostTransactionEffects.OnMinFee)
+                        }
                     }
-                )
+                },
+                onFailure = { error ->
+                    handleError("Failed to estimate fee for rate $newFeeRate", error)
+                }
+            )
         }
     }
 
@@ -343,6 +378,7 @@ class BoostTransactionViewModel @Inject constructor(
             it.copy(
                 boosting = false,
                 loading = false,
+                feeLocked = broadcastRbfReplacements[activity?.v1?.txId] != null,
             )
         }
         setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed, origin)
@@ -359,10 +395,17 @@ class BoostTransactionViewModel @Inject constructor(
 sealed interface BoostTransactionEffects {
     data object OnBoostSuccess : BoostTransactionEffects
     data object OnBoostFailed : BoostTransactionEffects
+    data object OnBoostPending : BoostTransactionEffects
     data object OnMaxFee : BoostTransactionEffects
     data object OnMinFee : BoostTransactionEffects
 }
 
+private data class RbfBroadcastAttempt(
+    val quote: BoostTransactionUiState,
+    val result: Deferred<Result<Txid>>,
+)
+
+@Immutable
 data class BoostTransactionUiState(
     val totalFeeSats: ULong = 0U,
     val feeRate: ULong = 0U,
@@ -373,4 +416,5 @@ data class BoostTransactionUiState(
     val loading: Boolean = false,
     val estimateTime: String = "",
     val isRbf: Boolean = false,
+    val feeLocked: Boolean = false,
 )
