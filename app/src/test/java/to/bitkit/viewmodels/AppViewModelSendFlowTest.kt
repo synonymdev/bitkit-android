@@ -12448,6 +12448,70 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a request's spark send that reconcile finds sent opens success`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedrequest")
+        val txid = "ab".repeat(32)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val privateContext = privatePaymentContext(7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.captureOriginalOnchainPayer(request)).thenReturn(Result.success(testPublicKey))
+        whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
+        whenever(lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, emptySet()))
+            .thenReturn(SparkWithdrawalOutcome.Sent(txid))
+        whenever(
+            paykitPaymentProofRepo.markSparkOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull(), any()),
+        )
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.consumeOnchainPaymentResolution(any())).then { call ->
+            onchainPaymentResolutions.update { it - call.getArgument<PaykitOnchainPaymentProofResolution>(0) }
+        }
+        // Reconcile completes the proof and publishes its only resolution before the send is marked uncertain.
+        whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).doSuspendableAnswer {
+            onchainPaymentResolutions.value = listOf(
+                PaykitOnchainPaymentProofResolution(testPublicKey, request.id, txid),
+            )
+            yield()
+            false
+        }
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any())).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+            onBeforeSend()
+            Result.failure(AppError("send outcome lost"))
+        }
+        pubkyPublicKey.value = testPublicKey
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                incomingPaymentRequestId = request.id,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+        val effects = mutableListOf<SendEffect>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.sendEffect.collect { effects += it } }
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+
+        confirmCurrentPayment()
+
+        assertEquals(
+            listOf<SendEffect>(SendEffect.PaymentSuccess),
+            effects,
+            "Spark lists it, so the request never waits on Pending",
+        )
+    }
+
+    @Test
     fun `spark route saves the tags picked on confirmation`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), any()))

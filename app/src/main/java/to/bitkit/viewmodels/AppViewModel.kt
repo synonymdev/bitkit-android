@@ -7053,8 +7053,11 @@ class AppViewModel @Inject constructor(
         if (outcome == SparkWithdrawalOutcome.Unsent || outcome is SparkWithdrawalOutcome.Sent) {
             uncertainSparkWithdrawal = null
         }
-        if (outcome is SparkWithdrawalOutcome.Sent && incomingPaymentRequest == null) {
-            // Spark already lists it, so a contact payment without a request has no proof left to wait on.
+        if (outcome is SparkWithdrawalOutcome.Sent) {
+            // Spark already lists it, so the send succeeded: its proof's resolution may have gone by already.
+            incomingPaymentRequest?.let { request ->
+                viewModelScope.launch { paykitPaymentProofRepo.completeSparkOnchainPayment(request, outcome.txid) }
+            }
             finishManualAllowancePayment(allowanceAttemptId, succeeded = true, transactionId = outcome.txid)
             onSendSuccess(sparkWithdrawalSent(outcome.txid, leg.deliveredSat))
             return
