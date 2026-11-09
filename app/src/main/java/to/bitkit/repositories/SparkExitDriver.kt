@@ -777,10 +777,7 @@ class SparkExitDriver(
         val isEverSweepable = runCatching {
             SparkExitSweep.plan(SparkExitSweep.worthSweeping(all, 1uL), record.destination, 1uL) != null
         }.getOrDefault(true)
-        if (!isEverSweepable) {
-            val total = all.fold(0uL) { sum, input -> sum.safe() + input.valueSats.safe() }
-            return current.copy(leftoverSweep = SparkExitRecord.LeftoverSweep(null, null, total, isDustKept = true))
-        }
+        if (!isEverSweepable) return keepAsDust(record, current, utxos, built)
         val refused = built?.takeIf { it.isWaitingForFees }?.refusedFeeRate ?: 0uL
         // A refusal raises the rate up to the next block's or the exit's, never above: a node asking more is refused
         // again, and the sweep waits a block for fees to drop.
@@ -792,6 +789,38 @@ class SparkExitDriver(
             rate,
         )
         return buildSweep(current, inputs, rate, built?.replacedTxids?.takeIf { it.isNotEmpty() })
+    }
+
+    /**
+     * Confirmed outputs not even the lowest relay rate can send stay as dust. Funding still unconfirmed beside them is
+     * not let go: the exit keeps every output and looks again after a recheck.
+     */
+    private fun keepAsDust(
+        record: SparkExitRecord,
+        confirmedOnly: SparkExitRecord,
+        utxos: List<EsploraUtxo>,
+        built: SparkExitRecord.LeftoverSweep?,
+    ): SparkExitRecord {
+        val isAllConfirmed = utxos.all { it.status.confirmed }
+        val confirmed = if (isAllConfirmed) utxos else utxos.filter { it.status.confirmed }
+        val total = confirmed.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+        if (isAllConfirmed) {
+            val kept = SparkExitRecord.LeftoverSweep(null, null, total, isDustKept = true)
+            return confirmedOnly.copy(leftoverSweep = kept)
+        }
+        val height = tip ?: return record
+        val waiting = SparkExitRecord.LeftoverSweep(
+            null,
+            null,
+            utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() },
+            replacedTxids = built?.replacedTxids.orEmpty(),
+            waitingSince = built?.takeIf { it.isWaitingForFees }?.waitingSince ?: height,
+            checkedAtHeight = height,
+        )
+        return record.copy(
+            leftover = utxos.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) },
+            leftoverSweep = waiting,
+        )
     }
 
     /**

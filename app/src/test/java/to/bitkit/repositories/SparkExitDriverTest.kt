@@ -1771,6 +1771,31 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dust confirmed beside unconfirmed funding keeps watching until that funding confirms`() = test {
+        val dust = SparkExitFixtures.utxo("d0".repeat(32), 0u, 294uL)
+        val late = SparkExitFixtures.utxo("e1".repeat(32), 0u, 30_000uL, confirmed = false)
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(dust, late)
+        chain.economyRate = 50uL
+        var record = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            leftover = listOf(SparkExitRecord.Leftover(dust.txid, dust.vout, dust.value)),
+        )
+        record = driver(tip = 1_000u).tick(record)
+        record = driver(tip = 1_144u).tick(record)
+
+        assertTrue(record.needsDriving, "the unconfirmed funding is still to be swept")
+        assertFalse(assertNotNull(record.leftoverSweep).isDustKept)
+        assertTrue(record.leftover.any { it.txid == late.txid })
+
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(dust, late.copy(status = EsploraTxStatus(true, 1_200u)))
+        chain.economyRate = 1uL
+        record = driver(tip = 1_288u).tick(record)
+        assertEquals(1, chain.rawBroadcasts.size)
+        assertTrue(SparkExitTxInputs.decode(chain.rawBroadcasts.single())!!.any { it.prevTxid == late.txid })
+    }
+
+    @Test
     fun `a replacement that would be dust keeps the accepted sweep`() = test {
         var record = driver(tip = 1_000u).tick(sweepDone())
         val first = assertNotNull(record.leftoverSweep)
