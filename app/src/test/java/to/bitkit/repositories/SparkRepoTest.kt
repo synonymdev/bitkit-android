@@ -547,6 +547,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment event keeps the journal until spark lists the withdrawal`() = test {
+        val sut = journaledSpark()
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(contactWithdrawal()))
+        runCurrent()
+
+        verify(activityRepo).upsertActivity(any())
+        assertEquals(
+            SparkWithdrawalOutcome.Unknown,
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+            "A list that lags the event must not read the withdrawal as unsent",
+        )
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        sut.start(0).getOrThrow()
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
     fun `keeps a journaled withdrawal Spark lists when its activity fails to save on start`() = test {
         cacheData.update {
             it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))

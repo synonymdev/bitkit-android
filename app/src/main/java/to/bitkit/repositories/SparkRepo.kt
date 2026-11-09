@@ -953,7 +953,7 @@ class SparkRepo @Inject constructor(
                 }
                 is SdkEvent.PaymentSucceeded -> onPayment(event.payment)
                 is SdkEvent.PaymentFailed -> onPayment(event.payment)
-                is SdkEvent.PaymentPending -> recordActivity(event.payment)
+                is SdkEvent.PaymentPending -> recordActivity(event.payment, settlesJournal = false)
                 is SdkEvent.UnclaimedDeposits -> Logger.warn(
                     "Found '${event.unclaimedDeposits.size}' unclaimed Spark deposits",
                     context = TAG,
@@ -972,7 +972,7 @@ class SparkRepo @Inject constructor(
         // The event carries its outcome, so a failed balance read never holds back its settlement.
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
-        recordActivity(payment)
+        recordActivity(payment, settlesJournal = false)
         payment.failedSendHash()?.let { hash ->
             val latest = lightningSend(hash)
             val isReleased = latest == SparkLightningSend.NotFound ||
@@ -982,8 +982,12 @@ class SparkRepo @Inject constructor(
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
-    private suspend fun recordActivity(payment: Payment) {
-        (payment.details as? PaymentDetails.Withdraw)?.let { return recordWithdrawal(payment, it) }
+    /**
+     * Records [payment] as activity. Only Spark's list or its send response [settlesJournal]: a payment event can come
+     * before the list holds the withdrawal, which recovery reads, so its journal stays open until the list shows it.
+     */
+    private suspend fun recordActivity(payment: Payment, settlesJournal: Boolean = true) {
+        (payment.details as? PaymentDetails.Withdraw)?.let { return recordWithdrawal(payment, it, settlesJournal) }
         val lightning = payment.details as? PaymentDetails.Lightning ?: return
         if (payment.status == PaymentStatus.PENDING && payment.paymentType == SparkPaymentType.RECEIVE) {
             return
@@ -1025,7 +1029,7 @@ class SparkRepo @Inject constructor(
      * Records a withdrawal to a Paykit contact as an on-chain send, settling the journal entry it matches. Transfers to
      * Savings have no row here: the node lists their arrival as the transfer.
      */
-    private suspend fun recordWithdrawal(payment: Payment, withdraw: PaymentDetails.Withdraw) {
+    private suspend fun recordWithdrawal(payment: Payment, withdraw: PaymentDetails.Withdraw, settlesJournal: Boolean) {
         val txid = withdraw.txId
         val existing = (activityRepo.get().getActivity(txid).getOrNull() as? Activity.Onchain)?.v1
             ?.takeIf { it.txType == PaymentType.SENT }
@@ -1048,7 +1052,7 @@ class SparkRepo @Inject constructor(
         val saved = activityRepo.get().upsertActivity(Activity.Onchain(activity))
             .onFailure { Logger.warn("Failed to record Spark withdrawal '$txid'", it, context = TAG) }
             .isSuccess
-        if (saved && journal != null) {
+        if (saved && journal != null && settlesJournal) {
             // The tags picked on Confirm travel with the journal, so a recovered withdrawal keeps them too.
             if (journal.tags.isNotEmpty()) {
                 activityRepo.get().addTagsToActivity(txid, journal.tags)
