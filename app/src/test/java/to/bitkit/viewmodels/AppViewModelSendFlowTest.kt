@@ -12298,6 +12298,100 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a refused reroute on confirmation blocks the swipe before the private list is consumed`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 10_000u)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
+        setActiveContactPaymentContext(testPublicKey, privateContext)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+            ),
+        )
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.None("Spark can't cover the fee")))
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+        // SendConfirmScreen sends PayConfirmed only once the swipe set shouldConfirmPay.
+        if (sut.sendUiState.value.shouldConfirmPay) sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isAmountInputValid, "a refused route must keep the swipe disabled")
+        verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
+    }
+
+    @Test
+    fun `switching back after a refused reroute pays the contact from its private list`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 10_000u)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        stubSuccessfulOnchainSend(leg.endpoint.value, leg.deliveredSat)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
+        setActiveContactPaymentContext(testPublicKey, privateContext)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+            ),
+        )
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.None("Spark can't cover the fee")))
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid, "switching back must re-enable the swipe")
+        confirmCurrentPayment()
+
+        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(lightningRepo).sendOnChain(
+            address = eq(leg.endpoint.value),
+            sats = any(),
+            speed = anyOrNull(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `spark leg fees count in the payment warnings`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact").copy(deliveredSat = 1_000uL, debitSat = 2_000uL)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)

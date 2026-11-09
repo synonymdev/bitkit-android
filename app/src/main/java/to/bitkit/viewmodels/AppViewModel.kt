@@ -4414,7 +4414,10 @@ class AppViewModel @Inject constructor(
         // A source switch on Confirm asks the router again, for a request (no amount step) or a route already decided.
         if (activeIncomingPaymentRequest() != null || paykitRouteDecided) {
             _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
-                routePaykitPayment(it)
+                // A refused route leaves no leg or invoice to pay; switching the source again recomputes validity.
+                if (routePaykitPayment(it) == PaykitRouteOutcome.Refused) {
+                    _sendUiState.update { state -> state.copy(isAmountInputValid = false) }
+                }
             }
         }
         reviewFundingSourceChange(current, canReviewInPlace, wasReviewed)
