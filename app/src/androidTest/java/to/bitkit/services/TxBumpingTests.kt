@@ -8,14 +8,12 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
-import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.LocalRegtest
@@ -270,18 +268,11 @@ class TxBumpingTests {
         val cpfpDestinationAddress = lightningService.newAddress()
         println("CPFP destination address: $cpfpDestinationAddress")
 
-        val cpfpResult = runSuspendCatching {
-            lightningService.accelerateByCpfp(
-                txid = stuckIncomingTxId,
-                satsPerVByte = highFeeRate,
-                toAddress = cpfpDestinationAddress,
-            )
-        }
-        // The shared regtest chain can mine the parent before the child is built, leaving nothing to bump
-        val isParentConfirmed = generateSequence(cpfpResult.exceptionOrNull()) { it.cause }
-            .any { it.message.orEmpty().contains("Transaction already confirmed") }
-        assumeFalse(isParentConfirmed)
-        val childTxId = cpfpResult.getOrThrow()
+        val childTxId = lightningService.accelerateByCpfp(
+            txid = stuckIncomingTxId,
+            satsPerVByte = highFeeRate,
+            toAddress = cpfpDestinationAddress,
+        )
 
         assertFalse(childTxId.isEmpty(), "CPFP child transaction ID should not be empty")
         assertTrue(

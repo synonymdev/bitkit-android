@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: synonymdev/bitkit-docker
-          ref: main
+          ref: f5eae182db9ddecd61a0f1b5e9f48aee283bb3dc
           path: bitkit-docker
 
       - name: Start local regtest
