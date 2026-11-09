@@ -1642,6 +1642,25 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a sweep whose replaced version confirmed shows the version that confirmed`() = test {
+        var record = driver(tip = 1_000u).tick(sweepDone())
+        val first = assertNotNull(record.leftoverSweep)
+        record = driver(tip = 1_144u).tick(record)
+        val replacement = assertNotNull(record.leftoverSweep)
+        assertTrue(replacement.valueSats < first.valueSats)
+        chain.confirmedTxids = setOf(assertNotNull(first.txid))
+
+        record = driver(tip = 1_145u).tick(record)
+
+        val landed = assertNotNull(record.leftoverSweep)
+        assertTrue(landed.isConfirmed)
+        assertEquals(first.txid, landed.txid)
+        assertEquals(first.valueSats, landed.valueSats)
+        assertEquals(first.txHex, landed.txHex)
+        assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
+    }
+
+    @Test
     fun `a replacement that would be dust keeps the accepted sweep`() = test {
         var record = driver(tip = 1_000u).tick(sweepDone())
         val first = assertNotNull(record.leftoverSweep)

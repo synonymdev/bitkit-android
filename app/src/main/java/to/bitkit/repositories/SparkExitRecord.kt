@@ -133,6 +133,11 @@ data class SparkExitRecord(
     val landedSweepTxid: String? = null,
     /** Leftover sweeps that confirmed while more funding was still at the address, earliest first. */
     val sweptLeftover: List<SweptLeftover> = emptyList(),
+    /**
+     * Every leftover sweep a node accepted, so the one that confirms is shown and followed with its own amount and
+     * inputs even after a replacement took its place.
+     */
+    val acceptedSweeps: List<AcceptedSweep> = emptyList(),
     /** Steps confirmed when the rebuild from the chain was adopted; one more clears [isRebuiltFromChain]. */
     val rebuiltFromChainConfirmedCount: Int? = null,
     /** The tip of the first funding-wait tick that looked for [fundingPaymentTxid]. */
@@ -224,6 +229,8 @@ data class SparkExitRecord(
     data class LostLeaf(val leafId: String, val valueSats: ULong)
 
     data class SweptLeftover(val txid: String, val valueSats: ULong)
+
+    data class AcceptedSweep(val txid: String, val txHex: String, val valueSats: ULong)
 
     data class LeftBehindLeaf(val leafId: String, val valueSats: ULong, val reason: String)
 
@@ -908,6 +915,22 @@ object SparkExitJson {
         r.failedLeafRetriedAt?.let { put("failedLeafRetriedAt", it.toLong()) }
         if (r.isFailedLeavesReleased) put("isFailedLeavesReleased", true)
         r.landedSweepTxid?.let { put("landedSweepTxid", it) }
+        if (r.acceptedSweeps.isNotEmpty()) {
+            put(
+                "acceptedSweeps",
+                buildJsonArray {
+                    r.acceptedSweeps.forEach {
+                        add(
+                            buildJsonObject {
+                                put("txid", it.txid)
+                                put("txHex", it.txHex)
+                                put("valueSats", it.valueSats.toLong())
+                            },
+                        )
+                    }
+                },
+            )
+        }
         if (r.sweptLeftover.isNotEmpty()) {
             put(
                 "sweptLeftover",
@@ -1017,6 +1040,10 @@ object SparkExitJson {
         isFailedLeavesReleased = o.booleanOrNull("isFailedLeavesReleased") ?: false,
         landedSweepTxid = o.stringOrNull("landedSweepTxid"),
         sweptLeftover = sweptLeftoverFromJson(o),
+        acceptedSweeps = o.arrayOrEmpty("acceptedSweeps").map {
+            val s = it.jsonObject
+            SparkExitRecord.AcceptedSweep(s.string("txid"), s.string("txHex"), s.ulong("valueSats"))
+        },
         rebuiltFromChainConfirmedCount = o.intOrNull("rebuiltFromChainConfirmedCount"),
         fundingPaymentSeenAtHeight = o.ulongOrNull("fundingPaymentSeenAtHeight")?.toUInt(),
         fundingPaymentMissingSince = o.ulongOrNull("fundingPaymentMissingSince")?.toUInt(),

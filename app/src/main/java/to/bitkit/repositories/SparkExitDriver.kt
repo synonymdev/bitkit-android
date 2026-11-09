@@ -755,9 +755,13 @@ class SparkExitDriver(
      */
     private suspend fun sweepLanded(
         record: SparkExitRecord,
-        sweep: SparkExitRecord.LeftoverSweep,
+        current: SparkExitRecord.LeftoverSweep,
         txid: String,
     ): SparkExitRecord {
+        // A version it replaced confirmed instead: that one's amount and inputs are what reached savings.
+        val sweep = record.acceptedSweeps.firstOrNull { it.txid == txid && it.txid != current.txid }
+            ?.let { current.copy(txid = it.txid, txHex = it.txHex, valueSats = it.valueSats) }
+            ?: current
         val landed = record.copy(leftoverSweep = sweep.copy(isConfirmed = true))
         val address = record.funding.firstOrNull()?.address ?: return landed
         // Read again on the next tick: what is left at the address decides how the sweep ends.
@@ -910,6 +914,7 @@ class SparkExitDriver(
                     rejection = null,
                     sentAtHeight = sweep.sentAtHeight ?: tip
                 ),
+                acceptedSweeps = record.acceptedSweepsWith(sweep, hex),
             )
             // A replacement refused for another reason while the version it replaced may still confirm waits again.
             is SparkExitBroadcastOutcome.Rejected if sweep.replacedTxids.isNotEmpty() && tip != null &&
@@ -924,6 +929,15 @@ class SparkExitDriver(
             is SparkExitBroadcastOutcome.NotMature,
             -> record
         }
+    }
+
+    private fun SparkExitRecord.acceptedSweepsWith(
+        sweep: SparkExitRecord.LeftoverSweep,
+        hex: String,
+    ): List<SparkExitRecord.AcceptedSweep> {
+        val txid = sweep.txid ?: return acceptedSweeps
+        if (acceptedSweeps.any { it.txid == txid }) return acceptedSweeps
+        return acceptedSweeps + SparkExitRecord.AcceptedSweep(txid, hex, sweep.valueSats)
     }
 
     private fun isRebuildDue(record: SparkExitRecord): Boolean {
