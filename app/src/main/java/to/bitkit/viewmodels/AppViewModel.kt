@@ -4143,6 +4143,8 @@ class AppViewModel @Inject constructor(
         _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
             preferSparkWhenSavingsShort(it)
             if (routePaykitPayment(it) == PaykitRouteOutcome.Refused) return false
+            // Validity was set against the source before routing; the route may have moved the payment to Spark.
+            _sendUiState.update { state -> state.copy(isAmountInputValid = validateAmount(state.amount)) }
         }
         if (!bindBitcoinRequestTerms()) return false
         requireCurrentPaymentPreparation(walletGeneration)

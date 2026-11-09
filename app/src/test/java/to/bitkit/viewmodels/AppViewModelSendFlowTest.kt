@@ -17841,6 +17841,43 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an onchain request routed to spark opens confirmation with the swipe on`() = test {
+        enablePaykitUi()
+        usdtEnabled.value = false
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val endpoint = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 20_000uL, debitSat = 20_300uL)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, 20_000u),
+            acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 5_000u, maxSendLightningSats = 50_000u)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.Opened(endpoint.value, endpoints = listOf(endpoint))),
+        )
+
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        assertTrue(
+            sut.sendUiState.value.isAmountInputValid,
+            "a spark leg that covers the request must enable the swipe",
+        )
+    }
+
+    @Test
     fun `fixed dollar request accepting USDT opens bitcoin confirmation while USDT is off`() = test {
         enablePaykitUi()
         usdtEnabled.value = false
