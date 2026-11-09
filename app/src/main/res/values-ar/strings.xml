@@ -1723,4 +1723,9 @@
     <string name="widgets__widget__size_small">صغير</string>
     <string name="widgets__widget__size_wide">عريض</string>
     <string name="wallet__balance_updating">جارٍ تحديث الرصيد…</string>
+    <string name="settings__status__lightning_connection__spark">يستخدم Spark</string>
+    <string name="settings__status__spark__error">غير متصل</string>
+    <string name="settings__status__spark__pending">جارٍ الاتصال...</string>
+    <string name="settings__status__spark__ready">متصل</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

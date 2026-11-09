@@ -1735,4 +1735,9 @@
     <string name="widgets__widget__size_small">Маленький</string>
     <string name="widgets__widget__size_wide">Широкий</string>
     <string name="wallet__balance_updating">Обновление баланса…</string>
+    <string name="settings__status__lightning_connection__spark">Через Spark</string>
+    <string name="settings__status__spark__error">Не в сети</string>
+    <string name="settings__status__spark__pending">Подключение...</string>
+    <string name="settings__status__spark__ready">Подключено</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

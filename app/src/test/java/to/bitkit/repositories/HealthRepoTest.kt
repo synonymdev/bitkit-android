@@ -229,6 +229,21 @@ class HealthRepoTest : BaseUnitTest() {
             sparkState.value = SparkState(isSupported = true, isReady = true)
             assertEquals(HealthState.READY, awaitItem().spark)
             isOnline.value = ConnectivityState.DISCONNECTED
+            val offline = awaitItem()
+            assertEquals(HealthState.ERROR, offline.spark)
+            assertEquals(HealthState.ERROR, offline.channels)
+            assertEquals(false, offline.isLightningViaSpark)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `spark is error when its start failed`() = test {
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true, hasStartFailed = true)))
+
+        sut = createSut()
+
+        sut.healthState.test {
             assertEquals(HealthState.ERROR, awaitItem().spark)
             cancelAndIgnoreRemainingEvents()
         }
@@ -238,8 +253,29 @@ class HealthRepoTest : BaseUnitTest() {
     fun `channels status is ready through spark when no channel is usable`() = test {
         val pendingChannel = mock<ChannelDetails> {
             on { isChannelReady } doReturn false
+            on { isUsable } doReturn false
         }
         val lightningState = LightningState(channels = listOf(pendingChannel).toImmutableList())
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true, isReady = true)))
+
+        sut = createSut()
+
+        sut.healthState.test {
+            val state = awaitItem()
+            assertEquals(HealthState.READY, state.channels)
+            assertEquals(true, state.isLightningViaSpark)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `channels status is ready through spark when the ready channel's peer is disconnected`() = test {
+        val disconnectedChannel = mock<ChannelDetails> {
+            on { isChannelReady } doReturn true
+            on { isUsable } doReturn false
+        }
+        val lightningState = LightningState(channels = listOf(disconnectedChannel).toImmutableList())
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
         whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true, isReady = true)))
 
@@ -257,6 +293,7 @@ class HealthRepoTest : BaseUnitTest() {
     fun `channels status is open when a channel is usable beside spark`() = test {
         val openChannel = mock<ChannelDetails> {
             on { isChannelReady } doReturn true
+            on { isUsable } doReturn true
         }
         val lightningState = LightningState(channels = listOf(openChannel).toImmutableList())
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))

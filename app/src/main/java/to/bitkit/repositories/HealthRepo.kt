@@ -96,7 +96,7 @@ class HealthRepo @Inject constructor(
             else -> HealthState.ERROR
         }
 
-        val hasUsableChannels = lightningState.channels.any { it.isChannelReady }
+        val hasUsableChannels = lightningState.channels.any { it.isUsable }
         val isLightningViaSpark = isOnline && !hasUsableChannels && sparkState.isReady
 
         val channelsHealth = when {
@@ -109,6 +109,7 @@ class HealthRepo @Inject constructor(
             !sparkState.isSupported -> null
             !isOnline -> HealthState.ERROR
             sparkState.isReady -> HealthState.READY
+            sparkState.hasStartFailed -> HealthState.ERROR
             else -> HealthState.PENDING
         }
 
@@ -192,7 +193,7 @@ data class AppHealthState(
     val electrum: HealthState = HealthState.READY,
     val node: HealthState = HealthState.READY,
     val channels: HealthState = HealthState.READY,
-    /** No channel can carry a payment, so Spark carries Lightning. */
+    /** No channel is usable, so Spark carries Lightning payments. */
     val isLightningViaSpark: Boolean = false,
     /** Null where Spark is unsupported. */
     val spark: HealthState? = null,

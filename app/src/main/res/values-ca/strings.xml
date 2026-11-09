@@ -1720,4 +1720,9 @@
     <string name="widgets__widget__size_small">Petit</string>
     <string name="widgets__widget__size_wide">Ample</string>
     <string name="wallet__balance_updating">S’està actualitzant el saldo…</string>
+    <string name="settings__status__lightning_connection__spark">Utilitzant Spark</string>
+    <string name="settings__status__spark__error">Fora de línia</string>
+    <string name="settings__status__spark__pending">Connectant...</string>
+    <string name="settings__status__spark__ready">Connectat</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

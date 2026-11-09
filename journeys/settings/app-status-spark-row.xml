@@ -1,0 +1,16 @@
+<journey name="app status spark row">
+  <description>
+    App Status shows a Spark row under Lightning Connection on builds where Spark is supported, and
+    the row opens Spark's detail screen. A dev build on regtest always supports Spark; the row reads
+    Connected once Spark reaches Lightspark's hosted regtest, Connecting before that, and Offline
+    without internet or after a failed start. Reaching the hosted regtest is not a journey
+    capability, so the checks accept any of the three.
+
+    Precondition: onboarded dev wallet with no channel, start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the menu button (testTag "HeaderMenu") and tap App Status (testTag "DrawerAppStatus")</action>
+    <action>Verify a row titled "Spark" (testTag "Status-spark") sits directly under Lightning Connection (testTag "Status-lightning_connection") and reads "Connected", "Connecting..." or "Offline"</action>
+    <action>Tap the Spark row and verify Spark's detail screen opens</action>
+  </actions>
+</journey>
