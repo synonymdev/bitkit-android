@@ -993,6 +993,7 @@ data class SparkExitState(
         get() {
             val exit = record ?: return null
             // Reached only once its sweep or cooperative step confirmed: the plan lists the sweep from the first build.
+            // A leaf an older state claimed never reaches savings, so it leaves the transfer too.
             val confirmed = exit.recovery?.let { SparkExitMath.confirmedReceived(it, exit.destination) }.orEmpty()
             val received = (exit.earlierReceivedSats + confirmed).values
                 .fold(0uL) { sum, sats -> sum.safe() + sats.safe() }
@@ -1000,6 +1001,6 @@ data class SparkExitState(
                 ?.takeIf { exit.fundingPaymentTxid == null }
                 ?.let { it.requiredSats.safe() - maxOf(exit.fundedSats, fundingSeenSats).safe() }
                 ?: 0uL
-            return (exit.expectedSats.safe() - received.safe()).safe() - unpaid.safe()
+            return ((exit.expectedSats.safe() - received.safe()).safe() - unpaid.safe()).safe() - exit.lostSats.safe()
         }
 }

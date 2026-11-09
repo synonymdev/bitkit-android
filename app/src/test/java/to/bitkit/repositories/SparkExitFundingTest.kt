@@ -192,6 +192,16 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a leaf an older state claimed leaves the transfer`() {
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
+            .copy(expectedSats = 150_000uL, leafIds = listOf("leaf-1", "leaf-2"))
+            .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 1L)
+            .copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 100_000uL)))
+
+        assertEquals(50_000uL, SparkExitState(record = record).inTransferSats)
+    }
+
+    @Test
     fun `a wait for a leaf that may still move tries again at doubling gaps up to a day and ends after a week`() {
         assertFalse(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_000u, tip = 1_005u))
         assertTrue(SparkExitMath.isRetryDue(since = 1_000u, retriedAt = 1_000u, tip = 1_006u))
