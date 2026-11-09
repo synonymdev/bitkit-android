@@ -322,7 +322,7 @@ class SparkExitRepo @Inject constructor(
         if (transferRepo.isSettled(transferId).getOrDefault(true)) return
         // Leaves the operators could not co-sign are still on their way to savings, before and while they are retried:
         // the transfer keeps counting them, less what already confirmed.
-        if (!record.isActive || (sweepActivity != null && !record.hasFailedLeavesOutstanding)) {
+        if (!record.isActive || (sweepActivity != null && !record.hasLeavesOutstanding)) {
             transferRepo.markSettled(transferId)
         }
     }

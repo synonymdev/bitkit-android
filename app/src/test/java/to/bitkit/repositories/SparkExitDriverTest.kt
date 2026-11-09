@@ -1064,6 +1064,58 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(ticked.isWaitingForLeaves)
     }
 
+    private fun partialBuild(reason: SkippedLeafReason): SparkExitRecord {
+        val record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(isRebuilding = true, leafIds = listOf("leaf-1", "leaf-2"))
+        sdk.preparedResponse = SparkExitFixtures.prepared(skipped = listOf(SkippedLeaf("leaf-2", 50_000uL, reason)))
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        val landed = SparkExitFixtures.recovery(
+            listOf(SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(990u))),
+        )
+        repeat(4) { sdk.checks += check(landed, RecoveryVerdict.Done) }
+        return record
+    }
+
+    @Test
+    fun `a leaf skipped while another builds is tried again before the exit ends`() = test {
+        var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.Unverified))
+        assertEquals(2, record.generation)
+        assertEquals(listOf("leaf-2"), record.waitingLeafIds)
+        assertEquals(record.waitingLeafIds, SparkExitJson.decode(SparkExitJson.encode(record)).waitingLeafIds)
+
+        sdk.preparedResponse = sdk.preparedResponse.copy(leaves = emptyList())
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.Running, record.phase, "leaf-2 may still move")
+        assertTrue(record.isWaitingForLeaves)
+        assertTrue(record.hasLeavesOutstanding, "leaf-2 is still in transfer")
+        assertEquals(listOf("leaf-2"), (sdk.prepareRequests.last().selection as ExitLeafSelection.Specific).leafIds)
+
+        chain.confirmedTxids = setOf("n1")
+        record = driver(withSdk = false, tip = 1_001u).tick(record)
+        assertEquals(Phase.Running, record.phase, "the exit waits for the sdk to retry leaf-2")
+
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = listOf("leaf-2"))
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2")))
+        record = driver(tip = 1_006u).tick(record)
+        assertNull(record.retrySince)
+        assertEquals(listOf("n1", "n2"), chain.broadcasts.map { it.txid })
+
+        record = driver(tip = 1_007u).tick(record)
+        assertEquals(Phase.Done, record.phase)
+    }
+
+    @Test
+    fun `a leaf skipped while another builds is let go after about a week`() = test {
+        var record = driver(tip = 1_000u).tick(partialBuild(SkippedLeafReason.FundsNotFound))
+        sdk.preparedResponse = sdk.preparedResponse.copy(leaves = emptyList())
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.Running, record.phase)
+
+        record = driver(tip = 2_008u).tick(record)
+        assertEquals(Phase.Done, record.phase)
+        assertNull(record.retrySince)
+    }
+
     @Test
     fun `resumes after a restart mid-exit without repeating broadcasts`() = test {
         val store = SparkExitStore(File(tempFolder.root, "spark-exit.json"))

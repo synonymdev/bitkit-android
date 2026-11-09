@@ -100,6 +100,11 @@ data class SparkExitRecord(
     val retrySince: UInt? = null,
     /** The tip of the last of those builds. */
     val retriedAt: UInt? = null,
+    /**
+     * The exit's leaves a build skipped while they may still move, with the rest built: tried again on their own
+     * before the exit ends, at the same gaps, and let go about a week later.
+     */
+    val waitingLeafIds: List<String> = emptyList(),
     /** The SDK's exit data from just before the first build, imported again before every rebuild. */
     val exitStateSnapshot: String? = null,
     /** The stored record could not be read, so the exit rebuilds from the chain with the funding it kept. */
@@ -441,11 +446,12 @@ data class SparkExitRecord(
     val isRetryingFailedLeaves: Boolean get() = isActive && failedLeafRetrySince != null
 
     /**
-     * Cooperative leaves the operators could not co-sign are still on their way to savings: the running recovery lists
-     * them, or their retry runs.
+     * Leaves are still on their way to savings outside the running recovery's steps: cooperative ones the operators
+     * could not co-sign (the recovery lists them, or their retry runs), or ones a build skipped while they may move.
      */
-    val hasFailedLeavesOutstanding: Boolean
-        get() = isRetryingFailedLeaves || (isActive && recovery?.failed?.isNotEmpty() == true)
+    val hasLeavesOutstanding: Boolean
+        get() = isRetryingFailedLeaves ||
+            (isActive && (recovery?.failed?.isNotEmpty() == true || waitingLeafIds.isNotEmpty()))
 
     /** While retrying, the current recovery still lists leaves the operators have not co-signed. */
     val isWaitingForOperators: Boolean
@@ -876,6 +882,9 @@ object SparkExitJson {
         }
         r.retrySince?.let { put("retrySince", it.toLong()) }
         r.retriedAt?.let { put("retriedAt", it.toLong()) }
+        if (r.waitingLeafIds.isNotEmpty()) {
+            put("waitingLeafIds", buildJsonArray { r.waitingLeafIds.forEach { add(JsonPrimitive(it)) } })
+        }
         r.exitStateSnapshot?.let { put("exitStateSnapshot", it) }
         if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
         if (r.isRedoRebuild) put("isRedoRebuild", true)
@@ -994,6 +1003,7 @@ object SparkExitJson {
             .orEmpty(),
         retrySince = o.ulongOrNull("retrySince")?.toUInt(),
         retriedAt = o.ulongOrNull("retriedAt")?.toUInt(),
+        waitingLeafIds = o.arrayOrEmpty("waitingLeafIds").map { it.jsonPrimitive.content },
         exitStateSnapshot = o.stringOrNull("exitStateSnapshot"),
         isRebuiltFromChain = o.booleanOrNull("isRebuiltFromChain") ?: false,
         isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,

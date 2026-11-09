@@ -254,7 +254,9 @@ class SparkExitDriver(
         // A leaf the operators' watchtower stopped is waited for, not struck, until its wait is over.
         val lost = record.lostLeaves(built).filter { !isStoppedWaiting(record, it.leafId, stopped) }
         if (lost.isNotEmpty()) return loseLeaves(record, lost)
+        // A leaf that may still move is kept apart and tried again before the exit ends.
         val adopted = record.adopt(built, nowMillis())
+            .copy(waitingLeafIds = waitingLeafIds(record, prepared.skipped, stopped))
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
         Logger.info(
@@ -301,10 +303,17 @@ class SparkExitDriver(
         return height < since || height - since < SparkExitMath.STOPPED_BLOCKS
     }
 
-    private fun isWaiting(record: SparkExitRecord, skipped: List<SkippedLeaf>, stopped: Set<String>): Boolean {
+    private fun isWaiting(record: SparkExitRecord, skipped: List<SkippedLeaf>, stopped: Set<String>): Boolean =
+        waitingLeafIds(record, skipped, stopped).isNotEmpty()
+
+    private fun waitingLeafIds(
+        record: SparkExitRecord,
+        skipped: List<SkippedLeaf>,
+        stopped: Set<String>,
+    ): List<String> {
         val since = record.retrySince
-        if (since != null && tip != null && SparkExitMath.isRetryReleased(since, tip)) return false
-        return skipped.any {
+        if (since != null && tip != null && SparkExitMath.isRetryReleased(since, tip)) return emptyList()
+        return skipped.filter {
             it.leafId in record.exitLeafIds && when (it.reason) {
                 SkippedLeafReason.Unverified,
                 SkippedLeafReason.FundsNotFound,
@@ -313,7 +322,7 @@ class SparkExitDriver(
                 is SkippedLeafReason.NotRecoverable -> isStoppedWaiting(record, it.leafId, stopped)
                 SkippedLeafReason.FeeExceedsValue -> false
             }
-        }
+        }.map { it.leafId }
     }
 
     private fun prepareRequest(record: SparkExitRecord, selection: ExitLeafSelection) = PrepareRecoverFundsRequest(
@@ -407,7 +416,8 @@ class SparkExitDriver(
         val stored = record.recovery ?: return record.copy(phase = SparkExitRecord.Phase.AwaitingFunding(0uL))
         // Nothing to check or send: only the failed cooperative leaves are left, and their retry decides the end.
         if (stored.transactions.isEmpty() && stored.failed.isNotEmpty()) {
-            return retryFailedLeaves(record, stored.failed.map { it.leafId }, sdk)
+            if (!record.isFailedLeavesReleased) return retryFailedLeaves(record, stored.failed.map { it.leafId }, sdk)
+            return retryWaitingLeaves(record, sdk) ?: end(record.ended(), record)
         }
         // An SDK that cannot check this tick still leaves the stored, signed steps to send.
         val checked = runSuspendCatching { sdk.check(withConfirmations(stored)) }
@@ -450,7 +460,8 @@ class SparkExitDriver(
                 if (checked.recovery.failed.isNotEmpty() && !updated.isFailedLeavesReleased) {
                     return retryFailedLeaves(updated, checked.recovery.failed.map { it.leafId }, sdk)
                 }
-                end(updated.copy(phase = SparkExitRecord.Phase.Done, failedLeaves = emptyList()), updated)
+                retryWaitingLeaves(updated, sdk)?.let { return it }
+                end(updated.ended(), updated)
             }
             is RecoveryVerdict.Redo -> {
                 Logger.warn(
@@ -506,8 +517,9 @@ class SparkExitDriver(
         val since = record.failedLeafRetrySince
         if (since != null && SparkExitMath.isRetryReleased(since, height)) {
             Logger.warn("Releasing Spark exit leaves '$failedIds' the operators did not co-sign", context = TAG)
-            val released = record.copy(phase = SparkExitRecord.Phase.Done, isFailedLeavesReleased = true)
-            return end(released, record)
+            val released = record.copy(isFailedLeavesReleased = true)
+            retryWaitingLeaves(released, sdk)?.let { return it }
+            return end(released.ended(), record)
         }
         if (since != null && !SparkExitMath.isRetryDue(since, record.failedLeafRetriedAt, height)) return record
         record = record.copy(failedLeafRetrySince = since ?: height, failedLeafRetriedAt = height)
@@ -534,6 +546,57 @@ class SparkExitDriver(
         Logger.info("Built a recovery of Spark exit leaves '$failedIds' as '${adopted.generation}'", context = TAG)
         return broadcastReady(adopted)
     }
+
+    /**
+     * Leaves a build skipped while they may still move, tried again on their own once the rest of the exit is done:
+     * at once, then at doubling gaps, until they build or about a week passed. Null once nothing waits, so the exit
+     * can end.
+     */
+    private suspend fun retryWaitingLeaves(start: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord? {
+        val ids = start.waitingLeafIds.filter { it in start.exitLeafIds }
+        if (ids.isEmpty()) return null
+        val height = tip ?: return start
+        val since = start.retrySince
+        if (since != null && SparkExitMath.isRetryReleased(since, height)) {
+            Logger.warn("Releasing Spark exit leaves '$ids' that did not move in about a week", context = TAG)
+            return null
+        }
+        if (since != null && !SparkExitMath.isRetryDue(since, start.retriedAt, height)) return start
+        var record = start.copy(retrySince = since ?: height, retriedAt = height)
+        val prepared = runSuspendCatching {
+            record = withExitState(record, sdk)
+            sdk.prepare(prepareRequest(record, ExitLeafSelection.Specific(ids)))
+        }.onFailure { Logger.warn("Failed to prepare waiting Spark exit leaves '$ids'", it, context = TAG) }
+            .getOrNull()
+            ?: return record
+        val stopped = prepared.exitChainState.stoppedLeafIds.toSet()
+        record = record.seeStopped(stopped)
+        val still = waitingLeafIds(record, prepared.skipped, stopped)
+        if (prepared.leaves.isEmpty()) return record.takeIf { still.isNotEmpty() }?.copy(waitingLeafIds = still)
+        val needsFunding = prepared.funding != null
+        val built = runSuspendCatching {
+            sdk.recover(
+                RecoverFundsRequest(prepared, if (needsFunding) record.fundingInputs else emptyList()),
+                if (needsFunding) makeSigner() else null,
+            )
+        }.onFailure { Logger.warn("Failed to build waiting Spark exit leaves '$ids'", it, context = TAG) }
+            .getOrNull()
+        if (built == null || built.transactions.isEmpty()) return record
+        val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = still)
+        save(adopted)
+        Logger.info("Built a recovery of waiting Spark exit leaves '$ids' as '${adopted.generation}'", context = TAG)
+        return broadcastReady(adopted)
+    }
+
+    /** Done, with the leaves it waited for let go; failed leaves it released stay listed. */
+    private fun SparkExitRecord.ended() = copy(
+        phase = SparkExitRecord.Phase.Done,
+        failedLeaves = if (isFailedLeavesReleased) failedLeaves else emptyList(),
+        skippedLeafCount = maxOf(skippedLeafCount, waitingLeafIds.size),
+        waitingLeafIds = emptyList(),
+        retrySince = null,
+        retriedAt = null,
+    )
 
     private suspend fun rebuild(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
         val rebuilding = record.copy(isRebuilding = true)
@@ -932,11 +995,12 @@ class SparkExitDriver(
         // Every step confirmed and no leaf failed: the exit is done without an SDK verdict.
         val isAllConfirmed = transactions.isNotEmpty() &&
             transactions.all { it.status is ExitTransactionStatus.Confirmed }
-        if (!isAllConfirmed || recovery.failed.isNotEmpty() || checked.phase != SparkExitRecord.Phase.Running) {
+        val isLeafLeft = recovery.failed.isNotEmpty() || checked.waitingLeafIds.isNotEmpty()
+        if (!isAllConfirmed || isLeafLeft || checked.phase != SparkExitRecord.Phase.Running) {
             return checked
         }
         Logger.info("Every Spark exit step confirmed; ending the exit without the SDK", context = TAG)
-        return end(checked.copy(phase = SparkExitRecord.Phase.Done, failedLeaves = emptyList()), checked)
+        return end(checked.ended(), checked)
     }
 
     /**
