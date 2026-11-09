@@ -371,6 +371,14 @@ object SparkExitAlerts {
     private val fundingReminderDelay = 4.hours
     private val regtestFundingReminderDelay = 10.minutes
 
+    /**
+     * A payment from savings the exit stopped waiting for on the tick from [previous]: no host knew it, it never
+     * confirmed, or it confirmed short of the funding. The ask is back.
+     */
+    fun isFundingAskBack(record: SparkExitRecord, previous: SparkExitRecord): Boolean =
+        previous.isAwaitingOwnPayment && !record.isAwaitingOwnPayment && record.fundingShortfallSats != null &&
+            record.fundingPaymentTxid == null
+
     /** A started exit nothing was paid into: no adopted funding, no payment from savings. */
     fun isAwaitingFirstFunding(record: SparkExitRecord): Boolean =
         record.phase is SparkExitRecord.Phase.AwaitingFunding && record.fundingShortfallSats != null &&

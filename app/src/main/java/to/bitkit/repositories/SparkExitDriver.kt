@@ -145,7 +145,7 @@ class SparkExitDriver(
                     val shortfall = record.fundingShortfallSats
                     // Nothing to fund when every leaf is recovered cooperatively.
                     val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
-                    if (funded != null) record = build(funded, sdk)
+                    record = if (funded != null) build(funded, sdk) else countShortOwnPayment(record)
                 }
             }
             SparkExitRecord.Phase.Running if record.isRebuilding -> {
@@ -359,6 +359,23 @@ class SparkExitDriver(
         val updated = record.copy(lostLeaves = record.lostLeaves + lost, isRebuilding = true, lastBuildAt = null)
         if (updated.exitLeafIds.isNotEmpty()) return updated
         return end(updated.copy(phase = SparkExitRecord.Phase.Failed(LOST_REASON), isRebuilding = false), updated)
+    }
+
+    /**
+     * A payment from savings that confirmed at the address without covering the funding is no longer waited for: it
+     * counts as funding seen there, and the rest is asked for and reminded about at once.
+     */
+    private suspend fun countShortOwnPayment(record: SparkExitRecord): SparkExitRecord {
+        val txid = record.fundingPaymentTxid?.takeIf { record.isAwaitingOwnPayment } ?: return record
+        val address = record.funding.firstOrNull()?.address ?: return record
+        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull() ?: return record
+        if (utxos.none { it.txid == txid && it.status.confirmed }) return record
+        Logger.info("Spark exit savings payment '$txid' confirmed short, asking for the rest", context = TAG)
+        return record.copy(
+            fundingPaymentTxid = null,
+            fundingPaymentSeenAtHeight = null,
+            fundingPaymentMissingSince = null,
+        )
     }
 
     private suspend fun lookForOwnPayment(record: SparkExitRecord): SparkExitRecord {

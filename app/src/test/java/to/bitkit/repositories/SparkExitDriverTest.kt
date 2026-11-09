@@ -641,6 +641,26 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a savings payment that confirms short of the funding asks for the rest at once`() = test {
+        val paid = "d0".repeat(32)
+        val waiting = SparkExitFixtures.record(Phase.AwaitingFunding(35_000uL)).copy(fundingPaymentTxid = paid)
+        val address = SparkExitFixtures.FUNDING_ADDRESS
+        chain.utxosByAddress[address] = listOf(SparkExitFixtures.utxo(paid, 0u, 20_000uL, confirmed = false))
+
+        val sent = driver(tip = 1_000u).tick(waiting)
+        assertTrue(sent.isAwaitingOwnPayment, "still confirming")
+        assertFalse(SparkExitAlerts.isFundingAskBack(sent, waiting))
+
+        chain.utxosByAddress[address] = listOf(SparkExitFixtures.utxo(paid, 0u, 20_000uL))
+        val short = driver(tip = 1_001u).tick(sent)
+
+        assertFalse(short.isAwaitingOwnPayment)
+        assertTrue(SparkExitAlerts.isFundingAskBack(short, sent))
+        val ask = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(short, chain.utxosByAddress[address]))
+        assertEquals(20_000uL, ask.receivedSats)
+    }
+
+    @Test
     fun `a payment from savings never adopted is forgotten 144 blocks after the first look`() {
         val waiting = SparkExitFixtures.record(Phase.NeedsFunding(30_000uL)).copy(fundingPaymentTxid = "bump")
         val looked = waiting.withOwnPaymentLooked(1_000u, isKnown = true)

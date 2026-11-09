@@ -400,12 +400,7 @@ class SparkExitRepo @Inject constructor(
                 deadlineAtMillis = clock.nowMs() + deadline.deadlineIn.inWholeMilliseconds
             )
         }
-        // A payment from savings the exit forgot, as no host knew it or it never confirmed: the ask is back.
-        if (previous.isAwaitingOwnPayment && !record.isAwaitingOwnPayment && record.fundingShortfallSats != null &&
-            record.fundingPaymentTxid == null
-        ) {
-            work.notify(SparkExitAlert.Funding)
-        }
+        if (SparkExitAlerts.isFundingAskBack(record, previous)) work.notify(SparkExitAlert.Funding)
         when (record.phase) {
             // Waiting on the operators for a week needs nothing from the user, so nothing reminds them.
             SparkExitRecord.Phase.Running if record.isWaitingForOperators -> {
