@@ -197,6 +197,9 @@ class BackupRepo @Inject constructor(
         Logger.debug("Set restore pending to '$isPending'", context = TAG)
     }
 
+    /** A restore was announced and its backup is not applied yet. */
+    fun isRestoreInProgress(): Boolean = _isRestoring.value || isRestorePending()
+
     suspend fun hasPendingWalletRestore(): Boolean = withContext(ioDispatcher) {
         keychain.hasPendingWalletRestore()
     }

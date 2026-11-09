@@ -367,6 +367,7 @@
     <string name="lightning__setting_up__not_seen">Spark hat deine Überweisung noch nicht gesehen. Sie wird nach 3 Bestätigungen gutgeschrieben; du kannst diesen Bildschirm verlassen.</string>
     <string name="lightning__setting_up__pay">₿ {amount} zahlen</string>
     <string name="lightning__setting_up__repriced">Sofort kostet jetzt ₿ {amount}. Zahle es oder warte auf 3 Bestätigungen, etwa 30 Minuten, zu einer niedrigeren Gebühr.</string>
+    <string name="lightning__setting_up__speed">Geschwindigkeit: {speed}</string>
     <string name="lightning__setting_up__step_adding">Wird hinzugefügt</string>
     <string name="lightning__setting_up__step_seen">Von Spark gesehen</string>
     <string name="lightning__setting_up__step_sent">Überweisung gesendet</string>

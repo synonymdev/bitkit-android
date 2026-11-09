@@ -262,9 +262,9 @@ class TransferViewModel @Inject constructor(
                     outcome.complete(awaitSwapClaim(swap.id))
                 }
 
-                // Pay the hold invoice (amount is encoded). It stays pending until Boltz
-                // locks funds on-chain and we claim them, which is the expected happy path.
-                val paymentHash = lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow()
+                // Pay the hold invoice (amount is encoded) from the channels it was quoted on, never Spark.
+                // It stays pending until Boltz locks funds on-chain and we claim them, the expected happy path.
+                val paymentHash = lightningRepo.payInvoiceWithNode(swap.invoice).getOrThrow()
 
                 // payInvoice returns as soon as the HTLC is dispatched, and a hold invoice never
                 // settles until Boltz claims, so nothing else notices a payment that fails to route.

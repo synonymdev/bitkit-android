@@ -79,6 +79,7 @@ class WalletRepo @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
     private val sparkRepo: SparkRepo,
+    private val backupRepo: BackupRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -120,7 +121,8 @@ class WalletRepo @Inject constructor(
         }
         repoScope.launch {
             sparkRepo.state.map { it.isReady }.distinctUntilChanged().collect { isReady ->
-                if (isReady && walletExists()) refreshBip21()
+                // An address revealed before the restore reads the backup leaves an unused index behind it.
+                if (isReady && walletExists() && !backupRepo.isRestoreInProgress()) refreshBip21()
             }
         }
         repoScope.launch {

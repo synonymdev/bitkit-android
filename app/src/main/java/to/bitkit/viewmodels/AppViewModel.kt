@@ -6678,7 +6678,13 @@ class AppViewModel @Inject constructor(
                 val current = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (current != original || !current.isTransfer || current.requestId != null) return@runSuspendCatching
                 if (!current.hasPositiveEvidence || !current.localFollowupComplete) return@runSuspendCatching
-                if (current.txid == null || current.transferContext == null) return@runSuspendCatching
+                if (current.txid == null) return@runSuspendCatching
+                if (current.isSparkFunding) {
+                    lightningRepo.followRecoveredSparkFunding(current)
+                    hideSheet()
+                    return@runSuspendCatching
+                }
+                if (current.transferContext == null) return@runSuspendCatching
                 val orderId = current.orderId ?: return@runSuspendCatching
                 hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
