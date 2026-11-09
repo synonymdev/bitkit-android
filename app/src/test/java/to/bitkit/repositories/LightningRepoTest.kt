@@ -1938,6 +1938,14 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `canSend counts spark when no channel can pay`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        assertTrue(sut.canSend(1_000uL))
+    }
+
+    @Test
     fun `canSend should return false when channels have insufficient capacity`() = test {
         startNodeForTesting()
         val channel = createChannelDetails().copy(
