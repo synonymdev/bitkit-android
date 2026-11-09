@@ -12,7 +12,8 @@ set -euo pipefail
 #   ./lsp POST /regtest/chain/deposit '{"address":"bcrt1q...","amountSat":500000}'
 #
 # Environment:
-#   BLOCKTANK_API_URL  Override base URL (default: staging)
+#   BLOCKTANK_API_URL       Override base URL (default: staging)
+#   BLOCKTANK_REGTEST_AUTH  user:password, required by staging's /regtest routes
 
 BASE_URL="${BLOCKTANK_API_URL:-https://api.stag0.blocktank.to/blocktank/api/v2}"
 METHOD="${1:?Usage: ./lsp <GET|POST> <path> [json_body]}"
@@ -29,14 +30,14 @@ call_api() {
     local response
 
     if [ "$METHOD" = "GET" ]; then
-        http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" "$URL")
+        http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" ${BLOCKTANK_REGTEST_AUTH:+-u "$BLOCKTANK_REGTEST_AUTH"} "$URL")
     elif [ "$METHOD" = "POST" ]; then
         if [ -n "$BODY" ]; then
-            http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" -X POST "$URL" \
+            http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" ${BLOCKTANK_REGTEST_AUTH:+-u "$BLOCKTANK_REGTEST_AUTH"} -X POST "$URL" \
                 -H "Content-Type: application/json" \
                 -d "$BODY")
         else
-            http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" -X POST "$URL" \
+            http_code=$(curl -s -o "$tmpfile" -w "%{http_code}" ${BLOCKTANK_REGTEST_AUTH:+-u "$BLOCKTANK_REGTEST_AUTH"} -X POST "$URL" \
                 -H "Content-Type: application/json" \
                 -d '{}')
         fi
