@@ -192,6 +192,8 @@
     <string name="lightning__spark_exit__ready_in">Ready in {duration}</string>
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit couldn\'t read this exit\'s saved progress, so it rebuilds it from the chain.</string>
     <string name="lightning__spark_exit__receive">You receive about</string>
+    <string name="lightning__spark_exit__savings_fee">Savings payment fee</string>
+    <string name="lightning__spark_exit__savings_total">Total from savings</string>
     <string name="lightning__spark_exit__step_funding">Fee funding confirms</string>
     <string name="lightning__spark_exit__step_publish">Publishing exit transactions</string>
     <string name="lightning__spark_exit__step_sweep">Sending to savings</string>
