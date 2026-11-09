@@ -1241,6 +1241,18 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark payment without a fee limit keeps to the node's default one`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        sut.payInvoice("invoice", 1_000uL).getOrThrow()
+
+        verify(sparkRepo).payInvoice(eq("invoice"), eq(1_000uL), isNull(), eq(60_000uL), any())
+    }
+
+    @Test
     fun `restore beginning during spark payment authorization prevents dispatch`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)

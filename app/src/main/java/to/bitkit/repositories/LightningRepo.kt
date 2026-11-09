@@ -1385,13 +1385,16 @@ class LightningRepo @Inject constructor(
 
     /** Pays with Spark when no channel has the outbound capacity for the invoice amount. */
     private fun shouldPayWithSpark(bolt11: String, sats: ULong?): Boolean {
-        val amountSats = sats ?: runCatching { Bolt11Invoice.fromStr(bolt11).amountMilliSatoshis() }.getOrNull()
-            ?.let { it / MSATS_PER_SAT } ?: return false
+        val amountSats = invoiceAmountSats(bolt11, sats) ?: return false
         val state = _lightningState.value
         val ldkCanSend = state.nodeLifecycleState.canRun() &&
             state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
         return !ldkCanSend && sparkRepo.canSend(amountSats)
     }
+
+    private fun invoiceAmountSats(bolt11: String, sats: ULong?): ULong? =
+        sats ?: runCatching { Bolt11Invoice.fromStr(bolt11).amountMilliSatoshis() }.getOrNull()
+            ?.let { it / MSATS_PER_SAT }
 
     suspend fun fetchLnurlInvoice(
         data: LnurlPayData,
@@ -1495,7 +1498,12 @@ class LightningRepo @Inject constructor(
             val authorizeSend: suspend () -> Boolean = {
                 onBeforeSend().also { if (it) requireWalletRestoreComplete() }
             }
-            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, authorizeSend)
+            // Without a caller's limit Spark keeps to the node's default, so a re-quote cannot raise the fee past it.
+            val maxTotalFeeMsat = maxTotalRoutingFeeMsat ?: invoiceAmountSats(bolt11, sats)?.let {
+                (it.safe() * MSATS_PER_SAT.safe() / DEFAULT_ROUTING_FEE_DIVISOR).safe() +
+                    DEFAULT_ROUTING_FEE_BASE_MSAT.safe()
+            }
+            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalFeeMsat, authorizeSend)
                 .onSuccess { recordSendRail(it, LightningRail.Spark) }
                 .onFailure {
                     if (it is PaymentPendingException) recordSendRail(it.paymentHash, LightningRail.Spark)
@@ -2829,6 +2837,12 @@ class LightningRepo @Inject constructor(
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val MSATS_PER_SAT = 1_000uL
+
+        /** LDK's default routing fee limit is 1% of the amount, this divisor, plus [DEFAULT_ROUTING_FEE_BASE_MSAT]. */
+        private const val DEFAULT_ROUTING_FEE_DIVISOR = 100uL
+
+        /** The flat 50 sats in LDK's default routing fee limit. */
+        private const val DEFAULT_ROUTING_FEE_BASE_MSAT = 50_000uL
 
         /** Inbound the node's ready channels need before an amountless contact endpoint goes to the node, not Spark. */
         private const val AMOUNTLESS_NODE_INBOUND_SATS = 1_000_000uL
