@@ -440,6 +440,13 @@ data class SparkExitRecord(
     /** The exit retries cooperative leaves the operators moved on-chain but could not co-sign. */
     val isRetryingFailedLeaves: Boolean get() = isActive && failedLeafRetrySince != null
 
+    /**
+     * Cooperative leaves the operators could not co-sign are still on their way to savings: the running recovery lists
+     * them, or their retry runs.
+     */
+    val hasFailedLeavesOutstanding: Boolean
+        get() = isRetryingFailedLeaves || (isActive && recovery?.failed?.isNotEmpty() == true)
+
     /** While retrying, the current recovery still lists leaves the operators have not co-signed. */
     val isWaitingForOperators: Boolean
         get() = isRetryingFailedLeaves && recovery?.failed?.isNotEmpty() == true

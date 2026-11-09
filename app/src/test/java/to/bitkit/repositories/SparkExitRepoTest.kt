@@ -1,6 +1,8 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.CheckRecoverFundsResponse
+import breez_sdk_spark.CooperativeRecoveryError
+import breez_sdk_spark.CooperativeRecoveryFailure
 import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.RecoveryRedoReason
@@ -209,6 +211,41 @@ class SparkExitRepoTest : BaseUnitTest() {
         store.save(running)
         createSut(activityRepo = activityRepo).load().getOrThrow()
         verify(transferRepo).markSettled("transfer-1")
+    }
+
+    @Test
+    fun `a sweep seen before failed leaves are retried keeps the transfer`() = test {
+        val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP)
+        val failed = CooperativeRecoveryFailure(
+            "coop-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        val running = SparkExitFixtures.record(Phase.Running)
+            .adopt(SparkExitFixtures.recovery(listOf(sweep), failed = listOf(failed)), 0L)
+        val activity = OnchainActivity.create(
+            walletId = "wallet0",
+            id = "sweep",
+            txType = PaymentType.RECEIVED,
+            txId = "s",
+            value = 90_000uL,
+            fee = 0uL,
+            address = "bcrt1qdestination",
+            timestamp = 0uL,
+            feeRate = 1uL,
+        ).copy(isTransfer = true)
+        val activityRepo = mock<ActivityRepo>()
+        whenever(activityRepo.getOnchainActivityByTxId(any(), any())).thenReturn(activity)
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.markSettled(any())).thenReturn(Result.success(Unit))
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+
+        assertNull(running.failedLeafRetrySince)
+        store.save(running)
+        createSut(activityRepo = activityRepo).load().getOrThrow()
+        verify(transferRepo, never()).markSettled(any())
     }
 
     @Test
