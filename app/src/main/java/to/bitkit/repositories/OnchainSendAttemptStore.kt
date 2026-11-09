@@ -390,7 +390,8 @@ class OnchainSendAttemptStore @Inject constructor(
             } else {
                 require(current.originalInputs == null && current.candidateTxids.isEmpty() && current.txid == null)
                 require((current.isMaxAmount && current.requestId == null) || receipt.amountSats == current.amountSats)
-                if (current.isTransfer && current.isMaxAmount) {
+                // Spark funding has no order, so only a Blocktank send-all is bound to its order's amounts.
+                if (current.isBlocktankFunding && current.isMaxAmount) {
                     val context = requireNotNull(current.transferContext)
                     val originalFee = requireNotNull(context.originalOrderFeeSats)
                     val miningFee = requireNotNull(receipt.miningFeeSats)
