@@ -1055,19 +1055,30 @@ class SparkExitDriver(
     private suspend fun broadcastWithoutSdk(record: SparkExitRecord): SparkExitRecord {
         val recovery = record.recovery ?: return record
         val tip = chain.tipHeight()
-        val statuses = recovery.transactions
+        // A saved confirmation is asked again, since a reorg can undo it; it stands only while no host answers.
+        val saved = recovery.transactions
             .mapNotNull { tx -> (tx.status as? ExitTransactionStatus.Confirmed)?.let { tx.txid to it.blockHeight } }
             .associate { (txid, height) -> txid to EsploraTxStatus(true, height) }
-            .toMutableMap<String, EsploraTxStatus?>()
+        val statuses = mutableMapOf<String, EsploraTxStatus?>()
         suspend fun status(txid: String): EsploraTxStatus? {
-            if (txid !in statuses) statuses[txid] = runSuspendCatching { chain.txStatus(txid) }.getOrNull()
+            if (txid !in statuses) {
+                statuses[txid] = runSuspendCatching { chain.txStatus(txid) }.getOrNull() ?: saved[txid]
+            }
             return statuses[txid]
         }
-        var current = record
-        val transactions = recovery.transactions.map { tx ->
-            if (tx.status is ExitTransactionStatus.Confirmed) return@map tx
-            val own = status(tx.txid)
-            if (own?.confirmed == true) return@map tx.copy(status = ExitTransactionStatus.Confirmed(own.blockHeight))
+        val reorged = saved.keys.filter { status(it)?.confirmed == false }.toSet()
+        var current = if (reorged.isEmpty()) record else withReorgUndone(record, recovery, reorged)
+        val transactions = recovery.transactions.map { saved ->
+            val own = status(saved.txid)
+            if (own?.confirmed == true) {
+                val height = own.blockHeight ?: (saved.status as? ExitTransactionStatus.Confirmed)?.blockHeight
+                return@map saved.copy(status = ExitTransactionStatus.Confirmed(height))
+            }
+            val tx = if (saved.txid in reorged) {
+                saved.copy(status = ExitTransactionStatus.WaitingForDependencies)
+            } else {
+                saved
+            }
             if (!tx.dependsOn.all { status(it)?.confirmed == true }) return@map tx
             // A height the SDK already worked out still holds.
             val known = (tx.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight
@@ -1139,6 +1150,28 @@ class SparkExitDriver(
             fundingPaymentSeenAtHeight = null,
             fundingPaymentMissingSince = null,
         )
+    }
+
+    private fun withReorgUndone(
+        record: SparkExitRecord,
+        recovery: RecoverFundsResponse,
+        reorged: Set<String>,
+    ): SparkExitRecord {
+        Logger.warn("Asking again after a reorg undid Spark exit steps '$reorged'", context = TAG)
+        // What was concluded from those confirmations, a spent input or a failed fee chain, no longer holds.
+        val undone = reorged.toMutableSet()
+        while (true) {
+            val added = recovery.transactions
+                .filter { it.txid !in undone && it.dependsOn.any { parent -> parent in undone } }
+                .map { it.txid }
+            if (added.isEmpty()) break
+            undone += added
+        }
+        val log = record.broadcastLog.map {
+            if (it.generation != record.generation || it.txid !in undone) return@map it
+            it.copy(isInputSpent = false, feeChainFailures = 0)
+        }
+        return record.copy(broadcastLog = log)
     }
 
     private suspend fun parentHeight(txid: String, known: EsploraTxStatus?): UInt? {

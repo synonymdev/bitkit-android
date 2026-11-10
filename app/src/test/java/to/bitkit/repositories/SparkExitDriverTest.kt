@@ -355,6 +355,7 @@ class SparkExitDriverTest : BaseUnitTest() {
                 SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
             ),
         )
+        chain.confirmedTxids = setOf("n1")
 
         driver(withSdk = false).tick(running(recovery))
 
@@ -1510,6 +1511,63 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(attempt.isInputSpent)
         assertEquals(0, attempt.rejections)
         assertNull(record.surfacedRejection)
+    }
+
+    private fun reorgedParentRecovery() = SparkExitFixtures.recovery(
+        listOf(
+            SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+            SparkExitFixtures.tx(
+                "r1",
+                kind = RecoveryTxKind.REFUND,
+                dependsOn = listOf("n1"),
+                status = ExitTransactionStatus.WaitingForDependencies,
+            ),
+        ),
+    )
+
+    @Test
+    fun `without the sdk a saved confirmation a reorg undid is asked again before its child goes out`() = test {
+        var record = running(reorgedParentRecovery())
+        chain.outcome = SparkExitBroadcastOutcome.InputsMissing("bad-txns-inputs-missingorspent")
+
+        record = driver(withSdk = false).tick(record)
+
+        assertTrue(chain.broadcasts.none { it.txid == "r1" })
+        val parent = record.recovery?.transactions?.first { it.txid == "n1" }
+        assertFalse(parent?.status is ExitTransactionStatus.Confirmed)
+        assertTrue(record.broadcastLog.none { it.txid == "r1" && it.isInputSpent })
+
+        // Confirmed again: its child goes out.
+        chain.confirmedTxids = setOf("n1")
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        now += SparkExitDriver.REBROADCAST_INTERVAL.inWholeMilliseconds
+        record = driver(withSdk = false).tick(record)
+
+        assertEquals(listOf("r1"), chain.broadcasts.map { it.txid }.filter { it == "r1" })
+    }
+
+    @Test
+    fun `without the sdk a reorg clears the spent input its child was refused for`() = test {
+        val spent = SparkExitRecord.BroadcastAttempt(1, "r1", 1, 0, now, "inputs missing", false, isInputSpent = true)
+        var record = running(reorgedParentRecovery()).copy(broadcastLog = listOf(spent))
+
+        record = driver(withSdk = false).tick(record)
+        assertFalse(record.broadcastLog.single { it.txid == "r1" }.isInputSpent)
+
+        chain.confirmedTxids = setOf("n1")
+        record = driver(withSdk = false).tick(record)
+
+        assertEquals(listOf("r1"), chain.broadcasts.map { it.txid }.filter { it == "r1" })
+    }
+
+    @Test
+    fun `without the sdk a saved confirmation stays while no host answers`() = test {
+        chain.statusErrorTxids = setOf("n1")
+
+        val record = driver(withSdk = false).tick(running(reorgedParentRecovery()))
+
+        assertEquals(ExitTransactionStatus.Confirmed(900u), record.recovery?.transactions?.first()?.status)
+        assertEquals(listOf("r1"), chain.broadcasts.map { it.txid })
     }
 
     /** The qa-03 run: an older state's refund took the leaf, and every Redo rebuilt the same spent refund. */
