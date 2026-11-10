@@ -382,11 +382,16 @@ class SparkRepo @Inject constructor(
         claimJobs.remove(txid)?.cancel()
         setDepositClaim(txid, SparkDepositClaim.Later)
         val vout = earlyClaimVouts.remove(txid) ?: return
+        // Tried again while another claim of the deposit, such as Spark's own sync, leaves the cap in place.
         scope.launch {
-            runSuspendCatching { sparkService.releaseDepositClaimFee(txid, vout) }
-                .onFailure {
-                    Logger.warn("Failed to clear the early claim cap of Spark deposit '$txid'", it, context = TAG)
-                }
+            repeat(CLAIM_POLL_ATTEMPTS) { attempt ->
+                runSuspendCatching { sparkService.releaseDepositClaimFee(txid, vout) }
+                    .onSuccess { return@launch }
+                    .onFailure {
+                        Logger.warn("Failed to clear the early claim cap of Spark deposit '$txid'", it, context = TAG)
+                    }
+                if (attempt < CLAIM_POLL_ATTEMPTS - 1) delay(CLAIM_POLL_INTERVAL)
+            }
         }
     }
 

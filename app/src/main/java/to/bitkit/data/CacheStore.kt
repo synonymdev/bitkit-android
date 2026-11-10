@@ -159,6 +159,19 @@ class CacheStore internal constructor(
         }
     }
 
+    /** Keeps [paymentHashes], the node's pending and paid sends, once, ahead of the hashes kept since. */
+    suspend fun seedLdkSendHashes(paymentHashes: List<String>) {
+        if (store.data.first().ldkSendHashesSeeded) return
+        store.updateData { data ->
+            if (data.ldkSendHashesSeeded) return@updateData data
+            val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.ldkSendHashes.toSet()
+            data.copy(
+                ldkSendHashes = (seeded + data.ldkSendHashes).takeLast(MAX_SPARK_SEND_HASHES),
+                ldkSendHashesSeeded = true,
+            )
+        }
+    }
+
     suspend fun removeLdkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().ldkSendHashes) return
@@ -202,6 +215,11 @@ data class AppCacheData(
     val sparkSendHashes: List<String> = listOf(),
     /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
     val ldkSendHashes: List<String> = listOf(),
+    /**
+     * Set once the node's own list has filled [ldkSendHashes], as node sends made before hashes were kept carry none
+     * there. Until then an unlistable node holds every Spark send.
+     */
+    val ldkSendHashesSeeded: Boolean = false,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

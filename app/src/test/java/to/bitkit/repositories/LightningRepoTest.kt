@@ -162,7 +162,7 @@ class LightningRepoTest : BaseUnitTest() {
             .thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever { electrumProbeService.probe(any(), any()) }.thenReturn(Result.success(Unit))
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(true)
@@ -1341,6 +1341,57 @@ class LightningRepoTest : BaseUnitTest() {
             .thenReturn(Result.success("hash"))
 
         assertEquals("hash", sut.payInvoice("bolt11", 1_000uL).getOrThrow())
+    }
+
+    @Test
+    fun `spark waits for the node's first listing when its earlier sends were never kept`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        val result = sut.payInvoice("bolt11", 1_000uL)
+
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        assertTrue(result.isFailure, "Spark paid while the node's earlier sends were unknown")
+    }
+
+    @Test
+    fun `the node's first listing keeps the sends it made before sends were kept`() = test {
+        startNodeForTesting()
+        val earlier = { status: PaymentStatus, hash: String ->
+            PaymentDetails(
+                id = hash,
+                kind = PaymentKind.Bolt11(
+                    hash = hash,
+                    preimage = null,
+                    secret = null,
+                    description = null,
+                    bolt11 = hash,
+                ),
+                amountMsat = 1_000_000uL,
+                feePaidMsat = null,
+                direction = PaymentDirection.OUTBOUND,
+                status = status,
+                latestUpdateTimestamp = 0uL,
+            )
+        }
+        whenever(lightningService.listPayments()).thenReturn(
+            listOf(
+                earlier(PaymentStatus.PENDING, "PENDING"),
+                earlier(PaymentStatus.SUCCEEDED, "paid"),
+                earlier(PaymentStatus.FAILED, "failed"),
+            )
+        )
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        sut.payInvoice("bolt11", 1_000uL)
+
+        verifyBlocking(cacheStore) { seedLdkSendHashes(listOf("PENDING", "paid")) }
     }
 
     @Test

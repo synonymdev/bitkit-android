@@ -430,6 +430,7 @@ class LightningRepo @Inject constructor(
                 lightningService.start(timeout, ::onEvent)
 
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                listPaymentsOrNull()?.let { seedLdkSendHashes(it) }
 
                 // Initial state sync
                 syncState()
@@ -1498,7 +1499,9 @@ class LightningRepo @Inject constructor(
         val paymentHash = runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
-            earlierNodeSend(bolt11, paymentHash)?.let { return it.toResult() }
+            runSuspendCatching { earlierNodeSend(bolt11, paymentHash) }
+                .getOrElse { return Result.failure(it) }
+                ?.let { return it.toResult() }
             val authorizeSend: suspend () -> Boolean = {
                 onBeforeSend().also { if (it) requireWalletRestoreComplete() }
             }
@@ -1524,12 +1527,22 @@ class LightningRepo @Inject constructor(
 
     /**
      * The node's pending or paid send of [bolt11]. While the node can't list its payments (stopped or not started yet),
-     * a send it started for the invoice counts as pending, since it may be live.
+     * a send it started for the invoice counts as pending, since it may be live. Before the node first listed its
+     * payments, the sends it made earlier are unknown, so the node not started yet is thrown.
      */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
         val payments = listPaymentsOrNull()
-            ?: return key.takeIf { it in cacheStore.data.first().ldkSendHashes }?.let { EarlierSend.Pending(it) }
+        if (payments == null) {
+            val cache = cacheStore.data.first()
+            if (key in cache.ldkSendHashes) return EarlierSend.Pending(key)
+            if (!cache.ldkSendHashesSeeded) {
+                Logger.warn("Refused a Spark send until the node lists its earlier payments once", context = TAG)
+                throw ServiceError.NodeNotStarted()
+            }
+            return null
+        }
+        seedLdkSendHashes(payments)
         val send = payments.firstOrNull {
             val kind = it.kind as? PaymentKind.Bolt11 ?: return@firstOrNull false
             it.direction == PaymentDirection.OUTBOUND &&
@@ -1568,6 +1581,15 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
             .onSuccess { recordSendRail(it, LightningRail.Ldk) }
             .also { syncState() }
+    }
+
+    /** Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too. */
+    private suspend fun seedLdkSendHashes(payments: List<PaymentDetails>) {
+        cacheStore.seedLdkSendHashes(
+            payments
+                .filter { it.direction == PaymentDirection.OUTBOUND && it.status != PaymentStatus.FAILED }
+                .mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash }
+        )
     }
 
     /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */

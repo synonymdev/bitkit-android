@@ -544,6 +544,29 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wait clears the early claim cap again when another claim held the deposit`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+            ClaimDepositOutcome.Deferred(
+                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 450uL, maxFeeSats = 300uL)
+            )
+        )
+        // The first call meets Spark's own sync claiming the deposit, which leaves the cap in place.
+        whenever { sparkService.releaseDepositClaimFee("txid", 0u) }
+            .thenAnswer { throw SdkException.DepositClaimInProgress("txid", 0u, "") }
+            .thenReturn(Unit)
+        val sut = createSut()
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        sut.waitForMatureClaim("txid")
+        advanceUntilIdle()
+
+        verify(sparkService, times(2)).releaseDepositClaimFee("txid", 0u)
+    }
+
+    @Test
     fun `wait before any claim attempt leaves the deposit alone`() = test {
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
