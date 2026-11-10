@@ -1,9 +1,14 @@
 package to.bitkit.ui.screens.transfer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,6 +18,7 @@ import to.bitkit.repositories.SparkClaimOffer
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.ui.theme.AppThemeSurface
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @Config(sdk = [34], qualifiers = "w320dp-h568dp")
@@ -32,6 +38,10 @@ class SettingUpScreenTest {
         assertTrue(label.bottom <= wait.top)
         assertTrue(wait.top == pay.top && wait.right < pay.left)
         composeRule.onNodeWithText("SPEED: INSTANT").assertExists()
+        composeRule.onNodeWithText(
+            "Pay it to add your transfer now, or wait for 3 confirmations, about 30 minutes.",
+            substring = true,
+        ).assertExists()
     }
 
     @Test
@@ -59,8 +69,40 @@ class SettingUpScreenTest {
         composeRule.onNodeWithText("SPEED: LATER").assertExists()
     }
 
+    @Config(sdk = [34], qualifiers = "w448dp-h997dp")
+    @Test
+    fun `the rings fill the width less 16 per side and keep their size when repriced`() {
+        setContent(SparkDepositClaim.Looking, SparkClaimSpeed.Instant)
+        val looking = composeRule.onNodeWithTag("TransferAnimation").getUnclippedBoundsInRoot()
+
+        setContent(repriced, SparkClaimSpeed.Instant)
+        val repricedRings = composeRule.onNodeWithTag("TransferAnimation").getUnclippedBoundsInRoot()
+
+        assertEquals(448f - 4 * 16f, looking.width.value, 0.5f)
+        assertEquals(looking.width.value, repricedRings.width.value, 0.5f)
+    }
+
+    @Config(sdk = [34], qualifiers = "w448dp-h997dp")
+    @Test
+    fun `the funds moved check takes the share of the screen width ios gives it`() {
+        setContent(SparkDepositClaim.Claimed, SparkClaimSpeed.Instant)
+
+        val check = composeRule.onNodeWithTag("TransferSuccessCheck").getUnclippedBoundsInRoot()
+
+        assertEquals(448f * 256f / 402f, check.width.value, 0.5f)
+        assertEquals(check.width.value, check.height.value, 0.5f)
+    }
+
+    private var claimState by mutableStateOf<Pair<SparkDepositClaim, SparkClaimSpeed>?>(null)
+
     private fun setContent(claim: SparkDepositClaim, speed: SparkClaimSpeed) {
-        composeRule.setContent { AppThemeSurface { Content(claim = claim, speed = speed) } }
+        val isFirst = claimState == null
+        claimState = claim to speed
+        if (!isFirst) return composeRule.waitForIdle()
+        composeRule.setContent {
+            val (shownClaim, shownSpeed) = requireNotNull(claimState)
+            AppThemeSurface { Content(claim = shownClaim, speed = shownSpeed) }
+        }
     }
 
     private val repriced = SparkDepositClaim.Repriced(

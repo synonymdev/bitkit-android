@@ -23,6 +23,7 @@ import breez_sdk_spark.SendOnchainSpeedFeeQuote
 import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
+import breez_sdk_spark.SyncError
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -34,6 +35,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -296,7 +298,42 @@ class SparkRepoTest : BaseUnitTest() {
 
         sut.start(0).getOrThrow()
 
-        verifyBlocking(cacheStore) { trimSparkSendHashes(paid = setOf("hash"), failed = setOf("failed")) }
+        verifyBlocking(cacheStore) {
+            trimSparkSendHashes(
+                paid = setOf("hash"),
+                failed = setOf("failed"),
+                listed = setOf("hash", "failed", "pending"),
+                live = setOf("pending"),
+            )
+        }
+    }
+
+    @Test
+    fun `a retry that starts and returns while the activity sync runs keeps its hash`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendHashes = listOf("hash"))), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed), listOf(failed, retry))
+        val recording = CompletableDeferred<Unit>()
+        whenever { activityRepo.getActivity(any(), any()) }.doSuspendableAnswer {
+            recording.await()
+            Result.success(null)
+        }
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(retry)
+        val sut = createSut(store)
+        val starting = async { sut.start(0) }
+        runCurrent()
+        // The listing read before the activity loop shows the invoice failed; its retry starts and returns meanwhile.
+        val paying = async { sut.payInvoice("lnbc1280n1send", 128uL) }
+        runCurrent()
+        recording.complete(Unit)
+        starting.await().getOrThrow()
+        paying.await()
+
+        assertTrue("hash" in store.data.first().sparkSendHashes, "A stale listing dropped a live retry's hash")
     }
 
     @Test
@@ -1277,6 +1314,77 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a failed withdrawal keeps the balance shown while spark reads zero`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("operators unreachable") }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+
+        assertTrue(sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).isFailure)
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL))
+        sut.refreshState().getOrThrow()
+
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the balance read 0 after the failed withdrawal")
+        assertEquals(0uL, sut.state.value.sendableSats, "a send was offered from the kept balance")
+    }
+
+    @Test
+    fun `a synced read after a failed withdrawal clears the kept balance even when it reads zero`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("operators unreachable") }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        assertTrue(sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).isFailure)
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() - 60uL))
+        sut.refreshState().getOrThrow()
+        val kept = sut.state.value.shownBalanceSats
+        assertEquals(10_000uL, kept, "a sync from before the failure cleared the kept balance")
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL))
+        sut.refreshState().getOrThrow()
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "a sync after the failure kept the old balance")
+    }
+
+    @Test
+    fun `a failed sync keeps the balance shown while spark reads zero`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+
+        val syncFailed = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        whenever { sparkService.getInfo() }.thenReturn(syncFailed)
+        sut.refreshState().getOrThrow()
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the balance read 0 while the sync failed")
+        assertEquals(0uL, sut.state.value.sendableSats, "a send was offered from the kept balance")
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL))
+        sut.refreshState().getOrThrow()
+        assertEquals(0uL, sut.state.value.shownBalanceSats)
+    }
+
+    @Test
+    fun `a deposit claimed early is listed only as claimed`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        listDeposit()
+        whenever { sparkService.listPayments() }.thenReturn(listOf(depositPayment()))
+        val sut = createSut()
+
+        sut.refreshState().getOrThrow()
+
+        val claimed = sut.state.value.deposits.map { it.isClaimed }
+        assertEquals(listOf(true), claimed, "the claimed deposit is in progress too")
+        assertEquals(0uL, sut.state.value.pendingDepositSats)
     }
 
     @Test

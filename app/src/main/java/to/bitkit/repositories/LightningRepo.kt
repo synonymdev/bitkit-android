@@ -1543,6 +1543,7 @@ class LightningRepo @Inject constructor(
      */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
+        val recordsBefore = ldkSendRecords.get()
         val payments = listPaymentsKeepingSendHashes()
         if (payments == null) {
             val cache = cacheStore.data.first()
@@ -1558,7 +1559,9 @@ class LightningRepo @Inject constructor(
             it.direction == PaymentDirection.OUTBOUND &&
                 (kind.bolt11.equals(bolt11, ignoreCase = true) || kind.hash.equals(paymentHash, ignoreCase = true))
         }
-        if (send == null || send.status == PaymentStatus.FAILED) cacheStore.removeLdkSendHash(key)
+        // A retry in flight, or one recorded while the listing was read, holds the invoice again.
+        val isRetried = key in ldkSendsInFlight || (ldkSendRecordedAt[key] ?: 0L) > recordsBefore
+        if ((send == null || send.status == PaymentStatus.FAILED) && !isRetried) cacheStore.removeLdkSendHash(key)
         if (send == null) return null
         val hash = (send.kind as PaymentKind.Bolt11).hash
         return when (send.status) {
@@ -1616,10 +1619,12 @@ class LightningRepo @Inject constructor(
             outbound.filter { it.status == status }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
         }
+        val recordedSince = ldkSendRecordedAt.filterValues { it > recordsBefore }.keys
+        val live = hashes(PaymentStatus.PENDING) + ldkSendsInFlight + recordedSince
         val paid = hashes(PaymentStatus.SUCCEEDED)
-        val failed = (hashes(PaymentStatus.FAILED) - paid - hashes(PaymentStatus.PENDING) - ldkSendsInFlight)
-            .filterTo(mutableSetOf()) { (ldkSendRecordedAt[it] ?: 0) <= recordsBefore }
-        cacheStore.trimLdkSendHashes(paid = paid, failed = failed)
+        val failed = hashes(PaymentStatus.FAILED) - paid - live
+        val listed = outbound.mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
+        cacheStore.trimLdkSendHashes(paid = paid - live, failed = failed, listed = listed, live = live)
         failed.forEach { ldkSendRecordedAt.remove(it) }
     }
 
@@ -1832,7 +1837,7 @@ class LightningRepo @Inject constructor(
                             if (prepared.receipt.amountSats != sats || miningFee == null ||
                                 miningFee > approvedMiningFeeSats
                             ) {
-                                throw OnchainSendChangedError()
+                                throw OnchainSendChangedError(miningFee)
                             }
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(

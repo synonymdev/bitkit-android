@@ -82,6 +82,7 @@ class SparkFundingViewModel @Inject constructor(
 
     private var maxJob: Job? = null
     private var quoteJob: Job? = null
+    private var amountJob: Job? = null
     private var retainedFundingJob: Job? = null
 
     /** The kept funding this screen settles, held until the screen closes so its recovery never takes over. */
@@ -89,6 +90,9 @@ class SparkFundingViewModel @Inject constructor(
 
     /** The fee rates the shown quote was priced at, so the transfer pays exactly what the screen shows. */
     private var quotedFeeRates: FeeRates? = null
+
+    /** The mining fee a refused fixed-amount funding needed, which this transfer's quotes show at least. */
+    private var fixedFeeFloorSats: ULong? = null
 
     init {
         viewModelScope.launch {
@@ -110,6 +114,7 @@ class SparkFundingViewModel @Inject constructor(
     /** Sends from the hardware wallet [walletId] instead of Savings. */
     fun useHardwareWallet(walletId: String) {
         if (_uiState.value.hwWalletId == walletId) return
+        fixedFeeFloorSats = null
         _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true) }
         refreshMax()
     }
@@ -142,6 +147,8 @@ class SparkFundingViewModel @Inject constructor(
     }
 
     fun onAmountChange(sats: Long) {
+        val state = _uiState.value
+        if (sats != state.amountSats || (sats > 0 && sats == state.maxSats) != state.isMax) fixedFeeFloorSats = null
         _uiState.update { it.copy(amountSats = sats, isMax = sats > 0 && sats == it.maxSats) }
     }
 
@@ -155,11 +162,17 @@ class SparkFundingViewModel @Inject constructor(
         )
     }
 
+    /** Drops a pricing still running when the amount screen leaves, so its quote never opens confirm. */
+    fun onAmountLeave() {
+        amountJob?.cancel()
+        _uiState.update { it.copy(isLoading = false) }
+    }
+
     /** Prices the transfer and moves on to the confirm screen when Savings can cover it and Spark can add it. */
     fun onAmountContinue() {
         if (_uiState.value.isLoading) return
         _uiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch {
+        amountJob = viewModelScope.launch {
             val quote = quote().getOrElse {
                 Logger.error("Failed to price Spark funding", it, context = TAG)
                 toastQuoteError()
@@ -245,8 +258,14 @@ class SparkFundingViewModel @Inject constructor(
             }
             val increase = quote.increaseOver(shownQuote, shown.speed)
             if (increase > 0) {
-                Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
-                toastFeesChanged(increase)
+                // A max transfer sends what Savings can afford, so its amount moves with the fee rates and balance.
+                if (shown.isMax && quote.amountSats != shownQuote.amountSats) {
+                    Logger.info("Asking for another swipe, the max amount changed since shown", context = TAG)
+                    toastMaxChanged(quote.toSpendingSats(shown.speed))
+                } else {
+                    Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
+                    toastFeesChanged(increase)
+                }
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
@@ -296,8 +315,8 @@ class SparkFundingViewModel @Inject constructor(
                 feeRates = quotedFeeRates,
                 isTransfer = true,
                 isMaxAmount = state.isMax,
-                // A send-all spends every coin, so its fee is bound; a fixed amount's coin selection can vary.
-                approvedMiningFeeSats = quote.networkFeeSats.toULong().takeIf { state.isMax },
+                // Savings never pay more than the Total the user confirmed, so a higher fee asks for another swipe.
+                approvedMiningFeeSats = quote.networkFeeSats.toULong(),
             ).getOrThrow()
             if (outcome !is OnchainSendOutcome.Accepted) {
                 Logger.warn("Spark funding was not accepted: '$outcome'", context = TAG)
@@ -311,8 +330,12 @@ class SparkFundingViewModel @Inject constructor(
             }
             onFundingAccepted(outcome.txid, outcome.amountSats ?: quote.amountSats.toULong(), quote)
         }.onFailure {
-            if (it.cause is OnchainSendChangedError) {
+            val changed = it.cause as? OnchainSendChangedError
+            if (changed != null) {
                 Logger.info("Asking for another swipe, the funding changed since approved", context = TAG)
+                // A fixed amount's coin selection can need more fee than its quote,
+                // so this transfer's quotes show at least that, and the next swipe approves it.
+                if (!state.isMax) fixedFeeFloorSats = changed.preparedFeeSats
                 quote().onSuccess { repriced ->
                     showQuote(repriced)
                     toastFeesChanged(repriced.increaseOver(quote, state.speed))
@@ -407,7 +430,7 @@ class SparkFundingViewModel @Inject constructor(
                 address = address,
                 speed = SPEED,
                 feeRates = feeRates,
-            ).getOrThrow()
+            ).getOrThrow().coerceAtLeast(fixedFeeFloorSats ?: 0uL)
         }
         val amount = if (state.isMax) (spendable.safe() - networkFee.safe()) else state.amountSats.toULong()
         val instantFee = sparkRepo.estimateDepositClaimFeeSats(amount).getOrThrow()
@@ -455,6 +478,13 @@ class SparkFundingViewModel @Inject constructor(
         title = R.string.lightning__spending_confirm__fees_changed_title,
         description = context.getString(R.string.lightning__spending_confirm__fees_changed_network)
             .replace("{amount}", formatPrimaryAmount(increaseSats)),
+        type = Toast.ToastType.INFO,
+    )
+
+    private fun toastMaxChanged(toSpendingSats: Long) = toast(
+        title = R.string.lightning__spending_confirm__max_changed_title,
+        description = context.getString(R.string.lightning__spending_confirm__max_changed)
+            .replace("{amount}", formatPrimaryAmount(toSpendingSats)),
         type = Toast.ToastType.INFO,
     )
 

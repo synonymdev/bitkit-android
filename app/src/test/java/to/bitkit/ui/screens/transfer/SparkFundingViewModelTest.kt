@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.synonym.bitkitcore.FeeRates
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -16,6 +17,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -34,7 +36,9 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendEvidence
+import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
@@ -135,6 +139,31 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `leaving the amount screen while pricing never opens confirm`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        val gate = CompletableDeferred<Unit>()
+        whenever(lightningRepo.getFeeRates()).doSuspendableAnswer {
+            gate.await()
+            Result.success(feeRates)
+        }
+        val effects = mutableListOf<SideEffect>()
+        val job = launch { sut.effects.collect { effects.add(it) } }
+
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onAmountLeave()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(emptyList(), effects)
+        assertEquals(false, sut.uiState.value.isLoading)
+        assertEquals(null, sut.uiState.value.quote)
+    }
+
+    @Test
     fun `swipe asks again when the network fee rose since shown`() = test {
         val sut = createSut()
         advanceUntilIdle()
@@ -156,6 +185,85 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
         )
+    }
+
+    @Test
+    fun `a fixed amount whose prepared fee rose is refused and priced again at that fee`() = test {
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn("rose {amount}")
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 700uL))))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        verify(lightningRepo).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = eq(500uL),
+        )
+        assertEquals("Changed", toasts.single().title)
+        assertTrue(toasts.single().description.orEmpty().startsWith("rose "), "${toasts.single().description}")
+        assertEquals(50_700L, sut.uiState.value.quote?.totalSats, "the new quote shows the fee that was refused")
+        assertEquals(false, sut.uiState.value.isSending)
+
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        verify(lightningRepo).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = eq(700uL),
+        )
+    }
+
+    @Test
+    fun `swipe on a max transfer whose amount fell names the new amount instead of a fee rise`() = test {
+        whenever(context.getString(R.string.lightning__spending_confirm__max_changed_title))
+            .thenReturn("Amount changed")
+        whenever(context.getString(R.string.lightning__spending_confirm__max_changed)).thenReturn("Max {amount}")
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(sut.uiState.value.maxSats)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        whenever { lightningRepo.estimateSendAllFee(any(), any(), any()) }.thenReturn(Result.success(800uL))
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("Amount changed", toasts.single().title)
+        // 100,000 savings less the 800 sat network fee and the 1,350 sat claim fee.
+        assertEquals("Max ₿ ${97_850L.formatToModernDisplay()}", toasts.single().description)
+        assertEquals(false, sut.uiState.value.isSending)
+    }
+
+    @Test
+    fun `swipe on a max transfer whose claim fee alone rose still names the fee rise`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(sut.uiState.value.maxSats)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        whenever { sparkRepo.estimateDepositClaimFeeSats(any()) }.thenReturn(Result.success(1_500uL))
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("Changed", toasts.single().title)
     }
 
     @Test
