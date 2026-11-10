@@ -11,7 +11,7 @@
   </description>
   <actions>
     <action>Tap the Spending balance card on the home screen</action>
-    <action>Tap "Transfer from Savings"</action>
+    <action>Tap "Transfer From Savings"</action>
     <action>If a transfer intro screen appears, tap "Get Started"</action>
     <action>Verify the spending amount screen (testTag "SpendingAmount") is visible</action>
     <action>Wait until the available/maximum amount (testTag "SpendingAmountAvailable") finishes loading and shows a positive value</action>

@@ -237,13 +237,13 @@
     <string name="lightning__scores_sync_time">وقت مزامنة درجات تحديد المسار</string>
     <string name="lightning__setting_up__not_seen">لم يرَ Spark تحويلك بعد. يُضاف بعد 3 تأكيدات؛ يمكنك مغادرة هذه الشاشة.</string>
     <string name="lightning__setting_up__pay">ادفع ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">أصبح الفوري يكلّف الآن ₿ {amount}. ادفعه، أو انتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
+    <string name="lightning__setting_up__repriced">أصبح الفوري يكلّف الآن &lt;accent&gt;₿ {amount}&lt;/accent&gt;. ادفعه، أو انتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
     <string name="lightning__setting_up__speed">السرعة: {speed}</string>
     <string name="lightning__setting_up__step_adding">جارٍ الإضافة إلى الإنفاق</string>
-    <string name="lightning__setting_up__step_seen">رآه Spark</string>
-    <string name="lightning__setting_up__step_sent">تم إرسال التحويل</string>
     <string name="lightning__setting_up__unavailable">الفوري غير متاح لهذا التحويل. يضيفه Spark إلى رصيد الإنفاق بعد 3 تأكيدات، نحو 30 دقيقة.</string>
     <string name="lightning__setting_up_button">متابعة استخدام Bitkit</string>
+    <string name="lightning__setting_up_step1">جارٍ معالجة الدفع</string>
+    <string name="lightning__setting_up_step2">الدفع ناجح</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">رسوم المطالبة</string>
     <string name="lightning__spark_confirmations">%1$d/3 تأكيدات</string>
@@ -279,7 +279,6 @@
     <string name="lightning__spending_confirm__quote_error_title">الرسوم غير متاحة</string>
     <string name="lightning__spending_confirm__spending_fee">رسوم الإنفاق</string>
     <string name="lightning__spending_confirm__total">الإجمالي</string>
-    <string name="lightning__spending_confirm__up_to">حتى</string>
     <string name="lightning__spending_intro__button">ابدأ</string>
     <string name="lightning__spending_intro__text">حوّل الأموال إلى رصيد الإنفاق للاستمتاع بمعاملات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
     <string name="lightning__spending_intro__title">تحويل\n&lt;accent&gt;إلى الإنفاق&lt;/accent&gt;</string>

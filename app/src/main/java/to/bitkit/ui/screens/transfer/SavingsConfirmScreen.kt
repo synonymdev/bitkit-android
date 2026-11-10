@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -44,7 +46,7 @@ import to.bitkit.ext.filterOpen
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.safe
 import to.bitkit.ui.components.AmountSlider
-import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -140,12 +142,13 @@ fun SavingsConfirmScreen(
             onAmountClick = { currency.switchUnit() },
             onAdvancedClick = onAdvancedClick,
             onSelectAllClick = { transfer.setSavingsSelection(SavingsSelection()) },
+            onSparkFeeRetry = { transfer.loadSparkWithdrawFee(sparkSats) },
             onSwipeConfirm = { shownSparkSats, shownFeeSats ->
                 transfer.confirmSavingsSwipe(channels, withdrawsSpark, shownSparkSats, shownFeeSats)
                     .also { if (it) onConfirm() }
             },
             onCloseConfirm = {
-                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark, SavingsTransferMode.CLOSE)
+                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark, SavingsTransferMode.CLOSE, sparkFeeSats)
                 onConfirm()
             },
         )
@@ -163,7 +166,7 @@ fun SavingsConfirmScreen(
 }
 
 @Composable
-private fun SavingsConfirmContent(
+internal fun SavingsConfirmContent(
     fallbackAmount: ULong,
     sparkAmount: ULong,
     sparkFeeSats: ULong?,
@@ -183,6 +186,7 @@ private fun SavingsConfirmContent(
     onAmountClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
     onSelectAllClick: () -> Unit = {},
+    onSparkFeeRetry: () -> Unit = {},
     onSwipeConfirm: (shownSparkSats: ULong, shownFeeSats: ULong?) -> Boolean = { _, _ -> true },
     onCloseConfirm: () -> Unit = {},
 ) {
@@ -223,7 +227,7 @@ private fun SavingsConfirmContent(
                         text = stringResource(R.string.lightning__savings_confirm__label),
                         color = Colors.White64,
                     )
-                    VerticalSpacer(8.dp)
+                    VerticalSpacer(16.dp)
                     MoneyDisplay(sats = headlineAmount.toLong(), onClick = onAmountClick)
 
                     if (quote != null) {
@@ -267,7 +271,7 @@ private fun SavingsConfirmContent(
                         }
                     }
 
-                    if (sparkFeeSats != null) {
+                    if (sparkFeeSats != null || isSparkFeePricing) {
                         VerticalSpacer(if (quote != null) 0.dp else 24.dp)
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -275,27 +279,26 @@ private fun SavingsConfirmContent(
                         ) {
                             FeeInfo(
                                 label = stringResource(R.string.lightning__savings_confirm__spark_fee),
-                                amount = sparkFeeSats.toLong(),
+                                amount = (sparkFeeSats ?: 0uL).toLong(),
+                                isLoading = isSparkFeePricing,
                             )
                         }
                     }
 
                     if (isSparkUnpriced && !isSparkFeePricing) {
                         VerticalSpacer(16.dp)
-                        BodyS(
-                            text = stringResource(
-                                if (isSparkTooSmall) {
-                                    R.string.lightning__savings_confirm__amount_too_low
-                                } else {
-                                    R.string.lightning__savings_spark_failed
-                                }
-                            ),
-                            color = Colors.Red,
-                        )
+                        if (isSparkTooSmall) {
+                            BodyM(
+                                text = stringResource(R.string.lightning__savings_confirm__amount_too_low),
+                                color = Colors.Red,
+                            )
+                        } else {
+                            SparkFeeError(onRetry = onSparkFeeRetry)
+                        }
                     }
 
                     if (hasMultiple) {
-                        VerticalSpacer(24.dp)
+                        VerticalSpacer(32.dp)
                         if (hasSelected) {
                             PrimaryButton(
                                 text = stringResource(R.string.lightning__savings_confirm__transfer_all),
@@ -333,6 +336,7 @@ private fun SavingsConfirmContent(
                                 contentDescription = null,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
+                                    .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
                                     .fillMaxSize()
                                     .graphicsLayer(scaleX = -1f),
                             )
@@ -374,6 +378,29 @@ private fun SavingsConfirmContent(
             }
             VerticalSpacer(16.dp)
         }
+    }
+}
+
+/** Spark's withdrawal fee could not be priced; the swipe waits for it, so it can be retried here. */
+@Composable
+private fun SparkFeeError(onRetry: () -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        BodyM(
+            text = stringResource(R.string.lightning__spending_confirm__error_quote),
+            color = Colors.Red,
+            modifier = Modifier.weight(1f),
+        )
+        PrimaryButton(
+            text = stringResource(R.string.common__retry),
+            size = ButtonSize.Small,
+            fullWidth = false,
+            onClick = onRetry,
+            modifier = Modifier.testTag("SavingsSparkFeeRetry"),
+        )
     }
 }
 

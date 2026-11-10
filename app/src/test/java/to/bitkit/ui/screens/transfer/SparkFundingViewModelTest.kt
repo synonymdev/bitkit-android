@@ -26,12 +26,14 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
@@ -99,6 +101,8 @@ class SparkFundingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `continue refuses an amount that does not cover the instant fee`() = test {
+        whenever(context.getString(R.string.lightning__spending_amount__error_min__description))
+            .thenReturn("Minimum {amount}")
         val sut = createSut()
         advanceUntilIdle()
         sut.onAmountChange(1_000)
@@ -106,6 +110,8 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         val toasts = collectToasts { sut.onAmountContinue() }
 
         assertEquals("Too small", toasts.single().title)
+        // An amount equal to the 1,350 sat claim fee is refused, so the smallest that passes is one more.
+        assertEquals("Minimum ${1_351L.formatToModernDisplay()}", toasts.single().description)
         assertEquals(null, sut.uiState.value.quote)
     }
 
@@ -148,6 +154,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -174,6 +181,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Accepted("txid", 50_000uL)))
         whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf("txid" to SparkDepositClaim.Later)))
@@ -193,6 +201,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             anyOrNull(), eq(false), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(sparkRepo).onDepositBroadcast("txid", 50_000uL)
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Later, 1_350uL)
@@ -208,6 +217,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -240,6 +250,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -273,6 +284,40 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a swipe refused for an older funding after a relaunch leaves that funding's early claim asking`() = test {
+        val older = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "older", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendBlockedError(older)))
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(older)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        val confirmed = older.copy(evidence = OnchainSendEvidence.Observed, localFollowupComplete = true)
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(confirmed)
+        attemptUpdates.value++
+        advanceUntilIdle()
+
+        verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 0uL)
+    }
+
+    @Test
     fun `the funding screen owns a kept funding until it closes`() = test {
         whenever {
             lightningRepo.sendOnChain(
@@ -280,6 +325,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(

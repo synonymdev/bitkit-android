@@ -244,13 +244,13 @@
     <string name="lightning__scores_sync_time">Hora de sincronización de puntuaciones de ruta</string>
     <string name="lightning__setting_up__not_seen">Spark todavía no vio tu transferencia. Se agrega después de 3 confirmaciones; puedes salir de esta pantalla.</string>
     <string name="lightning__setting_up__pay">Pagar ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instantáneo ahora cuesta ₿ {amount}. Págalo o espera 3 confirmaciones, unos 30 minutos, con una comisión menor.</string>
+    <string name="lightning__setting_up__repriced">Instantáneo ahora cuesta &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Págalo o espera 3 confirmaciones, unos 30 minutos, con una comisión menor.</string>
     <string name="lightning__setting_up__speed">Velocidad: {speed}</string>
     <string name="lightning__setting_up__step_adding">Agregando a gastos</string>
-    <string name="lightning__setting_up__step_seen">Visto por Spark</string>
-    <string name="lightning__setting_up__step_sent">Transferencia enviada</string>
     <string name="lightning__setting_up__unavailable">Instantáneo no está disponible para esta transferencia. Spark la agrega a tu saldo para gastos después de 3 confirmaciones, unos 30 minutos.</string>
     <string name="lightning__setting_up_button">Continuar Usando Bitkit</string>
+    <string name="lightning__setting_up_step1">Procesando pago</string>
+    <string name="lightning__setting_up_step2">Pago Efectuado</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Comisión de reclamo</string>
     <string name="lightning__spark_confirmations">%1$d/3 confirmaciones</string>
@@ -286,7 +286,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Comisiones no disponibles</string>
     <string name="lightning__spending_confirm__spending_fee">Comisión de gastos</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">hasta</string>
     <string name="lightning__spending_intro__button">Empezar</string>
     <string name="lightning__spending_intro__text">Transfiera fondos a su saldo de gastos para disfrutar de transacciones baratas e instantáneas con amigos y comercios.</string>
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;a gastos&lt;/accent&gt;</string>
