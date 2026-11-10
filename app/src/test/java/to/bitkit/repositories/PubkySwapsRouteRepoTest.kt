@@ -3,19 +3,24 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.PubkySwapRouteStatus
 import com.synonym.bitkitcore.pubkySwapsAdvance
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class PubkySwapsRouteRepoTest : BaseUnitTest() {
     companion object {
@@ -61,6 +66,22 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         ) { sut.awaitClaim(SWAP_ID, timeout = 1.minutes) }
 
         assertEquals(Result.success(CLAIM_TXID), txid)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `awaitClaim running out leaves the swap open and keeps advancing it`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
+                .thenReturn(status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID)))
+
+            val result = sut.awaitClaim(SWAP_ID, timeout = 1.seconds)
+            advanceUntilIdle()
+
+            assertIs<PubkySwapClaimTimeoutException>(result.exceptionOrNull())
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(2))
+        }
     }
 
     private suspend fun <T> advancing(vararg answers: Any, block: suspend () -> T): T =

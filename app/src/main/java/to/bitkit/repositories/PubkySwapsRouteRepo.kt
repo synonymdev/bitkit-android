@@ -150,9 +150,15 @@ class PubkySwapsRouteRepo @Inject constructor(
         var lastFailure: Throwable? = null
         return withTimeoutOrNull(timeout) {
             pollClaim(swapId, POLL_INTERVAL, untilConfirmed = false) { lastFailure = it }
-        }?.onSuccess {
-            scope.launch { withTimeoutOrNull(CONFIRMATION_TIMEOUT) { awaitConfirmation(swapId) } }
-        } ?: Result.failure(lastFailure ?: AppError("Swap '$swapId' not claimed yet"))
+        }?.onSuccess { advanceInBackground(swapId) } ?: run {
+            // The provider may still settle the hold payment, so the swap keeps advancing towards its claim.
+            advanceInBackground(swapId)
+            Result.failure(PubkySwapClaimTimeoutException(swapId, lastFailure))
+        }
+    }
+
+    private fun advanceInBackground(swapId: String) {
+        scope.launch { withTimeoutOrNull(CONFIRMATION_TIMEOUT) { awaitConfirmation(swapId) } }
     }
 
     private suspend fun awaitConfirmation(swapId: String) {
@@ -204,3 +210,7 @@ data class RestoredPubkySwaps(
     val restored: List<String>,
     val known: List<String>,
 )
+
+/** A claim wait that ran out with the swap still open: its hold payment may yet settle. */
+class PubkySwapClaimTimeoutException(swapId: String, cause: Throwable?) :
+    AppError("Swap '$swapId' not claimed yet", cause)

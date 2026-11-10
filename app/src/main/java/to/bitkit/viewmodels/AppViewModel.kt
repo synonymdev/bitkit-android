@@ -221,6 +221,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.repositories.PubkySwapClaimTimeoutException
 import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
@@ -565,6 +566,9 @@ class AppViewModel @Inject constructor(
     private var isPaymentRequestIdentityActivating = false
     private var isSubmittingPaymentRequest = false
     private var isSoftwarePaymentSubmissionActive = false
+
+    // The confirmed send that holds the submission guard; dismissing that send releases the guard for the next one.
+    private var confirmedPaymentSubmission: Any? = null
     private val activePaymentSubmissions = mutableSetOf<Any>()
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
@@ -6790,12 +6794,20 @@ class AppViewModel @Inject constructor(
         allowanceAttemptId: String?,
     ) {
         val sendGeneration = sendStateGeneration
-        val isSendCurrent = { sendGeneration == sendStateGeneration }
+        // A payment edited from Amount in the same sheet holds a fresh quote or none, so the result is no longer its.
+        val isSendCurrent = {
+            sendGeneration == sendStateGeneration &&
+                _sendUiState.value.paykitSwapRoute?.quote?.quoteId == quote.quoteId
+        }
+        // Read before the commit: a commit returning after dismissal must not take the next send's tags or address.
+        val tags = _sendUiState.value.selectedTags
+        val address = _sendUiState.value.address
         val payment = pubkySwapsRouteRepo.commit(quote.quoteId).getOrElse {
-            clearSwapRouteQuote(isSendCurrent())
+            val isCurrent = isSendCurrent()
+            clearSwapRouteQuote(isCurrent)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
+            handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
             return
         }
         Logger.info("Committed Pubky Swaps route '${payment.swapId}' to '${payment.destinationAddress}'", context = TAG)
@@ -6804,17 +6816,22 @@ class AppViewModel @Inject constructor(
                 "Swap hold invoice is not a Lightning invoice"
             }.paymentHash.toHex()
         }.getOrElse {
-            clearSwapRouteQuote(isSendCurrent())
+            val isCurrent = isSendCurrent()
+            clearSwapRouteQuote(isCurrent)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
+            handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
             return
         }
         // Only the claim finishes the send: the hold invoice's own success event is skipped as already processed.
         synchronized(processedPaymentsLock) { processedPayments.add(holdPaymentHash) }
         // A failed hold payment closes the send through the node's failure event, like a regular Lightning send.
-        _sendUiState.update { it.copy(paykitSwapRoute = it.paykitSwapRoute?.copy(holdPaymentHash = holdPaymentHash)) }
-        val tagsSaved = saveSwapRouteTags(holdPaymentHash)
+        if (isSendCurrent()) {
+            _sendUiState.update {
+                it.copy(paykitSwapRoute = it.paykitSwapRoute?.copy(holdPaymentHash = holdPaymentHash))
+            }
+        }
+        val tagsSaved = saveSwapRouteTags(holdPaymentHash, tags, address)
         val holdFailure = viewModelScope.async(start = CoroutineStart.UNDISPATCHED) {
             lightningRepo.nodeEvents.watchUntil {
                 when (it) {
@@ -6823,28 +6840,43 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        var keepContactPaymentContext = false
         try {
             contactPaymentContext?.let {
                 synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
             }
             // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
             lightningRepo.payInvoice(payment.invoice).getOrElse {
-                clearSwapRouteQuote(isSendCurrent())
+                val isCurrent = isSendCurrent()
+                clearSwapRouteQuote(isCurrent)
                 if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
                 releasePrivatePaymentListIfNeeded(contactPaymentContext)
                 finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-                handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
+                handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
                 return
             }
             val claimTxid = awaitSwapClaim(payment, holdFailure).getOrElse {
-                clearSwapRouteQuote(isSendCurrent())
+                if (it is PubkySwapClaimTimeoutException) {
+                    // The provider may still settle the hold payment, so a retry could pay the contact twice: the
+                    // send waits as pending on the hold payment while the swap keeps advancing in the background.
+                    Logger.warn("Pubky Swaps route '${payment.swapId}' outcome unknown", it, context = TAG)
+                    keepContactPaymentContext = true
+                    pendingPaymentRepo.track(holdPaymentHash)
+                    if (isSendCurrent()) {
+                        synchronized(contactPaymentContextLock) { activeContactPaymentContext = null }
+                        setSendEffect(SendEffect.NavigateToPending(holdPaymentHash, payment.deliveredSat.toLong()))
+                    }
+                    return
+                }
+                val isCurrent = isSendCurrent()
+                clearSwapRouteQuote(isCurrent)
                 finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
                 if (it is LightningPaymentFailedError) {
                     if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
                     releasePrivatePaymentListIfNeeded(contactPaymentContext)
                     return
                 }
-                handlePaymentPreparationFailure(it, contactPaymentContext, isSendCurrent())
+                handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
                 return
             }
             finishManualAllowancePayment(allowanceAttemptId, succeeded = true)
@@ -6867,7 +6899,7 @@ class AppViewModel @Inject constructor(
             )
         } finally {
             holdFailure.cancel()
-            clearPendingContactPaymentContext(holdPaymentHash)
+            if (!keepContactPaymentContext) clearPendingContactPaymentContext(holdPaymentHash)
         }
     }
 
@@ -6891,13 +6923,12 @@ class AppViewModel @Inject constructor(
         }.also { claim.cancel() }
     }
 
-    private suspend fun saveSwapRouteTags(paymentHash: String): Boolean {
-        val tags = _sendUiState.value.selectedTags
+    private suspend fun saveSwapRouteTags(paymentHash: String, tags: List<String>, address: String): Boolean {
         if (tags.isEmpty()) return false
         return preActivityMetadataRepo.savePreActivityMetadata(
             id = paymentHash,
             paymentHash = paymentHash,
-            address = _sendUiState.value.address,
+            address = address,
             isReceive = false,
             tags = tags,
         ).isSuccess
@@ -7984,6 +8015,8 @@ class AppViewModel @Inject constructor(
         }
         if (_currentSheet.value is Sheet.Send) {
             sendStateGeneration++
+            // A payment still running for the dismissed send, like a swap awaiting its claim, must not block the next.
+            if (confirmedPaymentSubmission != null) releaseConfirmedPaymentSubmission()
             cancelHardwarePaymentRequestIfNeeded()
             resetQuickPay()
             quickPayRepo.detachAll()
@@ -8188,11 +8221,11 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
-        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive ||
-            !_sendUiState.value.isHardwareFeeReady
-        ) {
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) {
+            _sendUiState.update { it.copy(shouldConfirmPay = false) }
             return
         }
+        if (!_sendUiState.value.isHardwareFeeReady) return
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -8207,6 +8240,7 @@ class AppViewModel @Inject constructor(
             return
         }
         isSoftwarePaymentSubmissionActive = true
+        val submission = Any().also { confirmedPaymentSubmission = it }
         viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             val finishSubmission = beginPaymentSubmission()
             try {
@@ -8214,10 +8248,15 @@ class AppViewModel @Inject constructor(
                 proceedWithPayment(contactPaymentContext)
             } finally {
                 finishSubmission()
-                isSubmittingPaymentRequest = false
-                isSoftwarePaymentSubmissionActive = false
+                if (confirmedPaymentSubmission === submission) releaseConfirmedPaymentSubmission()
             }
         }
+    }
+
+    private fun releaseConfirmedPaymentSubmission() {
+        confirmedPaymentSubmission = null
+        isSubmittingPaymentRequest = false
+        isSoftwarePaymentSubmissionActive = false
     }
 
     override fun onCleared() {
