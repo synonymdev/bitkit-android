@@ -597,7 +597,9 @@ data class SavingsSelection(
     fun channels(openChannels: List<ChannelDetails>): List<ChannelDetails> =
         channelIds?.let { ids -> openChannels.filter { it.channelId in ids } } ?: openChannels
 
-    fun withdrawsSpark(sparkSats: ULong): Boolean = includesSpark && sparkSats > 0uL
+    /** Spark moves when picked and holding a balance its withdrawal fee leaves something of ([isSparkTooSmall]). */
+    fun withdrawsSpark(sparkSats: ULong, isSparkTooSmall: Boolean = false): Boolean =
+        includesSpark && sparkSats > 0uL && !isSparkTooSmall
 }
 
 /** Whether a transfer to savings swaps funds out or closes a channel (default). */

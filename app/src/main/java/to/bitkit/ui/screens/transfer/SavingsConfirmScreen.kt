@@ -94,8 +94,12 @@ fun SavingsConfirmScreen(
     val selection by transfer.savingsSelection.collectAsStateWithLifecycle()
     val hasSelected = !selection.isAll
 
+    val isSparkTooSmall by transfer.isSparkWithdrawTooSmall.collectAsStateWithLifecycle()
     val channels = selection.channels(openChannels)
-    val withdrawsSpark = selection.withdrawsSpark(sparkSats)
+    // A Spark balance too small to move is left out, so the channels picked with it still move.
+    val pricesSpark = selection.withdrawsSpark(sparkSats)
+    val withdrawsSpark = selection.withdrawsSpark(sparkSats, isSparkTooSmall)
+    val isOnlySparkTooSmall = pricesSpark && isSparkTooSmall && channels.isEmpty()
 
     val channelsAmount = channels.sumOf { it.amountOnClose }
     val sparkAmount = if (withdrawsSpark) sparkSats else 0uL
@@ -103,7 +107,6 @@ fun SavingsConfirmScreen(
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
     val sparkFeeSats by transfer.sparkWithdrawFeeSats.collectAsStateWithLifecycle()
     val isSparkFeePricing by transfer.isSparkFeePricing.collectAsStateWithLifecycle()
-    val isSparkTooSmall by transfer.isSparkWithdrawTooSmall.collectAsStateWithLifecycle()
 
     // Pull the latest node balances so a just-received payment is reflected in the amounts below.
     LaunchedEffect(Unit) {
@@ -116,8 +119,8 @@ fun SavingsConfirmScreen(
         transfer.loadSavingsSwapQuote(channelsAmount, channels.totalNextOutboundHtlcLimitSats())
     }
 
-    LaunchedEffect(withdrawsSpark, sparkSats) {
-        if (withdrawsSpark) transfer.loadSparkWithdrawFee(sparkSats)
+    LaunchedEffect(pricesSpark, sparkSats) {
+        if (pricesSpark) transfer.loadSparkWithdrawFee(sparkSats)
     }
 
     Box {
@@ -127,9 +130,9 @@ fun SavingsConfirmScreen(
             sparkFeeSats = sparkFeeSats.takeIf { withdrawsSpark },
             // Spark's part moves only at the fee shown, so nothing is confirmed before it is priced.
             isSparkFeePricing = withdrawsSpark && isSparkFeePricing,
-            isSparkUnpriced = withdrawsSpark && sparkFeeSats == null,
+            isSparkUnpriced = withdrawsSpark && sparkFeeSats == null || isOnlySparkTooSmall,
             isNothingSelected = channels.isEmpty() && !withdrawsSpark,
-            isSparkTooSmall = withdrawsSpark && isSparkTooSmall,
+            isSparkTooSmall = isOnlySparkTooSmall,
             isSwapEnabled = swapState.isSwapEnabled,
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
