@@ -9,6 +9,7 @@ import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.OutboundPrivateSendReport
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentDeadline
@@ -541,6 +542,28 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertEquals(listOf(creation.subscription), sut.subscriptions.value)
         verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY)
         verify(paykitSdkService).proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))
+    }
+
+    @Test
+    fun `creator proposal the sdk finds too large reports subscription content that is too long`() = test {
+        val target = stubSubscriptionProposal()
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).doSuspendableAnswer {
+            throw PaykitException.Protocol("message_too_large", "Private Application Message exceeds the limit")
+        }
+
+        val result = sut.proposeSubscription(
+            draft = PaykitSubscriptionDraft(
+                amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
+                name = "Monthly support",
+                description = "Thank you",
+                frequency = PaykitRecurrenceUnit.Month,
+                expiresAt = clock.now().plus(60.seconds),
+            ),
+            target = target,
+            savedPublicKeys = listOf(COUNTERPARTY),
+        )
+
+        assertEquals(PaykitPaymentRequestError.SubscriptionTooLong, result.exceptionOrNull())
     }
 
     @Test
@@ -1671,6 +1694,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         proposalRecordedAt = null,
         payerAppId = null,
         executionClaimAppId = null,
+        proposalRecordedAt = null,
+        acceptanceRecordedAt = null,
     )
     private fun linkedPeer(
         publicKey: String,

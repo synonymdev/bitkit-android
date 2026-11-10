@@ -878,6 +878,8 @@
     <string name="wallet__boost_fee_custom">قد تتم تسوية معاملتك بشكل أسرع إذا أضفت رسوم شبكة إضافية. عيّن رسومك المخصصة أدناه.</string>
     <string name="wallet__boost_fee_recomended">قد تتم تسوية معاملتك بشكل أسرع إذا أضفت رسوم شبكة إضافية. إليك توصية:</string>
     <string name="wallet__boost_increase_fee">زيادة الرسوم</string>
+    <string name="wallet__boost_pending_msg">تسريع المعاملة قيد الانتظار. تفاصيل المعاملة المحدّثة غير جاهزة بعد.</string>
+    <string name="wallet__boost_pending_title">تسريع المعاملة قيد الانتظار</string>
     <string name="wallet__boost_recomended_button">استخدم الرسوم المقترحة</string>
     <string name="wallet__boost_success_msg">تم تعزيز المعاملة بنجاح.</string>
     <string name="wallet__boost_success_title">تم التعزيز!</string>
@@ -1288,6 +1290,7 @@
     <string name="profile__auth_error_invalid_capabilities">الوصول المطلوب لا يطابق مطالبة Bitkit هذه.</string>
     <string name="profile__auth_error_invalid_url">رابط تفويض Pubky هذا غير صالح.</string>
     <string name="profile__auth_error_missing_claim">ينقص هذا التفويض مطالبة Bitkit المطلوبة.</string>
+    <string name="profile__auth_error_signup_code_rejected">لم يقبل الخادم الرئيسي رمز التسجيل هذا. حاول مرة أخرى أو استخدم رابط تسجيل آخر.</string>
     <string name="profile__auth_error_timeout">لم يستجب مُرحّل التفويض في الوقت المحدد. يرجى المحاولة مرة أخرى.</string>
     <string name="profile__auth_error_title">فشل التفويض</string>
     <string name="profile__auth_error_unsupported_claim">مطالبة Bitkit هذه غير مدعومة.</string>
@@ -1543,6 +1546,7 @@
     <string name="wallet__payment_request_accepted_methods">قبول الدفع بـ</string>
     <string name="wallet__payment_request_after_expiry">مستلم · بعد انتهاء الصلاحية</string>
     <string name="wallet__payment_request_amount">المبلغ</string>
+    <string name="wallet__payment_request_before_request">مستلم · قبل الطلب</string>
     <string name="wallet__payment_request_choose_recipient">اختر المستلم</string>
     <string name="wallet__payment_request_dismiss">تجاهل</string>
     <string name="wallet__payment_request_enter_pubky">أدخل pubky</string>
@@ -1556,6 +1560,7 @@
     <string name="wallet__payment_request_mismatch">لم تطابق تفاصيل الدفع الطلب. تم إلغاء الدفع.</string>
     <string name="wallet__payment_request_not_specified">غير محدد</string>
     <string name="wallet__payment_request_note_placeholder">ما الغرض من هذه الدفعة؟</string>
+    <string name="wallet__payment_request_note_too_long">اختصر الملاحظة وحاول مرة أخرى.</string>
     <string name="wallet__payment_request_or_pay">طلب أو دفع</string>
     <string name="wallet__payment_request_or_pay_description">ادفع لـ %1$s أو اطلب دفعة.</string>
     <string name="wallet__payment_request_or_pay_headline">اطلب\n&lt;accent&gt;أو ادفع ₿&lt;/accent&gt;</string>

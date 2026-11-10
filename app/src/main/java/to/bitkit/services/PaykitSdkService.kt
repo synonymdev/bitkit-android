@@ -85,6 +85,7 @@ import com.synonym.paykit.defaultConfig
 import com.synonym.paykit.defaultPubkyClientConfig
 import com.synonym.paykit.parsePubkyAuthUrl
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
+import com.synonym.paykit.paymentProofEventLen
 import com.synonym.paykit.pubkyAppProfileSessionCapabilities
 import com.synonym.paykit.pubkyPublicKeyFromSecret
 import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
@@ -1343,6 +1344,31 @@ class PaykitSdkService @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Byte length of the Payment Proof Event Message [submitPaymentProof] would queue for these values. The SDK builds
+     * it with the code it queues with, so a payer can check it against [MAX_MESSAGE_BYTES] before paying.
+     */
+    fun paymentProofEventLength(
+        paymentReference: String,
+        paymentAppId: String,
+        paymentEndpointIdentifier: String,
+        proofJson: String,
+        billingPeriod: PaykitBillingPeriod? = null,
+        conversionQuoteId: String? = null,
+        allowanceId: String? = null,
+    ): UInt = PaymentReference(paymentReference).use { reference ->
+        PaymentProofSubmission(
+            billingPeriod = billingPeriod?.sdkValue,
+            paymentAppId = paymentAppId,
+            paymentEndpointIdentifier = paymentEndpointIdentifier,
+            allowanceId = allowanceId,
+            conversionQuoteId = conversionQuoteId,
+            proof = PrivateJsonObject(proofJson),
+        ).use { submission ->
+            paymentProofEventLen(localAppId = "bitkit", paymentReference = reference, submission = submission)
         }
     }
 

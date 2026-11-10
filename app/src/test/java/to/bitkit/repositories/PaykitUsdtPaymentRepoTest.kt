@@ -64,12 +64,15 @@ import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.ContactPaymentContext
+import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -688,6 +691,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         for (invalidReceipt in listOf(
             receipt.copy(underpaid = true),
             receipt.copy(afterExpiry = true),
+            receipt.copy(beforeRequest = true),
             receipt.copy(verified = false),
             receipt.copy(proofEventId = "unrelated")
         )) {
@@ -698,6 +702,52 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             )
         }
     }
+
+    @Test
+    fun `transfer within the timestamp tolerance of the proposal pays the request`() = test {
+        val paidAt = clock.now()
+        for (proposedAt in listOf(paidAt - 1.hours, paidAt + PaykitUsdtPaymentRepo.PAYMENT_TIME_TOLERANCE)) {
+            val record = receivedRequest(proposalRecordedAt = proposedAt.toString())
+            whenever(sdk.paymentRequests()).thenReturn(listOf(record))
+            stubVerification(Result.success(verifiedPayment(paidAt)))
+            stored = null
+            val repo = repo()
+
+            repo.reconcile().getOrThrow()
+
+            val receipt = repo.receipts.value.single()
+            assertFalse(receipt.beforeRequest)
+            assertTrue(receipt.satisfied)
+        }
+    }
+
+    @Test
+    fun `transfer earlier than the proposal beyond the tolerance does not pay the request`() = test {
+        val paidAt = clock.now()
+        val proposedAt = paidAt + PaykitUsdtPaymentRepo.PAYMENT_TIME_TOLERANCE + 1.seconds
+        val record = receivedRequest(proposalRecordedAt = proposedAt.toString())
+        whenever(sdk.paymentRequests()).thenReturn(listOf(record))
+        stubVerification(Result.success(verifiedPayment(paidAt)))
+        val repo = repo()
+
+        repo.reconcile().getOrThrow()
+
+        val receipt = repo.receipts.value.single()
+        assertTrue(receipt.verified)
+        assertTrue(receipt.beforeRequest)
+        assertFalse(receipt.satisfied)
+        assertTrue(repo.verifiedReceipts(identity).getOrThrow().isEmpty())
+        assertEquals(receipt, PaykitUsdtStateBackup.Receipt(receipt).restored())
+    }
+
+    private fun verifiedPayment(paidAt: Instant) = UsdtVerifiedPayment(
+        "42161:transaction:0",
+        "transaction:0",
+        "sender",
+        address,
+        50_000u,
+        paidAt.epochSeconds.toULong(),
+    )
 
     @Test
     fun `receipt status survives restart and reflects canonical execution and payment deadline`() = test {
@@ -740,27 +790,46 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `proof envelope includes the application id at the UTF-8 message boundary`() {
-        val binding = PaykitUsdtPaymentRepo.binding(request, identity, "bitkit", null, null)
-        // The rc63 envelope and largest ERC-20 receipt proof reserve 692 bytes before the reference.
-        val exactLimit = binding.copy(paymentReference = "é".repeat(154))
-        PaykitUsdtPaymentRepo.validateProofSize(exactLimit)
-        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> {
-            PaykitUsdtPaymentRepo.validateProofSize(
-                exactLimit.copy(paymentReference = exactLimit.paymentReference + "x")
-            )
-        }
+    fun `proof that fits one message is measured by the sdk before the payment is prepared`() = test {
+        whenever(
+            sdk.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt())
+
+        repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+
+        verify(sdk).paymentProofEventLength(
+            paymentReference = request.paymentReference,
+            paymentAppId = "bitkit",
+            paymentEndpointIdentifier = MethodId.UsdtArbitrum.rawValue,
+            proofJson = PaykitPaymentProofKind.Usdt.longestProofJson(),
+            billingPeriod = null,
+            conversionQuoteId = null,
+            allowanceId = null,
+        )
+        assertTrue(stored != null)
     }
 
     @Test
-    fun `proof size is bounded before the payment is prepared`() = test {
-        val binding = PaykitUsdtPaymentRepo.binding(request, identity, "bitkit", null, request.billingPeriod?.sdkValue)
-        PaykitUsdtPaymentRepo.validateProofSize(binding)
-        val oversized = context(request.copy(paymentReference = "é".repeat(256)))
-        assertTrue(
-            repo().prepare(oversized, quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).isFailure
-        )
+    fun `proof too large for one message fails before the payment is prepared`() = test {
+        whenever(
+            sdk.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt() + 1u)
+
+        val result = repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now()))
+
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, result.exceptionOrNull())
         assertEquals(null, stored)
+    }
+
+    @Test
+    fun `longest usdt proof carries the largest receipt log index`() {
+        val proof = Json.decodeFromString<PaykitUsdtProof>(PaykitPaymentProofKind.Usdt.longestProofJson())
+
+        assertEquals(PaykitUsdt.CHAIN_ID, proof.chainId)
+        assertEquals(66, proof.transactionHash.length)
+        assertEquals(78, proof.receiptLogIndex.length)
+        assertEquals(BigInteger.ONE.shiftLeft(256) - BigInteger.ONE, BigInteger(proof.receiptLogIndex))
+        assertEquals(132, proof.signature.length)
     }
 
     @Test
@@ -785,7 +854,10 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         assertEquals(true, repo.receipts.value.single().satisfied)
     }
 
-    private fun receivedRequest(id: String = request.paymentRequestId): PaymentRequestRecord {
+    private fun receivedRequest(
+        id: String = request.paymentRequestId,
+        proposalRecordedAt: String? = null,
+    ): PaymentRequestRecord {
         val json = Json.encodeToString(
             PaykitUsdtProof(UsdtPaymentProof("42161", "0x" + "a".repeat(64), "0", "0x" + "b".repeat(130)))
         )
@@ -807,6 +879,8 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             proposalRecordedAt = null,
             payerAppId = "bitkit",
             executionClaimAppId = "bitkit",
+            proposalRecordedAt = proposalRecordedAt,
+            acceptanceRecordedAt = null,
             terms = PaymentRequestTerms(
                 PaymentRequestAmount("0.05", "usd"),
                 reference,

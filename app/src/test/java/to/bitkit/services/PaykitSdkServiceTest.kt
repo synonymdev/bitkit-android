@@ -227,8 +227,13 @@ class PaykitSdkServiceTest {
                 }
                 "revision"
             }
-            val report =
-                PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+            val report = PrivatePaymentListDeliveryReport(
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                emptyList(),
+            )
             whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
             val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -3468,6 +3473,7 @@ class PaykitSdkServiceTest {
                     emptyList()
                 },
                 failedToDeliver = emptyList(),
+                acknowledged = emptyList(),
             )
         }
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }

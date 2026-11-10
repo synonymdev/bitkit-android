@@ -23,16 +23,17 @@ data class PaykitUsdtStateBackup(
         val receivedAtMillis: Long,
         val underpaid: Boolean,
         val afterExpiry: Boolean,
+        val beforeRequest: Boolean = false,
     ) {
         constructor(value: PaykitUsdtReceipt) : this(
             value.wallet, value.identity, value.requestId, value.paymentId, value.proofEventId,
             value.verified, value.transferId, value.amount.atomic, value.receivedAtMillis,
-            value.underpaid, value.afterExpiry,
+            value.underpaid, value.afterExpiry, value.beforeRequest,
         )
 
         fun restored() = PaykitUsdtReceipt(
             wallet, identity, requestId, paymentId, proofEventId, verified, transferId,
-            PaykitAmount(PaykitAsset.USDT, amountAtomic), receivedAtMillis, underpaid, afterExpiry,
+            PaykitAmount(PaykitAsset.USDT, amountAtomic), receivedAtMillis, underpaid, afterExpiry, beforeRequest,
         )
     }
 }

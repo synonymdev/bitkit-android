@@ -151,6 +151,8 @@ class PaykitIssuerInteropTest {
         proposalRecordedAt = null,
         payerAppId = null,
         executionClaimAppId = null,
+        proposalRecordedAt = null,
+        acceptanceRecordedAt = null,
     )
 }
 

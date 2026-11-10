@@ -8948,6 +8948,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `local RBF publication during receipt lookup cannot interrupt the boost success toast`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        var published = false
+        whenever(activityRepo.isReceivedTransaction("original")).doSuspendableAnswer {
+            entered.complete(Unit)
+            resume.await()
+            false
+        }
+        whenever(activityRepo.isLocalRbfBoost("original")).thenAnswer { published }
+        advanceUntilIdle()
+        emitNodeEvent(Event.OnchainTransactionReplaced("original", listOf("replacement")))
+        runCurrent()
+        assertTrue(entered.isCompleted)
+        published = true
+        resume.complete(Unit)
+        advanceUntilIdle()
+        verify(toastManager, never()).enqueue(argThat { testTag == "TransactionReplacedToast" })
+        verify(activityRepo).handleOnchainTransactionReplaced("original", listOf("replacement"))
+    }
+
+    @Test
+    fun `external replacement still shows incoming and outgoing notifications`() = test {
+        advanceUntilIdle()
+        for (received in listOf(false, true)) {
+            val txid = "external-$received"
+            whenever(activityRepo.isReceivedTransaction(txid)).thenReturn(received)
+            whenever(activityRepo.isLocalRbfBoost(txid)).thenReturn(false)
+            emitNodeEvent(Event.OnchainTransactionReplaced(txid, listOf("replacement-$received")))
+            advanceUntilIdle()
+            val expectedTag = if (received) "ReceivedTransactionReplacedToast" else "TransactionReplacedToast"
+            verify(toastManager).enqueue(argThat { testTag == expectedTag })
+        }
+    }
+
+    @Test
     fun `confirmed-only onchain receive shows the sheet after updating the activity`() = test {
         val sheetDetails = NewTransactionSheetDetails(
             type = NewTransactionSheetType.ONCHAIN,
@@ -11667,6 +11703,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(toastManager).enqueue(
             check {
                 assertEquals("PaymentRequestQueuedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `payment request too long to send asks to shorten the note`() = test {
+        val target = PaykitPaymentRequestTarget("pubkyrecipient")
+        val draft = PaykitPaymentRequestDraft(
+            amount = PaykitAmount(PaykitAsset.BTC, 1_000uL),
+            note = "💜".repeat(256),
+            expiresAt = Clock.System.now() + 60.seconds,
+        )
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(context.getString(R.string.wallet__payment_request_note_too_long))
+            .thenReturn("Shorten the note and try again.")
+        whenever(paykitPaymentRequestRepo.propose(draft, target, emptyList()))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestTooLong))
+        var created = false
+
+        sut.createPaymentRequest(draft, target) { created = true }
+        runCurrent()
+
+        assertFalse(created)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Shorten the note and try again.", it.description)
             }
         )
     }

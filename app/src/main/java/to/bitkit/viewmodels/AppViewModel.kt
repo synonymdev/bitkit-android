@@ -3012,6 +3012,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) {
         val isReceive = activityRepo.isReceivedTransaction(event.txid)
+        if (activityRepo.isLocalRbfBoost(event.txid)) return
         toast(
             type = Toast.ToastType.INFO,
             title = when (isReceive) {
@@ -8601,7 +8602,17 @@ class AppViewModel @Inject constructor(
                         )
                     }
                 }
-                .onFailure(::toast)
+                .onFailure {
+                    if (it is PaykitPaymentRequestError.RequestTooLong) {
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = context.getString(R.string.wallet__payment_request_note_too_long),
+                        )
+                    } else {
+                        toast(it)
+                    }
+                }
         }
     }
 
