@@ -901,10 +901,13 @@ class ActivityService(
         }
         if (existingActivity is Activity.Lightning) {
             val statusChanging = existingActivity.v1.status != state
+            // The Spark receive of a move can settle the send before the node's routing fee is recorded.
+            val feeChanging = payment.feePaidMsat?.let { msatFloorOf(it) != existingActivity.v1.fee } == true
             val needsPrivateContactAttribution = existingActivity.v1.contact == null &&
                 payment.direction == PaymentDirection.INBOUND
             if ((existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
                 !statusChanging &&
+                !feeChanging &&
                 !needsPrivateContactAttribution
             ) {
                 return

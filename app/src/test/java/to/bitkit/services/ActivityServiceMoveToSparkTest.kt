@@ -69,6 +69,30 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
         assertEquals(ROUTING_FEE_SATS, stored.fee)
     }
 
+    @Test
+    fun `a move to spark settled by its spark receive takes the routing fee from the later send update`() =
+        coreTest {
+            whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+            // The Spark receive marked the pending send succeeded after the node's last update of it.
+            row = Activity.Lightning(
+                LightningActivity.create(
+                    id = HASH,
+                    txType = PaymentType.SENT,
+                    status = PaymentState.SUCCEEDED,
+                    value = MOVED_SATS,
+                    invoice = "invoice",
+                    timestamp = 100uL,
+                    updatedAt = 300uL,
+                )
+            )
+
+            sut().syncLdkNodePaymentsToActivities(listOf(channelSend()))
+
+            val stored = (row as Activity.Lightning).v1
+            assertEquals(PaymentState.SUCCEEDED, stored.status)
+            assertEquals(ROUTING_FEE_SATS, stored.fee)
+        }
+
     private fun coreTest(block: suspend () -> Unit) = test {
         ServiceQueue.CORE.background {
             mockStatic(Class.forName(BITKIT_CORE_FFI_CLASS)).use { native ->
