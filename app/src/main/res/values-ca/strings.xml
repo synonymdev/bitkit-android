@@ -258,7 +258,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Comissions no disponibles</string>
     <string name="lightning__spending_confirm__spending_fee">Comissió de despesa</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">fins a</string>
     <string name="lightning__spending_intro__button">Començar</string>
     <string name="lightning__spending_intro__text">Transfereix fons al teu saldo de despesa per gaudir de transaccions instantànies i barates amb amics, família i comerciants.</string>
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;a despesa&lt;/accent&gt;</string>

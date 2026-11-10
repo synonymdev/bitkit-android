@@ -254,7 +254,6 @@
     <string name="lightning__spending_confirm__quote_error_title">الرسوم غير متاحة</string>
     <string name="lightning__spending_confirm__spending_fee">رسوم الإنفاق</string>
     <string name="lightning__spending_confirm__total">الإجمالي</string>
-    <string name="lightning__spending_confirm__up_to">حتى</string>
     <string name="lightning__spending_intro__button">ابدأ</string>
     <string name="lightning__spending_intro__text">حوّل الأموال إلى رصيد الإنفاق للاستمتاع بمعاملات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
     <string name="lightning__spending_intro__title">تحويل\n&lt;accent&gt;إلى الإنفاق&lt;/accent&gt;</string>

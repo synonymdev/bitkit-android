@@ -408,7 +408,7 @@
     <string name="lightning__spending_amount__error_min__title">Amount Too Small</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about" translatable="false">≈</string>
+    <string name="lightning__spending_confirm__about" translatable="false">±</string>
     <string name="lightning__spending_confirm__amount">To spending</string>
     <string name="lightning__spending_confirm__fees_changed_network">Fees are {amount} higher because fee rates or your savings balance changed while you were on this screen. Swipe again to confirm.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Fees changed</string>
@@ -420,7 +420,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Fees Unavailable</string>
     <string name="lightning__spending_confirm__spending_fee">Spending fee</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">up to</string>
     <string name="lightning__spending_intro__button">Get Started</string>
     <string name="lightning__spending_intro__text">Transfer funds to your spending balance to enjoy instant and cheap transactions with friends, family, and merchants.</string>
     <string name="lightning__spending_intro__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>

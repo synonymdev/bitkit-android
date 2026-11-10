@@ -141,7 +141,6 @@
     <string name="lightning__spending_confirm__instant_text">In wenigen Minuten bereit</string>
     <string name="lightning__spending_confirm__later_text">Nach 3 Bestätigungen, etwa 30 Minuten</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">bis zu</string>
     <string name="lightning__spending_intro__button">Los geht\'s</string>
     <string name="lightning__spending_intro__text">Überweisen Sie Geld auf Ihr Guthaben, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu tätigen.</string>
     <string name="lightning__spending_intro__title">&lt;accent&gt;zu den Ausgaben&lt;/accent&gt;</string>

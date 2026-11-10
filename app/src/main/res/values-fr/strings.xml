@@ -140,7 +140,6 @@
     <string name="lightning__spending_confirm__instant_text">Prêt en quelques minutes</string>
     <string name="lightning__spending_confirm__later_text">Après 3 confirmations, environ 30 minutes</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">jusqu\'à</string>
     <string name="lightning__spending_intro__button">Commencer</string>
     <string name="lightning__spending_intro__text">Transférez des fonds vers votre solde Dépenses pour profiter de transactions instantanées et moins chers avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__spending_intro__title">Transfert\n&lt;accent&gt;aux dépenses&lt;/accent&gt;</string>

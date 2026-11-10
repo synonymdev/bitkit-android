@@ -142,7 +142,6 @@
     <string name="lightning__spending_confirm__instant_text">Gotowe w kilka minut</string>
     <string name="lightning__spending_confirm__later_text">Po 3 potwierdzeniach, około 30 minut</string>
     <string name="lightning__spending_confirm__total">Razem</string>
-    <string name="lightning__spending_confirm__up_to">do</string>
     <string name="lightning__spending_intro__button">Rozpocznij</string>
     <string name="lightning__spending_intro__text">Przelewaj środki na swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="lightning__spending_intro__title">Prześlij \n&lt;accent&gt;na saldo wydatków&lt;/accent&gt;</string>

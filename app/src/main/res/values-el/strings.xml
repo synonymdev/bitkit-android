@@ -254,7 +254,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Μη διαθέσιμες χρεώσεις</string>
     <string name="lightning__spending_confirm__spending_fee">Χρέωση δαπανών</string>
     <string name="lightning__spending_confirm__total">Σύνολο</string>
-    <string name="lightning__spending_confirm__up_to">έως</string>
     <string name="lightning__spending_intro__button">Ξεκίνα</string>
     <string name="lightning__spending_intro__text">Μετέφερε κεφάλαια στο υπόλοιπο δαπανών για να απολαύσεις άμεσες και φθηνές συναλλαγές με φίλους, οικογένεια και εμπόρους.</string>
     <string name="lightning__spending_intro__title">Μεταφορά\n&lt;accent&gt;σε δαπάνες&lt;/accent&gt;</string>

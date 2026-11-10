@@ -270,7 +270,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Комиссии недоступны</string>
     <string name="lightning__spending_confirm__spending_fee">Комиссия расходов</string>
     <string name="lightning__spending_confirm__total">Итого</string>
-    <string name="lightning__spending_confirm__up_to">до</string>
     <string name="lightning__spending_intro__button">Начать</string>
     <string name="lightning__spending_intro__text">Переведите средства на свой баланс расходов, чтобы наслаждаться мгновенными и недорогими транзакциями с друзьями, семьёй и продавцами.</string>
     <string name="lightning__spending_intro__title">Перевод\n&lt;accent&gt;на Расходы&lt;/accent&gt;</string>

@@ -259,7 +259,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Commissioni non disponibili</string>
     <string name="lightning__spending_confirm__spending_fee">Commissione di spesa</string>
     <string name="lightning__spending_confirm__total">Totale</string>
-    <string name="lightning__spending_confirm__up_to">fino a</string>
     <string name="lightning__spending_intro__button">Inizia</string>
     <string name="lightning__spending_intro__text">Trasferisci fondi al tuo conto di spesa per usufruire di transazioni istantanee ed economiche con amici, familiari e commercianti.</string>
     <string name="lightning__spending_intro__title">Trasferisci\n&lt;accent&gt;alle spese&lt;/accent&gt;</string>

@@ -258,7 +258,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Kosten niet beschikbaar</string>
     <string name="lightning__spending_confirm__spending_fee">Bestedingskosten</string>
     <string name="lightning__spending_confirm__total">Totaal</string>
-    <string name="lightning__spending_confirm__up_to">tot</string>
     <string name="lightning__spending_intro__button">Aan de slag</string>
     <string name="lightning__spending_intro__text">Boek geld over naar je bestedingssaldo voor directe en goedkope transacties met vrienden, familie en winkeliers.</string>
     <string name="lightning__spending_intro__title">Overboeken\n&lt;accent&gt;naar bestedingssaldo&lt;/accent&gt;</string>

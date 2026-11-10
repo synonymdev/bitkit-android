@@ -213,7 +213,6 @@
     <string name="lightning__spending_confirm__spending_fee">Comisión de gastos</string>
     <string name="lightning__spending_confirm__lsp_fee">Comisión de servicio</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">hasta</string>
     <string name="lightning__spending_intro__button">Empezar</string>
     <string name="lightning__spending_intro__text">Transfiera fondos a su saldo de gasto para disfrutar de transacciones baratas e instantáneas con amigos, familia y comerciantes.</string>
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;a gastos&lt;/accent&gt;</string>

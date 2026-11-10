@@ -261,7 +261,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Poplatky nedostupné</string>
     <string name="lightning__spending_confirm__spending_fee">Poplatek za výdaje</string>
     <string name="lightning__spending_confirm__total">Celkem</string>
-    <string name="lightning__spending_confirm__up_to">až</string>
     <string name="lightning__spending_intro__button">Začít</string>
     <string name="lightning__spending_intro__text">Převeďte peníze na svůj disponibilní zůstatek a využívejte okamžité a levné transakce s přáteli, rodinou a obchodníky.</string>
     <string name="lightning__spending_intro__title">Převést\n&lt;accent&gt;do výdajů&lt;/accent&gt;</string>

@@ -261,7 +261,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Comisiones no disponibles</string>
     <string name="lightning__spending_confirm__spending_fee">Comisión de gastos</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">hasta</string>
     <string name="lightning__spending_intro__button">Empezar</string>
     <string name="lightning__spending_intro__text">Transfiera fondos a su saldo de gastos para disfrutar de transacciones baratas e instantáneas con amigos y comercios.</string>
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;a gastos&lt;/accent&gt;</string>
