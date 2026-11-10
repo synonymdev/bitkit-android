@@ -2078,12 +2078,9 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
         val parentEntry = remember(entry) { navController.getBackStackEntry(Routes.ConnectionsNav) }
         return hiltViewModel<SparkExitViewModel>(parentEntry)
     }
-    // Back to Spark, or to the screen that opened progress directly, such as App Status. Once progress is gone,
-    // a second call pops nothing.
-    val leaveExit = {
-        navController.popBackStack<Routes.SparkDetail>(inclusive = false) ||
-            navController.popBackStack<Routes.SparkExitProgress>(inclusive = true)
-    }
+    // Progress always sits right above the screen it returns to: Spark, which starting an exit pops back to first,
+    // or the screen that opened it directly, such as App Status. Once progress is gone, a second call pops nothing.
+    val leaveExit = { navController.popBackStack<Routes.SparkExitProgress>(inclusive = true) }
     composableWithDefaultTransitions<Routes.SparkExitIntro> {
         SparkExitIntroScreen(
             onBack = { navController.popBackStack() },
@@ -2111,7 +2108,7 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
             viewModel = exitViewModel(it),
             onBack = { navController.popBackStack() },
             onStart = {
-                leaveExit()
+                navController.popBackStack<Routes.SparkDetail>(inclusive = false)
                 navController.navigateTo(Routes.SparkExitProgress)
             },
         )
