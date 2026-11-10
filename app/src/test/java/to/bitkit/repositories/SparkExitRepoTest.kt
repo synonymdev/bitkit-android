@@ -814,6 +814,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(sparkRepo, never()).setExiting(true, true)
     }
@@ -920,6 +921,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -941,6 +943,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -1082,6 +1085,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         assertEquals("again", assertNotNull(store.load()).fundingPaymentTxid)
         assertFalse(sut.state.value.isSavingsPaymentRefused)
@@ -1166,6 +1170,7 @@ class SparkExitRepoTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.doSuspendableAnswer { answer() }
         whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
@@ -1318,6 +1323,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
