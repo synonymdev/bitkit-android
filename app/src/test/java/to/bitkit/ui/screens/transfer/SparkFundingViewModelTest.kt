@@ -148,6 +148,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -174,6 +175,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Accepted("txid", 50_000uL)))
         whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf("txid" to SparkDepositClaim.Later)))
@@ -193,6 +195,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             anyOrNull(), eq(false), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(sparkRepo).onDepositBroadcast("txid", 50_000uL)
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Later, 1_350uL)
@@ -208,6 +211,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -240,6 +244,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -280,6 +285,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(

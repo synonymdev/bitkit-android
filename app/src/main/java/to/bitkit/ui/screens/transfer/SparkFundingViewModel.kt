@@ -36,6 +36,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
@@ -241,16 +242,10 @@ class SparkFundingViewModel @Inject constructor(
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
-            val totalRise = quote.totalSats - shownQuote.totalSats
-            val spendingDrop = shownQuote.toSpendingSats(shown.speed) - quote.toSpendingSats(shown.speed)
-            if (totalRise > 0 || spendingDrop > 0) {
+            val increase = quote.increaseOver(shownQuote, shown.speed)
+            if (increase > 0) {
                 Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
-                toast(
-                    title = R.string.lightning__spending_confirm__fees_changed_title,
-                    description = context.getString(R.string.lightning__spending_confirm__fees_changed_network)
-                        .replace("{amount}", formatPrimaryAmount(maxOf(totalRise, spendingDrop))),
-                    type = Toast.ToastType.INFO,
-                )
+                toastFeesChanged(increase)
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
@@ -300,6 +295,8 @@ class SparkFundingViewModel @Inject constructor(
                 feeRates = quotedFeeRates,
                 isTransfer = true,
                 isMaxAmount = state.isMax,
+                // A send-all spends every coin, so its fee is bound; a fixed amount's coin selection can vary.
+                approvedMiningFeeSats = quote.networkFeeSats.toULong().takeIf { state.isMax },
             ).getOrThrow()
             if (outcome !is OnchainSendOutcome.Accepted) {
                 Logger.warn("Spark funding was not accepted: '$outcome'", context = TAG)
@@ -313,6 +310,14 @@ class SparkFundingViewModel @Inject constructor(
             }
             onFundingAccepted(outcome.txid, outcome.amountSats ?: quote.amountSats.toULong(), quote)
         }.onFailure {
+            if (it.cause is OnchainSendChangedError) {
+                Logger.info("Asking for another swipe, the funding changed since approved", context = TAG)
+                quote().onSuccess { repriced ->
+                    showQuote(repriced)
+                    toastFeesChanged(repriced.increaseOver(quote, state.speed))
+                }.onFailure { toastQuoteError() }
+                return@onFailure
+            }
             Logger.error("Failed to fund Spark", it, context = TAG)
             if (it is OnchainSendBlockedError && showRetainedFunding(quote)) return@onFailure
             toast(
@@ -434,6 +439,13 @@ class SparkFundingViewModel @Inject constructor(
     private suspend fun spendableSats(): ULong =
         lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
 
+    private fun toastFeesChanged(increaseSats: Long) = toast(
+        title = R.string.lightning__spending_confirm__fees_changed_title,
+        description = context.getString(R.string.lightning__spending_confirm__fees_changed_network)
+            .replace("{amount}", formatPrimaryAmount(increaseSats)),
+        type = Toast.ToastType.INFO,
+    )
+
     private fun toastQuoteError() = toast(
         title = R.string.lightning__spending_confirm__quote_error_title,
         description = context.getString(R.string.lightning__spending_confirm__quote_error_text),
@@ -490,6 +502,10 @@ interface SparkFundingContract {
         val spendableSats: Long,
     ) {
         val totalSats: Long get() = amountSats + networkFeeSats
+
+        /** How much more this asks than [approved]: the larger rise in the total or fall in what reaches spending. */
+        fun increaseOver(approved: Quote, speed: SparkClaimSpeed): Long =
+            maxOf(totalSats - approved.totalSats, approved.toSpendingSats(speed) - toSpendingSats(speed))
 
         /** Whether Savings can pay the amount and its network fee. */
         val isCovered: Boolean get() = totalSats <= spendableSats

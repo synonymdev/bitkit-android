@@ -2751,6 +2751,59 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(OnchainSendOutcome.Accepted(txid, 900uL), result)
     }
 
+    @Test
+    fun `a send that grew after approval is refused before broadcast`() = test {
+        val txid = "ab".repeat(32)
+        // The approved quote: 99_000 reaches the address for a 500 sat mining fee.
+        val cases = listOf<Triple<ULong, ULong?, Boolean>>(
+            Triple(99_000uL, 500uL, true),
+            Triple(99_000uL, 400uL, true),
+            Triple(99_500uL, 500uL, false),
+            Triple(98_500uL, 500uL, false),
+            Triple(99_000uL, 501uL, false),
+            Triple(99_000uL, null, false),
+        )
+        for ((amount, fee, valid) in cases) {
+            val original = pendingSendAttempt().copy(amountSats = 99_000uL, isMaxAmount = true, isTransfer = true)
+            val repo = prepareGuardedSend(original)
+            var broadcasts = 0
+            val prepared = PreparedOnchainSend(
+                OnchainPreparedReceipt(
+                    txid = txid,
+                    inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                    address = "address",
+                    amountSats = amount,
+                    miningFeeSats = fee,
+                ),
+            ) { beforeDispatch ->
+                beforeDispatch()
+                broadcasts++
+                OnchainSendOutcome.Accepted(txid)
+            }
+            whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+                .thenReturn(prepared)
+            whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+                .thenReturn(original.copy(amountSats = amount, evidence = OnchainSendEvidence.Accepted, txid = txid))
+
+            val result = repo.sendOnChain(
+                "address",
+                99_000uL,
+                isTransfer = true,
+                isMaxAmount = true,
+                approvedMiningFeeSats = 500uL,
+            )
+
+            if (valid) {
+                assertTrue(result.isSuccess, "The approved send must still go out: $amount, $fee")
+                assertEquals(1, broadcasts)
+            } else {
+                val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull(), "Sent $amount for $fee")
+                assertIs<OnchainSendChangedError>(error.cause)
+                assertEquals(0, broadcasts)
+            }
+        }
+    }
+
     private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
         OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
     ) {

@@ -1714,6 +1714,7 @@ class LightningRepo @Inject constructor(
         payerIdentity: String? = null,
         paymentDeadlineAt: Instant? = null,
         contactPublicKey: String? = null,
+        approvedMiningFeeSats: ULong? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
@@ -1792,6 +1793,14 @@ class LightningRepo @Inject constructor(
                                     OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
                                 }.toSet()
                             )
+                        }
+                        if (approvedMiningFeeSats != null) {
+                            val miningFee = prepared.receipt.miningFeeSats
+                            if (prepared.receipt.amountSats != sats || miningFee == null ||
+                                miningFee > approvedMiningFeeSats
+                            ) {
+                                throw OnchainSendChangedError()
+                            }
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(
                             attempt.attemptId,

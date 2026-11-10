@@ -190,6 +190,9 @@ class OnchainSendAttemptUnreadableError(cause: Throwable) : AppError("Failed to 
 
 class OnchainSendNotDispatchedError(cause: Throwable) : AppError("On-chain send did not reach the backend", cause)
 
+/** A send refused before broadcast because it would send another amount, or pay more mining fee, than approved. */
+class OnchainSendChangedError : AppError("On-chain send changed after it was approved")
+
 class OnchainSendPendingError(cause: Throwable, val txid: String? = null) :
     AppError("On-chain send outcome is unknown; do not send again", cause)
 
