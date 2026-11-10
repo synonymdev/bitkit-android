@@ -638,6 +638,42 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a stale settle never tells the newer withdrawal's send it ended`() = test {
+        // A retry to the same address and amount, so a settlement for the older one would read as the newer one's.
+        val newer = PendingSparkWithdrawal(
+            "bcrt1qcontact",
+            20_000uL,
+            "pubkycontact",
+            earlierTxids = setOf("withdrawal"),
+            startedAt = now.epochSeconds,
+        )
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        // Another settle closes the older journal and the newer withdrawal writes its own while this one saves.
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            cacheData.update { it.copy(pendingSparkWithdrawal = newer) }
+            Result.success(Unit)
+        }
+        whenever { sparkService.getInfo() }.thenReturn(info(50_000uL))
+        whenever(sparkService.isConnected).thenReturn(true)
+        val settlements = mutableListOf<SparkWithdrawalSettlement>()
+        val sut = createSut()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            sut.withdrawalSettlements.collect { settlements += it }
+        }
+
+        sut.start(0).getOrThrow()
+
+        assertEquals(newer, cacheData.value.pendingSparkWithdrawal)
+        assertEquals(emptyList(), settlements, "The older txid would settle the newer send still in flight")
+    }
+
+    @Test
     fun `keeps a journaled withdrawal Spark lists when its activity fails to save on start`() = test {
         cacheData.update {
             it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))

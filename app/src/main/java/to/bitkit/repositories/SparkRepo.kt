@@ -966,13 +966,22 @@ class SparkRepo @Inject constructor(
         // Spark may list a withdrawal it just sent only on a later sync, so an unlisted one stays open for a while.
         if (clock.now().epochSeconds < journal.startedAt + UNLISTED_WITHDRAWAL_GRACE.inWholeSeconds) return
         Logger.warn("Dropped Spark withdrawal to '${journal.address}' that Spark never sent", context = TAG)
-        clearJournal(journal)
-        _withdrawalSettlements.emit(SparkWithdrawalSettlement(journal.address, journal.amountSats, null))
+        if (clearJournal(journal)) {
+            _withdrawalSettlements.emit(SparkWithdrawalSettlement(journal.address, journal.amountSats, null))
+        }
     }
 
-    /** Clears [journal] only while it is still the open one, so a stale settle never drops a newer withdrawal's. */
-    private suspend fun clearJournal(journal: PendingSparkWithdrawal) {
-        cacheStore.update { if (it.pendingSparkWithdrawal == journal) it.copy(pendingSparkWithdrawal = null) else it }
+    /**
+     * Clears [journal] only while it is still the open one, so a stale settle never drops a newer withdrawal's. Returns
+     * whether it cleared it: only then is the settlement this attempt's to announce.
+     */
+    private suspend fun clearJournal(journal: PendingSparkWithdrawal): Boolean {
+        var cleared = false
+        cacheStore.update {
+            cleared = it.pendingSparkWithdrawal == journal
+            if (cleared) it.copy(pendingSparkWithdrawal = null) else it
+        }
+        return cleared
     }
 
     private suspend fun releaseFailedSends(payments: List<Payment>) {
@@ -1113,14 +1122,15 @@ class SparkRepo @Inject constructor(
                 activityRepo.get().addTagsToActivity(txid, journal.tags)
                     .onFailure { Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG) }
             }
-            clearJournal(journal)
-            _withdrawalSettlements.emit(
-                SparkWithdrawalSettlement(
-                    journal.address,
-                    journal.amountSats,
-                    txid.takeIf { payment.status != PaymentStatus.FAILED },
-                ),
-            )
+            if (clearJournal(journal)) {
+                _withdrawalSettlements.emit(
+                    SparkWithdrawalSettlement(
+                        journal.address,
+                        journal.amountSats,
+                        txid.takeIf { payment.status != PaymentStatus.FAILED },
+                    ),
+                )
+            }
         }
     }
 
