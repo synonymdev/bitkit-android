@@ -179,7 +179,7 @@ private fun Content(
                         state = sparkHealth,
                     ),
                     // Spark's detail shows a zero balance until Spark has read its state.
-                    onClick = { if (sparkHealth == HealthState.READY) onSparkClick() },
+                    onClick = onSparkClick.takeIf { sparkHealth == HealthState.READY },
                 )
             }
 
@@ -210,7 +210,7 @@ private fun Content(
 private fun StatusItem(
     statusUi: StatusUi,
     showDivider: Boolean = true,
-    onClick: () -> Unit = {},
+    onClick: (() -> Unit)? = {},
 ) {
     val bgColor = when (statusUi.state) {
         HealthState.READY -> Colors.Green16
@@ -229,7 +229,7 @@ private fun StatusItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                .clickableAlpha { onClick() }
+                .clickableAlpha(onClick = onClick)
                 .testTag("Status-${statusUi.id}")
         ) {
             Box(

@@ -141,13 +141,24 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a failed start is flagged until the next start begins`() = test {
-        whenever { sparkService.connect(0) }.thenThrow(IllegalStateException("offline")).thenReturn(true)
+        val retryConnects = CompletableDeferred<Unit>()
+        whenever { sparkService.connect(0) }
+            .thenThrow(IllegalStateException("offline"))
+            .doSuspendableAnswer {
+                retryConnects.await()
+                true
+            }
         val sut = createSut()
 
         assertTrue(sut.start(0).isFailure)
         assertTrue(sut.state.value.hasStartFailed)
 
-        sut.start(0).getOrThrow()
+        val retry = launch { sut.start(0) }
+        runCurrent()
+        assertFalse(sut.state.value.hasStartFailed, "a retry still connecting reads as connecting")
+
+        retryConnects.complete(Unit)
+        retry.join()
         assertFalse(sut.state.value.hasStartFailed)
     }
 
