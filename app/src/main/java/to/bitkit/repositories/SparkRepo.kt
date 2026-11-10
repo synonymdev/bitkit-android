@@ -114,6 +114,12 @@ class SparkRepo @Inject constructor(
     /** Withdrawals this app sent, by txid, known before Spark lists them so their arrival reads as a transfer. */
     private val withdrawalTxids = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * Set by a failed withdrawal until Spark reads a balance again: while its operators stay down, Spark can read 0
+     * with the funds still there, so the last known balance stays shown.
+     */
+    private val withdrawalFailed = AtomicBoolean(false)
+
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
 
@@ -200,6 +206,7 @@ class SparkRepo @Inject constructor(
         earlyClaimVouts.clear()
         preparedWithdrawal = null
         withdrawalTxids.clear()
+        withdrawalFailed.set(false)
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
@@ -490,9 +497,11 @@ class SparkRepo @Inject constructor(
             (payment.details as? PaymentDetails.Withdraw)?.txId?.let { withdrawalTxids += it }
             Unit
         }.onSuccess {
+            withdrawalFailed.set(false)
             runSuspendCatching { refresh() }
                 .onFailure { Logger.warn("Failed to refresh Spark after its withdrawal", it, context = TAG) }
         }.onFailure {
+            withdrawalFailed.set(true)
             Logger.error("Failed to withdraw from Spark", it, context = TAG)
         }
     }
@@ -633,10 +642,12 @@ class SparkRepo @Inject constructor(
                 )
             }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
+        if (info.balanceSats > 0uL) withdrawalFailed.set(false)
+        val isStale = withdrawalFailed.get() || info.lastSyncError != null
         _state.update {
             it.copy(
                 isReady = true,
-                balanceSats = info.balanceSats,
+                balanceSats = if (info.balanceSats == 0uL && isStale) it.balanceSats else info.balanceSats,
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),
                 withdrawals = payments.toWithdrawals(),

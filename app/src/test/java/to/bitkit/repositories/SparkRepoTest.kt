@@ -23,6 +23,7 @@ import breez_sdk_spark.SendOnchainSpeedFeeQuote
 import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
+import breez_sdk_spark.SyncError
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -825,6 +826,40 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a failed withdrawal keeps the balance shown while spark reads zero`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("operators unreachable") }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+
+        assertTrue(sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).isFailure)
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL))
+        sut.refreshState().getOrThrow()
+
+        assertEquals(10_000uL, sut.state.value.balanceSats, "the balance read 0 after the failed withdrawal")
+    }
+
+    @Test
+    fun `a failed sync keeps the balance shown while spark reads zero`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+
+        val syncFailed = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        whenever { sparkService.getInfo() }.thenReturn(syncFailed)
+        sut.refreshState().getOrThrow()
+        assertEquals(10_000uL, sut.state.value.balanceSats, "the balance read 0 while the sync failed")
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL))
+        sut.refreshState().getOrThrow()
+        assertEquals(0uL, sut.state.value.balanceSats)
     }
 
     @Test
