@@ -1068,6 +1068,19 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an exit that ended and a wipe forget the kept balance from before the exit`() = test {
+        val sut = keptAfterFailedSync()
+        sut.holdForExit()
+        sut.setExiting(false).getOrThrow()
+        sut.wipe(0).getOrThrow()
+
+        // A restored wallet's exit cancelled while Spark reads 0 shows none of the previous wallet's kept balance.
+        sut.releaseExitHold()
+
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the previous wallet's kept balance came back")
+    }
+
+    @Test
     fun `a deposit claimed early is listed only as claimed`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         listDeposit()

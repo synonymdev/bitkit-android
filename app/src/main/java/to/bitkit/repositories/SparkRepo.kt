@@ -236,6 +236,7 @@ class SparkRepo @Inject constructor(
         preparedWithdrawal = null
         withdrawalTxids.clear()
         withdrawalFailedAtSecs = null
+        keptBeforeExit = null
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
@@ -259,6 +260,8 @@ class SparkRepo @Inject constructor(
      */
     suspend fun setExiting(isExiting: Boolean, reconnect: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
         val isCurrent = _state.value.isExiting == isExiting && sparkService.isConnected
+        // An ended exit forgets the balance kept before it: a cancel already showed it again.
+        if (!isExiting) keptBeforeExit = null
         if (isCurrent && !reconnect) return@withContext Result.success(Unit)
         _state.update { it.copy(isExiting = isExiting, keptBalanceSats = it.keptBalanceSats.takeUnless { isExiting }) }
         runSuspendCatching {
