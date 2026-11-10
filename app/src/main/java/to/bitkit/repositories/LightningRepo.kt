@@ -1613,10 +1613,12 @@ class LightningRepo @Inject constructor(
             outbound.filter { it.status == status }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
         }
+        val recordedSince = ldkSendRecordedAt.filterValues { it > recordsBefore }.keys
+        val live = hashes(PaymentStatus.PENDING) + ldkSendsInFlight + recordedSince
         val paid = hashes(PaymentStatus.SUCCEEDED)
-        val failed = (hashes(PaymentStatus.FAILED) - paid - hashes(PaymentStatus.PENDING) - ldkSendsInFlight)
-            .filterTo(mutableSetOf()) { (ldkSendRecordedAt[it] ?: 0) <= recordsBefore }
-        cacheStore.trimLdkSendHashes(paid = paid, failed = failed)
+        val failed = hashes(PaymentStatus.FAILED) - paid - live
+        val listed = outbound.mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
+        cacheStore.trimLdkSendHashes(paid = paid - live, failed = failed, listed = listed, live = live)
         failed.forEach { ldkSendRecordedAt.remove(it) }
     }
 

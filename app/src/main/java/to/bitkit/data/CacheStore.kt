@@ -25,10 +25,18 @@ import kotlin.time.Clock
 
 /**
  * A listing drops a rail's send hashes it shows failed only, or paid once the invoice has expired, so the other rail
- * cannot pay it again. Paid sends with no known expiry (kept before expiries were, or whose invoice can't be parsed)
- * are dropped oldest first only past this many hashes. Pending sends and ones no listing has shown yet always stay.
+ * cannot pay it again, and ones it doesn't show once the invoice expired [UNLISTED_SEND_SETTLE_SECS] ago. Paid or
+ * unlisted sends with no known expiry (kept before expiries were, or whose invoice can't be parsed) are dropped oldest
+ * first only past this many hashes. A send that may be pending always stays.
  */
 internal const val MAX_SPARK_SEND_HASHES = 100
+
+/**
+ * How long past its invoice's expiry a send no listing shows may still be pending: no send starts after the expiry,
+ * and one settles within its HTLC timeout, which LDK caps at 1008 blocks (about a week) and Spark's routes keep
+ * shorter, so twice that cap leaves room for slow blocks.
+ */
+internal const val UNLISTED_SEND_SETTLE_SECS = 14L * 24 * 60 * 60
 
 private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
     fileName = "app_cache.json",
@@ -192,40 +200,53 @@ class CacheStore internal constructor(
     }
 
     /**
-     * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, and past the cap
-     * the oldest paid ones with no known expiry; a send that may be pending is never passed in, so it stays.
+     * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, ones it didn't
+     * show ([listed] is every hash it shows) whose invoice expired past [UNLISTED_SEND_SETTLE_SECS], and past the cap
+     * the oldest paid or unlisted ones with no known expiry. A send that may be pending ([live]) always stays.
      */
-    suspend fun trimLdkSendHashes(paid: Set<String>, failed: Set<String>) {
+    suspend fun trimLdkSendHashes(paid: Set<String>, failed: Set<String>, listed: Set<String>, live: Set<String>) {
         store.updateData {
-            val (hashes, expiries) = withoutSettled(it.ldkSendHashes, it.ldkSendExpiries, paid, failed)
+            val (hashes, expiries) =
+                withoutSettled(it.ldkSendHashes, it.ldkSendExpiries, SendListing(paid, failed, listed, live))
             it.copy(ldkSendHashes = hashes, ldkSendExpiries = expiries)
         }
     }
 
     /** Drops Spark's sends as [trimLdkSendHashes] drops the node's. */
-    suspend fun trimSparkSendHashes(paid: Set<String>, failed: Set<String>) {
+    suspend fun trimSparkSendHashes(paid: Set<String>, failed: Set<String>, listed: Set<String>, live: Set<String>) {
         store.updateData {
-            val (hashes, expiries) = withoutSettled(it.sparkSendHashes, it.sparkSendExpiries, paid, failed)
+            val (hashes, expiries) =
+                withoutSettled(it.sparkSendHashes, it.sparkSendExpiries, SendListing(paid, failed, listed, live))
             it.copy(sparkSendHashes = hashes, sparkSendExpiries = expiries)
         }
+    }
+
+    private class SendListing(paid: Set<String>, failed: Set<String>, listed: Set<String>, live: Set<String>) {
+        val paid = paid.lowercased()
+        val failed = failed.lowercased()
+        val listed = listed.lowercased()
+        val live = live.lowercased()
+
+        private fun Set<String>.lowercased() = mapTo(mutableSetOf()) { it.lowercase() }
     }
 
     private fun withoutSettled(
         hashes: List<String>,
         expiries: Map<String, Long>,
-        paid: Set<String>,
-        failed: Set<String>,
+        listing: SendListing,
     ): Pair<List<String>, Map<String, Long>> {
         val now = clock.now().epochSeconds
-        val paidHashes = paid.mapTo(mutableSetOf()) { it.lowercase() }
-        val failedHashes = failed.mapTo(mutableSetOf()) { it.lowercase() }
-        val listed = hashes.filterNot { hash ->
-            hash in failedHashes || hash in paidHashes && expiries[hash]?.let { it <= now } == true
-        }
-        var excess = listed.size - MAX_SPARK_SEND_HASHES
-        val kept = listed.filterNot { hash ->
-            (excess > 0 && hash in paidHashes && hash !in expiries).also { if (it) excess-- }
-        }
+        fun isExpired(hash: String, settleSecs: Long = 0) = expiries[hash]?.let { it + settleSecs <= now } == true
+        fun isSettled(hash: String) = hash !in listing.live && (
+            hash in listing.failed ||
+                hash in listing.paid && isExpired(hash) ||
+                hash !in listing.listed && isExpired(hash, UNLISTED_SEND_SETTLE_SECS)
+            )
+        fun isAged(hash: String) =
+            hash !in listing.live && hash !in expiries && (hash in listing.paid || hash !in listing.listed)
+        val unsettled = hashes.filterNot(::isSettled)
+        var excess = unsettled.size - MAX_SPARK_SEND_HASHES
+        val kept = unsettled.filterNot { hash -> (excess > 0 && isAged(hash)).also { if (it) excess-- } }
         return kept to expiries.filterKeys { it in kept }
     }
 

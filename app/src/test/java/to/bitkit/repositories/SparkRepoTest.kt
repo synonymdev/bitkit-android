@@ -32,6 +32,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -292,7 +293,42 @@ class SparkRepoTest : BaseUnitTest() {
 
         sut.start(0).getOrThrow()
 
-        verifyBlocking(cacheStore) { trimSparkSendHashes(paid = setOf("hash"), failed = setOf("failed")) }
+        verifyBlocking(cacheStore) {
+            trimSparkSendHashes(
+                paid = setOf("hash"),
+                failed = setOf("failed"),
+                listed = setOf("hash", "failed", "pending"),
+                live = setOf("pending"),
+            )
+        }
+    }
+
+    @Test
+    fun `a retry that starts and returns while the activity sync runs keeps its hash`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendHashes = listOf("hash"))), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed), listOf(failed, retry))
+        val recording = CompletableDeferred<Unit>()
+        whenever { activityRepo.getActivity(any(), any()) }.doSuspendableAnswer {
+            recording.await()
+            Result.success(null)
+        }
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(retry)
+        val sut = createSut(store)
+        val starting = async { sut.start(0) }
+        runCurrent()
+        // The listing read before the activity loop shows the invoice failed; its retry starts and returns meanwhile.
+        val paying = async { sut.payInvoice("lnbc1280n1send", 128uL) }
+        runCurrent()
+        recording.complete(Unit)
+        starting.await().getOrThrow()
+        paying.await()
+
+        assertTrue("hash" in store.data.first().sparkSendHashes, "A stale listing dropped a live retry's hash")
     }
 
     @Test

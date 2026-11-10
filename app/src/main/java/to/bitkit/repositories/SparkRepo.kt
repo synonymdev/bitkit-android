@@ -57,6 +57,7 @@ import to.bitkit.utils.ServiceError
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -128,6 +129,10 @@ class SparkRepo @Inject constructor(
 
     /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
     private val sendsInFlight = ConcurrentHashMap<String, String>()
+
+    /** Counts sends recorded, so a listing drops a failed hash only when it was recorded before the listing. */
+    private val sendRecords = AtomicLong()
+    private val sendRecordedAt = ConcurrentHashMap<String, Long>()
 
     @Volatile
     private var hasSyncedActivities = false
@@ -289,6 +294,7 @@ class SparkRepo @Inject constructor(
             val sent = try {
                 val invoice = method.invoiceDetails
                 val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
+                sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
@@ -818,31 +824,43 @@ class SparkRepo @Inject constructor(
 
     /** Records every Spark payment, returning whether all were saved, so a failed write leaves the sync to redo. */
     private suspend fun syncActivities(): Boolean {
+        val recordsBefore = sendRecords.get()
         val payments = sparkService.listPayments()
         val isSaved = payments.map { recordActivity(it) }.all { it }
         val sendHashes = { status: PaymentStatus ->
             payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
         }
-        // A send in flight may be missing from this list, or show only its earlier failed attempt, so it stays.
-        val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys
+        // A send in flight, or recorded after this list was read while the activities were recorded, may be missing
+        // from it or show only its earlier failed attempt, so it stays.
+        val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys + recordedSince(recordsBefore)
         val paid = sendHashes(PaymentStatus.COMPLETED) - live
-        cacheStore.trimSparkSendHashes(paid = paid, failed = sendHashes(PaymentStatus.FAILED) - paid - live)
+        cacheStore.trimSparkSendHashes(
+            paid = paid,
+            failed = sendHashes(PaymentStatus.FAILED) - paid - live,
+            listed = payments.mapNotNullTo(mutableSetOf()) { it.sendHash()?.lowercase() },
+            live = live,
+        )
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.
         val failed = payments.mapNotNull { it.sendHash(PaymentStatus.FAILED) }.distinct()
             .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
         if (failed.isEmpty()) return isSaved
         // A retry can start while the list is recorded, so the release reads Spark's sends again first.
+        val recordsBeforeCurrent = sendRecords.get()
         val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return isSaved
+        val recordedSinceCurrent = recordedSince(recordsBeforeCurrent)
         failed
-            .filter { !sendsInFlight.containsKey(it.lowercase()) }
+            .filter { !sendsInFlight.containsKey(it.lowercase()) && it.lowercase() !in recordedSinceCurrent }
             .filter { current.latestSend(it)?.status == PaymentStatus.FAILED }
             .forEach { cacheStore.removeSparkSendHash(it) }
         return isSaved
     }
 
-    private fun Payment.sendHash(status: PaymentStatus): String? = (details as? PaymentDetails.Lightning)
-        ?.takeIf { paymentType == SparkPaymentType.SEND && this.status == status }
+    private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
+
+    /** The payment hash of this send, at [status] when given. */
+    private fun Payment.sendHash(status: PaymentStatus? = null): String? = (details as? PaymentDetails.Lightning)
+        ?.takeIf { paymentType == SparkPaymentType.SEND && (status == null || this.status == status) }
         ?.htlcDetails?.paymentHash
 
     private suspend fun onSdkEvent(event: SdkEvent) {
