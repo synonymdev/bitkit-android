@@ -26,6 +26,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwWalletRepo
@@ -100,6 +101,8 @@ class SparkFundingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `continue refuses an amount that does not cover the instant fee`() = test {
+        whenever(context.getString(R.string.lightning__spending_amount__error_min__description))
+            .thenReturn("Minimum {amount}")
         val sut = createSut()
         advanceUntilIdle()
         sut.onAmountChange(1_000)
@@ -107,6 +110,8 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         val toasts = collectToasts { sut.onAmountContinue() }
 
         assertEquals("Too small", toasts.single().title)
+        // An amount equal to the 1,350 sat claim fee is refused, so the smallest that passes is one more.
+        assertEquals("Minimum ${1_351L.formatToModernDisplay()}", toasts.single().description)
         assertEquals(null, sut.uiState.value.quote)
     }
 

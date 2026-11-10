@@ -405,8 +405,8 @@
     <string name="lightning__spending_amount__error_balance__title">Insufficient Savings</string>
     <string name="lightning__spending_amount__error_max__description">The amount you can transfer to your spending balance is currently limited to ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__title">Spending Balance Maximum</string>
-    <string name="lightning__spending_amount__error_min__description">Transfer more than ₿ {amount}, so it covers the fees to add it to your spending balance.</string>
-    <string name="lightning__spending_amount__error_min__title">Amount Too Small</string>
+    <string name="lightning__spending_amount__error_min__description">A minimum of ₿ {amount} is needed to set up your spending balance.</string>
+    <string name="lightning__spending_amount__error_min__title">Savings Balance Minimum</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
     <string name="lightning__spending_confirm__about" translatable="false">±</string>

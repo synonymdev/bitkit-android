@@ -183,10 +183,11 @@ class SparkFundingViewModel @Inject constructor(
         }
     }
 
+    /** Names the smallest amount that passes, as an amount equal to the claim fee is refused. */
     private fun toastBelowClaimFee(quote: Quote) = toast(
         title = R.string.lightning__spending_amount__error_min__title,
         description = context.getString(R.string.lightning__spending_amount__error_min__description)
-            .replace("{amount}", quote.instantFeeSats.formatToModernDisplay()),
+            .replace("{amount}", (quote.instantFeeSats + 1).formatToModernDisplay()),
     )
 
     /** Re-prices the confirm screen, so it never shows a stale quote. */
