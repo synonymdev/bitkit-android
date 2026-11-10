@@ -95,7 +95,10 @@ enum class ExitStep { FUNDING, RUNNING }
 /** Asks for fee funding only while no payment covers it, as the progress screen does. */
 internal fun SparkExitRecord?.exitStep(funding: SparkExitFundingState? = null): ExitStep? {
     val record = this?.takeIf { it.isActive } ?: return null
+    // Before the first tick reads the funding, a savings payment the exit has not adopted yet counts as paid,
+    // as on iOS.
+    val isPaymentPending = record.fundingPaymentTxid?.let { txid -> record.funding.none { it.txid == txid } } == true
     val isAskingFunding = record.fundingShortfallSats != null &&
-        (funding == null || funding is SparkExitFundingState.Ask)
+        if (funding == null) !isPaymentPending else funding is SparkExitFundingState.Ask
     return if (isAskingFunding) ExitStep.FUNDING else ExitStep.RUNNING
 }

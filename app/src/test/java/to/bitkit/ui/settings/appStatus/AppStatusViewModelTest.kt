@@ -212,6 +212,19 @@ class AppStatusViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `exit step is running for a savings payment before the first funding read`() {
+        val paid = exitRecord(SparkExitRecord.Phase.AwaitingFunding(1_000uL), 1_000uL, paymentTxid = "txid")
+        assertEquals(ExitStep.RUNNING, paid.exitStep())
+        val adopted = exitRecord(
+            SparkExitRecord.Phase.AwaitingFunding(1_000uL),
+            1_000uL,
+            paymentTxid = "txid",
+            funding = listOf(SparkExitRecord.Funding(0u, "address", "pubkey", txid = "txid")),
+        )
+        assertEquals(ExitStep.FUNDING, adopted.exitStep())
+    }
+
+    @Test
     fun `ui state shows the step of a running exit`() = test {
         val record = exitRecord(SparkExitRecord.Phase.Running)
         whenever(sparkExitRepo.state).thenReturn(MutableStateFlow(SparkExitState(record = record)))
@@ -228,9 +241,13 @@ class AppStatusViewModelTest : BaseUnitTest() {
         phase: SparkExitRecord.Phase,
         shortfallSats: ULong? = null,
         isActive: Boolean = true,
+        paymentTxid: String? = null,
+        funding: List<SparkExitRecord.Funding> = emptyList(),
     ) = mock<SparkExitRecord> {
         on { this.phase } doReturn phase
         on { this.isActive } doReturn isActive
         on { fundingShortfallSats } doReturn shortfallSats
+        on { fundingPaymentTxid } doReturn paymentTxid
+        on { this.funding } doReturn funding
     }
 }
