@@ -67,6 +67,9 @@ class SparkExitViewModel @Inject constructor(
 
     private var fundingWatch: Job? = null
 
+    /** The savings fee a higher-fee payment was refused for, by rate: the next confirm approves at least that. */
+    private val feeBumpFeeFloors = mutableMapOf<ULong, ULong>()
+
     init {
         viewModelScope.launch {
             // Spark's live balance, for what a stopped exit leaves on Spark after a relaunch too.
@@ -187,7 +190,8 @@ class SparkExitViewModel @Inject constructor(
             _uiState.update { it.copy(feeBump = SparkExitFeeBumpUiState(isLoading = true)) }
             val spendable = sparkExitRepo.spendableSavingsSats().getOrNull()
             sparkExitRepo.feeBumpOptions()
-                .onSuccess { options ->
+                .onSuccess { priced ->
+                    val options = priced.map { it.withFeeFloor(feeBumpFeeFloors[it.rateSatPerVbyte]) }
                     val bump = SparkExitFeeBumpUiState(options = options.toImmutableList(), spendableSats = spendable)
                     // The fastest rate savings can pay for, or none when it covers no rate.
                     val selected = options.firstOrNull(bump::canPay)?.speed
@@ -216,7 +220,10 @@ class SparkExitViewModel @Inject constructor(
                 .onSuccess { _effects.emit(SparkExitEffect.FeeBumped) }
                 .onFailure {
                     // Savings never pays more than the fee confirmed: the rates are priced again for another confirm.
-                    if (it.cause is OnchainSendChangedError) {
+                    val changed = it.cause as? OnchainSendChangedError
+                    if (changed != null) {
+                        // Coin selection can need more fee than the estimate: the next confirm approves what it asked.
+                        changed.preparedFeeSats?.let { fee -> feeBumpFeeFloors[option.rateSatPerVbyte] = fee }
                         ToastEventBus.send(
                             type = Toast.ToastType.INFO,
                             title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
@@ -409,4 +416,9 @@ data class SparkExitFeeBumpUiState(
     /** Savings covers [option]'s cost, or there is nothing to pay. */
     fun canPay(option: SparkExitFeeBumpOption): Boolean =
         option.totalSats == 0uL || (spendableSats ?: 0uL) >= option.totalSats
+}
+
+private fun SparkExitFeeBumpOption.withFeeFloor(floorSats: ULong?): SparkExitFeeBumpOption {
+    if (floorSats == null || extraSats == 0uL || floorSats <= totalSats.safe() - extraSats.safe()) return this
+    return copy(totalSats = extraSats.safe() + floorSats.safe())
 }

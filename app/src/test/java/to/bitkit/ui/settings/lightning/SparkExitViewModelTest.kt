@@ -110,6 +110,27 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the next confirm after a refused higher fee approves the fee it was refused for`() = test {
+        val fast = SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 4_200uL, 4_620uL)
+        // Savings' coin selection needs 600 sats where the estimate says 420.
+        val floored = fast.copy(totalSats = 4_800uL)
+        whenever(repo.spendableSavingsSats()).thenReturn(Result.success(10_000uL))
+        whenever(repo.feeBumpOptions()).thenReturn(Result.success(listOf(fast)))
+        whenever(repo.payHigherFee(fast))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
+        whenever(repo.payHigherFee(floored)).thenReturn(Result.success(Unit))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.loadFeeBump()
+
+        sut.payHigherFee()
+        assertEquals(floored, sut.uiState.value.feeBump.selectedOption)
+        sut.payHigherFee()
+
+        verify(repo).payHigherFee(floored)
+    }
+
+    @Test
     fun `a paid higher fee no longer shows the fee as too low`() {
         val running = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
             .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
