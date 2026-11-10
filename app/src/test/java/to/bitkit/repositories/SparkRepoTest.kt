@@ -394,6 +394,53 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a start whose activity write failed syncs the activities again`() = test {
+        whenever(sparkService.isConnected).thenReturn(false, true)
+        whenever(sparkService.connect(0)).thenReturn(true, false)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        var saved = 0
+        whenever { activityRepo.upsertActivity(any()) }
+            .thenReturn(Result.failure(IllegalStateException("write failed")))
+            .thenAnswer { Result.success(Unit).also { saved++ } }
+        val sut = createSut()
+
+        sut.start(0)
+        sut.start(0)
+
+        assertTrue(saved > 0, "The receive whose write failed was never saved")
+    }
+
+    @Test
+    fun `a receive that failed to save is written again at the next sync`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        whenever { activityRepo.upsertActivity(any()) }
+            .thenReturn(Result.failure(IllegalStateException("write failed")), Result.success(Unit))
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        sparkEvents.emit(SdkEvent.Synced)
+        sparkEvents.emit(SdkEvent.Synced)
+
+        verify(activityRepo, times(2)).upsertActivity(any())
+    }
+
+    @Test
+    fun `an activity the user deleted is not written again`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(ActivityDeletedError("hash")))
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        sparkEvents.emit(SdkEvent.Synced)
+
+        verify(activityRepo, times(1)).upsertActivity(any())
+    }
+
+    @Test
     fun `marks a withdrawal's arrival as a transfer by the txid its send returned`() = test {
         val arrival = OnchainActivity.create(
             id = "arrival",

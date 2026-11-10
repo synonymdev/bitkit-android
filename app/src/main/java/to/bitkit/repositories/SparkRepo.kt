@@ -119,6 +119,9 @@ class SparkRepo @Inject constructor(
     /** Sends recorded before Spark knew their fee; its completion event reports 0 until a later sync. */
     private val sendsRecordedWithoutFee = ConcurrentHashMap.newKeySet<String>()
 
+    /** Payments whose activity failed to save, written again at the next refresh. */
+    private val unsavedPayments = ConcurrentHashMap.newKeySet<String>()
+
     private val isCollectingEvents = AtomicBoolean(false)
 
     private val refreshMutex = Mutex()
@@ -173,7 +176,7 @@ class SparkRepo @Inject constructor(
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
-            if (!hasSyncedActivities) syncActivities().also { hasSyncedActivities = true }
+            if (!hasSyncedActivities) hasSyncedActivities = syncActivities()
         }.onFailure {
             Logger.error("Failed to start Spark wallet", it, context = TAG)
         }
@@ -194,6 +197,7 @@ class SparkRepo @Inject constructor(
         withdrawalTxids.clear()
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
+        unsavedPayments.clear()
         sendsInFlight.clear()
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
@@ -631,7 +635,9 @@ class SparkRepo @Inject constructor(
             ).withBroadcastDeposits()
         }
         markClaimedDeposits(claimed)
-        payments.filter { it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0 }.forEach { recordActivity(it) }
+        payments
+            .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
+            .forEach { recordActivity(it) }
         markTransfers(payments)
     }
 
@@ -808,9 +814,10 @@ class SparkRepo @Inject constructor(
             ?.toSet()
     }
 
-    private suspend fun syncActivities() {
+    /** Records every Spark payment, returning whether all were saved, so a failed write leaves the sync to redo. */
+    private suspend fun syncActivities(): Boolean {
         val payments = sparkService.listPayments()
-        payments.forEach { recordActivity(it) }
+        val isSaved = payments.map { recordActivity(it) }.all { it }
         val sendHashes = { status: PaymentStatus ->
             payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
         }
@@ -823,13 +830,14 @@ class SparkRepo @Inject constructor(
         // retry of it is still live.
         val failed = payments.mapNotNull { it.sendHash(PaymentStatus.FAILED) }.distinct()
             .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
-        if (failed.isEmpty()) return
+        if (failed.isEmpty()) return isSaved
         // A retry can start while the list is recorded, so the release reads Spark's sends again first.
-        val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return
+        val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return isSaved
         failed
             .filter { !sendsInFlight.containsKey(it.lowercase()) }
             .filter { current.latestSend(it)?.status == PaymentStatus.FAILED }
             .forEach { cacheStore.removeSparkSendHash(it) }
+        return isSaved
     }
 
     private fun Payment.sendHash(status: PaymentStatus): String? = (details as? PaymentDetails.Lightning)
@@ -874,15 +882,16 @@ class SparkRepo @Inject constructor(
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
-    private suspend fun recordActivity(payment: Payment) {
-        val lightning = payment.details as? PaymentDetails.Lightning ?: return
+    /** Returns whether the payment's activity is saved; a failed write is kept in [unsavedPayments]. */
+    private suspend fun recordActivity(payment: Payment): Boolean {
+        val lightning = payment.details as? PaymentDetails.Lightning ?: return true
         if (payment.status == PaymentStatus.PENDING && payment.paymentType == SparkPaymentType.RECEIVE) {
-            return
+            return true
         }
         val id = lightning.htlcDetails.paymentHash
         val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
         // Another attempt of the same invoice, on either rail, already paid it.
-        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return
+        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
@@ -904,12 +913,19 @@ class SparkRepo @Inject constructor(
             contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,
         )
-        activityRepo.get().upsertActivity(Activity.Lightning(activity))
+        val saved = activityRepo.get().upsertActivity(Activity.Lightning(activity))
+            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+        if (!saved) {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        unsavedPayments.remove(payment.id)
         if (payment.paymentType == SparkPaymentType.SEND && payment.fees.toLong() == 0L) {
             sendsRecordedWithoutFee.add(payment.id)
         } else {
             sendsRecordedWithoutFee.remove(payment.id)
         }
+        return true
     }
 
     private suspend fun receivedContact(payment: Payment, paymentHash: String): String? {
