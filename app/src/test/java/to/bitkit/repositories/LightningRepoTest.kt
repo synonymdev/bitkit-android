@@ -1395,7 +1395,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a node listing trims only its paid sends past the cap`() = test {
+    fun `a node listing trims only its paid and failed sends past the cap`() = test {
         startNodeForTesting()
         val earlier = { status: PaymentStatus, hash: String ->
             PaymentDetails(
@@ -1427,7 +1427,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         sut.payInvoice("bolt11", 1_000uL)
 
-        verifyBlocking(cacheStore) { trimLdkSendHashes(setOf("paid")) }
+        verifyBlocking(cacheStore) { trimLdkSendHashes(setOf("paid", "failed")) }
     }
 
     @Test

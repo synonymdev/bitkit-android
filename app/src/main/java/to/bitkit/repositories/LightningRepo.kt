@@ -1585,15 +1585,14 @@ class LightningRepo @Inject constructor(
 
     /**
      * Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too, then trims
-     * only paid ones past the cap, so a send that may still be pending always holds Spark.
+     * only paid and failed ones past the cap, so a send that may still be pending always holds Spark.
      */
     private suspend fun keepLdkSendHashes(payments: List<PaymentDetails>) {
-        val sends = payments
-            .filter { it.direction == PaymentDirection.OUTBOUND && it.status != PaymentStatus.FAILED }
-            .sortedBy { it.latestUpdateTimestamp }
+        val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
+        val sends = outbound.filter { it.status != PaymentStatus.FAILED }.sortedBy { it.latestUpdateTimestamp }
         cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
         cacheStore.trimLdkSendHashes(
-            sends.filter { it.status == PaymentStatus.SUCCEEDED }
+            outbound.filter { it.status != PaymentStatus.PENDING }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
         )
     }

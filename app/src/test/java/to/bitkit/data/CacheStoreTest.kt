@@ -126,5 +126,33 @@ class CacheStoreTest : BaseUnitTest() {
         assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
     }
 
+    @Test
+    fun `node sends listed as failed are trimmed past the cap, a pending one stays`() = test {
+        sut.addLdkSendHash("pending")
+        val failed = settledHashes()
+        failed.forEach { sut.addLdkSendHash(it) }
+
+        sut.trimLdkSendHashes(failed.toSet())
+
+        val kept = sut.data.first().ldkSendHashes
+        assertTrue("pending" in kept)
+        assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
+        assertFalse(failed.first() in kept, "The oldest failed send was kept over the cap")
+    }
+
+    @Test
+    fun `a retried node send survives a trim from a listing that still shows it failed`() = test {
+        sut.addLdkSendHash("retried")
+        val failed = settledHashes()
+        failed.forEach { sut.addLdkSendHash(it) }
+        sut.addLdkSendHash("retried")
+
+        sut.trimLdkSendHashes(failed.toSet() + "retried")
+
+        val kept = sut.data.first().ldkSendHashes
+        assertEquals("retried", kept.last())
+        assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
+    }
+
     private fun settledHashes() = (1..MAX_SPARK_SEND_HASHES).map { "paid$it" }
 }

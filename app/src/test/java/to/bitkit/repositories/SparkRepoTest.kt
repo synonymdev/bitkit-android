@@ -259,19 +259,21 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark's paid sends are trimmed past the cap when spark syncs on start`() = test {
+    fun `spark's paid and failed sends are trimmed past the cap when spark syncs on start`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.listPayments() }.thenReturn(
             listOf(
                 sentPayment(fees = 0),
+                sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED).withHash("FAILED"),
                 sentPayment(fees = 0).copy(id = "pending", status = PaymentStatus.PENDING).withHash("PENDING"),
+                sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.FAILED).withHash("PENDING"),
             )
         )
         val sut = createSut()
 
         sut.start(0).getOrThrow()
 
-        verifyBlocking(cacheStore) { trimSparkSendHashes(setOf("hash")) }
+        verifyBlocking(cacheStore) { trimSparkSendHashes(setOf("hash", "failed")) }
     }
 
     @Test
@@ -817,6 +819,19 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         whenever { sparkService.send(any()) }.thenAnswer { throw expired }
         assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+    }
+
+    @Test
+    fun `an invoice that expired inside the spark send no longer holds the node`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.InvalidInput("Invoice has expired") }
+        val sut = createSut()
+
+        assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
     }
 
     @Test

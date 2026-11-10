@@ -23,8 +23,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * How many paid send hashes to keep per rail; an older paid send's invoice has long expired, so the other rail
- * cannot pay it again. Sends that may still be pending are always kept, past this cap too.
+ * How many send hashes to keep per rail before a listing drops the oldest it shows as paid or failed; an older paid
+ * send's invoice has long expired, so the other rail cannot pay it again. Sends that may still be pending, and ones
+ * no listing has shown yet, are always kept, past this cap too.
  */
 internal const val MAX_SPARK_SEND_HASHES = 100
 
@@ -175,22 +176,26 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Past the cap, drops the oldest of the node's sends [paid] lists as paid; a send that may be pending stays. */
-    suspend fun trimLdkSendHashes(paid: Set<String>) {
+    /**
+     * Past the cap, drops the oldest of the node's sends a listing showed as paid or failed ([settled]); a send that
+     * may be pending stays. A retry moves its hash to the newest end, so a trim from an older listing drops others
+     * first.
+     */
+    suspend fun trimLdkSendHashes(settled: Set<String>) {
         if (store.data.first().ldkSendHashes.size <= MAX_SPARK_SEND_HASHES) return
-        store.updateData { it.copy(ldkSendHashes = it.ldkSendHashes.withoutOldestPaid(paid)) }
+        store.updateData { it.copy(ldkSendHashes = it.ldkSendHashes.withoutOldestSettled(settled)) }
     }
 
-    /** Past the cap, drops the oldest of Spark's sends [paid] lists as paid; a send that may be pending stays. */
-    suspend fun trimSparkSendHashes(paid: Set<String>) {
+    /** Past the cap, drops the oldest of Spark's sends a listing showed as paid or failed ([settled]). */
+    suspend fun trimSparkSendHashes(settled: Set<String>) {
         if (store.data.first().sparkSendHashes.size <= MAX_SPARK_SEND_HASHES) return
-        store.updateData { it.copy(sparkSendHashes = it.sparkSendHashes.withoutOldestPaid(paid)) }
+        store.updateData { it.copy(sparkSendHashes = it.sparkSendHashes.withoutOldestSettled(settled)) }
     }
 
-    private fun List<String>.withoutOldestPaid(paid: Set<String>): List<String> {
-        val lowercasePaid = paid.mapTo(mutableSetOf()) { it.lowercase() }
+    private fun List<String>.withoutOldestSettled(settled: Set<String>): List<String> {
+        val lowercaseSettled = settled.mapTo(mutableSetOf()) { it.lowercase() }
         var excess = size - MAX_SPARK_SEND_HASHES
-        return filterNot { hash -> (excess > 0 && hash in lowercasePaid).also { if (it) excess-- } }
+        return filterNot { hash -> (excess > 0 && hash in lowercaseSettled).also { if (it) excess-- } }
     }
 
     suspend fun removeLdkSendHash(paymentHash: String) {

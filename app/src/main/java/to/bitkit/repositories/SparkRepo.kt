@@ -289,7 +289,11 @@ class SparkRepo @Inject constructor(
                 sendsInFlight.remove(paymentHash.lowercase())
             }
             val payment = sent.getOrElse {
-                if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
+                // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
+                if (it.isInvoiceExpired()) {
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    throw SparkError.InvoiceExpired(it)
+                }
                 // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                 // nothing, for instance when an earlier send spent it after the balance was read.
                 if (it is SdkException.InsufficientFunds) {
@@ -810,7 +814,11 @@ class SparkRepo @Inject constructor(
         val sendHashes = { status: PaymentStatus ->
             payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
         }
-        cacheStore.trimSparkSendHashes(sendHashes(PaymentStatus.COMPLETED) - sendHashes(PaymentStatus.PENDING))
+        // A send in flight may be missing from this list, or show only its earlier failed attempt, so it stays.
+        cacheStore.trimSparkSendHashes(
+            sendHashes(PaymentStatus.COMPLETED) + sendHashes(PaymentStatus.FAILED) - sendHashes(PaymentStatus.PENDING) -
+                sendsInFlight.keys
+        )
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.
         val failed = payments.mapNotNull { it.sendHash(PaymentStatus.FAILED) }.distinct()
