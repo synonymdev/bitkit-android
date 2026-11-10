@@ -4,13 +4,16 @@ import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.PubkySwapRouteStatus
 import com.synonym.bitkitcore.pubkySwapsAdvance
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.whenever
@@ -81,6 +84,24 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
             assertIs<PubkySwapClaimTimeoutException>(result.exceptionOrNull())
             core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(2))
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `awaitClaim keeps advancing the swap after its caller is cancelled`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
+                .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
+                .thenReturn(status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID)))
+
+            val caller = launch { sut.awaitClaim(SWAP_ID) }
+            runCurrent()
+            caller.cancel()
+            advanceUntilIdle()
+
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, atLeast(3))
         }
     }
 

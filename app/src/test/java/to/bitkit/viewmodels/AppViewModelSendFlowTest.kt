@@ -16907,9 +16907,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmCurrentPayment()
+            assertEquals(SendRetryRoute.Amount, assertIs<SendEffect.NavigateToError>(awaitItem()).retryRoute)
             expectNoEvents()
         }
-        assertNull(sut.currentSheet.value)
         verify(pubkySwapsRouteRepo, never()).awaitClaim(any(), any())
     }
 
@@ -17018,7 +17018,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `swap route refused commit clears the quote`() = test {
+    fun `swap route refused commit clears the quote and retries from the amount`() = test {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.failure(AppError("quote_expired")))
         openSwapRoutedContactPayment()
 
@@ -17027,8 +17027,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmSwapRoutedPayment()
-            cancelAndIgnoreRemainingEvents()
+            assertEquals(SendRetryRoute.Amount, assertIs<SendEffect.NavigateToError>(awaitItem()).retryRoute)
+            expectNoEvents()
         }
+        assertNotNull(sut.currentSheet.value)
+        assertNotNull(activeContactPaymentContext())
         assertNotNull(sut.sendUiState.value.paykitSwapRoute)
         assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
     }

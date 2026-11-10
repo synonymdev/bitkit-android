@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.pubkySwapsCommitRoute
 import com.synonym.bitkitcore.pubkySwapsRestore
 import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -146,16 +147,18 @@ class PubkySwapsRouteRepo @Inject constructor(
      * settles the hold invoice once it sees the claim, so the payment is done; the claim is still advanced in the
      * background so bitkit-core rebroadcasts it until it confirms.
      */
-    suspend fun awaitClaim(swapId: String, timeout: Duration = CLAIM_TIMEOUT): Result<String> {
+    // Runs on the app scope: the swap keeps advancing towards its claim when the caller, such as a cleared screen,
+    // stops waiting.
+    suspend fun awaitClaim(swapId: String, timeout: Duration = CLAIM_TIMEOUT): Result<String> = scope.async {
         var lastFailure: Throwable? = null
-        return withTimeoutOrNull(timeout) {
+        withTimeoutOrNull(timeout) {
             pollClaim(swapId, POLL_INTERVAL, untilConfirmed = false) { lastFailure = it }
         }?.onSuccess { advanceInBackground(swapId) } ?: run {
             // The provider may still settle the hold payment, so the swap keeps advancing towards its claim.
             advanceInBackground(swapId)
             Result.failure(PubkySwapClaimTimeoutException(swapId, lastFailure))
         }
-    }
+    }.await()
 
     private fun advanceInBackground(swapId: String) {
         scope.launch { withTimeoutOrNull(CONFIRMATION_TIMEOUT) { awaitConfirmation(swapId) } }

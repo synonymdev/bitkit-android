@@ -6805,11 +6805,7 @@ class AppViewModel @Inject constructor(
         val tags = _sendUiState.value.selectedTags
         val address = _sendUiState.value.address
         val payment = pubkySwapsRouteRepo.commit(quote.quoteId).getOrElse {
-            val isCurrent = isSendCurrent()
-            clearSwapRouteQuote(isCurrent)
-            releasePrivatePaymentListIfNeeded(contactPaymentContext)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
+            failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
             return
         }
         Logger.info("Committed Pubky Swaps route '${payment.swapId}' to '${payment.destinationAddress}'", context = TAG)
@@ -6818,11 +6814,7 @@ class AppViewModel @Inject constructor(
                 "Swap hold invoice is not a Lightning invoice"
             }.paymentHash.toHex()
         }.getOrElse {
-            val isCurrent = isSendCurrent()
-            clearSwapRouteQuote(isCurrent)
-            releasePrivatePaymentListIfNeeded(contactPaymentContext)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
+            failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
             return
         }
         // A failed hold payment closes the send through the node's failure event, like a regular Lightning send.
@@ -6847,12 +6839,8 @@ class AppViewModel @Inject constructor(
         lightningRepo.payInvoice(payment.invoice).getOrElse {
             holdFailure.cancel()
             clearPendingContactPaymentContext(holdPaymentHash)
-            val isCurrent = isSendCurrent()
-            clearSwapRouteQuote(isCurrent)
             if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
-            releasePrivatePaymentListIfNeeded(contactPaymentContext)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
+            failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
             return
         }
         // The provider settles the hold payment once it sees the claim, so the send waits on it as a pending Lightning
@@ -6916,6 +6904,33 @@ class AppViewModel @Inject constructor(
             Logger.error("Failed Pubky Swaps route '${payment.swapId}'", it, context = TAG)
             pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(holdPaymentHash))
             if (shouldNotifyPendingResolution(holdPaymentHash)) notifyPendingPaymentFailed()
+        }
+    }
+
+    /** A swap that failed before its hold payment went out moved no funds, so the send retries from the amount. */
+    private suspend fun failSwapRoutedPayment(
+        error: Throwable,
+        contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String?,
+        isCurrent: Boolean,
+    ) {
+        clearSwapRouteQuote(isCurrent)
+        releasePrivatePaymentListIfNeeded(contactPaymentContext)
+        finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+        if (!isCurrent) {
+            handlePaymentPreparationFailure(error, contactPaymentContext, isSendCurrent = false)
+            return
+        }
+        setSendEffect(
+            SendEffect.NavigateToError(
+                failure = error.toSendFailureDetails(context, paymentRequest = null),
+                retryRoute = SendRetryRoute.Amount,
+            ),
+        )
+        if (contactPaymentContext?.incomingPaymentRequest != null) {
+            viewModelScope.launch {
+                refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
+            }
         }
     }
 
