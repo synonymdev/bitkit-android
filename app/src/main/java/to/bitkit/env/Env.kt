@@ -129,7 +129,6 @@ internal object Env {
             Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
         }
 
-    /** Esplora REST that Spark reads the chain from; null keeps the SDK's default, on staging and regtest. */
     /**
      * Whether the node's chain is the one Spark watches, so an on-chain funding of Spark from Savings or a hardware
      * wallet reaches it. On regtest Spark runs on Lightspark's own chain, which the node joins only through the
@@ -140,6 +139,7 @@ internal object Env {
 
     val sparkSharesNodeChain: Boolean get() = sparkSharesNodeChain(network, regtestEsploraUrl)
 
+    /** Esplora REST that Spark reads the chain from; null keeps the SDK's default, on staging and regtest. */
     fun sparkChainServiceUrl(network: Network): String? = when (network) {
         Network.BITCOIN -> bitkitEsploraUrl
         else -> null
