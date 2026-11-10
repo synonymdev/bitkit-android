@@ -12414,6 +12414,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a route quoted for an amount that changed meanwhile never lands`() = test {
+        val leg = sparkRouteLeg("bcrt1qcontact")
+        val quote = CompletableDeferred<Result<PaykitRoute>>()
+        balanceState.value = BalanceState(maxSendLightningSats = 10_000u)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quote.await() }
+        setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
+        val route = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = route,
+            ),
+        )
+        sut.showSheet(Sheet.Send(SendRoute.Amount))
+        sut.setSendEvent(SendEvent.AmountContinue)
+        runCurrent()
+
+        // A request's rate refresh writes a new amount while Spark quotes the old one.
+        setSendState(sut.sendUiState.value.copy(amount = 2_000uL))
+        quote.complete(Result.success(PaykitRoute.Service(leg)))
+        advanceUntilIdle()
+
+        assertNull(
+            sut.sendUiState.value.paykitRoute?.serviceLeg,
+            "a leg quoted for the old amount must not pay the new one",
+        )
+        assertEquals(2_000uL, sut.sendUiState.value.amount)
+    }
+
+    @Test
     fun `an uncertain spark send to a contact that spark already lists opens success`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         val effects = uncertainContactSparkSend(leg, SparkWithdrawalOutcome.Sent("ab".repeat(32)))

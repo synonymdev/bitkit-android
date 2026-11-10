@@ -4776,6 +4776,13 @@ class AppViewModel @Inject constructor(
         ) {
             return PaykitRouteOutcome.Stale
         }
+        // An amount a rate refresh wrote, or a source picked, while the router answered needs a new route.
+        val current = _sendUiState.value
+        if (current.amount != state.amount || current.payMethod != state.payMethod) {
+            paykitRouteDecided = false
+            _sendUiState.update { it.copy(isLoading = false) }
+            return PaykitRouteOutcome.Stale
+        }
         _sendUiState.update { it.copy(isLoading = false) }
         val picked = result.getOrElse {
             Logger.error("Failed to route Paykit payment", it, context = TAG)
