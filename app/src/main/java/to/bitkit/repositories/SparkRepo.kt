@@ -256,7 +256,7 @@ class SparkRepo @Inject constructor(
     suspend fun setExiting(isExiting: Boolean, reconnect: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
         val isCurrent = _state.value.isExiting == isExiting && sparkService.isConnected
         if (isCurrent && !reconnect) return@withContext Result.success(Unit)
-        _state.update { it.copy(isExiting = isExiting) }
+        _state.update { it.copy(isExiting = isExiting, keptBalanceSats = it.keptBalanceSats.takeUnless { isExiting }) }
         runSuspendCatching {
             onOptimizationCutShort()
             sparkService.disconnect()
@@ -268,10 +268,10 @@ class SparkRepo @Inject constructor(
     }
 
     /**
-     * Holds Spark for an exit about to start: no sends, receives or spending balance, in the same step the exit's
+     * Holds Spark for an exit about to start: no sends, receives, spending or kept balance, in the same step the exit's
      * transfer starts counting it. [setExiting] reconnects it for the exit afterwards.
      */
-    fun holdForExit() = _state.update { it.copy(isExiting = true) }
+    fun holdForExit() = _state.update { it.copy(isExiting = true, keptBalanceSats = null) }
 
     /** Releases the hold of an exit whose start failed before anything was saved: Spark was never disconnected. */
     fun releaseExitHold() = _state.update { it.copy(isExiting = false) }
@@ -777,8 +777,9 @@ class SparkRepo @Inject constructor(
             it.copy(
                 isReady = true,
                 balanceSats = info.balanceSats,
+                // An exit moves the balance to savings, so a zero read during one keeps nothing.
                 keptBalanceSats = it.shownBalanceSats.takeIf { kept ->
-                    info.balanceSats == 0uL && isStale && kept > 0uL
+                    info.balanceSats == 0uL && isStale && kept > 0uL && !it.isExiting
                 },
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),

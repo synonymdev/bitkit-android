@@ -928,6 +928,26 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an emergency exit drops the kept balance so spending does not count it again after the exit`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        val syncFailed = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        whenever { sparkService.getInfo() }.thenReturn(syncFailed)
+        sut.refreshState().getOrThrow()
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats)
+
+        sut.setExiting(true).getOrThrow()
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the exit kept the balance it moves to savings")
+        sut.refreshState().getOrThrow()
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "a zero read during the exit kept a balance")
+
+        sut.setExiting(false).getOrThrow()
+        assertEquals(0uL, sut.state.value.shownSpendingSats, "spending counted the exited balance again")
+    }
+
+    @Test
     fun `a deposit claimed early is listed only as claimed`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         listDeposit()
