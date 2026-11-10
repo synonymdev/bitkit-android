@@ -34,6 +34,10 @@ class FcmService : FirebaseMessagingService() {
             Logger.debug("FCM body: $body", context = TAG)
             sendNotification(title, body, Bundle(message.data.toPersistableBundle()))
         }
+
+        if (Env.wakeGatewayUrl != null && message.data.isNotEmpty()) {
+            WakeWorker.enqueue(applicationContext, wakePushJson(message.data))
+        }
     }
 
     private fun sendNotification(title: String?, body: String?, extras: Bundle? = null) {
