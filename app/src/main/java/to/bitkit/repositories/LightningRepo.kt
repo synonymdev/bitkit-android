@@ -1573,8 +1573,9 @@ class LightningRepo @Inject constructor(
 
     /**
      * The node's pending or paid send of [bolt11]. While the node can't list its payments (stopped or not started yet),
-     * a send it started for the invoice counts as pending, since it may be live. Before the node first listed its
-     * payments, the sends it made earlier are unknown, so the node not started yet is thrown.
+     * a send it started for the invoice may be live or paid, and its event may never come, so the node not started yet
+     * is thrown rather than a Pending nothing resolves. Before the node first listed its payments, the sends it made
+     * earlier are unknown, so the same is thrown.
      */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
@@ -1583,7 +1584,10 @@ class LightningRepo @Inject constructor(
         val payments = listPaymentsKeepingSendHashes()
         if (payments == null) {
             val cache = cacheStore.data.first()
-            if (key in cache.ldkSendHashes) return EarlierSend.Pending(key)
+            if (key in cache.ldkSendHashes) {
+                Logger.warn("Refused a Spark send of '$key' until the node lists its earlier send", context = TAG)
+                throw ServiceError.NodeNotStarted()
+            }
             if (!cache.ldkSendHashesSeeded) {
                 Logger.warn("Refused a Spark send until the node lists its earlier payments once", context = TAG)
                 throw ServiceError.NodeNotStarted()

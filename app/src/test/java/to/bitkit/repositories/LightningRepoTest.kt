@@ -105,6 +105,7 @@ import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
 import java.math.BigInteger
 import kotlin.coroutines.cancellation.CancellationException
@@ -1320,7 +1321,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an invoice the node sent is not sent through spark while the node can't list it`() = test {
+    fun `an invoice the node sent fails rather than pends through spark while the node can't list it`() = test {
         startNodeForTesting()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
         whenever(lightningService.listPayments()).thenReturn(null)
@@ -1331,7 +1332,8 @@ class LightningRepoTest : BaseUnitTest() {
         val retry = sut.payInvoice("bolt11", 1_000uL)
 
         verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
-        assertIs<PaymentPendingException>(retry.exceptionOrNull())
+        // A Pending would wait on a node event that may never come, so it fails until the node can list again.
+        assertIs<ServiceError.NodeNotStarted>(retry.exceptionOrNull())
     }
 
     @Test
