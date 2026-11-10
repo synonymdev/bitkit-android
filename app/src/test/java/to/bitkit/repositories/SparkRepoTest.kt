@@ -84,6 +84,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -828,6 +829,29 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keeps an aged failed withdrawal's journal while the sync after it never reached spark`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any())).doSuspendableAnswer {
+            now += 11.minutes
+            throw SdkException.Generic("timeout")
+        }
+        // The sync call returns, but the SDK keeps the failed Spark sync in its info.
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(50_000uL).copy(
+                lastSyncError = SyncError.Network("operators unreachable"),
+                lastSyncedAt = (now + 1.hours).epochSeconds.toULong(),
+            )
+        )
+
+        assertTrue(sut.withdraw("bcrt1qcontact", 20_000uL, null).isFailure)
+
+        assertNotNull(
+            cacheData.value.pendingSparkWithdrawal,
+            "A sync that never reached Spark can't show the aged withdrawal was never sent",
+        )
+    }
+
+    @Test
     fun `a journal that closes tells the pending send how its withdrawal ended`() = test {
         val settlements = mutableListOf<SparkWithdrawalSettlement>()
         cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
@@ -859,12 +883,34 @@ class SparkRepoTest : BaseUnitTest() {
     fun `a sync in a long foreground session closes an expired unlisted withdrawal`() = test {
         val sut = journaledSpark()
         cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+        whenever { sparkService.getInfo() }.thenReturn(info(50_000uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
 
         sparkEvents.emit(SdkEvent.Synced)
         runCurrent()
 
         assertNull(cacheData.value.pendingSparkWithdrawal, "An expired journal must not block later withdrawals")
         assertNull(sut.withdraw("bcrt1qcontact", 20_000uL, null).exceptionOrNull() as? SparkError.WithdrawalPending)
+    }
+
+    @Test
+    fun `a synced event after a sync that never reached spark keeps an expired unlisted withdrawal`() = test {
+        journaledSpark()
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+        // Spark emits Synced after a sync whose Spark leg failed too, and keeps that failure in its info.
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(50_000uL).copy(
+                lastSyncError = SyncError.Network("operators unreachable"),
+                lastSyncedAt = now.epochSeconds.toULong(),
+            )
+        )
+
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+
+        assertNotNull(
+            cacheData.value.pendingSparkWithdrawal,
+            "A sync that never reached Spark can't show the withdrawal was never sent",
+        )
     }
 
     @Test

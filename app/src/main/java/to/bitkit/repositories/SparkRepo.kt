@@ -695,8 +695,11 @@ class SparkRepo @Inject constructor(
                     isWithdrawing = false
                 }
                 val payment = sent.getOrElse {
-                    // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops.
-                    runSuspendCatching { sparkService.syncWallet() }.onSuccess { syncActivities(settleJournal = true) }
+                    // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops. A
+                    // sync that never reached Spark still returns, so only one done after the failure drops it.
+                    val failedAt = clock.now().epochSeconds.toULong()
+                    runSuspendCatching { sparkService.syncWallet() }
+                        .onSuccess { syncActivities(settleJournal = hasSyncedSince(failedAt)) }
                     throw it
                 }
                 Logger.info("Sent Spark withdrawal '${payment.id}' with status '${payment.status}'", context = TAG)
@@ -1136,7 +1139,11 @@ class SparkRepo @Inject constructor(
                     _state.update { it.copy(hasSynced = true) }
                     refresh()
                     // A journal left open past its grace period would block every later withdrawal until a restart.
-                    if (cacheStore.data.first().pendingSparkWithdrawal != null) syncActivities(settleJournal = true)
+                    // Spark emits Synced after a sync that never reached it too, so only one since the journal
+                    // drops it.
+                    cacheStore.data.first().pendingSparkWithdrawal?.let {
+                        syncActivities(settleJournal = hasSyncedSince(it.startedAt.toULong()))
+                    }
                 }
                 is SdkEvent.PaymentSucceeded -> onPayment(event.payment)
                 is SdkEvent.PaymentFailed -> onPayment(event.payment)
