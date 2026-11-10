@@ -1515,7 +1515,11 @@ class LightningRepo @Inject constructor(
             val ldkRecordsBefore = ldkSendRecords.get()
             runSuspendCatching { earlierNodeSend(bolt11, paymentHash) }
                 .getOrElse { return Result.failure(it) }
-                ?.let { return it.toResult() }
+                ?.let {
+                    // The node paid it, so its caller settles from the node's payment, as its event already fired.
+                    if (it is EarlierSend.Paid) recordSendRail(it.paymentHash, LightningRail.Ldk)
+                    return it.toResult()
+                }
             var isAdmitted = false
             var isRefused = false
             val authorizeSend: suspend () -> Boolean = {
@@ -2599,9 +2603,24 @@ class LightningRepo @Inject constructor(
         if (state.nodeLifecycleState.isRunning()) state.channels else it
     }
 
-    /** The completion event of a Spark send that settled before its caller started watching for it. */
+    /**
+     * The completion event of a send that settled before its caller started watching for it, read from the rail it
+     * last went out on: a node send only when it succeeded, as one the node paid earlier gets no new event.
+     */
     suspend fun settledSparkSendEvent(paymentHash: String): Event? =
-        if (isLdkSend(paymentHash)) null else sparkRepo.settledSendEvent(paymentHash)
+        if (isLdkSend(paymentHash)) paidNodeSendEvent(paymentHash) else sparkRepo.settledSendEvent(paymentHash)
+
+    private suspend fun paidNodeSendEvent(paymentHash: String): Event? {
+        val payments = runSuspendCatching { lightningService.listPayments() }
+            .onFailure { Logger.warn("Failed to list node payments", it, context = TAG) }
+            .getOrNull()
+        val payment = payments?.firstOrNull {
+            it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.SUCCEEDED &&
+                (it.kind as? PaymentKind.Bolt11)?.hash.equals(paymentHash, ignoreCase = true)
+        } ?: return null
+        val kind = payment.kind as PaymentKind.Bolt11
+        return Event.PaymentSuccessful(payment.id, kind.hash, kind.preimage, payment.feePaidMsat)
+    }
 
     /** Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed. */
     suspend fun sparkLightningSend(paymentHash: String): SparkLightningSend = sparkRepo.lightningSend(paymentHash)

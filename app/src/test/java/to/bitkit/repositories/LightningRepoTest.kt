@@ -1539,6 +1539,19 @@ class LightningRepoTest : BaseUnitTest() {
         verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
+    @Test
+    fun `a spark send of an invoice the node already paid settles as paid`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.SUCCEEDED)))
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+
+        // The node's own success event fired before this send, so its caller reads the settled payment instead.
+        assertEquals("h", assertIs<Event.PaymentSuccessful>(sut.settledSparkSendEvent("h")).paymentHash)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
         id = hash,
         kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),
