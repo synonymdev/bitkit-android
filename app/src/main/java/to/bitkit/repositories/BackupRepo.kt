@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -188,6 +189,11 @@ class BackupRepo @Inject constructor(
     val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
 
     private val restorePendingUntil = MutableStateFlow(0L)
+
+    /** Whether a restore is announced and its backup not applied yet, as [isRestoreInProgress], as it changes. */
+    val restoreInProgress: Flow<Boolean> = combine(_isRestoring, restorePendingUntil) { isRestoring, pendingUntil ->
+        isRestoring || currentTimeMillis() < pendingUntil
+    }.distinctUntilChanged()
 
     fun reset() {
         stopObservingBackups()
@@ -1329,8 +1335,7 @@ class BackupRepo @Inject constructor(
             withTimeout(VSS_TIMESTAMP_TIMEOUT) {
                 vssBackupClient.setup().getOrThrow()
                 coroutineScope {
-                    BackupCategory.entries
-                        .filter { it != BackupCategory.LIGHTNING_CONNECTIONS && it != BackupCategory.USDT_RECOVERY }
+                    LATEST_BACKUP_TIME_CATEGORIES
                         .map { category -> async { getRemoteBackupTimestamp(category) } }
                         .mapNotNull { it.await() }
                         .filter { it > 0uL }
@@ -1455,6 +1460,16 @@ class BackupRepo @Inject constructor(
 
     companion object {
         private const val TAG = "BackupRepo"
+
+        /**
+         * The categories whose remote timestamp tells when the wallet was last backed up. The Spark exit data is left
+         * out: reading its timestamp downloads data that can reach several MB.
+         */
+        internal val LATEST_BACKUP_TIME_CATEGORIES = BackupCategory.entries.filter {
+            it != BackupCategory.LIGHTNING_CONNECTIONS &&
+                it != BackupCategory.USDT_RECOVERY &&
+                it != BackupCategory.SPARK_EXIT
+        }
 
         private const val MINUTE_IN_MS = 60_000
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds

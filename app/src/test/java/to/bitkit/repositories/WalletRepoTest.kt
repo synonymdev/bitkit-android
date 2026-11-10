@@ -138,6 +138,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = "", onchainAddress = ADDRESS)))
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(backupRepo.restoreInProgress).thenReturn(MutableStateFlow(false))
         whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
         whenever(lightningRepo.nodeEventUpdates).thenReturn(MutableSharedFlow())
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
@@ -236,6 +237,28 @@ class WalletRepoTest : BaseUnitTest() {
         testScheduler.runCurrent()
 
         verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
+    }
+
+    @Test
+    fun `a restore that completes after the node and spark started refreshes the receive invoice once`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        val restoring = MutableStateFlow(true)
+        whenever(backupRepo.restoreInProgress).thenReturn(restoring)
+        whenever(backupRepo.isRestoreInProgress()).thenAnswer { restoring.value }
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any(), any())).thenReturn(Result.success(INVOICE))
+        val spark = sparkRepoWith(MutableStateFlow(SparkState(isReady = true)))
+        whenever(spark.canReceive()).thenReturn(true)
+        sut = createSut(spark = spark)
+        testScheduler.runCurrent()
+        verify(lightningRepo, never()).createInvoice(anyOrNull(), any(), any(), any())
+
+        restoring.value = false
+        testScheduler.runCurrent()
+
+        verify(lightningRepo, times(1)).createInvoice(anyOrNull(), any(), any(), any())
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
     }
 
     private fun sparkRepoWith(state: MutableStateFlow<SparkState>): SparkRepo = mock {

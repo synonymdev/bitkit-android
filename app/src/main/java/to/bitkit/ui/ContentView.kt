@@ -1090,7 +1090,10 @@ private fun RootNavHost(
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigateTo(Routes.SavingsConfirm) },
+                    onContinueClick = {
+                        transferViewModel.beginSavingsTransfer()
+                        navController.navigateTo(Routes.SavingsConfirm)
+                    },
                 )
             }
             deepLinkableComposable<Routes.SavingsConfirm> {
