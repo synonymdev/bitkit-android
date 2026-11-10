@@ -999,7 +999,8 @@ class SparkRepo @Inject constructor(
         runSuspendCatching {
             when (event) {
                 is SdkEvent.Synced -> {
-                    _state.update { it.copy(hasSynced = true) }
+                    // Spark also reports Synced for a partial or skipped sync, while its wallet sync still fails.
+                    if (hasSyncedSince(null)) _state.update { it.copy(hasSynced = true) }
                     refresh()
                     // A send whose outcome stayed unknown past its polling settles on a later sync.
                     uncertainSends.keys.toList().forEach { trySettleUncertainSend(it) }

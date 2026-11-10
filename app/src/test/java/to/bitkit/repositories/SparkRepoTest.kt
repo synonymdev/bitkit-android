@@ -1450,6 +1450,23 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a synced event after a failed wallet sync leaves spark's payment list unread`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        )
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        runCurrent()
+
+        // Spark also reports Synced for a partial sync, or one it skipped, while its wallet sync still fails.
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+
+        assertFalse(sut.canListPayments(), "a list no wallet sync filled was read as complete")
+    }
+
+    @Test
     fun `an uncertain spark send keeps holding the node off while spark can't resync`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
