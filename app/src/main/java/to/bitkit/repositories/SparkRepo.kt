@@ -787,9 +787,16 @@ class SparkRepo @Inject constructor(
      */
     suspend fun earlierLightningSend(bolt11: String, paymentHash: String?): EarlierSend? =
         withContext(bgDispatcher) {
-            sendsInFlight.entries
-                .firstOrNull { it.value.equals(bolt11, ignoreCase = true) || it.key == paymentHash?.lowercase() }
-                ?.let { return@withContext EarlierSend.Pending(it.key) }
+            val recordsBefore = sendRecords.get()
+            val isOfInvoice = { send: Map.Entry<String, String> ->
+                send.value.equals(bolt11, ignoreCase = true) || send.key == paymentHash?.lowercase()
+            }
+            sendsInFlight.entries.firstOrNull(isOfInvoice)?.let { return@withContext EarlierSend.Pending(it.key) }
+            // A retry started, or recorded, while the listing below is read may still be pending.
+            val retried = {
+                sendsInFlight.entries.firstOrNull(isOfInvoice)?.key
+                    ?: paymentHash?.lowercase()?.takeIf { it in recordedSince(recordsBefore) }
+            }
             // Before Spark's first sync its local list can be empty although a restored send is live.
             val payments = if (sparkService.isSupported && canListPayments()) {
                 runSuspendCatching { sparkService.listPayments() }
@@ -804,7 +811,8 @@ class SparkRepo @Inject constructor(
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
-                ?: return@withContext null
+                ?: return@withContext retried()?.let { EarlierSend.Pending(it) }
+            if (send.status == PaymentStatus.FAILED) retried()?.let { return@withContext EarlierSend.Pending(it) }
             val hash = (send.details as PaymentDetails.Lightning).htlcDetails.paymentHash
             when (send.status) {
                 PaymentStatus.PENDING -> EarlierSend.Pending(hash)
@@ -812,6 +820,13 @@ class SparkRepo @Inject constructor(
                 PaymentStatus.FAILED -> null
             }
         }
+
+    /** The count of sends recorded so far, read before a node send's checks for [hasRecordedSendSince]. */
+    fun sendRecordMark(): Long = sendRecords.get()
+
+    /** Whether a send of [paymentHash] was recorded after [sendRecordMark] read [records]. */
+    fun hasRecordedSendSince(records: Long, paymentHash: String?): Boolean =
+        paymentHash != null && (sendRecordedAt[paymentHash.lowercase()] ?: 0L) > records
 
     private suspend fun startedSend(paymentHash: String?): String? {
         val hash = paymentHash?.lowercase() ?: return null

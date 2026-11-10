@@ -203,6 +203,29 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry recorded while an older list is read holds the node off the invoice`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0).copy(status = PaymentStatus.PENDING))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        var isRetried = false
+        // Spark retries the invoice the node is about to pay, and its send returns, while this list is read.
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            if (!isRetried) {
+                isRetried = true
+                sut.payInvoice("lnbc1280n1send", 128uL)
+            }
+            listOf(failed)
+        }
+
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
     fun `a readable history without a live attempt lets the node pay a recorded invoice`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever(sparkService.isConnected).thenReturn(true)

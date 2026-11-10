@@ -48,6 +48,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentFailureReason
+import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PeerDetails
@@ -1507,9 +1508,35 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.success("h"))
 
-        sut.payInvoice("h", 1_000uL)
+        val result = sut.payInvoice("h", 1_000uL)
 
         assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an older listing released the node retry's hold")
+        assertIs<PaymentPendingException>(result.exceptionOrNull(), "Spark paid an invoice the node is retrying")
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a node send of an invoice spark admitted is refused at submission`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var nodeResult: Result<PaymentId>? = null
+        // The node starts the same invoice after Spark's checks passed, while Spark is sending it.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            check(authorizeSend())
+            nodeResult = sut.payInvoiceWithNode("h")
+            Result.success("h")
+        }
+
+        sut.payInvoice("h", 1_000uL)
+
+        assertIs<PaymentPendingException>(nodeResult?.exceptionOrNull(), "the node paid an invoice Spark is sending")
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
