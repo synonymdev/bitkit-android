@@ -1419,11 +1419,17 @@ class PubkyRepo @Inject constructor(
                 image = keptImage,
                 links = fitted.links.map { SdkPubkyProfileLink(title = it.label, url = it.url) },
             )
+            val image = data.image?.takeIf { it.isPaykitStorage() }
+            // Recorded before the profile is created without it, so an app stopped before the move still retries it.
+            // A failed create keeps it too: the create may have landed, and the next load or save handles either case.
+            if (image != null) {
+                pubkyStore.update { it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending + publicKey) }
+            }
             val snapshot = profileWrite(generation) {
                 withPubkyAppScope { pubkyService.publishPubkyProfile(update, null, publicKey) }
             }
             Logger.info("Moved Bitkit profile to pubky.app", context = TAG)
-            val image = data.image?.takeIf { it.isPaykitStorage() } ?: return@runSuspendCatching snapshot
+            image ?: return@runSuspendCatching snapshot
             moveAvatar(publicKey, image, snapshot, generation) ?: snapshot
         }.onFailure { Logger.warn("Failed to move Bitkit profile to pubky.app", it, context = TAG) }.getOrNull()
 

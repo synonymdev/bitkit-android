@@ -1127,6 +1127,31 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `loadProfile records the avatar move before it creates the pubky app profile`() = test {
+        val store = MutableStateFlow(PubkyStoreData())
+        whenever(pubkyStore.data).thenReturn(store)
+        whenever { pubkyStore.update(any()) }.thenAnswer {
+            store.value = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(store.value)
+            Unit
+        }
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(
+            paykitRecord(createPaykitProfile("Bitkit Name", image = "pubky://self/pub/paykit/blobs/avatar.jpg"))
+        )
+        var pendingAtCreate: Set<String>? = null
+        whenever { pubkyService.publishPubkyProfile(any(), anyOrNull(), any()) }.doSuspendableAnswer {
+            pendingAtCreate = pendingAtCreate ?: store.value.pubkyAppAvatarPending
+            createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Bitkit Name"))
+        }
+        store.value = PubkyStoreData()
+
+        sut.loadProfile()
+
+        assertEquals(setOf(VALID_SELF_KEY), pendingAtCreate)
+    }
+
+    @Test
     fun `loadProfile keeps a pending avatar move when the Paykit copy cannot be read`() = test {
         val store = MutableStateFlow(
             PubkyStoreData(pubkyAppProfileOwners = setOf(VALID_SELF_KEY), pubkyAppAvatarPending = setOf(VALID_SELF_KEY))
