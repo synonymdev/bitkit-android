@@ -559,6 +559,10 @@ class LightningService internal constructor(
                 }
             this@LightningService.node = null
         }
+        // Releasing a node whose stop left tasks detached shuts down its tokio runtime under them, and the first
+        // one to resume (a VSS write returning, or a thaw from the freezer) aborts the app with "A Tokio 1.x
+        // context was found, but it is being shutdown." In the background, kill the process while the runtime
+        // is alive instead; a cold start restores everything. In the foreground, release as before.
         if (monitor.hasDetachedWork && isAppInBackground()) {
             exitBeforeRuntimeShutdown()
             return@withContext
@@ -567,16 +571,6 @@ class LightningService internal constructor(
         Logger.info("Node stopped", context = TAG)
     }
 
-    /**
-     * Ends the process instead of releasing a node whose stop left tracked tasks detached.
-     *
-     * Releasing the node shuts down its tokio runtime underneath those tasks, and the first one that
-     * resumes (a VSS write returning, or the process thawing from the cached-apps freezer) polls a
-     * timer on the dead runtime and aborts the app with "A Tokio 1.x context was found, but it is
-     * being shutdown." Killing the process while the runtime is still alive avoids that abort, and a
-     * backgrounded app loses nothing a cold start does not restore. In the foreground the release
-     * still runs, since ending the process there would close the app in front of the user.
-     */
     private suspend fun exitBeforeRuntimeShutdown() {
         Logger.warn("Exiting process: node stop left ldk_node tasks detached while in background", context = TAG)
         delay(EXIT_LOG_FLUSH_DELAY)
