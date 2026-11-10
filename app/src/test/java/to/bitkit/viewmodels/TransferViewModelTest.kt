@@ -6,10 +6,12 @@ import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.ReverseSwapResponse
 import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -436,6 +438,24 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SPARK_FEE + 200uL, sut.sparkWithdrawFeeSats.value)
+    }
+
+    @Test
+    fun `leaving progress during spark's withdrawal still closes the selected channels`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        val withdrawn = CompletableDeferred<Result<Unit>>()
+        whenever { sparkRepo.withdrawAll(any(), any()) }.doSuspendableAnswer { withdrawn.await() }
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+        val progress = launch { sut.closeSelectedChannels() }
+        runCurrent()
+
+        progress.cancel()
+        withdrawn.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
     }
 
     @Test

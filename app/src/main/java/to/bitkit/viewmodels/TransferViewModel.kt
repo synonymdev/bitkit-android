@@ -11,6 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -82,6 +83,7 @@ class TransferViewModel @Inject constructor(
     private var sparkFeeJob: Job? = null
     private var confirmedSparkFeeSats: ULong? = null
     private var sparkWithdrawJob: Job? = null
+    private var closeJob: Deferred<List<ChannelDetails>>? = null
     private var sparkFeeBalanceSats: ULong? = null
     private var sparkAddress: String? = null
 
@@ -404,6 +406,7 @@ class TransferViewModel @Inject constructor(
         _savingsSwapResult.update { null }
         _isSparkWithdrawFailed.update { false }
         sparkWithdrawJob = null
+        closeJob = null
         _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels
         withdrawsSpark = withdrawSpark
@@ -420,10 +423,16 @@ class TransferViewModel @Inject constructor(
     /** Whether Transfer to Savings closes channels, rather than only withdrawing Spark's balance. */
     fun hasChannelsToClose(): Boolean = channelsToClose.isNotEmpty()
 
-    /** Withdraws Spark's balance when selected, then closes the channels selected earlier, pending closure */
+    /**
+     * Withdraws Spark's balance when selected, then closes the channels selected earlier, pending closure. Once per
+     * confirmed transfer, in viewModelScope, so leaving the progress screen during the withdrawal skips no close.
+     */
     suspend fun closeSelectedChannels(): List<ChannelDetails> {
-        if (withdrawsSpark) withdrawSparkToSavings()
-        return closeChannels(channelsToClose)
+        val job = closeJob ?: viewModelScope.async {
+            if (withdrawsSpark) withdrawSparkToSavings()
+            closeChannels(channelsToClose)
+        }.also { closeJob = it }
+        return job.await()
     }
 
     private suspend fun withdrawSparkToSavings() {
