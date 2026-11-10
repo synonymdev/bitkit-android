@@ -1380,11 +1380,13 @@ class PubkyRepo @Inject constructor(
         snapshot ?: return paykitData?.takeIf { migrating }?.let { it.toPubkyProfile(publicKey) to null }
         val pendingAvatar = paykitData?.image?.takeIf { it.isPaykitStorage() }
         var retryingAvatar = fetched != null && publicKey in stored.pubkyAppAvatarPending
-        if (retryingAvatar && (pendingAvatar == null || fetched?.profile?.image != null)) {
-            // An avatar set on pubky.app meanwhile wins, and only an avatar on Paykit storage is moved.
+        val avatarMoveSettled = fetched?.profile?.image != null || (paykitRead.isSuccess && pendingAvatar == null)
+        if (retryingAvatar && avatarMoveSettled) {
+            // An avatar set on pubky.app meanwhile wins, and only an avatar on Paykit storage is moved. An unread copy
+            // settles nothing, so the move is retried on a later load.
             pubkyStore.update { it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - publicKey) }
-            retryingAvatar = false
         }
+        if (pendingAvatar == null || avatarMoveSettled) retryingAvatar = false
         if (retryingAvatar) {
             snapshot = moveAvatar(publicKey, checkNotNull(pendingAvatar), snapshot, generation) ?: snapshot
         }

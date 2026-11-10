@@ -1127,6 +1127,29 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `loadProfile keeps a pending avatar move when the Paykit copy cannot be read`() = test {
+        val store = MutableStateFlow(
+            PubkyStoreData(pubkyAppProfileOwners = setOf(VALID_SELF_KEY), pubkyAppAvatarPending = setOf(VALID_SELF_KEY))
+        )
+        whenever(pubkyStore.data).thenReturn(store)
+        whenever { pubkyStore.update(any()) }.thenAnswer {
+            store.value = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(store.value)
+            Unit
+        }
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        sut.loadProfile()
+        doReturn(
+            paykitRecord(createPaykitProfile("Test", image = "pubky://self/pub/paykit/blobs/avatar.jpg"))
+        ).whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+        clearInvocations(pubkyService)
+
+        sut.loadProfile()
+
+        verifyBlocking(pubkyService) { fetchFile(eq("pubky://self/pub/paykit/blobs/avatar.jpg"), any()) }
+    }
+
+    @Test
     fun `createIdentity fits a restored Bitkit-only profile to pubky app limits`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
