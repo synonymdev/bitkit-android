@@ -403,6 +403,20 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a claimed deposit hides only its own output of the transaction`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listUnclaimedDeposits() }.thenReturn(
+            listOf(0u, 1u).map { DepositInfo("txid", it, 50_000uL, false, null, null, null, null, null, null) }
+        )
+        whenever { sparkService.listPayments() }.thenReturn(listOf(depositPayment()))
+        val sut = createSut()
+
+        sut.refreshState().getOrThrow()
+
+        assertEquals(50_000uL, sut.state.value.pendingDepositSats, "another output of the claimed tx was hidden")
+    }
+
+    @Test
     fun `a failed send does not release a hash its retry still holds pending`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
