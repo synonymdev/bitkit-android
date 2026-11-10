@@ -82,6 +82,7 @@ class SparkFundingViewModel @Inject constructor(
 
     private var maxJob: Job? = null
     private var quoteJob: Job? = null
+    private var amountJob: Job? = null
     private var retainedFundingJob: Job? = null
 
     /** The kept funding this screen settles, held until the screen closes so its recovery never takes over. */
@@ -161,11 +162,17 @@ class SparkFundingViewModel @Inject constructor(
         )
     }
 
+    /** Drops a pricing still running when the amount screen leaves, so its quote never opens confirm. */
+    fun onAmountLeave() {
+        amountJob?.cancel()
+        _uiState.update { it.copy(isLoading = false) }
+    }
+
     /** Prices the transfer and moves on to the confirm screen when Savings can cover it and Spark can add it. */
     fun onAmountContinue() {
         if (_uiState.value.isLoading) return
         _uiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch {
+        amountJob = viewModelScope.launch {
             val quote = quote().getOrElse {
                 Logger.error("Failed to price Spark funding", it, context = TAG)
                 toastQuoteError()

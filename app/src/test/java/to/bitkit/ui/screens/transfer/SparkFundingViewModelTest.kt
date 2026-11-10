@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.synonym.bitkitcore.FeeRates
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -16,6 +17,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -134,6 +136,31 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         assertEquals(50_500L, quote.totalSats)
         assertEquals(48_650L, quote.toSpendingSats(SparkClaimSpeed.Instant))
         assertEquals(49_802L, quote.toSpendingSats(SparkClaimSpeed.Later))
+    }
+
+    @Test
+    fun `leaving the amount screen while pricing never opens confirm`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        val gate = CompletableDeferred<Unit>()
+        whenever(lightningRepo.getFeeRates()).doSuspendableAnswer {
+            gate.await()
+            Result.success(feeRates)
+        }
+        val effects = mutableListOf<SideEffect>()
+        val job = launch { sut.effects.collect { effects.add(it) } }
+
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onAmountLeave()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(emptyList(), effects)
+        assertEquals(false, sut.uiState.value.isLoading)
+        assertEquals(null, sut.uiState.value.quote)
     }
 
     @Test
