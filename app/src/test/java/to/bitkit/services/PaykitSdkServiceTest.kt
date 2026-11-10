@@ -3473,7 +3473,6 @@ class PaykitSdkServiceTest {
                     emptyList()
                 },
                 failedToDeliver = emptyList(),
-                acknowledged = emptyList(),
             )
         }
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }

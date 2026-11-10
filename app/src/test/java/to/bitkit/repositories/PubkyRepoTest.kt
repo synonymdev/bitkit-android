@@ -766,7 +766,7 @@ class PubkyRepoTest : BaseUnitTest() {
             throw AppError(PaykitException.Policy("policy_error", "Identity lives on another homeserver"))
         }
         whenever(pubkyService.signIn("secret")).thenReturn(Unit)
-        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenReturn(mock())
 
         val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
         httpClient.close()
@@ -791,7 +791,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.exceptionOrNull()?.isPaykitTemporarilyUnavailable() == true)
         assertNull(sut.publicKey.value)
         verifyBlocking(pubkyService, times(1)) { signUp(any(), any(), any()) }
-        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any(), any()) }
     }
 
     @Test

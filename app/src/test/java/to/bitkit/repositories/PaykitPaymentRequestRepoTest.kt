@@ -1049,7 +1049,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).let {
             it.copy(
                 proposalAppId = "marketplace",
-                proposalRecordedAt = null,
                 terms = requireNotNull(it.terms).copy(
                     acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
                     paymentEndpoints = mapOf(
@@ -3679,7 +3678,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ),
         acceptedEventId = null,
         acceptedOutboundStatus = null,
-        acceptanceRecordedAt = null,
         rejectedEventId = null,
         rejectedOutboundStatus = null,
         canceledEventId = null,
@@ -3692,7 +3690,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         lastEventAt = clock.now().toString(),
         invalidReason = null,
         proposalAppId = "bitkit",
-        proposalRecordedAt = null,
         payerAppId = null,
         executionClaimAppId = null,
         proposalRecordedAt = null,
