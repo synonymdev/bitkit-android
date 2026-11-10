@@ -141,6 +141,9 @@ class SparkRepo @Inject constructor(
     private val sendRecords = AtomicLong()
     private val sendRecordedAt = ConcurrentHashMap<String, Long>()
 
+    /** Sends whose outcome Spark didn't report, by lowercase payment hash, pending until a later sync settles them. */
+    private val uncertainSends = ConcurrentHashMap.newKeySet<String>()
+
     @Volatile
     private var hasSyncedActivities = false
 
@@ -212,6 +215,7 @@ class SparkRepo @Inject constructor(
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
         sendsInFlight.clear()
+        uncertainSends.clear()
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
         _depositClaims.update { emptyMap() }
@@ -332,6 +336,7 @@ class SparkRepo @Inject constructor(
     }
 
     private fun settleUncertainSend(paymentHash: String) {
+        uncertainSends += paymentHash.lowercase()
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
@@ -348,13 +353,18 @@ class SparkRepo @Inject constructor(
                 when (val send = lightningSend(paymentHash)) {
                     SparkLightningSend.NotFound if isSynced -> {
                         cacheStore.removeSparkSendHash(paymentHash)
+                        uncertainSends -= paymentHash.lowercase()
                         val reason = PaymentFailureReason.UNEXPECTED_ERROR
                         _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, reason))
                         return@launch
                     }
                     // A pending send ends with its own payment event.
-                    is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@launch
+                    is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> {
+                        uncertainSends -= paymentHash.lowercase()
+                        return@launch
+                    }
                     is SparkLightningSend.Found -> {
+                        uncertainSends -= paymentHash.lowercase()
                         if (send.status == PaymentStatus.FAILED) cacheStore.removeSparkSendHash(paymentHash)
                         settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
                         return@launch
@@ -806,10 +816,11 @@ class SparkRepo @Inject constructor(
                 send.value.equals(bolt11, ignoreCase = true) || send.key == paymentHash?.lowercase()
             }
             sendsInFlight.entries.firstOrNull(isOfInvoice)?.let { return@withContext EarlierSend.Pending(it.key) }
-            // A retry started, or recorded, while the listing below is read may still be pending.
+            // A retry started, or recorded, while the listing below is read may still be pending, as may a send whose
+            // outcome Spark didn't report until a sync settles it.
             val retried = {
                 sendsInFlight.entries.firstOrNull(isOfInvoice)?.key
-                    ?: paymentHash?.lowercase()?.takeIf { it in recordedSince(recordsBefore) }
+                    ?: paymentHash?.lowercase()?.takeIf { it in recordedSince(recordsBefore) || it in uncertainSends }
             }
             // Before Spark's first sync its local list can be empty although a restored send is live.
             val payments = if (sparkService.isSupported && canListPayments()) {

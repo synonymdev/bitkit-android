@@ -1427,6 +1427,24 @@ class SparkRepoTest : BaseUnitTest() {
         assertFalse(sut.canListPayments(), "a restored wallet's unsynced list was read as complete")
     }
 
+    @Test
+    fun `an uncertain spark send keeps holding the node off while spark can't resync`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        // From here every resync fails, so Spark's list stays as it was before the send.
+        whenever { sparkService.syncWallet() }.thenAnswer { throw SdkException.Generic("operators unreachable") }
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+    }
+
     private fun info(balanceSats: ULong) = GetInfoResponse(
         identityPubkey = "pubkey",
         balanceSats = balanceSats,
