@@ -8948,6 +8948,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `local RBF publication during receipt lookup cannot interrupt the boost success toast`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        var published = false
+        whenever(activityRepo.isReceivedTransaction("original")).doSuspendableAnswer {
+            entered.complete(Unit)
+            resume.await()
+            false
+        }
+        whenever(activityRepo.isLocalRbfBoost("original")).thenAnswer { published }
+        advanceUntilIdle()
+        emitNodeEvent(Event.OnchainTransactionReplaced("original", listOf("replacement")))
+        runCurrent()
+        assertTrue(entered.isCompleted)
+        published = true
+        resume.complete(Unit)
+        advanceUntilIdle()
+        verify(toastManager, never()).enqueue(argThat { testTag == "TransactionReplacedToast" })
+        verify(activityRepo).handleOnchainTransactionReplaced("original", listOf("replacement"))
+    }
+
+    @Test
+    fun `external replacement still shows incoming and outgoing notifications`() = test {
+        advanceUntilIdle()
+        for (received in listOf(false, true)) {
+            val txid = "external-$received"
+            whenever(activityRepo.isReceivedTransaction(txid)).thenReturn(received)
+            whenever(activityRepo.isLocalRbfBoost(txid)).thenReturn(false)
+            emitNodeEvent(Event.OnchainTransactionReplaced(txid, listOf("replacement-$received")))
+            advanceUntilIdle()
+            val expectedTag = if (received) "ReceivedTransactionReplacedToast" else "TransactionReplacedToast"
+            verify(toastManager).enqueue(argThat { testTag == expectedTag })
+        }
+    }
+
+    @Test
     fun `confirmed-only onchain receive shows the sheet after updating the activity`() = test {
         val sheetDetails = NewTransactionSheetDetails(
             type = NewTransactionSheetType.ONCHAIN,

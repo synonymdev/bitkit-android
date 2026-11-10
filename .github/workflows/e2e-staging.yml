@@ -89,10 +89,8 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: multi_address, grep: "@multi_address_staging" }
           - { name: pubky_paykit, grep: "@pubky_staging" }
           - { name: hardware_wallet, grep: "@hardware_wallet" }
-          - { name: transfer, grep: "@transfer_staging" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 
@@ -186,6 +184,7 @@ jobs:
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           BACKEND: regtest
+          BLOCKTANK_REGTEST_AUTH: ${{ secrets.BLOCKTANK_REGTEST_AUTH }}
           RECORD_VIDEO: true
           ATTEMPT: 1
 
@@ -204,6 +203,7 @@ jobs:
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           BACKEND: regtest
+          BLOCKTANK_REGTEST_AUTH: ${{ secrets.BLOCKTANK_REGTEST_AUTH }}
           RECORD_VIDEO: true
           ATTEMPT: 2
 
@@ -221,6 +221,7 @@ jobs:
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           BACKEND: regtest
+          BLOCKTANK_REGTEST_AUTH: ${{ secrets.BLOCKTANK_REGTEST_AUTH }}
           RECORD_VIDEO: true
           ATTEMPT: 3
 

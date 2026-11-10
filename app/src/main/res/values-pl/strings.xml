@@ -1027,6 +1027,8 @@
     <string name="wallet__boost_increase_fee">Zwiększ opłatę</string>
     <string name="wallet__boost_fee_custom">Twoja transakcja może zostać rozliczona szybciej, jeśli uwzględnisz dodatkową opłatę sieciową. Ustaw niestandardową opłatę poniżej.</string>
     <string name="wallet__boost_fee_recomended">Twoja transakcja może zostać rozliczona szybciej, jeśli uwzględnisz dodatkową opłatę sieciową. Oto zalecenie:</string>
+    <string name="wallet__boost_pending_msg">Przyspieszenie oczekuje. Zaktualizowane szczegóły transakcji nie są jeszcze dostępne.</string>
+    <string name="wallet__boost_pending_title">Przyspieszenie oczekuje</string>
     <string name="wallet__boost_recomended_button">Zastosuj sugerowaną opłatę</string>
     <string name="wallet__boost_swipe">Przesuń, aby przyspieszyć</string>
     <string name="wallet__payment_received">Otrzymano Bitcoinów</string>
