@@ -1152,6 +1152,41 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deleteProfile is not followed by a profile copy write from a load under way`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY))
+            .thenReturn(paykitRecord(PubkyProfileData(name = "Old", bio = "").toPaykitProfile()))
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenAnswer { paykitRecord(it.getArgument(0)) }
+        val snapshot = createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Test"))
+        val loadReading = CompletableDeferred<Unit>()
+        val finishLoad = CompletableDeferred<Unit>()
+        var reads = 0
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).doSuspendableAnswer {
+            if (reads++ == 0) {
+                loadReading.complete(Unit)
+                finishLoad.await()
+            }
+            snapshot
+        }
+        val copyDeleted = CompletableDeferred<Unit>()
+        whenever(pubkyService.deletePaykitProfile()).doSuspendableAnswer {
+            copyDeleted.complete(Unit)
+            Unit
+        }
+        clearInvocations(pubkyService)
+
+        val load = async { sut.loadProfile() }
+        loadReading.await()
+        val deletion = async { sut.deleteProfile() }
+        copyDeleted.await()
+        finishLoad.complete(Unit)
+        deletion.await().getOrThrow()
+        load.await()
+
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any(), any()) }
+    }
+
+    @Test
     fun `loadProfile moves a multi-line bio and scheme-less links to pubky app`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
