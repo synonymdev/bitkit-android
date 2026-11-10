@@ -427,6 +427,40 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed activity read keeps its stored note contact and seen time and retries at the next sync`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val stored = LightningActivity.create(
+            id = "hash",
+            txType = ActivityPaymentType.SENT,
+            status = PaymentState.PENDING,
+            value = 128uL,
+            invoice = "lnbc1280n1send",
+            timestamp = 1uL,
+            message = "note",
+            contact = "contact",
+            seenAt = 5uL,
+        )
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(
+                Result.failure(IllegalStateException("read failed")),
+                Result.success(Activity.Lightning(stored)),
+            )
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(sentPayment(fees = 2)))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        sparkEvents.emit(SdkEvent.Synced)
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, times(1)).upsertActivity(activities.capture())
+        val written = (activities.firstValue as Activity.Lightning).v1
+        assertEquals("note", written.message)
+        assertEquals("contact", written.contact)
+        assertEquals(5uL, written.seenAt)
+    }
+
+    @Test
     fun `an activity the user deleted is not written again`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val sut = createSut()

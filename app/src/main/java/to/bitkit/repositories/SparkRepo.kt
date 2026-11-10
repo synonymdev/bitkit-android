@@ -889,7 +889,12 @@ class SparkRepo @Inject constructor(
             return true
         }
         val id = lightning.htlcDetails.paymentHash
-        val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
+        // A failed read would drop the stored note, contact and seen time, so the write waits for the next refresh.
+        val stored = activityRepo.get().getActivity(id).getOrElse {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        val existing = (stored as? Activity.Lightning)?.v1
         // Another attempt of the same invoice, on either rail, already paid it.
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
         val activity = LightningActivity.create(
