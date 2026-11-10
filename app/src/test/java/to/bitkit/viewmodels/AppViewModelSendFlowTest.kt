@@ -17051,12 +17051,61 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmCurrentPayment()
-            assertEquals(SendEffect.NavigateToPending(SWAP_HOLD_HASH, SWAP_DELIVERED_SATS.toLong()), awaitItem())
+            assertEquals(
+                SendEffect.NavigateToPending(
+                    SWAP_HOLD_HASH,
+                    SWAP_DELIVERED_SATS.toLong(),
+                    retryRoute = SendRetryRoute.Amount,
+                ),
+                awaitItem(),
+            )
             expectNoEvents()
         }
         verify(pendingPaymentRepo).track(SWAP_HOLD_HASH)
         verify(preActivityMetadataRepo, never()).deletePreActivityMetadata(SWAP_HOLD_HASH)
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+
+        // The hold payment settling later finishes the pending send.
+        sut.onSendSuccess(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.SENT,
+                paymentHashOrTxId = SWAP_HOLD_HASH,
+                sats = SWAP_DELIVERED_SATS.toLong(),
+            ),
+        )
+        assertEquals(SWAP_HOLD_HASH, sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `swap route claim wait leaves a re-quoted send free to pay`() = test {
+        val claim = CompletableDeferred<Result<String>>()
+        val editedQuote = swapRouteQuote().copy(quoteId = "edited-quote", deliveredSat = SWAP_DELIVERED_SATS + 1_000u)
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(pubkySwapsRouteRepo.commit("edited-quote")).doSuspendableAnswer { awaitCancellation() }
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            // Backups and Paykit's background work do not wait for the claim.
+            assertFalse(paymentSubmissionActive.value)
+            whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any()))
+                .thenReturn(Result.success(PaykitRoute.Swap(editedQuote)))
+            sut.setSendEvent(SendEvent.AmountChange(editedQuote.deliveredSat))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            // The first swap's hold payment is no longer this send's.
+            assertNull(sut.sendUiState.value.paykitSwapRoute?.holdPaymentHash)
+            confirmSwapRoutedPayment()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo).commit("edited-quote")
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
     }
 
     @Test
@@ -17164,8 +17213,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.AmountContinue)
             advanceBeforeHoldWatchDeadline()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
-            // The first payment still awaits its claim.
-            assertTrue(paymentSubmissionActive.value)
             confirmSwapRoutedPayment()
             cancelAndIgnoreRemainingEvents()
         }
@@ -17175,6 +17222,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         // The first payment ending must not lift the guard of the second while it still pays.
         claim.complete(Result.success(SWAP_CLAIM_TXID))
         advanceBeforeHoldWatchDeadline()
+        verify(toastManager).enqueue(check { assertEquals("PendingPaymentSucceededToast", it.testTag) })
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceBeforeHoldWatchDeadline()
         verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)

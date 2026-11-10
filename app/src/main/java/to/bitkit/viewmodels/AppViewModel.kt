@@ -4222,7 +4222,7 @@ class AppViewModel @Inject constructor(
                 isAmountInputValid = validateAmount(amount),
                 confirmedWarnings = persistentListOf(),
                 paykitSwapRoute = if (staleQuote) {
-                    it.paykitSwapRoute.copy(quote = null, providerName = null)
+                    it.paykitSwapRoute.copy(quote = null, providerName = null, holdPaymentHash = null)
                 } else {
                     it.paykitSwapRoute
                 },
@@ -4688,9 +4688,11 @@ class AppViewModel @Inject constructor(
         }
         _sendUiState.update {
             it.copy(
+                // A new quote replaces the committed one, so its hold payment is no longer this send's.
                 paykitSwapRoute = route.copy(
                     quote = quote,
                     providerName = pubkySwapsRouteRepo.providerContact(quote.providerPubky)?.name,
+                    holdPaymentHash = null,
                 ),
                 lightningFeeSats = quote.totalFeeSat.toLong(),
             )
@@ -6840,31 +6842,62 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        contactPaymentContext?.let {
+            synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
+        }
+        // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
+        lightningRepo.payInvoice(payment.invoice).getOrElse {
+            holdFailure.cancel()
+            clearPendingContactPaymentContext(holdPaymentHash)
+            val isCurrent = isSendCurrent()
+            clearSwapRouteQuote(isCurrent)
+            if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+            handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
+            return
+        }
+        // The claim wait can take minutes, so it runs outside this send's submission: other sends, backups and
+        // Paykit's background work go on meanwhile.
+        viewModelScope.launch {
+            finishSwapRoutedPayment(
+                SwapRoutedPayment(payment, holdPaymentHash, tagsSaved, contactPaymentContext, allowanceAttemptId),
+                holdFailure,
+                isSendCurrent,
+            )
+        }
+    }
+
+    private suspend fun finishSwapRoutedPayment(
+        swap: SwapRoutedPayment,
+        holdFailure: Deferred<PaymentFailureReason?>,
+        isSendCurrent: () -> Boolean,
+    ) {
+        val payment = swap.payment
+        val holdPaymentHash = swap.holdPaymentHash
+        val contactPaymentContext = swap.contactPaymentContext
+        val allowanceAttemptId = swap.allowanceAttemptId
         var keepContactPaymentContext = false
         try {
-            contactPaymentContext?.let {
-                synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
-            }
-            // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
-            lightningRepo.payInvoice(payment.invoice).getOrElse {
-                val isCurrent = isSendCurrent()
-                clearSwapRouteQuote(isCurrent)
-                if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
-                releasePrivatePaymentListIfNeeded(contactPaymentContext)
-                finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-                handlePaymentPreparationFailure(it, contactPaymentContext, isCurrent)
-                return
-            }
             val claimTxid = awaitSwapClaim(payment, holdFailure).getOrElse {
                 if (it is PubkySwapClaimTimeoutException) {
                     // The provider may still settle the hold payment, so a retry could pay the contact twice: the
                     // send waits as pending on the hold payment while the swap keeps advancing in the background.
                     Logger.warn("Pubky Swaps route '${payment.swapId}' outcome unknown", it, context = TAG)
                     keepContactPaymentContext = true
+                    // The hold payment's own success event now finishes the send, through its pending resolution.
+                    synchronized(processedPaymentsLock) { processedPayments.remove(holdPaymentHash) }
                     pendingPaymentRepo.track(holdPaymentHash)
                     if (isSendCurrent()) {
                         synchronized(contactPaymentContextLock) { activeContactPaymentContext = null }
-                        setSendEffect(SendEffect.NavigateToPending(holdPaymentHash, payment.deliveredSat.toLong()))
+                        setSendEffect(
+                            SendEffect.NavigateToPending(
+                                paymentHash = holdPaymentHash,
+                                amount = payment.deliveredSat.toLong(),
+                                // The provider consumed the committed quote, so a retry re-quotes from the amount.
+                                retryRoute = SendRetryRoute.Amount,
+                            ),
+                        )
                     }
                     return
                 }
@@ -6872,7 +6905,7 @@ class AppViewModel @Inject constructor(
                 clearSwapRouteQuote(isCurrent)
                 finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
                 if (it is LightningPaymentFailedError) {
-                    if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
+                    if (swap.tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
                     releasePrivatePaymentListIfNeeded(contactPaymentContext)
                     return
                 }
@@ -9511,6 +9544,7 @@ sealed class SendEffect {
         val observeResolution: Boolean = true,
         val isOnchain: Boolean = false,
         val refusalReason: String? = null,
+        val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
     ) : SendEffect()
 }
 
@@ -9557,6 +9591,14 @@ sealed interface SendEvent {
     data object NavToAddress : SendEvent
     data object Contacts : SendEvent
 }
+
+private data class SwapRoutedPayment(
+    val payment: PubkySwapRoutePayment,
+    val holdPaymentHash: String,
+    val tagsSaved: Boolean,
+    val contactPaymentContext: ContactPaymentContext?,
+    val allowanceAttemptId: String?,
+)
 
 private class LightningPaymentFailedError(
     val reason: PaymentFailureReason?,

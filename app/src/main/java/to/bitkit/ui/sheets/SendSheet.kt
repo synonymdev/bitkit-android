@@ -328,6 +328,7 @@ fun SendSheet(
                                 observeResolution = it.observeResolution,
                                 isOnchain = it.isOnchain,
                                 refusalReason = it.refusalReason,
+                                retryRoute = it.retryRoute,
                             )
                         )
                         is SendEffect.NavigateToError -> navController.navigateTo(
