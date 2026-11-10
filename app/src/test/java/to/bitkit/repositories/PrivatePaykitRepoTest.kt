@@ -4522,6 +4522,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         },
         failedToQueue = failedToQueue,
         failedToDeliver = failedToDeliver,
+        acknowledged = emptyList(),
     )
 
     private fun cachedPublishedContact() = PrivatePaykitContactCacheData(
@@ -4539,6 +4540,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .map { privateListSyncChange(it.counterparty) },
         failedToQueue = emptyList(),
         failedToDeliver = emptyList(),
+        acknowledged = emptyList(),
     )
 
     private fun privateListSyncChange(

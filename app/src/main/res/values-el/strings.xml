@@ -1293,6 +1293,7 @@
     <string name="profile__auth_error_invalid_capabilities">Η ζητούμενη πρόσβαση δεν αντιστοιχεί σε αυτή τη δήλωση Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Αυτός ο σύνδεσμος εξουσιοδότησης Pubky δεν είναι έγκυρος.</string>
     <string name="profile__auth_error_missing_claim">Σε αυτή την εξουσιοδότηση λείπει η απαιτούμενη δήλωση Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Ο homeserver δεν δέχτηκε αυτόν τον κωδικό εγγραφής. Δοκίμασε ξανά ή χρησιμοποίησε άλλον σύνδεσμο εγγραφής.</string>
     <string name="profile__auth_error_timeout">Ο αναμεταδότης εξουσιοδότησης δεν απάντησε εγκαίρως. Δοκίμασε ξανά.</string>
     <string name="profile__auth_error_title">Η εξουσιοδότηση απέτυχε</string>
     <string name="profile__auth_error_unsupported_claim">Αυτή η δήλωση Bitkit δεν υποστηρίζεται.</string>
@@ -1540,6 +1541,7 @@
     <string name="wallet__payment_request_accepted_methods">Αποδοχή πληρωμής σε</string>
     <string name="wallet__payment_request_after_expiry">Ελήφθη · Μετά τη λήξη</string>
     <string name="wallet__payment_request_amount">Ποσό</string>
+    <string name="wallet__payment_request_before_request">Ελήφθη · Πριν από το αίτημα</string>
     <string name="wallet__payment_request_choose_recipient">Επιλογή παραλήπτη</string>
     <string name="wallet__payment_request_dismiss">Απόρριψη</string>
     <string name="wallet__payment_request_enter_pubky">Εισαγωγή pubky</string>
@@ -1553,6 +1555,7 @@
     <string name="wallet__payment_request_mismatch">Τα στοιχεία πληρωμής δεν αντιστοιχούσαν στο αίτημα. Η πληρωμή ακυρώθηκε.</string>
     <string name="wallet__payment_request_not_specified">Δεν καθορίστηκε</string>
     <string name="wallet__payment_request_note_placeholder">Για τι είναι αυτή η πληρωμή;</string>
+    <string name="wallet__payment_request_note_too_long">Συντόμευσε τη σημείωση και δοκίμασε ξανά.</string>
     <string name="wallet__payment_request_or_pay">Αίτημα ή πληρωμή</string>
     <string name="wallet__payment_request_or_pay_description">Πλήρωσε τον/την %1$s ή ζήτησε πληρωμή.</string>
     <string name="wallet__payment_request_or_pay_headline">Αίτημα\n&lt;accent&gt;ή πληρωμή ₿&lt;/accent&gt;</string>

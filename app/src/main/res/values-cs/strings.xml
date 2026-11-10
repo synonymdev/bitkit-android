@@ -1311,6 +1311,7 @@
     <string name="profile__auth_error_invalid_capabilities">Požadovaný přístup neodpovídá tomuto nároku Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Tento autorizační odkaz Pubky je neplatný.</string>
     <string name="profile__auth_error_missing_claim">V této autorizaci chybí požadovaný nárok Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Homeserver tento registrační kód nepřijal. Zkuste to znovu nebo použijte jiný registrační odkaz.</string>
     <string name="profile__auth_error_timeout">Autorizační relay neodpověděl včas. Zkuste to prosím znovu.</string>
     <string name="profile__auth_error_title">Autorizace se nezdařila</string>
     <string name="profile__auth_error_unsupported_claim">Tento nárok Bitkit není podporován.</string>
@@ -1546,6 +1547,7 @@
     <string name="wallet__payment_request_accepted_methods">Přijmout platbu v</string>
     <string name="wallet__payment_request_after_expiry">Přijato · Po vypršení</string>
     <string name="wallet__payment_request_amount">Částka</string>
+    <string name="wallet__payment_request_before_request">Přijato · Před žádostí</string>
     <string name="wallet__payment_request_choose_recipient">Vybrat příjemce</string>
     <string name="wallet__payment_request_dismiss">Odmítnout</string>
     <string name="wallet__payment_request_enter_pubky">Zadejte pubky</string>
@@ -1559,6 +1561,7 @@
     <string name="wallet__payment_request_mismatch">Platební údaje neodpovídaly žádosti. Platba byla zrušena.</string>
     <string name="wallet__payment_request_not_specified">Neuvedeno</string>
     <string name="wallet__payment_request_note_placeholder">Za co je tato platba?</string>
+    <string name="wallet__payment_request_note_too_long">Zkraťte poznámku a zkuste to znovu.</string>
     <string name="wallet__payment_request_or_pay">Požádat nebo zaplatit</string>
     <string name="wallet__payment_request_or_pay_description">Zaplaťte kontaktu %1$s nebo požádejte o platbu.</string>
     <string name="wallet__payment_request_or_pay_headline">Požádat\n&lt;accent&gt;nebo zaplatit ₿&lt;/accent&gt;</string>

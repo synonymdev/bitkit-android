@@ -619,6 +619,7 @@
     <string name="profile__auth_error_invalid_capabilities">The requested access does not match this Bitkit claim.</string>
     <string name="profile__auth_error_invalid_url">This Pubky authorization link is invalid.</string>
     <string name="profile__auth_error_missing_claim">This authorization is missing its required Bitkit claim.</string>
+    <string name="profile__auth_error_signup_code_rejected">The homeserver did not accept this signup code. Try again or use another signup link.</string>
     <string name="profile__auth_error_timeout">The authorization relay did not respond in time. Please try again.</string>
     <string name="profile__auth_error_title">Authorization Failed</string>
     <string name="profile__auth_error_unsupported_claim">This Bitkit claim is not supported.</string>
@@ -1413,6 +1414,7 @@
     <string name="wallet__payment_request_accepted_methods">Accept payment in</string>
     <string name="wallet__payment_request_after_expiry">Received · After expiry</string>
     <string name="wallet__payment_request_amount">Amount</string>
+    <string name="wallet__payment_request_before_request">Received · Before request</string>
     <string name="wallet__payment_request_choose_recipient">Choose Recipient</string>
     <string name="wallet__payment_request_contact">Contact</string>
     <string name="wallet__payment_request_date">Date</string>
@@ -1429,6 +1431,7 @@
     <string name="wallet__payment_request_not_specified">Not specified</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
+    <string name="wallet__payment_request_note_too_long">Shorten the note and try again.</string>
     <string name="wallet__payment_request_or_pay">Request Or Pay</string>
     <string name="wallet__payment_request_or_pay_description">Pay %1$s or request a payment.</string>
     <string name="wallet__payment_request_or_pay_headline"><![CDATA[Request\n<accent>Or Pay ₿</accent>]]></string>

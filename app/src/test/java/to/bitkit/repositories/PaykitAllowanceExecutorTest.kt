@@ -413,6 +413,43 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payment proof is measured with its allowance before the request is accepted`() = test {
+        val request = fixtures.paymentRequest()
+        whenever(
+            sdk.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt())
+
+        val result = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.STARTED, result)
+        val order = inOrder(sdk, payer)
+        order.verify(sdk).paymentProofEventLength(
+            paymentReference = request.paymentReference,
+            paymentAppId = PAYMENT_APP_ID,
+            paymentEndpointIdentifier = fixtures.lightningIdentifier,
+            proofJson = PaykitPaymentProofKind.Lightning.longestProofJson(),
+            billingPeriod = null,
+            conversionQuoteId = null,
+            allowanceId = ALLOWANCE_ID,
+        )
+        order.verify(payer).acceptOnThisInstall<AllowanceAssociationRecord>(eq(request), any())
+    }
+
+    @Test
+    fun `request whose payment proof would not fit one message stays manual without acceptance`() = test {
+        whenever(
+            sdk.paymentProofEventLength(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        ).thenReturn(PaykitSdkService.MAX_MESSAGE_BYTES.toUInt() + 1u)
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(payer, never()).acceptOnThisInstall<AllowanceAssociationRecord>(any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
+    }
+
+    @Test
     fun `blocked candidate stays manual without acceptance`() = test {
         candidates = listOf(candidate(blocked = AllowanceAccountingBlock.SharedRule("amount_outside_range")))
 

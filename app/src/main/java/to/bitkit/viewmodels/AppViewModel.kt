@@ -8492,7 +8492,17 @@ class AppViewModel @Inject constructor(
                         )
                     }
                 }
-                .onFailure(::toast)
+                .onFailure {
+                    if (it is PaykitPaymentRequestError.RequestTooLong) {
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = context.getString(R.string.wallet__payment_request_note_too_long),
+                        )
+                    } else {
+                        toast(it)
+                    }
+                }
         }
     }
 
