@@ -3,7 +3,7 @@
     Drives the watch-only Transfer To Spending flow for a paired Trezor into Spark: Amount -> Sign With
     Your Device -> Transaction Signed -> setting-up progress, then verifies the new transfer is
     represented once in the hardware wallet's Core activity scope. Requires Spark connected on its
-    regtest and a paired Bridge emulator whose native-segwit account holds spendable regtest funds and
+    regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), and a paired Bridge emulator whose native-segwit account holds spendable regtest funds and
     at least one older hardware receive row with a distinct amount.
   </description>
   <actions>

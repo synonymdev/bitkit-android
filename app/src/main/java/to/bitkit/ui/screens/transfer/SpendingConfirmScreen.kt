@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.SparkClaimSpeed
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
@@ -52,6 +53,7 @@ import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.MoneyMSB
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
@@ -206,14 +208,14 @@ private fun Content(
     }
 }
 
-/** The four fee tiles of a transfer to spending, at the selected claim [speed]. */
+/**
+ * The four fee tiles of a transfer to spending, at the selected claim [speed]. The claim fee is an estimate at either
+ * speed, so the tiles that come from it, Spending fee and To spending, show `±`; Network fees and Total are exact.
+ */
 @Composable
 internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        val claimPrefix = when (speed) {
-            SparkClaimSpeed.Instant -> stringResource(R.string.lightning__spending_confirm__up_to)
-            SparkClaimSpeed.Later -> stringResource(R.string.lightning__spending_confirm__about)
-        }
+        val estimatePrefix = stringResource(R.string.lightning__spending_confirm__about)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
@@ -226,7 +228,7 @@ internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Mo
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__spending_fee),
                 amount = quote?.claimFeeSats(speed) ?: 0,
-                prefix = claimPrefix,
+                prefix = estimatePrefix,
                 modifier = Modifier.testTag("SpendingConfirmSpendingFee")
             )
         }
@@ -237,7 +239,7 @@ internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Mo
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__amount),
                 amount = quote?.toSpendingSats(speed) ?: 0,
-                prefix = claimPrefix.takeIf { speed == SparkClaimSpeed.Later },
+                prefix = estimatePrefix,
                 modifier = Modifier.testTag("SpendingConfirmAmount")
             )
             FeeInfo(
@@ -261,7 +263,7 @@ internal fun SpendingSpeedRows(
         SpeedItem(
             title = stringResource(R.string.fee__instant__title),
             description = stringResource(R.string.lightning__spending_confirm__instant_text),
-            feePrefix = stringResource(R.string.lightning__spending_confirm__up_to),
+            feePrefix = stringResource(R.string.lightning__spending_confirm__about),
             feeSats = quote?.instantFeeSats,
             icon = R.drawable.ic_speed_fast,
             iconColor = Colors.Purple,
@@ -280,7 +282,6 @@ internal fun SpendingSpeedRows(
             onClick = { onSpeedChange(SparkClaimSpeed.Later) },
             modifier = Modifier.testTag("SpendingConfirmLater")
         )
-        HorizontalDivider()
     }
 }
 
@@ -296,15 +297,11 @@ private fun SpeedItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .clickableAlpha(onClick = onClick)
-            .then(if (isSelected) Modifier.background(Colors.White06) else Modifier)
-    ) {
-        HorizontalDivider()
+    Column(modifier = modifier.clickableAlpha(onClick = onClick)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
+                .then(if (isSelected) Modifier.background(Colors.White06) else Modifier)
                 .padding(horizontal = 16.dp)
                 .heightIn(min = 72.dp)
                 .padding(vertical = 8.dp)
@@ -316,19 +313,26 @@ private fun SpeedItem(
                 modifier = Modifier.size(32.dp),
             )
             HorizontalSpacer(16.dp)
-            // The text wraps, so the fee keeps its one line at the end of the row.
+            // The text wraps, so the fee keeps its lines at the end of the row.
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(title, color = MaterialTheme.colorScheme.primary)
                 BodySSB(description, color = MaterialTheme.colorScheme.secondary)
             }
             if (feeSats != null) {
                 HorizontalSpacer(8.dp)
-                Row {
-                    BodySSB("$feePrefix ", color = Colors.White64)
-                    MoneySSB(sats = feeSats, showSymbol = true)
+                Column(horizontalAlignment = Alignment.End) {
+                    Row {
+                        BodyMSB("$feePrefix ", color = Colors.White64)
+                        MoneyMSB(sats = feeSats, showSymbol = true)
+                    }
+                    Row {
+                        BodySSB("$feePrefix ", color = Colors.White64)
+                        MoneySSB(sats = feeSats, unit = LocalCurrencies.current.primaryDisplay.not(), showSymbol = true)
+                    }
                 }
             }
         }
+        HorizontalDivider()
     }
 }
 

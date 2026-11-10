@@ -5,14 +5,15 @@
     or less pays on that swipe, at the new amount. A price whose total is higher, or that leaves less for
     the spending balance, pays nothing: the screen shows the new amounts and a "Fees changed" toast, and
     the next swipe pays them. The higher-total case needs a spend of the wallet's own UTXO outside the app,
-    or a fee rate rise, which the Capabilities table does not list, so unit tests and a manual test cover it.
+    or a fee rate rise, which the Capabilities table does not list, so the unit test `swipe asks again when the
+    network fee rose since shown` in SparkFundingViewModelTest.kt covers it.
 
     A larger UTXO confirms while Spending Confirm is open, so the transfer is priced at swipe against a
     changed wallet. Coin selection may keep two inputs (150 000 + 150 000, or 150 000 + 500 000) at the
     same fee, or spend the new UTXO alone at a lower fee; either way the fresh price costs no more than the
     one shown, so the swipe pays at once.
 
-    Precondition: a freshly onboarded dev wallet with Spark connected on its regtest, no channel and
+    Precondition: a freshly onboarded dev wallet with Spark connected on its regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), no channel and
     exactly two confirmed on-chain UTXOs of 150 000 sats each (two ./lsp deposits to the wallet's
     savings address, each followed by a mine). Start on the wallet home screen.
   </description>

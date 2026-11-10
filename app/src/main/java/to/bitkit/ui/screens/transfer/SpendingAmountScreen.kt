@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.HorizontalDivider
@@ -25,6 +24,8 @@ import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.repositories.CurrencyState
@@ -53,6 +54,12 @@ import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
+/** Number pad row height when the screen has room, as iOS and Figma draw it; rows shrink to fit below that. */
+private val PAD_ROW_HEIGHT = 78.dp
+
+/** Shortest number pad row, reached only when four 50 dp rows don't fit, as on a 640 dp tall phone. */
+private val PAD_ROW_MIN_HEIGHT = 40.dp
+
 @Suppress("ViewModelForwarding")
 @Composable
 fun SpendingAmountScreen(
@@ -75,6 +82,9 @@ fun SpendingAmountScreen(
     LaunchedEffect(amountUiState.sats) {
         viewModel.onAmountChange(amountUiState.sats)
     }
+
+    // A pricing that lands after the screen starts leaving must not open confirm over the screen behind it.
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { viewModel.onAmountLeave() }
 
     LaunchedEffect(viewModel, onQuoteReady) {
         viewModel.effects.collect {
@@ -118,7 +128,7 @@ fun SpendingAmountScreen(
 
 @Suppress("ViewModelForwarding")
 @Composable
-private fun Content(
+internal fun Content(
     uiState: UiState,
     amountInputViewModel: AmountInputViewModel,
     onBackClick: () -> Unit,
@@ -198,12 +208,9 @@ private fun SpendingAmountNodeRunning(
                 .testTag("${tag}NumberField")
         )
 
-        // Keys shrink on short screens, so Continue stays visible below the pad.
         Column(
             verticalArrangement = Arrangement.Bottom,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+            modifier = Modifier.weight(1f)
         ) {
             Row(
                 verticalAlignment = Alignment.Bottom,
@@ -255,26 +262,23 @@ private fun SpendingAmountNodeRunning(
                 viewModel = amountInputViewModel,
                 currencies = currencies,
                 enabled = isReady && hasFunds,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(max = NUMBER_PAD_MAX_HEIGHT)
+                idealRowHeight = PAD_ROW_HEIGHT,
+                minRowHeight = PAD_ROW_MIN_HEIGHT,
+                modifier = Modifier.weight(1f, fill = false)
             )
+
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                onClick = onConfirmAmount,
+                enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
+                isLoading = uiState.isLoading,
+                modifier = Modifier.testTag("${tag}Continue")
+            )
+
+            VerticalSpacer(16.dp)
         }
-
-        PrimaryButton(
-            text = stringResource(R.string.common__continue),
-            onClick = onConfirmAmount,
-            enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
-            isLoading = uiState.isLoading,
-            modifier = Modifier.testTag("${tag}Continue")
-        )
-
-        VerticalSpacer(16.dp)
     }
 }
-
-/** The number pad's height at its ideal key size. */
-private val NUMBER_PAD_MAX_HEIGHT = 300.dp
 
 @Preview(showSystemUi = true)
 @Preview(showSystemUi = true, device = "id:pixel_9_pro_xl", name = "Large")

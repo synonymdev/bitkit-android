@@ -58,6 +58,7 @@ import to.bitkit.utils.ServiceError
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -121,11 +122,21 @@ class SparkRepo @Inject constructor(
     /** Withdrawals this app sent, by txid, known before Spark lists them so their arrival reads as a transfer. */
     private val withdrawalTxids = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * When a withdrawal last failed, in seconds since 1970, until Spark reads a balance again or syncs after it: while
+     * its operators stay down, Spark can read 0 with the funds still there, so the last balance stays shown.
+     */
+    @Volatile
+    private var withdrawalFailedAtSecs: ULong? = null
+
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
 
     /** Sends recorded before Spark knew their fee; its completion event reports 0 until a later sync. */
     private val sendsRecordedWithoutFee = ConcurrentHashMap.newKeySet<String>()
+
+    /** Payments whose activity failed to save, written again at the next refresh. */
+    private val unsavedPayments = ConcurrentHashMap.newKeySet<String>()
 
     private val isCollectingEvents = AtomicBoolean(false)
 
@@ -133,6 +144,10 @@ class SparkRepo @Inject constructor(
 
     /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
     private val sendsInFlight = ConcurrentHashMap<String, String>()
+
+    /** Counts sends recorded, so a listing drops a failed hash only when it was recorded before the listing. */
+    private val sendRecords = AtomicLong()
+    private val sendRecordedAt = ConcurrentHashMap<String, Long>()
 
     @Volatile
     private var hasSyncedActivities = false
@@ -147,6 +162,9 @@ class SparkRepo @Inject constructor(
 
     /** Watchers of the claims of deposits this app sent, by txid; they outlive the screens that start them. */
     private val claimJobs = ConcurrentHashMap<String, Job>()
+
+    /** Vouts of the deposits an early claim was attempted for, so Wait can clear the fee cap it left on them. */
+    private val earlyClaimVouts = ConcurrentHashMap<String, UInt>()
 
     private val _depositClaims = MutableStateFlow<Map<String, SparkDepositClaim>>(emptyMap())
 
@@ -194,7 +212,7 @@ class SparkRepo @Inject constructor(
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
-            if (!hasSyncedActivities) syncActivities().also { hasSyncedActivities = true }
+            if (!hasSyncedActivities) hasSyncedActivities = syncActivities()
         }.onFailure {
             Logger.error("Failed to start Spark wallet", it, context = TAG)
         }
@@ -210,10 +228,13 @@ class SparkRepo @Inject constructor(
     suspend fun wipe(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         claimJobs.values.forEach { it.cancel() }
         claimJobs.clear()
+        earlyClaimVouts.clear()
         preparedWithdrawal = null
         withdrawalTxids.clear()
+        withdrawalFailedAtSecs = null
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
+        unsavedPayments.clear()
         sendsInFlight.clear()
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
@@ -396,13 +417,26 @@ class SparkRepo @Inject constructor(
                 throw PaymentPendingException(paymentHash)
             }
             val sent = try {
-                cacheStore.addSparkSendHash(paymentHash)
+                val invoice = method.invoiceDetails
+                val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
+                sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
+                cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
             }
             val payment = sent.getOrElse {
-                if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
+                // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
+                if (it.isInvoiceExpired()) {
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    throw SparkError.InvoiceExpired(it)
+                }
+                // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
+                // nothing, for instance when an earlier send spent it after the balance was read.
+                if (it is SdkException.InsufficientFunds) {
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    throw SparkError.SendRefused("Spark balance can't cover the payment", it)
+                }
                 Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
                 settleUncertainSend(paymentHash)
                 throw PaymentPendingException(paymentHash)
@@ -481,10 +515,25 @@ class SparkRepo @Inject constructor(
         followDepositClaim(txid, SparkClaimSpeed.Instant, repriced.offer.earlyFeeSats)
     }
 
-    /** Leaves the deposit in [txid] to the claim at 3 confirmations. */
+    /**
+     * Leaves the deposit in [txid] to the claim at 3 confirmations, clearing the fee cap an early claim attempt left on
+     * it, so Spark doesn't still claim it early.
+     */
     fun waitForMatureClaim(txid: String) {
         claimJobs.remove(txid)?.cancel()
         setDepositClaim(txid, SparkDepositClaim.Later)
+        val vout = earlyClaimVouts.remove(txid) ?: return
+        // Tried again while another claim of the deposit, such as Spark's own sync, leaves the cap in place.
+        scope.launch {
+            repeat(CLAIM_POLL_ATTEMPTS) { attempt ->
+                runSuspendCatching { sparkService.releaseDepositClaimFee(txid, vout) }
+                    .onSuccess { return@launch }
+                    .onFailure {
+                        Logger.warn("Failed to clear the early claim cap of Spark deposit '$txid'", it, context = TAG)
+                    }
+                if (attempt < CLAIM_POLL_ATTEMPTS - 1) delay(CLAIM_POLL_INTERVAL)
+            }
+        }
     }
 
     private suspend fun claimInstantly(txid: String, ceilingSats: ULong) {
@@ -537,6 +586,7 @@ class SparkRepo @Inject constructor(
 
     /** Accepts the early claim of [offer] at its quoted fee. */
     suspend fun claimEarly(offer: SparkClaimOffer.Choice): Result<SparkEarlyClaim> = withContext(bgDispatcher) {
+        earlyClaimVouts[offer.txid] = offer.vout
         runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, offer.earlyFeeSats) }
             .map { SparkEarlyClaim.from(it) }
             .recover { if (it is SdkException.DepositClaimInProgress) SparkEarlyClaim.Claimed else throw it }
@@ -566,9 +616,11 @@ class SparkRepo @Inject constructor(
             (payment.details as? PaymentDetails.Withdraw)?.txId?.let { withdrawalTxids += it }
             Unit
         }.onSuccess {
+            withdrawalFailedAtSecs = null
             runSuspendCatching { refresh() }
                 .onFailure { Logger.warn("Failed to refresh Spark after its withdrawal", it, context = TAG) }
         }.onFailure {
+            withdrawalFailedAtSecs = clock.now().epochSeconds.toULong()
             Logger.error("Failed to withdraw from Spark", it, context = TAG)
         }
     }
@@ -697,9 +749,7 @@ class SparkRepo @Inject constructor(
     private suspend fun refresh() = refreshMutex.withLock {
         val info = sparkService.getInfo()
         info.lastSyncError?.let { Logger.warn("Failed to sync Spark, balances may be stale: '$it'", context = TAG) }
-        val pending = sparkService.listUnclaimedDeposits().map {
-            SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false)
-        }
+        val unclaimed = sparkService.listUnclaimedDeposits()
         val payments = sparkService.listPayments()
         val claimed = payments
             .filter { it.method == PaymentMethod.DEPOSIT && it.status == PaymentStatus.COMPLETED }
@@ -713,11 +763,23 @@ class SparkRepo @Inject constructor(
                     claimedAt = payment.timestamp,
                 )
             }
+        // Spark can still list a deposit it already claimed early as unclaimed, so a claimed one is listed only once.
+        val claimedTxids = claimed.map { it.txid.lowercase() }.toSet()
+        val pending = unclaimed
+            .filter { it.txid.lowercase() !in claimedTxids }
+            .map { SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false) }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
+        val failedAt = withdrawalFailedAtSecs
+        val hasSyncedSince = failedAt != null && info.lastSyncError == null && (info.lastSyncedAt ?: 0uL) > failedAt
+        if (info.balanceSats > 0uL || hasSyncedSince) withdrawalFailedAtSecs = null
+        val isStale = withdrawalFailedAtSecs != null || info.lastSyncError != null
         _state.update {
             it.copy(
                 isReady = true,
                 balanceSats = info.balanceSats,
+                keptBalanceSats = it.shownBalanceSats.takeIf { kept ->
+                    info.balanceSats == 0uL && isStale && kept > 0uL
+                },
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),
                 withdrawals = payments.toWithdrawals(),
@@ -725,7 +787,9 @@ class SparkRepo @Inject constructor(
             ).withBroadcastDeposits()
         }
         markClaimedDeposits(claimed)
-        payments.filter { it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0 }.forEach { recordActivity(it) }
+        payments
+            .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
+            .forEach { recordActivity(it) }
         markTransfers(payments)
     }
 
@@ -881,39 +945,66 @@ class SparkRepo @Inject constructor(
     /** Payment hashes of the Lightning payments Spark received. */
     suspend fun receivedLightningPaymentHashes(): Set<String> =
         lightningPaymentHashes { it.paymentType == SparkPaymentType.RECEIVE && it.status == PaymentStatus.COMPLETED }
+            .orEmpty()
 
-    /** Payment hashes of the Lightning payments Spark sent or is sending. */
-    suspend fun attemptedLightningPaymentHashes(): Set<String> =
-        lightningPaymentHashes { it.paymentType == SparkPaymentType.SEND && it.status != PaymentStatus.FAILED }
+    /**
+     * Payment hashes of the Lightning payments Spark sent or is sending, or null while Spark runs here but can't list
+     * them, so a send it may have made isn't read as never tried.
+     */
+    suspend fun attemptedLightningPaymentHashes(): Set<String>? {
+        if (!sparkService.isSupported) return emptySet()
+        return lightningPaymentHashes { it.paymentType == SparkPaymentType.SEND && it.status != PaymentStatus.FAILED }
+    }
 
-    private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String> = withContext(bgDispatcher) {
-        if (!sparkService.isConnected) return@withContext emptySet()
+    private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String>? = withContext(bgDispatcher) {
+        if (!sparkService.isConnected) return@withContext null
         runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
-            .getOrDefault(emptyList())
-            .filter(filter)
-            .mapNotNull { (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash?.lowercase() }
-            .toSet()
+            .getOrNull()
+            ?.filter(filter)
+            ?.mapNotNull { (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash?.lowercase() }
+            ?.toSet()
     }
 
-    private suspend fun syncActivities() {
+    /** Records every Spark payment, returning whether all were saved, so a failed write leaves the sync to redo. */
+    private suspend fun syncActivities(): Boolean {
+        val recordsBefore = sendRecords.get()
         val payments = sparkService.listPayments()
-        payments.forEach { recordActivity(it) }
+        val isSaved = payments.map { recordActivity(it) }.all { it }
+        val sendHashes = { status: PaymentStatus ->
+            payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
+        }
+        // A send in flight, or recorded after this list was read while the activities were recorded, may be missing
+        // from it or show only its earlier failed attempt, so it stays.
+        val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys + recordedSince(recordsBefore)
+        val paid = sendHashes(PaymentStatus.COMPLETED) - live
+        cacheStore.trimSparkSendHashes(
+            paid = paid,
+            failed = sendHashes(PaymentStatus.FAILED) - paid - live,
+            listed = payments.mapNotNullTo(mutableSetOf()) { it.sendHash()?.lowercase() },
+            live = live,
+        )
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.
-        val failed = payments.mapNotNull { it.failedSendHash() }.distinct()
+        val failed = payments.mapNotNull { it.sendHash(PaymentStatus.FAILED) }.distinct()
             .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
-        if (failed.isEmpty()) return
+        if (failed.isEmpty()) return isSaved
         // A retry can start while the list is recorded, so the release reads Spark's sends again first.
-        val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return
+        val recordsBeforeCurrent = sendRecords.get()
+        val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return isSaved
+        val recordedSinceCurrent = recordedSince(recordsBeforeCurrent)
         failed
-            .filter { !sendsInFlight.containsKey(it.lowercase()) }
+            .filter { !sendsInFlight.containsKey(it.lowercase()) && it.lowercase() !in recordedSinceCurrent }
             .filter { current.latestSend(it)?.status == PaymentStatus.FAILED }
             .forEach { cacheStore.removeSparkSendHash(it) }
+        return isSaved
     }
 
-    private fun Payment.failedSendHash(): String? = (details as? PaymentDetails.Lightning)
-        ?.takeIf { paymentType == SparkPaymentType.SEND && status == PaymentStatus.FAILED }
+    private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
+
+    /** The payment hash of this send, at [status] when given. */
+    private fun Payment.sendHash(status: PaymentStatus? = null): String? = (details as? PaymentDetails.Lightning)
+        ?.takeIf { paymentType == SparkPaymentType.SEND && (status == null || this.status == status) }
         ?.htlcDetails?.paymentHash
 
     private suspend fun onSdkEvent(event: SdkEvent) {
@@ -946,7 +1037,7 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
-        payment.failedSendHash()?.let { hash ->
+        payment.sendHash(PaymentStatus.FAILED)?.let { hash ->
             val latest = lightningSend(hash)
             val isReleased = latest == SparkLightningSend.NotFound ||
                 (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
@@ -955,15 +1046,21 @@ class SparkRepo @Inject constructor(
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
-    private suspend fun recordActivity(payment: Payment) {
-        val lightning = payment.details as? PaymentDetails.Lightning ?: return
+    /** Returns whether the payment's activity is saved; a failed write is kept in [unsavedPayments]. */
+    private suspend fun recordActivity(payment: Payment): Boolean {
+        val lightning = payment.details as? PaymentDetails.Lightning ?: return true
         if (payment.status == PaymentStatus.PENDING && payment.paymentType == SparkPaymentType.RECEIVE) {
-            return
+            return true
         }
         val id = lightning.htlcDetails.paymentHash
-        val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
+        // A failed read would drop the stored note, contact and seen time, so the write waits for the next refresh.
+        val stored = activityRepo.get().getActivity(id).getOrElse {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        val existing = (stored as? Activity.Lightning)?.v1
         // Another attempt of the same invoice, on either rail, already paid it.
-        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return
+        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
@@ -985,12 +1082,19 @@ class SparkRepo @Inject constructor(
             contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,
         )
-        activityRepo.get().upsertActivity(Activity.Lightning(activity))
+        val saved = activityRepo.get().upsertActivity(Activity.Lightning(activity))
+            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+        if (!saved) {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        unsavedPayments.remove(payment.id)
         if (payment.paymentType == SparkPaymentType.SEND && payment.fees.toLong() == 0L) {
             sendsRecordedWithoutFee.add(payment.id)
         } else {
             sendsRecordedWithoutFee.remove(payment.id)
         }
+        return true
     }
 
     private suspend fun receivedContact(payment: Payment, paymentHash: String): String? {
@@ -1036,7 +1140,13 @@ data class SparkState(
     val isReady: Boolean = false,
     /** Spark synced its payments at least once since it connected, so its payment list is complete. */
     val hasSynced: Boolean = false,
+    /** What Spark read, which sends and withdrawals use. */
     val balanceSats: ULong = 0uL,
+    /**
+     * The balance shown while Spark reads 0 after a failed withdrawal or a failed sync, with the funds likely still
+     * there; null once Spark reads a balance again or syncs after the failure. Never offered to a send.
+     */
+    val keptBalanceSats: ULong? = null,
     /** Deposits seen on-chain that Spark claims into [balanceSats] after 3 confirmations. */
     val pendingDepositSats: ULong = 0uL,
     val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
@@ -1053,6 +1163,12 @@ data class SparkState(
 
     /** The balance Spending counts; during an emergency exit it is in transfer to Savings instead. */
     val spendingSats: ULong get() = if (isExiting) 0uL else balanceSats
+
+    /** The balance shown in Spending and on the Spark connection, which [keptBalanceSats] stands in for. */
+    val shownBalanceSats: ULong get() = keptBalanceSats ?: balanceSats
+
+    /** The [spendingSats] shown in Spending, which [keptBalanceSats] stands in for. */
+    val shownSpendingSats: ULong get() = if (isExiting) 0uL else shownBalanceSats
 }
 
 object SparkFees {

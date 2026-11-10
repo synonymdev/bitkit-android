@@ -111,6 +111,7 @@ import to.bitkit.utils.UrlValidator
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -168,6 +169,13 @@ class LightningRepo @Inject constructor(
 
     /** The rail each Lightning send last went out on, by payment hash, so a retry settles only from its own rail. */
     private val sendRails = ConcurrentHashMap<String, LightningRail>()
+
+    /** Node sends under way, kept so a listing that shows only an earlier failed attempt doesn't drop its hash. */
+    private val ldkSendsInFlight = ConcurrentHashMap.newKeySet<String>()
+
+    /** Counts node sends recorded, so a listing drops a failed hash only when it was recorded before the listing. */
+    private val ldkSendRecords = AtomicLong()
+    private val ldkSendRecordedAt = ConcurrentHashMap<String, Long>()
 
     @Volatile
     private var lastKnownNodeId: String? = null
@@ -430,6 +438,7 @@ class LightningRepo @Inject constructor(
                 lightningService.start(timeout, ::onEvent)
 
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                listPaymentsKeepingSendHashes()
 
                 // Initial state sync
                 syncState()
@@ -1498,7 +1507,9 @@ class LightningRepo @Inject constructor(
         val paymentHash = runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
-            earlierNodeSend(bolt11, paymentHash)?.let { return it.toResult() }
+            runSuspendCatching { earlierNodeSend(bolt11, paymentHash) }
+                .getOrElse { return Result.failure(it) }
+                ?.let { return it.toResult() }
             val authorizeSend: suspend () -> Boolean = {
                 onBeforeSend().also { if (it) requireWalletRestoreComplete() }
             }
@@ -1522,12 +1533,33 @@ class LightningRepo @Inject constructor(
         return payInvoiceWithLdk(bolt11, null, paymentHash, null, null) { true }
     }
 
+    /**
+     * The node's pending or paid send of [bolt11]. While the node can't list its payments (stopped or not started yet),
+     * a send it started for the invoice counts as pending, since it may be live. Before the node first listed its
+     * payments, the sends it made earlier are unknown, so the node not started yet is thrown.
+     */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
-        val send = listPaymentsOrNull()?.firstOrNull {
+        val key = ldkSendKey(bolt11, paymentHash)
+        val recordsBefore = ldkSendRecords.get()
+        val payments = listPaymentsKeepingSendHashes()
+        if (payments == null) {
+            val cache = cacheStore.data.first()
+            if (key in cache.ldkSendHashes) return EarlierSend.Pending(key)
+            if (!cache.ldkSendHashesSeeded) {
+                Logger.warn("Refused a Spark send until the node lists its earlier payments once", context = TAG)
+                throw ServiceError.NodeNotStarted()
+            }
+            return null
+        }
+        val send = payments.firstOrNull {
             val kind = it.kind as? PaymentKind.Bolt11 ?: return@firstOrNull false
             it.direction == PaymentDirection.OUTBOUND &&
                 (kind.bolt11.equals(bolt11, ignoreCase = true) || kind.hash.equals(paymentHash, ignoreCase = true))
-        } ?: return null
+        }
+        // A retry in flight, or one recorded while the listing was read, holds the invoice again.
+        val isRetried = key in ldkSendsInFlight || (ldkSendRecordedAt[key] ?: 0L) > recordsBefore
+        if ((send == null || send.status == PaymentStatus.FAILED) && !isRetried) cacheStore.removeLdkSendHash(key)
+        if (send == null) return null
         val hash = (send.kind as PaymentKind.Bolt11).hash
         return when (send.status) {
             PaymentStatus.PENDING -> EarlierSend.Pending(hash)
@@ -1555,10 +1587,53 @@ class LightningRepo @Inject constructor(
         sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
+        val key = ldkSendKey(bolt11, paymentHash)
+        ldkSendsInFlight += key
+        ldkSendRecordedAt[key] = ldkSendRecords.incrementAndGet()
+        cacheStore.addLdkSendHash(key, invoiceExpiresAt(bolt11))
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
+            .also { ldkSendsInFlight -= key }
             .onSuccess { recordSendRail(it, LightningRail.Ldk) }
             .also { syncState() }
     }
+
+    /** The node's payments after keeping its send hashes from them, or null while it can't list them. */
+    private suspend fun listPaymentsKeepingSendHashes(): List<PaymentDetails>? {
+        val recordsBefore = ldkSendRecords.get()
+        return listPaymentsOrNull()?.also { keepLdkSendHashes(it, recordsBefore) }
+    }
+
+    /**
+     * Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too, then trims
+     * the ones listed failed only or paid with an expired invoice. A send that may still be pending always holds Spark:
+     * one in flight, or recorded after [recordsBefore] while the listing was read, can show an earlier failed attempt.
+     */
+    private suspend fun keepLdkSendHashes(payments: List<PaymentDetails>, recordsBefore: Long) {
+        val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
+        val sends = outbound.filter { it.status != PaymentStatus.FAILED }.sortedBy { it.latestUpdateTimestamp }
+        cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
+        val hashes = { status: PaymentStatus ->
+            outbound.filter { it.status == status }
+                .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
+        }
+        val recordedSince = ldkSendRecordedAt.filterValues { it > recordsBefore }.keys
+        val live = hashes(PaymentStatus.PENDING) + ldkSendsInFlight + recordedSince
+        val paid = hashes(PaymentStatus.SUCCEEDED)
+        val failed = hashes(PaymentStatus.FAILED) - paid - live
+        val listed = outbound.mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
+        cacheStore.trimLdkSendHashes(paid = paid - live, failed = failed, listed = listed, live = live)
+        failed.forEach { ldkSendRecordedAt.remove(it) }
+    }
+
+    /** When [bolt11] expires, in epoch seconds, or null when it can't be parsed. */
+    private fun invoiceExpiresAt(bolt11: String): Long? = runCatching {
+        val invoice = Bolt11Invoice.fromStr(bolt11)
+        (invoice.secondsSinceEpoch().safe() + invoice.expiryTimeSeconds().safe())
+            .coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
+    }.getOrNull()
+
+    /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */
+    private fun ldkSendKey(bolt11: String, paymentHash: String?): String = (paymentHash ?: bolt11).lowercase()
 
     private fun recordSendRail(paymentHash: String, rail: LightningRail) {
         sendRails[paymentHash.lowercase()] = rail
@@ -1674,6 +1749,7 @@ class LightningRepo @Inject constructor(
         payerIdentity: String? = null,
         paymentDeadlineAt: Instant? = null,
         contactPublicKey: String? = null,
+        approvedMiningFeeSats: ULong? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
@@ -1752,6 +1828,14 @@ class LightningRepo @Inject constructor(
                                     OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
                                 }.toSet()
                             )
+                        }
+                        if (approvedMiningFeeSats != null) {
+                            val miningFee = prepared.receipt.miningFeeSats
+                            if (prepared.receipt.amountSats != sats || miningFee == null ||
+                                miningFee > approvedMiningFeeSats
+                            ) {
+                                throw OnchainSendChangedError(miningFee)
+                            }
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(
                             attempt.attemptId,

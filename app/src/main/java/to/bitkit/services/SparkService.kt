@@ -279,6 +279,11 @@ class SparkService @Inject constructor(
             ClaimDepositRequest(txid, vout, MaxFee(MaxOnchainFee.Fixed(maxFeeSats), proportionalPpm = null)),
         ).outcome
 
+    /** Clears the fee ceiling an early claim left on a deposit, back to the configured one that never claims early. */
+    suspend fun releaseDepositClaimFee(txid: String, vout: UInt) {
+        requireSdk().claimDeposit(ClaimDepositRequest(txid, vout, maxFee = null))
+    }
+
     suspend fun listPayments(): List<Payment> = requireSdk().listPayments(ListPaymentsRequest()).payments
 
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */

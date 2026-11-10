@@ -55,7 +55,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
             // During an exit, Spark's value outside it stays on Spark.
-            val sparkSats = sparkRepo.state.value.spendingSats.safe() +
+            val sparkSats = sparkRepo.state.value.shownSpendingSats.safe() +
                 (sparkExitRepo.state.value.outsideExitSats ?: 0uL).safe()
             val sparkExitSats = getSparkExitSats(activeTransfers)
             val afterLingeringCoopClose = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
