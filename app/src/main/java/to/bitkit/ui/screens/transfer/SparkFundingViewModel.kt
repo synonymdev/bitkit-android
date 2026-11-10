@@ -300,7 +300,7 @@ class SparkFundingViewModel @Inject constructor(
             ).getOrThrow()
             if (outcome !is OnchainSendOutcome.Accepted) {
                 Logger.warn("Spark funding was not accepted: '$outcome'", context = TAG)
-                if (showRetainedFunding(quote)) return@runSuspendCatching
+                if (showRetainedFunding(quote, isThisSwipes = true)) return@runSuspendCatching
                 error("Spark funding was not accepted: '$outcome'")
             }
             withContext(NonCancellable) {
@@ -319,7 +319,7 @@ class SparkFundingViewModel @Inject constructor(
                 return@onFailure
             }
             Logger.error("Failed to fund Spark", it, context = TAG)
-            if (it is OnchainSendBlockedError && showRetainedFunding(quote)) return@onFailure
+            if (it is OnchainSendBlockedError && showRetainedFunding(quote, isThisSwipes = false)) return@onFailure
             toast(
                 title = R.string.lightning__close_error,
                 description = context.getString(R.string.wallet__send_error_create_tx),
@@ -328,28 +328,39 @@ class SparkFundingViewModel @Inject constructor(
         _uiState.update { it.copy(isSending = false) }
     }
 
-    private suspend fun onFundingAccepted(txid: String, amountSats: ULong, quote: Quote) {
+    /** With [ceilingSats] 0, as for a funding no swipe on this screen approved, an early claim asks first. */
+    private suspend fun onFundingAccepted(
+        txid: String,
+        amountSats: ULong,
+        quote: Quote,
+        ceilingSats: ULong = quote.instantFeeSats.toULong(),
+    ) {
         val speed = _uiState.value.speed
         withContext(NonCancellable) {
             sparkRepo.onDepositBroadcast(txid, amountSats)
-            sparkRepo.followDepositClaim(txid, speed, quote.instantFeeSats.toULong())
+            sparkRepo.followDepositClaim(txid, speed, ceilingSats)
         }
         Logger.info("Funded Spark with '$amountSats' sats in '$txid'", context = TAG)
         _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
         _effects.emit(SideEffect.Sent)
     }
 
-    // A signed funding that was not accepted is kept; Payment Pending shows it and retries it at a new fee.
-    private suspend fun showRetainedFunding(quote: Quote): Boolean {
+    // A signed funding that was not accepted is kept; Payment Pending shows it and retries it at a new fee. A swipe
+    // refused for an earlier funding approved no claim fee for it: one this screen already follows keeps its own,
+    // and one from before, as after a relaunch, asks before an early claim.
+    private suspend fun showRetainedFunding(quote: Quote, isThisSwipes: Boolean): Boolean {
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
         if (attempt == null || !attempt.isTransfer || !attempt.blocksNextSend) return false
-        watchRetainedFunding(attempt, quote)
+        when {
+            isThisSwipes -> watchRetainedFunding(attempt, quote, quote.instantFeeSats.toULong())
+            attempt.attemptId != ownedFundingAttemptId -> watchRetainedFunding(attempt, quote, ceilingSats = 0uL)
+        }
         _effects.emit(SideEffect.FundingPending(attempt))
         return true
     }
 
     // Payment Pending can be dismissed, so the confirm screen leaves for Setting Up once the kept funding completes.
-    private fun watchRetainedFunding(retained: OnchainSendAttempt, quote: Quote) {
+    private fun watchRetainedFunding(retained: OnchainSendAttempt, quote: Quote, ceilingSats: ULong) {
         retainedFundingJob?.cancel()
         ownedFundingAttemptId?.takeIf { it != retained.attemptId }
             ?.let { lightningRepo.followFundingOnScreen(it, isFollowed = false) }
@@ -363,7 +374,7 @@ class SparkFundingViewModel @Inject constructor(
                     it.attemptId == retained.attemptId && it.address == quote.address &&
                         it.hasPositiveEvidence && it.localFollowupComplete && it.txid != null
                 }
-            onFundingAccepted(requireNotNull(completed.txid), completed.amountSats, quote)
+            onFundingAccepted(requireNotNull(completed.txid), completed.amountSats, quote, ceilingSats)
         }
     }
 

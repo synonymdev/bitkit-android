@@ -32,6 +32,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
@@ -275,6 +276,40 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 1_350uL)
         verify(lightningRepo).followFundingOnScreen("attempt", true)
         verify(lightningRepo, never()).followFundingOnScreen("attempt", false)
+    }
+
+    @Test
+    fun `a swipe refused for an older funding after a relaunch leaves that funding's early claim asking`() = test {
+        val older = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "older", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendBlockedError(older)))
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(older)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        val confirmed = older.copy(evidence = OnchainSendEvidence.Observed, localFollowupComplete = true)
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(confirmed)
+        attemptUpdates.value++
+        advanceUntilIdle()
+
+        verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 0uL)
     }
 
     @Test
