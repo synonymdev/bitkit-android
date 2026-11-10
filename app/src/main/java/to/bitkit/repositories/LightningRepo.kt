@@ -581,6 +581,11 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun onEvent(event: Event) {
+        // An earlier channel attempt's failure never fails a retry Spark is paying.
+        if (event is Event.PaymentFailed && event.paymentHash?.let { isSparkSend(it) } == true) {
+            Logger.info("Skipped node failure of '${event.paymentHash}', its retry went over Spark", context = TAG)
+            return
+        }
         val observedTxid = when (event) {
             is Event.OnchainTransactionReceived -> event.txid
             is Event.OnchainTransactionConfirmed -> event.txid

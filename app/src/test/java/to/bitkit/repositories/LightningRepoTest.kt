@@ -1552,6 +1552,25 @@ class LightningRepoTest : BaseUnitTest() {
         verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
     }
 
+    @Test
+    fun `a late channel failure never fails a spark retry of the invoice`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.failure(PaymentPendingException("hash")))
+        sut.payInvoice("bolt11", 1_000uL)
+        assertTrue(sut.isSparkSend("hash"))
+
+        // The node's earlier attempt fails only after the retry went out on Spark.
+        onEvent(Event.PaymentFailed("hash", "hash", PaymentFailureReason.UNEXPECTED_ERROR))
+        runCurrent()
+
+        assertTrue(events.none { it is Event.PaymentFailed })
+    }
+
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
         id = hash,
         kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),
