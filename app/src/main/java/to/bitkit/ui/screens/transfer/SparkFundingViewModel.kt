@@ -230,6 +230,11 @@ class SparkFundingViewModel @Inject constructor(
     /** Prices again at swipe time, and asks for another swipe when the transfer got worse since it was shown. */
     fun onConfirm() {
         val shown = _uiState.value
+        // A kept funding that completed while another screen showed missed its Sent, so it leaves now instead.
+        if (shown.txid != null) {
+            viewModelScope.launch { _effects.emit(SideEffect.Sent) }
+            return
+        }
         val shownQuote = shown.quote ?: return
         if (shown.isSending || shown.isQuoting) return
         quoteJob?.cancel()
