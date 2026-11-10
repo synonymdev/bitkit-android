@@ -1540,6 +1540,7 @@ class LightningRepo @Inject constructor(
      */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
+        val recordsBefore = ldkSendRecords.get()
         val payments = listPaymentsKeepingSendHashes()
         if (payments == null) {
             val cache = cacheStore.data.first()
@@ -1555,7 +1556,9 @@ class LightningRepo @Inject constructor(
             it.direction == PaymentDirection.OUTBOUND &&
                 (kind.bolt11.equals(bolt11, ignoreCase = true) || kind.hash.equals(paymentHash, ignoreCase = true))
         }
-        if (send == null || send.status == PaymentStatus.FAILED) cacheStore.removeLdkSendHash(key)
+        // A retry in flight, or one recorded while the listing was read, holds the invoice again.
+        val isRetried = key in ldkSendsInFlight || (ldkSendRecordedAt[key] ?: 0L) > recordsBefore
+        if ((send == null || send.status == PaymentStatus.FAILED) && !isRetried) cacheStore.removeLdkSendHash(key)
         if (send == null) return null
         val hash = (send.kind as PaymentKind.Bolt11).hash
         return when (send.status) {
