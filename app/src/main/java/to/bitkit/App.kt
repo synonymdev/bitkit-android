@@ -24,6 +24,7 @@ import to.bitkit.services.PubkyAuthHandlerRegistrar
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
 import to.bitkit.utils.SubscriptionClockOffsetSync
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -104,11 +105,26 @@ class CurrentActivity : ActivityLifecycleCallbacks {
     var value: Activity? = null
         private set
 
+    private val startedCount = AtomicInteger(0)
+
+    /**
+     * Whether any activity is started (visible), including one paused behind a system dialog. Use this, not
+     * `ProcessLifecycleOwner`, which never initializes here: the manifest removes androidx.startup's
+     * `InitializationProvider`.
+     */
+    val hasStartedActivity: Boolean get() = startedCount.get() > 0
+
     override fun onActivityCreated(activity: Activity, bundle: Bundle?) = Unit
-    override fun onActivityStarted(activity: Activity) = run { this.value = activity }
+    override fun onActivityStarted(activity: Activity) = run {
+        startedCount.incrementAndGet()
+        this.value = activity
+    }
     override fun onActivityResumed(activity: Activity) = run { this.value = activity }
     override fun onActivityPaused(activity: Activity) = clearIfCurrent(activity)
-    override fun onActivityStopped(activity: Activity) = clearIfCurrent(activity)
+    override fun onActivityStopped(activity: Activity) = run {
+        startedCount.updateAndGet { maxOf(0, it - 1) }
+        clearIfCurrent(activity)
+    }
     override fun onActivitySaveInstanceState(activity: Activity, bundle: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = clearIfCurrent(activity)
 

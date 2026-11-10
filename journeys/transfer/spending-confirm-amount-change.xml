@@ -13,9 +13,21 @@
     same fee, or spend the new UTXO alone at a lower fee; either way the fresh price costs no more than the
     one shown, so the swipe pays at once.
 
-    Precondition: a freshly onboarded dev wallet with Spark connected on its regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), no channel and
-    exactly two confirmed on-chain UTXOs of 150 000 sats each (two ./lsp deposits to the wallet's
-    savings address, each followed by a mine). Start on the wallet home screen.
+    The wallet's UTXOs and Spark's deposit must be on one chain the run can fund and mine, so it runs on
+    bitkit-docker's local Spark regtest, where Savings, the Spark operators and the SSP share bitkit-docker's
+    chain. Lightspark's hosted regtest can't be mined on demand. The recipe is docs/spark-regtest.md at
+    synonymdev/bitkit-docker commit cdd294a5ef7470df11ee9ea64d46f441777fdb49
+    (https://github.com/synonymdev/bitkit-docker/blob/cdd294a5ef7470df11ee9ea64d46f441777fdb49/docs/spark-regtest.md).
+
+    Not yet in this repository: the build setting that reads `SPARK_LOCAL_CONFIG_B64` and `SPARK_LOCAL_CHAIN_URL`
+    comes in a follow-up PR. Until it lands, this journey runs only on a build with that setting added.
+
+    Precondition: `./spark up` running in bitkit-docker; a dev build with that setting, built and connected as
+    the doc's "Point a Bitkit dev build at it" section says (`SPARK_LOCAL_CONFIG_B64` from `./spark config
+    --base64`, `SPARK_LOCAL_CHAIN_URL`, and the `adb reverse` ports), with Savings on bitkit-docker's Electrum
+    (`tcp://127.0.0.1:60001`); a freshly onboarded wallet with no channel
+    and exactly two confirmed on-chain UTXOs of 150 000 sats each (in bitkit-docker, `./spark send
+    &lt;savings address&gt; 150000` twice, each mining a block). Start on the wallet home screen.
   </description>
   <actions>
     <action>Tap Receive (testTag "Receive"), tap the "Savings" receive tab (the tab row carries no test tag), tap "Show Details" (testTag "ShowDetails"), read the address from testTag "ReceiveOnchainAddress", then press back to the home screen</action>
@@ -24,7 +36,7 @@
     <action>Enter 200 000 on the number pad (testTags "N2", "N0", "N0", "N0", "N0", "N0") and tap "Continue" (testTag "SpendingAmountContinue")</action>
     <action>Verify the confirm screen is visible (testTag "SpendingConfirmMore") and wait until its network fee is shown</action>
     <action>Note the amounts under "Network Fees" (testTag "SpendingConfirmNetworkFee") and "Total" (testTag "SpendingConfirmTotal")</action>
-    <action>Run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":500000}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>In bitkit-docker, run ./spark send &lt;savings addr&gt; 500000, which pays the address and mines a block</action>
     <action>Wait 30s for the wallet to sync the new UTXO</action>
     <action>If the received sheet (testTag "ReceivedTransaction") is visible, tap its button (testTag "ReceivedTransactionButton")</action>
     <action>Verify the confirm screen still shows the amounts noted before the deposit</action>

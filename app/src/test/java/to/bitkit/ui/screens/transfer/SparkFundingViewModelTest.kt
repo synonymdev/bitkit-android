@@ -21,6 +21,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -40,6 +41,7 @@ import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendPendingError
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.repositories.SparkRepo
@@ -463,6 +465,84 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         store.clear()
 
         verify(lightningRepo).followFundingOnScreen("attempt", false)
+    }
+
+    @Test
+    fun `a funding whose outcome is unknown opens its recovery instead of an error`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendPendingError(IllegalStateException("timeout"), "txid")))
+        val retained = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(retained)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        val effects = mutableListOf<SideEffect>()
+        backgroundScope.launch { sut.effects.collect { effects += it } }
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertTrue(toasts.isEmpty())
+        assertEquals(SideEffect.FundingPending(retained), effects.last())
+    }
+
+    @Test
+    fun `a kept funding that completed off the confirm screen is not sent again`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
+        val retained = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(retained)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onConfirm()
+        advanceUntilIdle()
+        // Its Sent effect lands while the Amount screen, which ignores it, is showing.
+        val confirmed = retained.copy(evidence = OnchainSendEvidence.Observed, localFollowupComplete = true)
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(confirmed)
+        attemptUpdates.value++
+        advanceUntilIdle()
+        val effects = mutableListOf<SideEffect>()
+        backgroundScope.launch { sut.effects.collect { effects += it } }
+
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(1)).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+        )
+        assertEquals(SideEffect.Sent, effects.lastOrNull())
     }
 
     @Test

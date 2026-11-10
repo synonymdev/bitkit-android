@@ -11781,6 +11781,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payment request too long to send asks to shorten the note`() = test {
+        val target = PaykitPaymentRequestTarget("pubkyrecipient")
+        val draft = PaykitPaymentRequestDraft(
+            amount = PaykitAmount(PaykitAsset.BTC, 1_000uL),
+            note = "💜".repeat(256),
+            expiresAt = Clock.System.now() + 60.seconds,
+        )
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(context.getString(R.string.wallet__payment_request_note_too_long))
+            .thenReturn("Shorten the note and try again.")
+        whenever(paykitPaymentRequestRepo.propose(draft, target, emptyList()))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestTooLong))
+        var created = false
+
+        sut.createPaymentRequest(draft, target) { created = true }
+        runCurrent()
+
+        assertFalse(created)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Shorten the note and try again.", it.description)
+            }
+        )
+    }
+
+    @Test
     fun `incoming payment request closes when it is no longer pending`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1removedpaymentrequest"
