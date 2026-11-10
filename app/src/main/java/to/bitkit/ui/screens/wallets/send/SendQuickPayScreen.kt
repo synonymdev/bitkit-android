@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -39,6 +41,7 @@ import to.bitkit.viewmodels.QuickPayViewModel
 
 @Composable
 fun SendQuickPayScreen(
+    requestId: String,
     quickPayData: QuickPayData,
     isRequestActive: Boolean,
     onPaymentComplete: (String, Long) -> Unit,
@@ -49,16 +52,21 @@ fun SendQuickPayScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lightningState by viewModel.lightningState.collectAsStateWithLifecycle()
-    val session = remember { QuickPaySession() }
+    val activity = LocalActivity.current
+    val sessionId = rememberSaveable { QuickPaySession().id }
+    val session = remember(sessionId) { QuickPaySession(sessionId) }
 
     DisposableEffect(session) {
         viewModel.attach(session)
-        onDispose { viewModel.detach(session) }
+        onDispose {
+            // The view model outlives an Activity recreation, so its session keeps the payment and its result
+            if (activity?.isChangingConfigurations != true) viewModel.detach(session)
+        }
     }
 
     LaunchedEffect(quickPayData, lightningState.nodeLifecycleState, isRequestActive) {
         if (isRequestActive && lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
-            viewModel.pay(session, quickPayData)
+            viewModel.pay(session, quickPayData, requestId)
         }
     }
 

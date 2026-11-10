@@ -900,6 +900,9 @@ class BackupRepo @Inject constructor(
                 allowances = paykitAllowanceStore.backupSnapshot()
                     .mapValues { PaykitAllowanceStateBackup(it.value) }
                     .ifEmpty { null },
+                onchainPaidInvoices = onchainSendAttemptStore.paidInvoicesBackupSnapshot(walletIndex)
+                    .map { PaykitPaymentStateBackup.OnchainPaidInvoiceBackup(it) }
+                    .ifEmpty { null },
             ),
         )
 
@@ -1171,6 +1174,13 @@ class BackupRepo @Inject constructor(
                 }
             }
             val walletIndex = backupWalletIndex()
+            it.onchainPaidInvoices?.let { invoices ->
+                val restored = invoices.mapNotNull { invoice -> invoice.restored() }
+                if (restored.size < invoices.size) {
+                    Logger.warn("Dropped '${invoices.size - restored.size}' malformed paid invoices", context = TAG)
+                }
+                onchainSendAttemptStore.restorePaidInvoices(restored, walletIndex)
+            }
             it.activeOnchainAttempt?.let { wire ->
                 validateActiveProof(wire, it.pendingProofs)
                 val attempt = wire.restored(

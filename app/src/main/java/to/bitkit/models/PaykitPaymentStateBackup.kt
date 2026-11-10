@@ -3,6 +3,7 @@
 package to.bitkit.models
 
 import kotlinx.serialization.Serializable
+import to.bitkit.repositories.OnchainPaidInvoice
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentRequestId
@@ -21,7 +22,18 @@ data class PaykitPaymentStateBackup(
     val acceptedOneTimeRequests: Map<String, Set<PaykitPaymentRequestId>>? = null,
     /** Allowance state by identity; absent when no identity has any. */
     val allowances: Map<String, PaykitAllowanceStateBackup>? = null,
+    /** Lightning invoices whose address an on-chain send dispatched; absent when there are none. */
+    val onchainPaidInvoices: List<OnchainPaidInvoiceBackup>? = null,
 ) {
+    /** Integer strings avoid cross-platform precision loss, as in the shared attempt record. */
+    @Serializable
+    data class OnchainPaidInvoiceBackup(val paymentHash: String, val expiresAt: String) {
+        constructor(invoice: OnchainPaidInvoice) : this(invoice.paymentHash, invoice.expiresAt.toString())
+
+        /** The entry, or null when its expiry is malformed. */
+        fun restored(): OnchainPaidInvoice? = expiresAt.toULongOrNull()?.let { OnchainPaidInvoice(paymentHash, it) }
+    }
+
     @Serializable
     data class Subscription(
         val acceptances: List<Acceptance>,

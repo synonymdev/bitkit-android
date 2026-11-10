@@ -29,6 +29,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendOutcome
@@ -37,9 +38,12 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.viewmodels.LightningPaymentStatus
+import to.bitkit.viewmodels.OnchainPaymentRefusedError
 import to.bitkit.viewmodels.SanityWarning
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -288,6 +292,26 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertNull(sut.uiState.value.recoveredTxid)
         assertEquals("cd".repeat(32), sut.uiState.value.currentTxid)
         assertEquals(original.amountSats, sut.uiState.value.recoveryAttempt?.amountSats)
+    }
+
+    @Test
+    fun `retry refused by a lightning payment of the invoice says why`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+
+        sut.retryOriginal(2uL) { _, _ ->
+            Result.failure(OnchainPaymentRefusedError(LightningPaymentStatus.PENDING, "Lightning pending"))
+        }
+        advanceUntilIdle()
+        assertEquals("Lightning pending", sut.uiState.value.lightningPaymentRefusal)
+        assertEquals(original, sut.uiState.value.recoveryAttempt)
+
+        sut.retryOriginal(2uL) { _, _ -> Result.failure(OnchainSendBlockedError(original)) }
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.lightningPaymentRefusal)
+        assertNotNull(sut.uiState.value.recoveryError)
     }
 
     @Test

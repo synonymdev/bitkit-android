@@ -41,6 +41,9 @@ import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
@@ -92,6 +95,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
@@ -2030,6 +2034,8 @@ class LightningRepoTest : BaseUnitTest() {
                 any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
                 anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                lightningPaymentHash = anyOrNull(),
+                lightningInvoiceExpiresAt = anyOrNull(),
             )
         }
             .thenReturn(attempt)
@@ -2305,8 +2311,30 @@ class LightningRepoTest : BaseUnitTest() {
             any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(),
             anyOrNull(),
             contactPublicKey = anyOrNull(),
+            lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
+
+    private fun bolt11Payment(
+        paymentHash: String,
+        status: PaymentStatus,
+        direction: PaymentDirection = PaymentDirection.OUTBOUND,
+    ) = PaymentDetails(
+        id = paymentHash,
+        kind = PaymentKind.Bolt11(
+            hash = paymentHash,
+            preimage = null,
+            secret = null,
+            description = null,
+            bolt11 = null,
+        ),
+        amountMsat = 20_000uL,
+        feePaidMsat = null,
+        direction = direction,
+        status = status,
+        latestUpdateTimestamp = 100uL,
+    )
 
     private fun pendingSendAttempt() = OnchainSendAttempt(
         walletId = "test-wallet", attemptId = "attempt-1", requestId = null, orderId = null,
@@ -2323,10 +2351,66 @@ class LightningRepoTest : BaseUnitTest() {
                 any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
                 anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                lightningPaymentHash = anyOrNull(),
+                lightningInvoiceExpiresAt = anyOrNull(),
             )
         ).thenReturn(attempt)
         startNodeForTesting()
         return spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+    }
+
+    @Test
+    fun `a lightning payment's status is read only from the node's outbound payment of its invoice`() = test {
+        val paymentHash = "ab".repeat(32)
+        val cases = listOf(
+            listOf(bolt11Payment(paymentHash, PaymentStatus.PENDING)) to PaymentStatus.PENDING,
+            listOf(bolt11Payment(paymentHash.uppercase(), PaymentStatus.PENDING)) to PaymentStatus.PENDING,
+            listOf(bolt11Payment(paymentHash, PaymentStatus.FAILED)) to PaymentStatus.FAILED,
+            listOf(bolt11Payment(paymentHash, PaymentStatus.SUCCEEDED)) to PaymentStatus.SUCCEEDED,
+            listOf(bolt11Payment("cd".repeat(32), PaymentStatus.PENDING)) to null,
+            listOf(bolt11Payment(paymentHash, PaymentStatus.PENDING, PaymentDirection.INBOUND)) to null,
+            emptyList<PaymentDetails>() to null,
+        )
+
+        cases.forEachIndexed { index, (payments, status) ->
+            whenever(lightningService.payment(paymentHash)).thenReturn(payments.firstOrNull())
+
+            assertEquals(status, sut.outboundPaymentStatus(paymentHash).getOrThrow(), "case $index")
+        }
+        verify(lightningService, never()).listPayments()
+    }
+
+    @Test
+    fun `a payment store that cannot be read gives no lightning payment status`() = test {
+        whenever(lightningService.payment(any())).doSuspendableAnswer { throw ServiceError.NodeNotSetup() }
+
+        assertTrue(sut.outboundPaymentStatus("ab".repeat(32)).isFailure)
+    }
+
+    @Test
+    fun `an on-chain send admits the hash of the lightning invoice its address came with`() = test {
+        val repo = prepareGuardedSend(pendingSendAttempt())
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        ).doSuspendableAnswer { throw NodeException.InvalidAddress("invalid address") }
+
+        repo.sendOnChain("address", 1_000uL, lightningPaymentHash = "010203")
+
+        verify(onchainSendAttemptStore).admit(
+            any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
+            anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            lightningPaymentHash = eq("010203"),
+            lightningInvoiceExpiresAt = anyOrNull(),
+        )
     }
 
     @Test
@@ -2923,6 +3007,8 @@ class LightningRepoTest : BaseUnitTest() {
                     any(), isNull(), eq("order-1"), any(), any(), any(), any(), eq(true), anyOrNull(), any(),
                     eq(context), any(), anyOrNull(),
                     contactPublicKey = anyOrNull(),
+                    lightningPaymentHash = anyOrNull(),
+                    lightningInvoiceExpiresAt = anyOrNull(),
                 )
                 preparedOutcome(OnchainSendOutcome.Unknown("ab".repeat(32)))
             }

@@ -1004,8 +1004,13 @@
     <string name="wallet__send_instant_failed">Pago fallido</string>
     <string name="wallet__send_invoice">Factura</string>
     <string name="wallet__send_invoice_expiration">Expiración de la factura</string>
+    <string name="wallet__send_lightning_onchain_sent">Es posible que ya se haya enviado un pago onchain a la dirección de esta factura, así que Bitkit no pagará también la factura por Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit no puede leer sus registros de pagos onchain, así que no puede saber si la dirección de esta factura ya se pagó. Para evitar pagar dos veces, no pagará la factura por Lightning.</string>
     <string name="wallet__send_max_spending__description">La cantidad máxima que se puede gastar es un poco más baja debido al saldo de reserva exigido.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
+    <string name="wallet__send_onchain_lightning_paid">Un pago Lightning de esta factura ya se completó, así que Bitkit no la volverá a pagar onchain.</string>
+    <string name="wallet__send_onchain_lightning_pending">Un pago Lightning de esta factura aún podría completarse. Para evitar pagarla dos veces, Bitkit no la pagará onchain a menos que ese pago falle.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit no puede verificar el pago Lightning de esta factura hasta que la billetera se haya iniciado, así que todavía no pagará la dirección. Vuelva a intentarlo entonces, o pegue solo la dirección para pagarla sin la factura.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero revisa la red y luego devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puede seguir utilizando Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>

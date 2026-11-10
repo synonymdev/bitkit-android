@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import com.synonym.bitkitcore.LnurlPayData
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,7 +94,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.attach(session)
         val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
 
-        sut.pay(session, data)
+        sut.pay(session, data, requestId = "request-1")
 
         verify(quickPayRepo).pay(
             session,
@@ -109,8 +110,8 @@ class QuickPayViewModelTest : BaseUnitTest() {
         events.emit(QuickPaySessionEvent.FallBackToConfirm)
         advanceUntilIdle()
 
-        sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
-        sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
+        sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"), requestId = "request-1")
+        sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"), requestId = "request-1")
 
         verify(quickPayRepo, never()).pay(any(), any())
     }
@@ -121,8 +122,8 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.attach(session)
         val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
 
-        sut.pay(session, data)
-        sut.pay(session, data)
+        sut.pay(session, data, requestId = "request-1")
+        sut.pay(session, data, requestId = "request-1")
 
         verify(quickPayRepo, times(1)).pay(
             session,
@@ -136,9 +137,9 @@ class QuickPayViewModelTest : BaseUnitTest() {
         val second = QuickPaySession()
         val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
         sut.attach(first)
-        sut.pay(first, data)
+        sut.pay(first, data, requestId = "request-1")
         sut.attach(second)
-        sut.pay(second, data)
+        sut.pay(second, data, requestId = "request-2")
 
         verify(quickPayRepo, times(1)).pay(
             first,
@@ -170,12 +171,12 @@ class QuickPayViewModelTest : BaseUnitTest() {
         val second = QuickPaySession()
         val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
         sut.attach(first)
-        sut.pay(first, data)
+        sut.pay(first, data, requestId = "request-1")
         events.emit(QuickPaySessionEvent.Error(QuickPayConversionError(), null))
         advanceUntilIdle()
 
         sut.attach(second)
-        sut.pay(second, data)
+        sut.pay(second, data, requestId = "request-2")
 
         verify(quickPayRepo, times(1)).pay(
             second,
@@ -207,6 +208,38 @@ class QuickPayViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `reattaching the same session keeps its payment and result`() = test {
+        val session = QuickPaySession()
+        val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
+        sut.attach(session)
+        sut.pay(session, data, requestId = "request-1")
+        events.emit(QuickPaySessionEvent.Success(paymentHash = "hash1", amountWithFee = 501L))
+        advanceUntilIdle()
+
+        // A recreated screen attaches its saved session again and asks to pay once more
+        sut.attach(session)
+        sut.pay(session, data, requestId = "request-1")
+
+        assertIs<QuickPayResult.Success>(sut.uiState.value.result)
+        verify(quickPayRepo, times(1)).attach(session)
+        verify(quickPayRepo, times(1)).pay(any(), any())
+    }
+
+    @Test
+    fun `pay passes the request id with an lnurl payment`() = test {
+        val session = QuickPaySession()
+        val lnurl = mock<LnurlPayData>()
+        sut.attach(session)
+
+        sut.pay(session, QuickPayData.LnurlPay(sats = 500u, data = lnurl), requestId = "request-7")
+
+        verify(quickPayRepo).pay(
+            session,
+            QuickPayPayRequest.LnurlPay(data = lnurl, amountSats = 500u, requestId = "request-7"),
+        )
+    }
+
+    @Test
     fun `stale detach does not detach a newer session`() = test {
         val old = QuickPaySession()
         val next = QuickPaySession()
@@ -222,7 +255,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
     fun `viewmodel has no settlement methods on the repo besides signalCompletion from events`() = test {
         val session = QuickPaySession()
         sut.attach(session)
-        sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
+        sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"), requestId = "request-1")
         advanceUntilIdle()
 
         verify(quickPayRepo, never()).signalCompletion(any(), any(), any(), any(), any())
