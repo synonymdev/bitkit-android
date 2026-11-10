@@ -1571,6 +1571,26 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(events.none { it is Event.PaymentFailed })
     }
 
+    @Test
+    fun `a node failure arriving while spark sends the retry never fails it`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        // The node's earlier attempt fails while Spark is sending the retry, before Spark returns.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            check(it.getArgument<suspend () -> Boolean>(4)())
+            onEvent(Event.PaymentFailed("h", "h", PaymentFailureReason.UNEXPECTED_ERROR))
+            Result.success("h")
+        }
+
+        sut.payInvoice("h", 1_000uL)
+        runCurrent()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "an older node failure failed the Spark retry")
+    }
+
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
         id = hash,
         kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),

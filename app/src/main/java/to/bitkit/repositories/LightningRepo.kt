@@ -1527,6 +1527,7 @@ class LightningRepo @Inject constructor(
                 }
             var isAdmitted = false
             var isRefused = false
+            var railBefore: LightningRail? = null
             val authorizeSend: suspend () -> Boolean = {
                 val isAuthorized = onBeforeSend().also { if (it) requireWalletRestoreComplete() }
                 if (isAuthorized) {
@@ -1535,6 +1536,9 @@ class LightningRepo @Inject constructor(
                     }
                     isRefused = !isAdmitted
                     if (isRefused) throw PaymentPendingException(paymentHash ?: key)
+                    // Recorded at admission, so a node failure arriving while Spark sends reads as an older attempt's.
+                    railBefore = sendRails[key]
+                    recordSendRail(key, LightningRail.Spark)
                 }
                 isAuthorized
             }
@@ -1549,6 +1553,9 @@ class LightningRepo @Inject constructor(
                     .onFailure {
                         if (it is PaymentPendingException && !isRefused) {
                             recordSendRail(it.paymentHash, LightningRail.Spark)
+                        } else if (isAdmitted) {
+                            // Spark sent nothing, so the node's attempt stays the latest.
+                            railBefore?.let { rail -> recordSendRail(key, rail) } ?: sendRails.remove(key)
                         }
                     }
             } finally {
