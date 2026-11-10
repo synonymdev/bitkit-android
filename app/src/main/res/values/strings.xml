@@ -308,7 +308,7 @@
     <string name="lightning__force_nav_title">Force Transfer</string>
     <string name="lightning__force_text">Could not initiate transfer. Do you want to force this transfer? You won’t be able to use these funds for ±14 days (!)</string>
     <string name="lightning__force_title">Force\n&lt;accent&gt;Transfer&lt;/accent&gt;</string>
-    <string name="lightning__funding__button1">Transfer from Savings</string>
+    <string name="lightning__funding__button1">Transfer From Savings</string>
     <string name="lightning__funding__button2">Use Other Wallet</string>
     <string name="lightning__funding__button_hw">Transfer from HW wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
