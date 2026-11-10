@@ -5,6 +5,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
@@ -21,6 +22,7 @@ import to.bitkit.repositories.SparkExitNetworkFees
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitSavingsFunding
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
@@ -128,6 +130,24 @@ class SparkExitViewModelTest : BaseUnitTest() {
         sut.payHigherFee()
 
         verify(repo).payHigherFee(floored)
+    }
+
+    @Test
+    fun `the next funding after a start refused for a higher savings fee prices at least that fee`() = test {
+        whenever(repo.savingsFundingFee(anyOrNull())).thenReturn(Result.success(SparkExitSavingsFunding(420uL, true)))
+        whenever(repo.start(true))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.loadSavingsFunding()
+        sut.onFundFromSavings()
+
+        sut.start()
+        sut.loadSavingsFunding()
+
+        // Savings' coin selection needs 600 sats where the estimate says 420: the next funding prices that.
+        verify(repo).savingsFundingFee(null)
+        verify(repo).savingsFundingFee(600uL)
     }
 
     @Test

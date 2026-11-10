@@ -632,30 +632,36 @@ class SparkExitRepo @Inject constructor(
     )
 
     /**
-     * The fee Savings pays to send the fee funding at the fast rate. Fails when the rates cannot be read; the rates it
-     * priced are the ones the payment at the start sends at.
+     * The fee Savings pays to send the fee funding at the fast rate, at least [floorSats], the fee a start was
+     * refused for. Fails when the rates cannot be read; the rates it priced are the ones the payment at the start
+     * sends at.
      */
-    suspend fun savingsFundingFee(): Result<SparkExitSavingsFunding> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            val pending = requireNotNull(_state.value.pending) { "No Spark exit quote" }
-            val address = requireNotNull(_state.value.fundingAddress) { "No Spark exit funding address" }
-            val fundingSats = pending.quote.fundingSats
-            val feeRates = lightningRepo.getFeeRates().getOrThrow()
-            val feeSats = lightningRepo.calculateTotalFee(
-                amountSats = fundingSats,
-                address = address,
-                speed = TransactionSpeed.Fast,
-                feeRates = feeRates,
-                allowFallback = false,
-            ).getOrThrow()
-            _state.update { it.copy(pending = it.pending?.copy(savingsFeeRates = feeRates, savingsFeeSats = feeSats)) }
-            val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
-            SparkExitSavingsFunding(
-                feeSats = feeSats,
-                canPay = SparkExitMath.canFundFromSavings(spendable, fundingSats, feeSats),
-            )
+    suspend fun savingsFundingFee(floorSats: ULong? = null): Result<SparkExitSavingsFunding> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val pending = requireNotNull(_state.value.pending) { "No Spark exit quote" }
+                val address = requireNotNull(_state.value.fundingAddress) { "No Spark exit funding address" }
+                val fundingSats = pending.quote.fundingSats
+                val feeRates = lightningRepo.getFeeRates().getOrThrow()
+                val estimateSats = lightningRepo.calculateTotalFee(
+                    amountSats = fundingSats,
+                    address = address,
+                    speed = TransactionSpeed.Fast,
+                    feeRates = feeRates,
+                    allowFallback = false,
+                ).getOrThrow()
+                // Coin selection can need more fee than the estimate: the start approves what it was refused for.
+                val feeSats = maxOf(estimateSats, floorSats ?: 0uL)
+                _state.update {
+                    it.copy(pending = it.pending?.copy(savingsFeeRates = feeRates, savingsFeeSats = feeSats))
+                }
+                val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+                SparkExitSavingsFunding(
+                    feeSats = feeSats,
+                    canPay = SparkExitMath.canFundFromSavings(spendable, fundingSats, feeSats),
+                )
+            }
         }
-    }
 
     /** Reads what reached the funding address, for the funding screen while the user pays from another wallet. */
     suspend fun refreshFundingAddress(): Result<ULong> = withContext(bgDispatcher) {

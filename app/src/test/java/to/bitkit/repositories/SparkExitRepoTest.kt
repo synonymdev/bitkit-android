@@ -927,6 +927,29 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay from savings approves at least the fee a start was refused for`() = test {
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        whenever(lightning.getFeeRates()).thenReturn(Result.success(FeeRates(fast = 7u, mid = 4u, slow = 1u)))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success(420uL))
+        whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
+
+        assertEquals(600uL, sut.savingsFundingFee(floorSats = 600uL).getOrThrow().feeSats)
+        sut.start(fundFromSavings = true).getOrThrow()
+        sut.onAppBackgrounded()
+
+        verify(lightning).sendOnChain(
+            eq(funding), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = eq(600uL),
+        )
+    }
+
+    @Test
     fun `savings never pays more than the confirmed funding when the start quotes again`() = test {
         stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
         val sdk = FakeSparkExitRecovering()

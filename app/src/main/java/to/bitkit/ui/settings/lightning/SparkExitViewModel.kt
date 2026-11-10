@@ -70,6 +70,9 @@ class SparkExitViewModel @Inject constructor(
     /** The savings fee a higher-fee payment was refused for, by rate: the next confirm approves at least that. */
     private val feeBumpFeeFloors = mutableMapOf<ULong, ULong>()
 
+    /** The savings fee a start's funding was refused for: the next funding prices and approves at least that. */
+    private var savingsFeeFloorSats: ULong? = null
+
     init {
         viewModelScope.launch {
             // Spark's live balance, for what a stopped exit leaves on Spark after a relaunch too.
@@ -124,7 +127,7 @@ class SparkExitViewModel @Inject constructor(
     fun loadSavingsFunding() {
         viewModelScope.launch {
             _uiState.update { it.copy(savingsFeeSats = null, hasSavingsFeeFailed = false) }
-            sparkExitRepo.savingsFundingFee()
+            sparkExitRepo.savingsFundingFee(savingsFeeFloorSats)
                 .onSuccess { funding ->
                     _uiState.update { it.copy(savingsFeeSats = funding.feeSats, canFundFromSavings = funding.canPay) }
                 }
@@ -173,10 +176,23 @@ class SparkExitViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isStarting = true) }
             sparkExitRepo.start(_uiState.value.fundFromSavings)
-                .onSuccess { _effects.emit(SparkExitEffect.Started) }
+                .onSuccess {
+                    savingsFeeFloorSats = null
+                    _effects.emit(SparkExitEffect.Started)
+                }
                 .onFailure {
-                    // A cancel during the start already said so on progress.
-                    if (it !is SparkExitStartCancelled) ToastEventBus.send(it)
+                    // Savings never pays more than the fee confirmed: the next funding asks for the refused one.
+                    val changed = it.cause as? OnchainSendChangedError
+                    if (changed != null) {
+                        changed.preparedFeeSats?.let { fee -> savingsFeeFloorSats = fee }
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+                        )
+                    } else if (it !is SparkExitStartCancelled) {
+                        // A cancel during the start already said so on progress.
+                        ToastEventBus.send(it)
+                    }
                     // The exit started but paying its fee funding failed: progress shows where to fund it.
                     if (sparkExitRepo.state.value.isExiting) _effects.emit(SparkExitEffect.Started)
                 }
