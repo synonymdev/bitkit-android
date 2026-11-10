@@ -40,6 +40,7 @@ import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendPendingError
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.repositories.SparkRepo
@@ -463,6 +464,38 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         store.clear()
 
         verify(lightningRepo).followFundingOnScreen("attempt", false)
+    }
+
+    @Test
+    fun `a funding whose outcome is unknown opens its recovery instead of an error`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendPendingError(IllegalStateException("timeout"), "txid")))
+        val retained = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(retained)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        val effects = mutableListOf<SideEffect>()
+        backgroundScope.launch { sut.effects.collect { effects += it } }
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertTrue(toasts.isEmpty())
+        assertEquals(SideEffect.FundingPending(retained), effects.last())
     }
 
     @Test
