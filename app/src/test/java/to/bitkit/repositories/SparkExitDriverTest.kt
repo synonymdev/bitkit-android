@@ -55,6 +55,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         withSdk: Boolean = true,
         tip: UInt? = null,
         save: (SparkExitRecord) -> Unit = { saved += it },
+        trustedFeeRate: ULong? = 10uL,
     ) = SparkExitDriver(
         chain = chain,
         recovering = sdk.takeIf { withSdk },
@@ -62,6 +63,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         save = save,
         nowMillis = { now },
         tip = tip,
+        trustedFeeRate = { trustedFeeRate },
     )
 
     private val interval = SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds
@@ -1663,12 +1665,12 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals("exit-state-1", record.exitStateSnapshot)
     }
 
-    private fun sweepDone(): SparkExitRecord {
-        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0".repeat(32), 1u, 25_000uL))
+    private fun sweepDone(valueSats: ULong = 25_000uL): SparkExitRecord {
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0".repeat(32), 1u, valueSats))
         return SparkExitFixtures.record(Phase.Done).copy(
             destination = SWEEP_DESTINATION,
             funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
-            leftover = listOf(SparkExitRecord.Leftover("f0".repeat(32), 1u, 25_000uL)),
+            leftover = listOf(SparkExitRecord.Leftover("f0".repeat(32), 1u, valueSats)),
         )
     }
 
@@ -1741,6 +1743,25 @@ class SparkExitDriverTest : BaseUnitTest() {
             "sweep rate '${sent.feeRateSatPerVbyte}' sat/vB, next block '${chain.nextBlockRate}', " +
                 "leftover 25000 sats, swept '${sent.valueSats}' sats",
         )
+    }
+
+    @Test
+    fun `a host quoting an absurd fee rate cannot push the leftover sweep past bitkit's own rate`() = test {
+        // The host's next block asks 5,000 sat/vB and its refusal 550,000 sats for a ~110 vB sweep of 2M sats.
+        chain.nextBlockRate = 5_000uL
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 110 < 550000")
+        var record = driver(tip = 1_000u).tick(sweepDone(valueSats = 2_000_000uL))
+        record = driver(tip = 1_000u).tick(record)
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        record = driver(tip = 1_001u).tick(record)
+
+        val sent = assertNotNull(record.leftoverSweep)
+        assertEquals(10uL, sent.feeRateSatPerVbyte, "the refused sweep went out at the host's rate")
+
+        // A day unconfirmed: no replacement above the ceiling, the same sweep is sent again.
+        record = driver(tip = 1_145u).tick(record)
+        assertEquals(sent.txid, record.leftoverSweep?.txid)
+        assertEquals(10uL, record.leftoverSweep?.feeRateSatPerVbyte)
     }
 
     @Test
@@ -1873,7 +1894,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         val first = assertNotNull(record.leftoverSweep)
         chain.nextBlockRate = 1_000uL
 
-        record = driver(tip = 1_144u).tick(record)
+        record = driver(tip = 1_144u, trustedFeeRate = 1_000uL).tick(record)
 
         assertEquals(first.txid, record.leftoverSweep?.txid)
         assertTrue(assertNotNull(record.leftoverSweep).isAccepted)

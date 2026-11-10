@@ -93,6 +93,11 @@ class SparkExitDriver(
     private val nowMillis: () -> Long,
     /** The chain tip this tick, null when it could not be read. */
     private val tip: UInt? = null,
+    /**
+     * The fast rate of Bitkit's own fee source, null when it cannot be read: with the exit's own rate, the most a
+     * leftover sweep pays, whatever the chain host asks.
+     */
+    private val trustedFeeRate: suspend () -> ULong? = { null },
 ) {
     companion object {
         private const val TAG = "SparkExitDriver"
@@ -788,7 +793,11 @@ class SparkExitDriver(
         val refused = built?.takeIf { it.isWaitingForFees }?.refusedFeeRate ?: 0uL
         // A refusal raises the rate up to the next block's or the exit's, never above: a node asking more is refused
         // again, and the sweep waits a block for fees to drop.
-        val cap = if (refused > 0uL) maxOf(nextBlockRate() ?: 0uL, record.feeRateSatPerVbyte) else 0uL
+        val cap = if (refused > 0uL) {
+            minOf(maxOf(nextBlockRate() ?: 0uL, record.feeRateSatPerVbyte), sweepFeeCeiling(record))
+        } else {
+            0uL
+        }
         val floor = minOf(refused, cap)
         val rate = maxOf(SparkExitMath.sweepFeeRate(economyRate(), record.feeRateSatPerVbyte), floor)
         val inputs = SparkExitSweep.worthSweeping(
@@ -891,6 +900,13 @@ class SparkExitDriver(
         .onFailure { Logger.warn("Failed to read the next-block fee rate for the leftover sweep", it, context = TAG) }
         .getOrNull()
 
+    /**
+     * The most a leftover sweep pays per vbyte: the exit's own rate, which the user confirmed, or Bitkit's own fast
+     * rate when higher. The chain host's estimates and refusals are not trusted past it.
+     */
+    private suspend fun sweepFeeCeiling(record: SparkExitRecord): ULong =
+        maxOf(record.feeRateSatPerVbyte, runSuspendCatching { trustedFeeRate() }.getOrNull() ?: 0uL)
+
     private suspend fun economyRate(): ULong? = runSuspendCatching { chain.economyFeeRate() }
         .onFailure { Logger.warn("Failed to read the economy fee rate for the leftover sweep", it, context = TAG) }
         .getOrNull()
@@ -927,7 +943,10 @@ class SparkExitDriver(
             .onFailure { Logger.warn("Failed to read the Spark exit leftover sweep fee rate", it, context = TAG) }
             .getOrNull()
             ?: return null
-        val rate = maxOf(nextBlock, (old.feeRateSatPerVbyte ?: record.feeRateSatPerVbyte) + 1uL)
+        val oldRate = old.feeRateSatPerVbyte ?: record.feeRateSatPerVbyte
+        val rate = minOf(maxOf(nextBlock, oldRate + 1uL), sweepFeeCeiling(record))
+        // At the ceiling already: sent again as it is until it confirms.
+        if (rate <= oldRate) return null
         val values = record.leftover.associate { "${it.txid}:${it.vout}" to it.valueSats }
         val inputs = SparkExitTxInputs.decode(hex)?.map {
             SparkExitSweep.Input(it.prevTxid, it.vout, values["${it.prevTxid}:${it.vout}"] ?: return null)

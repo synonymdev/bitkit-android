@@ -298,6 +298,7 @@ class SparkExitRepo @Inject constructor(
         save = ::saveRecord,
         nowMillis = clock::nowMs,
         tip = tip,
+        trustedFeeRate = { lightningRepo.getFeeRates().getOrNull()?.fast?.toULong() },
     )
 
     private suspend fun afterTick(
