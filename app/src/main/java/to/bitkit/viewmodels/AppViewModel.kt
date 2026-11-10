@@ -5921,8 +5921,12 @@ class AppViewModel @Inject constructor(
     ): MethodId = when (source) {
         SendFundingSource.Usdt -> MethodId.UsdtArbitrum
         SendFundingSource.Spending -> routedPaykitRoute?.serviceLeg?.let { MethodId.fromRawValue(it.endpoint.methodId) }
-            ?: when (lnurl) {
-                is LnurlParams.LnurlPay -> MethodId.Lnurl
+            ?: when {
+                lnurl is LnurlParams.LnurlPay -> MethodId.Lnurl
+                // With no Lightning payment to make, Spending funds the Spark leg to the on-chain endpoint, so it takes
+                // that endpoint's price before the router picks the leg.
+                decodedInvoice == null && paykitRoute?.offersSparkLeg == true && address.isNotEmpty() ->
+                    PublicPaykitRepo.onchainMethodId(address)
                 else -> MethodId.Bolt11
             }
         SendFundingSource.Savings, is SendFundingSource.Hardware -> PublicPaykitRepo.onchainMethodId(address)

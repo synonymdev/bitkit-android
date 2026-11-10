@@ -18419,6 +18419,53 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an onchain dollar request priced for onchain only goes to spark at its onchain rate`() = test {
+        enablePaykitUi()
+        usdtEnabled.value = false
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val endpoint = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 2_500uL, debitSat = 2_800uL)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(
+                PaymentConversion.Fixed(
+                    listOf(ConversionRate(MethodId.P2wpkh.rawValue.substringBeforeLast("-"), "0.00001")),
+                ),
+            ),
+            acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u, maxSendLightningSats = 50_000u)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.Opened(endpoint.value, endpoints = listOf(endpoint))),
+        )
+
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.paykitRateUnavailable)
+        assertEquals(2_500uL, sut.sendUiState.value.amount)
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        verify(paykitRouteRepo).route(
+            eq(2_500uL),
+            eq(listOf(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))),
+            any(),
+            eq(0uL),
+            eq(true),
+        )
+    }
+
+    @Test
     fun `fixed dollar request accepting USDT opens bitcoin confirmation while USDT is off`() = test {
         enablePaykitUi()
         usdtEnabled.value = false
