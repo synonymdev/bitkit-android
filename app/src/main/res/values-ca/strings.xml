@@ -1816,4 +1816,7 @@
     <string name="widgets__widget__size_small">Petit</string>
     <string name="widgets__widget__size_wide">Ample</string>
     <string name="wallet__balance_updating">S’està actualitzant el saldo…</string>
+    <string name="settings__status__exit__funding">Cal finançament de comissions</string>
+    <string name="settings__status__exit__pending">En curs</string>
+    <string name="settings__status__exit__title">Sortida d\'emergència</string>
 </resources>

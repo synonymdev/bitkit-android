@@ -1815,4 +1815,7 @@
     <string name="widgets__widget__size_small">Μικρό</string>
     <string name="widgets__widget__size_wide">Φαρδύ</string>
     <string name="wallet__balance_updating">Ενημέρωση υπολοίπου…</string>
+    <string name="settings__status__exit__funding">Απαιτείται χρηματοδότηση τελών</string>
+    <string name="settings__status__exit__pending">Σε εξέλιξη</string>
+    <string name="settings__status__exit__title">Έξοδος Έκτακτης Ανάγκης</string>
 </resources>

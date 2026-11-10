@@ -1817,4 +1817,7 @@
     <string name="widgets__widget__size_small">Malý</string>
     <string name="widgets__widget__size_wide">Široký</string>
     <string name="wallet__balance_updating">Aktualizace zůstatku…</string>
+    <string name="settings__status__exit__funding">Je potřeba financovat poplatky</string>
+    <string name="settings__status__exit__pending">Probíhá</string>
+    <string name="settings__status__exit__title">Nouzový odchod</string>
 </resources>
