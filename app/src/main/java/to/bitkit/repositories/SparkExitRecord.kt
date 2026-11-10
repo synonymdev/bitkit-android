@@ -156,8 +156,11 @@ data class SparkExitRecord(
         /** Blocks a step a node accepted may go unconfirmed before the exit's fee rate counts as too low. */
         const val UNCONFIRMED_BLOCKS_TO_SURFACE = 6u
 
-        /** Blocks a payment from savings may be unknown to every host before the exit forgets it and asks again. */
-        const val OWN_PAYMENT_MISSING_BLOCKS = 1u
+        /**
+         * Blocks a payment from savings may be unknown to every host before the exit forgets it and asks again: long
+         * enough that a host still indexing it, or one false miss, never asks for the funding twice.
+         */
+        const val OWN_PAYMENT_MISSING_BLOCKS = 3u
 
         /** Blocks after the first look a payment from savings may stay unadopted before the exit asks again. */
         const val OWN_PAYMENT_TIMEOUT_BLOCKS = 144u
@@ -268,8 +271,9 @@ data class SparkExitRecord(
             recovery?.transactions?.all { it.status is ExitTransactionStatus.Confirmed } == true
 
     /**
-     * [fundingPaymentTxid] at [tip], when [isKnown] says whether a host knows it: forgotten once missing for a block,
-     * or 144 blocks after the first look without being adopted, so the ask and its reminder come back.
+     * [fundingPaymentTxid] at [tip], when [isKnown] says whether a host knows it: forgotten once missing for
+     * [OWN_PAYMENT_MISSING_BLOCKS] blocks, or 144 blocks after the first look without being adopted, so the ask and
+     * its reminder come back.
      */
     fun withOwnPaymentLooked(tip: UInt, isKnown: Boolean): SparkExitRecord {
         if (!isAwaitingOwnPayment && !isEndedPaymentPending) return this

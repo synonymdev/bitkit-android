@@ -632,13 +632,16 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertIs<Phase.NeedsFunding>(record.phase)
         assertTrue(record.isAwaitingOwnPayment)
         assertEquals(1_001u, record.fundingPaymentSeenAtHeight)
-        // No host knows the payment for a block: the exit forgets it and asks again.
+        // No host knows the payment for three blocks: the exit forgets it and asks again.
         chain.unknownTxids = setOf("bump")
         sdk.checks += check(recovery, RecoveryVerdict.Valid)
         record = driver(tip = 1_002u).tick(record)
         assertEquals(1_002u, record.fundingPaymentMissingSince)
         sdk.checks += check(recovery, RecoveryVerdict.Valid)
-        record = driver(tip = 1_003u).tick(record)
+        record = driver(tip = 1_004u).tick(record)
+        assertTrue(record.isAwaitingOwnPayment)
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        record = driver(tip = 1_005u).tick(record)
         assertFalse(record.isAwaitingOwnPayment)
         assertNull(record.fundingPaymentTxid)
     }
@@ -661,6 +664,19 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(SparkExitAlerts.isFundingAskBack(short, sent))
         val ask = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(short, chain.utxosByAddress[address]))
         assertEquals(20_000uL, ask.receivedSats)
+    }
+
+    @Test
+    fun `a payment from savings one host misses for a block or a single read is not forgotten`() {
+        val waiting = SparkExitFixtures.record(Phase.NeedsFunding(30_000uL)).copy(fundingPaymentTxid = "bump")
+        // Missed just before a block and just after it, seconds apart: the host may still be indexing it.
+        val missed = waiting.withOwnPaymentLooked(1_000u, isKnown = false).withOwnPaymentLooked(1_001u, isKnown = false)
+        assertTrue(missed.isAwaitingOwnPayment, "a one-block miss asked for the funding again")
+
+        // A read that finds it starts the count over; only a miss that lasts three blocks forgets it.
+        val found = missed.withOwnPaymentLooked(1_002u, isKnown = true).withOwnPaymentLooked(1_003u, isKnown = false)
+        assertTrue(found.withOwnPaymentLooked(1_005u, isKnown = false).isAwaitingOwnPayment)
+        assertFalse(found.withOwnPaymentLooked(1_006u, isKnown = false).isAwaitingOwnPayment)
     }
 
     @Test
@@ -1306,10 +1322,10 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertNull(record.fundingPaymentTxid)
         assertNotNull(assertNotNull(record.leftoverSweep).txHex)
 
-        // One no host ever sees is forgotten after a block, and the exit stops.
+        // One no host sees for three blocks is forgotten, and the exit stops.
         chain.unknownTxids = setOf("gone")
         var forgotten = driver(tip = 1_000u).tick(ended.copy(fundingPaymentTxid = "gone"))
-        forgotten = driver(tip = 1_001u).tick(forgotten)
+        forgotten = driver(tip = 1_003u).tick(forgotten)
         assertNull(forgotten.fundingPaymentTxid)
         assertFalse(forgotten.needsDriving)
     }
