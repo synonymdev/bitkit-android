@@ -150,7 +150,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit le divise en {count} parties, une pour chaque étape, afin qu\'une étape bloquée ne retarde pas les autres.</string>
     <string name="lightning__spark_exit__funding_text">La sortie paie ses frais avec un paiement on-chain séparé de &lt;accent&gt;{amount}&lt;/accent&gt;. Ce qu\'elle ne dépense pas revient à l\'épargne à la fin.</string>
     <string name="lightning__spark_exit__funding_title">Financer les\n&lt;accent&gt;frais&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID de la transaction : {txid}</string>
     <string name="lightning__spark_exit__intro_text">N\'utilisez ceci que si Spark ne fonctionne plus pour vous. Cela transfère votre solde de dépenses vers l\'épargne &lt;accent&gt;sans les opérateurs Spark&lt;/accent&gt;.\n\nCela prend &lt;accent&gt;jusqu\'à 4 semaines&lt;/accent&gt;, coûte des frais on-chain payés depuis l\'épargne, et de très petits montants peuvent rester sur place. Cela s\'exécute en arrière-plan, et Bitkit vous prévient s\'il a besoin de vous.</string>
     <string name="lightning__spark_exit__intro_title">Quitter Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Reste sur Spark</string>
@@ -160,7 +159,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} de financement des frais restant n\'a pas pu être envoyé et reste à {address}, chemin de dérivation {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Envoi de {amount} de financement des frais restant vers l\'épargne.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} de financement des frais restant a été envoyé vers l\'épargne.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID de la transaction : {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} de monnaie des frais arrivera dans votre épargne quand les frais de réseau baisseront.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} a été réclamé on-chain par un ancien propriétaire de ces fonds et ne peut pas être récupéré.</string>
     <string name="lightning__spark_exit__nav_title">Sortie d\'urgence</string>
@@ -202,7 +200,6 @@
     <string name="lightning__spark_exit__step_publish">Publication des transactions de sortie</string>
     <string name="lightning__spark_exit__step_sweep">Envoi vers l\'épargne</string>
     <string name="lightning__spark_exit__step_timelock">En attente du timelock</string>
-    <string name="lightning__spark_exit__sweep_txid">ID de la transaction : {txid}</string>
     <string name="lightning__spark_exit__swipe">Glisser pour sortir</string>
     <string name="lightning__spark_exit__uneconomic">Les frais sont supérieurs à ce que vous recevriez.</string>
     <string name="lightning__spark_exit__waiting_leaves">Une partie de cette sortie ne peut pas être lue on-chain pour le moment. Bitkit réessaie pendant une semaine au maximum.</string>

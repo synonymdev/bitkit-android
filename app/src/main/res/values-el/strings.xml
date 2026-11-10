@@ -268,7 +268,6 @@
     <string name="lightning__spark_exit__funding_split">Το Bitkit τη χωρίζει σε {count} μέρη, ένα για κάθε βήμα, ώστε ένα κολλημένο βήμα να μην καθυστερεί τα άλλα.</string>
     <string name="lightning__spark_exit__funding_text">Η έξοδος πληρώνει τα τέλη της από μια ξεχωριστή on-chain πληρωμή &lt;accent&gt;{amount}&lt;/accent&gt;. Ό,τι δεν ξοδέψει επιστρέφει στις αποταμιεύσεις στο τέλος.</string>
     <string name="lightning__spark_exit__funding_title">Χρηματοδότηση\n&lt;accent&gt;τελών&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID συναλλαγής: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Χρησιμοποιήστε το μόνο αν το Spark σταματήσει να λειτουργεί για εσάς. Μεταφέρει το υπόλοιπο δαπανών σας στις αποταμιεύσεις &lt;accent&gt;χωρίς τους διαχειριστές του Spark&lt;/accent&gt;.\n\nΔιαρκεί &lt;accent&gt;έως 4 εβδομάδες&lt;/accent&gt;, κοστίζει τέλη on-chain που πληρώνονται από τις αποταμιεύσεις, και πολύ μικρά ποσά μπορεί να μείνουν πίσω. Εκτελείται στο παρασκήνιο και το Bitkit σας ειδοποιεί αν σας χρειαστεί.</string>
     <string name="lightning__spark_exit__intro_title">Έξοδος από το Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Παραμένει στο Spark</string>
@@ -278,7 +277,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} από την υπόλοιπη χρηματοδότηση τελών δεν ήταν δυνατό να σταλούν και παραμένουν στη διεύθυνση {address}, διαδρομή παραγωγής {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Αποστολή {amount} από την υπόλοιπη χρηματοδότηση τελών στις αποταμιεύσεις.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} από την υπόλοιπη χρηματοδότηση τελών στάλθηκαν στις αποταμιεύσεις.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID συναλλαγής: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} ρέστα τελών θα φτάσουν στις αποταμιεύσεις σας όταν πέσουν τα τέλη δικτύου.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} διεκδικήθηκαν on-chain από προηγούμενο κάτοχο αυτών των κεφαλαίων και δεν μπορούν να ανακτηθούν.</string>
     <string name="lightning__spark_exit__nav_title">Έξοδος Έκτακτης Ανάγκης</string>
@@ -320,7 +318,6 @@
     <string name="lightning__spark_exit__step_publish">Δημοσίευση συναλλαγών εξόδου</string>
     <string name="lightning__spark_exit__step_sweep">Αποστολή στις αποταμιεύσεις</string>
     <string name="lightning__spark_exit__step_timelock">Αναμονή για το timelock</string>
-    <string name="lightning__spark_exit__sweep_txid">ID συναλλαγής: {txid}</string>
     <string name="lightning__spark_exit__swipe">Σύρετε Για Έξοδο</string>
     <string name="lightning__spark_exit__uneconomic">Τα τέλη είναι υψηλότερα από όσα θα λαμβάνατε.</string>
     <string name="lightning__spark_exit__waiting_leaves">Μέρος αυτής της εξόδου δεν μπορεί να διαβαστεί on-chain αυτή τη στιγμή. Το Bitkit προσπαθεί ξανά για έως μία εβδομάδα.</string>

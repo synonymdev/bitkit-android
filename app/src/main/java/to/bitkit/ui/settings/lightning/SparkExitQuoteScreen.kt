@@ -25,6 +25,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 
 /** What the exit takes on-chain, what it costs, and what stays behind. */
 @Composable
@@ -66,8 +67,12 @@ private fun Content(
                 }
                 uiState.isQuoting && uiState.isSettling -> BodyM(
                     text = stringResource(R.string.lightning__spark_exit__quote_settling),
+                    color = Colors.White64,
                 )
-                uiState.isQuoting -> BodyM(text = stringResource(R.string.lightning__spark_exit__quote_loading))
+                uiState.isQuoting -> BodyM(
+                    text = stringResource(R.string.lightning__spark_exit__quote_loading),
+                    color = Colors.White64,
+                )
             }
             block?.let {
                 VerticalSpacer(16.dp)
@@ -106,7 +111,7 @@ private fun UnexitableNote(sats: ULong) {
     VerticalSpacer(16.dp)
     BodyS(
         text = stringResource(R.string.lightning__spark_exit__quote_outside)
-            .replace("{amount}", sparkExitAmountText(sats)),
+            .replace("{amount}", sparkExitAmountAccent(sats)).withAccentBoldBright(),
         color = Colors.White64,
         modifier = Modifier.testTag("SparkExitQuoteOutside")
     )

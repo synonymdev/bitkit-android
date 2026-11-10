@@ -268,7 +268,6 @@
     <string name="lightning__spark_exit__funding_split">يقسمه Bitkit إلى {count} أجزاء، جزء لكل خطوة، حتى لا تعطّل خطوة عالقة الخطوات الأخرى.</string>
     <string name="lightning__spark_exit__funding_text">يدفع الخروج رسومه من دفعة منفصلة على السلسلة بقيمة &lt;accent&gt;{amount}&lt;/accent&gt;. ما لا يُنفق منها يعود إلى المدخرات في النهاية.</string>
     <string name="lightning__spark_exit__funding_title">موّل\n&lt;accent&gt;الرسوم&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">معرّف المعاملة: {txid}</string>
     <string name="lightning__spark_exit__intro_text">استخدم هذا فقط إذا توقّف Spark عن العمل لديك. ينقل رصيد الإنفاق إلى المدخرات &lt;accent&gt;من دون مشغّلي Spark&lt;/accent&gt;.\n\nيستغرق &lt;accent&gt;ما يصل إلى 4 أسابيع&lt;/accent&gt;، ويكلّف رسومًا على السلسلة تُدفع من المدخرات، وقد تبقى المبالغ الصغيرة جدًا على Spark. يعمل في الخلفية، ويُعلمك Bitkit إذا احتاج إليك.</string>
     <string name="lightning__spark_exit__intro_title">غادر Spark\n&lt;accent&gt;على السلسلة&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">يبقى على Spark</string>
@@ -278,7 +277,6 @@
     <string name="lightning__spark_exit__leftover_rejected">تعذّر إرسال المتبقي من تمويل الرسوم بقيمة {amount} ويبقى على {address}، مسار الاشتقاق {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">جارٍ إرسال {amount} من تمويل الرسوم المتبقي إلى المدخرات.</string>
     <string name="lightning__spark_exit__leftover_swept">تم إرسال {amount} من تمويل الرسوم المتبقي إلى المدخرات.</string>
-    <string name="lightning__spark_exit__leftover_txid">معرّف المعاملة: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">سيصل {amount} من فكة الرسوم إلى مدخراتك عندما تنخفض رسوم الشبكة.</string>
     <string name="lightning__spark_exit__lost_leaves">طالب مالك سابق لهذه الأموال بمبلغ {amount} على السلسلة ولا يمكن استرداده.</string>
     <string name="lightning__spark_exit__nav_title">الخروج الطارئ</string>
@@ -320,7 +318,6 @@
     <string name="lightning__spark_exit__step_publish">نشر معاملات الخروج</string>
     <string name="lightning__spark_exit__step_sweep">الإرسال إلى المدخرات</string>
     <string name="lightning__spark_exit__step_timelock">انتظار القفل الزمني</string>
-    <string name="lightning__spark_exit__sweep_txid">معرّف المعاملة: {txid}</string>
     <string name="lightning__spark_exit__swipe">اسحب للخروج</string>
     <string name="lightning__spark_exit__uneconomic">الرسوم أعلى مما ستستلمه.</string>
     <string name="lightning__spark_exit__waiting_leaves">لا يمكن قراءة جزء من هذا الخروج على السلسلة الآن. يحاول Bitkit مجددًا لمدة تصل إلى أسبوع.</string>

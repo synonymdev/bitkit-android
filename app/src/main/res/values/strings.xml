@@ -433,7 +433,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit splits it into {count} parts, one for each step, so one stuck step can\'t hold up the others.</string>
     <string name="lightning__spark_exit__funding_text">The exit pays its fees from a separate on-chain payment of &lt;accent&gt;{amount}&lt;/accent&gt;. What it doesn\'t spend comes back to savings at the end.</string>
     <string name="lightning__spark_exit__funding_title">Fund the\n&lt;accent&gt;fees&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">Transaction ID: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Use this only if Spark stops working for you. It moves your spending balance to savings &lt;accent&gt;without the Spark operators&lt;/accent&gt;.\n\nIt takes &lt;accent&gt;up to 4 weeks&lt;/accent&gt;, costs on-chain fees paid from savings, and very small amounts can stay behind. It runs in the background, and Bitkit notifies you if it needs you.</string>
     <string name="lightning__spark_exit__intro_title">Leave Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Stays on Spark</string>
@@ -443,7 +442,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} of leftover fee funding could not be sent and stays at {address}, derivation path {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Sending {amount} of leftover fee funding to savings.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} of leftover fee funding was sent to savings.</string>
-    <string name="lightning__spark_exit__leftover_txid">Transaction ID: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} of fee change will reach your savings when network fees drop.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} was claimed on-chain by an older owner of these funds and can\'t be recovered.</string>
     <string name="lightning__spark_exit__nav_title">Emergency Exit</string>
@@ -485,7 +483,6 @@
     <string name="lightning__spark_exit__step_publish">Publishing exit transactions</string>
     <string name="lightning__spark_exit__step_sweep">Sending to savings</string>
     <string name="lightning__spark_exit__step_timelock">Waiting for the timelock</string>
-    <string name="lightning__spark_exit__sweep_txid">Transaction ID: {txid}</string>
     <string name="lightning__spark_exit__swipe">Swipe To Exit</string>
     <string name="lightning__spark_exit__uneconomic">The fees are higher than what you would receive.</string>
     <string name="lightning__spark_exit__waiting_leaves">Part of this exit can\'t be read on-chain right now. Bitkit tries again for up to a week.</string>

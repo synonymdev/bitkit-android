@@ -152,7 +152,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit dzieli je na {count} części, po jednej na każdy krok, aby jeden zablokowany krok nie wstrzymywał pozostałych.</string>
     <string name="lightning__spark_exit__funding_text">Wyjście płaci swoje opłaty z osobnej płatności on-chain w wysokości &lt;accent&gt;{amount}&lt;/accent&gt;. To, czego nie wyda, wraca na koniec do Oszczędności.</string>
     <string name="lightning__spark_exit__funding_title">Sfinansuj\n&lt;accent&gt;opłaty&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID transakcji: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Używaj tego tylko wtedy, gdy Spark przestanie dla Ciebie działać. Przenosi saldo wydatków do Oszczędności &lt;accent&gt;bez operatorów Spark&lt;/accent&gt;.\n\nTrwa &lt;accent&gt;do 4 tygodni&lt;/accent&gt;, kosztuje opłaty on-chain pokrywane z Oszczędności, a bardzo małe kwoty mogą pozostać. Działa w tle, a Bitkit powiadomi Cię, jeśli będzie Cię potrzebować.</string>
     <string name="lightning__spark_exit__intro_title">Opuść Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Pozostaje na Spark</string>
@@ -162,7 +161,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} pozostałego finansowania opłat nie udało się wysłać i pozostaje pod adresem {address}, ścieżka derywacji {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Wysyłanie {amount} pozostałego finansowania opłat do Oszczędności.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} pozostałego finansowania opłat wysłano do Oszczędności.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID transakcji: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} reszty z opłat trafi do Twoich Oszczędności, gdy opłaty sieciowe spadną.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} zostało przejęte on-chain przez wcześniejszego właściciela tych środków i nie można go odzyskać.</string>
     <string name="lightning__spark_exit__nav_title">Wyjście awaryjne</string>
@@ -204,7 +202,6 @@
     <string name="lightning__spark_exit__step_publish">Publikowanie transakcji wyjścia</string>
     <string name="lightning__spark_exit__step_sweep">Wysyłanie do Oszczędności</string>
     <string name="lightning__spark_exit__step_timelock">Oczekiwanie na blokadę czasową</string>
-    <string name="lightning__spark_exit__sweep_txid">ID transakcji: {txid}</string>
     <string name="lightning__spark_exit__swipe">Przesuń, aby wyjść</string>
     <string name="lightning__spark_exit__uneconomic">Opłaty są wyższe niż kwota, którą otrzymasz.</string>
     <string name="lightning__spark_exit__waiting_leaves">Części tego wyjścia nie można teraz odczytać on-chain. Bitkit będzie próbować ponownie przez maksymalnie tydzień.</string>

@@ -276,7 +276,6 @@
     <string name="lightning__spark_exit__funding_split">A Bitkit o divide em {count} partes, uma para cada etapa, para que uma etapa travada não segure as outras.</string>
     <string name="lightning__spark_exit__funding_text">A saída paga suas taxas com um pagamento on-chain separado de &lt;accent&gt;{amount}&lt;/accent&gt;. O que ela não gastar volta para a poupança no final.</string>
     <string name="lightning__spark_exit__funding_title">Financiar as\n&lt;accent&gt;taxas&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID da transação: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Use isso apenas se a Spark parar de funcionar para você. Isso move seu saldo de gastos para a poupança &lt;accent&gt;sem os operadores da Spark&lt;/accent&gt;.\n\nLeva &lt;accent&gt;até 4 semanas&lt;/accent&gt;, custa taxas on-chain pagas da poupança, e valores muito pequenos podem ficar para trás. Roda em segundo plano, e a Bitkit avisa você se precisar de você.</string>
     <string name="lightning__spark_exit__intro_title">Sair da Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Fica na Spark</string>
@@ -286,7 +285,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} de sobra do financiamento das taxas não pôde ser enviado e fica em {address}, caminho de derivação {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Enviando {amount} de sobra do financiamento das taxas para a poupança.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} de sobra do financiamento das taxas foi enviado para a poupança.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID da transação: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} de troco das taxas chegará à sua poupança quando as taxas de rede caírem.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} foi reivindicado on-chain por um antigo dono desses fundos e não pode ser recuperado.</string>
     <string name="lightning__spark_exit__nav_title">Saída de Emergência</string>
@@ -328,7 +326,6 @@
     <string name="lightning__spark_exit__step_publish">Publicando as transações de saída</string>
     <string name="lightning__spark_exit__step_sweep">Enviando para a poupança</string>
     <string name="lightning__spark_exit__step_timelock">Aguardando o timelock</string>
-    <string name="lightning__spark_exit__sweep_txid">ID da transação: {txid}</string>
     <string name="lightning__spark_exit__swipe">Deslize Para Sair</string>
     <string name="lightning__spark_exit__uneconomic">As taxas são maiores do que o que você receberia.</string>
     <string name="lightning__spark_exit__waiting_leaves">Parte desta saída não pode ser lida on-chain agora. A Bitkit tenta de novo por até uma semana.</string>

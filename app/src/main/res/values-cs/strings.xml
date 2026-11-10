@@ -275,7 +275,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit ji rozdělí na {count} částí, jednu pro každý krok, aby jeden zaseknutý krok nezdržel ostatní.</string>
     <string name="lightning__spark_exit__funding_text">Odchod platí své poplatky ze samostatné on-chain platby ve výši &lt;accent&gt;{amount}&lt;/accent&gt;. Co nespotřebuje, se na konci vrátí do úspor.</string>
     <string name="lightning__spark_exit__funding_title">Financujte\n&lt;accent&gt;poplatky&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID transakce: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Použijte to, jen pokud vám Spark přestane fungovat. Přesune váš zůstatek k utrácení do úspor &lt;accent&gt;bez operátorů Sparku&lt;/accent&gt;.\n\nTrvá &lt;accent&gt;až 4 týdny&lt;/accent&gt;, stojí on-chain poplatky placené z úspor a velmi malé částky mohou zůstat na Spark. Běží na pozadí a Bitkit vás upozorní, pokud vás bude potřebovat.</string>
     <string name="lightning__spark_exit__intro_title">Opustit Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Zůstává na Spark</string>
@@ -285,7 +284,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} ze zbylého financování poplatků se nepodařilo odeslat a zůstává na {address}, derivační cesta {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Odesílání {amount} ze zbylého financování poplatků do úspor.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} ze zbylého financování poplatků bylo odesláno do úspor.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID transakce: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} drobných z poplatků dorazí do vašich úspor, až síťové poplatky klesnou.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} si on-chain nárokoval dřívější vlastník těchto prostředků a nelze je získat zpět.</string>
     <string name="lightning__spark_exit__nav_title">Nouzový odchod</string>
@@ -327,7 +325,6 @@
     <string name="lightning__spark_exit__step_publish">Zveřejnění transakcí odchodu</string>
     <string name="lightning__spark_exit__step_sweep">Odesílání do úspor</string>
     <string name="lightning__spark_exit__step_timelock">Čekání na časový zámek</string>
-    <string name="lightning__spark_exit__sweep_txid">ID transakce: {txid}</string>
     <string name="lightning__spark_exit__swipe">Přejeďte pro odchod</string>
     <string name="lightning__spark_exit__uneconomic">Poplatky jsou vyšší, než kolik byste obdrželi.</string>
     <string name="lightning__spark_exit__waiting_leaves">Část tohoto odchodu teď nelze on-chain načíst. Bitkit to bude zkoušet znovu až týden.</string>

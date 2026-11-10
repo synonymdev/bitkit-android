@@ -284,7 +284,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit делит сумму на {count} частей, по одной на каждый шаг, чтобы застрявший шаг не задерживал остальные.</string>
     <string name="lightning__spark_exit__funding_text">Выход оплачивает свои комиссии отдельным ончейн-платежом на &lt;accent&gt;{amount}&lt;/accent&gt;. Неизрасходованное в конце вернётся в сбережения.</string>
     <string name="lightning__spark_exit__funding_title">Оплатите\n&lt;accent&gt;комиссии&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID транзакции: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Используйте это, только если Spark перестал у вас работать. Выход переводит ваш расходный баланс в сбережения &lt;accent&gt;без операторов Spark&lt;/accent&gt;.\n\nОн занимает &lt;accent&gt;до 4 недель&lt;/accent&gt;, требует ончейн-комиссий из сбережений, а очень маленькие суммы могут остаться в Spark. Выход работает в фоне, и Bitkit сообщит, если понадобится ваше участие.</string>
     <string name="lightning__spark_exit__intro_title">Выйти из Spark\n&lt;accent&gt;ончейн&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Остаётся в Spark</string>
@@ -294,7 +293,6 @@
     <string name="lightning__spark_exit__leftover_rejected">Остаток средств на комиссии {amount} не удалось отправить, он остаётся на {address}, путь деривации {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Отправка остатка средств на комиссии {amount} в сбережения.</string>
     <string name="lightning__spark_exit__leftover_swept">Остаток средств на комиссии {amount} отправлен в сбережения.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID транзакции: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">Сдача с комиссий {amount} поступит в сбережения, когда сетевые комиссии снизятся.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} забрал ончейн один из прежних владельцев этих средств, и вернуть их нельзя.</string>
     <string name="lightning__spark_exit__nav_title">Экстренный Выход</string>
@@ -336,7 +334,6 @@
     <string name="lightning__spark_exit__step_publish">Публикация транзакций выхода</string>
     <string name="lightning__spark_exit__step_sweep">Отправка в сбережения</string>
     <string name="lightning__spark_exit__step_timelock">Ожидание таймлока</string>
-    <string name="lightning__spark_exit__sweep_txid">ID транзакции: {txid}</string>
     <string name="lightning__spark_exit__swipe">Проведите для выхода</string>
     <string name="lightning__spark_exit__uneconomic">Комиссии больше, чем сумма, которую вы получите.</string>
     <string name="lightning__spark_exit__waiting_leaves">Часть этого выхода сейчас не удаётся прочитать в блокчейне. Bitkit будет пробовать снова в течение недели.</string>

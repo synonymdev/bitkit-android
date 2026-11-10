@@ -151,7 +151,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit teilt sie in {count} Teile auf, einen für jeden Schritt, damit ein hängender Schritt die anderen nicht aufhält.</string>
     <string name="lightning__spark_exit__funding_text">Der Ausstieg zahlt seine Gebühren aus einer separaten On-Chain-Zahlung von &lt;accent&gt;{amount}&lt;/accent&gt;. Was er nicht ausgibt, geht am Ende zurück auf dein Sparkonto.</string>
     <string name="lightning__spark_exit__funding_title">Gebühren\n&lt;accent&gt;finanzieren&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">Transaktions-ID: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Nutze dies nur, wenn Spark für dich nicht mehr funktioniert. Es verschiebt dein Ausgabenguthaben auf dein Sparkonto, &lt;accent&gt;ohne die Spark-Betreiber&lt;/accent&gt;.\n\nEs dauert &lt;accent&gt;bis zu 4 Wochen&lt;/accent&gt;, kostet On-Chain-Gebühren, die vom Sparkonto bezahlt werden, und sehr kleine Beträge können zurückbleiben. Es läuft im Hintergrund, und Bitkit benachrichtigt dich, wenn es dich braucht.</string>
     <string name="lightning__spark_exit__intro_title">Spark\n&lt;accent&gt;on-chain verlassen&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Bleibt auf Spark</string>
@@ -161,7 +160,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} übrige Gebührenfinanzierung konnte nicht gesendet werden und bleibt bei {address}, Ableitungspfad {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">{amount} übrige Gebührenfinanzierung wird an dein Sparkonto gesendet.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} übrige Gebührenfinanzierung wurde an dein Sparkonto gesendet.</string>
-    <string name="lightning__spark_exit__leftover_txid">Transaktions-ID: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} Gebührenwechselgeld erreicht dein Sparkonto, wenn die Netzgebühren sinken.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} wurde von einem früheren Besitzer dieser Mittel on-chain beansprucht und kann nicht zurückgeholt werden.</string>
     <string name="lightning__spark_exit__nav_title">Notausstieg</string>
@@ -203,7 +201,6 @@
     <string name="lightning__spark_exit__step_publish">Ausstiegstransaktionen werden veröffentlicht</string>
     <string name="lightning__spark_exit__step_sweep">Wird an das Sparkonto gesendet</string>
     <string name="lightning__spark_exit__step_timelock">Warten auf die Zeitsperre</string>
-    <string name="lightning__spark_exit__sweep_txid">Transaktions-ID: {txid}</string>
     <string name="lightning__spark_exit__swipe">Swipe zum Aussteigen</string>
     <string name="lightning__spark_exit__uneconomic">Die Gebühren sind höher als der Betrag, den du erhalten würdest.</string>
     <string name="lightning__spark_exit__waiting_leaves">Ein Teil dieses Ausstiegs kann gerade nicht on-chain gelesen werden. Bitkit versucht es bis zu einer Woche lang erneut.</string>
