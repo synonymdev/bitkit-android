@@ -40,6 +40,7 @@ import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.QuickPayLedgerRecord
 import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
@@ -583,6 +584,15 @@ class QuickPayRepoTest : BaseUnitTest() {
         val hashes = cacheStore.data.first().quickPayLedger!!.records.map { it.invoicePaymentHash }
         assertFalse("old" in hashes)
         assertTrue("new" in hashes)
+    }
+
+    @Test
+    fun `a spark refusal is a rejection before dispatch`() {
+        assertEquals(
+            QuickPayDispatchClass.PRE_DISPATCH_REJECTION,
+            classifyDispatchError(SparkError.SendRefused("Spark balance can't cover the payment")),
+        )
+        assertEquals(QuickPayDispatchClass.PRE_DISPATCH_REJECTION, classifyDispatchError(SparkError.InvoiceExpired()))
     }
 
     @Test
