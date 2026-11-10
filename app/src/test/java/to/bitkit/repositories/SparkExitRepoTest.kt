@@ -921,7 +921,8 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
-            approvedMiningFeeSats = anyOrNull(),
+            // Savings never pays more fee than the one confirmed.
+            approvedMiningFeeSats = eq(300uL),
         )
     }
 
@@ -1323,7 +1324,8 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
-            approvedMiningFeeSats = anyOrNull(),
+            // The total shown less the extra funding.
+            approvedMiningFeeSats = eq(400uL),
         )
     }
 

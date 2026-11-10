@@ -575,7 +575,11 @@ class SparkExitRepo @Inject constructor(
     private suspend fun payHigherFeeLocked(option: SparkExitFeeBumpOption) {
         val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
         val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
-        val txid = if (option.extraSats > 0uL) sendFunding(address, option.extraSats, option.feeRates) else null
+        val txid = if (option.extraSats > 0uL) {
+            sendFunding(address, option.extraSats, option.feeRates, option.totalSats.safe() - option.extraSats.safe())
+        } else {
+            null
+        }
         tickMutex.withLock {
             val current = _state.value.record ?: return@withLock
             if (current.isRebuilding && current.isActive) {
@@ -644,7 +648,7 @@ class SparkExitRepo @Inject constructor(
                 feeRates = feeRates,
                 allowFallback = false,
             ).getOrThrow()
-            _state.update { it.copy(pending = it.pending?.copy(savingsFeeRates = feeRates)) }
+            _state.update { it.copy(pending = it.pending?.copy(savingsFeeRates = feeRates, savingsFeeSats = feeSats)) }
             val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
             SparkExitSavingsFunding(
                 feeSats = feeSats,
@@ -754,7 +758,9 @@ class SparkExitRepo @Inject constructor(
         // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
         val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
         if (fundFromSavings && savingsSats > 0uL) {
-            runSuspendCatching { payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates) }
+            runSuspendCatching {
+                payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates, pending.savingsFeeSats)
+            }
                 // A refused payment shows on progress at once, with the offer to pay again.
                 .onFailure { _state.value.record?.let { current -> noteSavingsSend(current) } }
                 .getOrThrow()
@@ -804,7 +810,13 @@ class SparkExitRepo @Inject constructor(
         return fresh.copy(sparkBalanceSats = sparkRepo.state.value.balanceSats)
     }
 
-    private suspend fun payFunding(createdAt: Long, address: String, sats: ULong, feeRates: FeeRates?) {
+    private suspend fun payFunding(
+        createdAt: Long,
+        address: String,
+        sats: ULong,
+        feeRates: FeeRates?,
+        approvedFeeSats: ULong?,
+    ) {
         // Under the tick lock from the check to the saved txid: a cancel either ends the exit before anything is paid
         // or finds the payment and refuses. After the tick in flight, so its save cannot drop the txid.
         tickMutex.withLock {
@@ -812,7 +824,7 @@ class SparkExitRepo @Inject constructor(
                 Logger.info("Spark exit ended before savings paid its funding; nothing is paid", context = TAG)
                 return@withLock
             }
-            val txid = sendFunding(address, sats, feeRates)
+            val txid = sendFunding(address, sats, feeRates, approvedFeeSats)
             val record = _state.value.record ?: return@withLock
             val paid = record.copy(fundingPaymentTxid = txid)
             saveRecord(paid)
@@ -879,12 +891,19 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
-    private suspend fun sendFunding(address: String, sats: ULong, feeRates: FeeRates? = null): String {
+    /** Savings never pays more fee than [approvedFeeSats], the one confirmed: a higher one asks again. */
+    private suspend fun sendFunding(
+        address: String,
+        sats: ULong,
+        feeRates: FeeRates?,
+        approvedFeeSats: ULong?,
+    ): String {
         val outcome = lightningRepo.sendOnChain(
             address = address,
             sats = sats,
             speed = TransactionSpeed.Fast,
             feeRates = feeRates,
+            approvedMiningFeeSats = approvedFeeSats,
         ).getOrThrow()
         return fundingTxid(outcome, sats)
     }
@@ -1029,6 +1048,8 @@ data class SparkExitPending(
     val fundingIndex: UInt,
     /** The rates the fee of paying the funding from savings was priced at, which that payment sends at. */
     val savingsFeeRates: FeeRates? = null,
+    /** The fee of paying the funding from savings the user confirmed, which that payment never exceeds. */
+    val savingsFeeSats: ULong? = null,
 )
 
 data class SparkExitSavingsFunding(

@@ -4,10 +4,15 @@ import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.FeeRate
+import to.bitkit.repositories.OnchainSendChangedError
+import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.repositories.SparkExitFixtures
 import to.bitkit.repositories.SparkExitFundingState
@@ -85,6 +90,23 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertTrue(SparkExitFeeBumpUiState(spendableSats = 0uL).canPay(fast.copy(extraSats = 0uL, totalSats = 0uL)))
         assertTrue(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 1_000uL).isSavingsShort)
         assertFalse(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 5_000uL).isSavingsShort)
+    }
+
+    @Test
+    fun `a higher fee whose savings payment now costs more is priced again for another confirm`() = test {
+        val fast = SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 4_200uL, 4_620uL)
+        whenever(repo.spendableSavingsSats()).thenReturn(Result.success(10_000uL))
+        whenever(repo.feeBumpOptions()).thenReturn(Result.success(listOf(fast)))
+        whenever(repo.payHigherFee(fast))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.loadFeeBump()
+
+        sut.payHigherFee()
+
+        verify(repo, times(2)).feeBumpOptions()
+        assertFalse(sut.uiState.value.feeBump.isPaying)
     }
 
     @Test

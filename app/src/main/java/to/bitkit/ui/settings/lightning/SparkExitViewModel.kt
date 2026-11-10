@@ -25,6 +25,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.FeeRate
 import to.bitkit.models.Toast
 import to.bitkit.models.safe
+import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitCancel
 import to.bitkit.repositories.SparkExitCancelUnreadable
@@ -213,7 +214,19 @@ class SparkExitViewModel @Inject constructor(
             _uiState.update { it.copy(feeBump = it.feeBump.copy(isPaying = true)) }
             sparkExitRepo.payHigherFee(option)
                 .onSuccess { _effects.emit(SparkExitEffect.FeeBumped) }
-                .onFailure { ToastEventBus.send(it) }
+                .onFailure {
+                    // Savings never pays more than the fee confirmed: the rates are priced again for another confirm.
+                    if (it.cause is OnchainSendChangedError) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+                        )
+                        _uiState.update { state -> state.copy(feeBump = state.feeBump.copy(isPaying = false)) }
+                        loadFeeBump()
+                        return@launch
+                    }
+                    ToastEventBus.send(it)
+                }
             _uiState.update { it.copy(feeBump = it.feeBump.copy(isPaying = false)) }
         }
     }
