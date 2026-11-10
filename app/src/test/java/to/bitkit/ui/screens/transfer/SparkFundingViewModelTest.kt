@@ -500,6 +500,53 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a new amount after a kept funding completed off the confirm screen is funded`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
+        val retained = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt", requestId = null,
+            orderId = null, address = "bcrt1qspark", amountSats = 50_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 2uL, isTransfer = true, channelId = null, tags = emptyList(),
+            txid = "txid", evidence = OnchainSendEvidence.Unknown, candidateTxids = listOf("txid"),
+        )
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(retained)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onConfirm()
+        advanceUntilIdle()
+        // Its Sent effect lands while the Amount screen, which ignores it, is showing.
+        val confirmed = retained.copy(evidence = OnchainSendEvidence.Observed, localFollowupComplete = true)
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(confirmed)
+        attemptUpdates.value++
+        advanceUntilIdle()
+        // A new transfer of another amount starts on the Amount screen that showed.
+        sut.onAmountChange(40_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(2)).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `a kept funding that completed off the confirm screen is not sent again`() = test {
         whenever {
             lightningRepo.sendOnChain(

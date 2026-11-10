@@ -116,7 +116,7 @@ class SparkFundingViewModel @Inject constructor(
     fun useHardwareWallet(walletId: String) {
         if (_uiState.value.hwWalletId == walletId) return
         fixedFeeFloorSats = null
-        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true) }
+        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true, txid = null) }
         refreshMax()
     }
 
@@ -149,8 +149,16 @@ class SparkFundingViewModel @Inject constructor(
 
     fun onAmountChange(sats: Long) {
         val state = _uiState.value
-        if (sats != state.amountSats || (sats > 0 && sats == state.maxSats) != state.isMax) fixedFeeFloorSats = null
-        _uiState.update { it.copy(amountSats = sats, isMax = sats > 0 && sats == it.maxSats) }
+        val isNewTransfer = sats != state.amountSats || (sats > 0 && sats == state.maxSats) != state.isMax
+        if (isNewTransfer) fixedFeeFloorSats = null
+        _uiState.update {
+            // A funding followed for the earlier amount never stands in for this one's.
+            it.copy(
+                amountSats = sats,
+                isMax = sats > 0 && sats == it.maxSats,
+                txid = it.txid.takeUnless { isNewTransfer },
+            )
+        }
     }
 
     fun quarterSats(): Long = _uiState.value.maxSats.let { max -> minOf((max * QUARTER).roundToLong(), max) }
