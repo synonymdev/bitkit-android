@@ -112,9 +112,24 @@ class PaykitPaymentStateBackupTest {
         assertEquals("2026-10-01T00:00:00.125Z", attempt.billingPeriod?.sdkValue?.startsAt)
         assertEquals(50_000uL, receipt.amount.atomic)
         assertEquals(attempt.requestId, receipt.requestId)
+        assertFalse(receipt.beforeRequest, "A backup written without the flag restores it as unset")
         val rebuilt = PaykitUsdtStateBackup(listOf(attempt), listOf(PaykitUsdtStateBackup.Receipt(receipt)))
         val json = Json { encodeDefaults = true }
-        assertEquals(json.parseToJsonElement(fixture), json.parseToJsonElement(json.encodeToString(rebuilt)))
+        val expected = fixture.replace("\"afterExpiry\": false", "\"afterExpiry\": false,\n\"beforeRequest\": false")
+        assertEquals(json.parseToJsonElement(expected), json.parseToJsonElement(json.encodeToString(rebuilt)))
+    }
+
+    @Test
+    fun `usdt backup keeps a receipt paid before its request`() {
+        val backup = Json.decodeFromString<PaykitUsdtStateBackup>(usdtBackupFixture)
+        val receipt = backup.receipts.single().restored().copy(beforeRequest = true)
+
+        val restored = Json.decodeFromString<PaykitUsdtStateBackup>(
+            Json.encodeToString(PaykitUsdtStateBackup(backup.attempts, listOf(PaykitUsdtStateBackup.Receipt(receipt)))),
+        ).receipts.single().restored()
+
+        assertTrue(restored.beforeRequest)
+        assertFalse(restored.satisfied)
     }
 
     @Test

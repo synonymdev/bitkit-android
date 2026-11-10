@@ -33,6 +33,8 @@ data class ActiveOnchainAttemptBackup(
     val candidateMiningFees: Map<String, String>? = null,
     val followup: Followup? = null,
     val transfer: Transfer? = null,
+    // A transfer to Spark's deposit address pays no order, so only this keeps it a transfer through a restore.
+    val sparkFunding: Boolean? = null,
 ) {
     @Serializable
     data class Wallet(val kind: String = "software", val network: String, val binding: String, val sourceIndex: String)
@@ -128,7 +130,7 @@ data class ActiveOnchainAttemptBackup(
             walletId = walletId, walletIndex = destinationIndex, attemptId = attemptId,
             requestId = requestId, orderId = orderId, payerIdentity = payerIdentity,
             address = address, amountSats = unsigned(amountSats), isMaxAmount = isMaxAmount,
-            feeRateSatsPerVByte = unsigned(feeRateSatsPerVByte), isTransfer = orderId != null,
+            feeRateSatsPerVByte = unsigned(feeRateSatsPerVByte), isTransfer = orderId != null || sparkFunding == true,
             channelId = followup.channelId, tags = followup.tags, evidence = evidence,
             txid = txid, refusalReason = rejectionReason, localFollowupComplete = false,
             originalInputs = inputs, candidateTxids = candidateTxids, candidateFeeRates = restoredFeeRates,
@@ -191,6 +193,7 @@ data class ActiveOnchainAttemptBackup(
                         requireNotNull(it.originalOrderFeeSats).toString(),
                     )
                 },
+                sparkFunding = true.takeIf { attempt.isSparkFunding },
             )
             wire.restored(network, binding, attempt.walletId, attempt.walletIndex)
             return wire

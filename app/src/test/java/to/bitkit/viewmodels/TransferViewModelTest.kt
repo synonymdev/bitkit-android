@@ -6,10 +6,12 @@ import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.ReverseSwapResponse
 import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -21,6 +23,7 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -388,6 +391,71 @@ class TransferViewModelTest : BaseUnitTest() {
         val expectedSwapFee = (expectedMax.toLong() * SWAP_FEE_PERCENT / 100.0).roundToLong().toULong()
         assertEquals(expectedSwapFee, quote.swapFeeSat)
         assertEquals(expectedMax - expectedSwapFee - SWAP_MINER_FEE, quote.receiveSat)
+    }
+
+    @Test
+    fun `a new transfer to savings withdraws spark to a fresh address`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        // The wallet is wiped and another restored in the same process, so the first address is no longer its own.
+        whenever { lightningRepo.newAddress() }.thenReturn(Result.success("bcrt1qrestored"))
+
+        sut.beginSavingsTransfer()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(eq("bcrt1qrestored"), any())
+        verify(sparkRepo, never()).withdrawAll(eq(CLAIM_ADDRESS), any())
+    }
+
+    @Test
+    fun `a new transfer to savings prices spark's withdrawal again`() = test {
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE + 200uL))
+
+        sut.beginSavingsTransfer()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+
+        assertEquals(SPARK_FEE + 200uL, sut.sparkWithdrawFeeSats.value)
+    }
+
+    @Test
+    fun `a spark withdrawal refused for its fee is priced again`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        whenever { sparkRepo.withdrawAll(any(), any()) }.thenReturn(Result.failure(SparkError.WithdrawalFeeChanged()))
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE + 200uL))
+
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+
+        assertEquals(SPARK_FEE + 200uL, sut.sparkWithdrawFeeSats.value)
+    }
+
+    @Test
+    fun `leaving progress during spark's withdrawal still closes the selected channels`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        val withdrawn = CompletableDeferred<Result<Unit>>()
+        whenever { sparkRepo.withdrawAll(any(), any()) }.doSuspendableAnswer { withdrawn.await() }
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+        val progress = launch { sut.closeSelectedChannels() }
+        runCurrent()
+
+        progress.cancel()
+        withdrawn.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
     }
 
     @Test

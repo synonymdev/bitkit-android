@@ -11,6 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -82,6 +83,7 @@ class TransferViewModel @Inject constructor(
     private var sparkFeeJob: Job? = null
     private var confirmedSparkFeeSats: ULong? = null
     private var sparkWithdrawJob: Job? = null
+    private var closeJob: Deferred<List<ChannelDetails>>? = null
     private var sparkFeeBalanceSats: ULong? = null
     private var sparkAddress: String? = null
 
@@ -309,7 +311,15 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Opens Transfer to Savings with nothing left from an earlier visit that ended before the swipe. */
-    fun beginSavingsTransfer() = setSavingsSelection(SavingsSelection())
+    fun beginSavingsTransfer() {
+        // A wallet wipe keeps this view model, so an address kept from before may belong to the wiped wallet.
+        sparkAddress = null
+        // Spark's withdrawal fee moves, so each transfer prices it again.
+        sparkFeeJob?.cancel()
+        sparkFeeBalanceSats = null
+        _sparkWithdrawFeeSats.update { null }
+        setSavingsSelection(SavingsSelection())
+    }
 
     fun setSavingsSelection(selection: SavingsSelection) {
         _savingsSelection.update { selection }
@@ -396,6 +406,7 @@ class TransferViewModel @Inject constructor(
         _savingsSwapResult.update { null }
         _isSparkWithdrawFailed.update { false }
         sparkWithdrawJob = null
+        closeJob = null
         _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels
         withdrawsSpark = withdrawSpark
@@ -412,10 +423,16 @@ class TransferViewModel @Inject constructor(
     /** Whether Transfer to Savings closes channels, rather than only withdrawing Spark's balance. */
     fun hasChannelsToClose(): Boolean = channelsToClose.isNotEmpty()
 
-    /** Withdraws Spark's balance when selected, then closes the channels selected earlier, pending closure */
+    /**
+     * Withdraws Spark's balance when selected, then closes the channels selected earlier, pending closure. Once per
+     * confirmed transfer, in viewModelScope, so leaving the progress screen during the withdrawal skips no close.
+     */
     suspend fun closeSelectedChannels(): List<ChannelDetails> {
-        if (withdrawsSpark) withdrawSparkToSavings()
-        return closeChannels(channelsToClose)
+        val job = closeJob ?: viewModelScope.async {
+            if (withdrawsSpark) withdrawSparkToSavings()
+            closeChannels(channelsToClose)
+        }.also { closeJob = it }
+        return job.await()
     }
 
     private suspend fun withdrawSparkToSavings() {
@@ -439,7 +456,11 @@ class TransferViewModel @Inject constructor(
                 sparkAddress = null
                 sparkFeeBalanceSats = null
             }
-            .onFailure { _isSparkWithdrawFailed.update { true } }
+            .onFailure {
+                // A refused fee is quoted again, so the next visit doesn't show it and fail the same way.
+                sparkFeeBalanceSats = null
+                _isSparkWithdrawFailed.update { true }
+            }
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
