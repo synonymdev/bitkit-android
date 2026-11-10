@@ -496,10 +496,11 @@ class SparkRepo @Inject constructor(
         earlyClaimVouts[offer.txid] = offer.vout
         runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, offer.earlyFeeSats) }
             .map { SparkEarlyClaim.from(it) }
-            .recover { if (it is SdkException.DepositClaimInProgress) SparkEarlyClaim.Claimed else throw it }
+            .recoverCatching { if (it is SdkException.DepositClaimInProgress) SparkEarlyClaim.Claimed else throw it }
             .onSuccess {
                 Logger.info("Early claim of Spark deposit '${offer.txid}': '$it'", context = TAG)
-                refresh()
+                runSuspendCatching { refresh() }
+                    .onFailure { Logger.warn("Failed to refresh Spark state", it, context = TAG) }
             }
             .onFailure { Logger.error("Failed to claim Spark deposit '${offer.txid}' early", it, context = TAG) }
     }

@@ -1445,6 +1445,17 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
     }
 
+    @Test
+    fun `a failed early claim is a failure the claim follower keeps going on`() = test {
+        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }
+            .thenAnswer { throw SdkException.Generic("operators unreachable") }
+        val choice = SparkClaimOffer.Choice("txid", 0u, earlyFeeSats = 300uL, 0u, 198uL, 3u)
+
+        val result = runCatching { createSut().claimEarly(choice) }
+
+        assertTrue(result.getOrThrow().isFailure, "a failed early claim threw instead of failing")
+    }
+
     private fun info(balanceSats: ULong) = GetInfoResponse(
         identityPubkey = "pubkey",
         balanceSats = balanceSats,
