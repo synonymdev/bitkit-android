@@ -114,6 +114,15 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `entering transfer to savings drops a pick left from an abandoned visit`() {
+        sut.setSavingsSelection(SavingsSelection(channelIds = persistentSetOf("closed-since"), includesSpark = false))
+
+        sut.beginSavingsTransfer()
+
+        assertEquals(SavingsSelection(), sut.savingsSelection.value)
+    }
+
+    @Test
     fun `transfer to savings with only spark withdraws spark and closes no channel`() = test {
         sparkState.value = SparkState(balanceSats = SPARK_SATS)
         sut.loadSparkWithdrawFee(SPARK_SATS)

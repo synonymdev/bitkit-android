@@ -1522,12 +1522,21 @@ class LightningRepo @Inject constructor(
         return payInvoiceWithLdk(bolt11, null, paymentHash, null, null) { true }
     }
 
+    /**
+     * The node's pending or paid send of [bolt11]. While the node can't list its payments (stopped or not started yet),
+     * a send it started for the invoice counts as pending, since it may be live.
+     */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
-        val send = listPaymentsOrNull()?.firstOrNull {
+        val key = ldkSendKey(bolt11, paymentHash)
+        val payments = listPaymentsOrNull()
+            ?: return key.takeIf { it in cacheStore.data.first().ldkSendHashes }?.let { EarlierSend.Pending(it) }
+        val send = payments.firstOrNull {
             val kind = it.kind as? PaymentKind.Bolt11 ?: return@firstOrNull false
             it.direction == PaymentDirection.OUTBOUND &&
                 (kind.bolt11.equals(bolt11, ignoreCase = true) || kind.hash.equals(paymentHash, ignoreCase = true))
-        } ?: return null
+        }
+        if (send == null || send.status == PaymentStatus.FAILED) cacheStore.removeLdkSendHash(key)
+        if (send == null) return null
         val hash = (send.kind as PaymentKind.Bolt11).hash
         return when (send.status) {
             PaymentStatus.PENDING -> EarlierSend.Pending(hash)
@@ -1555,10 +1564,14 @@ class LightningRepo @Inject constructor(
         sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
+        cacheStore.addLdkSendHash(ldkSendKey(bolt11, paymentHash))
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
             .onSuccess { recordSendRail(it, LightningRail.Ldk) }
             .also { syncState() }
     }
+
+    /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */
+    private fun ldkSendKey(bolt11: String, paymentHash: String?): String = (paymentHash ?: bolt11).lowercase()
 
     private fun recordSendRail(paymentHash: String, rail: LightningRail) {
         sendRails[paymentHash.lowercase()] = rail

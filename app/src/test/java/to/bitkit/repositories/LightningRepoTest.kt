@@ -1318,6 +1318,43 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an invoice the node sent is not sent through spark while the node can't list it`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        val retry = sut.payInvoice("bolt11", 1_000uL)
+
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        assertIs<PaymentPendingException>(retry.exceptionOrNull())
+    }
+
+    @Test
+    fun `spark still pays while the node can't list when the node never tried the invoice`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        assertEquals("hash", sut.payInvoice("bolt11", 1_000uL).getOrThrow())
+    }
+
+    @Test
+    fun `a node send is recorded before it leaves`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send("bolt11", 1_000uL)).thenReturn("hash")
+
+        sut.payInvoice("bolt11", 1_000uL).getOrThrow()
+
+        verifyBlocking(cacheStore) { addLdkSendHash("bolt11") }
+    }
+
+    @Test
     fun `an invoice spark is still paying is not sent again through the node`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)

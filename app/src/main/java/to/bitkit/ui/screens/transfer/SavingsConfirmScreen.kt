@@ -125,6 +125,7 @@ fun SavingsConfirmScreen(
             // Spark's part moves only at the fee shown, so nothing is confirmed before it is priced.
             isSparkFeePricing = withdrawsSpark && isSparkFeePricing,
             isSparkUnpriced = withdrawsSpark && sparkFeeSats == null,
+            isNothingSelected = channels.isEmpty() && !withdrawsSpark,
             isSparkTooSmall = withdrawsSpark && isSparkTooSmall,
             isSwapEnabled = swapState.isSwapEnabled,
             quote = swapState.quote,
@@ -167,6 +168,7 @@ private fun SavingsConfirmContent(
     sparkFeeSats: ULong?,
     isSparkFeePricing: Boolean,
     isSparkUnpriced: Boolean,
+    isNothingSelected: Boolean = false,
     isSparkTooSmall: Boolean,
     isSwapEnabled: Boolean,
     quote: SavingsSwapQuote?,
@@ -344,7 +346,7 @@ private fun SavingsConfirmContent(
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
                 loading = isLoading || isPricingSwap || isSparkFeePricing,
-                enabled = !isSparkUnpriced,
+                enabled = !isSparkUnpriced && !isNothingSelected,
                 color = Colors.Brand,
                 onConfirm = {
                     scope.launch {
@@ -359,7 +361,7 @@ private fun SavingsConfirmContent(
                 // Fallback: drain a whole channel on-chain by closing it instead of swapping.
                 TertiaryButton(
                     text = stringResource(R.string.lightning__savings_confirm__close_instead),
-                    enabled = !isSparkUnpriced,
+                    enabled = !isSparkUnpriced && !isNothingSelected,
                     onClick = onCloseConfirm,
                 )
             }

@@ -137,6 +137,9 @@ class SparkRepo @Inject constructor(
     /** Watchers of the claims of deposits this app sent, by txid; they outlive the screens that start them. */
     private val claimJobs = ConcurrentHashMap<String, Job>()
 
+    /** Vouts of the deposits an early claim was attempted for, so Wait can clear the fee cap it left on them. */
+    private val earlyClaimVouts = ConcurrentHashMap<String, UInt>()
+
     private val _depositClaims = MutableStateFlow<Map<String, SparkDepositClaim>>(emptyMap())
 
     /** Where the claim of each deposit sent from the transfer flow stands, by txid. */
@@ -186,6 +189,7 @@ class SparkRepo @Inject constructor(
     suspend fun wipe(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         claimJobs.values.forEach { it.cancel() }
         claimJobs.clear()
+        earlyClaimVouts.clear()
         preparedWithdrawal = null
         withdrawalTxids.clear()
         broadcastDeposits.clear()
@@ -286,6 +290,12 @@ class SparkRepo @Inject constructor(
             }
             val payment = sent.getOrElse {
                 if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
+                // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
+                // nothing, for instance when an earlier send spent it after the balance was read.
+                if (it is SdkException.InsufficientFunds) {
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    throw SparkError.SendRefused("Spark balance can't cover the payment", it)
+                }
                 Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
                 settleUncertainSend(paymentHash)
                 throw PaymentPendingException(paymentHash)
@@ -364,10 +374,20 @@ class SparkRepo @Inject constructor(
         followDepositClaim(txid, SparkClaimSpeed.Instant, repriced.offer.earlyFeeSats)
     }
 
-    /** Leaves the deposit in [txid] to the claim at 3 confirmations. */
+    /**
+     * Leaves the deposit in [txid] to the claim at 3 confirmations, clearing the fee cap an early claim attempt left on
+     * it, so Spark doesn't still claim it early.
+     */
     fun waitForMatureClaim(txid: String) {
         claimJobs.remove(txid)?.cancel()
         setDepositClaim(txid, SparkDepositClaim.Later)
+        val vout = earlyClaimVouts.remove(txid) ?: return
+        scope.launch {
+            runSuspendCatching { sparkService.releaseDepositClaimFee(txid, vout) }
+                .onFailure {
+                    Logger.warn("Failed to clear the early claim cap of Spark deposit '$txid'", it, context = TAG)
+                }
+        }
     }
 
     private suspend fun claimInstantly(txid: String, ceilingSats: ULong) {
@@ -420,6 +440,7 @@ class SparkRepo @Inject constructor(
 
     /** Accepts the early claim of [offer] at its quoted fee. */
     suspend fun claimEarly(offer: SparkClaimOffer.Choice): Result<SparkEarlyClaim> = withContext(bgDispatcher) {
+        earlyClaimVouts[offer.txid] = offer.vout
         runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, offer.earlyFeeSats) }
             .map { SparkEarlyClaim.from(it) }
             .recover { if (it is SdkException.DepositClaimInProgress) SparkEarlyClaim.Claimed else throw it }
@@ -757,19 +778,25 @@ class SparkRepo @Inject constructor(
     /** Payment hashes of the Lightning payments Spark received. */
     suspend fun receivedLightningPaymentHashes(): Set<String> =
         lightningPaymentHashes { it.paymentType == SparkPaymentType.RECEIVE && it.status == PaymentStatus.COMPLETED }
+            .orEmpty()
 
-    /** Payment hashes of the Lightning payments Spark sent or is sending. */
-    suspend fun attemptedLightningPaymentHashes(): Set<String> =
-        lightningPaymentHashes { it.paymentType == SparkPaymentType.SEND && it.status != PaymentStatus.FAILED }
+    /**
+     * Payment hashes of the Lightning payments Spark sent or is sending, or null while Spark runs here but can't list
+     * them, so a send it may have made isn't read as never tried.
+     */
+    suspend fun attemptedLightningPaymentHashes(): Set<String>? {
+        if (!sparkService.isSupported) return emptySet()
+        return lightningPaymentHashes { it.paymentType == SparkPaymentType.SEND && it.status != PaymentStatus.FAILED }
+    }
 
-    private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String> = withContext(bgDispatcher) {
-        if (!sparkService.isConnected) return@withContext emptySet()
+    private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String>? = withContext(bgDispatcher) {
+        if (!sparkService.isConnected) return@withContext null
         runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
-            .getOrDefault(emptyList())
-            .filter(filter)
-            .mapNotNull { (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash?.lowercase() }
-            .toSet()
+            .getOrNull()
+            ?.filter(filter)
+            ?.mapNotNull { (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash?.lowercase() }
+            ?.toSet()
     }
 
     private suspend fun syncActivities() {

@@ -524,6 +524,52 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wait after a claim time reprice clears the early claim cap`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+            ClaimDepositOutcome.Deferred(
+                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 450uL, maxFeeSats = 300uL)
+            )
+        )
+        val sut = createSut()
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        sut.waitForMatureClaim("txid")
+        advanceUntilIdle()
+
+        assertEquals(SparkDepositClaim.Later, sut.depositClaims.value["txid"])
+        verify(sparkService).releaseDepositClaimFee("txid", 0u)
+    }
+
+    @Test
+    fun `wait before any claim attempt leaves the deposit alone`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
+        val sut = createSut()
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        sut.waitForMatureClaim("txid")
+        advanceUntilIdle()
+
+        verify(sparkService, never()).releaseDepositClaimFee(any(), any())
+    }
+
+    @Test
+    fun `attempted sends are unknown while spark can't list them`() = test {
+        whenever(sparkService.isConnected).thenReturn(false)
+        val sut = createSut()
+
+        assertNull(sut.attemptedLightningPaymentHashes())
+
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenAnswer { throw SdkException.Generic("offline") }
+        assertNull(sut.attemptedLightningPaymentHashes())
+    }
+
+    @Test
     fun `instant is unavailable when Spark offers only the standard claim`() = test {
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = null))
@@ -732,6 +778,20 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         whenever { sparkService.send(any()) }.thenAnswer { throw expired }
         assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+    }
+
+    @Test
+    fun `insufficient funds inside the spark send is a refusal, not pending`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.InsufficientFunds(null) }
+        val sut = createSut()
+
+        val error = sut.payInvoice("lnbc1", 100uL).exceptionOrNull()
+
+        assertIs<SparkError.SendRefused>(error)
+        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
     }
 
     @Test

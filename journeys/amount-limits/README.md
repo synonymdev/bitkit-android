@@ -21,7 +21,8 @@ External node).
      `./lsp POST /regtest/chain/deposit '{"address":"<addr>","amountSat":100000}'`
      then `./lsp POST /regtest/chain/mine '{"count":3}'` and wait for the balance to sync.
 2. **Transfer→Spending needs Spark connected** so the most Savings can send to the Spark deposit
-   address can be priced. The number pad is disabled until that max loads — **wait for it** before
+   address can be priced. On regtest it also needs a build with `ESPLORA_URL` on Spark's regtest chain
+   (`scripts/spark-regtest-esplora.py`); without it the Transfer Unavailable sheet opens. The number pad is disabled until that max loads — **wait for it** before
    typing.
 3. **External-node flow needs a reachable LN peer.** The staging LSP node works as the peer:
    id `028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc`,

@@ -10,7 +10,7 @@
     sees, so this journey stops before the swipe; the states after it are covered by SettingUpScreen previews and
     SparkRepoTest.
 
-    Precondition: dev build with Spark connected on its regtest (no key needed), a freshly onboarded wallet (so
+    Precondition: dev build with Spark connected on its regtest (no key needed), built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), a freshly onboarded wallet (so
     neither intro has been seen) with a positive on-chain Savings balance and no channels, and the Spending
     suggestion card on Home. Start on the wallet home screen.
   </description>

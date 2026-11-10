@@ -9,7 +9,8 @@
     path shows the same sheet content.
 
     Precondition: dev build, onboarded wallet with a positive on-chain Savings balance, no channels and Spark
-    not running (a build without a Breez API key, or Spark's regtest unreachable); with Spark ready, see
+    not running (a build without a Breez API key, or Spark's regtest unreachable), or a regtest build without
+    `ESPLORA_URL`, whose deposits Spark can't see; with Spark ready on its chain, see
     spark-transfer-to-spending.xml. Start on
     the wallet home screen.
   </description>

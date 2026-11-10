@@ -234,6 +234,12 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the latest backup time skips the spark exit data`() {
+        assertFalse(BackupCategory.SPARK_EXIT in BackupRepo.LATEST_BACKUP_TIME_CATEGORIES)
+        assertTrue(BackupCategory.WALLET in BackupRepo.LATEST_BACKUP_TIME_CATEGORIES)
+    }
+
+    @Test
     fun `restore marker storage reads leave Main responsive`() = test {
         val entered = CompletableDeferred<Thread>()
         val release = CountDownLatch(1)

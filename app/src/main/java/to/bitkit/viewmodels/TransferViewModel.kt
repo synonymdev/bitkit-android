@@ -307,6 +307,9 @@ class TransferViewModel @Inject constructor(
         return SavingsSwapResult.Failure(event.reason.toUserMessage(context))
     }
 
+    /** Opens Transfer to Savings with nothing left from an earlier visit that ended before the swipe. */
+    fun beginSavingsTransfer() = setSavingsSelection(SavingsSelection())
+
     fun setSavingsSelection(selection: SavingsSelection) {
         _savingsSelection.update { selection }
     }

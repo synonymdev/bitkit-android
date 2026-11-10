@@ -152,6 +152,19 @@ class CacheStore internal constructor(
         store.updateData { it.copy(sparkSendHashes = it.sparkSendHashes - hash) }
     }
 
+    suspend fun addLdkSendHash(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            it.copy(ldkSendHashes = (it.ldkSendHashes - hash + hash).takeLast(MAX_SPARK_SEND_HASHES))
+        }
+    }
+
+    suspend fun removeLdkSendHash(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash !in store.data.first().ldkSendHashes) return
+        store.updateData { it.copy(ldkSendHashes = it.ldkSendHashes - hash) }
+    }
+
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
         it.copy(backgroundReceive = details)
     }
@@ -187,6 +200,8 @@ data class AppCacheData(
     val pendingLightningMessages: Map<String, String> = mapOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
+    /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
+    val ldkSendHashes: List<String> = listOf(),
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts
