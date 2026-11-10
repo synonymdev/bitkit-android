@@ -36,6 +36,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.SubscriptionClockOffset
 import javax.inject.Inject
+import kotlin.time.TimeSource
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -266,31 +267,56 @@ class SettingsViewModel @Inject constructor(
     val publicPaymentsEnabled = contactPaymentSettingsRepo.isPublicEnabled
         .asStateFlow(initialValue = false)
 
-    private val _isUpdatingContactPayments = MutableStateFlow(false)
-    val isUpdatingContactPayments = _isUpdatingContactPayments.asStateFlow()
+    private val _pendingContactPayments = MutableStateFlow<Boolean?>(null)
 
-    fun setPublicPaymentsEnabled(value: Boolean) = updatePaymentSharing {
+    /** The value a private payments change is moving to, or null when no change is running. */
+    val pendingContactPayments = _pendingContactPayments.asStateFlow()
+
+    private val _pendingPublicPayments = MutableStateFlow<Boolean?>(null)
+
+    /** The value a public payments change is moving to, or null when no change is running. */
+    val pendingPublicPayments = _pendingPublicPayments.asStateFlow()
+
+    fun setPublicPaymentsEnabled(value: Boolean) = updatePaymentSharing(_pendingPublicPayments, "public", value) {
         contactPaymentSettingsRepo.setPublicEnabled(value)
     }
 
-    fun setContactPaymentsEnabled(value: Boolean) = updatePaymentSharing {
+    fun setContactPaymentsEnabled(value: Boolean) = updatePaymentSharing(_pendingContactPayments, "private", value) {
         contactPaymentSettingsRepo.setEnabled(value)
     }
 
-    private fun updatePaymentSharing(update: suspend () -> Result<Unit>) {
-        if (_isUpdatingContactPayments.value) return
+    private fun updatePaymentSharing(
+        pending: MutableStateFlow<Boolean?>,
+        label: String,
+        value: Boolean,
+        update: suspend () -> Result<Unit>,
+    ) {
+        if (!pending.compareAndSet(null, value)) return
         viewModelScope.launch {
-            _isUpdatingContactPayments.update { true }
+            val started = TimeSource.Monotonic.markNow()
+            Logger.info("Updating $label Paykit payments to '$value'", context = TAG)
             try {
-                update().onFailure {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = contactPaymentSyncErrorMessage(it),
-                    )
-                }
+                update()
+                    .onSuccess {
+                        Logger.info(
+                            "Updated $label Paykit payments to '$value' in ${started.elapsedNow()}",
+                            context = TAG,
+                        )
+                    }
+                    .onFailure {
+                        Logger.warn(
+                            "Failed to update $label Paykit payments to '$value' after ${started.elapsedNow()}",
+                            it,
+                            context = TAG,
+                        )
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = contactPaymentSyncErrorMessage(it),
+                        )
+                    }
             } finally {
-                _isUpdatingContactPayments.update { false }
+                pending.update { null }
             }
         }
     }
