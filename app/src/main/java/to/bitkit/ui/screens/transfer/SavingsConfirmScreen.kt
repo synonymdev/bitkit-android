@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -52,6 +51,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.PrimaryButton
@@ -65,11 +65,15 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.transferViewModel
+import to.bitkit.ui.utils.screenWidth
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.SavingsSelection
 import to.bitkit.viewmodels.SavingsSwapQuote
 import to.bitkit.viewmodels.SavingsTransferMode
+
+/** The piggybank's width against the screen's, as iOS draws its 256 pt piggybank on a 402 pt screen. */
+private const val PIGGY_SCREEN_SHARE = 256f / 402f
 
 @Composable
 fun SavingsConfirmScreen(
@@ -94,8 +98,12 @@ fun SavingsConfirmScreen(
     val selection by transfer.savingsSelection.collectAsStateWithLifecycle()
     val hasSelected = !selection.isAll
 
+    val isSparkTooSmall by transfer.isSparkWithdrawTooSmall.collectAsStateWithLifecycle()
     val channels = selection.channels(openChannels)
-    val withdrawsSpark = selection.withdrawsSpark(sparkSats)
+    // A Spark balance too small to move is left out, so the channels picked with it still move.
+    val pricesSpark = selection.withdrawsSpark(sparkSats)
+    val withdrawsSpark = selection.withdrawsSpark(sparkSats, isSparkTooSmall)
+    val isOnlySparkTooSmall = pricesSpark && isSparkTooSmall && channels.isEmpty()
 
     val channelsAmount = channels.sumOf { it.amountOnClose }
     val sparkAmount = if (withdrawsSpark) sparkSats else 0uL
@@ -103,7 +111,6 @@ fun SavingsConfirmScreen(
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
     val sparkFeeSats by transfer.sparkWithdrawFeeSats.collectAsStateWithLifecycle()
     val isSparkFeePricing by transfer.isSparkFeePricing.collectAsStateWithLifecycle()
-    val isSparkTooSmall by transfer.isSparkWithdrawTooSmall.collectAsStateWithLifecycle()
 
     // Pull the latest node balances so a just-received payment is reflected in the amounts below.
     LaunchedEffect(Unit) {
@@ -116,8 +123,8 @@ fun SavingsConfirmScreen(
         transfer.loadSavingsSwapQuote(channelsAmount, channels.totalNextOutboundHtlcLimitSats())
     }
 
-    LaunchedEffect(withdrawsSpark, sparkSats) {
-        if (withdrawsSpark) transfer.loadSparkWithdrawFee(sparkSats)
+    LaunchedEffect(pricesSpark, sparkSats) {
+        if (pricesSpark) transfer.loadSparkWithdrawFee(sparkSats)
     }
 
     Box {
@@ -127,9 +134,9 @@ fun SavingsConfirmScreen(
             sparkFeeSats = sparkFeeSats.takeIf { withdrawsSpark },
             // Spark's part moves only at the fee shown, so nothing is confirmed before it is priced.
             isSparkFeePricing = withdrawsSpark && isSparkFeePricing,
-            isSparkUnpriced = withdrawsSpark && sparkFeeSats == null,
+            isSparkUnpriced = withdrawsSpark && sparkFeeSats == null || isOnlySparkTooSmall,
             isNothingSelected = channels.isEmpty() && !withdrawsSpark,
-            isSparkTooSmall = withdrawsSpark && isSparkTooSmall,
+            isSparkTooSmall = isOnlySparkTooSmall,
             isSwapEnabled = swapState.isSwapEnabled,
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
@@ -316,32 +323,36 @@ internal fun SavingsConfirmContent(
                         }
                     }
 
-                    // Flexible middle: the piggybank fills the remaining space, so it shrinks when the
-                    // fees/slider are shown (no squished buttons) and fills the gap while the quote loads.
+                    // The piggybank keeps its size: when the fees, slider and Spark row make the content tall,
+                    // it scrolls above the swipe instead of shrinking.
+                    FillHeight()
                     Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .weight(1f)
                             .fillMaxWidth()
                             .padding(vertical = 16.dp),
-                        contentAlignment = Alignment.Center,
                     ) {
+                        val piggySize = screenWidth() * PIGGY_SCREEN_SHARE
                         if (isPricingSwap) {
-                            GradientCircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                strokeWidth = 3.dp,
-                            )
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(piggySize)) {
+                                GradientCircularProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    strokeWidth = 3.dp,
+                                )
+                            }
                         } else {
                             Image(
                                 painter = painterResource(R.drawable.piggybank),
                                 contentDescription = null,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
-                                    .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
-                                    .fillMaxSize()
-                                    .graphicsLayer(scaleX = -1f),
+                                    .size(piggySize)
+                                    .graphicsLayer(scaleX = -1f)
+                                    .testTag("SavingsConfirmPiggybank"),
                             )
                         }
                     }
+                    FillHeight()
                 }
             }
 

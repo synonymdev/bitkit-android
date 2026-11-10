@@ -1456,6 +1456,32 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(listOf("h"), store.data.first().ldkSendHashes)
     }
 
+    @Test
+    fun `a node retry of the same invoice that ends while an older listing is read keeps its hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        var isRetried = false
+        // The node retries the invoice Spark is about to pay, and its send returns, while this listing is read.
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            val listed = listOf(nodeSend("h", PaymentStatus.FAILED))
+            if (!isRetried) {
+                isRetried = true
+                sut.payInvoiceWithNode("h")
+            }
+            listed
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("h"))
+
+        sut.payInvoice("h", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an older listing released the node retry's hold")
+    }
+
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
         id = hash,
         kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),
@@ -1516,7 +1542,14 @@ class LightningRepoTest : BaseUnitTest() {
 
         sut.payInvoice("bolt11", 1_000uL)
 
-        verifyBlocking(cacheStore) { trimLdkSendHashes(paid = setOf("paid"), failed = setOf("failed")) }
+        verifyBlocking(cacheStore) {
+            trimLdkSendHashes(
+                paid = setOf("paid"),
+                failed = setOf("failed"),
+                listed = setOf("pending", "paid", "failed"),
+                live = setOf("pending"),
+            )
+        }
     }
 
     @Test
@@ -2899,7 +2932,8 @@ class LightningRepoTest : BaseUnitTest() {
                 assertEquals(1, broadcasts)
             } else {
                 val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull(), "Sent $amount for $fee")
-                assertIs<OnchainSendChangedError>(error.cause)
+                val changed = assertIs<OnchainSendChangedError>(error.cause)
+                assertEquals(fee, changed.preparedFeeSats, "Sent $amount for $fee")
                 assertEquals(0, broadcasts)
             }
         }

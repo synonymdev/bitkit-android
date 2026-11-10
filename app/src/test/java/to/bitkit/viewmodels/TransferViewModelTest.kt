@@ -101,6 +101,14 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `savings selection leaves a spark balance too small to move, so the channels still move`() {
+        val selection = SavingsSelection()
+
+        assertFalse(selection.withdrawsSpark(SPARK_SATS, isSparkTooSmall = true))
+        assertEquals(listOf(CHANNEL_A), selection.channels(listOf(CHANNEL_A)))
+    }
+
+    @Test
     fun `savings selection moves only the picked channels and spark`() {
         val channelsOnly = SavingsSelection(channelIds = persistentSetOf(CHANNEL_B.channelId), includesSpark = false)
         val sparkOnly = SavingsSelection(channelIds = persistentSetOf(), includesSpark = true)

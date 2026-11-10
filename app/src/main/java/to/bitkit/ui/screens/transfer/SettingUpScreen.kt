@@ -5,9 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -42,11 +43,15 @@ import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.localizedRandom
+import to.bitkit.ui.utils.screenWidth
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
 /** Confirmations Spark waits for before it adds a deposit by itself. */
 private const val MATURE_CONFIRMATIONS = 3
+
+/** The success check's width against the screen's, as iOS draws its 256 pt check on a 402 pt screen. */
+private const val CHECK_SCREEN_SHARE = 256f / 402f
 
 /** About how long [MATURE_CONFIRMATIONS] take. */
 private const val MATURE_MINUTES = 30
@@ -170,7 +175,10 @@ internal fun Content(
                         painter = painterResource(id = R.drawable.check),
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(256.dp)
+                        modifier = Modifier
+                            .width(screenWidth() * CHECK_SCREEN_SHARE)
+                            .aspectRatio(1f)
+                            .testTag("TransferSuccessCheck")
                     )
                 }
             }

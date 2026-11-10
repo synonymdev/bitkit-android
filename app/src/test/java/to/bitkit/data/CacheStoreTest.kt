@@ -100,7 +100,12 @@ class CacheStoreTest : BaseUnitTest() {
         val paid = settledHashes()
         sut.seedLdkSendHashes(listOf("pending") + paid)
 
-        sut.trimLdkSendHashes(paid = paid.toSet(), failed = emptySet())
+        sut.trimLdkSendHashes(
+            paid = paid.toSet(),
+            failed = emptySet(),
+            listed = paid.toSet() + "pending",
+            live = setOf("pending"),
+        )
 
         val kept = sut.data.first().ldkSendHashes
         assertTrue("pending" in kept)
@@ -122,7 +127,12 @@ class CacheStoreTest : BaseUnitTest() {
         val paid = settledHashes()
         paid.forEach { sut.addSparkSendHash(it) }
 
-        sut.trimSparkSendHashes(paid = paid.toSet(), failed = emptySet())
+        sut.trimSparkSendHashes(
+            paid = paid.toSet(),
+            failed = emptySet(),
+            listed = paid.toSet() + "pending",
+            live = setOf("pending"),
+        )
 
         val kept = sut.data.first().sparkSendHashes
         assertTrue("pending" in kept)
@@ -134,7 +144,12 @@ class CacheStoreTest : BaseUnitTest() {
         sut.addLdkSendHash("pending")
         sut.addLdkSendHash("failed")
 
-        sut.trimLdkSendHashes(paid = emptySet(), failed = setOf("failed"))
+        sut.trimLdkSendHashes(
+            paid = emptySet(),
+            failed = setOf("failed"),
+            listed = setOf("pending", "failed"),
+            live = setOf("pending"),
+        )
 
         assertEquals(listOf("pending"), sut.data.first().ldkSendHashes)
     }
@@ -146,7 +161,8 @@ class CacheStoreTest : BaseUnitTest() {
         store.addSparkSendHash("unexpired", expiresAt = NOW + 1)
         store.addSparkSendHash("unknown")
 
-        store.trimSparkSendHashes(paid = setOf("expired", "unexpired", "unknown"), failed = emptySet())
+        val paid = setOf("expired", "unexpired", "unknown")
+        store.trimSparkSendHashes(paid = paid, failed = emptySet(), listed = paid, live = emptySet())
 
         val data = store.data.first()
         assertEquals(listOf("unexpired", "unknown"), data.sparkSendHashes)
@@ -160,7 +176,8 @@ class CacheStoreTest : BaseUnitTest() {
         val paid = settledHashes()
         paid.forEach { store.addLdkSendHash(it, expiresAt = NOW - 1) }
 
-        store.trimLdkSendHashes(paid = paid.toSet() + "unexpired", failed = emptySet())
+        val listed = paid.toSet() + "unexpired"
+        store.trimLdkSendHashes(paid = listed, failed = emptySet(), listed = listed, live = emptySet())
 
         val data = store.data.first()
         assertEquals(listOf("unexpired"), data.ldkSendHashes, "The unexpired paid send was dropped")
@@ -174,11 +191,35 @@ class CacheStoreTest : BaseUnitTest() {
         val paid = settledHashes()
         paid.forEach { store.addSparkSendHash(it, expiresAt = NOW + 3_600) }
 
-        store.trimSparkSendHashes(paid = paid.toSet() + "expired", failed = emptySet())
+        val listed = paid.toSet() + "expired"
+        store.trimSparkSendHashes(paid = listed, failed = emptySet(), listed = listed, live = emptySet())
 
         val data = store.data.first()
         assertFalse("expired" in data.sparkSendHashes, "The expired paid send stayed past the cap")
         assertFalse("expired" in data.sparkSendExpiries)
+    }
+
+    @Test
+    fun `a send no listing shows is dropped once its invoice expired past the settle window`() = test {
+        val store = expiringStore()
+        store.addSparkSendHash("stale", expiresAt = NOW - UNLISTED_SEND_SETTLE_SECS)
+        store.addSparkSendHash("settling", expiresAt = NOW - UNLISTED_SEND_SETTLE_SECS + 1)
+        store.addSparkSendHash("unknown")
+        store.addSparkSendHash("live", expiresAt = NOW - UNLISTED_SEND_SETTLE_SECS)
+
+        store.trimSparkSendHashes(paid = emptySet(), failed = emptySet(), listed = emptySet(), live = setOf("live"))
+
+        assertEquals(listOf("settling", "unknown", "live"), store.data.first().sparkSendHashes)
+    }
+
+    @Test
+    fun `sends no listing shows with no known expiry are dropped oldest first past the cap`() = test {
+        val unlisted = (0..MAX_SPARK_SEND_HASHES).map { "unlisted$it" }
+        unlisted.forEach { sut.addLdkSendHash(it) }
+
+        sut.trimLdkSendHashes(paid = emptySet(), failed = emptySet(), listed = emptySet(), live = emptySet())
+
+        assertEquals(unlisted.drop(1), sut.data.first().ldkSendHashes)
     }
 
     private fun expiringStore() = CacheStore(

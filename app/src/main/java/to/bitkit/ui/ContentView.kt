@@ -1392,7 +1392,7 @@ private fun NavGraphBuilder.home(
 
         SpendingWalletScreen(
             channels = lightningState.channels,
-            hasSparkBalance = sparkState.balanceSats > 0uL,
+            hasSparkBalance = sparkState.shownBalanceSats > 0uL,
             canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
             onMoveToSparkClick = { navController.navigateTo(Routes.MoveToSpark) },
             lightningActivities = lightningActivities ?: persistentListOf(),

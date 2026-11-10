@@ -39,6 +39,7 @@ import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
+import to.bitkit.ui.utils.screenWidth
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.viewmodels.AppViewModel
@@ -157,6 +158,15 @@ fun SavingsProgressScreen(
     )
 }
 
+/** Outer ring against the screen width, as iOS draws its 311 pt ring on a 402 pt screen. */
+private const val RING_SCREEN_SHARE = 311f / 402f
+
+/** Inner ring against the outer one, iOS's 207 of 311 pt. */
+private const val INNER_RING_SHARE = 207f / 311f
+
+/** The figure's square against the outer ring, iOS's 256 of 311 pt. */
+private const val FIGURE_SHARE = 256f / 311f
+
 /** Legacy path: cooperatively close the selected channel(s), retrying on failure. */
 private suspend fun runChannelClose(
     transfer: TransferViewModel,
@@ -235,6 +245,9 @@ internal fun SavingsProgressContent(
                     largeCircleRes = R.drawable.onchain_sync_large,
                     smallCircleRes = R.drawable.onchain_sync_small,
                     keepAssetRatios = true,
+                    innerRingShare = INNER_RING_SHARE,
+                    figureShare = FIGURE_SHARE,
+                    maxSize = screenWidth() * RING_SCREEN_SHARE,
                 )
             } else {
                 Box(

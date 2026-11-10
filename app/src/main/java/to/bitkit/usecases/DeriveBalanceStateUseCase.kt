@@ -52,7 +52,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
-            val sparkSats = sparkRepo.state.value.balanceSats
+            val sparkSats = sparkRepo.state.value.shownBalanceSats
             val afterLingeringCoopClose = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
             val totalLightningSats = afterLingeringCoopClose.safe() + sparkSats.safe()
 

@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.UsdtException
 import com.synonym.vssclient.VssException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -190,10 +192,21 @@ class BackupRepo @Inject constructor(
 
     private val restorePendingUntil = MutableStateFlow(0L)
 
-    /** Whether a restore is announced and its backup not applied yet, as [isRestoreInProgress], as it changes. */
-    val restoreInProgress: Flow<Boolean> = combine(_isRestoring, restorePendingUntil) { isRestoring, pendingUntil ->
-        isRestoring || currentTimeMillis() < pendingUntil
-    }.distinctUntilChanged()
+    /**
+     * Whether a restore is announced and its backup not applied yet, as [isRestoreInProgress], as it changes; a gate
+     * that lapses by its timeout ends it then, too.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val restoreInProgress: Flow<Boolean> = combine(_isRestoring, restorePendingUntil, ::Pair)
+        .transformLatest { (isRestoring, pendingUntil) ->
+            val remainingMillis = pendingUntil - currentTimeMillis()
+            emit(isRestoring || remainingMillis > 0)
+            if (!isRestoring && remainingMillis > 0) {
+                delay(remainingMillis)
+                emit(false)
+            }
+        }
+        .distinctUntilChanged()
 
     fun reset() {
         stopObservingBackups()
