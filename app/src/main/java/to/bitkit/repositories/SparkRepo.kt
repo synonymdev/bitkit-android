@@ -203,11 +203,12 @@ class SparkRepo @Inject constructor(
             }
             val connected = sparkService.connect(walletIndex)
             importRestoredExitState(walletIndex)
-            // The SDK starts syncing inside build(), before the listener exists, so its first Synced can be missed.
+            // The SDK starts syncing inside build(), before the listener exists, so its first Synced can be missed. A
+            // sync that never reached Spark still returns, so only one that did may drop an unlisted withdrawal.
             val synced = runSuspendCatching { sparkService.syncWallet() }
-                .onSuccess { if (hasSyncedSince(null)) _state.update { it.copy(hasSynced = true) } }
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
-                .isSuccess
+                .isSuccess && hasSyncedSince(null)
+            if (synced) _state.update { it.copy(hasSynced = true) }
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
             // Only a full sync settles a pending withdrawal journal, so the sync runs until the journal clears. Only a

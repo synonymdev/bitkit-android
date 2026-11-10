@@ -80,6 +80,7 @@ import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -781,6 +782,25 @@ class SparkRepoTest : BaseUnitTest() {
 
         verify(activityRepo, never()).upsertActivity(any())
         assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `keeps a journaled withdrawal while the sync on start never reached spark`() = test {
+        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        // The sync call returns, but Spark could not reach its operators, so its list may lack the withdrawal.
+        whenever { sparkService.getInfo() }
+            .thenReturn(info(50_000uL).copy(lastSyncError = SyncError.Network("operators unreachable")))
+
+        createSut().start(0).getOrThrow()
+
+        assertNotNull(
+            cacheData.value.pendingSparkWithdrawal,
+            "A sync that never reached Spark can't show it never sent",
+        )
     }
 
     @Test
