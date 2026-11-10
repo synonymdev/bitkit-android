@@ -364,7 +364,15 @@ androidComponents {
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_OVERRIDE", e2eHomegateOverrideEnv.stringField())
-        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL", "BLOCKTANK_REGTEST_AUTH")) {
+        val debugOnlyFields = listOf(
+            "E2E_VSS_SERVER_URL",
+            "E2E_LNURL_AUTH_SERVER_URL",
+            "E2E_BLOCKTANK_API_URL",
+            "BLOCKTANK_REGTEST_AUTH",
+            // A local wake gateway to test wakes against; see Env.wakeGatewayUrl.
+            "WAKE_GATEWAY_URL",
+        )
+        for (key in debugOnlyFields) {
             val value = if (variant.buildType == "debug") localProp(key).orElse("") else provider { "" }
             buildConfigFields.put(key, value.stringField())
         }

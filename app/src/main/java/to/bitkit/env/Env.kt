@@ -224,6 +224,15 @@ internal object Env {
             else -> "https://bitkit.stag0.blocktank.to/backups-ldk"
         }
 
+    /**
+     * The wake gateway this build registers with for background pushes, or null to leave wakes off. No gateway is
+     * deployed yet (synonymdev/wake#2), so only a debug build with `WAKE_GATEWAY_URL` set has one, for local testing.
+     */
+    val wakeGatewayUrl: String?
+        get() = BuildConfig.WAKE_GATEWAY_URL.takeIf { isDebug && it.isNotBlank() } ?: when (network) {
+            Network.BITCOIN, Network.TESTNET, Network.SIGNET, Network.REGTEST -> null
+        }
+
     fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {
         val isE2eLocal = isE2eTest && e2eBackend == "local"
         return when (network) {
