@@ -6915,7 +6915,10 @@ class AppViewModel @Inject constructor(
         isCurrent: Boolean,
     ) {
         clearSwapRouteQuote(isCurrent)
-        releasePrivatePaymentListIfNeeded(contactPaymentContext)
+        // Nothing was paid to the list's address, so a retry may pay from the same list.
+        contactPaymentContext?.privatePaymentContext?.let {
+            privatePaykitRepo.releasePrivatePaymentList(contactPaymentContext.publicKey, it)
+        }
         finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
         if (!isCurrent) {
             handlePaymentPreparationFailure(error, contactPaymentContext, isSendCurrent = false)

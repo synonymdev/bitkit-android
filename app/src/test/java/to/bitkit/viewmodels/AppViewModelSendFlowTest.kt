@@ -203,6 +203,7 @@ import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
+import to.bitkit.repositories.PrivatePaykitError
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
@@ -17018,6 +17019,50 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swap route retry after a refused commit pays from the same private payment list`() = test {
+        val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
+        var consumed = false
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            if (consumed) {
+                Result.failure(PrivatePaykitError.PaymentListAlreadyConsumed)
+            } else {
+                consumed = true
+                Result.success(Unit)
+            }
+        }
+        whenever(privatePaykitRepo.releasePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            consumed = false
+            Result.success(Unit)
+        }
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID))
+            .thenReturn(Result.failure(AppError("quote_expired")), Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment(privatePaymentContext = privateContext)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertIs<SendEffect.NavigateToError>(awaitItem())
+
+            // Retry from Amount quotes afresh for the same contact.
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(privatePaykitRepo, times(2)).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        verify(lightningRepo).payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())
+    }
+
+    @Test
     fun `swap route refused commit clears the quote and retries from the amount`() = test {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.failure(AppError("quote_expired")))
         openSwapRoutedContactPayment()
@@ -17458,6 +17503,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         endpoints: List<Endpoint> = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
         // `advanceUntilIdle` fires the hold watch's timer, which ends a swap payment still awaiting its claim.
         settle: TestScope.() -> Unit = { advanceUntilIdle() },
+        privatePaymentContext: PrivatePaykitPaymentContext? = null,
     ) {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
         whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(quote)
@@ -17474,6 +17520,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.openContactPayment(
             paymentRequest = REGTEST_ADDRESS,
             publicKey = testPublicKey,
+            privatePaymentContext = privatePaymentContext,
             endpoints = endpoints,
         )
         settle()
