@@ -14,12 +14,17 @@
     one shown, so the swipe pays at once.
 
     The wallet's UTXOs and Spark's deposit must be on one chain the run can fund and mine, so it runs on
-    bitkit-docker's local Spark regtest (docs/spark-regtest.md in synonymdev/bitkit-docker), where Savings, the
-    Spark operators and the SSP share bitkit-docker's chain. Lightspark's hosted regtest can't be mined on demand.
+    bitkit-docker's local Spark regtest, where Savings, the Spark operators and the SSP share bitkit-docker's
+    chain. Lightspark's hosted regtest can't be mined on demand. The recipe is docs/spark-regtest.md at
+    synonymdev/bitkit-docker commit cdd294a5ef7470df11ee9ea64d46f441777fdb49
+    (https://github.com/synonymdev/bitkit-docker/blob/cdd294a5ef7470df11ee9ea64d46f441777fdb49/docs/spark-regtest.md).
 
-    Precondition: `./spark up` running in bitkit-docker; a dev build connected to it as that doc's "Point a
-    Bitkit dev build at it" section says (the local Spark config and chain URL, patched in where the build
-    doesn't read them yet, and the `adb reverse` ports), with Savings on bitkit-docker's Electrum
+    Not yet in this repository: the build setting that reads `SPARK_LOCAL_CONFIG_B64` and `SPARK_LOCAL_CHAIN_URL`
+    comes in a follow-up PR. Until it lands, this journey runs only on a build with that setting added.
+
+    Precondition: `./spark up` running in bitkit-docker; a dev build with that setting, built and connected as
+    the doc's "Point a Bitkit dev build at it" section says (`SPARK_LOCAL_CONFIG_B64` from `./spark config
+    --base64`, `SPARK_LOCAL_CHAIN_URL`, and the `adb reverse` ports), with Savings on bitkit-docker's Electrum
     (`tcp://127.0.0.1:60001`); a freshly onboarded wallet with no channel
     and exactly two confirmed on-chain UTXOs of 150 000 sats each (in bitkit-docker, `./spark send
     &lt;savings address&gt; 150000` twice, each mining a block). Start on the wallet home screen.
