@@ -282,6 +282,18 @@ class WakeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the app lifecycle starts no wake work without a gateway`() = test {
+        whenever(wakeConfig.gatewayUrl).thenReturn(null)
+
+        sut.onAppForeground()
+        sut.onAppBackground()
+
+        verify(lightningRepo, never()).lightningState
+        verify(wakeService, never()).setPresence(any(), any(), any())
+        verify(wakeService, never()).clearPresence(any(), any())
+    }
+
+    @Test
     fun `unregister revokes the device secret and treats an unknown secret as done`() = test {
         sut.syncRegistration().getOrThrow()
         whenever(wakeService.unregister(any(), any())).thenAnswer {

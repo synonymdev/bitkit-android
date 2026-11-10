@@ -82,12 +82,14 @@ class WakeRepo @Inject constructor(
      * presence lease until [onAppBackground], so the gateway holds back fallback alerts while the app is open.
      */
     fun onAppForeground() {
+        if (wakeConfig.gatewayUrl == null) return
         if (registrationJob?.isActive != true) registrationJob = scope.launch { observeRegistration() }
         if (presenceJob?.isActive != true) presenceJob = scope.launch { holdPresence() }
     }
 
     /** Ends the presence lease once the app leaves the foreground. */
     fun onAppBackground() {
+        if (wakeConfig.gatewayUrl == null) return
         presenceJob?.cancel()
         presenceJob = null
         scope.launch { clearPresence() }
