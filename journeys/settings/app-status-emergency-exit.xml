@@ -5,15 +5,17 @@
     while a payment that covers the funding waits to confirm. The row opens the exit's progress screen, and
     leaving that screen returns to App Status. With no active exit the row is absent.
 
-    Precondition: dev build on regtest with Spark connected and an emergency exit started but not yet funded
-    (spark emergency exit journey, then swipe to start the exit with "Fund from another wallet"). Start on the
-    wallet home screen. Starting an exit takes the Spark balance out of Spending for days, so use a throwaway wallet.
+    Precondition: dev build on regtest with Spark connected, a Spark balance and savings that can pay the exit's
+    fee funding. Start an emergency exit from Spark (spark emergency exit journey), pick "Pay from savings" and
+    swipe to start it. Starting an exit takes the Spark balance out of Spending for days, so use a throwaway
+    wallet. Start on the wallet home screen.
   </description>
   <actions>
     <action>Tap the menu button (testTag "HeaderMenu") and tap App Status (testTag "DrawerAppStatus")</action>
-    <action>Verify a row titled "Emergency Exit" (testTag "Status-spark_exit") sits under Lightning Connection (testTag "Status-lightning_connection") and reads "Fee funding needed"</action>
+    <action>Verify a row titled "Emergency Exit" (testTag "Status-spark_exit") sits under Lightning Connection (testTag "Status-lightning_connection") and reads "In progress", since savings paid the funding</action>
     <action>Tap the row and verify the exit's progress screen (testTag "SparkExitProgress") opens</action>
-    <action>Tap "Cancel exit", confirm, and verify "Exit cancelled" shows</action>
-    <action>Tap "OK" (testTag "SparkExitProgressOk") and verify App Status shows again, now without the "Emergency Exit" row</action>
+    <action>Tap "OK" (testTag "SparkExitProgressOk") and verify App Status shows again with the "Emergency Exit" row still there</action>
+    <action>Tap the row again, tap "Cancel exit" and confirm</action>
+    <action>Verify App Status shows without the "Emergency Exit" row; if "Exit cancelled" shows first, tap "OK" (testTag "SparkExitProgressOk") to get there</action>
   </actions>
 </journey>
