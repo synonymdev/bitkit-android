@@ -1,8 +1,6 @@
 package to.bitkit.services
 
 import android.os.Process
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -59,6 +57,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
+import to.bitkit.App
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.SettingsStore
@@ -1617,8 +1616,7 @@ internal fun exactOriginalSendFee(
     return inputTotal - outputTotal
 }
 
-private fun isProcessInBackground(): Boolean =
-    !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+private fun isProcessInBackground(): Boolean = App.currentActivity?.hasStartedActivity != true
 
 /**
  * Flags a node whose stop timed out and left tracked tasks detached on its tokio runtime.
