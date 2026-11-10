@@ -6904,7 +6904,9 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Pubky Swaps route '${payment.swapId}' outcome unknown", it, context = TAG)
                 return
             }
-            clearSwapRouteQuote(isSendCurrent())
+            // A failed hold payment keeps its hash on the send: its own failure handler may still be on its way to
+            // the error screen and finds the send by that hash.
+            clearSwapRouteQuote(isSendCurrent(), keepHoldPaymentHash = it is LightningPaymentFailedError)
             finishManualAllowancePayment(swap.allowanceAttemptId, succeeded = false)
             clearPendingContactPaymentContext(holdPaymentHash)
             releasePrivatePaymentListIfNeeded(swap.contactPaymentContext)
@@ -6917,11 +6919,16 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun clearSwapRouteQuote(isSendCurrent: Boolean) {
+    private fun clearSwapRouteQuote(isSendCurrent: Boolean, keepHoldPaymentHash: Boolean = false) {
         if (!isSendCurrent) return
         _sendUiState.update {
+            val route = it.paykitSwapRoute
             it.copy(
-                paykitSwapRoute = it.paykitSwapRoute?.copy(quote = null, providerName = null, holdPaymentHash = null),
+                paykitSwapRoute = route?.copy(
+                    quote = null,
+                    providerName = null,
+                    holdPaymentHash = route.holdPaymentHash.takeIf { keepHoldPaymentHash },
+                ),
                 lightningFeeSats = 0,
             )
         }

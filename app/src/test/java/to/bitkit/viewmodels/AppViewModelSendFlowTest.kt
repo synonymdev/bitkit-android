@@ -16967,6 +16967,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swap route hold payment failing before it returns opens the error once its handler catches up`() = test {
+        val activityRefreshed = CompletableDeferred<Unit>()
+        whenever { activityRepo.handlePaymentEvent(SWAP_HOLD_HASH) }.doSuspendableAnswer { activityRefreshed.await() }
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())).doSuspendableAnswer {
+            emitSwapHoldPaymentFailed()
+            Result.success(SWAP_HOLD_HASH)
+        }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            activityRefreshed.complete(Unit)
+            advanceBeforeHoldWatchDeadline()
+            assertIs<SendEffect.NavigateToError>(awaitItem())
+            expectNoEvents()
+        }
+        verify(pendingPaymentRepo, never()).track(SWAP_HOLD_HASH)
+    }
+
+    @Test
     fun `swap route hold payment failure retries from the amount without recommitting the quote`() = test {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
