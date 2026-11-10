@@ -6857,8 +6857,10 @@ class AppViewModel @Inject constructor(
         }
         // The provider settles the hold payment once it sees the claim, so the send waits on it as a pending Lightning
         // payment. Pending has no way back to Amount, where a fresh quote could pay the contact a second time.
-        pendingPaymentRepo.track(holdPaymentHash)
-        if (isSendCurrent()) {
+        // A hold payment that failed before payInvoice returned already opened the error screen through its event.
+        val holdFailedEarly = holdFailure.isCompleted
+        if (!holdFailedEarly) pendingPaymentRepo.track(holdPaymentHash)
+        if (!holdFailedEarly && isSendCurrent()) {
             synchronized(contactPaymentContextLock) { activeContactPaymentContext = null }
             setSendEffect(
                 SendEffect.NavigateToPending(
