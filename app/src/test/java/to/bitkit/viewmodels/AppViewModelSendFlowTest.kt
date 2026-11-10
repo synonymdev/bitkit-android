@@ -16792,7 +16792,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `swap routed contact payment finishes once on the claim and tags the hold payment`() = test {
+    fun `swap routed contact payment waits on its hold payment and tags it`() = test {
         val activityV1 = mock<LightningActivity> {
             on { value } doReturn SWAP_DEBIT_SATS
             on { fee } doReturn 0u
@@ -16800,7 +16800,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val activity = mock<BitkitActivity.Lightning> { on { v1 } doReturn activityV1 }
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.success(activity))
-        whenever(pendingPaymentRepo.isPending(SWAP_HOLD_HASH)).thenReturn(false)
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
@@ -16828,9 +16827,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
             sut.addTagToSelected("rent")
             confirmCurrentPayment()
-            assertEquals(SendEffect.PaymentSuccess, awaitItem())
-            assertEquals(SWAP_HOLD_HASH, sut.successSendUiState.value.paymentHashOrTxId)
-            assertEquals(NewTransactionSheetType.LIGHTNING, sut.successSendUiState.value.type)
+            assertEquals(swapHoldPending(), awaitItem())
 
             emitNodeEvent(
                 Event.PaymentSuccessful(
@@ -16842,8 +16839,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             advanceUntilIdle()
             expectNoEvents()
-            assertEquals(SWAP_HOLD_HASH, sut.successSendUiState.value.paymentHashOrTxId)
         }
+        // The Pending screen shows Bitcoin Sent on the hold payment's resolution.
+        verify(pendingPaymentRepo).resolve(check { assertIs<PendingPaymentResolution.Success>(it) })
         verify(activityRepo).setContact(
             contactPublicKey = eq(testPublicKey),
             forPaymentId = eq(SWAP_HOLD_HASH),
@@ -16935,12 +16933,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
             assertFalse(claimCancelled)
             emitSwapHoldPaymentFailed()
             advanceBeforeHoldWatchDeadline()
-            assertTrue(awaitItem() is SendEffect.NavigateToError)
+            expectNoEvents()
         }
         assertTrue(claimCancelled)
+        verify(pendingPaymentRepo).resolve(check { assertIs<PendingPaymentResolution.Failure>(it) })
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
     }
 
@@ -16957,9 +16957,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmSwapRoutedPayment()
+            // The Pending screen hands its retry route to the error screen.
+            assertEquals(swapHoldPending(), awaitItem())
             emitSwapHoldPaymentFailed()
             advanceBeforeHoldWatchDeadline()
-            assertEquals(SendRetryRoute.Amount, assertIs<SendEffect.NavigateToError>(awaitItem()).retryRoute)
             assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
 
             sut.setSendEvent(SendEvent.ClearPayConfirmation)
@@ -16986,7 +16987,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `swap route claim failure shows no success`() = test {
+    fun `swap route claim failure fails the pending send`() = test {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
@@ -16998,9 +16999,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmCurrentPayment()
+            assertEquals(swapHoldPending(), awaitItem())
             expectNoEvents()
         }
-        assertNull(sut.currentSheet.value)
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Failure(SWAP_HOLD_HASH))
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
     }
 
@@ -17034,11 +17037,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         assertEquals("edited-quote", sut.sendUiState.value.paykitSwapRoute?.quote?.quoteId)
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
-        verify(toastManager).enqueue(check { assertEquals("PendingPaymentSucceededToast", it.testTag) })
     }
 
     @Test
-    fun `swap route claim wait running out shows the send as pending`() = test {
+    fun `swap route claim wait running out keeps the send pending`() = test {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
@@ -17051,14 +17053,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmCurrentPayment()
-            assertEquals(
-                SendEffect.NavigateToPending(
-                    SWAP_HOLD_HASH,
-                    SWAP_DELIVERED_SATS.toLong(),
-                    retryRoute = SendRetryRoute.Amount,
-                ),
-                awaitItem(),
-            )
+            assertEquals(swapHoldPending(), awaitItem())
             expectNoEvents()
         }
         verify(pendingPaymentRepo).track(SWAP_HOLD_HASH)
@@ -17115,6 +17110,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.sendEffect.test {
             claim.complete(Result.success(SWAP_CLAIM_TXID))
+            emitSwapHoldPaymentSuccessful()
             advanceBeforeHoldWatchDeadline()
             expectNoEvents()
         }
@@ -17221,6 +17217,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         // The first payment ending must not lift the guard of the second while it still pays.
         claim.complete(Result.success(SWAP_CLAIM_TXID))
+        emitSwapHoldPaymentSuccessful()
         advanceBeforeHoldWatchDeadline()
         verify(toastManager).enqueue(check { assertEquals("PendingPaymentSucceededToast", it.testTag) })
         sut.setSendEvent(SendEvent.PayConfirmed)
@@ -17269,6 +17266,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceBeforeHoldWatchDeadline()
     }
+
+    private fun swapHoldPending() = SendEffect.NavigateToPending(
+        paymentHash = SWAP_HOLD_HASH,
+        amount = SWAP_DELIVERED_SATS.toLong(),
+        retryRoute = SendRetryRoute.Amount,
+    )
+
+    private suspend fun emitSwapHoldPaymentSuccessful() = emitNodeEvent(
+        Event.PaymentSuccessful(
+            paymentId = SWAP_HOLD_HASH,
+            paymentHash = SWAP_HOLD_HASH,
+            paymentPreimage = "preimage",
+            feePaidMsat = 0uL,
+        ),
+    )
 
     private suspend fun emitSwapHoldPaymentFailed() = emitNodeEvent(
         Event.PaymentFailed(
@@ -17399,6 +17411,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     ) {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
         whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(quote)
+        // The swap send waits on its hold payment as a pending payment.
+        doAnswer { doReturn(true).whenever(pendingPaymentRepo).isPending(SWAP_HOLD_HASH) }
+            .whenever(pendingPaymentRepo).track(SWAP_HOLD_HASH)
         whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
             Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
         )
