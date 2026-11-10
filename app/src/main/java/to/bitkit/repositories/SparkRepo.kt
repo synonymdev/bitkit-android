@@ -308,6 +308,11 @@ class SparkRepo @Inject constructor(
                 val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
                 sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
+                // The checks above and saving the hash suspend, so the deadline is checked last, before the send.
+                runCatching { ensurePaymentDeadline(paymentDeadlineAt) }.onFailure {
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    throw it
+                }
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())

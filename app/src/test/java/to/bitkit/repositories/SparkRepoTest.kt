@@ -80,6 +80,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import com.synonym.bitkitcore.PaymentType as ActivityPaymentType
 
@@ -96,7 +97,7 @@ class SparkRepoTest : BaseUnitTest() {
     private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
     private val contactResolver = mock<PrivatePaykitContactResolver>()
     private val pendingPaymentRepo = PendingPaymentRepo()
-    private val now = Instant.fromEpochSeconds(1_800_000_000)
+    private var now = Instant.fromEpochSeconds(1_800_000_000)
     private val clock = object : Clock {
         override fun now() = this@SparkRepoTest.now
     }
@@ -1454,6 +1455,25 @@ class SparkRepoTest : BaseUnitTest() {
         val result = runCatching { createSut().claimEarly(choice) }
 
         assertTrue(result.getOrThrow().isFailure, "a failed early claim threw instead of failing")
+    }
+
+    @Test
+    fun `a spark send whose deadline passes before it goes out is not sent`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val deadline = now + 1.seconds
+        val sut = createSut()
+
+        // The caller's last check before the send can wait past the deadline, as Paykit's does on its lock.
+        val result = sut.payInvoice("lnbc1", 100uL, deadline, null) {
+            now = deadline + 1.seconds
+            true
+        }
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
     }
 
     private fun info(balanceSats: ULong) = GetInfoResponse(
