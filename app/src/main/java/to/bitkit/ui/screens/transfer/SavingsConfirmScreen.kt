@@ -145,7 +145,7 @@ fun SavingsConfirmScreen(
                     .also { if (it) onConfirm() }
             },
             onCloseConfirm = {
-                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark, SavingsTransferMode.CLOSE)
+                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark, SavingsTransferMode.CLOSE, sparkFeeSats)
                 onConfirm()
             },
         )
