@@ -111,28 +111,6 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: AVD cache
-        uses: actions/cache@v6
-        id: avd-cache
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-30-default-x86_64
-
-      - name: Create AVD and generate snapshot for caching
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          target: default
-          arch: x86_64
-          profile: pixel_4
-          force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          disable-animations: false
-          script: echo "Generated AVD snapshot for caching."
-
       - name: Run UI tests on Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -142,10 +120,10 @@ jobs:
           target: default
           arch: x86_64
           profile: pixel_4
-          force-avd-creation: false
-          # Cold boot. Restoring the cached snapshot sometimes reports sys.boot_completed=1 before
-          # system_server publishes its services, and the runner's `input keyevent 82` then fails with
-          # "No service published for: input". A cold boot costs about 30s.
+          # Fresh AVD, cold boot, no AVD cache. Restoring a cached snapshot sometimes reported
+          # sys.boot_completed=1 before system_server published its services, and the runner's
+          # `input keyevent 82` then failed with "No service published for: input". Restoring the
+          # 1.7 GB cache took about 60s, more than creating and cold booting a new AVD.
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: bash .github/scripts/run-ui-tests.sh
