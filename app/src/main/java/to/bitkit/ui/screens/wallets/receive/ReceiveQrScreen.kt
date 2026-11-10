@@ -296,9 +296,8 @@ fun ReceiveQrScreen(
         }
     }
 
-    val showingCjitOnboarding = remember(lightningState, canCreateLightningInvoice) {
-        !canCreateLightningInvoice && lightningState.nodeLifecycleState.isRunning()
-    }
+    // Shown while the node starts too, with its button disabled until the node runs.
+    val showingCjitOnboarding = !canCreateLightningInvoice
 
     fun selectReceiveTab(tab: ReceiveTab) {
         val wrapsToFirst = selectedTab == visibleTabs.last() && tab == visibleTabs.first()
@@ -519,6 +518,7 @@ fun ReceiveQrScreen(
                             onClickReceiveCjit()
                             showDetails = false
                         },
+                        enabled = lightningState.nodeLifecycleState.isRunning(),
                         fullWidth = true,
                         modifier = Modifier
                             .padding(horizontal = 16.dp)

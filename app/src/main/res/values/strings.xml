@@ -1546,13 +1546,13 @@
     <string name="wallet__payment_unknown_required_features">This Lightning invoice uses features Bitkit does not support yet.</string>
     <string name="wallet__peer_disconnected">Peer disconnected.</string>
     <string name="wallet__receive">Receive</string>
-    <string name="wallet__receive__cjit">Receive Lightning funds</string>
+    <string name="wallet__receive__cjit">Receive Lightning Funds</string>
     <string name="wallet__receive_bitcoin">Receive Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Bitcoin invoice</string>
     <string name="wallet__receive_copied">Invoice copied to clipboard</string>
     <string name="wallet__receive_lightning_invoice">Lightning invoice</string>
     <string name="wallet__receive_note_placeholder">Optional note to payer</string>
-    <string name="wallet__receive_onboarding_description">Enjoy instant and cheap bitcoin payments on the Lightning Network.</string>
+    <string name="wallet__receive_onboarding_description">Enjoy instant and cheap transactions with friends, family, and merchants.</string>
     <string name="wallet__receive_onboarding_title">Receive on &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Show Details</string>
     <string name="wallet__receive_show_qr">QR Code</string>
