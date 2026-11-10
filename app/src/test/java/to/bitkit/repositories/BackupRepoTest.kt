@@ -1589,6 +1589,22 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a restore gate that lapses by its timeout ends the restore in progress`() = test {
+        val startedAt = currentTime
+        whenever(clock.now()).thenAnswer { Instant.fromEpochMilliseconds(3_000 + currentTime - startedAt) }
+        val states = mutableListOf<Boolean>()
+        backgroundScope.launch { sut.restoreInProgress.collect { states += it } }
+        runCurrent()
+
+        sut.setRestorePending(true)
+        runCurrent()
+        advanceTimeBy(10.minutes + 1.seconds)
+        runCurrent()
+
+        assertEquals(listOf(false, true, false), states)
+    }
+
+    @Test
     fun `pending public address restore blocks metadata uploads after the transient gate clears`() = test {
         val reservationStore = stubPublicAddressRestore(
             "bcrt1qpublic",
