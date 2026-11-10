@@ -372,8 +372,9 @@
     <string name="lightning__savings_progress__title">Funds\n&lt;accent&gt;in transfer&lt;/accent&gt;</string>
     <string name="lightning__savings_settling__text">Your transfer has been initiated and is &lt;accent&gt;settling on-chain&lt;/accent&gt;. Your savings balance will update automatically once it completes.</string>
     <string name="lightning__savings_settling__title">Transfer\n&lt;accent&gt;on the way&lt;/accent&gt;</string>
-    <string name="lightning__savings_spark_failed">Your Spark balance couldn\'t move to savings and stays in your spending balance.</string>
-    <string name="lightning__savings_spark_failed_channels">Your Spark balance couldn\'t move to savings and stays in your spending balance. Your connections are moving to savings.</string>
+    <string name="lightning__savings_spark_failed">Your Spark balance could not move to savings and stays in your spending balance.</string>
+    <string name="lightning__savings_spark_failed__title">Transfer\n&lt;accent&gt;failed&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed_channels">Your channel funds are moving to savings, but your Spark balance could not move and stays in your spending balance.</string>
     <string name="lightning__scores_sync_time">Pathfinding Scores Sync Time</string>
     <string name="lightning__setting_up__not_seen">Spark hasn\'t seen your transfer yet. It\'s added after 3 confirmations; you can leave this screen.</string>
     <string name="lightning__setting_up__pay">Pay ₿ {amount}</string>

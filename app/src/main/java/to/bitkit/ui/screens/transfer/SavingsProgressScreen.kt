@@ -75,8 +75,11 @@ fun SavingsProgressScreen(
     }
 
     fun showSparkFailure(movesChannels: Boolean) {
-        toastSparkFailure(movesChannels)
-        onTransferUnavailable()
+        progressState = if (movesChannels) {
+            SavingsProgressState.SPARK_FAILED_PARTIAL
+        } else {
+            SavingsProgressState.SPARK_FAILED
+        }
     }
 
     // Effect to execute the transfer & update UI
@@ -147,7 +150,7 @@ fun SavingsProgressScreen(
         }
     }
 
-    Content(
+    SavingsProgressContent(
         progressState = progressState,
         onContinueClick = { onContinueClick() },
         modifier = Modifier.keepScreenOn(),
@@ -181,18 +184,23 @@ private suspend fun runChannelClose(
 }
 
 @Composable
-private fun Content(
+internal fun SavingsProgressContent(
     progressState: SavingsProgressState,
     modifier: Modifier = Modifier,
     onContinueClick: () -> Unit = {},
 ) {
     val inProgress = progressState == SavingsProgressState.PROGRESS
     val showAnimation = inProgress || progressState == SavingsProgressState.SETTLING
+    val isSparkFailed = progressState.isSparkFailed
     ScreenColumn(
         modifier = modifier.testTag(
             when (progressState) {
                 SavingsProgressState.PROGRESS -> "TransferSettingUp"
                 SavingsProgressState.SETTLING -> "TransferSettling"
+                SavingsProgressState.SPARK_FAILED,
+                SavingsProgressState.SPARK_FAILED_PARTIAL,
+                -> "SavingsSparkFailed"
+
                 else -> "TransferSuccess"
             }
         )
@@ -201,6 +209,8 @@ private fun Content(
             titleText = when (progressState) {
                 SavingsProgressState.PROGRESS,
                 SavingsProgressState.SETTLING,
+                SavingsProgressState.SPARK_FAILED,
+                SavingsProgressState.SPARK_FAILED_PARTIAL,
                 -> stringResource(R.string.lightning__transfer__nav_title)
 
                 SavingsProgressState.SUCCESS -> stringResource(R.string.lightning__transfer_success__nav_title)
@@ -255,7 +265,9 @@ private fun Content(
                 PrimaryButton(
                     text = stringResource(R.string.common__ok),
                     onClick = onContinueClick,
-                    modifier = Modifier.testTag("TransferSuccess-button")
+                    modifier = Modifier.testTag(
+                        if (isSparkFailed) "SavingsSparkFailed-button" else "TransferSuccess-button"
+                    ),
                 )
             }
             VerticalSpacer(16.dp)
@@ -277,6 +289,12 @@ private fun ProgressMessage(progressState: SavingsProgressState) {
 
         SavingsProgressState.INTERRUPTED ->
             R.string.lightning__savings_interrupted__title to R.string.lightning__savings_interrupted__text
+
+        SavingsProgressState.SPARK_FAILED ->
+            R.string.lightning__savings_spark_failed__title to R.string.lightning__savings_spark_failed
+
+        SavingsProgressState.SPARK_FAILED_PARTIAL ->
+            R.string.lightning__savings_spark_failed__title to R.string.lightning__savings_spark_failed_channels
     }
     Display(text = stringResource(titleRes).withAccent())
     VerticalSpacer(8.dp)
@@ -286,13 +304,18 @@ private fun ProgressMessage(progressState: SavingsProgressState) {
     )
 }
 
-enum class SavingsProgressState { PROGRESS, SETTLING, SUCCESS, INTERRUPTED }
+/** `SPARK_FAILED_PARTIAL`: Spark's balance did not move, while the selected channels still did. */
+enum class SavingsProgressState {
+    PROGRESS, SETTLING, SUCCESS, INTERRUPTED, SPARK_FAILED, SPARK_FAILED_PARTIAL;
+
+    val isSparkFailed get() = this == SPARK_FAILED || this == SPARK_FAILED_PARTIAL
+}
 
 @Preview(showSystemUi = true)
 @Composable
 private fun PreviewProgress() {
     AppThemeSurface {
-        Content(
+        SavingsProgressContent(
             progressState = SavingsProgressState.PROGRESS,
         )
     }
@@ -302,7 +325,7 @@ private fun PreviewProgress() {
 @Composable
 private fun PreviewSettling() {
     AppThemeSurface {
-        Content(
+        SavingsProgressContent(
             progressState = SavingsProgressState.SETTLING,
         )
     }
@@ -312,7 +335,7 @@ private fun PreviewSettling() {
 @Composable
 private fun PreviewSuccess() {
     AppThemeSurface {
-        Content(
+        SavingsProgressContent(
             progressState = SavingsProgressState.SUCCESS,
         )
     }
@@ -322,8 +345,18 @@ private fun PreviewSuccess() {
 @Composable
 private fun PreviewInterrupted() {
     AppThemeSurface {
-        Content(
+        SavingsProgressContent(
             progressState = SavingsProgressState.INTERRUPTED,
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewSparkFailed() {
+    AppThemeSurface {
+        SavingsProgressContent(
+            progressState = SavingsProgressState.SPARK_FAILED_PARTIAL,
         )
     }
 }
