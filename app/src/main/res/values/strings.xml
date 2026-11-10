@@ -378,7 +378,7 @@
     <string name="lightning__scores_sync_time">Pathfinding Scores Sync Time</string>
     <string name="lightning__setting_up__not_seen">Spark hasn\'t seen your transfer yet. It\'s added after 3 confirmations; you can leave this screen.</string>
     <string name="lightning__setting_up__pay">Pay ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instant now costs &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Pay it, or wait for 3 confirmations, about 30 minutes, at a lower fee.</string>
+    <string name="lightning__setting_up__repriced">Instant now costs &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Pay it to add your transfer now, or wait for 3 confirmations, about 30 minutes.</string>
     <string name="lightning__setting_up__speed">Speed: {speed}</string>
     <string name="lightning__setting_up__step_adding">Adding To Spending</string>
     <string name="lightning__setting_up__unavailable">Instant isn\'t available for this transfer. Spark adds it to your spending balance after 3 confirmations, about 30 minutes.</string>

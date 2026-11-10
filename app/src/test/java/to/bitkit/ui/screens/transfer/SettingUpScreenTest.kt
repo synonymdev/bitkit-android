@@ -38,6 +38,10 @@ class SettingUpScreenTest {
         assertTrue(label.bottom <= wait.top)
         assertTrue(wait.top == pay.top && wait.right < pay.left)
         composeRule.onNodeWithText("SPEED: INSTANT").assertExists()
+        composeRule.onNodeWithText(
+            "Pay it to add your transfer now, or wait for 3 confirmations, about 30 minutes.",
+            substring = true,
+        ).assertExists()
     }
 
     @Test
