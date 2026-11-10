@@ -710,6 +710,22 @@ class PaykitAllowanceExecutor @Inject constructor(
             Logger.info("Kept an incoming request manual: the payee offers no Lightning invoice", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
+        // Measured before the acceptance, so a proof that can never be delivered is never accepted on the payee's side.
+        val proofFits = runSuspendCatching {
+            paykitSdkService.requirePaymentProofFits(
+                paymentReference = request.paymentReference,
+                paymentAppId = payment.appId,
+                paymentEndpointIdentifier = payment.endpoint.methodId.rawValue,
+                kind = PaykitPaymentProofKind.Lightning,
+                billingPeriod = request.billingPeriod,
+                conversionQuoteId = null,
+                allowanceId = candidate.allowanceId,
+            )
+        }.isSuccess
+        if (!proofFits) {
+            Logger.info("Kept an incoming request manual: its payment proof would not fit one message", context = TAG)
+            return PaykitAllowanceAutoPayResult.MANUAL
+        }
 
         if (!admits(activation)) {
             Logger.info("Kept an incoming request manual: allowances turned off before acceptance", context = TAG)
