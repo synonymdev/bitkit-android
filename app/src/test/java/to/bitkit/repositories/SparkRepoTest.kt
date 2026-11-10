@@ -259,6 +259,22 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark's paid sends are trimmed past the cap when spark syncs on start`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenReturn(
+            listOf(
+                sentPayment(fees = 0),
+                sentPayment(fees = 0).copy(id = "pending", status = PaymentStatus.PENDING).withHash("PENDING"),
+            )
+        )
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+
+        verifyBlocking(cacheStore) { trimSparkSendHashes(setOf("hash")) }
+    }
+
+    @Test
     fun `a failed send does not release a hash its retry still holds pending`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
@@ -1075,6 +1091,11 @@ class SparkRepoTest : BaseUnitTest() {
         method = PaymentMethod.DEPOSIT,
         details = PaymentDetails.Deposit(txId = "txid", vout = 0u),
     )
+
+    private fun Payment.withHash(hash: String): Payment {
+        val lightning = details as PaymentDetails.Lightning
+        return copy(details = lightning.copy(htlcDetails = lightning.htlcDetails.copy(paymentHash = hash)))
+    }
 
     private fun sentPayment(fees: Int) = Payment(
         id = "send",

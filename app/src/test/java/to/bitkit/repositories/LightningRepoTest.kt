@@ -1395,6 +1395,42 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node listing trims only its paid sends past the cap`() = test {
+        startNodeForTesting()
+        val earlier = { status: PaymentStatus, hash: String ->
+            PaymentDetails(
+                id = hash,
+                kind = PaymentKind.Bolt11(
+                    hash = hash,
+                    preimage = null,
+                    secret = null,
+                    description = null,
+                    bolt11 = hash,
+                ),
+                amountMsat = 1_000_000uL,
+                feePaidMsat = null,
+                direction = PaymentDirection.OUTBOUND,
+                status = status,
+                latestUpdateTimestamp = 0uL,
+            )
+        }
+        whenever(lightningService.listPayments()).thenReturn(
+            listOf(
+                earlier(PaymentStatus.PENDING, "pending"),
+                earlier(PaymentStatus.SUCCEEDED, "PAID"),
+                earlier(PaymentStatus.FAILED, "failed"),
+            )
+        )
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        sut.payInvoice("bolt11", 1_000uL)
+
+        verifyBlocking(cacheStore) { trimLdkSendHashes(setOf("paid")) }
+    }
+
+    @Test
     fun `a node send is recorded before it leaves`() = test {
         startNodeForTesting()
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))

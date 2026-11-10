@@ -807,9 +807,13 @@ class SparkRepo @Inject constructor(
     private suspend fun syncActivities() {
         val payments = sparkService.listPayments()
         payments.forEach { recordActivity(it) }
+        val sendHashes = { status: PaymentStatus ->
+            payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
+        }
+        cacheStore.trimSparkSendHashes(sendHashes(PaymentStatus.COMPLETED) - sendHashes(PaymentStatus.PENDING))
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.
-        val failed = payments.mapNotNull { it.failedSendHash() }.distinct()
+        val failed = payments.mapNotNull { it.sendHash(PaymentStatus.FAILED) }.distinct()
             .filter { payments.latestSend(it)?.status == PaymentStatus.FAILED }
         if (failed.isEmpty()) return
         // A retry can start while the list is recorded, so the release reads Spark's sends again first.
@@ -820,8 +824,8 @@ class SparkRepo @Inject constructor(
             .forEach { cacheStore.removeSparkSendHash(it) }
     }
 
-    private fun Payment.failedSendHash(): String? = (details as? PaymentDetails.Lightning)
-        ?.takeIf { paymentType == SparkPaymentType.SEND && status == PaymentStatus.FAILED }
+    private fun Payment.sendHash(status: PaymentStatus): String? = (details as? PaymentDetails.Lightning)
+        ?.takeIf { paymentType == SparkPaymentType.SEND && this.status == status }
         ?.htlcDetails?.paymentHash
 
     private suspend fun onSdkEvent(event: SdkEvent) {
@@ -853,7 +857,7 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment)
-        payment.failedSendHash()?.let { hash ->
+        payment.sendHash(PaymentStatus.FAILED)?.let { hash ->
             val latest = lightningSend(hash)
             val isReleased = latest == SparkLightningSend.NotFound ||
                 (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED

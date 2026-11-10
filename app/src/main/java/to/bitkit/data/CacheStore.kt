@@ -22,8 +22,11 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** How many Spark send hashes to keep; an older send's invoice has long expired, so the node cannot pay it again. */
-private const val MAX_SPARK_SEND_HASHES = 100
+/**
+ * How many paid send hashes to keep per rail; an older paid send's invoice has long expired, so the other rail
+ * cannot pay it again. Sends that may still be pending are always kept, past this cap too.
+ */
+internal const val MAX_SPARK_SEND_HASHES = 100
 
 private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
     fileName = "app_cache.json",
@@ -142,7 +145,7 @@ class CacheStore internal constructor(
     suspend fun addSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         store.updateData {
-            it.copy(sparkSendHashes = (it.sparkSendHashes - hash + hash).takeLast(MAX_SPARK_SEND_HASHES))
+            it.copy(sparkSendHashes = it.sparkSendHashes - hash + hash)
         }
     }
 
@@ -155,7 +158,7 @@ class CacheStore internal constructor(
     suspend fun addLdkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         store.updateData {
-            it.copy(ldkSendHashes = (it.ldkSendHashes - hash + hash).takeLast(MAX_SPARK_SEND_HASHES))
+            it.copy(ldkSendHashes = it.ldkSendHashes - hash + hash)
         }
     }
 
@@ -166,10 +169,28 @@ class CacheStore internal constructor(
             if (data.ldkSendHashesSeeded) return@updateData data
             val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.ldkSendHashes.toSet()
             data.copy(
-                ldkSendHashes = (seeded + data.ldkSendHashes).takeLast(MAX_SPARK_SEND_HASHES),
+                ldkSendHashes = seeded + data.ldkSendHashes,
                 ldkSendHashesSeeded = true,
             )
         }
+    }
+
+    /** Past the cap, drops the oldest of the node's sends [paid] lists as paid; a send that may be pending stays. */
+    suspend fun trimLdkSendHashes(paid: Set<String>) {
+        if (store.data.first().ldkSendHashes.size <= MAX_SPARK_SEND_HASHES) return
+        store.updateData { it.copy(ldkSendHashes = it.ldkSendHashes.withoutOldestPaid(paid)) }
+    }
+
+    /** Past the cap, drops the oldest of Spark's sends [paid] lists as paid; a send that may be pending stays. */
+    suspend fun trimSparkSendHashes(paid: Set<String>) {
+        if (store.data.first().sparkSendHashes.size <= MAX_SPARK_SEND_HASHES) return
+        store.updateData { it.copy(sparkSendHashes = it.sparkSendHashes.withoutOldestPaid(paid)) }
+    }
+
+    private fun List<String>.withoutOldestPaid(paid: Set<String>): List<String> {
+        val lowercasePaid = paid.mapTo(mutableSetOf()) { it.lowercase() }
+        var excess = size - MAX_SPARK_SEND_HASHES
+        return filterNot { hash -> (excess > 0 && hash in lowercasePaid).also { if (it) excess-- } }
     }
 
     suspend fun removeLdkSendHash(paymentHash: String) {

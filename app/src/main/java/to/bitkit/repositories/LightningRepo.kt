@@ -430,7 +430,7 @@ class LightningRepo @Inject constructor(
                 lightningService.start(timeout, ::onEvent)
 
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                listPaymentsOrNull()?.let { seedLdkSendHashes(it) }
+                listPaymentsOrNull()?.let { keepLdkSendHashes(it) }
 
                 // Initial state sync
                 syncState()
@@ -1542,7 +1542,7 @@ class LightningRepo @Inject constructor(
             }
             return null
         }
-        seedLdkSendHashes(payments)
+        keepLdkSendHashes(payments)
         val send = payments.firstOrNull {
             val kind = it.kind as? PaymentKind.Bolt11 ?: return@firstOrNull false
             it.direction == PaymentDirection.OUTBOUND &&
@@ -1583,12 +1583,18 @@ class LightningRepo @Inject constructor(
             .also { syncState() }
     }
 
-    /** Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too. */
-    private suspend fun seedLdkSendHashes(payments: List<PaymentDetails>) {
-        cacheStore.seedLdkSendHashes(
-            payments
-                .filter { it.direction == PaymentDirection.OUTBOUND && it.status != PaymentStatus.FAILED }
-                .mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash }
+    /**
+     * Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too, then trims
+     * only paid ones past the cap, so a send that may still be pending always holds Spark.
+     */
+    private suspend fun keepLdkSendHashes(payments: List<PaymentDetails>) {
+        val sends = payments
+            .filter { it.direction == PaymentDirection.OUTBOUND && it.status != PaymentStatus.FAILED }
+            .sortedBy { it.latestUpdateTimestamp }
+        cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
+        cacheStore.trimLdkSendHashes(
+            sends.filter { it.status == PaymentStatus.SUCCEEDED }
+                .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
         )
     }
 
