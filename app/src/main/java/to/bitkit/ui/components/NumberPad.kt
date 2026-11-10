@@ -37,6 +37,7 @@ import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
@@ -57,7 +58,6 @@ import kotlin.time.Duration.Companion.milliseconds
 const val KEY_DELETE = "delete"
 const val KEY_000 = "000"
 const val KEY_DECIMAL = "."
-private val defaultHeight = 300.dp
 private const val FOCUS_RETRY_COUNT = 10
 private val FOCUS_RETRY_DELAY = 50.milliseconds
 private val idealButtonHeight = 75.dp
@@ -75,13 +75,18 @@ private const val DISABLED_ALPHA = 0.64f
 
 /**
  * Numeric keyboard.
+ *
+ * Rows take [idealRowHeight] when there is room. A fixed height splits evenly into the rows; a bounded one
+ * shrinks them to fit, down to [minRowHeight].
  */
 @Composable
 fun NumberPad(
     onPress: OnKeyPress,
     modifier: Modifier = Modifier,
     type: NumberPadType = NumberPadType.SIMPLE,
-    availableHeight: Dp = defaultHeight,
+    idealRowHeight: Dp = idealButtonHeight,
+    minRowHeight: Dp = minButtonHeight,
+    availableHeight: Dp = idealRowHeight * ROWS,
     decimalSeparator: String = KEY_DECIMAL,
     errorKey: String? = null,
     enabled: Boolean = true,
@@ -115,7 +120,9 @@ fun NumberPad(
     ) {
         val buttonHeight = when {
             constraints.hasFixedHeight -> maxHeight / ROWS
-            else -> (availableHeight / ROWS).coerceIn(minButtonHeight, idealButtonHeight)
+            constraints.hasBoundedHeight -> (min(maxHeight, availableHeight) / ROWS)
+                .coerceIn(minRowHeight, idealRowHeight)
+            else -> (availableHeight / ROWS).coerceIn(minRowHeight, idealRowHeight)
         }
 
         val totalKeyboardHeight = buttonHeight * ROWS
@@ -190,7 +197,9 @@ fun NumberPad(
     currencies: CurrencyState = LocalCurrencies.current,
     enabled: Boolean = true,
     type: NumberPadType = viewModel.getNumberPadType(currencies),
-    availableHeight: Dp = defaultHeight,
+    idealRowHeight: Dp = idealButtonHeight,
+    minRowHeight: Dp = minButtonHeight,
+    availableHeight: Dp = idealRowHeight * ROWS,
     decimalSeparator: String = KEY_DECIMAL,
     includeNavigationBarsPadding: Boolean = false,
 ) {
@@ -200,6 +209,8 @@ fun NumberPad(
         modifier = modifier,
         enabled = enabled,
         type = type,
+        idealRowHeight = idealRowHeight,
+        minRowHeight = minRowHeight,
         availableHeight = availableHeight,
         decimalSeparator = decimalSeparator,
         errorKey = uiState.errorKey,

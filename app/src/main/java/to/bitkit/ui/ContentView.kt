@@ -1079,7 +1079,10 @@ private fun RootNavHost(
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigateTo(Routes.SavingsConfirm) },
+                    onContinueClick = {
+                        transferViewModel.beginSavingsTransfer()
+                        navController.navigateTo(Routes.SavingsConfirm)
+                    },
                 )
             }
             deepLinkableComposable<Routes.SavingsConfirm> {
@@ -1378,7 +1381,7 @@ private fun NavGraphBuilder.home(
 
         SpendingWalletScreen(
             channels = lightningState.channels,
-            hasSparkBalance = sparkState.balanceSats > 0uL,
+            hasSparkBalance = sparkState.shownBalanceSats > 0uL,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = {

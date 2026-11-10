@@ -135,7 +135,7 @@ class WalletRepo @Inject constructor(
             }
         }
         repoScope.launch {
-            sparkRepo.state.map { it.balanceSats to it.pendingDepositSats }.distinctUntilChanged().collect {
+            sparkRepo.state.map { it.shownBalanceSats to it.pendingDepositSats }.distinctUntilChanged().collect {
                 if (walletExists()) syncBalances()
             }
         }

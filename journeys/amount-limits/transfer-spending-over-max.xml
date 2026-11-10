@@ -5,13 +5,13 @@
     digits while at the cap.
 
     Precondition: onboarded dev wallet with a POSITIVE on-chain Savings balance and Spark connected on
-    its regtest, so the most Savings can send to the Spark deposit address can be priced. The pad is
+    its regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), so the most Savings can send to the Spark deposit address can be priced. The pad is
     disabled until that maximum loads — wait for it. The maximum is the Savings balance less the network
     fee, so it is lower than the Savings balance. Start on the wallet home screen.
   </description>
   <actions>
     <action>Tap the Spending balance card on the home screen</action>
-    <action>Tap "Transfer from Savings"</action>
+    <action>Tap "Transfer From Savings"</action>
     <action>If a transfer intro screen appears, tap "Get Started"</action>
     <action>Verify the spending amount screen (testTag "SpendingAmount") is visible</action>
     <action>Wait until the available/maximum amount (testTag "SpendingAmountAvailable") finishes loading and shows a positive value</action>

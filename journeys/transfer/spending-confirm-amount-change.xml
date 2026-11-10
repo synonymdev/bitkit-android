@@ -13,7 +13,7 @@
     same fee, or spend the new UTXO alone at a lower fee; either way the fresh price costs no more than the
     one shown, so the swipe pays at once.
 
-    Precondition: a freshly onboarded dev wallet with Spark connected on its regtest, no channel and
+    Precondition: a freshly onboarded dev wallet with Spark connected on its regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), no channel and
     exactly two confirmed on-chain UTXOs of 150 000 sats each (two ./lsp deposits to the wallet's
     savings address, each followed by a mine). Start on the wallet home screen.
   </description>

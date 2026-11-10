@@ -101,6 +101,14 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `savings selection leaves a spark balance too small to move, so the channels still move`() {
+        val selection = SavingsSelection()
+
+        assertFalse(selection.withdrawsSpark(SPARK_SATS, isSparkTooSmall = true))
+        assertEquals(listOf(CHANNEL_A), selection.channels(listOf(CHANNEL_A)))
+    }
+
+    @Test
     fun `savings selection moves only the picked channels and spark`() {
         val channelsOnly = SavingsSelection(channelIds = persistentSetOf(CHANNEL_B.channelId), includesSpark = false)
         val sparkOnly = SavingsSelection(channelIds = persistentSetOf(), includesSpark = true)
@@ -111,6 +119,15 @@ class TransferViewModelTest : BaseUnitTest() {
         assertFalse(sparkOnly.isAll)
         assertTrue(sparkOnly.channels(listOf(CHANNEL_A, CHANNEL_B)).isEmpty())
         assertTrue(sparkOnly.withdrawsSpark(SPARK_SATS))
+    }
+
+    @Test
+    fun `entering transfer to savings drops a pick left from an abandoned visit`() {
+        sut.setSavingsSelection(SavingsSelection(channelIds = persistentSetOf("closed-since"), includesSpark = false))
+
+        sut.beginSavingsTransfer()
+
+        assertEquals(SavingsSelection(), sut.savingsSelection.value)
     }
 
     @Test
@@ -125,6 +142,101 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
         verify(lightningRepo, never()).awaitPeerConnected(any())
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `the swipe resets when spark's balance is priced again before it commits`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        // A receive lands between the swipe and its commit, so the confirm screen prices the new balance.
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(NEW_SPARK_FEE))
+        sparkState.value = SparkState(balanceSats = NEW_SPARK_SATS)
+        sut.loadSparkWithdrawFee(NEW_SPARK_SATS)
+
+        val committed = sut.confirmSavingsSwipe(
+            channels = emptyList(),
+            withdrawSpark = true,
+            shownSparkSats = SPARK_SATS,
+            shownFeeSats = SPARK_FEE,
+        )
+
+        assertFalse(committed)
+        sut.closeSelectedChannels()
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+    }
+
+    @Test
+    fun `the swipe resets when spark's balance changes before the screen prices it again`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(NEW_SPARK_FEE))
+        sparkState.value = SparkState(balanceSats = NEW_SPARK_SATS)
+
+        val committed = sut.confirmSavingsSwipe(
+            channels = emptyList(),
+            withdrawSpark = true,
+            shownSparkSats = SPARK_SATS,
+            shownFeeSats = SPARK_FEE,
+        )
+
+        assertFalse(committed)
+        sut.closeSelectedChannels()
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+    }
+
+    @Test
+    fun `the swipe commits spark's withdrawal at the fee shown`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+
+        val committed = sut.confirmSavingsSwipe(
+            channels = emptyList(),
+            withdrawSpark = true,
+            shownSparkSats = SPARK_SATS,
+            shownFeeSats = SPARK_FEE,
+        )
+
+        assertTrue(committed)
+        sut.closeSelectedChannels()
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    @Test
+    fun `the swipe withdraws spark at the fee it confirmed when spark is priced again before the withdrawal`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        assertTrue(
+            sut.confirmSavingsSwipe(
+                channels = emptyList(),
+                withdrawSpark = true,
+                shownSparkSats = SPARK_SATS,
+                shownFeeSats = SPARK_FEE,
+            )
+        )
+        repriceSpark()
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    @Test
+    fun `closing instead withdraws spark at the fee shown when spark is priced again before the withdrawal`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true, SavingsTransferMode.CLOSE)
+        repriceSpark()
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    /** A receive lands during the transition, so the confirm screen prices Spark's new balance. */
+    private suspend fun repriceSpark() {
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(NEW_SPARK_FEE))
+        sparkState.value = SparkState(balanceSats = NEW_SPARK_SATS)
+        sut.loadSparkWithdrawFee(NEW_SPARK_SATS)
     }
 
     @Test
@@ -544,7 +656,9 @@ class TransferViewModelTest : BaseUnitTest() {
         val CHANNEL_A = createChannelDetails().copy(channelId = "channel_a")
         val CHANNEL_B = createChannelDetails().copy(channelId = "channel_b")
         const val SPARK_SATS = 40_000uL
+        const val NEW_SPARK_SATS = 52_000uL
         const val SPARK_FEE = 1_470uL
+        const val NEW_SPARK_FEE = 1_620uL
         const val CHANNEL_SENDABLE = 60_000uL
         const val TXID = "tx-abc"
         const val SPENDABLE_LN = 150_000uL

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -42,16 +43,18 @@ import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.localizedRandom
+import to.bitkit.ui.utils.screenWidth
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 
 /** Confirmations Spark waits for before it adds a deposit by itself. */
 private const val MATURE_CONFIRMATIONS = 3
 
+/** The success check's width against the screen's, as iOS draws its 256 pt check on a 402 pt screen. */
+private const val CHECK_SCREEN_SHARE = 256f / 402f
+
 /** About how long [MATURE_CONFIRMATIONS] take. */
 private const val MATURE_MINUTES = 30
-
-/** The arrows' share of the illustration, as on iOS, so the inner circle shows around them. */
-private const val FIGURE_FRACTION = 0.85f
 
 @Composable
 fun SettingUpScreen(
@@ -112,7 +115,7 @@ internal fun Content(
                 )
                 VerticalSpacer(8.dp)
                 BodyM(
-                    text = claimText(claim),
+                    text = claimText(claim).withAccentBoldBright(),
                     color = Colors.White64,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -141,23 +144,18 @@ internal fun Content(
             }
             VerticalSpacer(28.dp)
             if (inProgress) {
-                Box(
-                    contentAlignment = Alignment.Center,
+                TransferAnimationView(
+                    largeCircleRes = R.drawable.ln_sync_large,
+                    smallCircleRes = R.drawable.ln_sync_small,
+                    keepAssetRatios = true,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                ) {
-                    TransferAnimationView(
-                        largeCircleRes = R.drawable.ln_sync_large,
-                        smallCircleRes = R.drawable.ln_sync_small,
-                        contentWidthFraction = FIGURE_FRACTION,
-                        modifier = Modifier.aspectRatio(1f)
-                    )
-                }
+                )
                 VerticalSpacer(16.dp)
                 val steps = persistentListOf(
-                    stringResource(R.string.lightning__setting_up__step_sent),
-                    stringResource(R.string.lightning__setting_up__step_seen),
+                    stringResource(R.string.lightning__setting_up_step1),
+                    stringResource(R.string.lightning__setting_up_step2),
                     stringResource(R.string.lightning__setting_up__step_adding),
                 )
                 ProgressSteps(
@@ -167,14 +165,22 @@ internal fun Content(
                 )
                 VerticalSpacer(16.dp)
             } else {
-                Image(
-                    painter = painterResource(id = R.drawable.check),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
+                Box(
+                    contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(16.dp)
-                )
+                        .fillMaxWidth()
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.check),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .width(screenWidth() * CHECK_SCREEN_SHARE)
+                            .aspectRatio(1f)
+                            .testTag("TransferSuccessCheck")
+                    )
+                }
             }
 
             if (claim is SparkDepositClaim.Repriced) {

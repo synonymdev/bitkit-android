@@ -142,7 +142,6 @@
     <string name="lightning__spending_confirm__instant_text">Gotowe w kilka minut</string>
     <string name="lightning__spending_confirm__later_text">Po 3 potwierdzeniach, około 30 minut</string>
     <string name="lightning__spending_confirm__total">Razem</string>
-    <string name="lightning__spending_confirm__up_to">do</string>
     <string name="lightning__spending_intro__button">Rozpocznij</string>
     <string name="lightning__spending_intro__text">Przelewaj środki na swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="lightning__spending_intro__title">Prześlij \n&lt;accent&gt;na saldo wydatków&lt;/accent&gt;</string>
@@ -274,13 +273,13 @@
     <string name="lightning__scores_sync_time">Czas synchronizacji wyników ścieżek</string>
     <string name="lightning__setting_up__not_seen">Spark jeszcze nie widzi Twojego przelewu. Zostanie dodany po 3 potwierdzeniach; możesz opuścić ten ekran.</string>
     <string name="lightning__setting_up__pay">Zapłać ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Natychmiast kosztuje teraz ₿ {amount}. Zapłać albo poczekaj na 3 potwierdzenia, około 30 minut, z niższą opłatą.</string>
+    <string name="lightning__setting_up__repriced">Natychmiast kosztuje teraz &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Zapłać albo poczekaj na 3 potwierdzenia, około 30 minut, z niższą opłatą.</string>
     <string name="lightning__setting_up__speed">Prędkość: {speed}</string>
     <string name="lightning__setting_up__step_adding">Dodawanie do wydatków</string>
-    <string name="lightning__setting_up__step_seen">Widziany przez Spark</string>
-    <string name="lightning__setting_up__step_sent">Przelew wysłany</string>
     <string name="lightning__setting_up__unavailable">Natychmiast nie jest dostępne dla tego przelewu. Spark doda go do Twojego salda wydatków po 3 potwierdzeniach, około 30 minut.</string>
     <string name="lightning__setting_up_button">Kontunuuj korzystanie z Bitkit\'a</string>
+    <string name="lightning__setting_up_step1">Przetwarzanie płatności</string>
+    <string name="lightning__setting_up_step2">Płatność powiodła się</string>
     <string name="lightning__spendable_onchain">Dostępne Onchain</string>
     <string name="lightning__total_anchor_channels_reserve">Całkowita rezerwa kanałów anchor</string>
     <string name="lightning__total_lightning">Całkowite Lightning</string>

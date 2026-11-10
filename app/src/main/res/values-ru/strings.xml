@@ -228,13 +228,13 @@
     <string name="lightning__scores_sync_time">Время синхронизации оценок маршрутизации</string>
     <string name="lightning__setting_up__not_seen">Spark ещё не увидел ваш перевод. Он будет зачислен после 3 подтверждений; можно покинуть этот экран.</string>
     <string name="lightning__setting_up__pay">Оплатить ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Мгновенно теперь стоит ₿ {amount}. Оплатите или дождитесь 3 подтверждений, около 30 минут, с меньшей комиссией.</string>
+    <string name="lightning__setting_up__repriced">Мгновенно теперь стоит &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Оплатите или дождитесь 3 подтверждений, около 30 минут, с меньшей комиссией.</string>
     <string name="lightning__setting_up__speed">Скорость: {speed}</string>
     <string name="lightning__setting_up__step_adding">Зачисление на расходы</string>
-    <string name="lightning__setting_up__step_seen">Виден Spark</string>
-    <string name="lightning__setting_up__step_sent">Перевод отправлен</string>
     <string name="lightning__setting_up__unavailable">Мгновенно недоступно для этого перевода. Spark зачислит его на баланс расходов после 3 подтверждений, примерно через 30 минут.</string>
     <string name="lightning__setting_up_button">Продолжить Использование Bitkit</string>
+    <string name="lightning__setting_up_step1">Обработка Платежа</string>
+    <string name="lightning__setting_up_step2">Платеж Успешен</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Комиссия за зачисление</string>
     <string name="lightning__spark_confirmations">%1$d/3 подтверждений</string>
@@ -270,7 +270,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Комиссии недоступны</string>
     <string name="lightning__spending_confirm__spending_fee">Комиссия расходов</string>
     <string name="lightning__spending_confirm__total">Итого</string>
-    <string name="lightning__spending_confirm__up_to">до</string>
     <string name="lightning__spending_intro__button">Начать</string>
     <string name="lightning__spending_intro__text">Переведите средства на свой баланс расходов, чтобы наслаждаться мгновенными и недорогими транзакциями с друзьями, семьёй и продавцами.</string>
     <string name="lightning__spending_intro__title">Перевод\n&lt;accent&gt;на Расходы&lt;/accent&gt;</string>
