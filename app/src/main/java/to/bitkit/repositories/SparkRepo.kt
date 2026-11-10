@@ -396,14 +396,17 @@ class SparkRepo @Inject constructor(
     /** A send whose outcome Spark didn't report: when it failed, and when its invoice expires, in epoch seconds. */
     private data class UncertainSend(val failedAt: ULong, val expiresAt: ULong)
 
-    /** Whether Spark's last wallet sync reached it, and started after [seconds] when given. */
+    /**
+     * Whether Spark's last wallet sync reached it, and started after [seconds] when given. A sync time is required
+     * either way, as the SDK sets it only on a wallet sync that succeeded and reports no error before any sync ends.
+     */
     private suspend fun hasSyncedSince(seconds: ULong?): Boolean {
         val info = runSuspendCatching { sparkService.getInfo() }
             .onFailure { Logger.warn("Failed to read Spark's sync state", it, context = TAG) }
             .getOrNull() ?: return false
         info.lastSyncError?.let { Logger.warn("Spark's last sync failed: '$it'", context = TAG) }
         val syncedAt = info.lastSyncedAt
-        return info.lastSyncError == null && (seconds == null || syncedAt != null && syncedAt > seconds)
+        return info.lastSyncError == null && syncedAt != null && (seconds == null || syncedAt > seconds)
     }
 
     private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {

@@ -1467,6 +1467,20 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a synced event before any wallet sync succeeded leaves spark's payment list unread`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        // After a connect the SDK reports no sync error until a sync ends, and no sync time until one succeeds.
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+
+        assertFalse(sut.canListPayments(), "a list no wallet sync filled was read as complete")
+    }
+
+    @Test
     fun `an uncertain spark send keeps holding the node off while spark can't resync`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
@@ -1629,7 +1643,7 @@ class SparkRepoTest : BaseUnitTest() {
         tokenBalances = emptyMap(),
         recoverableFundsSats = 0uL,
         lastSyncError = null,
-        lastSyncedAt = null,
+        lastSyncedAt = 1uL,
     )
 
     private fun prepared(feeSats: ULong): PrepareSendPaymentResponse {
