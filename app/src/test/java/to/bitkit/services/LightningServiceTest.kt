@@ -139,7 +139,10 @@ class LightningServiceTest : BaseUnitTest() {
         sut = createService()
     }
 
-    private fun createService(ldkDispatcher: CoroutineDispatcher = testDispatcher): LightningService =
+    private fun createService(
+        ldkDispatcher: CoroutineDispatcher = testDispatcher,
+        isAppInBackground: () -> Boolean = { this.isAppInBackground },
+    ): LightningService =
         LightningService(
             bgDispatcher = testDispatcher,
             ioDispatcher = testDispatcher,
@@ -151,7 +154,7 @@ class LightningServiceTest : BaseUnitTest() {
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
             ldkQueue = ldkDispatcher,
             onchainFeeRateFactory = { sendFeeRate },
-            isAppInBackground = { isAppInBackground },
+            isAppInBackground = isAppInBackground,
             exitProcess = { exitCount++ },
         ).also { it.node = node }
 
@@ -655,6 +658,19 @@ class LightningServiceTest : BaseUnitTest() {
         verify(node, never()).destroy()
         assertEquals(1, exitCount)
         assertNull(sut.node)
+    }
+
+    @Test
+    fun `stop releases a node with detached work when the app returns before the exit`() = test {
+        var backgroundChecks = 0
+        sut = createService(isAppInBackground = { backgroundChecks++ == 0 })
+        sut.runtimeMonitor.onLog(detachingRecord)
+
+        sut.stop()
+
+        verify(node).destroy()
+        assertEquals(0, exitCount)
+        assertEquals(2, backgroundChecks)
     }
 
     @Test

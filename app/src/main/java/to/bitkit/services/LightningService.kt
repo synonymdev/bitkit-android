@@ -563,18 +563,20 @@ class LightningService internal constructor(
         // one to resume (a VSS write returning, or a thaw from the freezer) aborts the app with "A Tokio 1.x
         // context was found, but it is being shutdown." In the background, kill the process while the runtime
         // is alive instead; a cold start restores everything. In the foreground, release as before.
-        if (monitor.hasDetachedWork && isAppInBackground()) {
-            exitBeforeRuntimeShutdown()
-            return@withContext
-        }
+        if (monitor.hasDetachedWork && isAppInBackground() && exitBeforeRuntimeShutdown()) return@withContext
         releaseHandle(node)
         Logger.info("Node stopped", context = TAG)
     }
 
-    private suspend fun exitBeforeRuntimeShutdown() {
+    private suspend fun exitBeforeRuntimeShutdown(): Boolean {
         Logger.warn("Exiting process: node stop left ldk_node tasks detached while in background", context = TAG)
         delay(EXIT_LOG_FLUSH_DELAY)
+        if (!isAppInBackground()) {
+            Logger.warn("Cancelled process exit: app returned to foreground", context = TAG)
+            return false
+        }
         exitProcess()
+        return true
     }
 
     /**
