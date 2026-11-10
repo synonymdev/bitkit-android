@@ -184,7 +184,7 @@ class SparkRepo @Inject constructor(
             importRestoredExitState(walletIndex)
             // The SDK starts syncing inside build(), before the listener exists, so its first Synced can be missed.
             runSuspendCatching { sparkService.syncWallet() }
-                .onSuccess { _state.update { it.copy(hasSynced = true) } }
+                .onSuccess { if (hasSyncedSince(null)) _state.update { it.copy(hasSynced = true) } }
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
@@ -337,12 +337,16 @@ class SparkRepo @Inject constructor(
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
                 pendingPaymentRepo.state.first { paymentHash in it.pendingPayments }
             }
+            val failedAt = clock.now().epochSeconds.toULong()
             repeat(SETTLE_ATTEMPTS) {
                 runSuspendCatching { sparkService.syncWallet() }
                     .onFailure { Logger.warn("Failed to sync Spark after send '$paymentHash'", it, context = TAG) }
-                    .onSuccess { _state.update { it.copy(hasSynced = true) } }
+                // Spark finishes an interrupted send only on a later sync, and a sync that never reached it still
+                // returns, so only one that completed after the failure shows the send was never made.
+                val isSynced = hasSyncedSince(failedAt)
+                if (isSynced) _state.update { it.copy(hasSynced = true) }
                 when (val send = lightningSend(paymentHash)) {
-                    SparkLightningSend.NotFound -> {
+                    SparkLightningSend.NotFound if isSynced -> {
                         cacheStore.removeSparkSendHash(paymentHash)
                         val reason = PaymentFailureReason.UNEXPECTED_ERROR
                         _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, reason))
@@ -355,11 +359,21 @@ class SparkRepo @Inject constructor(
                         settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
                         return@launch
                     }
-                    SparkLightningSend.Unavailable -> delay(SETTLE_RETRY_INTERVAL)
+                    SparkLightningSend.NotFound, SparkLightningSend.Unavailable -> delay(SETTLE_RETRY_INTERVAL)
                 }
             }
             Logger.warn("Stopped settling Spark send '$paymentHash'", context = TAG)
         }
+    }
+
+    /** Whether Spark's last wallet sync reached it, and started after [seconds] when given. */
+    private suspend fun hasSyncedSince(seconds: ULong?): Boolean {
+        val info = runSuspendCatching { sparkService.getInfo() }
+            .onFailure { Logger.warn("Failed to read Spark's sync state", it, context = TAG) }
+            .getOrNull() ?: return false
+        info.lastSyncError?.let { Logger.warn("Spark's last sync failed: '$it'", context = TAG) }
+        val syncedAt = info.lastSyncedAt
+        return info.lastSyncError == null && (seconds == null || syncedAt != null && syncedAt > seconds)
     }
 
     private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {
