@@ -423,6 +423,22 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark withdrawal refused for its fee is priced again`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        whenever { sparkRepo.withdrawAll(any(), any()) }.thenReturn(Result.failure(SparkError.WithdrawalFeeChanged()))
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE + 200uL))
+
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+
+        assertEquals(SPARK_FEE + 200uL, sut.sparkWithdrawFeeSats.value)
+    }
+
+    @Test
     fun `loadSavingsSwapQuote sizes the swap by the selected channels, not spark`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())

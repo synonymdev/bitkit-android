@@ -447,7 +447,11 @@ class TransferViewModel @Inject constructor(
                 sparkAddress = null
                 sparkFeeBalanceSats = null
             }
-            .onFailure { _isSparkWithdrawFailed.update { true } }
+            .onFailure {
+                // A refused fee is quoted again, so the next visit doesn't show it and fail the same way.
+                sparkFeeBalanceSats = null
+                _isSparkWithdrawFailed.update { true }
+            }
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
