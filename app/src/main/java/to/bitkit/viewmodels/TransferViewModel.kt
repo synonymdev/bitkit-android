@@ -405,7 +405,8 @@ class TransferViewModel @Inject constructor(
         // Drop any outcome from an earlier attempt so the progress screen cannot act on it.
         _savingsSwapResult.update { null }
         _isSparkWithdrawFailed.update { false }
-        sparkWithdrawJob = null
+        // A withdrawal still going out is kept, so a transfer confirmed again joins it rather than sending it twice.
+        if (sparkWithdrawJob?.isActive != true) sparkWithdrawJob = null
         closeJob = null
         _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels

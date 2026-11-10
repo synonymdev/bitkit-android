@@ -481,6 +481,29 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a second savings confirm never sends spark's withdrawal again`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        val withdrawn = CompletableDeferred<Result<Unit>>()
+        whenever { sparkRepo.withdrawAll(any(), any()) }.doSuspendableAnswer { withdrawn.await() }
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+        val first = launch { sut.closeSelectedChannels() }
+        runCurrent()
+        first.cancel()
+
+        // The transfer is confirmed again while its withdrawal is still going out.
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = true)
+        val second = launch { sut.closeSelectedChannels() }
+        runCurrent()
+        withdrawn.complete(Result.success(Unit))
+        advanceUntilIdle()
+        second.join()
+
+        verify(sparkRepo, times(1)).withdrawAll(any(), any())
+    }
+
+    @Test
     fun `loadSavingsSwapQuote sizes the swap by the selected channels, not spark`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
