@@ -40,6 +40,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
+import to.bitkit.data.HeldHwSend
+import to.bitkit.data.HwHeldSendStore
+import to.bitkit.data.HwHeldSendsUnreadableError
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
@@ -76,6 +79,7 @@ import to.bitkit.models.walletKey
 import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.SignedTransactionId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.ceil
@@ -100,6 +104,7 @@ class HwWalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val hwWalletStore: HwWalletStore,
+    private val hwHeldSendStore: HwHeldSendStore,
     private val settingsStore: SettingsStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -116,6 +121,9 @@ class HwWalletRepo @Inject constructor(
         /** A Trezor reconnect is a session handshake; a Jade one may include entering the PIN on the device. */
         private val TREZOR_RECONNECT_TIMEOUT = 30.seconds
         private val JADE_RECONNECT_TIMEOUT = 5.minutes
+
+        /** LDK's ANTI_REORG_DELAY: a spend this deep is final, so a transaction conflicting with it never confirms. */
+        const val FINAL_SPEND_CONFIRMATIONS = 6u
     }
 
     /** Alternates which vendor gets the Bluetooth part of a scan, to stay under Android's scan-rate limit. */
@@ -301,6 +309,8 @@ class HwWalletRepo @Inject constructor(
         }
         trezorRepo.resetState()
         jadeRepo.resetState()
+        // A wipe forgets held sends with the rest of the wallet; one that cannot be cleared fails the wipe
+        hwHeldSendStore.reset()
     }
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
@@ -967,6 +977,76 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    /**
+     * Keeps [send], whose broadcast may have gone out, across sheets and restarts, so the same payment is not signed
+     * again beside it until the wallet sees it.
+     */
+    suspend fun holdSend(send: HeldHwSend): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { hwHeldSendStore.holdSend(send) }
+    }
+
+    suspend fun releaseHeldSend(txId: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { hwHeldSendStore.releaseHeldSends(setOf(txId)) }
+    }
+
+    /**
+     * The held send of this payment, which is never signed again until it is recorded as sent or released. Fails with
+     * [HwHeldSendsUnreadableError] when an earlier send of [walletId] may be among records that cannot be read.
+     */
+    suspend fun heldSendFor(walletId: String, address: String, amountSats: ULong): Result<HeldHwSend?> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val data = hwHeldSendStore.load()
+                data.unreadableErrorFor(walletId)?.let { throw it }
+                data.heldSends.firstOrNull { it.isPaymentOf(walletId, address, amountSats) }
+            }
+        }
+
+    /**
+     * Discards the held send records of [walletId] that cannot be read, so its sends are signed again. Only an explicit
+     * choice of the user calls this, as a payment those records held may then be sent twice.
+     */
+    suspend fun clearUnreadableHeldSends(walletId: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { hwHeldSendStore.clearUnreadable(walletId) }
+    }
+
+    /**
+     * Whether a fresh read of [walletId]'s history shows another transaction, [FINAL_SPEND_CONFIRMATIONS] deep,
+     * spending one of the coins of the signed [serializedTx], which proves it can never confirm. False while the
+     * history holds the transaction itself; fails when the history cannot be read.
+     */
+    suspend fun isSpentByAnotherTransaction(walletId: String, serializedTx: String): Result<Boolean> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val txId = SignedTransactionId.fromHex(serializedTx)
+                val inputs = SignedTransactionId.inputsFromHex(serializedTx).toSet()
+                val account = getFundingAccount(walletId).getOrThrow()
+                val network = Env.network.toCoreNetwork()
+                val history = trezorRepo.getTransactionHistory(account.xpub, network, account.accountType)
+                    .getOrThrow()
+                    .transactions
+                if (history.any { it.txid.equals(txId, ignoreCase = true) }) return@runSuspendCatching false
+                // A coin is spent no earlier than the block that created it
+                val fundedAt = history
+                    .filter { tx -> inputs.any { it.txid.equals(tx.txid, ignoreCase = true) } }
+                    .mapNotNull { it.blockHeight }
+                    .minOrNull() ?: return@runSuspendCatching false
+                history
+                    .filter {
+                        it.sent > 0uL && it.confirmations >= FINAL_SPEND_CONFIRMATIONS &&
+                            (it.blockHeight ?: 0u) >= fundedAt
+                    }
+                    .any { tx ->
+                        val detail = trezorRepo
+                            .getTransactionDetail(account.xpub, tx.txid, network, account.accountType)
+                            .getOrThrow()
+                        val isSameTransaction = detail.txid.equals(tx.txid, ignoreCase = true)
+                        require(isSameTransaction) { "Backend returned another transaction" }
+                        detail.inputs.any { OnchainSendInput(it.txid.lowercase(), it.vout) in inputs }
+                    }
+            }
+        }
+
     /** Fresh backend observation of this exact transaction in the original hardware wallet. */
     suspend fun observeExactTransaction(
         walletId: String,
@@ -1184,6 +1264,31 @@ class HwWalletRepo @Inject constructor(
     init {
         observeWatcherEvents()
         syncWatchers()
+        releaseSeenHeldSends()
+    }
+
+    private fun releaseSeenHeldSends() {
+        scope.launch {
+            activities.collect { activities ->
+                // A held send its wallet has seen went out, so it is recorded with its tags and released, and a later
+                // send of the same payment is a new one. A replaced transaction no longer exists and is not seen.
+                val seen = activities.filterIsInstance<Activity.Onchain>()
+                    .filter { it.v1.doesExist }
+                    .associate { (it.v1.walletId to it.v1.txId.lowercase()) to it.v1.id }
+                if (seen.isEmpty()) return@collect
+                runSuspendCatching {
+                    val held = hwHeldSendStore.load().heldSends.filter { (it.walletId to it.txId.lowercase()) in seen }
+                    if (held.isEmpty()) return@runSuspendCatching
+                    held.filter { it.tags.isNotEmpty() }.forEach { send ->
+                        val activityId = seen.getValue(send.walletId to send.txId.lowercase())
+                        activityRepo.addTagsToActivity(activityId, send.tags, send.walletId)
+                            .onFailure { Logger.warn("Failed to tag seen held send '${send.txId}'", it, context = TAG) }
+                    }
+                    hwHeldSendStore.releaseHeldSends(held.mapTo(mutableSetOf()) { it.txId })
+                    Logger.info("Released '${held.size}' held hardware sends their wallets have seen", context = TAG)
+                }.onFailure { Logger.warn("Failed to release seen held hardware sends", it, context = TAG) }
+            }
+        }
     }
 
     private fun observeWatcherEvents() {

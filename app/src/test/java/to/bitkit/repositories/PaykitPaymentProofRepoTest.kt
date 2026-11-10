@@ -21,6 +21,7 @@ import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PubkyIdentityCapability
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -3061,7 +3062,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 it.getArgument<suspend () -> Unit>(2)()
                 hwWalletRepo.broadcastFunding(it.getArgument(0), it.getArgument(1))
             }
-        val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo)
+        whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
+        val send = HwSendViewModel(
+            context,
+            hwWalletRepo,
+            mock(),
+            mock<CoreService>(),
+            mock(),
+            repo,
+            HwHeldDispatchTracker(),
+        )
         send.signAndBroadcast(
             HwSendRequest(
                 walletId,

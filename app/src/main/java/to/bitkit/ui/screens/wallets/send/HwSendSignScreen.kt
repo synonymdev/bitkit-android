@@ -32,6 +32,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.illustrationRes
 import to.bitkit.ui.components.sendOpenConnectRes
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.transfer.hardware.HwPassphrasePromptSheet
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -56,6 +57,7 @@ fun HwSendSignScreen(
     beginPaymentSubmission: () -> (() -> Unit),
     paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
+    onPaymentPending: (HwSendResult) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val wallets by viewModel.wallets.collectAsStateWithLifecycle()
@@ -85,6 +87,9 @@ fun HwSendSignScreen(
     }
     // Without this the sheet's NavHost pops the route itself, ignoring the guard and skipping onBack
     BackHandler(onBack = onBackRequest)
+    uiState.unresolvedSend?.let { send ->
+        LaunchedEffect(send) { onPaymentPending(send) }
+    }
 
     val signAndBroadcast = {
         viewModel.signAndBroadcast(
@@ -105,6 +110,46 @@ fun HwSendSignScreen(
         onBack = onBackRequest,
         onOpenConnect = signAndBroadcast,
     )
+
+    uiState.alreadySentSend?.let { alreadySent ->
+        AppAlertDialog(
+            title = stringResource(R.string.hardware__send_already_sent_title),
+            text = if (alreadySent.sentAt.isEmpty()) {
+                stringResource(R.string.hardware__send_already_sent_text_undated)
+            } else {
+                stringResource(R.string.hardware__send_already_sent_text, alreadySent.sentAt)
+            },
+            confirmText = stringResource(R.string.hardware__send_again),
+            dismissText = stringResource(R.string.hardware__send_view_sent),
+            onConfirm = {
+                viewModel.confirmSendAgain()
+                signAndBroadcast()
+            },
+            onDismiss = viewModel::showAlreadySentSend,
+        )
+    }
+
+    uiState.unreadableHeldSends?.let { prompt ->
+        val clearText = if (prompt.clearsAllWallets) {
+            stringResource(R.string.hardware__held_sends_clear_all)
+        } else {
+            stringResource(R.string.hardware__held_sends_clear)
+        }
+        AppAlertDialog(
+            title = stringResource(
+                if (prompt.isConfirming) {
+                    R.string.hardware__held_sends_clear_confirm_title
+                } else {
+                    R.string.hardware__held_sends_unreadable_title
+                },
+            ),
+            text = if (prompt.isConfirming) prompt.confirmMessage else prompt.message,
+            confirmText = clearText,
+            confirmTextColor = Colors.Red,
+            onConfirm = viewModel::clearUnreadableHeldSends,
+            onDismiss = viewModel::dismissUnreadableHeldSends,
+        )
+    }
 
     if (uiState.isPassphraseRequired) {
         HwPassphrasePromptSheet(

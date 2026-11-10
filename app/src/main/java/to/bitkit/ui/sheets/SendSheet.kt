@@ -66,6 +66,8 @@ import to.bitkit.ui.screens.subscriptions.SubscriptionFirstPaymentProgress
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
 import to.bitkit.ui.screens.subscriptions.contactFor
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
+import to.bitkit.ui.screens.wallets.send.HeldHwSendEvent
+import to.bitkit.ui.screens.wallets.send.HwSendResult
 import to.bitkit.ui.screens.wallets.send.HwSendSignScreen
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
@@ -132,6 +134,16 @@ internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
 internal fun NavController.navigateToSendPending(route: SendRoute.Pending) {
     navigateTo(route) { popUpTo(graph.id) { inclusive = true } }
 }
+
+private fun NavController.navigateToHardwareSendPending(send: HwSendResult) = navigateToSendPending(
+    SendRoute.Pending(
+        paymentHash = send.txId,
+        amount = send.amountSats.toLong(),
+        observeResolution = false,
+        isOnchain = true,
+        walletId = send.walletId,
+    )
+)
 
 @Composable
 @Suppress("CyclomaticComplexMethod")
@@ -237,6 +249,23 @@ fun SendSheet(
                 }
             }
             LaunchedEffect(hwSendViewModel, navController) {
+                // A held send can complete long after its pending screen closed; only that screen shows its success
+                hwSendViewModel.heldSendEvents.collect { event ->
+                    val route = navController.currentBackStackEntry
+                        ?.takeIf { it.destination.hasRoute<SendRoute.Pending>() }
+                        ?.toRoute<SendRoute.Pending>()
+                    val send = event.send
+                    if (route?.walletId != send.walletId || !route.paymentHash.equals(send.txId, ignoreCase = true)) {
+                        return@collect
+                    }
+                    when (event) {
+                        is HeldHwSendEvent.Completed ->
+                            showHardwareSuccess(send.txId, send.amountSats, send.walletId, isShopPayment = false)
+                        is HeldHwSendEvent.Released -> appViewModel.hideSheet()
+                    }
+                }
+            }
+            LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
                     val resolved = appViewModel.resolvedHardwarePaymentFor(result.walletId, result.txId)
                     if (resolved != null && hwSendViewModel.completeReconciledBroadcast(
@@ -298,7 +327,19 @@ fun SendSheet(
                             }
                             navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
                         }
-                        is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
+                        is SendEffect.NavigateToHardwareSign -> {
+                            // A payment whose broadcast may have gone out is broadcast again instead of signed anew
+                            val state = appViewModel.sendUiState.value
+                            val unresolvedSend = state.hardwareWalletId?.let { walletId ->
+                                hwSendViewModel.resumeHeldSend(walletId, state.address, state.amount)
+                            }
+                            if (unresolvedSend == null) {
+                                navController.navigateTo(SendRoute.HardwareSign)
+                            } else {
+                                appViewModel.onHardwareSignCancelled()
+                                navController.navigateToHardwareSendPending(unresolvedSend)
+                            }
+                        }
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             val details = appViewModel.successSendUiState.value
@@ -571,6 +612,7 @@ fun SendSheet(
                             appViewModel.onHardwareSignCancelled()
                             if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
+                        onPaymentPending = { navController.navigateToHardwareSendPending(it) },
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.Success> {
@@ -718,6 +760,7 @@ fun SendSheet(
                 composableWithDefaultTransitions<SendRoute.Pending> {
                     val route = it.toRoute<SendRoute.Pending>()
                     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                    val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
                     SendPendingScreen(
                         savedStateHandle = it.savedStateHandle,
                         onNavigateToPin = { navController.navigateTo(SendRoute.RecoveryPinCheck) },
@@ -767,6 +810,11 @@ fun SendSheet(
                         onClose = { appViewModel.hideSheet() },
                         onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId, route.walletId) },
                         viewModel = hiltViewModel<SendPendingViewModel>(),
+                        canRetryHardwareSend = hwSendUiState.unresolvedSends.any { send ->
+                            send.walletId == route.walletId && send.txId.equals(route.paymentHash, ignoreCase = true)
+                        },
+                        isRetryingHardwareSend = route.paymentHash.lowercase() in hwSendUiState.retryingSendTxIds,
+                        onRetryHardwareSend = { hwSendViewModel.retryUnresolvedSend(route.paymentHash) },
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.ComingSoon> {

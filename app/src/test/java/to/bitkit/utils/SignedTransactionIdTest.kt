@@ -1,6 +1,7 @@
 package to.bitkit.utils
 
 import org.junit.Test
+import to.bitkit.repositories.OnchainSendInput
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -20,6 +21,18 @@ class SignedTransactionIdTest {
             it[it.size - 5] = (it[it.size - 5].toInt() xor 1).toByte()
         }
         assertEquals(expected, SignedTransactionId.fromHex(witnessChanged.toHexString()))
+    }
+
+    @Test
+    fun `reads the coins a signed transaction spends with or without witness data`() {
+        val expected = listOf(
+            OnchainSendInput("167c8b8b6169007fd94edc121d606c829cbb5d6b51075bb0c664911848a0c5f7", 1u),
+        )
+        assertEquals(expected, SignedTransactionId.inputsFromHex(fixture()))
+        val withoutWitness = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction-legacy.hex"))
+            .bufferedReader().readText().trim()
+        assertEquals(expected, SignedTransactionId.inputsFromHex(withoutWitness))
+        assertFailsWith<IllegalArgumentException> { SignedTransactionId.inputsFromHex(fixture().dropLast(2)) }
     }
 
     @Test
