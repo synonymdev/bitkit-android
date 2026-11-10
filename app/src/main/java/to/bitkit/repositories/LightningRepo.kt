@@ -169,6 +169,9 @@ class LightningRepo @Inject constructor(
     /** The rail each Lightning send last went out on, by payment hash, so a retry settles only from its own rail. */
     private val sendRails = ConcurrentHashMap<String, LightningRail>()
 
+    /** Node sends under way, kept so a listing read before one began doesn't drop its hash as failed. */
+    private val ldkSendsInFlight = ConcurrentHashMap.newKeySet<String>()
+
     @Volatile
     private var lastKnownNodeId: String? = null
 
@@ -1577,15 +1580,18 @@ class LightningRepo @Inject constructor(
         sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
-        cacheStore.addLdkSendHash(ldkSendKey(bolt11, paymentHash), invoiceExpiresAt(bolt11))
+        val key = ldkSendKey(bolt11, paymentHash)
+        ldkSendsInFlight += key
+        cacheStore.addLdkSendHash(key, invoiceExpiresAt(bolt11))
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
+            .also { ldkSendsInFlight -= key }
             .onSuccess { recordSendRail(it, LightningRail.Ldk) }
             .also { syncState() }
     }
 
     /**
-     * Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too, then trims
-     * only paid and failed ones past the cap, so a send that may still be pending always holds Spark.
+     * Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too, drops sends
+     * listed only as failed, then trims paid ones past the cap, so a send that may still be pending always holds Spark.
      */
     private suspend fun keepLdkSendHashes(payments: List<PaymentDetails>) {
         val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
@@ -1595,7 +1601,10 @@ class LightningRepo @Inject constructor(
             outbound.filter { it.status == status }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
         }
-        cacheStore.trimLdkSendHashes(paid = hashes(PaymentStatus.SUCCEEDED), failed = hashes(PaymentStatus.FAILED))
+        val paid = hashes(PaymentStatus.SUCCEEDED)
+        val live = paid + hashes(PaymentStatus.PENDING) + ldkSendsInFlight
+        cacheStore.removeLdkSendHashes(hashes(PaymentStatus.FAILED) - live)
+        cacheStore.trimLdkSendHashes(paid = paid, failed = emptySet())
     }
 
     /** When [bolt11] expires, in epoch seconds, or null when it can't be parsed. */

@@ -229,11 +229,13 @@ class CacheStore internal constructor(
         return kept to expiries.filterKeys { it in kept }
     }
 
-    suspend fun removeLdkSendHash(paymentHash: String) {
-        val hash = paymentHash.lowercase()
-        if (hash !in store.data.first().ldkSendHashes) return
+    suspend fun removeLdkSendHash(paymentHash: String) = removeLdkSendHashes(setOf(paymentHash))
+
+    suspend fun removeLdkSendHashes(paymentHashes: Set<String>) {
+        val hashes = paymentHashes.mapTo(mutableSetOf()) { it.lowercase() }
+        if (store.data.first().ldkSendHashes.none { it in hashes }) return
         store.updateData {
-            it.copy(ldkSendHashes = it.ldkSendHashes - hash, ldkSendExpiries = it.ldkSendExpiries - hash)
+            it.copy(ldkSendHashes = it.ldkSendHashes - hashes, ldkSendExpiries = it.ldkSendExpiries - hashes)
         }
     }
 

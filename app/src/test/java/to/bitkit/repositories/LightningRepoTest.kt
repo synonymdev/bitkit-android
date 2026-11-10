@@ -99,6 +99,7 @@ import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
@@ -1395,7 +1396,69 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a node listing trims only its paid and failed sends past the cap`() = test {
+    fun `a node send listed only as failed leaves the kept hashes`() = test {
+        val cache = AppCacheData(ldkSendHashes = listOf("h"), ldkSendHashesSeeded = true)
+        val store = CacheStore(InMemoryDataStore(cache))
+        sut = repoWith(store)
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+
+        startNodeForTesting()
+
+        assertEquals(emptyList(), store.data.first().ldkSendHashes)
+    }
+
+    @Test
+    fun `a node retry in flight keeps its hash while an older listing shows it failed`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        val sent = CompletableDeferred<String>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { sent.await() }
+        val retry = async { sut.payInvoiceWithNode("h") }
+        runCurrent()
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("other"))
+
+        sut.payInvoice("other", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes)
+        sent.complete("h")
+        retry.await()
+    }
+
+    private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
+        id = hash,
+        kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),
+        amountMsat = 1_000_000uL,
+        feePaidMsat = null,
+        direction = PaymentDirection.OUTBOUND,
+        status = status,
+        latestUpdateTimestamp = 0uL,
+    )
+
+    private fun repoWith(store: CacheStore) = LightningRepo(
+        bgDispatcher = testDispatcher,
+        lightningService = lightningService,
+        settingsStore = settingsStore,
+        coreService = coreService,
+        keychain = keychain,
+        lnurlService = lnurlService,
+        cacheStore = store,
+        preActivityMetadataRepo = preActivityMetadataRepo,
+        onchainSendAttemptStore = onchainSendAttemptStore,
+        connectivityRepo = connectivityRepo,
+        vssBackupClientLdk = vssBackupClientLdk,
+        urlValidator = urlValidator,
+        electrumProbeService = electrumProbeService,
+        sparkRepo = sparkRepo,
+    )
+
+    @Test
+    fun `a node listing drops its failed sends and trims its paid ones past the cap`() = test {
         startNodeForTesting()
         val earlier = { status: PaymentStatus, hash: String ->
             PaymentDetails(
@@ -1427,7 +1490,8 @@ class LightningRepoTest : BaseUnitTest() {
 
         sut.payInvoice("bolt11", 1_000uL)
 
-        verifyBlocking(cacheStore) { trimLdkSendHashes(paid = setOf("paid"), failed = setOf("failed")) }
+        verifyBlocking(cacheStore) { removeLdkSendHashes(setOf("failed")) }
+        verifyBlocking(cacheStore) { trimLdkSendHashes(paid = setOf("paid"), failed = emptySet()) }
     }
 
     @Test
