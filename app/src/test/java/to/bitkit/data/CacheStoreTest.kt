@@ -130,31 +130,27 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `node sends listed as failed are trimmed past the cap, a pending one stays`() = test {
+    fun `node sends listed failed only are dropped under the cap too, a pending one stays`() = test {
         sut.addLdkSendHash("pending")
-        val failed = settledHashes()
-        failed.forEach { sut.addLdkSendHash(it) }
+        sut.addLdkSendHash("failed")
 
-        sut.trimLdkSendHashes(paid = emptySet(), failed = failed.toSet())
+        sut.trimLdkSendHashes(paid = emptySet(), failed = setOf("failed"))
 
-        val kept = sut.data.first().ldkSendHashes
-        assertTrue("pending" in kept)
-        assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
-        assertFalse(failed.first() in kept, "The oldest failed send was kept over the cap")
+        assertEquals(listOf("pending"), sut.data.first().ldkSendHashes)
     }
 
     @Test
-    fun `a retried node send survives a trim from a listing that still shows it failed`() = test {
-        sut.addLdkSendHash("retried")
-        val failed = settledHashes()
-        failed.forEach { sut.addLdkSendHash(it) }
-        sut.addLdkSendHash("retried")
+    fun `a paid spark send whose invoice expired is dropped under the cap, an unexpired one stays`() = test {
+        val store = expiringStore()
+        store.addSparkSendHash("expired", expiresAt = NOW)
+        store.addSparkSendHash("unexpired", expiresAt = NOW + 1)
+        store.addSparkSendHash("unknown")
 
-        sut.trimLdkSendHashes(paid = emptySet(), failed = failed.toSet() + "retried")
+        store.trimSparkSendHashes(paid = setOf("expired", "unexpired", "unknown"), failed = emptySet())
 
-        val kept = sut.data.first().ldkSendHashes
-        assertEquals("retried", kept.last())
-        assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
+        val data = store.data.first()
+        assertEquals(listOf("unexpired", "unknown"), data.sparkSendHashes)
+        assertEquals(mapOf("unexpired" to NOW + 1), data.sparkSendExpiries)
     }
 
     @Test
@@ -167,9 +163,8 @@ class CacheStoreTest : BaseUnitTest() {
         store.trimLdkSendHashes(paid = paid.toSet() + "unexpired", failed = emptySet())
 
         val data = store.data.first()
-        assertTrue("unexpired" in data.ldkSendHashes, "The unexpired paid send was dropped")
-        assertEquals(NOW + 3_600, data.ldkSendExpiries["unexpired"])
-        assertEquals(MAX_SPARK_SEND_HASHES, data.ldkSendHashes.size)
+        assertEquals(listOf("unexpired"), data.ldkSendHashes, "The unexpired paid send was dropped")
+        assertEquals(mapOf("unexpired" to NOW + 3_600), data.ldkSendExpiries)
     }
 
     @Test

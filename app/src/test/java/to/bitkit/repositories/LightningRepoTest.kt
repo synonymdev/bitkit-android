@@ -1430,6 +1430,32 @@ class LightningRepoTest : BaseUnitTest() {
         retry.await()
     }
 
+    @Test
+    fun `a node retry that ends while an older listing is read keeps its hash`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        var isRetried = false
+        // The node retries the invoice, and its send returns, after this listing was read with the failed attempt.
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            val listed = listOf(nodeSend("h", PaymentStatus.FAILED))
+            if (!isRetried) {
+                isRetried = true
+                sut.payInvoiceWithNode("h")
+            }
+            listed
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("other"))
+
+        sut.payInvoice("other", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes)
+    }
+
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
         id = hash,
         kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),
@@ -1458,7 +1484,7 @@ class LightningRepoTest : BaseUnitTest() {
     )
 
     @Test
-    fun `a node listing drops its failed sends and trims its paid ones past the cap`() = test {
+    fun `a node listing trims its paid and failed sends but not its pending ones`() = test {
         startNodeForTesting()
         val earlier = { status: PaymentStatus, hash: String ->
             PaymentDetails(
@@ -1490,8 +1516,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         sut.payInvoice("bolt11", 1_000uL)
 
-        verifyBlocking(cacheStore) { removeLdkSendHashes(setOf("failed")) }
-        verifyBlocking(cacheStore) { trimLdkSendHashes(paid = setOf("paid"), failed = emptySet()) }
+        verifyBlocking(cacheStore) { trimLdkSendHashes(paid = setOf("paid"), failed = setOf("failed")) }
     }
 
     @Test

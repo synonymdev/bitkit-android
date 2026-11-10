@@ -825,10 +825,8 @@ class SparkRepo @Inject constructor(
         }
         // A send in flight may be missing from this list, or show only its earlier failed attempt, so it stays.
         val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys
-        cacheStore.trimSparkSendHashes(
-            paid = sendHashes(PaymentStatus.COMPLETED) - live,
-            failed = sendHashes(PaymentStatus.FAILED) - live,
-        )
+        val paid = sendHashes(PaymentStatus.COMPLETED) - live
+        cacheStore.trimSparkSendHashes(paid = paid, failed = sendHashes(PaymentStatus.FAILED) - paid - live)
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.
         val failed = payments.mapNotNull { it.sendHash(PaymentStatus.FAILED) }.distinct()
