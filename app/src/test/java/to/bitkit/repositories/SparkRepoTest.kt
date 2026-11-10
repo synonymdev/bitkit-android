@@ -842,7 +842,29 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.getInfo() }.thenReturn(info(0uL))
         sut.refreshState().getOrThrow()
 
-        assertEquals(10_000uL, sut.state.value.balanceSats, "the balance read 0 after the failed withdrawal")
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the balance read 0 after the failed withdrawal")
+        assertEquals(0uL, sut.state.value.sendableSats, "a send was offered from the kept balance")
+    }
+
+    @Test
+    fun `a synced read after a failed withdrawal clears the kept balance even when it reads zero`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("operators unreachable") }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        assertTrue(sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).isFailure)
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() - 60uL))
+        sut.refreshState().getOrThrow()
+        val kept = sut.state.value.shownBalanceSats
+        assertEquals(10_000uL, kept, "a sync from before the failure cleared the kept balance")
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL))
+        sut.refreshState().getOrThrow()
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "a sync after the failure kept the old balance")
     }
 
     @Test
@@ -855,11 +877,12 @@ class SparkRepoTest : BaseUnitTest() {
         val syncFailed = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
         whenever { sparkService.getInfo() }.thenReturn(syncFailed)
         sut.refreshState().getOrThrow()
-        assertEquals(10_000uL, sut.state.value.balanceSats, "the balance read 0 while the sync failed")
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the balance read 0 while the sync failed")
+        assertEquals(0uL, sut.state.value.sendableSats, "a send was offered from the kept balance")
 
         whenever { sparkService.getInfo() }.thenReturn(info(0uL))
         sut.refreshState().getOrThrow()
-        assertEquals(0uL, sut.state.value.balanceSats)
+        assertEquals(0uL, sut.state.value.shownBalanceSats)
     }
 
     @Test

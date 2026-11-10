@@ -115,10 +115,11 @@ class SparkRepo @Inject constructor(
     private val withdrawalTxids = ConcurrentHashMap.newKeySet<String>()
 
     /**
-     * Set by a failed withdrawal until Spark reads a balance again: while its operators stay down, Spark can read 0
-     * with the funds still there, so the last known balance stays shown.
+     * When a withdrawal last failed, in seconds since 1970, until Spark reads a balance again or syncs after it: while
+     * its operators stay down, Spark can read 0 with the funds still there, so the last balance stays shown.
      */
-    private val withdrawalFailed = AtomicBoolean(false)
+    @Volatile
+    private var withdrawalFailedAtSecs: ULong? = null
 
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
@@ -206,7 +207,7 @@ class SparkRepo @Inject constructor(
         earlyClaimVouts.clear()
         preparedWithdrawal = null
         withdrawalTxids.clear()
-        withdrawalFailed.set(false)
+        withdrawalFailedAtSecs = null
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
@@ -497,11 +498,11 @@ class SparkRepo @Inject constructor(
             (payment.details as? PaymentDetails.Withdraw)?.txId?.let { withdrawalTxids += it }
             Unit
         }.onSuccess {
-            withdrawalFailed.set(false)
+            withdrawalFailedAtSecs = null
             runSuspendCatching { refresh() }
                 .onFailure { Logger.warn("Failed to refresh Spark after its withdrawal", it, context = TAG) }
         }.onFailure {
-            withdrawalFailed.set(true)
+            withdrawalFailedAtSecs = clock.now().epochSeconds.toULong()
             Logger.error("Failed to withdraw from Spark", it, context = TAG)
         }
     }
@@ -645,12 +646,17 @@ class SparkRepo @Inject constructor(
             .filter { it.txid.lowercase() !in claimedTxids }
             .map { SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false) }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
-        if (info.balanceSats > 0uL) withdrawalFailed.set(false)
-        val isStale = withdrawalFailed.get() || info.lastSyncError != null
+        val failedAt = withdrawalFailedAtSecs
+        val hasSyncedSince = failedAt != null && info.lastSyncError == null && (info.lastSyncedAt ?: 0uL) > failedAt
+        if (info.balanceSats > 0uL || hasSyncedSince) withdrawalFailedAtSecs = null
+        val isStale = withdrawalFailedAtSecs != null || info.lastSyncError != null
         _state.update {
             it.copy(
                 isReady = true,
-                balanceSats = if (info.balanceSats == 0uL && isStale) it.balanceSats else info.balanceSats,
+                balanceSats = info.balanceSats,
+                keptBalanceSats = it.shownBalanceSats.takeIf { kept ->
+                    info.balanceSats == 0uL && isStale && kept > 0uL
+                },
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),
                 withdrawals = payments.toWithdrawals(),
@@ -1009,7 +1015,13 @@ data class SparkState(
     val isReady: Boolean = false,
     /** Spark synced its payments at least once since it connected, so its payment list is complete. */
     val hasSynced: Boolean = false,
+    /** What Spark read, which sends and withdrawals use. */
     val balanceSats: ULong = 0uL,
+    /**
+     * The balance shown while Spark reads 0 after a failed withdrawal or a failed sync, with the funds likely still
+     * there; null once Spark reads a balance again or syncs after the failure. Never offered to a send.
+     */
+    val keptBalanceSats: ULong? = null,
     /** Deposits seen on-chain that Spark claims into [balanceSats] after 3 confirmations. */
     val pendingDepositSats: ULong = 0uL,
     val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
@@ -1017,6 +1029,9 @@ data class SparkState(
 ) {
     /** The most Spark can send once its service fee is paid, so a payment near the full balance isn't offered. */
     val sendableSats: ULong get() = SparkFees.sendableSats(balanceSats)
+
+    /** The balance shown in Spending and on the Spark connection, which [keptBalanceSats] stands in for. */
+    val shownBalanceSats: ULong get() = keptBalanceSats ?: balanceSats
 }
 
 object SparkFees {

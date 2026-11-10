@@ -115,7 +115,7 @@ class LightningConnectionsViewModel @Inject constructor(
                         pendingConnections = channels.filterPending()
                             .map { it.mapToUiModel(channels, connectionText) }
                             .reversed().toImmutableList(),
-                        localBalance = calculateLocalBalance(channels).safe() + sparkState.balanceSats.safe(),
+                        localBalance = calculateLocalBalance(channels).safe() + sparkState.shownBalanceSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
                         spark = sparkState.toUi(lightningRepo),
                         isSparkReceiving = sparkState.isReady,
@@ -252,9 +252,9 @@ data class SparkDepositUi(
 internal suspend fun SparkState.toUi(lightningRepo: LightningRepo): SparkUi? {
     if (!isReady) return null
     // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
-    if (balanceSats == 0uL && deposits.isEmpty() && Env.network != Network.REGTEST) return null
+    if (shownBalanceSats == 0uL && deposits.isEmpty() && Env.network != Network.REGTEST) return null
     return SparkUi(
-        balanceSats = balanceSats,
+        balanceSats = shownBalanceSats,
         deposits = deposits.map {
             SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
         }.toImmutableList(),
