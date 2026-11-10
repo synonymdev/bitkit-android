@@ -19,6 +19,7 @@ import to.bitkit.repositories.AppHealthState
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitState
@@ -195,8 +196,19 @@ class AppStatusViewModelTest : BaseUnitTest() {
     @Test
     fun `exit step maps running and funding phases`() {
         assertEquals(ExitStep.RUNNING, exitRecord(SparkExitRecord.Phase.Running).exitStep())
-        assertEquals(ExitStep.FUNDING, exitRecord(SparkExitRecord.Phase.AwaitingFunding(1_000uL)).exitStep())
-        assertEquals(ExitStep.FUNDING, exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL)).exitStep())
+        assertEquals(ExitStep.FUNDING, exitRecord(SparkExitRecord.Phase.AwaitingFunding(1_000uL), 1_000uL).exitStep())
+        assertEquals(ExitStep.FUNDING, exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL), 1_000uL).exitStep())
+        val asked = exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL), 1_000uL)
+        assertEquals(ExitStep.FUNDING, asked.exitStep(SparkExitFundingState.Ask(1_000uL)))
+    }
+
+    @Test
+    fun `exit step is running once a payment covers the funding`() {
+        val awaiting = exitRecord(SparkExitRecord.Phase.AwaitingFunding(1_000uL), 1_000uL)
+        val needs = exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL), 1_000uL)
+        assertEquals(ExitStep.RUNNING, awaiting.exitStep(SparkExitFundingState.Paid("txid")))
+        assertEquals(ExitStep.RUNNING, needs.exitStep(SparkExitFundingState.Seen("txid")))
+        assertEquals(ExitStep.RUNNING, exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL)).exitStep())
     }
 
     @Test
@@ -212,8 +224,13 @@ class AppStatusViewModelTest : BaseUnitTest() {
         }
     }
 
-    private fun exitRecord(phase: SparkExitRecord.Phase, isActive: Boolean = true) = mock<SparkExitRecord> {
+    private fun exitRecord(
+        phase: SparkExitRecord.Phase,
+        shortfallSats: ULong? = null,
+        isActive: Boolean = true,
+    ) = mock<SparkExitRecord> {
         on { this.phase } doReturn phase
         on { this.isActive } doReturn isActive
+        on { fundingShortfallSats } doReturn shortfallSats
     }
 }

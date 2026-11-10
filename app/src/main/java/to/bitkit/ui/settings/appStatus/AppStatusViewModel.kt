@@ -20,6 +20,7 @@ import to.bitkit.models.HealthState
 import to.bitkit.repositories.AppHealthState
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import javax.inject.Inject
@@ -54,7 +55,7 @@ class AppStatusViewModel @Inject constructor(
                     HealthState.ERROR -> context.getString(R.string.settings__status__lightning_node__error)
                     else -> lightningState.nodeLifecycleState.uiText(context)
                 },
-                exitStep = exitState.record.exitStep(),
+                exitStep = exitState.record.exitStep(exitState.fundingState),
             )
         }.collect { newState ->
             _uiState.update { newState }
@@ -91,8 +92,10 @@ data class AppStatusUiState(
 
 enum class ExitStep { FUNDING, RUNNING }
 
-internal fun SparkExitRecord?.exitStep(): ExitStep? = when (this?.takeIf { it.isActive }?.phase) {
-    is SparkExitRecord.Phase.AwaitingFunding, is SparkExitRecord.Phase.NeedsFunding -> ExitStep.FUNDING
-    SparkExitRecord.Phase.Running -> ExitStep.RUNNING
-    else -> null
+/** Asks for fee funding only while no payment covers it, as the progress screen does. */
+internal fun SparkExitRecord?.exitStep(funding: SparkExitFundingState? = null): ExitStep? {
+    val record = this?.takeIf { it.isActive } ?: return null
+    val isAskingFunding = record.fundingShortfallSats != null &&
+        (funding == null || funding is SparkExitFundingState.Ask)
+    return if (isAskingFunding) ExitStep.FUNDING else ExitStep.RUNNING
 }
