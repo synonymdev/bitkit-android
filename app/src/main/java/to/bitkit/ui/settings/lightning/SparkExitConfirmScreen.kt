@@ -70,7 +70,6 @@ private fun Content(
         ) {
             VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__spark_exit__confirm_title).withAccent())
-            VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(R.string.lightning__spark_exit__confirm_text).withAccentBoldBright(),
                 color = Colors.White64,

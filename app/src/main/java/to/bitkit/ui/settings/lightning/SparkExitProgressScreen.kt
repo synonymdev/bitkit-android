@@ -109,7 +109,6 @@ private fun Content(
             ) {
                 VerticalSpacer(32.dp)
                 Display(text = progressTitle(record?.phase, uiState.progressFunding).withAccent())
-                VerticalSpacer(8.dp)
                 BodyM(
                     text = progressText(
                         record = record,
@@ -164,6 +163,8 @@ private fun Content(
                         title = stringResource(R.string.lightning__spark_exit__cancel_title),
                         text = stringResource(R.string.lightning__spark_exit__cancel_text),
                         confirmText = stringResource(R.string.lightning__spark_exit__cancel),
+                        dismissText = stringResource(R.string.common__cancel),
+                        confirmTextColor = Colors.Red,
                         onConfirm = {
                             isConfirming = false
                             onCancel()
@@ -189,7 +190,8 @@ private fun Content(
 private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onPayHigherFee: () -> Unit) {
     SparkExitSteps(record = record, tipHeight = uiState.tipHeight)
     uiState.sweepTxid?.let {
-        VerticalSpacer(24.dp)
+        // With the cell's own 16 dp above its caption it sits as far below the steps as on iOS.
+        VerticalSpacer(9.dp)
         SparkExitTxNote(
             text = null,
             txid = it,

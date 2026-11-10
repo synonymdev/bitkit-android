@@ -83,7 +83,6 @@ private fun Content(
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 VerticalSpacer(32.dp)
                 Display(text = stringResource(R.string.lightning__spark_exit__fee_bump_title).withAccent())
-                VerticalSpacer(8.dp)
                 BodyM(
                     text = stringResource(R.string.lightning__spark_exit__fee_bump_text)
                         .replace("{rate}", "${uiState.record?.feeRateSatPerVbyte ?: 0uL}")

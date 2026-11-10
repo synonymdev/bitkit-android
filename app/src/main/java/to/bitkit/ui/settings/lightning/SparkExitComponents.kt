@@ -48,6 +48,12 @@ import to.bitkit.viewmodels.AppViewModel
 internal fun sparkExitAmountText(sats: ULong): String =
     rememberMoneyText(sats.toLong(), showSymbol = true)?.replace(Regex("</?accent>"), "") ?: sats.toString()
 
+/**
+ * What Display's line height adds under a headline on Android against iOS: master's spacers under an exit headline
+ * render 9 dp more here, so exit screens take it off and look the same on both apps. Measured on 2x media devices.
+ */
+internal val SparkExitDisplayExtra = 9.dp
+
 /** The amount marked as an inline accent, for a line drawn with [withAccentBoldBright] or [withAccentBoldRed]. */
 @Composable
 internal fun sparkExitAmountAccent(sats: ULong): String = "<accent>${sparkExitAmountText(sats)}</accent>"

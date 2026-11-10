@@ -65,7 +65,6 @@ fun SparkExitIntroScreen(
                     text = stringResource(R.string.lightning__spark_exit__intro_title).withAccent(),
                     modifier = Modifier.fillMaxWidth()
                 )
-                VerticalSpacer(8.dp)
                 BodyM(
                     text = stringResource(R.string.lightning__spark_exit__intro_text).withAccentBoldBright(),
                     color = Colors.White64,

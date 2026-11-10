@@ -61,7 +61,7 @@ private fun Content(
         ) {
             VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__spark_exit__quote_title).withAccent())
-            VerticalSpacer(32.dp)
+            VerticalSpacer(32.dp - SparkExitDisplayExtra)
             when {
                 uiState.quote != null -> {
                     SparkExitQuoteRows(uiState.quote)
