@@ -5,7 +5,7 @@
     digits while at the cap.
 
     Precondition: onboarded dev wallet with a POSITIVE on-chain Savings balance and Spark connected on
-    its regtest, so the most Savings can send to the Spark deposit address can be priced. The pad is
+    its regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), so the most Savings can send to the Spark deposit address can be priced. The pad is
     disabled until that maximum loads — wait for it. The maximum is the Savings balance less the network
     fee, so it is lower than the Savings balance. Start on the wallet home screen.
   </description>

@@ -16,6 +16,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -117,6 +119,13 @@ class WalletRepo @Inject constructor(
         repoScope.launch {
             hwWalletRepo.wallets.collect { wallets ->
                 _balanceState.update { state -> state.copy(hardwareWallets = wallets.map { it.toBalance() }) }
+            }
+        }
+        repoScope.launch {
+            // Node start and Spark-ready skip their refresh during a restore, so it runs once the restore ends.
+            backupRepo.restoreInProgress.drop(1).filter { !it }.collect {
+                val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
+                if (walletExists() && (isNodeRunning || sparkRepo.state.value.isReady)) refreshBip21()
             }
         }
         repoScope.launch {

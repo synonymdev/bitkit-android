@@ -10244,6 +10244,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unified scan offers only savings when spending cannot pay`() = test {
+        val bolt11 = "lnbcrt1spendingempty"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.canSend(any())).thenReturn(false)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertFalse(sut.sendUiState.value.isUnified)
+        assertFalse(sut.sendUiState.value.canSwitchFundingSource)
+    }
+
+    @Test
     fun `manual input of own lightning invoice shows self payment toast`() = test {
         val bolt11 = "lnbcrt1ownmanual"
         stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = OWN_NODE_ID.fromHex())

@@ -91,4 +91,40 @@ class CacheStoreTest : BaseUnitTest() {
             sut.data.first().deletedActivities,
         )
     }
+
+    @Test
+    fun `a pending node send behind the cap of paid ones stays kept`() = test {
+        val paid = settledHashes()
+        sut.seedLdkSendHashes(listOf("pending") + paid)
+
+        sut.trimLdkSendHashes(paid.toSet())
+
+        val kept = sut.data.first().ldkSendHashes
+        assertTrue("pending" in kept)
+        assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
+        assertFalse(paid.first() in kept, "The oldest paid send was kept over the cap")
+    }
+
+    @Test
+    fun `a node send still pending behind the cap of later sends stays kept`() = test {
+        sut.addLdkSendHash("pending")
+        settledHashes().forEach { sut.addLdkSendHash(it) }
+
+        assertTrue("pending" in sut.data.first().ldkSendHashes)
+    }
+
+    @Test
+    fun `a spark send still pending behind the cap of later sends stays kept`() = test {
+        sut.addSparkSendHash("pending")
+        val paid = settledHashes()
+        paid.forEach { sut.addSparkSendHash(it) }
+
+        sut.trimSparkSendHashes(paid.toSet())
+
+        val kept = sut.data.first().sparkSendHashes
+        assertTrue("pending" in kept)
+        assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
+    }
+
+    private fun settledHashes() = (1..MAX_SPARK_SEND_HASHES).map { "paid$it" }
 }

@@ -7,7 +7,7 @@
 
     Precondition: onboarded dev wallet with the display unit set to modern Bitcoin (sats), primary
     display Bitcoin, a POSITIVE on-chain Savings balance of at least 250 000 sats, and Spark connected
-    on its regtest. Start on the wallet home screen. No funds move: the journey never taps Continue.
+    on its regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet). Start on the wallet home screen. No funds move: the journey never taps Continue.
 
     Why 250 000: the number pad rejects any sats input above its max
     (AmountInputViewModel.handleNumberPadInput, the guard comparing the new amount to maxAmount),
