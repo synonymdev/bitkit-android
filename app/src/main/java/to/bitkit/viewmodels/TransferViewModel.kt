@@ -312,6 +312,10 @@ class TransferViewModel @Inject constructor(
     fun beginSavingsTransfer() {
         // A wallet wipe keeps this view model, so an address kept from before may belong to the wiped wallet.
         sparkAddress = null
+        // Spark's withdrawal fee moves, so each transfer prices it again.
+        sparkFeeJob?.cancel()
+        sparkFeeBalanceSats = null
+        _sparkWithdrawFeeSats.update { null }
         setSavingsSelection(SavingsSelection())
     }
 
