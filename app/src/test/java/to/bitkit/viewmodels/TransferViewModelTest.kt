@@ -21,6 +21,7 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -388,6 +389,24 @@ class TransferViewModelTest : BaseUnitTest() {
         val expectedSwapFee = (expectedMax.toLong() * SWAP_FEE_PERCENT / 100.0).roundToLong().toULong()
         assertEquals(expectedSwapFee, quote.swapFeeSat)
         assertEquals(expectedMax - expectedSwapFee - SWAP_MINER_FEE, quote.receiveSat)
+    }
+
+    @Test
+    fun `a new transfer to savings withdraws spark to a fresh address`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        // The wallet is wiped and another restored in the same process, so the first address is no longer its own.
+        whenever { lightningRepo.newAddress() }.thenReturn(Result.success("bcrt1qrestored"))
+
+        sut.beginSavingsTransfer()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(eq("bcrt1qrestored"), any())
+        verify(sparkRepo, never()).withdrawAll(eq(CLAIM_ADDRESS), any())
     }
 
     @Test

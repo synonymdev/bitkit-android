@@ -309,7 +309,11 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Opens Transfer to Savings with nothing left from an earlier visit that ended before the swipe. */
-    fun beginSavingsTransfer() = setSavingsSelection(SavingsSelection())
+    fun beginSavingsTransfer() {
+        // A wallet wipe keeps this view model, so an address kept from before may belong to the wiped wallet.
+        sparkAddress = null
+        setSavingsSelection(SavingsSelection())
+    }
 
     fun setSavingsSelection(selection: SavingsSelection) {
         _savingsSelection.update { selection }
