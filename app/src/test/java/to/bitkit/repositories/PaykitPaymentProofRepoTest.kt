@@ -931,6 +931,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a spark withdrawal refused before its journal releases its proof without reading spark`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markSparkOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
+        val identity = storedProofs.single().identity
+
+        assertTrue(repo.releaseRefusedSparkOnchainProof(request))
+
+        assertTrue(storedProofs.isEmpty())
+        verify(lightningRepo, never()).sparkWithdrawalOutcome(any(), any(), any())
+        verify(allowanceExecutor).onchainSendReleased(identity, request.id)
+    }
+
+    @Test
     fun `a spark withdrawal that never sent fails its allowance attempt on reconcile`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.P2wpkh.rawValue)

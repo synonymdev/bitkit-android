@@ -438,6 +438,26 @@ class PaykitPaymentProofRepo @Inject constructor(
         }.getOrDefault(false)
     }
 
+    /**
+     * Releases the started Spark proof of [request] for a withdrawal Spark refused before its journal was written, so
+     * nothing left the wallet and no listing is needed; returns whether it did.
+     */
+    suspend fun releaseRefusedSparkOnchainProof(request: PaykitPaymentRequest): Boolean = withContext(ioDispatcher) {
+        val identity = currentIdentity() ?: return@withContext false
+        runSuspendCatching {
+            operationMutex.withLock {
+                val proof = loadProofs().lastOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                        it.sparkWithdrawal && it.paymentStarted && it.proofData == null
+                } ?: return@withLock false
+                releaseUnsentSparkOnchainProofLocked(proof)
+                true
+            }
+        }.onFailure {
+            Logger.warn("Failed to release a refused Spark withdrawal proof", it, context = TAG)
+        }.getOrDefault(false)
+    }
+
     /** Settles a started Spark proof from Spark's list: completed by its own withdrawal, removed when it never sent. */
     private suspend fun reconcileSparkOnchainProof(proof: PendingPaykitPaymentProof): Boolean {
         if (!proof.paymentStarted || proof.proofData != null) return false
@@ -455,17 +475,21 @@ class PaykitPaymentProofRepo @Inject constructor(
                 completeSparkOnchainProofLocked(proof, outcome.txid)
             }
             SparkWithdrawalOutcome.Unsent -> {
-                allowanceExecutor.get().onchainSendReleased(proof.identity, proof.requestId)
-                Logger.info("Released a Paykit proof whose Spark withdrawal never sent", context = TAG)
-                releaseDeniedPrivateConsumption(proof)
-                removeProofsLocked { it == proof }
-                // The pending screen of an uncertain Spark send waits on this to fail it.
-                val release = PaykitSparkWithdrawalRelease(proof.identity, proof.requestId)
-                _sparkWithdrawalReleases.update { if (release in it) it else it + release }
+                releaseUnsentSparkOnchainProofLocked(proof)
                 false
             }
             SparkWithdrawalOutcome.Unknown -> false
         }
+    }
+
+    private suspend fun releaseUnsentSparkOnchainProofLocked(proof: PendingPaykitPaymentProof) {
+        allowanceExecutor.get().onchainSendReleased(proof.identity, proof.requestId)
+        Logger.info("Released a Paykit proof whose Spark withdrawal never sent", context = TAG)
+        releaseDeniedPrivateConsumption(proof)
+        removeProofsLocked { it == proof }
+        // The pending screen of an uncertain Spark send waits on this to fail it.
+        val release = PaykitSparkWithdrawalRelease(proof.identity, proof.requestId)
+        _sparkWithdrawalReleases.update { if (release in it) it else it + release }
     }
 
     private suspend fun completeSparkOnchainProofLocked(proof: PendingPaykitPaymentProof, txid: String): Boolean {

@@ -12603,6 +12603,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark leg refused at its deadline releases the request proof without a spark sync`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedrequest")
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val privateContext = privatePaymentContext(7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.captureOriginalOnchainPayer(request)).thenReturn(Result.success(testPublicKey))
+        whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
+        whenever(
+            paykitPaymentProofRepo.markSparkOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull(), any()),
+        )
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
+            .thenReturn(Result.success(Unit))
+        // Spark hasn't synced, so it can't yet say the withdrawal never sent.
+        whenever(lightningRepo.sparkWithdrawalOutcome(any(), any(), any())).thenReturn(SparkWithdrawalOutcome.Unknown)
+        whenever(paykitPaymentProofRepo.releaseRefusedSparkOnchainProof(request)).thenReturn(true)
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+        ).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            onBeforeSend()
+            Result.failure(ServiceError.PaymentDeadlineExpired())
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                amount = leg.deliveredSat,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        confirmCurrentPayment()
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).releaseRefusedSparkOnchainProof(request)
+        verify(lightningRepo, never()).sparkWithdrawalOutcome(any(), any(), any())
+    }
+
+    @Test
     fun `a failed spark leg releases a request proof spark never sent`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedrequest")
         val request = paymentRequest().copy(

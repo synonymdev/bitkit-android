@@ -265,6 +265,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -7040,6 +7041,12 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
+        // Spark refuses a send past its deadline before writing its journal, so nothing left and no listing is needed.
+        if (error is ServiceError.PaymentDeadlineExpired) {
+            incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseRefusedSparkOnchainProof(it) }
+            failServiceLegBeforeSend(error, preparedPaymentProofRequest, contactPaymentContext, allowanceAttemptId)
+            return
+        }
         incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(it) }
         // Registered before the outcome is read, so a journal that closes meanwhile still reaches this send.
         val attempt = leg.endpoint.value to leg.deliveredSat
@@ -7070,6 +7077,15 @@ class AppViewModel @Inject constructor(
             showUnresolvedOnchainSend(null, leg.deliveredSat, incomingPaymentRequest)
             return
         }
+        failServiceLegBeforeSend(error, preparedPaymentProofRequest, contactPaymentContext, allowanceAttemptId)
+    }
+
+    private suspend fun failServiceLegBeforeSend(
+        error: Throwable,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String?,
+    ) {
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         cancelPaymentProofPreparation(preparedPaymentProofRequest)
         finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
