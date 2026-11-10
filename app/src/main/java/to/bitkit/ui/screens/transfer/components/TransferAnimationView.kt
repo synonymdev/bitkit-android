@@ -10,24 +10,33 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
+
+/** Inner ring size against the outer ring, as iOS's `EllipseLoader` draws it. */
+const val ELLIPSE_INNER_SHARE = 0.70f
+
+/** Side of the square the figure fits in, against the outer ring, as iOS's `EllipseLoader` `centerScale`. */
+const val ELLIPSE_FIGURE_SHARE = 0.85f
 
 @Composable
 fun TransferAnimationView(
@@ -38,6 +47,9 @@ fun TransferAnimationView(
     rotateContent: Boolean = true,
     contentWidthFraction: Float = 1f,
     keepAssetRatios: Boolean = false,
+    innerRingShare: Float = ELLIPSE_INNER_SHARE,
+    figureShare: Float = ELLIPSE_FIGURE_SHARE,
+    maxSize: Dp = Dp.Infinity,
 ) {
     val animationSpec: InfiniteRepeatableSpec<Float> = infiniteRepeatable(
         animation = tween(durationMillis = 3000, easing = EaseInOut),
@@ -76,6 +88,9 @@ fun TransferAnimationView(
                 rotationLarge = rotationLarge,
                 rotationSmall = rotationSmall,
                 rotationContent = if (rotateContent) rotationArrows else 0f,
+                innerRingShare = innerRingShare,
+                figureShare = figureShare,
+                maxSize = maxSize,
             )
             return@Box
         }
@@ -116,8 +131,8 @@ fun TransferAnimationView(
 }
 
 /**
- * Draws the rings and figure at their sizes relative to the large ring, as the design sets them, at any density:
- * the assets are `nodpi`, so drawn at their own pixel size the small ring grows against the clamped large one.
+ * Draws the rings and figure as iOS's `EllipseLoader` does: the outer ring fills the largest square that fits, up to
+ * [maxSize], the inner ring takes [innerRingShare] of it and the figure fits a square of [figureShare] of it.
  */
 @Composable
 private fun ScaledLayers(
@@ -127,40 +142,42 @@ private fun ScaledLayers(
     rotationLarge: Float,
     rotationSmall: Float,
     rotationContent: Float,
+    innerRingShare: Float,
+    figureShare: Float,
+    maxSize: Dp,
 ) {
-    val large = painterResource(largeCircleRes)
-    val small = painterResource(smallCircleRes)
-    val content = painterResource(contentRes)
-    val largeWidth = large.intrinsicSize.width
-    val maxSize = with(LocalDensity.current) { largeWidth.toDp() }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .widthIn(max = maxSize)
-            .aspectRatio(1f),
-    ) {
-        Image(
-            painter = large,
-            contentDescription = null,
+    BoxWithConstraints(contentAlignment = Alignment.Center) {
+        val container = min(min(maxWidth, maxHeight), maxSize)
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .fillMaxSize()
-                .rotate(rotationLarge),
-        )
-        Image(
-            painter = small,
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize(small.intrinsicSize.width / largeWidth)
-                .rotate(rotationSmall),
-        )
-        Image(
-            painter = content,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxSize(content.intrinsicSize.width / largeWidth)
-                .rotate(rotationContent),
-        )
+                .size(container)
+                .clipToBounds()
+                .testTag("TransferAnimation"),
+        ) {
+            Image(
+                painter = painterResource(largeCircleRes),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .rotate(rotationLarge),
+            )
+            Image(
+                painter = painterResource(smallCircleRes),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(container * innerRingShare)
+                    .rotate(rotationSmall),
+            )
+            Image(
+                painter = painterResource(contentRes),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(container * figureShare)
+                    .rotate(rotationContent),
+            )
+        }
     }
 }
 
