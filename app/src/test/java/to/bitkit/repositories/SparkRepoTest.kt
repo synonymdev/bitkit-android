@@ -863,6 +863,20 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a deposit claimed early is listed only as claimed`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        listDeposit()
+        whenever { sparkService.listPayments() }.thenReturn(listOf(depositPayment()))
+        val sut = createSut()
+
+        sut.refreshState().getOrThrow()
+
+        val claimed = sut.state.value.deposits.map { it.isClaimed }
+        assertEquals(listOf(true), claimed, "the claimed deposit is in progress too")
+        assertEquals(0uL, sut.state.value.pendingDepositSats)
+    }
+
+    @Test
     fun `a sent withdrawal succeeds even when the refresh after it fails`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))

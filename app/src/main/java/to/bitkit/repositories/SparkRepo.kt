@@ -625,9 +625,7 @@ class SparkRepo @Inject constructor(
     private suspend fun refresh() = refreshMutex.withLock {
         val info = sparkService.getInfo()
         info.lastSyncError?.let { Logger.warn("Failed to sync Spark, balances may be stale: '$it'", context = TAG) }
-        val pending = sparkService.listUnclaimedDeposits().map {
-            SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false)
-        }
+        val unclaimed = sparkService.listUnclaimedDeposits()
         val payments = sparkService.listPayments()
         val claimed = payments
             .filter { it.method == PaymentMethod.DEPOSIT && it.status == PaymentStatus.COMPLETED }
@@ -641,6 +639,11 @@ class SparkRepo @Inject constructor(
                     claimedAt = payment.timestamp,
                 )
             }
+        // Spark can still list a deposit it already claimed early as unclaimed, so a claimed one is listed only once.
+        val claimedTxids = claimed.map { it.txid.lowercase() }.toSet()
+        val pending = unclaimed
+            .filter { it.txid.lowercase() !in claimedTxids }
+            .map { SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false) }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
         if (info.balanceSats > 0uL) withdrawalFailed.set(false)
         val isStale = withdrawalFailed.get() || info.lastSyncError != null
