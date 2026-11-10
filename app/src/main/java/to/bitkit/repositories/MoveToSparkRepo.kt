@@ -145,6 +145,7 @@ class MoveToSparkRepo @Inject constructor(
             }
             val sentId = lightningRepo.payInvoiceOverLdk(
                 bolt11 = quote.invoice,
+                paymentHash = paymentHash,
                 sats = quote.amountSats,
                 maxTotalRoutingFeeMsat = MoveToSparkMath.feeCapMsat(quote.feeSats),
             ).onSuccess { paymentId.set(it) }.getOrElse {

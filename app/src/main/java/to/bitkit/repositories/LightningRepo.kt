@@ -1566,12 +1566,13 @@ class LightningRepo @Inject constructor(
     /** Pays [bolt11] from the channels only, never falling back to Spark, which moving a channel balance needs. */
     suspend fun payInvoiceOverLdk(
         bolt11: String,
+        paymentHash: String,
         sats: ULong?,
         maxTotalRoutingFeeMsat: ULong?,
     ): Result<PaymentId> = payInvoiceWithLdk(
         bolt11 = bolt11,
         sats = sats,
-        paymentHash = null,
+        paymentHash = paymentHash,
         paymentDeadlineAt = null,
         maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
         onBeforeSend = { true },
