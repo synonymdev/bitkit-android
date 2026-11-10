@@ -1476,6 +1476,32 @@ class SparkRepoTest : BaseUnitTest() {
         verify(sparkService, never()).send(any())
     }
 
+    @Test
+    fun `an older failed row never ends an uncertain spark send while spark can't resync`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        // An earlier attempt of the invoice failed, and from here every wallet sync fails without throwing.
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"), lastSyncedAt = 1uL)
+        )
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "an older failure ended a send Spark may finish")
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+    }
+
     private fun info(balanceSats: ULong) = GetInfoResponse(
         identityPubkey = "pubkey",
         balanceSats = balanceSats,

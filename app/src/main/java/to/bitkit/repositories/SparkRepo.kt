@@ -368,13 +368,14 @@ class SparkRepo @Inject constructor(
                         uncertainSends -= paymentHash.lowercase()
                         return@launch
                     }
-                    is SparkLightningSend.Found -> {
+                    // A failed row may be an earlier attempt's, so it is final only after a sync since the failure.
+                    is SparkLightningSend.Found if send.status != PaymentStatus.FAILED || isSynced -> {
                         uncertainSends -= paymentHash.lowercase()
                         if (send.status == PaymentStatus.FAILED) cacheStore.removeSparkSendHash(paymentHash)
                         settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
                         return@launch
                     }
-                    SparkLightningSend.NotFound, SparkLightningSend.Unavailable -> delay(SETTLE_RETRY_INTERVAL)
+                    else -> delay(SETTLE_RETRY_INTERVAL)
                 }
             }
             Logger.warn("Stopped settling Spark send '$paymentHash'", context = TAG)
