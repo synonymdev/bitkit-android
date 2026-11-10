@@ -522,7 +522,13 @@ class SparkRepo @Inject constructor(
             ?.takeIf { it.address == address && it.balanceSats == balanceSats }
             ?.takeIf { it.response.withdrawalQuote().expiresAt > nowSecs.safe() + QUOTE_EXPIRY_MARGIN_SECS.safe() }
             ?.let { return it }
-        val response = sparkService.prepareSend(address, balanceSats, FeePolicy.FEES_INCLUDED)
+        val response = try {
+            sparkService.prepareSend(address, balanceSats, FeePolicy.FEES_INCLUDED)
+        } catch (e: SdkException.InvalidInput) {
+            // Spark refuses to quote a balance that even its cheapest fee leaves as dust.
+            if (e.isBelowMinimum()) throw SparkError.WithdrawalTooSmall()
+            throw e
+        }
         return PreparedWithdrawal(address, balanceSats, response).also { preparedWithdrawal = it }
     }
 
@@ -1233,6 +1239,9 @@ sealed interface SparkClaimStep {
 }
 
 /** Spark refuses an expired Lightning invoice with this input error, at prepare and again at send. */
+internal fun SdkException.InvalidInput.isBelowMinimum(): Boolean =
+    v1.startsWith("Amount is below the minimum", ignoreCase = true)
+
 internal fun Throwable.isInvoiceExpired(): Boolean =
     this is SdkException.InvalidInput && v1.contains("invoice has expired", ignoreCase = true)
 

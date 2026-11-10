@@ -1296,6 +1296,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a balance spark refuses to quote as below the minimum is too small to withdraw`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(500uL))
+        // What the SDK answers when even its cheapest fee would leave dust.
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenAnswer {
+            throw SdkException.InvalidInput(
+                "Amount is below the minimum of 330 sats required for this address after lowest fees of 1093 sats"
+            )
+        }
+        val sut = createSut()
+
+        assertIs<SparkError.WithdrawalTooSmall>(sut.estimateWithdrawAllFeeSats(ADDRESS).exceptionOrNull())
+        assertIs<SparkError.WithdrawalTooSmall>(sut.withdrawAll(ADDRESS, confirmedFeeSats = 1_093uL).exceptionOrNull())
+
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenAnswer {
+            throw SdkException.InvalidInput("Invalid address: bad")
+        }
+        assertIs<SdkException.InvalidInput>(sut.estimateWithdrawAllFeeSats(ADDRESS).exceptionOrNull())
+    }
+
+    @Test
     fun `exit backup waits for spark's first sync`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.exportExitState() }.thenReturn("state")
