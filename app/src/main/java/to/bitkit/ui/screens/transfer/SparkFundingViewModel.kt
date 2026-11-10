@@ -258,8 +258,14 @@ class SparkFundingViewModel @Inject constructor(
             }
             val increase = quote.increaseOver(shownQuote, shown.speed)
             if (increase > 0) {
-                Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
-                toastFeesChanged(increase)
+                // A max transfer sends what Savings can afford, so its amount moves with the fee rates and balance.
+                if (shown.isMax && quote.amountSats != shownQuote.amountSats) {
+                    Logger.info("Asking for another swipe, the max amount changed since shown", context = TAG)
+                    toastMaxChanged(quote.toSpendingSats(shown.speed))
+                } else {
+                    Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
+                    toastFeesChanged(increase)
+                }
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
@@ -472,6 +478,13 @@ class SparkFundingViewModel @Inject constructor(
         title = R.string.lightning__spending_confirm__fees_changed_title,
         description = context.getString(R.string.lightning__spending_confirm__fees_changed_network)
             .replace("{amount}", formatPrimaryAmount(increaseSats)),
+        type = Toast.ToastType.INFO,
+    )
+
+    private fun toastMaxChanged(toSpendingSats: Long) = toast(
+        title = R.string.lightning__spending_confirm__max_changed_title,
+        description = context.getString(R.string.lightning__spending_confirm__max_changed)
+            .replace("{amount}", formatPrimaryAmount(toSpendingSats)),
         type = Toast.ToastType.INFO,
     )
 

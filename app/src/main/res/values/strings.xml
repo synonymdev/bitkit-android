@@ -417,6 +417,8 @@
     <string name="lightning__spending_confirm__instant_text">Ready in a few minutes</string>
     <string name="lightning__spending_confirm__later_text">After 3 confirmations, about 30 minutes</string>
     <string name="lightning__spending_confirm__lsp_fee">Service fees</string>
+    <string name="lightning__spending_confirm__max_changed">The most you can transfer is now {amount}, because fee rates or your savings balance changed while you were on this screen. Swipe again to confirm.</string>
+    <string name="lightning__spending_confirm__max_changed_title">Amount changed</string>
     <string name="lightning__spending_confirm__network_fee">Network fees</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit couldn\'t get the current fees for this transfer. Check your connection and try again.</string>
     <string name="lightning__spending_confirm__quote_error_title">Fees Unavailable</string>

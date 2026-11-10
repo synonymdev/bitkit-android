@@ -233,6 +233,40 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swipe on a max transfer whose amount fell names the new amount instead of a fee rise`() = test {
+        whenever(context.getString(R.string.lightning__spending_confirm__max_changed_title))
+            .thenReturn("Amount changed")
+        whenever(context.getString(R.string.lightning__spending_confirm__max_changed)).thenReturn("Max {amount}")
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(sut.uiState.value.maxSats)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        whenever { lightningRepo.estimateSendAllFee(any(), any(), any()) }.thenReturn(Result.success(800uL))
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("Amount changed", toasts.single().title)
+        // 100,000 savings less the 800 sat network fee and the 1,350 sat claim fee.
+        assertEquals("Max ₿ ${97_850L.formatToModernDisplay()}", toasts.single().description)
+        assertEquals(false, sut.uiState.value.isSending)
+    }
+
+    @Test
+    fun `swipe on a max transfer whose claim fee alone rose still names the fee rise`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(sut.uiState.value.maxSats)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        whenever { sparkRepo.estimateDepositClaimFeeSats(any()) }.thenReturn(Result.success(1_500uL))
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("Changed", toasts.single().title)
+    }
+
+    @Test
     fun `swipe refuses with real copy when savings no longer cover the transfer`() = test {
         val sut = createSut()
         advanceUntilIdle()
