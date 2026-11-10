@@ -80,6 +80,7 @@ import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -771,6 +772,38 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(300uL, onchain.fee)
         assertEquals("pubkycontact", onchain.contact)
         assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `an accepted withdrawal stays sent after a restart whose list lacks it`() = test {
+        journaledSpark().also { whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal()) }
+            .withdraw("bcrt1qcontact", 20_000uL, "pubkycontact").getOrThrow()
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        // After a restart before the request's proof completed, Spark's list lacks the withdrawal.
+        whenever { sparkService.listPayments() }.thenReturn(emptyList())
+        val restarted = createSut()
+
+        whenever { sparkService.getInfo() }
+            .thenReturn(info(50_000uL).copy(lastSyncError = SyncError.Network("operators unreachable")))
+        restarted.start(0).getOrThrow()
+        assertEquals(
+            SparkWithdrawalOutcome.Sent("withdrawal"),
+            restarted.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+            "A failed sync after the restart must not release a request Spark accepted",
+        )
+
+        whenever { sparkService.getInfo() }.thenReturn(info(50_000uL))
+        restarted.start(0).getOrThrow()
+        assertEquals(
+            SparkWithdrawalOutcome.Sent("withdrawal"),
+            restarted.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+            "A list that lacks an accepted withdrawal is no proof it never sent",
+        )
+        assertNotEquals(
+            SparkWithdrawalOutcome.Sent("withdrawal"),
+            restarted.withdrawalOutcome("bcrt1qcontact", 20_000uL, setOf("withdrawal")),
+            "An earlier attempt's withdrawal never settles a new one",
+        )
     }
 
     @Test

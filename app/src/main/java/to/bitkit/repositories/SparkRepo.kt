@@ -110,6 +110,9 @@ class SparkRepo @Inject constructor(
         /** How long a journaled withdrawal Spark doesn't list stays open before a sync closes it as never sent. */
         private val UNLISTED_WITHDRAWAL_GRACE = 10.minutes
 
+        /** How many sent contact withdrawals stay recorded for a request proof to complete from. */
+        private const val MAX_SENT_WITHDRAWALS = 20
+
         private val SETTLE_RETRY_INTERVAL = 30.seconds
 
         /** Seconds a withdrawal quote must still hold to be reused, so it can't expire mid-send. */
@@ -650,6 +653,10 @@ class SparkRepo @Inject constructor(
         amountSats: ULong,
         earlierTxids: Set<String>,
     ): SparkWithdrawalOutcome = withContext(bgDispatcher) {
+        // A withdrawal recorded as sent stays sent, also once Spark's list lacks it after a restart.
+        cacheStore.data.first().sentSparkWithdrawals.firstOrNull {
+            it.address == address && it.amountSats == amountSats && it.txid !in earlierTxids
+        }?.let { return@withContext SparkWithdrawalOutcome.Sent(it.txid) }
         if (!_state.value.hasSynced || isWithdrawing) return@withContext SparkWithdrawalOutcome.Unknown
         val txid = sparkService.listPayments().firstNotNullOfOrNull { payment ->
             val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@firstNotNullOfOrNull null
@@ -1133,11 +1140,17 @@ class SparkRepo @Inject constructor(
      * Clears [journal] only while it is still the open one, so a stale settle never drops a newer withdrawal's. Returns
      * whether it cleared it: only then is the settlement this attempt's to announce.
      */
-    private suspend fun clearJournal(journal: PendingSparkWithdrawal): Boolean {
+    private suspend fun clearJournal(journal: PendingSparkWithdrawal, sentTxid: String? = null): Boolean {
         var cleared = false
         cacheStore.update {
             cleared = it.pendingSparkWithdrawal == journal
-            if (cleared) it.copy(pendingSparkWithdrawal = null) else it
+            if (!cleared) return@update it
+            // The request's proof completes after the journal clears, so the sent withdrawal it records outlives it.
+            val sent = sentTxid?.let { txid -> SentSparkWithdrawal(journal.address, journal.amountSats, txid) }
+            it.copy(
+                pendingSparkWithdrawal = null,
+                sentSparkWithdrawals = (it.sentSparkWithdrawals + listOfNotNull(sent)).takeLast(MAX_SENT_WITHDRAWALS),
+            )
         }
         return cleared
     }
@@ -1335,14 +1348,9 @@ class SparkRepo @Inject constructor(
                 activityRepo.get().addTagsToActivity(txid, journal.tags)
                     .onFailure { Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG) }
             }
-            if (clearJournal(journal)) {
-                _withdrawalSettlements.emit(
-                    SparkWithdrawalSettlement(
-                        journal.address,
-                        journal.amountSats,
-                        txid.takeIf { payment.status != PaymentStatus.FAILED },
-                    ),
-                )
+            val sentTxid = txid.takeIf { payment.status != PaymentStatus.FAILED }
+            if (clearJournal(journal, sentTxid)) {
+                _withdrawalSettlements.emit(SparkWithdrawalSettlement(journal.address, journal.amountSats, sentTxid))
             }
         }
         return true
@@ -1398,6 +1406,14 @@ data class PendingSparkWithdrawal(
             withdraw.txId !in earlierTxids
     }
 }
+
+/** A withdrawal to a Paykit contact that Spark sent as [txid]. */
+@Serializable
+data class SentSparkWithdrawal(
+    val address: String,
+    val amountSats: ULong,
+    val txid: String,
+)
 
 /** A journaled withdrawal to [address] closed: sent as [txid], or never sent when [txid] is null. */
 data class SparkWithdrawalSettlement(
