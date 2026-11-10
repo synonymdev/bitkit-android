@@ -947,6 +947,42 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(0uL, sut.state.value.shownSpendingSats, "spending counted the exited balance again")
     }
 
+    private suspend fun keptAfterFailedSync(): SparkRepo {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        val syncFailed = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        whenever { sparkService.getInfo() }.thenReturn(syncFailed)
+        sut.refreshState().getOrThrow()
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats)
+        return sut
+    }
+
+    @Test
+    fun `an exit start that failed before saving keeps the kept balance`() = test {
+        val sut = keptAfterFailedSync()
+
+        sut.holdForExit()
+        sut.releaseExitHold()
+        sut.refreshState().getOrThrow()
+
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the failed start dropped the kept balance")
+    }
+
+    @Test
+    fun `a cancelled exit keeps the kept balance`() = test {
+        val sut = keptAfterFailedSync()
+
+        sut.holdForExit()
+        sut.setExiting(true, reconnect = true).getOrThrow()
+        sut.releaseExitHold()
+        sut.setExiting(false, reconnect = true).getOrThrow()
+
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the cancel dropped the kept balance")
+        assertEquals(10_000uL, sut.state.value.shownSpendingSats)
+    }
+
     @Test
     fun `a deposit claimed early is listed only as claimed`() = test {
         whenever(sparkService.isConnected).thenReturn(true)

@@ -129,6 +129,10 @@ class SparkRepo @Inject constructor(
     @Volatile
     private var withdrawalFailedAtSecs: ULong? = null
 
+    /** The kept balance when an exit's hold started, shown again should the exit pay nothing. */
+    @Volatile
+    private var keptBeforeExit: ULong? = null
+
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
 
@@ -271,10 +275,20 @@ class SparkRepo @Inject constructor(
      * Holds Spark for an exit about to start: no sends, receives, spending or kept balance, in the same step the exit's
      * transfer starts counting it. [setExiting] reconnects it for the exit afterwards.
      */
-    fun holdForExit() = _state.update { it.copy(isExiting = true, keptBalanceSats = null) }
+    fun holdForExit() {
+        keptBeforeExit = _state.value.keptBalanceSats
+        _state.update { it.copy(isExiting = true, keptBalanceSats = null) }
+    }
 
-    /** Releases the hold of an exit whose start failed before anything was saved: Spark was never disconnected. */
-    fun releaseExitHold() = _state.update { it.copy(isExiting = false) }
+    /**
+     * Releases the hold of an exit that paid nothing: its start failed before anything was saved, or it was cancelled.
+     * The balance kept before it shows again while Spark still reads 0.
+     */
+    fun releaseExitHold() {
+        val kept = keptBeforeExit
+        keptBeforeExit = null
+        _state.update { it.copy(isExiting = false, keptBalanceSats = if (it.balanceSats == 0uL) kept else null) }
+    }
 
     /** Whether an exit quote has to wait first: a leaf optimization runs, or one ran or was cut short recently. */
     suspend fun needsSettling(): Boolean =

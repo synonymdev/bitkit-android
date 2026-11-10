@@ -969,7 +969,9 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertTrue(sut.canCancel)
         assertEquals(SparkExitCancel.Cancelled, sut.cancel().getOrThrow())
         assertNull(store.load())
-        verify(sparkRepo).setExiting(false, false)
+        // Nothing was paid: Spark keeps the balance it showed before the exit.
+        verify(sparkRepo).releaseExitHold()
+        verify(sparkRepo).setExiting(false, true)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -1142,6 +1144,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals(Phase.Failed(CANCELLED_REASON), record.phase)
         assertEquals(5_000uL, record.leftover.single().valueSats)
         assertTrue(record.needsDriving)
+        verify(sparkRepo).releaseExitHold()
     }
 
     @Test

@@ -242,8 +242,6 @@ data class LightningConnectionsUiState(
 data class SparkUi(
     /** The balance shown, which can be a kept figure while Spark reads 0. */
     val balanceSats: ULong,
-    /** What Spark read, which an emergency exit moves. */
-    val readBalanceSats: ULong = balanceSats,
     val deposits: ImmutableList<SparkDepositUi> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
     val recoverableFundsSats: ULong = 0uL,
@@ -251,8 +249,11 @@ data class SparkUi(
     /** An exit runs, or ended with leftover fee funding not yet swept: Emergency exit opens its progress. */
     val showsExitResult: Boolean = false,
 ) {
-    /** The emergency exit is offered while Spark holds funds, and leads to its progress while it shows one. */
-    val showsExit get() = readBalanceSats > 0uL || recoverableFundsSats > 0uL || showsExitResult
+    /**
+     * The emergency exit is offered while Spark holds funds, also a kept balance while it reads 0, and leads to its
+     * progress while it shows one.
+     */
+    val showsExit get() = balanceSats > 0uL || recoverableFundsSats > 0uL || showsExitResult
 
     val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
     val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
@@ -273,7 +274,6 @@ internal suspend fun SparkState.toUi(lightningRepo: LightningRepo, showsExitResu
     if (shownBalanceSats == 0uL && deposits.isEmpty() && !hasExit && Env.network != Network.REGTEST) return null
     return SparkUi(
         balanceSats = shownBalanceSats,
-        readBalanceSats = balanceSats,
         deposits = deposits.map {
             SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
         }.toImmutableList(),

@@ -990,7 +990,9 @@ class SparkExitRepo @Inject constructor(
                     work.schedulePeriodic()
                     SparkExitCancel.Sweeping
                 }
-                sparkRepo.setExiting(false)
+                // Nothing was paid from Spark: the balance it showed before the exit shows again.
+                sparkRepo.releaseExitHold()
+                sparkRepo.setExiting(false, reconnect = true)
                 Logger.info("Cancelled the Spark exit with outcome '$outcome'", context = TAG)
                 outcome
             }
