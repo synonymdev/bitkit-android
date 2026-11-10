@@ -208,11 +208,14 @@ private fun Content(
     }
 }
 
-/** The four fee tiles of a transfer to spending, at the selected claim [speed]. */
+/**
+ * The four fee tiles of a transfer to spending, at the selected claim [speed]. The claim fee is an estimate at either
+ * speed, so the tiles that come from it, Spending fee and To spending, show `±`; Network fees and Total are exact.
+ */
 @Composable
 internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        val claimPrefix = stringResource(R.string.lightning__spending_confirm__about)
+        val estimatePrefix = stringResource(R.string.lightning__spending_confirm__about)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
@@ -225,7 +228,7 @@ internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Mo
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__spending_fee),
                 amount = quote?.claimFeeSats(speed) ?: 0,
-                prefix = claimPrefix,
+                prefix = estimatePrefix,
                 modifier = Modifier.testTag("SpendingConfirmSpendingFee")
             )
         }
@@ -236,7 +239,7 @@ internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Mo
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__amount),
                 amount = quote?.toSpendingSats(speed) ?: 0,
-                prefix = claimPrefix.takeIf { speed == SparkClaimSpeed.Later },
+                prefix = estimatePrefix,
                 modifier = Modifier.testTag("SpendingConfirmAmount")
             )
             FeeInfo(
