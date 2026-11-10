@@ -30,7 +30,6 @@ import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPad
@@ -52,6 +51,12 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
+
+/** Number pad row height when the screen has room, as iOS and Figma draw it; rows shrink to fit below that. */
+private val PAD_ROW_HEIGHT = 78.dp
+
+/** Shortest number pad row, reached only when four 50 dp rows don't fit, as on a 640 dp tall phone. */
+private val PAD_ROW_MIN_HEIGHT = 40.dp
 
 @Suppress("ViewModelForwarding")
 @Composable
@@ -118,7 +123,7 @@ fun SpendingAmountScreen(
 
 @Suppress("ViewModelForwarding")
 @Composable
-private fun Content(
+internal fun Content(
     uiState: UiState,
     amountInputViewModel: AmountInputViewModel,
     onBackClick: () -> Unit,
@@ -198,69 +203,75 @@ private fun SpendingAmountNodeRunning(
                 .testTag("${tag}NumberField")
         )
 
-        FillHeight()
-
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.testTag(
-                if (isHardware) "HardwareTransferAmountNumberPad" else "SendAmountNumberPad"
-            )
+        Column(
+            verticalArrangement = Arrangement.Bottom,
+            modifier = Modifier.weight(1f)
         ) {
-            Column {
-                Text13Up(
-                    text = stringResource(R.string.wallet__send_available),
-                    color = Colors.White64,
-                    modifier = Modifier.testTag("${tag}Available")
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.testTag(
+                    if (isHardware) "HardwareTransferAmountNumberPad" else "SendAmountNumberPad"
                 )
-                VerticalSpacer(8.dp)
-                MoneySSB(
-                    sats = uiState.maxSats,
-                    showSymbol = true,
-                    modifier = Modifier.testTag("${tag}Unit")
+            ) {
+                Column {
+                    Text13Up(
+                        text = stringResource(R.string.wallet__send_available),
+                        color = Colors.White64,
+                        modifier = Modifier.testTag("${tag}Available")
+                    )
+                    VerticalSpacer(8.dp)
+                    MoneySSB(
+                        sats = uiState.maxSats,
+                        showSymbol = true,
+                        modifier = Modifier.testTag("${tag}Unit")
+                    )
+                }
+                FillWidth()
+                UnitButton(
+                    color = Colors.Purple,
+                    onClick = { amountInputViewModel.switchUnit(currencies) },
+                    modifier = Modifier.testTag(
+                        if (isHardware) "HardwareTransferAmountUnitButton" else "SpendingNumberPadUnit"
+                    )
+                )
+                NumberPadActionButton(
+                    text = stringResource(R.string.lightning__spending_amount__quarter),
+                    color = Colors.Purple,
+                    enabled = isReady && hasFunds,
+                    onClick = onClickQuarter,
+                    modifier = Modifier.testTag("${tag}Quarter")
+                )
+                NumberPadActionButton(
+                    text = stringResource(R.string.common__max),
+                    color = Colors.Purple,
+                    enabled = isReady && hasFunds,
+                    onClick = onClickMaxAmount,
+                    modifier = Modifier.testTag("${tag}Max")
                 )
             }
-            FillWidth()
-            UnitButton(
-                color = Colors.Purple,
-                onClick = { amountInputViewModel.switchUnit(currencies) },
-                modifier = Modifier.testTag(
-                    if (isHardware) "HardwareTransferAmountUnitButton" else "SpendingNumberPadUnit"
-                )
-            )
-            NumberPadActionButton(
-                text = stringResource(R.string.lightning__spending_amount__quarter),
-                color = Colors.Purple,
+
+            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
+
+            NumberPad(
+                viewModel = amountInputViewModel,
+                currencies = currencies,
                 enabled = isReady && hasFunds,
-                onClick = onClickQuarter,
-                modifier = Modifier.testTag("${tag}Quarter")
+                idealRowHeight = PAD_ROW_HEIGHT,
+                minRowHeight = PAD_ROW_MIN_HEIGHT,
+                modifier = Modifier.weight(1f, fill = false)
             )
-            NumberPadActionButton(
-                text = stringResource(R.string.common__max),
-                color = Colors.Purple,
-                enabled = isReady && hasFunds,
-                onClick = onClickMaxAmount,
-                modifier = Modifier.testTag("${tag}Max")
+
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                onClick = onConfirmAmount,
+                enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
+                isLoading = uiState.isLoading,
+                modifier = Modifier.testTag("${tag}Continue")
             )
+
+            VerticalSpacer(16.dp)
         }
-
-        HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
-
-        NumberPad(
-            viewModel = amountInputViewModel,
-            currencies = currencies,
-            enabled = isReady && hasFunds,
-        )
-
-        PrimaryButton(
-            text = stringResource(R.string.common__continue),
-            onClick = onConfirmAmount,
-            enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
-            isLoading = uiState.isLoading,
-            modifier = Modifier.testTag("${tag}Continue")
-        )
-
-        VerticalSpacer(16.dp)
     }
 }
 
