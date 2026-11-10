@@ -294,6 +294,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send with no row holds the node after a restart until its invoice expires`() = test {
+        cacheData.value = AppCacheData(
+            sparkSendHashes = listOf("hash", "expired"),
+            sparkSendExpiries = mapOf("hash" to now.epochSeconds + 3_600, "expired" to now.epochSeconds - 1),
+        )
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+
+        assertEquals(
+            EarlierSend.Pending("hash"),
+            sut.earlierLightningSend("lnbc1280n1send", "hash"),
+            "The node may pay an invoice whose Spark send a later sync can still resume",
+        )
+        assertEquals(PaymentStatus.PENDING, sut.lightningSendStatuses()?.get("hash"))
+        assertEquals(setOf("hash"), sut.attemptedLightningPaymentHashes())
+        assertNull(sut.earlierLightningSend("lnbc1280n1expired", "expired"))
+    }
+
+    @Test
     fun `a paid send whose invoice is unexpired still holds the node behind the cap while spark cant list`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         store.addSparkSendHash("hash", expiresAt = now.epochSeconds + 3_600)
@@ -2001,6 +2022,23 @@ class SparkRepoTest : BaseUnitTest() {
         sut.start(0).getOrThrow()
 
         assertFalse(sut.canListPayments(), "a restored wallet's unsynced list was read as complete")
+    }
+
+    @Test
+    fun `a synced event after a failed wallet sync leaves spark's payment list unread`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        )
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        runCurrent()
+
+        // Spark also reports Synced for a partial sync, or one it skipped, while its wallet sync still fails.
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+
+        assertFalse(sut.canListPayments(), "a list no wallet sync filled was read as complete")
     }
 
     @Test

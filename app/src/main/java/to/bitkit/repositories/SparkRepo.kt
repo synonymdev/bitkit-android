@@ -151,7 +151,6 @@ class SparkRepo @Inject constructor(
     private val sendRecords = AtomicLong()
     private val sendRecordedAt = ConcurrentHashMap<String, Long>()
 
-    /** Sends whose outcome Spark didn't report, by lowercase payment hash, pending until a later sync settles them. */
     /** Sends whose outcome Spark didn't report, by payment hash. */
     private val uncertainSends = ConcurrentHashMap<String, UncertainSend>()
 
@@ -951,10 +950,11 @@ class SparkRepo @Inject constructor(
     suspend fun lightningSendStatuses(): Map<String, PaymentStatus>? = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext emptyMap()
         if (!canListPayments()) return@withContext null
+        val unlisted = unexpiredStartedSends()
         val payments = runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrElse { return@withContext null }
-        payments
+        val listed = payments
             .mapNotNull { payment ->
                 (payment.details as? PaymentDetails.Lightning)
                     ?.takeIf { payment.paymentType == SparkPaymentType.SEND }
@@ -962,6 +962,8 @@ class SparkRepo @Inject constructor(
             }
             .distinct()
             .associateWith { hash -> requireNotNull(payments.latestSend(hash)).status }
+        val listedHashes = listed.keys.mapTo(mutableSetOf()) { it.lowercase() }
+        listed + (unlisted - listedHashes).associateWith { PaymentStatus.PENDING }
     }
 
     /**
@@ -1000,6 +1002,7 @@ class SparkRepo @Inject constructor(
                         it in recordedSince(recordsBefore) || uncertainSends.containsKey(it)
                     }
             }
+            val unlisted = unexpiredStartedSends()
             // Before Spark's first sync its local list can be empty although a restored send is live.
             val payments = if (sparkService.isSupported && canListPayments()) {
                 runSuspendCatching { sparkService.listPayments() }
@@ -1014,7 +1017,8 @@ class SparkRepo @Inject constructor(
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
-                ?: return@withContext retried()?.let { EarlierSend.Pending(it) }
+                ?: return@withContext (retried() ?: paymentHash?.lowercase()?.takeIf { it in unlisted })
+                    ?.let { EarlierSend.Pending(it) }
             if (send.status == PaymentStatus.FAILED) retried()?.let { return@withContext EarlierSend.Pending(it) }
             val hash = (send.details as PaymentDetails.Lightning).htlcDetails.paymentHash
             when (send.status) {
@@ -1030,6 +1034,18 @@ class SparkRepo @Inject constructor(
     /** Whether a send of [paymentHash] was recorded after [sendRecordMark] read [records]. */
     fun hasRecordedSendSince(records: Long, paymentHash: String?): Boolean =
         paymentHash != null && (sendRecordedAt[paymentHash.lowercase()] ?: 0L) > records
+
+    /**
+     * Spark's started sends whose invoice is unexpired. A sync can still resume one Spark committed but lists no row
+     * for, also after a restart, so it is pending until its invoice expires, the rule `trySettleUncertainSend` holds.
+     */
+    private suspend fun unexpiredStartedSends(): Set<String> {
+        val now = clock.now().epochSeconds
+        val cache = cacheStore.data.first()
+        return cache.sparkSendHashes.filterTo(mutableSetOf()) { hash ->
+            cache.sparkSendExpiries[hash]?.let { it > now } == true
+        }
+    }
 
     private suspend fun startedSend(paymentHash: String?): String? {
         val hash = paymentHash?.lowercase() ?: return null
@@ -1057,8 +1073,26 @@ class SparkRepo @Inject constructor(
      */
     suspend fun attemptedLightningPaymentHashes(): Set<String>? {
         if (!sparkService.isSupported) return emptySet()
-        return lightningPaymentHashes { it.paymentType == SparkPaymentType.SEND && it.status != PaymentStatus.FAILED }
+        val unlisted = unexpiredStartedSends()
+        val sends = lightningPaymentStatuses { it.paymentType == SparkPaymentType.SEND } ?: return null
+        return sends.filterValues { it.any { status -> status != PaymentStatus.FAILED } }.keys + (unlisted - sends.keys)
     }
+
+    /** The statuses of Spark's Lightning payments that match [filter], by lowercase payment hash. */
+    private suspend fun lightningPaymentStatuses(filter: (Payment) -> Boolean): Map<String, Set<PaymentStatus>>? =
+        withContext(bgDispatcher) {
+            if (!sparkService.isConnected) return@withContext null
+            runSuspendCatching { sparkService.listPayments() }
+                .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+                .getOrNull()
+                ?.filter(filter)
+                ?.mapNotNull { payment ->
+                    (payment.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash?.lowercase()
+                        ?.let { it to payment.status }
+                }
+                ?.groupBy({ it.first }, { it.second })
+                ?.mapValues { it.value.toSet() }
+        }
 
     private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String>? = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext null
@@ -1154,7 +1188,8 @@ class SparkRepo @Inject constructor(
         runSuspendCatching {
             when (event) {
                 is SdkEvent.Synced -> {
-                    _state.update { it.copy(hasSynced = true) }
+                    // Spark also reports Synced for a partial or skipped sync, while its wallet sync still fails.
+                    if (hasSyncedSince(null)) _state.update { it.copy(hasSynced = true) }
                     refresh()
                     // A send whose outcome stayed unknown past its polling settles on a later sync.
                     uncertainSends.keys.toList().forEach { trySettleUncertainSend(it) }
