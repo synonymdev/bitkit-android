@@ -270,21 +270,25 @@ private fun Content(
                     // Bottom Section
                     FillHeight()
                     VerticalSpacer(16.dp)
-                    SecondaryButton(
-                        text = stringResource(R.string.lightning__conn_button_export_logs),
-                        onClick = onClickExportLogs,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(LightningConnectionsTestTags.EXPORT_LOGS_BUTTON)
-                    )
-                    VerticalSpacer(16.dp)
-                    PrimaryButton(
-                        text = stringResource(R.string.lightning__conn_button_add),
-                        onClick = onClickAddConnection,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(LightningConnectionsTestTags.ADD_CONNECTION_BUTTON)
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        SecondaryButton(
+                            text = stringResource(R.string.lightning__conn_button_export_logs),
+                            onClick = onClickExportLogs,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag(LightningConnectionsTestTags.EXPORT_LOGS_BUTTON)
+                        )
+                        PrimaryButton(
+                            text = stringResource(R.string.lightning__conn_button_add),
+                            onClick = onClickAddConnection,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag(LightningConnectionsTestTags.ADD_CONNECTION_BUTTON)
+                        )
+                    }
                     VerticalSpacer(16.dp)
                 }
             }

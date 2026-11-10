@@ -129,6 +129,9 @@ class SparkRepo @Inject constructor(
     /** Sends recorded before Spark knew their fee; its completion event reports 0 until a later sync. */
     private val sendsRecordedWithoutFee = ConcurrentHashMap.newKeySet<String>()
 
+    /** Payments whose activity failed to save, written again at the next refresh. */
+    private val unsavedPayments = ConcurrentHashMap.newKeySet<String>()
+
     private val isCollectingEvents = AtomicBoolean(false)
 
     private val refreshMutex = Mutex()
@@ -192,10 +195,10 @@ class SparkRepo @Inject constructor(
                 .isSuccess
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
-            // Only a full sync settles a pending withdrawal journal, so the sync runs until the journal clears.
+            // Only a full sync settles a pending withdrawal journal, so the sync runs until the journal clears. Only a
+            // sync that saved every write marks the activities synced, so a failed write is redone on the next start.
             if (!hasSyncedActivities || cacheStore.data.first().pendingSparkWithdrawal != null) {
-                syncActivities(settleJournal = synced)
-                hasSyncedActivities = true
+                if (syncActivities(settleJournal = synced)) hasSyncedActivities = true
             }
         }.onFailure {
             Logger.error("Failed to start Spark wallet", it, context = TAG)
@@ -217,6 +220,7 @@ class SparkRepo @Inject constructor(
         withdrawalTxids.clear()
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
+        unsavedPayments.clear()
         sendsInFlight.clear()
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
@@ -306,13 +310,19 @@ class SparkRepo @Inject constructor(
                 throw PaymentPendingException(paymentHash)
             }
             val sent = try {
-                cacheStore.addSparkSendHash(paymentHash)
+                val invoice = method.invoiceDetails
+                val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
+                cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
             }
             val payment = sent.getOrElse {
-                if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
+                // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
+                if (it.isInvoiceExpired()) {
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    throw SparkError.InvoiceExpired(it)
+                }
                 // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                 // nothing, for instance when an earlier send spent it after the balance was read.
                 if (it is SdkException.InsufficientFunds) {
@@ -767,7 +777,9 @@ class SparkRepo @Inject constructor(
             ).withBroadcastDeposits()
         }
         markClaimedDeposits(claimed)
-        payments.filter { it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0 }.forEach { recordActivity(it) }
+        payments
+            .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
+            .forEach { recordActivity(it) }
         markTransfers(payments)
     }
 
@@ -951,24 +963,25 @@ class SparkRepo @Inject constructor(
     }
 
     /**
-     * Records Spark's payments as activity. With [settleJournal], after a sync that just succeeded, a journaled
-     * withdrawal the list still lacks never sent, unless it is still being sent in this process or started less than
-     * [UNLISTED_WITHDRAWAL_GRACE] ago.
+     * Records Spark's payments as activity, returning whether all were saved, so a failed write leaves the sync to
+     * redo. With [settleJournal], after a sync that just succeeded, a journaled withdrawal the list still lacks never
+     * sent, unless it is still being sent in this process or started less than [UNLISTED_WITHDRAWAL_GRACE] ago.
      */
-    private suspend fun syncActivities(settleJournal: Boolean) {
+    private suspend fun syncActivities(settleJournal: Boolean): Boolean {
         val payments = sparkService.listPayments()
-        payments.forEach { recordActivity(it) }
+        val isSaved = payments.map { recordActivity(it) }.all { it }
         releaseFailedSends(payments)
-        if (!settleJournal || isWithdrawing) return
-        val journal = cacheStore.data.first().pendingSparkWithdrawal ?: return
+        if (!settleJournal || isWithdrawing) return isSaved
+        val journal = cacheStore.data.first().pendingSparkWithdrawal ?: return isSaved
         // A listed withdrawal whose activity failed to save keeps its journal for the next sync to retry.
-        if (payments.any { journal.matches(it) }) return
+        if (payments.any { journal.matches(it) }) return isSaved
         // Spark may list a withdrawal it just sent only on a later sync, so an unlisted one stays open for a while.
-        if (clock.now().epochSeconds < journal.startedAt + UNLISTED_WITHDRAWAL_GRACE.inWholeSeconds) return
+        if (clock.now().epochSeconds < journal.startedAt + UNLISTED_WITHDRAWAL_GRACE.inWholeSeconds) return isSaved
         Logger.warn("Dropped Spark withdrawal to '${journal.address}' that Spark never sent", context = TAG)
         if (clearJournal(journal)) {
             _withdrawalSettlements.emit(SparkWithdrawalSettlement(journal.address, journal.amountSats, null))
         }
+        return isSaved
     }
 
     /**
@@ -988,7 +1001,10 @@ class SparkRepo @Inject constructor(
         val sendHashes = { status: PaymentStatus ->
             payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
         }
-        cacheStore.trimSparkSendHashes(sendHashes(PaymentStatus.COMPLETED) - sendHashes(PaymentStatus.PENDING))
+        // A send in flight may be missing from this list, or show only its earlier failed attempt, so it stays.
+        val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys
+        val paid = sendHashes(PaymentStatus.COMPLETED) - live
+        cacheStore.trimSparkSendHashes(paid = paid, failed = sendHashes(PaymentStatus.FAILED) - paid - live)
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.
         val failed = payments.mapNotNull { it.sendHash(PaymentStatus.FAILED) }.distinct()
@@ -1047,19 +1063,25 @@ class SparkRepo @Inject constructor(
     }
 
     /**
-     * Records [payment] as activity. Only Spark's list or its send response [settlesJournal]: a payment event can come
-     * before the list holds the withdrawal, which recovery reads, so its journal stays open until the list shows it.
+     * Records [payment] as activity and returns whether it is saved; a failed write is kept in [unsavedPayments]. Only
+     * Spark's list or its send response [settlesJournal]: a payment event can come before the list holds the
+     * withdrawal, which recovery reads, so its journal stays open until the list shows it.
      */
-    private suspend fun recordActivity(payment: Payment, settlesJournal: Boolean = true) {
+    private suspend fun recordActivity(payment: Payment, settlesJournal: Boolean = true): Boolean {
         (payment.details as? PaymentDetails.Withdraw)?.let { return recordWithdrawal(payment, it, settlesJournal) }
-        val lightning = payment.details as? PaymentDetails.Lightning ?: return
+        val lightning = payment.details as? PaymentDetails.Lightning ?: return true
         if (payment.status == PaymentStatus.PENDING && payment.paymentType == SparkPaymentType.RECEIVE) {
-            return
+            return true
         }
         val id = lightning.htlcDetails.paymentHash
-        val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
+        // A failed read would drop the stored note, contact and seen time, so the write waits for the next refresh.
+        val stored = activityRepo.get().getActivity(id).getOrElse {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        val existing = (stored as? Activity.Lightning)?.v1
         // Another attempt of the same invoice, on either rail, already paid it.
-        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return
+        if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
@@ -1081,24 +1103,39 @@ class SparkRepo @Inject constructor(
             contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,
         )
-        activityRepo.get().upsertActivity(Activity.Lightning(activity))
+        val saved = activityRepo.get().upsertActivity(Activity.Lightning(activity))
+            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+        if (!saved) {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        unsavedPayments.remove(payment.id)
         if (payment.paymentType == SparkPaymentType.SEND && payment.fees.toLong() == 0L) {
             sendsRecordedWithoutFee.add(payment.id)
         } else {
             sendsRecordedWithoutFee.remove(payment.id)
         }
+        return true
     }
 
     /**
      * Records a withdrawal to a Paykit contact as an on-chain send, settling the journal entry it matches. Transfers to
      * Savings have no row here: the node lists their arrival as the transfer.
      */
-    private suspend fun recordWithdrawal(payment: Payment, withdraw: PaymentDetails.Withdraw, settlesJournal: Boolean) {
+    private suspend fun recordWithdrawal(
+        payment: Payment,
+        withdraw: PaymentDetails.Withdraw,
+        settlesJournal: Boolean,
+    ): Boolean {
         val txid = withdraw.txId
-        val existing = (activityRepo.get().getActivity(txid).getOrNull() as? Activity.Onchain)?.v1
-            ?.takeIf { it.txType == PaymentType.SENT }
+        // A failed read would drop the stored contact and seen time, so the write waits for the next refresh.
+        val stored = activityRepo.get().getActivity(txid).getOrElse {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        val existing = (stored as? Activity.Onchain)?.v1?.takeIf { it.txType == PaymentType.SENT }
         val journal = cacheStore.data.first().pendingSparkWithdrawal?.takeIf { it.matches(payment) }
-        if (existing == null && journal == null) return
+        if (existing == null && journal == null) return true
         val activity = OnchainActivity.create(
             id = txid,
             txType = PaymentType.SENT,
@@ -1112,11 +1149,16 @@ class SparkRepo @Inject constructor(
             contact = existing?.contact ?: journal?.contact,
             seenAt = existing?.seenAt,
         )
-        // The journal stays until the activity is saved, so a failed save is retried from Spark's list.
+        // The journal stays until the activity is saved, so a failed save is retried from Spark's list and on refresh.
         val saved = activityRepo.get().upsertActivity(Activity.Onchain(activity))
             .onFailure { Logger.warn("Failed to record Spark withdrawal '$txid'", it, context = TAG) }
-            .isSuccess
-        if (saved && journal != null && settlesJournal) {
+            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+        if (!saved) {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        unsavedPayments.remove(payment.id)
+        if (journal != null && settlesJournal) {
             // The tags picked on Confirm travel with the journal, so a recovered withdrawal keeps them too.
             if (journal.tags.isNotEmpty()) {
                 activityRepo.get().addTagsToActivity(txid, journal.tags)
@@ -1132,6 +1174,7 @@ class SparkRepo @Inject constructor(
                 )
             }
         }
+        return true
     }
 
     private suspend fun receivedContact(payment: Payment, paymentHash: String): String? {

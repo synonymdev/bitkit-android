@@ -7748,7 +7748,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
     }
@@ -11876,6 +11876,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                     paymentDeadlineAt = anyOrNull(),
                     contactPublicKey = anyOrNull(),
+                    approvedMiningFeeSats = anyOrNull(),
                 ),
             ).doSuspendableAnswer {
                 entered.complete(Unit)
@@ -11998,6 +11999,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(
             paykitPaymentProofRepo
@@ -12736,6 +12738,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -12972,6 +12975,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -13022,6 +13026,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
             any(),
@@ -13976,6 +13981,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -14121,6 +14127,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -14213,6 +14220,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -15469,6 +15477,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -15515,6 +15524,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -15581,6 +15591,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -15709,6 +15720,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -15920,6 +15932,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -17718,6 +17731,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)
@@ -19270,7 +19284,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())

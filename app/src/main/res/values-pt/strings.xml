@@ -137,7 +137,6 @@
     <string name="lightning__spending_confirm__instant_text">Pronto em poucos minutos</string>
     <string name="lightning__spending_confirm__later_text">Após 3 confirmações, cerca de 30 minutos</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">até</string>
     <string name="lightning__spending_intro__button">Começar</string>
     <string name="lightning__spending_intro__text">Transfira fundos para seu saldo de gastos para desfrutar de transações instantâneas e baratas com amigos, familiares e comerciantes.</string>
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;para gastos&lt;/accent&gt;</string>
@@ -264,13 +263,13 @@
     <string name="lightning__scores_sync_time">Tempo de Sinc. das Pontuações de Pathfinding</string>
     <string name="lightning__setting_up__not_seen">A Spark ainda não viu a sua transferência. É adicionada após 3 confirmações; pode sair deste ecrã.</string>
     <string name="lightning__setting_up__pay">Pagar ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instantâneo custa agora ₿ {amount}. Pague-o ou aguarde 3 confirmações, cerca de 30 minutos, com uma taxa mais baixa.</string>
+    <string name="lightning__setting_up__repriced">Instantâneo custa agora &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Pague-o ou aguarde 3 confirmações, cerca de 30 minutos, com uma taxa mais baixa.</string>
     <string name="lightning__setting_up__speed">Velocidade: {speed}</string>
     <string name="lightning__setting_up__step_adding">A adicionar aos gastos</string>
-    <string name="lightning__setting_up__step_seen">Vista pela Spark</string>
-    <string name="lightning__setting_up__step_sent">Transferência enviada</string>
     <string name="lightning__setting_up__unavailable">Instantâneo não está disponível para esta transferência. A Spark adiciona-a ao seu saldo de gastos após 3 confirmações, cerca de 30 minutos.</string>
     <string name="lightning__setting_up_button">Continuar Usando o Bitkit</string>
+    <string name="lightning__setting_up_step1">Processando Pagamento</string>
+    <string name="lightning__setting_up_step2">Pagamento Realizado</string>
     <string name="lightning__fee_rate_update_time">Tempo de Atualização do Cache de Taxa</string>
     <string name="lightning__inbound_capacity">Capacidade de Entrada</string>
     <string name="lightning__next_outbound_htlc_limit">Limite do Próximo HTLC de Saída</string>

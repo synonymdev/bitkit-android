@@ -60,6 +60,7 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.MAX_SPARK_SEND_HASHES
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
@@ -68,6 +69,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import java.io.File
@@ -100,7 +102,7 @@ class SparkRepoTest : BaseUnitTest() {
         override fun now() = this@SparkRepoTest.now
     }
 
-    private fun createSut() = SparkRepo(
+    private fun createSut(cacheStore: CacheStore = this.cacheStore) = SparkRepo(
         bgDispatcher = testDispatcher,
         sparkService = sparkService,
         activityRepo = { activityRepo },
@@ -224,7 +226,7 @@ class SparkRepoTest : BaseUnitTest() {
         createSut().payInvoice("lnbc1280n1send", 128uL).getOrThrow()
 
         inOrder(cacheStore, sparkService) {
-            verifyBlocking(cacheStore) { addSparkSendHash("hash") }
+            verifyBlocking(cacheStore) { addSparkSendHash(eq("hash"), anyOrNull()) }
             verifyBlocking(sparkService) { send(any()) }
         }
     }
@@ -263,19 +265,38 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark's paid sends are trimmed past the cap when spark syncs on start`() = test {
+    fun `a paid send whose invoice is unexpired still holds the node behind the cap while spark cant list`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        store.addSparkSendHash("hash", expiresAt = now.epochSeconds + 3_600)
+        val newer = (1..MAX_SPARK_SEND_HASHES).map { sentPayment(fees = 2).copy(id = "send$it").withHash("newer$it") }
+        (1..MAX_SPARK_SEND_HASHES).forEach { store.addSparkSendHash("newer$it", expiresAt = now.epochSeconds - 1) }
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)) + newer)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        whenever { sparkService.listPayments() }.thenThrow(IllegalStateException("list failed"))
+
+        val earlier = sut.earlierLightningSend("lnbc1280n1other", "hash")
+
+        assertEquals(EarlierSend.Pending("hash"), earlier, "The node may pay an unexpired invoice Spark already paid")
+    }
+
+    @Test
+    fun `spark's paid and failed sends are trimmed past the cap when spark syncs on start`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.listPayments() }.thenReturn(
             listOf(
                 sentPayment(fees = 0),
+                sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED).withHash("FAILED"),
                 sentPayment(fees = 0).copy(id = "pending", status = PaymentStatus.PENDING).withHash("PENDING"),
+                sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.FAILED).withHash("PENDING"),
             )
         )
         val sut = createSut()
 
         sut.start(0).getOrThrow()
 
-        verifyBlocking(cacheStore) { trimSparkSendHashes(setOf("hash")) }
+        verifyBlocking(cacheStore) { trimSparkSendHashes(paid = setOf("hash"), failed = setOf("failed")) }
     }
 
     @Test
@@ -393,6 +414,87 @@ class SparkRepoTest : BaseUnitTest() {
         val activities = argumentCaptor<Activity>()
         verify(activityRepo, times(2)).upsertActivity(activities.capture())
         assertEquals(listOf(0uL, 2uL), activities.allValues.map { (it as Activity.Lightning).v1.fee })
+    }
+
+    @Test
+    fun `a start whose activity write failed syncs the activities again`() = test {
+        whenever(sparkService.isConnected).thenReturn(false, true)
+        whenever(sparkService.connect(0)).thenReturn(true, false)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        var saved = 0
+        whenever { activityRepo.upsertActivity(any()) }
+            .thenReturn(Result.failure(IllegalStateException("write failed")))
+            .thenAnswer { Result.success(Unit).also { saved++ } }
+        val sut = createSut()
+
+        sut.start(0)
+        sut.start(0)
+
+        assertTrue(saved > 0, "The receive whose write failed was never saved")
+    }
+
+    @Test
+    fun `a receive that failed to save is written again at the next sync`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        whenever { activityRepo.upsertActivity(any()) }
+            .thenReturn(Result.failure(IllegalStateException("write failed")), Result.success(Unit))
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        sparkEvents.emit(SdkEvent.Synced)
+        sparkEvents.emit(SdkEvent.Synced)
+
+        verify(activityRepo, times(2)).upsertActivity(any())
+    }
+
+    @Test
+    fun `a failed activity read keeps its stored note contact and seen time and retries at the next sync`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val stored = LightningActivity.create(
+            id = "hash",
+            txType = ActivityPaymentType.SENT,
+            status = PaymentState.PENDING,
+            value = 128uL,
+            invoice = "lnbc1280n1send",
+            timestamp = 1uL,
+            message = "note",
+            contact = "contact",
+            seenAt = 5uL,
+        )
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(
+                Result.failure(IllegalStateException("read failed")),
+                Result.success(Activity.Lightning(stored)),
+            )
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(sentPayment(fees = 2)))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        sparkEvents.emit(SdkEvent.Synced)
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, times(1)).upsertActivity(activities.capture())
+        val written = (activities.firstValue as Activity.Lightning).v1
+        assertEquals("note", written.message)
+        assertEquals("contact", written.contact)
+        assertEquals(5uL, written.seenAt)
+    }
+
+    @Test
+    fun `an activity the user deleted is not written again`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(ActivityDeletedError("hash")))
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        sparkEvents.emit(SdkEvent.Synced)
+
+        verify(activityRepo, times(1)).upsertActivity(any())
     }
 
     @Test
@@ -635,6 +737,39 @@ class SparkRepoTest : BaseUnitTest() {
         journaledSpark()
 
         assertEquals(newer, cacheData.value.pendingSparkWithdrawal, "Losing the newer journal could pay it twice")
+    }
+
+    @Test
+    fun `a withdrawal that failed to save is written again on refresh and settles its journal once`() = test {
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        whenever { activityRepo.upsertActivity(any()) }
+            .thenReturn(Result.failure(IllegalStateException("write failed")), Result.success(Unit))
+        whenever { sparkService.getInfo() }.thenReturn(info(50_000uL))
+        whenever(sparkService.isConnected).thenReturn(true)
+        val settlements = mutableListOf<SparkWithdrawalSettlement>()
+        val sut = createSut()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            sut.withdrawalSettlements.collect { settlements += it }
+        }
+
+        sut.start(0).getOrThrow()
+        assertEquals(
+            PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"),
+            cacheData.value.pendingSparkWithdrawal,
+            "A withdrawal whose activity failed to save keeps its journal",
+        )
+        sut.refreshState().getOrThrow()
+        sut.refreshState().getOrThrow()
+
+        verify(activityRepo, times(2)).upsertActivity(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        assertEquals(listOf(SparkWithdrawalSettlement("bcrt1qcontact", 20_000uL, "withdrawal")), settlements)
     }
 
     @Test
@@ -1272,6 +1407,19 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         whenever { sparkService.send(any()) }.thenAnswer { throw expired }
         assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+    }
+
+    @Test
+    fun `an invoice that expired inside the spark send no longer holds the node`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.InvalidInput("Invoice has expired") }
+        val sut = createSut()
+
+        assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
     }
 
     @Test

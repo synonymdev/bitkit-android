@@ -194,6 +194,44 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the swipe withdraws spark at the fee it confirmed when spark is priced again before the withdrawal`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        assertTrue(
+            sut.confirmSavingsSwipe(
+                channels = emptyList(),
+                withdrawSpark = true,
+                shownSparkSats = SPARK_SATS,
+                shownFeeSats = SPARK_FEE,
+            )
+        )
+        repriceSpark()
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    @Test
+    fun `closing instead withdraws spark at the fee shown when spark is priced again before the withdrawal`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true, SavingsTransferMode.CLOSE)
+        repriceSpark()
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    /** A receive lands during the transition, so the confirm screen prices Spark's new balance. */
+    private suspend fun repriceSpark() {
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(NEW_SPARK_FEE))
+        sparkState.value = SparkState(balanceSats = NEW_SPARK_SATS)
+        sut.loadSparkWithdrawFee(NEW_SPARK_SATS)
+    }
+
+    @Test
     fun `transfer to savings with only channels leaves spark untouched`() = test {
         sparkState.value = SparkState(balanceSats = SPARK_SATS)
         sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = false)

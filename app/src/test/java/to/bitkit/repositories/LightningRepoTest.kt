@@ -99,6 +99,7 @@ import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
@@ -1395,7 +1396,95 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a node listing trims only its paid sends past the cap`() = test {
+    fun `a node send listed only as failed leaves the kept hashes`() = test {
+        val cache = AppCacheData(ldkSendHashes = listOf("h"), ldkSendHashesSeeded = true)
+        val store = CacheStore(InMemoryDataStore(cache))
+        sut = repoWith(store)
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+
+        startNodeForTesting()
+
+        assertEquals(emptyList(), store.data.first().ldkSendHashes)
+    }
+
+    @Test
+    fun `a node retry in flight keeps its hash while an older listing shows it failed`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        val sent = CompletableDeferred<String>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { sent.await() }
+        val retry = async { sut.payInvoiceWithNode("h") }
+        runCurrent()
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("other"))
+
+        sut.payInvoice("other", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes)
+        sent.complete("h")
+        retry.await()
+    }
+
+    @Test
+    fun `a node retry that ends while an older listing is read keeps its hash`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        var isRetried = false
+        // The node retries the invoice, and its send returns, after this listing was read with the failed attempt.
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            val listed = listOf(nodeSend("h", PaymentStatus.FAILED))
+            if (!isRetried) {
+                isRetried = true
+                sut.payInvoiceWithNode("h")
+            }
+            listed
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("other"))
+
+        sut.payInvoice("other", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes)
+    }
+
+    private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
+        id = hash,
+        kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),
+        amountMsat = 1_000_000uL,
+        feePaidMsat = null,
+        direction = PaymentDirection.OUTBOUND,
+        status = status,
+        latestUpdateTimestamp = 0uL,
+    )
+
+    private fun repoWith(store: CacheStore) = LightningRepo(
+        bgDispatcher = testDispatcher,
+        lightningService = lightningService,
+        settingsStore = settingsStore,
+        coreService = coreService,
+        keychain = keychain,
+        lnurlService = lnurlService,
+        cacheStore = store,
+        preActivityMetadataRepo = preActivityMetadataRepo,
+        onchainSendAttemptStore = onchainSendAttemptStore,
+        connectivityRepo = connectivityRepo,
+        vssBackupClientLdk = vssBackupClientLdk,
+        urlValidator = urlValidator,
+        electrumProbeService = electrumProbeService,
+        sparkRepo = sparkRepo,
+    )
+
+    @Test
+    fun `a node listing trims its paid and failed sends but not its pending ones`() = test {
         startNodeForTesting()
         val earlier = { status: PaymentStatus, hash: String ->
             PaymentDetails(
@@ -1427,7 +1516,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         sut.payInvoice("bolt11", 1_000uL)
 
-        verifyBlocking(cacheStore) { trimLdkSendHashes(setOf("paid")) }
+        verifyBlocking(cacheStore) { trimLdkSendHashes(paid = setOf("paid"), failed = setOf("failed")) }
     }
 
     @Test
@@ -2749,6 +2838,59 @@ class LightningRepoTest : BaseUnitTest() {
             .thenReturn(original.copy(amountSats = 900uL, evidence = OnchainSendEvidence.Accepted, txid = txid))
         val result = repo.sendOnChain("address", 1_000uL, isMaxAmount = true).getOrThrow()
         assertEquals(OnchainSendOutcome.Accepted(txid, 900uL), result)
+    }
+
+    @Test
+    fun `a send that grew after approval is refused before broadcast`() = test {
+        val txid = "ab".repeat(32)
+        // The approved quote: 99_000 reaches the address for a 500 sat mining fee.
+        val cases = listOf<Triple<ULong, ULong?, Boolean>>(
+            Triple(99_000uL, 500uL, true),
+            Triple(99_000uL, 400uL, true),
+            Triple(99_500uL, 500uL, false),
+            Triple(98_500uL, 500uL, false),
+            Triple(99_000uL, 501uL, false),
+            Triple(99_000uL, null, false),
+        )
+        for ((amount, fee, valid) in cases) {
+            val original = pendingSendAttempt().copy(amountSats = 99_000uL, isMaxAmount = true, isTransfer = true)
+            val repo = prepareGuardedSend(original)
+            var broadcasts = 0
+            val prepared = PreparedOnchainSend(
+                OnchainPreparedReceipt(
+                    txid = txid,
+                    inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                    address = "address",
+                    amountSats = amount,
+                    miningFeeSats = fee,
+                ),
+            ) { beforeDispatch ->
+                beforeDispatch()
+                broadcasts++
+                OnchainSendOutcome.Accepted(txid)
+            }
+            whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+                .thenReturn(prepared)
+            whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+                .thenReturn(original.copy(amountSats = amount, evidence = OnchainSendEvidence.Accepted, txid = txid))
+
+            val result = repo.sendOnChain(
+                "address",
+                99_000uL,
+                isTransfer = true,
+                isMaxAmount = true,
+                approvedMiningFeeSats = 500uL,
+            )
+
+            if (valid) {
+                assertTrue(result.isSuccess, "The approved send must still go out: $amount, $fee")
+                assertEquals(1, broadcasts)
+            } else {
+                val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull(), "Sent $amount for $fee")
+                assertIs<OnchainSendChangedError>(error.cause)
+                assertEquals(0, broadcasts)
+            }
+        }
     }
 
     private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
