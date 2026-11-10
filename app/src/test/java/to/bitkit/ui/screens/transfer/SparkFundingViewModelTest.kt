@@ -34,7 +34,9 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendEvidence
+import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
@@ -155,6 +157,51 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `a fixed amount whose prepared fee rose is refused and priced again at that fee`() = test {
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn("rose {amount}")
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 700uL))))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        verify(lightningRepo).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = eq(500uL),
+        )
+        assertEquals("Changed", toasts.single().title)
+        assertTrue(toasts.single().description.orEmpty().startsWith("rose "), "${toasts.single().description}")
+        assertEquals(50_700L, sut.uiState.value.quote?.totalSats, "the new quote shows the fee that was refused")
+        assertEquals(false, sut.uiState.value.isSending)
+
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        verify(lightningRepo).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = eq(700uL),
         )
     }
 

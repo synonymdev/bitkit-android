@@ -1831,7 +1831,7 @@ class LightningRepo @Inject constructor(
                             if (prepared.receipt.amountSats != sats || miningFee == null ||
                                 miningFee > approvedMiningFeeSats
                             ) {
-                                throw OnchainSendChangedError()
+                                throw OnchainSendChangedError(miningFee)
                             }
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(

@@ -90,6 +90,9 @@ class SparkFundingViewModel @Inject constructor(
     /** The fee rates the shown quote was priced at, so the transfer pays exactly what the screen shows. */
     private var quotedFeeRates: FeeRates? = null
 
+    /** The mining fee a refused fixed-amount funding needed, which this transfer's quotes show at least. */
+    private var fixedFeeFloorSats: ULong? = null
+
     init {
         viewModelScope.launch {
             lightningRepo.lightningState.map { it.nodeStatus?.isRunning ?: false }.distinctUntilChanged()
@@ -110,6 +113,7 @@ class SparkFundingViewModel @Inject constructor(
     /** Sends from the hardware wallet [walletId] instead of Savings. */
     fun useHardwareWallet(walletId: String) {
         if (_uiState.value.hwWalletId == walletId) return
+        fixedFeeFloorSats = null
         _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true) }
         refreshMax()
     }
@@ -142,6 +146,8 @@ class SparkFundingViewModel @Inject constructor(
     }
 
     fun onAmountChange(sats: Long) {
+        val state = _uiState.value
+        if (sats != state.amountSats || (sats > 0 && sats == state.maxSats) != state.isMax) fixedFeeFloorSats = null
         _uiState.update { it.copy(amountSats = sats, isMax = sats > 0 && sats == it.maxSats) }
     }
 
@@ -296,8 +302,8 @@ class SparkFundingViewModel @Inject constructor(
                 feeRates = quotedFeeRates,
                 isTransfer = true,
                 isMaxAmount = state.isMax,
-                // A send-all spends every coin, so its fee is bound; a fixed amount's coin selection can vary.
-                approvedMiningFeeSats = quote.networkFeeSats.toULong().takeIf { state.isMax },
+                // Savings never pay more than the Total the user confirmed, so a higher fee asks for another swipe.
+                approvedMiningFeeSats = quote.networkFeeSats.toULong(),
             ).getOrThrow()
             if (outcome !is OnchainSendOutcome.Accepted) {
                 Logger.warn("Spark funding was not accepted: '$outcome'", context = TAG)
@@ -311,8 +317,12 @@ class SparkFundingViewModel @Inject constructor(
             }
             onFundingAccepted(outcome.txid, outcome.amountSats ?: quote.amountSats.toULong(), quote)
         }.onFailure {
-            if (it.cause is OnchainSendChangedError) {
+            val changed = it.cause as? OnchainSendChangedError
+            if (changed != null) {
                 Logger.info("Asking for another swipe, the funding changed since approved", context = TAG)
+                // A fixed amount's coin selection can need more fee than its quote,
+                // so this transfer's quotes show at least that, and the next swipe approves it.
+                if (!state.isMax) fixedFeeFloorSats = changed.preparedFeeSats
                 quote().onSuccess { repriced ->
                     showQuote(repriced)
                     toastFeesChanged(repriced.increaseOver(quote, state.speed))
@@ -407,7 +417,7 @@ class SparkFundingViewModel @Inject constructor(
                 address = address,
                 speed = SPEED,
                 feeRates = feeRates,
-            ).getOrThrow()
+            ).getOrThrow().coerceAtLeast(fixedFeeFloorSats ?: 0uL)
         }
         val amount = if (state.isMax) (spendable.safe() - networkFee.safe()) else state.amountSats.toULong()
         val instantFee = sparkRepo.estimateDepositClaimFeeSats(amount).getOrThrow()

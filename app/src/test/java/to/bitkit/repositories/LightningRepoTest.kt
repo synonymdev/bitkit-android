@@ -2894,7 +2894,8 @@ class LightningRepoTest : BaseUnitTest() {
                 assertEquals(1, broadcasts)
             } else {
                 val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull(), "Sent $amount for $fee")
-                assertIs<OnchainSendChangedError>(error.cause)
+                val changed = assertIs<OnchainSendChangedError>(error.cause)
+                assertEquals(fee, changed.preparedFeeSats, "Sent $amount for $fee")
                 assertEquals(0, broadcasts)
             }
         }
