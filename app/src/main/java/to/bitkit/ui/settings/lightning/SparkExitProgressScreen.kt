@@ -338,11 +338,17 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
                 .replace("{path}", path.orEmpty()).withAccentBoldBright(),
             color = Colors.White64,
         )
-        sweep?.txid != null && sweep.rejection == null -> SparkExitTxNote(
+        // Its txid shows once the network accepted the sweep, as it may never go out before that.
+        sweep?.txid != null && sweep.isAccepted -> SparkExitTxNote(
             text = stringResource(R.string.lightning__spark_exit__leftover_sending)
                 .replace("{amount}", sparkExitAmountAccent(sweep.valueSats)),
             txid = sweep.txid,
             testTag = "SparkExitLeftoverSending",
+        )
+        sweep?.txid != null && sweep.rejection == null -> BodyS(
+            text = stringResource(R.string.lightning__spark_exit__leftover_sending)
+                .replace("{amount}", sparkExitAmountAccent(sweep.valueSats)).withAccentBoldBright(),
+            color = Colors.White64,
         )
         // Refused for good: where the leftover stays, with the path a wallet needs to find it.
         sweep?.rejection != null && path != null -> BodyS(
