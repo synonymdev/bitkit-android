@@ -353,6 +353,32 @@ class TransferViewModel @Inject constructor(
     }
 
     /**
+     * The swipe: commits the transfer only while Spark's withdrawal is still priced at the fee shown when the swipe
+     * began, for the balance shown then. Returns false without committing when Spark's balance changed or is being
+     * priced again since, so the swipe resets instead of opening progress.
+     */
+    fun confirmSavingsSwipe(
+        channels: List<ChannelDetails>,
+        withdrawSpark: Boolean,
+        shownSparkSats: ULong,
+        shownFeeSats: ULong?,
+    ): Boolean {
+        if (withdrawSpark && !isSparkPricedAt(shownSparkSats, shownFeeSats)) {
+            Logger.info("Refused the savings swipe as Spark changed since it was shown", context = TAG)
+            return false
+        }
+        onTransferToSavingsConfirm(channels, withdrawSpark)
+        return true
+    }
+
+    private fun isSparkPricedAt(balanceSats: ULong, feeSats: ULong?): Boolean =
+        feeSats != null &&
+            sparkFeeJob?.isActive != true &&
+            _sparkWithdrawFeeSats.value == feeSats &&
+            sparkFeeBalanceSats == balanceSats &&
+            sparkRepo.state.value.balanceSats == balanceSats
+
+    /**
      * Commit the transfer and pick how it runs. A swap needs a priced quote, so without one
      * (swaps unsupported on this network, Boltz unreachable, or an amount below the swap
      * minimum) the transfer closes a channel exactly as it did before swaps existed.

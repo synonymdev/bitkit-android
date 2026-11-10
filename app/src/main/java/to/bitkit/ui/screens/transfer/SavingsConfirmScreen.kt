@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -139,9 +140,9 @@ fun SavingsConfirmScreen(
             onAmountClick = { currency.switchUnit() },
             onAdvancedClick = onAdvancedClick,
             onSelectAllClick = { transfer.setSavingsSelection(SavingsSelection()) },
-            onSwipeConfirm = {
-                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark)
-                onConfirm()
+            onSwipeConfirm = { shownSparkSats, shownFeeSats ->
+                transfer.confirmSavingsSwipe(channels, withdrawsSpark, shownSparkSats, shownFeeSats)
+                    .also { if (it) onConfirm() }
             },
             onCloseConfirm = {
                 transfer.onTransferToSavingsConfirm(channels, withdrawsSpark, SavingsTransferMode.CLOSE)
@@ -182,7 +183,7 @@ private fun SavingsConfirmContent(
     onAmountClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
     onSelectAllClick: () -> Unit = {},
-    onSwipeConfirm: () -> Unit = {},
+    onSwipeConfirm: (shownSparkSats: ULong, shownFeeSats: ULong?) -> Boolean = { _, _ -> true },
     onCloseConfirm: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -343,16 +344,22 @@ private fun SavingsConfirmContent(
             // The swipe always commits the transfer: it swaps when a quote is ready and otherwise
             // falls back to the pre-swap behaviour of closing the channel, so it is never inert.
             var isLoading by remember { mutableStateOf(false) }
+            // Read at swipe time, as the swipe's gesture keeps the lambda from the composition it started in.
+            val shownSpark by rememberUpdatedState(sparkAmount to sparkFeeSats)
+            val commitSwipe by rememberUpdatedState(onSwipeConfirm)
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
                 loading = isLoading || isPricingSwap || isSparkFeePricing,
                 enabled = !isSparkUnpriced && !isNothingSelected,
+                confirmed = isLoading,
                 color = Colors.Brand,
                 onConfirm = {
+                    val (shownSparkSats, shownFeeSats) = shownSpark
                     scope.launch {
                         isLoading = true
                         delay(300)
-                        onSwipeConfirm()
+                        // Spark changed since the swipe began: reset the swipe so the new fee is approved first.
+                        if (!commitSwipe(shownSparkSats, shownFeeSats)) isLoading = false
                     }
                 }
             )
