@@ -1577,7 +1577,7 @@ class LightningRepo @Inject constructor(
         sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
-        cacheStore.addLdkSendHash(ldkSendKey(bolt11, paymentHash))
+        cacheStore.addLdkSendHash(ldkSendKey(bolt11, paymentHash), invoiceExpiresAt(bolt11))
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
             .onSuccess { recordSendRail(it, LightningRail.Ldk) }
             .also { syncState() }
@@ -1591,11 +1591,19 @@ class LightningRepo @Inject constructor(
         val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
         val sends = outbound.filter { it.status != PaymentStatus.FAILED }.sortedBy { it.latestUpdateTimestamp }
         cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
-        cacheStore.trimLdkSendHashes(
-            outbound.filter { it.status != PaymentStatus.PENDING }
+        val hashes = { status: PaymentStatus ->
+            outbound.filter { it.status == status }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
-        )
+        }
+        cacheStore.trimLdkSendHashes(paid = hashes(PaymentStatus.SUCCEEDED), failed = hashes(PaymentStatus.FAILED))
     }
+
+    /** When [bolt11] expires, in epoch seconds, or null when it can't be parsed. */
+    private fun invoiceExpiresAt(bolt11: String): Long? = runCatching {
+        val invoice = Bolt11Invoice.fromStr(bolt11)
+        (invoice.secondsSinceEpoch().safe() + invoice.expiryTimeSeconds().safe())
+            .coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
+    }.getOrNull()
 
     /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */
     private fun ldkSendKey(bolt11: String, paymentHash: String?): String = (paymentHash ?: bolt11).lowercase()

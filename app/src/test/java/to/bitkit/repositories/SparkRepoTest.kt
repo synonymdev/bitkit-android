@@ -57,6 +57,7 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.MAX_SPARK_SEND_HASHES
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
@@ -65,6 +66,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
@@ -96,7 +98,7 @@ class SparkRepoTest : BaseUnitTest() {
         override fun now() = this@SparkRepoTest.now
     }
 
-    private fun createSut() = SparkRepo(
+    private fun createSut(cacheStore: CacheStore = this.cacheStore) = SparkRepo(
         bgDispatcher = testDispatcher,
         sparkService = sparkService,
         activityRepo = { activityRepo },
@@ -220,7 +222,7 @@ class SparkRepoTest : BaseUnitTest() {
         createSut().payInvoice("lnbc1280n1send", 128uL).getOrThrow()
 
         inOrder(cacheStore, sparkService) {
-            verifyBlocking(cacheStore) { addSparkSendHash("hash") }
+            verifyBlocking(cacheStore) { addSparkSendHash(eq("hash"), anyOrNull()) }
             verifyBlocking(sparkService) { send(any()) }
         }
     }
@@ -259,6 +261,23 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a paid send whose invoice is unexpired still holds the node behind the cap while spark cant list`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        store.addSparkSendHash("hash", expiresAt = now.epochSeconds + 3_600)
+        val newer = (1..MAX_SPARK_SEND_HASHES).map { sentPayment(fees = 2).copy(id = "send$it").withHash("newer$it") }
+        (1..MAX_SPARK_SEND_HASHES).forEach { store.addSparkSendHash("newer$it", expiresAt = now.epochSeconds - 1) }
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)) + newer)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        whenever { sparkService.listPayments() }.thenThrow(IllegalStateException("list failed"))
+
+        val earlier = sut.earlierLightningSend("lnbc1280n1other", "hash")
+
+        assertEquals(EarlierSend.Pending("hash"), earlier, "The node may pay an unexpired invoice Spark already paid")
+    }
+
+    @Test
     fun `spark's paid and failed sends are trimmed past the cap when spark syncs on start`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.listPayments() }.thenReturn(
@@ -273,7 +292,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         sut.start(0).getOrThrow()
 
-        verifyBlocking(cacheStore) { trimSparkSendHashes(setOf("hash", "failed")) }
+        verifyBlocking(cacheStore) { trimSparkSendHashes(paid = setOf("hash"), failed = setOf("failed")) }
     }
 
     @Test

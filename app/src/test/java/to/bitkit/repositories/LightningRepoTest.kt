@@ -1427,7 +1427,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         sut.payInvoice("bolt11", 1_000uL)
 
-        verifyBlocking(cacheStore) { trimLdkSendHashes(setOf("paid", "failed")) }
+        verifyBlocking(cacheStore) { trimLdkSendHashes(paid = setOf("paid"), failed = setOf("failed")) }
     }
 
     @Test

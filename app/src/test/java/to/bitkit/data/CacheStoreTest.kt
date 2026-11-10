@@ -13,9 +13,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @Config(application = Application::class, sdk = [34])
 @RunWith(RobolectricTestRunner::class)
@@ -97,7 +100,7 @@ class CacheStoreTest : BaseUnitTest() {
         val paid = settledHashes()
         sut.seedLdkSendHashes(listOf("pending") + paid)
 
-        sut.trimLdkSendHashes(paid.toSet())
+        sut.trimLdkSendHashes(paid = paid.toSet(), failed = emptySet())
 
         val kept = sut.data.first().ldkSendHashes
         assertTrue("pending" in kept)
@@ -119,7 +122,7 @@ class CacheStoreTest : BaseUnitTest() {
         val paid = settledHashes()
         paid.forEach { sut.addSparkSendHash(it) }
 
-        sut.trimSparkSendHashes(paid.toSet())
+        sut.trimSparkSendHashes(paid = paid.toSet(), failed = emptySet())
 
         val kept = sut.data.first().sparkSendHashes
         assertTrue("pending" in kept)
@@ -132,7 +135,7 @@ class CacheStoreTest : BaseUnitTest() {
         val failed = settledHashes()
         failed.forEach { sut.addLdkSendHash(it) }
 
-        sut.trimLdkSendHashes(failed.toSet())
+        sut.trimLdkSendHashes(paid = emptySet(), failed = failed.toSet())
 
         val kept = sut.data.first().ldkSendHashes
         assertTrue("pending" in kept)
@@ -147,12 +150,52 @@ class CacheStoreTest : BaseUnitTest() {
         failed.forEach { sut.addLdkSendHash(it) }
         sut.addLdkSendHash("retried")
 
-        sut.trimLdkSendHashes(failed.toSet() + "retried")
+        sut.trimLdkSendHashes(paid = emptySet(), failed = failed.toSet() + "retried")
 
         val kept = sut.data.first().ldkSendHashes
         assertEquals("retried", kept.last())
         assertEquals(MAX_SPARK_SEND_HASHES, kept.size)
     }
 
+    @Test
+    fun `a paid node send whose invoice is unexpired stays past the cap of newer paid ones`() = test {
+        val store = expiringStore()
+        store.addLdkSendHash("unexpired", expiresAt = NOW + 3_600)
+        val paid = settledHashes()
+        paid.forEach { store.addLdkSendHash(it, expiresAt = NOW - 1) }
+
+        store.trimLdkSendHashes(paid = paid.toSet() + "unexpired", failed = emptySet())
+
+        val data = store.data.first()
+        assertTrue("unexpired" in data.ldkSendHashes, "The unexpired paid send was dropped")
+        assertEquals(NOW + 3_600, data.ldkSendExpiries["unexpired"])
+        assertEquals(MAX_SPARK_SEND_HASHES, data.ldkSendHashes.size)
+    }
+
+    @Test
+    fun `a paid spark send whose invoice expired is trimmed past the cap with its expiry`() = test {
+        val store = expiringStore()
+        store.addSparkSendHash("expired", expiresAt = NOW - 1)
+        val paid = settledHashes()
+        paid.forEach { store.addSparkSendHash(it, expiresAt = NOW + 3_600) }
+
+        store.trimSparkSendHashes(paid = paid.toSet() + "expired", failed = emptySet())
+
+        val data = store.data.first()
+        assertFalse("expired" in data.sparkSendHashes, "The expired paid send stayed past the cap")
+        assertFalse("expired" in data.sparkSendExpiries)
+    }
+
+    private fun expiringStore() = CacheStore(
+        InMemoryDataStore(AppCacheData()),
+        object : Clock {
+            override fun now() = Instant.fromEpochSeconds(NOW)
+        },
+    )
+
     private fun settledHashes() = (1..MAX_SPARK_SEND_HASHES).map { "paid$it" }
+
+    private companion object {
+        const val NOW = 1_800_000_000L
+    }
 }

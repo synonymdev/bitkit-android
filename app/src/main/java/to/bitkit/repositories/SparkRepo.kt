@@ -287,7 +287,9 @@ class SparkRepo @Inject constructor(
                 throw PaymentPendingException(paymentHash)
             }
             val sent = try {
-                cacheStore.addSparkSendHash(paymentHash)
+                val invoice = method.invoiceDetails
+                val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
+                cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
@@ -822,9 +824,10 @@ class SparkRepo @Inject constructor(
             payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
         }
         // A send in flight may be missing from this list, or show only its earlier failed attempt, so it stays.
+        val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys
         cacheStore.trimSparkSendHashes(
-            sendHashes(PaymentStatus.COMPLETED) + sendHashes(PaymentStatus.FAILED) - sendHashes(PaymentStatus.PENDING) -
-                sendsInFlight.keys
+            paid = sendHashes(PaymentStatus.COMPLETED) - live,
+            failed = sendHashes(PaymentStatus.FAILED) - live,
         )
         // A send that failed, also while the app was closed, no longer holds the node off its invoice, unless a
         // retry of it is still live.

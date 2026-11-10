@@ -21,11 +21,12 @@ import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
 
 /**
- * How many send hashes to keep per rail before a listing drops the oldest it shows as paid or failed; an older paid
- * send's invoice has long expired, so the other rail cannot pay it again. Sends that may still be pending, and ones
- * no listing has shown yet, are always kept, past this cap too.
+ * How many send hashes to keep per rail before a listing drops the oldest it shows as failed, or as paid once the
+ * paid send's invoice has expired, so the other rail cannot pay it again. A paid send with no known expiry is dropped
+ * like a failed one. Pending sends, unexpired paid ones and ones no listing has shown yet are kept past this cap.
  */
 internal const val MAX_SPARK_SEND_HASHES = 100
 
@@ -37,6 +38,7 @@ private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
 @Singleton
 class CacheStore internal constructor(
     private val store: DataStore<AppCacheData>,
+    private val clock: Clock = Clock.System,
 ) {
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.appCacheDataStore)
@@ -143,25 +145,38 @@ class CacheStore internal constructor(
         store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages - paymentHash) }
     }
 
-    suspend fun addSparkSendHash(paymentHash: String) {
+    /** Keeps [paymentHash] with its invoice's expiry in epoch seconds, [expiresAt], when known. */
+    suspend fun addSparkSendHash(paymentHash: String, expiresAt: Long? = null) {
         val hash = paymentHash.lowercase()
         store.updateData {
-            it.copy(sparkSendHashes = it.sparkSendHashes - hash + hash)
+            it.copy(
+                sparkSendHashes = it.sparkSendHashes - hash + hash,
+                sparkSendExpiries = it.sparkSendExpiries.with(hash, expiresAt),
+            )
         }
     }
 
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendHashes) return
-        store.updateData { it.copy(sparkSendHashes = it.sparkSendHashes - hash) }
-    }
-
-    suspend fun addLdkSendHash(paymentHash: String) {
-        val hash = paymentHash.lowercase()
         store.updateData {
-            it.copy(ldkSendHashes = it.ldkSendHashes - hash + hash)
+            it.copy(sparkSendHashes = it.sparkSendHashes - hash, sparkSendExpiries = it.sparkSendExpiries - hash)
         }
     }
+
+    /** Keeps [paymentHash] with its invoice's expiry in epoch seconds, [expiresAt], when known. */
+    suspend fun addLdkSendHash(paymentHash: String, expiresAt: Long? = null) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            it.copy(
+                ldkSendHashes = it.ldkSendHashes - hash + hash,
+                ldkSendExpiries = it.ldkSendExpiries.with(hash, expiresAt),
+            )
+        }
+    }
+
+    private fun Map<String, Long>.with(hash: String, expiresAt: Long?) =
+        if (expiresAt == null) this else this + (hash to expiresAt)
 
     /** Keeps [paymentHashes], the node's pending and paid sends, once, ahead of the hashes kept since. */
     suspend fun seedLdkSendHashes(paymentHashes: List<String>) {
@@ -177,31 +192,49 @@ class CacheStore internal constructor(
     }
 
     /**
-     * Past the cap, drops the oldest of the node's sends a listing showed as paid or failed ([settled]); a send that
-     * may be pending stays. A retry moves its hash to the newest end, so a trim from an older listing drops others
-     * first.
+     * Past the cap, drops the oldest of the node's sends a listing showed as [failed], or as [paid] with an expired or
+     * unknown invoice expiry; a send that may be pending stays. A retry moves its hash to the newest end, so a trim
+     * from an older listing drops others first.
      */
-    suspend fun trimLdkSendHashes(settled: Set<String>) {
+    suspend fun trimLdkSendHashes(paid: Set<String>, failed: Set<String>) {
         if (store.data.first().ldkSendHashes.size <= MAX_SPARK_SEND_HASHES) return
-        store.updateData { it.copy(ldkSendHashes = it.ldkSendHashes.withoutOldestSettled(settled)) }
+        store.updateData {
+            val (hashes, expiries) = withoutOldestSettled(it.ldkSendHashes, it.ldkSendExpiries, paid, failed)
+            it.copy(ldkSendHashes = hashes, ldkSendExpiries = expiries)
+        }
     }
 
-    /** Past the cap, drops the oldest of Spark's sends a listing showed as paid or failed ([settled]). */
-    suspend fun trimSparkSendHashes(settled: Set<String>) {
+    /** Past the cap, drops the oldest of Spark's sends a listing showed as [failed], or as [paid] once expired. */
+    suspend fun trimSparkSendHashes(paid: Set<String>, failed: Set<String>) {
         if (store.data.first().sparkSendHashes.size <= MAX_SPARK_SEND_HASHES) return
-        store.updateData { it.copy(sparkSendHashes = it.sparkSendHashes.withoutOldestSettled(settled)) }
+        store.updateData {
+            val (hashes, expiries) = withoutOldestSettled(it.sparkSendHashes, it.sparkSendExpiries, paid, failed)
+            it.copy(sparkSendHashes = hashes, sparkSendExpiries = expiries)
+        }
     }
 
-    private fun List<String>.withoutOldestSettled(settled: Set<String>): List<String> {
-        val lowercaseSettled = settled.mapTo(mutableSetOf()) { it.lowercase() }
-        var excess = size - MAX_SPARK_SEND_HASHES
-        return filterNot { hash -> (excess > 0 && hash in lowercaseSettled).also { if (it) excess-- } }
+    private fun withoutOldestSettled(
+        hashes: List<String>,
+        expiries: Map<String, Long>,
+        paid: Set<String>,
+        failed: Set<String>,
+    ): Pair<List<String>, Map<String, Long>> {
+        val now = clock.now().epochSeconds
+        val paidHashes = paid.mapTo(mutableSetOf()) { it.lowercase() }
+        val failedHashes = failed.mapTo(mutableSetOf()) { it.lowercase() }
+        fun droppable(hash: String) =
+            hash in failedHashes || hash in paidHashes && expiries[hash].let { it == null || it <= now }
+        var excess = hashes.size - MAX_SPARK_SEND_HASHES
+        val kept = hashes.filterNot { hash -> (excess > 0 && droppable(hash)).also { if (it) excess-- } }
+        return kept to expiries.filterKeys { it in kept }
     }
 
     suspend fun removeLdkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().ldkSendHashes) return
-        store.updateData { it.copy(ldkSendHashes = it.ldkSendHashes - hash) }
+        store.updateData {
+            it.copy(ldkSendHashes = it.ldkSendHashes - hash, ldkSendExpiries = it.ldkSendExpiries - hash)
+        }
     }
 
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
@@ -239,8 +272,12 @@ data class AppCacheData(
     val pendingLightningMessages: Map<String, String> = mapOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
+    /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */
+    val sparkSendExpiries: Map<String, Long> = mapOf(),
     /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
     val ldkSendHashes: List<String> = listOf(),
+    /** Invoice expiry in epoch seconds of the [ldkSendHashes] that know it. */
+    val ldkSendExpiries: Map<String, Long> = mapOf(),
     /**
      * Set once the node's own list has filled [ldkSendHashes], as node sends made before hashes were kept carry none
      * there. Until then an unlistable node holds every Spark send.
