@@ -228,6 +228,10 @@ class PubkyRepo @Inject constructor(
     private val profileWriteMutex = Mutex()
     private val profileDeletionGeneration = AtomicLong(0L)
 
+    // Moved on when a save starts and when it ends, so odd while one runs. A load writes the Paykit copy back only when
+    // no save ran since it read the copy, so it never writes back tags a save replaced.
+    private val profileSaveEpoch = AtomicLong(0L)
+
     /** Revision of the loaded pubky.app profile, which a save must still match; null when none exists. */
     @Volatile
     private var ownProfileRevision: String? = null
@@ -1249,6 +1253,24 @@ class PubkyRepo @Inject constructor(
         base: PubkyProfile?,
         expectedRevision: String?,
     ): SavedProfile {
+        profileSaveEpoch.incrementAndGet()
+        try {
+            return writeProfileOnce(publicKey, name, bio, links, tags, imageUrl, base, expectedRevision)
+        } finally {
+            profileSaveEpoch.incrementAndGet()
+        }
+    }
+
+    private suspend fun writeProfileOnce(
+        publicKey: String,
+        name: String,
+        bio: String,
+        links: List<PubkyProfileLink>,
+        tags: List<String>,
+        imageUrl: String?,
+        base: PubkyProfile?,
+        expectedRevision: String?,
+    ): SavedProfile {
         val generation = profileDeletionGeneration.get()
         val copyUnread = tagsUnavailable
         // A profile written without a base is fitted to pubky.app's limits, as a move is.
@@ -1343,6 +1365,7 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun loadOwnProfile(publicKey: String): Pair<PubkyProfile, String?>? {
         val generation = profileDeletionGeneration.get()
+        val saveEpoch = profileSaveEpoch.get()
         val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
             .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
         tagsUnavailable = paykitRead.isFailure
@@ -1374,7 +1397,7 @@ class PubkyRepo @Inject constructor(
             it.copy(tags = paykitData?.tags.orEmpty(), imageUrl = if (avatarPending) pendingAvatar else it.imageUrl)
         }
         if (!avatarPending && paykitData != null && paykitData != profile.toProfileData()) {
-            publishPaykitProfileCopy(publicKey, profile, generation)
+            publishPaykitProfileCopy(publicKey, profile, generation, saveEpoch)
         }
         return profile to snapshot.revision
     }
@@ -1485,9 +1508,16 @@ class PubkyRepo @Inject constructor(
     private fun String.isPubkyAppFile() =
         "/pub/pubky.app/files/" in this && codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
 
-    private suspend fun publishPaykitProfileCopy(publicKey: String, profile: PubkyProfile, generation: Long) {
+    private suspend fun publishPaykitProfileCopy(
+        publicKey: String,
+        profile: PubkyProfile,
+        generation: Long,
+        saveEpoch: Long,
+    ) {
         runSuspendCatching {
             profileWrite(generation) {
+                // Checked under the write lock, so a save that starts after it writes its copy after this one.
+                if (saveEpoch % 2 != 0L || profileSaveEpoch.get() != saveEpoch) return@profileWrite
                 pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile(), publicKey)
             }
         }.onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }

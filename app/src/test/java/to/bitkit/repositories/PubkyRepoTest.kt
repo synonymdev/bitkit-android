@@ -1225,6 +1225,34 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a load under way does not write back the tags a save replaced`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        var copy = PubkyProfileData(name = "Test", bio = "", tags = listOf("old")).toPaykitProfile()
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { paykitRecord(copy) }
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenAnswer {
+            copy = it.getArgument(0)
+            paykitRecord(copy)
+        }
+        sut.loadProfile()
+        val loadReading = CompletableDeferred<Unit>()
+        val finishLoad = CompletableDeferred<Unit>()
+        val saved = createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "New"))
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).doSuspendableAnswer {
+            loadReading.complete(Unit)
+            finishLoad.await()
+            saved
+        }
+
+        val load = async { sut.loadProfile() }
+        loadReading.await()
+        sut.saveProfile(name = "New", bio = "", links = emptyList(), tags = listOf("new"), imageUrl = null).getOrThrow()
+        finishLoad.complete(Unit)
+        load.await()
+
+        assertEquals(listOf("new"), PubkyProfileData.fromPaykitProfile(copy).tags)
+    }
+
+    @Test
     fun `loadProfile moves a multi-line bio and scheme-less links to pubky app`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
