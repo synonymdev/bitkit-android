@@ -216,13 +216,13 @@
     <string name="lightning__scores_sync_time">Pathfinding scores synchronisatietijd</string>
     <string name="lightning__setting_up__not_seen">Spark heeft je overboeking nog niet gezien. Hij wordt toegevoegd na 3 bevestigingen; je kunt dit scherm verlaten.</string>
     <string name="lightning__setting_up__pay">Betaal ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Direct kost nu ₿ {amount}. Betaal het, of wacht op 3 bevestigingen, ongeveer 30 minuten, tegen lagere kosten.</string>
+    <string name="lightning__setting_up__repriced">Direct kost nu &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Betaal het, of wacht op 3 bevestigingen, ongeveer 30 minuten, tegen lagere kosten.</string>
     <string name="lightning__setting_up__speed">Snelheid: {speed}</string>
     <string name="lightning__setting_up__step_adding">Toevoegen aan besteding</string>
-    <string name="lightning__setting_up__step_seen">Gezien door Spark</string>
-    <string name="lightning__setting_up__step_sent">Overboeking verzonden</string>
     <string name="lightning__setting_up__unavailable">Direct is niet beschikbaar voor deze overboeking. Spark voegt hem na 3 bevestigingen, ongeveer 30 minuten, toe aan je bestedingssaldo.</string>
     <string name="lightning__setting_up_button">Doorgaan met Bitkit</string>
+    <string name="lightning__setting_up_step1">Betaling verwerken</string>
+    <string name="lightning__setting_up_step2">Betaling succesvol</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Claimkosten</string>
     <string name="lightning__spark_confirmations">%1$d/3 bevestigingen</string>

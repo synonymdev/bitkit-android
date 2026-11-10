@@ -38,7 +38,7 @@ class SettingUpScreenTest {
     fun `later steps and their label sit above the button on a small screen`() {
         setContent(SparkDepositClaim.Later, SparkClaimSpeed.Instant)
 
-        val label = composeRule.onNodeWithText("Seen By Spark").getUnclippedBoundsInRoot()
+        val label = composeRule.onNodeWithText("Payment Successful").getUnclippedBoundsInRoot()
         val button = composeRule.onNodeWithTag("TransferSuccess-button").getUnclippedBoundsInRoot()
 
         assertTrue(label.bottom <= button.top)

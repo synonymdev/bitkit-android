@@ -273,13 +273,13 @@
     <string name="lightning__scores_sync_time">Pathfinding-Scores Sync-Zeit</string>
     <string name="lightning__setting_up__not_seen">Spark hat deine Überweisung noch nicht gesehen. Sie wird nach 3 Bestätigungen gutgeschrieben; du kannst diesen Bildschirm verlassen.</string>
     <string name="lightning__setting_up__pay">₿ {amount} zahlen</string>
-    <string name="lightning__setting_up__repriced">Sofort kostet jetzt ₿ {amount}. Zahle es oder warte auf 3 Bestätigungen, etwa 30 Minuten, zu einer niedrigeren Gebühr.</string>
+    <string name="lightning__setting_up__repriced">Sofort kostet jetzt &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Zahle es oder warte auf 3 Bestätigungen, etwa 30 Minuten, zu einer niedrigeren Gebühr.</string>
     <string name="lightning__setting_up__speed">Geschwindigkeit: {speed}</string>
     <string name="lightning__setting_up__step_adding">Wird hinzugefügt</string>
-    <string name="lightning__setting_up__step_seen">Von Spark gesehen</string>
-    <string name="lightning__setting_up__step_sent">Überweisung gesendet</string>
     <string name="lightning__setting_up__unavailable">Sofort ist für diese Überweisung nicht verfügbar. Spark fügt sie nach 3 Bestätigungen, etwa 30 Minuten, deinem Ausgabenguthaben hinzu.</string>
     <string name="lightning__setting_up_button">Bitkit weiter verwenden</string>
+    <string name="lightning__setting_up_step1">Zahlung wird verarbeitet</string>
+    <string name="lightning__setting_up_step2">Zahlung erfolgreich</string>
     <string name="lightning__spendable_onchain">Onchain verfügbar</string>
     <string name="lightning__total_anchor_channels_reserve">Gesamte Anchor-Channels-Reserve</string>
     <string name="lightning__total_lightning">Gesamt Lightning</string>

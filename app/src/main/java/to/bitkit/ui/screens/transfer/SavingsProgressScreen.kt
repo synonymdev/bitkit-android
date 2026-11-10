@@ -224,6 +224,7 @@ private fun Content(
                 TransferAnimationView(
                     largeCircleRes = R.drawable.onchain_sync_large,
                     smallCircleRes = R.drawable.onchain_sync_small,
+                    keepAssetRatios = true,
                 )
             } else {
                 Box(

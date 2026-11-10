@@ -219,13 +219,13 @@
     <string name="lightning__scores_sync_time">Čas synchronizace skóre hledání cest</string>
     <string name="lightning__setting_up__not_seen">Spark tvůj převod zatím neviděl. Připíše se po 3 potvrzeních; tuto obrazovku můžeš opustit.</string>
     <string name="lightning__setting_up__pay">Zaplatit ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Okamžitě nyní stojí ₿ {amount}. Zaplať, nebo počkej na 3 potvrzení, asi 30 minut, s nižším poplatkem.</string>
+    <string name="lightning__setting_up__repriced">Okamžitě nyní stojí &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Zaplať, nebo počkej na 3 potvrzení, asi 30 minut, s nižším poplatkem.</string>
     <string name="lightning__setting_up__speed">Rychlost: {speed}</string>
     <string name="lightning__setting_up__step_adding">Přidávání do výdajů</string>
-    <string name="lightning__setting_up__step_seen">Viděno Sparkem</string>
-    <string name="lightning__setting_up__step_sent">Převod odeslán</string>
     <string name="lightning__setting_up__unavailable">Okamžitě není pro tento převod dostupné. Spark ho přidá do tvého zůstatku pro výdaje po 3 potvrzeních, asi za 30 minut.</string>
     <string name="lightning__setting_up_button">Pokračujte v používání Bitkit</string>
+    <string name="lightning__setting_up_step1">Zpracování platby</string>
+    <string name="lightning__setting_up_step2">Platba úspěšně proběhla</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Poplatek za připsání</string>
     <string name="lightning__spark_confirmations">%1$d/3 potvrzení</string>

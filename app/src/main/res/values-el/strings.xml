@@ -212,13 +212,13 @@
     <string name="lightning__scores_sync_time">Χρόνος συγχρονισμού βαθμολογιών εύρεσης διαδρομής</string>
     <string name="lightning__setting_up__not_seen">Το Spark δεν έχει δει ακόμα τη μεταφορά σου. Προστίθεται μετά από 3 επιβεβαιώσεις· μπορείς να φύγεις από αυτή την οθόνη.</string>
     <string name="lightning__setting_up__pay">Πλήρωσε ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Το Άμεσα κοστίζει τώρα ₿ {amount}. Πλήρωσέ το ή περίμενε 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
+    <string name="lightning__setting_up__repriced">Το Άμεσα κοστίζει τώρα &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Πλήρωσέ το ή περίμενε 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
     <string name="lightning__setting_up__speed">Ταχύτητα: {speed}</string>
     <string name="lightning__setting_up__step_adding">Προσθήκη στις δαπάνες</string>
-    <string name="lightning__setting_up__step_seen">Το είδε το Spark</string>
-    <string name="lightning__setting_up__step_sent">Η μεταφορά στάλθηκε</string>
     <string name="lightning__setting_up__unavailable">Το Άμεσα δεν είναι διαθέσιμο για αυτή τη μεταφορά. Το Spark την προσθέτει στο υπόλοιπο δαπανών σου μετά από 3 επιβεβαιώσεις, περίπου 30 λεπτά.</string>
     <string name="lightning__setting_up_button">Συνέχισε να χρησιμοποιείς το Bitkit</string>
+    <string name="lightning__setting_up_step1">Επεξεργασία πληρωμής</string>
+    <string name="lightning__setting_up_step2">Επιτυχής πληρωμή</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Χρέωση εξαργύρωσης</string>
     <string name="lightning__spark_confirmations">%1$d/3 επιβεβαιώσεις</string>
