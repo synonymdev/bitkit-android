@@ -12080,7 +12080,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `spark route pays the contact while spending is the source`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()))
             .thenReturn(Result.success("txid"))
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
         setSendState(
@@ -12094,7 +12094,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any())
     }
 
     @Test
@@ -12115,7 +12115,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull(), any(), any())
+        verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull(), any(), anyOrNull(), any())
     }
 
     @Test
@@ -12236,9 +12236,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `spark route pays an onchain request and completes its proof`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedrequest")
         val txid = "ab".repeat(32)
+        val deadline = Instant.parse("2099-01-01T00:00:00Z")
         val request = paymentRequest().copy(
             amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
             acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+            paymentDeadlineAt = deadline,
         )
         val privateContext = privatePaymentContext(7uL)
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
@@ -12253,8 +12255,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
             .thenReturn(Result.success(Unit))
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any())).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+        ).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
             if (onBeforeSend()) Result.success(txid) else Result.failure(AppError("refused"))
         }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -12283,6 +12287,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             verify(paykitPaymentProofRepo).completeSparkOnchainPayment(request, txid)
         }
+        // Spark checks the request's deadline right before it sends.
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), eq(deadline), any())
     }
 
     @Test
@@ -12309,8 +12315,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
             .thenReturn(Result.success(Unit))
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any())).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+        ).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }
@@ -12447,8 +12455,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 whileOutcomeIsRead()
                 outcome
             }
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()),
+        ).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }
@@ -12483,7 +12493,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 10_000u)
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
             .thenReturn(Result.success(PaykitRoute.Service(leg)))
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()))
             .thenReturn(Result.success("txid"))
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
         setSendState(
@@ -12502,7 +12512,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(lightningRepo, never()).fetchLnurlInvoice(any(), any(), anyOrNull())
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any())
     }
 
     @Test
@@ -12539,8 +12549,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             yield()
             false
         }
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any())).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+        ).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }
@@ -12572,7 +12584,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `spark route saves the tags picked on confirmation`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), anyOrNull(), any()))
             .thenReturn(Result.success("txid"))
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
         setSendState(
@@ -12587,7 +12599,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), anyOrNull(), any())
     }
 
     @Test
@@ -12601,7 +12613,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()))
             .thenReturn(Result.failure(AppError("send failed")))
         whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).thenReturn(true)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -12746,7 +12758,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `spending retried after a refused reroute and a switch back routes through spark again`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 10_000u)
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()))
             .thenReturn(Result.success("txid"))
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
             .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
@@ -12782,7 +12794,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             "the quote recovered, so Spark carries it",
         )
         confirmCurrentPayment()
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any())
     }
 
     @Test
@@ -12825,8 +12837,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
         whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).thenReturn(true)
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), any())).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+        ).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
             runSuspendCatching { onBeforeSend() }.map { "never" }
         }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -12854,8 +12868,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)).thenReturn(emptySet())
         whenever(lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, emptySet()))
             .thenReturn(SparkWithdrawalOutcome.Unknown)
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), any())).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(3)
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()),
+        ).doSuspendableAnswer {
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }

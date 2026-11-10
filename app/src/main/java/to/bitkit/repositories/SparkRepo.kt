@@ -616,7 +616,8 @@ class SparkRepo @Inject constructor(
     /**
      * Withdraws exactly [amountSats] to a Paykit [contact]'s on-chain [address] at medium speed and returns the
      * withdrawal's txid. A journal entry written before the send lets the next start settle a withdrawal the app was
-     * killed during, from Spark's payment list, and refuses another withdrawal until then.
+     * killed during, from Spark's payment list, and refuses another withdrawal until then. Past [paymentDeadlineAt],
+     * it sends nothing.
      */
     suspend fun withdraw(
         address: String,
@@ -624,6 +625,7 @@ class SparkRepo @Inject constructor(
         contact: String?,
         maxDebitSats: ULong? = null,
         tags: List<String> = emptyList(),
+        paymentDeadlineAt: Instant? = null,
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> =
         withContext(bgDispatcher) {
@@ -640,6 +642,8 @@ class SparkRepo @Inject constructor(
                 isWithdrawing = true
                 val sent = try {
                     if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
+                    // A quote can expire while the request and its allowance are checked, so it is checked last.
+                    ensurePaymentDeadline(paymentDeadlineAt)
                     val journal = PendingSparkWithdrawal(
                         address,
                         amountSats,

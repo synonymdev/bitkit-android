@@ -6986,6 +6986,7 @@ class AppViewModel @Inject constructor(
             leg,
             contactPaymentContext?.publicKey,
             _sendUiState.value.selectedTags,
+            incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
         ) {
             val earlier = lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)
             startSparkOnchainProof(

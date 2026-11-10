@@ -15,6 +15,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Instant
 
 /**
  * Picks how to pay a Paykit contact through bitkit-core's Paykit router: directly from a balance the wallet holds,
@@ -65,12 +66,13 @@ class PaykitRouteRepo @Inject constructor(
 
     /**
      * Runs a service leg the router picked to the [contact] and returns the txid that pays them; [onBeforeSend] runs
-     * once the leg is prepared, right before it sends.
+     * once the leg is prepared, right before it sends; past [paymentDeadlineAt] it sends nothing.
      */
     suspend fun payServiceLeg(
         leg: ServiceRouteLeg,
         contact: String?,
         tags: List<String> = emptyList(),
+        paymentDeadlineAt: Instant? = null,
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> = when (leg.service) {
         SparkRepo.ROUTE_SERVICE -> sparkRepo.withdraw(
@@ -79,6 +81,7 @@ class PaykitRouteRepo @Inject constructor(
             contact = contact,
             maxDebitSats = leg.debitSat,
             tags = tags,
+            paymentDeadlineAt = paymentDeadlineAt,
             onBeforeSend = onBeforeSend,
         )
         else -> Result.failure(AppError("Unsupported route service '${leg.service}'"))

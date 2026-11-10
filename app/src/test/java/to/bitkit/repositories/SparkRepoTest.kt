@@ -99,7 +99,7 @@ class SparkRepoTest : BaseUnitTest() {
     private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
     private val contactResolver = mock<PrivatePaykitContactResolver>()
     private val pendingPaymentRepo = PendingPaymentRepo()
-    private val now = Instant.fromEpochSeconds(1_800_000_000)
+    private var now = Instant.fromEpochSeconds(1_800_000_000)
     private val clock = object : Clock {
         override fun now() = this@SparkRepoTest.now
     }
@@ -865,6 +865,27 @@ class SparkRepoTest : BaseUnitTest() {
         val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, onBeforeSend = { false })
 
         assertIs<PaymentAbortedBeforeSend>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a withdrawal whose deadline passes before it sends never leaves`() = test {
+        val sut = journaledSpark()
+
+        val result = sut.withdraw(
+            "bcrt1qcontact",
+            20_000uL,
+            null,
+            paymentDeadlineAt = now + 1.minutes,
+            onBeforeSend = {
+                // The quote's deadline passes while the allowance and the request are checked.
+                now += 2.minutes
+                true
+            },
+        )
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
         verify(sparkService, never()).send(any())
         assertNull(cacheData.value.pendingSparkWithdrawal)
     }
