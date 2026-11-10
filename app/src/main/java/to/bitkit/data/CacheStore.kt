@@ -236,7 +236,9 @@ class CacheStore internal constructor(
         listing: SendListing,
     ): Pair<List<String>, Map<String, Long>> {
         val now = clock.now().epochSeconds
-        fun isExpired(hash: String, settleSecs: Long = 0) = expiries[hash]?.let { it + settleSecs <= now } == true
+
+        // Compared against now minus the window, as an invoice that never expires is kept at Long.MAX_VALUE.
+        fun isExpired(hash: String, settleSecs: Long = 0) = expiries[hash]?.let { it <= now - settleSecs } == true
         fun isSettled(hash: String) = hash !in listing.live && (
             hash in listing.failed ||
                 hash in listing.paid && isExpired(hash) ||
