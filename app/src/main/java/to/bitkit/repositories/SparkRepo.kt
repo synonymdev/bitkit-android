@@ -844,15 +844,18 @@ class SparkRepo @Inject constructor(
 
     /** Records every Spark payment, returning whether all were saved, so a failed write leaves the sync to redo. */
     private suspend fun syncActivities(): Boolean {
+        // Read after the records, as a send counts as in flight before it is recorded, so one of the two shows it.
         val recordsBefore = sendRecords.get()
+        val inFlightBefore = sendsInFlight.keys.toSet()
         val payments = sparkService.listPayments()
         val isSaved = payments.map { recordActivity(it) }.all { it }
         val sendHashes = { status: PaymentStatus ->
             payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
         }
-        // A send in flight, or recorded after this list was read while the activities were recorded, may be missing
-        // from it or show only its earlier failed attempt, so it stays.
-        val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys + recordedSince(recordsBefore)
+        // A send in flight, also one that ended while this list was read, or recorded after it was read while the
+        // activities were recorded, may be missing from it or show only its earlier failed attempt, so it stays.
+        val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys + inFlightBefore +
+            recordedSince(recordsBefore)
         val paid = sendHashes(PaymentStatus.COMPLETED) - live
         cacheStore.trimSparkSendHashes(
             paid = paid,
@@ -867,10 +870,11 @@ class SparkRepo @Inject constructor(
         if (failed.isEmpty()) return isSaved
         // A retry can start while the list is recorded, so the release reads Spark's sends again first.
         val recordsBeforeCurrent = sendRecords.get()
+        val inFlightBeforeCurrent = sendsInFlight.keys.toSet()
         val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return isSaved
-        val recordedSinceCurrent = recordedSince(recordsBeforeCurrent)
+        val liveCurrent = sendsInFlight.keys + inFlightBeforeCurrent + recordedSince(recordsBeforeCurrent)
         failed
-            .filter { !sendsInFlight.containsKey(it.lowercase()) && it.lowercase() !in recordedSinceCurrent }
+            .filter { it.lowercase() !in liveCurrent }
             .filter { current.latestSend(it)?.status == PaymentStatus.FAILED }
             .forEach { cacheStore.removeSparkSendHash(it) }
         return isSaved

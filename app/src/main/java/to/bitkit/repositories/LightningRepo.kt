@@ -1541,6 +1541,7 @@ class LightningRepo @Inject constructor(
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
         val recordsBefore = ldkSendRecords.get()
+        val inFlightBefore = ldkSendsInFlight.toSet()
         val payments = listPaymentsKeepingSendHashes()
         if (payments == null) {
             val cache = cacheStore.data.first()
@@ -1556,8 +1557,9 @@ class LightningRepo @Inject constructor(
             it.direction == PaymentDirection.OUTBOUND &&
                 (kind.bolt11.equals(bolt11, ignoreCase = true) || kind.hash.equals(paymentHash, ignoreCase = true))
         }
-        // A retry in flight, or one recorded while the listing was read, holds the invoice again.
-        val isRetried = key in ldkSendsInFlight || (ldkSendRecordedAt[key] ?: 0L) > recordsBefore
+        // A retry in flight, also one that ended while the listing was read, or recorded meanwhile, holds the invoice.
+        val isRetried = key in ldkSendsInFlight || key in inFlightBefore ||
+            (ldkSendRecordedAt[key] ?: 0L) > recordsBefore
         if ((send == null || send.status == PaymentStatus.FAILED) && !isRetried) cacheStore.removeLdkSendHash(key)
         if (send == null) return null
         val hash = (send.kind as PaymentKind.Bolt11).hash
@@ -1599,16 +1601,23 @@ class LightningRepo @Inject constructor(
 
     /** The node's payments after keeping its send hashes from them, or null while it can't list them. */
     private suspend fun listPaymentsKeepingSendHashes(): List<PaymentDetails>? {
+        // Read after the records, as a send counts as in flight before it is recorded, so one of the two shows it.
         val recordsBefore = ldkSendRecords.get()
-        return listPaymentsOrNull()?.also { keepLdkSendHashes(it, recordsBefore) }
+        val inFlightBefore = ldkSendsInFlight.toSet()
+        return listPaymentsOrNull()?.also { keepLdkSendHashes(it, recordsBefore, inFlightBefore) }
     }
 
     /**
      * Keeps the node's pending and paid sends once, so those made before sends were kept hold Spark too, then trims
      * the ones listed failed only or paid with an expired invoice. A send that may still be pending always holds Spark:
-     * one in flight, or recorded after [recordsBefore] while the listing was read, can show an earlier failed attempt.
+     * one in flight, also one in flight before the listing ([inFlightBefore]) that ended while it was read, or recorded
+     * after [recordsBefore] meanwhile, can show an earlier failed attempt.
      */
-    private suspend fun keepLdkSendHashes(payments: List<PaymentDetails>, recordsBefore: Long) {
+    private suspend fun keepLdkSendHashes(
+        payments: List<PaymentDetails>,
+        recordsBefore: Long,
+        inFlightBefore: Set<String>,
+    ) {
         val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
         val sends = outbound.filter { it.status != PaymentStatus.FAILED }.sortedBy { it.latestUpdateTimestamp }
         cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
@@ -1617,7 +1626,7 @@ class LightningRepo @Inject constructor(
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
         }
         val recordedSince = ldkSendRecordedAt.filterValues { it > recordsBefore }.keys
-        val live = hashes(PaymentStatus.PENDING) + ldkSendsInFlight + recordedSince
+        val live = hashes(PaymentStatus.PENDING) + ldkSendsInFlight + inFlightBefore + recordedSince
         val paid = hashes(PaymentStatus.SUCCEEDED)
         val failed = hashes(PaymentStatus.FAILED) - paid - live
         val listed = outbound.mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
