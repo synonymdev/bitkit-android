@@ -459,6 +459,28 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a new savings transfer leaves an earlier one's channels to close`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        val withdrawn = CompletableDeferred<Result<Unit>>()
+        whenever { sparkRepo.withdrawAll(any(), any()) }.doSuspendableAnswer { withdrawn.await() }
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+        val first = launch { sut.closeSelectedChannels() }
+        runCurrent()
+        first.cancel()
+
+        // A second transfer is confirmed while the first still waits on Spark's withdrawal.
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = false)
+        sut.closeSelectedChannels()
+        withdrawn.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
+        verify(lightningRepo, times(1)).closeChannel(CHANNEL_B, false, null)
+    }
+
+    @Test
     fun `loadSavingsSwapQuote sizes the swap by the selected channels, not spark`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())

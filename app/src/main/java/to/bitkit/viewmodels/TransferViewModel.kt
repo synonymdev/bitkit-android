@@ -428,9 +428,12 @@ class TransferViewModel @Inject constructor(
      * confirmed transfer, in viewModelScope, so leaving the progress screen during the withdrawal skips no close.
      */
     suspend fun closeSelectedChannels(): List<ChannelDetails> {
+        // Read when the job starts, so a transfer confirmed while it runs never changes what it closes.
+        val channels = channelsToClose
+        val withdraws = withdrawsSpark
         val job = closeJob ?: viewModelScope.async {
-            if (withdrawsSpark) withdrawSparkToSavings()
-            closeChannels(channelsToClose)
+            if (withdraws) withdrawSparkToSavings()
+            closeChannels(channels)
         }.also { closeJob = it }
         return job.await()
     }
