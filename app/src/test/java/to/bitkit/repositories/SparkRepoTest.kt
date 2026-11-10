@@ -1517,6 +1517,46 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a retry of an uncertain spark send is refused while spark has never synced`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        // No wallet sync has succeeded yet, so Spark's list can't be read.
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verify(sparkService, times(1)).send(any())
+    }
+
+    @Test
+    fun `a retry of a spark send kept from before a restart is refused while its first sync fails`() = test {
+        cacheData.value = AppCacheData(
+            sparkSendHashes = listOf("hash"),
+            sparkSendExpiries = mapOf("hash" to now.epochSeconds + 3_600),
+        )
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        )
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        // Spark makes a new transfer for each send call, so the retry would pay the invoice again.
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
     fun `an unlisted spark send kept from before a restart reads as pending until its invoice expires`() = test {
         cacheData.value = AppCacheData(
             sparkSendHashes = listOf("hash", "expired"),

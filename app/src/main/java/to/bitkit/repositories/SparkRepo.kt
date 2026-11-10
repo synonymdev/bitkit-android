@@ -819,7 +819,8 @@ class SparkRepo @Inject constructor(
      * Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed.
      * [SparkLightningSend.Unavailable] while Spark is supported but cannot list its payments, so a send it may hold
      * is never read as one it never made. A send Spark may still resume reads as pending: one whose outcome Spark
-     * didn't report, unless a row settles it, and a started one with no row whose invoice is unexpired.
+     * didn't report, unless a row settles it, and a started one with no row whose invoice is unexpired, also while
+     * Spark can't list its payments, so a retry never sends it again.
      */
     suspend fun lightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
         val hash = paymentHash.lowercase()
@@ -827,9 +828,8 @@ class SparkRepo @Inject constructor(
         val send = listedLightningSend(paymentHash)
         val isUncertain = uncertainSends.containsKey(hash)
         val isHeld = when (send) {
-            SparkLightningSend.NotFound -> isUncertain || isUnlistedHeld
+            SparkLightningSend.NotFound, SparkLightningSend.Unavailable -> isUncertain || isUnlistedHeld
             is SparkLightningSend.Found -> isUncertain && send.status == PaymentStatus.FAILED
-            SparkLightningSend.Unavailable -> false
         }
         if (isHeld) SparkLightningSend.Found(PaymentStatus.PENDING, null) else send
     }
