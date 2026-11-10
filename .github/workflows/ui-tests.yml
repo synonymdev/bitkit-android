@@ -143,7 +143,10 @@ jobs:
           arch: x86_64
           profile: pixel_4
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Cold boot. Restoring the cached snapshot sometimes reports sys.boot_completed=1 before
+          # system_server publishes its services, and the runner's `input keyevent 82` then fails with
+          # "No service published for: input". A cold boot costs about 30s.
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: bash .github/scripts/run-ui-tests.sh
 
