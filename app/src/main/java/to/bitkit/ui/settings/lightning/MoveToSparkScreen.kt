@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -40,6 +42,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 
 /** Moves the channels' balance to the user's Spark wallet over Lightning, then offers to close the emptied channel. */
 @Composable
@@ -93,7 +96,7 @@ private fun Header(title: String, text: String) {
     VerticalSpacer(32.dp)
     Display(text = title.withAccent(accentColor = Colors.Purple))
     VerticalSpacer(8.dp)
-    BodyM(text = text, color = Colors.White64)
+    BodyM(text = text.withAccentBoldBright(), color = Colors.White64)
 }
 
 /** Takes the height between the content and the bottom buttons, so the buttons stay at the screen's bottom. */
@@ -110,9 +113,20 @@ private fun ColumnScope.Illustration(@DrawableRes drawable: Int) {
             painter = painterResource(drawable),
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
+            modifier = Modifier
+                .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
+                .aspectRatio(1f)
+                .scale(illustrationScale(drawable))
         )
     }
+}
+
+/** Scales each illustration so its drawing fills its box like the zap; the others have wider transparent margins. */
+private fun illustrationScale(@DrawableRes drawable: Int): Float = when (drawable) {
+    R.drawable.check -> 1.25f
+    R.drawable.cross -> 1.4f
+    R.drawable.exclamation_mark -> 1.1f
+    else -> 1f
 }
 
 @Composable
@@ -271,9 +285,12 @@ private fun ColumnScope.Failed(failure: MoveToSparkFailure, onBack: () -> Unit, 
     )
 }
 
+/** The amount, ₿ included, as one inline accent of the body text. */
 @Composable
-private fun amountText(sats: ULong): String =
-    rememberMoneyText(sats.toLong(), showSymbol = true)?.replace(Regex("</?accent>"), "") ?: sats.toString()
+private fun amountText(sats: ULong): String {
+    val money = rememberMoneyText(sats.toLong(), showSymbol = true)?.replace(Regex("</?accent>"), "") ?: sats.toString()
+    return "<accent>$money</accent>"
+}
 
 @Composable
 private fun Buttons(
