@@ -405,7 +405,8 @@ class TransferViewModel @Inject constructor(
         // Drop any outcome from an earlier attempt so the progress screen cannot act on it.
         _savingsSwapResult.update { null }
         _isSparkWithdrawFailed.update { false }
-        sparkWithdrawJob = null
+        // A withdrawal still going out is kept, so a transfer confirmed again joins it rather than sending it twice.
+        if (sparkWithdrawJob?.isActive != true) sparkWithdrawJob = null
         closeJob = null
         _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels
@@ -428,9 +429,12 @@ class TransferViewModel @Inject constructor(
      * confirmed transfer, in viewModelScope, so leaving the progress screen during the withdrawal skips no close.
      */
     suspend fun closeSelectedChannels(): List<ChannelDetails> {
+        // Read when the job starts, so a transfer confirmed while it runs never changes what it closes.
+        val channels = channelsToClose
+        val withdraws = withdrawsSpark
         val job = closeJob ?: viewModelScope.async {
-            if (withdrawsSpark) withdrawSparkToSavings()
-            closeChannels(channelsToClose)
+            if (withdraws) withdrawSparkToSavings()
+            closeChannels(channels)
         }.also { closeJob = it }
         return job.await()
     }
