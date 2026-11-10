@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.HorizontalDivider
@@ -31,6 +30,7 @@ import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPad
@@ -198,68 +198,59 @@ private fun SpendingAmountNodeRunning(
                 .testTag("${tag}NumberField")
         )
 
-        // Keys shrink on short screens, so Continue stays visible below the pad.
-        Column(
-            verticalArrangement = Arrangement.Bottom,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+        FillHeight()
+
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.testTag(
+                if (isHardware) "HardwareTransferAmountNumberPad" else "SendAmountNumberPad"
+            )
         ) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.testTag(
-                    if (isHardware) "HardwareTransferAmountNumberPad" else "SendAmountNumberPad"
+            Column {
+                Text13Up(
+                    text = stringResource(R.string.wallet__send_available),
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("${tag}Available")
                 )
-            ) {
-                Column {
-                    Text13Up(
-                        text = stringResource(R.string.wallet__send_available),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("${tag}Available")
-                    )
-                    VerticalSpacer(8.dp)
-                    MoneySSB(
-                        sats = uiState.maxSats,
-                        showSymbol = true,
-                        modifier = Modifier.testTag("${tag}Unit")
-                    )
-                }
-                FillWidth()
-                UnitButton(
-                    color = Colors.Purple,
-                    onClick = { amountInputViewModel.switchUnit(currencies) },
-                    modifier = Modifier.testTag(
-                        if (isHardware) "HardwareTransferAmountUnitButton" else "SpendingNumberPadUnit"
-                    )
-                )
-                NumberPadActionButton(
-                    text = stringResource(R.string.lightning__spending_amount__quarter),
-                    color = Colors.Purple,
-                    enabled = isReady && hasFunds,
-                    onClick = onClickQuarter,
-                    modifier = Modifier.testTag("${tag}Quarter")
-                )
-                NumberPadActionButton(
-                    text = stringResource(R.string.common__max),
-                    color = Colors.Purple,
-                    enabled = isReady && hasFunds,
-                    onClick = onClickMaxAmount,
-                    modifier = Modifier.testTag("${tag}Max")
+                VerticalSpacer(8.dp)
+                MoneySSB(
+                    sats = uiState.maxSats,
+                    showSymbol = true,
+                    modifier = Modifier.testTag("${tag}Unit")
                 )
             }
-
-            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
-
-            NumberPad(
-                viewModel = amountInputViewModel,
-                currencies = currencies,
+            FillWidth()
+            UnitButton(
+                color = Colors.Purple,
+                onClick = { amountInputViewModel.switchUnit(currencies) },
+                modifier = Modifier.testTag(
+                    if (isHardware) "HardwareTransferAmountUnitButton" else "SpendingNumberPadUnit"
+                )
+            )
+            NumberPadActionButton(
+                text = stringResource(R.string.lightning__spending_amount__quarter),
+                color = Colors.Purple,
                 enabled = isReady && hasFunds,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(max = NUMBER_PAD_MAX_HEIGHT)
+                onClick = onClickQuarter,
+                modifier = Modifier.testTag("${tag}Quarter")
+            )
+            NumberPadActionButton(
+                text = stringResource(R.string.common__max),
+                color = Colors.Purple,
+                enabled = isReady && hasFunds,
+                onClick = onClickMaxAmount,
+                modifier = Modifier.testTag("${tag}Max")
             )
         }
+
+        HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
+
+        NumberPad(
+            viewModel = amountInputViewModel,
+            currencies = currencies,
+            enabled = isReady && hasFunds,
+        )
 
         PrimaryButton(
             text = stringResource(R.string.common__continue),
@@ -272,9 +263,6 @@ private fun SpendingAmountNodeRunning(
         VerticalSpacer(16.dp)
     }
 }
-
-/** The number pad's height at its ideal key size. */
-private val NUMBER_PAD_MAX_HEIGHT = 300.dp
 
 @Preview(showSystemUi = true)
 @Preview(showSystemUi = true, device = "id:pixel_9_pro_xl", name = "Large")
