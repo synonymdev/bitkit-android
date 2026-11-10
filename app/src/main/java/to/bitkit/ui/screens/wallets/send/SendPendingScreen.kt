@@ -49,6 +49,7 @@ import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PendingPaymentResolution
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
@@ -184,6 +185,7 @@ private fun AbandonExpiredPayment(
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val canUseBiometrics = appViewModel?.canUseBiometrics?.collectAsStateWithLifecycle()?.value == true
     val isBiometrySupported = rememberBiometricAuthSupported()
     val abandonedToast = stringResource(R.string.wallet__send_pending__abandon_done)
     // The cancel can take up to 30 s; a failure is announced, not only shown above the hourglass.
@@ -208,7 +210,9 @@ private fun AbandonExpiredPayment(
             ),
             confirmText = stringResource(R.string.common__continue),
             dismissText = stringResource(R.string.common__cancel),
-            onConfirm = { onConfirm(isPinEnabled && pinForPayments, isBiometricEnabled && isBiometrySupported) },
+            onConfirm = {
+                onConfirm(isPinEnabled && pinForPayments, isBiometricEnabled && isBiometrySupported && canUseBiometrics)
+            },
             onDismiss = onDismiss,
         )
     }
@@ -253,6 +257,7 @@ private fun RecoveryAuthorization(
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val canUseBiometrics = appViewModel?.canUseBiometrics?.collectAsStateWithLifecycle()?.value == true
     val isBiometrySupported = rememberBiometricAuthSupported()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val reviewing = (showFeeApproval && uiState.recoveryAttempt != null) ||
@@ -327,7 +332,7 @@ private fun RecoveryAuthorization(
                         receipt,
                         warnings,
                         isPinEnabled && pinForPayments,
-                        isBiometricEnabled && isBiometrySupported
+                        isBiometricEnabled && isBiometrySupported && canUseBiometrics,
                     )
                 }
             }

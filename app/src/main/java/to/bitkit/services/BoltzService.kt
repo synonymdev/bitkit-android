@@ -18,18 +18,25 @@ import com.synonym.bitkitcore.boltzListSwaps
 import com.synonym.bitkitcore.boltzRefundSubmarineSwap
 import com.synonym.bitkitcore.boltzStartSwapUpdates
 import com.synonym.bitkitcore.boltzStopSwapUpdates
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Thin wrapper around the bitkit-core Boltz swaps FFI (submarine + reverse swaps between onchain
@@ -37,10 +44,20 @@ import javax.inject.Singleton
  * [SharedFlow]; swap keys are re-derived from the wallet mnemonic on demand, never persisted.
  */
 @Singleton
-class BoltzService @Inject constructor(
+class BoltzService internal constructor(
     private val keychain: Keychain,
     private val settingsStore: SettingsStore,
+    private val updatesStream: BoltzUpdatesStream,
 ) {
+    @Inject
+    constructor(keychain: Keychain, settingsStore: SettingsStore) : this(keychain, settingsStore, CoreUpdatesStream)
+
+    // Orders starts and stops of the stream, as a start that lands after a stop would keep it running
+    private val updatesMutex = Mutex()
+
+    @Volatile
+    private var isWiping = false
+
     private val _events = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 64)
 
     /** Swap lifecycle events emitted while the updates stream is running. */
@@ -151,20 +168,30 @@ class BoltzService @Inject constructor(
         network: BoltzNetwork = boltzNetwork(),
     ) {
         val (mnemonic, passphrase) = credentials()
-        boltzStartSwapUpdates(
-            network = network,
-            listener = listener,
-            mnemonic = mnemonic,
-            bip39Passphrase = passphrase,
-            feeRateSatPerVb = feeRateSatPerVb,
-            acceptZeroConf = acceptZeroConf,
-        )
+        updatesMutex.withLock {
+            if (isWiping) throw SwapUpdatesWipeInProgress()
+            // bitkit-core runs the start on its own runtime, where cancelling this call would not undo it
+            withContext(NonCancellable) {
+                updatesStream.start(network, listener, mnemonic, passphrase, feeRateSatPerVb, acceptZeroConf)
+            }
+        }
         Logger.info("Started Boltz updates stream on $network", context = TAG)
     }
 
     suspend fun stopUpdates() {
-        boltzStopSwapUpdates()
+        updatesMutex.withLock { updatesStream.stop() }
         Logger.info("Stopped Boltz updates stream", context = TAG)
+    }
+
+    /** The stream holds the wallet's mnemonic, so from the start of a wipe until its end nothing starts it. */
+    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
+
+    /**
+     * Returns once the stream is stopped and no start made before it can land any more. Throws if the stream could not
+     * be stopped, or not within [UPDATES_STOP_TIMEOUT].
+     */
+    suspend fun stopUpdatesAndAwait() {
+        checkNotNull(withTimeoutOrNull(UPDATES_STOP_TIMEOUT) { stopUpdates() }) { "Timed out stopping swap updates" }
     }
 
     // endregion
@@ -204,5 +231,47 @@ class BoltzService @Inject constructor(
 
     companion object {
         private const val TAG = "BoltzService"
+
+        /**
+         * Bounds [stopUpdatesAndAwait]. bitkit-core holds the stream while a start subscribes each pending swap, which
+         * waits on Boltz while it is unreachable, and its stop waits for the same stream.
+         */
+        private val UPDATES_STOP_TIMEOUT = 30.seconds
     }
+}
+
+class SwapUpdatesWipeInProgress : AppError("Swap updates cannot start during a wallet wipe")
+
+internal interface BoltzUpdatesStream {
+    @Suppress("LongParameterList")
+    suspend fun start(
+        network: BoltzNetwork,
+        listener: BoltzEventListener,
+        mnemonic: String,
+        passphrase: String?,
+        feeRateSatPerVb: Double?,
+        acceptZeroConf: Boolean,
+    )
+
+    suspend fun stop()
+}
+
+private object CoreUpdatesStream : BoltzUpdatesStream {
+    override suspend fun start(
+        network: BoltzNetwork,
+        listener: BoltzEventListener,
+        mnemonic: String,
+        passphrase: String?,
+        feeRateSatPerVb: Double?,
+        acceptZeroConf: Boolean,
+    ) = boltzStartSwapUpdates(
+        network = network,
+        listener = listener,
+        mnemonic = mnemonic,
+        bip39Passphrase = passphrase,
+        feeRateSatPerVb = feeRateSatPerVb,
+        acceptZeroConf = acceptZeroConf,
+    )
+
+    override suspend fun stop() = boltzStopSwapUpdates()
 }

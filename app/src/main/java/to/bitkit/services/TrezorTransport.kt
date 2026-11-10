@@ -91,6 +91,9 @@ class TrezorTransport @Inject constructor(
         private val PUSH_CHAR_UUID = UUID.fromString("8c000004-a59b-4d58-a9ad-073df69fa1b1")
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
+        /** SharedPreferences file that held THP credentials before they moved to files. */
+        private const val LEGACY_CREDENTIAL_PREFS = "trezor_thp_credentials"
+
         // Timeouts
         private const val READ_TIMEOUT_MS = 5000
         private const val WRITE_TIMEOUT_MS = 5000
@@ -147,7 +150,7 @@ class TrezorTransport @Inject constructor(
             espMigrated = true
             try {
                 val espPrefs = context.getSharedPreferences(
-                    "trezor_thp_credentials",
+                    LEGACY_CREDENTIAL_PREFS,
                     Context.MODE_PRIVATE,
                 )
                 val allEntries = espPrefs.all
@@ -397,6 +400,10 @@ class TrezorTransport @Inject constructor(
         val latch = CountDownLatch(1)
 
         synchronized(pairingCodeLock) {
+            if (pairingCodeRefusals > 0) {
+                Logger.info("Refused pairing code entry", context = TAG)
+                return ""
+            }
             pairingCodeResult = null
             pairingCodeRequest = PairingCodeRequest(isRequested = true, latch = latch)
             _needsPairingCode.update { true }
@@ -456,6 +463,8 @@ class TrezorTransport @Inject constructor(
 
     private val pairingCodeLock = Any()
 
+    private var pairingCodeRefusals = 0
+
     private sealed interface PairingCodeResult {
         data class Submitted(val code: String) : PairingCodeResult
 
@@ -504,6 +513,18 @@ class TrezorTransport @Inject constructor(
             _needsPairingCode.update { false }
             pairingCodeRequest.latch?.countDown()
         }
+    }
+
+    /**
+     * Answers every pairing-code request with an empty code at once, raising none, until a matching
+     * [allowPairingCodeRequests], so a connect that reaches pairing during a wallet wipe ends now.
+     */
+    fun refusePairingCodeRequests() {
+        synchronized(pairingCodeLock) { pairingCodeRefusals++ }
+    }
+
+    fun allowPairingCodeRequests() {
+        synchronized(pairingCodeLock) { pairingCodeRefusals = (pairingCodeRefusals - 1).coerceAtLeast(0) }
     }
 
     override fun saveThpCredential(deviceId: String, credentialJson: String): Boolean {
@@ -606,6 +627,31 @@ class TrezorTransport @Inject constructor(
             TrezorDebugLog.log("CLEAR", "EXCEPTION: ${it.message}")
             Logger.error("Failed to clear device credential", it, context = TAG)
         }
+    }
+
+    /**
+     * Deletes every stored THP credential. Core saves one as soon as a device pairs, before its PIN, so a device
+     * that paired but never became known has one too. Fails when any credential is left, including one in the
+     * legacy preferences, which a later load would migrate back into a file.
+     */
+    fun clearAllDeviceCredentials(): Result<Unit> = runCatching {
+        synchronized(this) {
+            val files = credentialDir.listFiles().orEmpty()
+            val kept = files.filterNot { it.deleteRecursively() }
+            // Clears the cached instance, then deletes the file, so neither a failed write nor the cache keeps one
+            context.getSharedPreferences(LEGACY_CREDENTIAL_PREFS, Context.MODE_PRIVATE)
+                .edit(commit = true) { clear() }
+            val legacyCleared = context.deleteSharedPreferences(LEGACY_CREDENTIAL_PREFS)
+            TrezorDebugLog.log(
+                "CLEAR",
+                "clearAllDeviceCredentials: files=${files.size}, kept=${kept.size}, legacyCleared=$legacyCleared",
+            )
+            check(kept.isEmpty()) { "Failed to delete credential files '${kept.joinToString { it.name }}'" }
+            check(legacyCleared) { "Failed to clear legacy credential preferences" }
+            Logger.info("Cleared '${files.size}' device credentials", context = TAG)
+        }
+    }.onFailure {
+        TrezorDebugLog.log("CLEAR", "EXCEPTION: ${it.message}")
     }
 
     private fun credentialFile(deviceId: String): File {

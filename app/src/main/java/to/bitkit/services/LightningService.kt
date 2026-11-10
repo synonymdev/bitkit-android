@@ -583,7 +583,8 @@ class LightningService internal constructor(
         if (node != null) throw ServiceError.NodeStillRunning()
         awaitNodeRelease()
         Logger.warn("Wiping LDK storage…", context = TAG)
-        Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
+        val storage = Path(Env.ldkStoragePath(walletIndex)).toFile()
+        check(storage.deleteRecursively()) { "Failed to delete all LDK storage" }
         Logger.info("LDK storage wiped", context = TAG)
     }
 

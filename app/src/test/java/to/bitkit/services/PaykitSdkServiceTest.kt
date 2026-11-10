@@ -2018,7 +2018,7 @@ class PaykitSdkServiceTest {
                 native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
                 if (failure is CancellationException) {
                     assertFailsWith<CancellationException> { service.initializeAndImportSession("saved-session") }
-                    assertFailsWith<CancellationException> { service.contactRecords() }
+                    assertFailsWith<PaykitSetupInterrupted> { service.contactRecords() }
                     service.initialize()
                     verify(sdk).initialize()
                 } else {

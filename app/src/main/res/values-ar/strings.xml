@@ -442,6 +442,7 @@
     <string name="security__pass_your">عبارة المرور الخاصة بك</string>
     <string name="security__pin_allowance">يرجى إدخال رمز PIN لتأكيد هذا التغيير في الميزانية.</string>
     <string name="security__pin_attempts">{attemptsRemaining} محاولات متبقية. نسيت رمز PIN؟</string>
+    <string name="security__pin_check_error">تعذر على Bitkit التحقق من رمز PIN الخاص بك. يرجى المحاولة مرة أخرى.</string>
     <string name="security__pin_choose_header">اختر رمز PIN من 4 أرقام</string>
     <string name="security__pin_choose_text">يرجى استخدام رمز PIN ستتذكره. إذا نسيت رمز PIN، يمكنك إعادة تعيينه، لكن ذلك سيتطلب استعادة محفظتك.</string>
     <string name="security__pin_disable_button">تعطيل PIN</string>
@@ -468,6 +469,7 @@
     <string name="security__reset_button_backup">نسخ احتياطي أولاً</string>
     <string name="security__reset_button_reset">إعادة تعيين المحفظة</string>
     <string name="security__reset_confirm">نعم، أعد التعيين</string>
+    <string name="security__reset_dialog_channel_migration">لم يكتمل بعد نقل قنوات Lightning الخاصة بك من تطبيق Bitkit السابق إلى هذه المحفظة. تبقى بياناتها على هذا الجهاز، لكن إعادة التعيين الآن قد تجعل استرداد تلك الأموال أصعب.</string>
     <string name="security__reset_dialog_desc">هل أنت متأكد من رغبتك في إعادة تعيين محفظة Bitkit؟ هل لديك نسخة احتياطية من عبارة الاسترداد وبيانات المحفظة؟</string>
     <string name="security__reset_dialog_title">إعادة تعيين Bitkit؟</string>
     <string name="security__reset_graph_confirm">نعم، أعد التعيين</string>
@@ -479,6 +481,14 @@
     <string name="security__success_title">تم تأمين المحفظة</string>
     <string name="security__use_pin">استخدم رمز PIN</string>
     <string name="security__wipe_app">مسح التطبيق</string>
+    <string name="security__wipe_blocked_text">لا يستطيع Bitkit التحقق من حالة الأمان الخاصة به، لذا تبقى محفظتك مقفلة. اضغط على «إعادة المحاولة» للتحقق مرة أخرى، أو صدّر السجلات لفريق الدعم.</string>
+    <string name="security__wipe_blocked_title">المحفظة مقفلة</string>
+    <string name="security__wipe_clear_storage_text">إذا استمر حدوث ذلك، امسح تخزين Bitkit من إعدادات Android › التطبيقات › Bitkit › التخزين، ثم استعد محفظتك باستخدام عبارة الاسترداد.</string>
+    <string name="security__wipe_failed_text">تعذر على Bitkit إكمال حذف بيانات محفظتك وسيحاول مرة أخرى. أبقِ Bitkit مفتوحًا، أو اضغط على «إعادة المحاولة».</string>
+    <string name="security__wipe_incomplete_text">تمت إعادة تعيين Bitkit، لكن تعذر حذف بعض بيانات محفظة USDT من هذا الجهاز.</string>
+    <string name="security__wipe_not_started">تعذر بدء إعادة التعيين. لم يُحذف أي شيء.</string>
+    <string name="security__wipe_running_text">يحذف Bitkit جميع بيانات المحفظة من هذا الجهاز. أبقِ Bitkit مفتوحًا حتى تنتهي العملية.</string>
+    <string name="security__wipe_title">جارٍ إعادة تعيين Bitkit</string>
     <string name="security__wiped_message">تمت إعادة تعيين Bitkit وحذف جميع بيانات المحفظة.</string>
     <string name="security__wiped_title">تم حذف بيانات المحفظة</string>
     <string name="security__pin_enable_button">تفعيل PIN</string>

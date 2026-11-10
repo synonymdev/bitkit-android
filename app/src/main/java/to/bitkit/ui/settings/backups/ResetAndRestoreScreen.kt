@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.security.WipeReason
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
@@ -47,16 +48,21 @@ fun ResetAndRestoreScreen(
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
     var showDialog by remember { mutableStateOf(false) }
+    var isChannelMigrationPending by remember { mutableStateOf(false) }
     val isWiping by wallet.isWiping.collectAsStateWithLifecycle()
 
     Content(
         showConfirmDialog = showDialog,
+        isChannelMigrationPending = isChannelMigrationPending,
         isWiping = isWiping,
         onClickBackup = { app.showSheet(Sheet.Backup()) },
-        onClickReset = { showDialog = true },
+        onClickReset = {
+            isChannelMigrationPending = app.isChannelMigrationPending()
+            showDialog = true
+        },
         onResetConfirm = {
             showDialog = false
-            wallet.wipeWallet()
+            wallet.wipeWallet(WipeReason.USER_RESET)
         },
         onResetDismiss = { showDialog = false },
         onBack = { navController.popBackStack() },
@@ -66,6 +72,7 @@ fun ResetAndRestoreScreen(
 @Composable
 private fun Content(
     showConfirmDialog: Boolean,
+    isChannelMigrationPending: Boolean,
     isWiping: Boolean,
     onClickBackup: () -> Unit,
     onClickReset: () -> Unit,
@@ -130,9 +137,11 @@ private fun Content(
         }
 
         if (showConfirmDialog) {
+            val description = stringResource(R.string.security__reset_dialog_desc)
+            val channelMigration = stringResource(R.string.security__reset_dialog_channel_migration)
             AppAlertDialog(
                 title = stringResource(R.string.security__reset_dialog_title),
-                text = stringResource(R.string.security__reset_dialog_desc),
+                text = if (isChannelMigrationPending) "$description\n\n$channelMigration" else description,
                 confirmText = stringResource(R.string.security__reset_confirm),
                 onConfirm = onResetConfirm,
                 onDismiss = onResetDismiss,
@@ -155,6 +164,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             showConfirmDialog = false,
+            isChannelMigrationPending = false,
             isWiping = false,
             onClickBackup = {},
             onClickReset = {},
@@ -171,6 +181,7 @@ private fun PreviewDialog() {
     AppThemeSurface {
         Content(
             showConfirmDialog = true,
+            isChannelMigrationPending = false,
             isWiping = false,
             onClickBackup = {},
             onClickReset = {},

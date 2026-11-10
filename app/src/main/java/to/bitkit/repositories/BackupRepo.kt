@@ -208,12 +208,13 @@ class BackupRepo @Inject constructor(
     private fun currentTimeMillis(): Long = nowMillis(clock)
     private fun isRestorePending(): Boolean = currentTimeMillis() < restorePendingUntil.value
     private fun isUsdtRestorePending(): Boolean = keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)
+    private fun isWipeGateUp(): Boolean = runCatching { keychain.loadWipePending() != null }.getOrDefault(true)
     private fun shouldSkipBackup(
         category: BackupCategory? = null,
     ): Boolean = if (category == BackupCategory.USDT_RECOVERY) {
-        _isWiping.value || isUsdtRestorePending()
+        _isWiping.value || isWipeGateUp() || isUsdtRestorePending()
     } else {
-        _isRestoring.value || _isWiping.value || isRestorePending() ||
+        _isRestoring.value || _isWiping.value || isRestorePending() || isWipeGateUp() ||
             ((category == null || category == BackupCategory.WALLET) && isUsdtRestorePending())
     }
     private fun BackupItemStatus.shouldBackup(category: BackupCategory) =

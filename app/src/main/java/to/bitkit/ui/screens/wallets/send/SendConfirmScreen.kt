@@ -66,6 +66,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
@@ -134,6 +135,7 @@ fun SendConfirmScreen(
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val canUseBiometrics = appViewModel?.canUseBiometrics?.collectAsStateWithLifecycle()?.value == true
     val isBiometrySupported = rememberBiometricAuthSupported()
 
     // Handle result from PinCheckScreen
@@ -163,7 +165,7 @@ fun SendConfirmScreen(
         if (!uiState.shouldConfirmPay) return@LaunchedEffect
         if (isPinEnabled && pinForPayments) {
             currentOnEvent(SendEvent.ClearPayConfirmation)
-            if (isBiometricEnabled && isBiometrySupported) {
+            if (isBiometricEnabled && isBiometrySupported && canUseBiometrics) {
                 showBiometrics = true
             } else {
                 onNavigateToPin()

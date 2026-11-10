@@ -50,8 +50,10 @@ import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.security.WipeCoordinator
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
@@ -90,6 +92,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val connectionRecovery = connectionRecoveryFixture(settingsStore)
+    private val wipeCoordinator = mock<WipeCoordinator>()
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -188,6 +191,7 @@ class WalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
         connectionRecovery = connectionRecovery,
+        wipeCoordinator = { wipeCoordinator },
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
@@ -1083,6 +1087,17 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.walletExists()
 
         assertFalse(result)
+    }
+
+    @Test
+    fun `walletState starts without a wallet behind the wipe gate when the keychain cannot be read`() = test {
+        val error = KeychainError.FailedToLoad(Keychain.Key.BIP39_MNEMONIC.name)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenAnswer { throw error }
+
+        sut = createSut()
+
+        assertFalse(sut.walletState.value.walletExists)
+        verify(wipeCoordinator).block(error)
     }
 
     @Test

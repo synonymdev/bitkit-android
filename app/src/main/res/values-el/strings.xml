@@ -442,6 +442,7 @@
     <string name="security__pass_your">Η κωδική φράση σου</string>
     <string name="security__pin_allowance">Εισάγαγε τον κωδικό PIN για να επιβεβαιώσεις αυτή την αλλαγή στον προϋπολογισμό.</string>
     <string name="security__pin_attempts">{attemptsRemaining} προσπάθειες απομένουν. Ξέχασες το PIN;</string>
+    <string name="security__pin_check_error">Το Bitkit δεν μπόρεσε να ελέγξει το PIN σου. Δοκίμασε ξανά.</string>
     <string name="security__pin_choose_header">Επίλεξε 4ψήφιο PIN</string>
     <string name="security__pin_choose_text">Χρησιμοποίησε ένα PIN που θα θυμάσαι. Αν ξεχάσεις το PIN σου μπορείς να το επαναφέρεις, αλλά αυτό θα απαιτήσει επαναφορά του πορτοφολιού σου.</string>
     <string name="security__pin_disable_button">Απενεργοποίηση PIN</string>
@@ -468,6 +469,7 @@
     <string name="security__reset_button_backup">Αντίγραφο ασφαλείας πρώτα</string>
     <string name="security__reset_button_reset">Επαναφορά πορτοφολιού</string>
     <string name="security__reset_confirm">Ναι, Επαναφορά</string>
+    <string name="security__reset_dialog_channel_migration">Τα κανάλια Lightning σου από την προηγούμενη εφαρμογή Bitkit δεν έχουν ολοκληρώσει ακόμη τη μεταφορά τους σε αυτό το πορτοφόλι. Τα δεδομένα τους παραμένουν σε αυτή τη συσκευή, αλλά μια επαναφορά τώρα μπορεί να δυσκολέψει την ανάκτηση αυτών των κεφαλαίων.</string>
     <string name="security__reset_dialog_desc">Είσαι σίγουρος ότι θέλεις να επαναφέρεις το πορτοφόλι Bitkit; Έχεις αντίγραφο ασφαλείας της φράσης ανάκτησης και των δεδομένων του πορτοφολιού;</string>
     <string name="security__reset_dialog_title">Επαναφορά Bitkit;</string>
     <string name="security__reset_graph_confirm">Ναι, Επαναφορά</string>
@@ -479,6 +481,14 @@
     <string name="security__success_title">Πορτοφόλι ασφαλισμένο</string>
     <string name="security__use_pin">Χρήση κωδικού PIN</string>
     <string name="security__wipe_app">Διαγραφή εφαρμογής</string>
+    <string name="security__wipe_blocked_text">Το Bitkit δεν μπορεί να επαληθεύσει την κατάσταση ασφαλείας του, οπότε το πορτοφόλι σου παραμένει κλειδωμένο. Πάτησε Δοκιμάστε Ξανά για νέο έλεγχο ή κάνε εξαγωγή των αρχείων καταγραφής για την υποστήριξη.</string>
+    <string name="security__wipe_blocked_title">Το πορτοφόλι κλειδώθηκε</string>
+    <string name="security__wipe_clear_storage_text">Αν αυτό συνεχίζει να συμβαίνει, διαγράψτε τον αποθηκευτικό χώρο του Bitkit στις Ρυθμίσεις Android › Εφαρμογές › Bitkit › Αποθηκευτικός χώρος και, στη συνέχεια, επαναφέρετε το πορτοφόλι σας με τη φράση ανάκτησης.</string>
+    <string name="security__wipe_failed_text">Το Bitkit δεν μπόρεσε να ολοκληρώσει τη διαγραφή των δεδομένων του πορτοφολιού σου και θα προσπαθήσει ξανά. Κράτησε το Bitkit ανοιχτό ή πάτησε Δοκιμάστε Ξανά.</string>
+    <string name="security__wipe_incomplete_text">Έγινε επαναφορά του Bitkit, αλλά ορισμένα δεδομένα του πορτοφολιού USDT δεν ήταν δυνατό να διαγραφούν από αυτήν τη συσκευή.</string>
+    <string name="security__wipe_not_started">Η επαναφορά δεν μπόρεσε να ξεκινήσει. Δεν διαγράφηκε τίποτα.</string>
+    <string name="security__wipe_running_text">Το Bitkit διαγράφει όλα τα δεδομένα πορτοφολιού από αυτή τη συσκευή. Κράτησε το Bitkit ανοιχτό μέχρι να ολοκληρωθεί.</string>
+    <string name="security__wipe_title">Επαναφορά του Bitkit</string>
     <string name="security__wiped_message">Το Bitkit επαναφέρθηκε και όλα τα δεδομένα πορτοφολιού διαγράφηκαν.</string>
     <string name="security__wiped_title">Δεδομένα πορτοφολιού διαγράφηκαν</string>
     <string name="security__pin_enable_button">Ενεργοποίηση PIN</string>

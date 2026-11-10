@@ -80,7 +80,7 @@ class AllowancesScreenTest {
     @Before
     fun setUp() {
         whenever(app.pinAttemptsRemaining).thenReturn(MutableStateFlow(Env.PIN_ATTEMPTS))
-        whenever(app.validatePin(any())).thenReturn(true)
+        whenever { app.validatePin(any()) }.thenReturn(true)
         whenever(allowanceRepo.entries).thenReturn(MutableStateFlow(listOf(entry())))
         whenever(allowanceRepo.autoPaidSats).thenReturn(MutableStateFlow(emptyMap()))
         whenever(allowanceRepo.automaticPaymentPause).thenReturn(pause)

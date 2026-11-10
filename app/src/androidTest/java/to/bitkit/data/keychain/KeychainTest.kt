@@ -103,6 +103,42 @@ class KeychainTest : BaseAndroidTest() {
     }
 
     @Test
+    fun wipeRetaining_keepsListedKeysAndRemovesOthers() = test {
+        sut.upsertString(Keychain.Key.PIN.name, "1234")
+        sut.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, "0")
+        sut.upsertString(Keychain.Key.BIP39_MNEMONIC.name, "mnemonic")
+        sut.saveWipePending("intent")
+
+        sut.wipe(retaining = setOf(Keychain.Key.PIN, Keychain.Key.PIN_ATTEMPTS_REMAINING))
+
+        assertEquals("1234", sut.loadString(Keychain.Key.PIN.name))
+        assertEquals("0", sut.loadString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name))
+        assertNull(sut.loadString(Keychain.Key.BIP39_MNEMONIC.name))
+        assertEquals("intent", sut.loadWipePending())
+    }
+
+    @Test
+    fun wipePendingFlag_isPresenceOnly_andSurvivesEncryptionKeyReset() = test {
+        sut.saveWipePending("not json")
+
+        sut.resetEncryptionKey()
+
+        assertEquals("not json", sut.loadWipePending())
+        sut.deleteWipePending()
+        assertNull(sut.loadWipePending())
+    }
+
+    @Test
+    fun wipePendingFlag_keyIsIndependentOfWalletIndex() = test {
+        sut.saveWipePending("intent")
+
+        db.clearAllTables()
+        db.configDao().upsert(ConfigEntity(walletIndex = 1L))
+
+        assertEquals("intent", sut.loadWipePending())
+    }
+
+    @Test
     fun pinAttemptsRemaining_shouldReturnDecryptedValue() = test {
         val attemptsRemaining = "3"
         sut.saveString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, attemptsRemaining)
@@ -114,6 +150,7 @@ class KeychainTest : BaseAndroidTest() {
 
     @After
     fun tearDown() {
+        runBlocking { sut.deleteWipePending() }
         db.close()
         sut.cancel()
     }

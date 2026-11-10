@@ -19,7 +19,7 @@ import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
-import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -127,9 +127,9 @@ class SendPinCheckScreenTest {
                 }
             }
         }
-        verify(app, never()).validatePin(any())
+        verifyBlocking(app, never()) { validatePin(any()) }
 
-        whenever(app.validatePin("1".repeat(Env.PIN_LENGTH))).thenReturn(true)
+        whenever { app.validatePin("1".repeat(Env.PIN_LENGTH)) }.thenReturn(true)
         composeRule.runOnIdle { navController.navigateTo(SendRoute.RecoveryPinCheck) }
         repeat(Env.PIN_LENGTH) { composeRule.onNodeWithTag("N1").performClick() }
         composeRule.runOnIdle {
@@ -140,6 +140,6 @@ class SendPinCheckScreenTest {
             assertEquals(expectedCancellations, cancellations)
             assertEquals(1, successes)
         }
-        verify(app).validatePin("1".repeat(Env.PIN_LENGTH))
+        verifyBlocking(app) { validatePin("1".repeat(Env.PIN_LENGTH)) }
     }
 }

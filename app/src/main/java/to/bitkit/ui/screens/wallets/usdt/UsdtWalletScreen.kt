@@ -517,7 +517,8 @@ internal fun UsdtAuthentication(
     onVerified: () -> Unit,
     @StringRes pinDescriptionRes: Int = R.string.security__pin_send,
 ) {
-    val supported = rememberBiometricAuthSupported()
+    val canUseBiometrics = appViewModel?.canUseBiometrics?.collectAsStateWithLifecycle()?.value == true
+    val supported = rememberBiometricAuthSupported() && canUseBiometrics
     var fallbackToPin by remember { mutableStateOf(false) }
     if (useBiometrics && supported && !fallbackToPin) {
         BiometricsView(onSuccess = onVerified, onFailure = { fallbackToPin = true })
