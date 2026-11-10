@@ -7,6 +7,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import org.junit.Rule
 import org.junit.Test
@@ -75,6 +76,17 @@ class SettingUpScreenTest {
 
         assertEquals(448f - 4 * 16f, looking.width.value, 0.5f)
         assertEquals(looking.width.value, repricedRings.width.value, 0.5f)
+    }
+
+    @Config(sdk = [34], qualifiers = "w448dp-h997dp")
+    @Test
+    fun `the funds moved check takes the share of the screen width ios gives it`() {
+        setContent(SparkDepositClaim.Claimed, SparkClaimSpeed.Instant)
+
+        val check = composeRule.onNodeWithTag("TransferSuccessCheck").getUnclippedBoundsInRoot()
+
+        assertEquals(448f * 256f / 402f, check.width.value, 0.5f)
+        assertEquals(check.width.value, check.height.value, 0.5f)
     }
 
     private var claimState by mutableStateOf<Pair<SparkDepositClaim, SparkClaimSpeed>?>(null)
