@@ -18,12 +18,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.CaptionM
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -68,6 +69,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         Column(
             modifier = Modifier
@@ -118,8 +120,8 @@ private fun Content(
             } else {
                 val isPricing = uiState.savingsFeeSats == null && !uiState.hasSavingsFeeFailed
                 if (!isPricing && !uiState.canFundFromSavings) {
-                    CaptionM(
-                        text = stringResource(R.string.lightning__spark_exit__fund_insufficient).withAccent(),
+                    Caption(
+                        text = stringResource(R.string.lightning__spark_exit__fund_insufficient),
                         color = Colors.White64,
                     )
                     VerticalSpacer(16.dp)

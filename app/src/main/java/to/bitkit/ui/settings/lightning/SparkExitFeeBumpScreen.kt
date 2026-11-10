@@ -22,11 +22,12 @@ import to.bitkit.R
 import to.bitkit.models.FeeRate
 import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.CaptionM
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.send.FeeItem
 import to.bitkit.ui.theme.AppThemeSurface
@@ -72,6 +73,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         Column(
             modifier = Modifier
@@ -132,8 +134,8 @@ private fun Content(
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             if (bump.isSavingsShort) {
-                CaptionM(
-                    text = stringResource(R.string.lightning__spark_exit__fund_insufficient).withAccent(),
+                Caption(
+                    text = stringResource(R.string.lightning__spark_exit__fund_insufficient),
                     color = Colors.White64,
                     modifier = Modifier.testTag("SparkExitFeeBumpInsufficient")
                 )

@@ -29,8 +29,8 @@ import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.CaptionB
-import to.bitkit.ui.components.CaptionM
 import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.rememberMoneyText
@@ -138,8 +138,8 @@ internal fun SparkExitFundingAddress(
             )
         }
         if (isCovered) {
-            CaptionM(
-                text = stringResource(R.string.lightning__spark_exit__fund_seen).withAccent(),
+            Caption(
+                text = stringResource(R.string.lightning__spark_exit__fund_seen),
                 color = Colors.Green,
                 modifier = Modifier.fillMaxWidth()
             )

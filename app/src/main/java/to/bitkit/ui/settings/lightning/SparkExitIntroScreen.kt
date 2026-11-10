@@ -28,6 +28,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -44,6 +45,7 @@ fun SparkExitIntroScreen(
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         BoxWithConstraints(
             modifier = Modifier

@@ -36,6 +36,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
@@ -92,6 +93,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
@@ -335,12 +337,6 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
                 .replace("{address}", address)
                 .replace("{path}", path.orEmpty()).withAccentBoldBright(),
             color = Colors.White64,
-        )
-        sweep?.txid != null && sweep.isAccepted -> SparkExitTxNote(
-            text = stringResource(R.string.lightning__spark_exit__leftover_swept)
-                .replace("{amount}", sparkExitAmountAccent(sweep.valueSats)),
-            txid = sweep.txid,
-            testTag = "SparkExitLeftoverSwept",
         )
         sweep?.txid != null && sweep.rejection == null -> SparkExitTxNote(
             text = stringResource(R.string.lightning__spark_exit__leftover_sending)
