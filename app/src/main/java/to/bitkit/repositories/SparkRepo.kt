@@ -141,7 +141,6 @@ class SparkRepo @Inject constructor(
     private val sendRecords = AtomicLong()
     private val sendRecordedAt = ConcurrentHashMap<String, Long>()
 
-    /** Sends whose outcome Spark didn't report, by lowercase payment hash, pending until a later sync settles them. */
     /** Sends whose outcome Spark didn't report, by payment hash. */
     private val uncertainSends = ConcurrentHashMap<String, UncertainSend>()
 
