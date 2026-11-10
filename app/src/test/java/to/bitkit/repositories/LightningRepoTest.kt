@@ -1476,6 +1476,36 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node retry in flight when an older listing is read keeps its hash after it ends`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        val sent = CompletableDeferred<String>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { sent.await() }
+        val retry = async { sut.payInvoiceWithNode("h") }
+        runCurrent()
+        var isEnded = false
+        // The retry recorded before this listing ends while the listing, which still shows it failed, is read.
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            if (!isEnded) {
+                isEnded = true
+                sent.complete("h")
+                retry.await()
+            }
+            listOf(nodeSend("h", PaymentStatus.FAILED))
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("other"))
+
+        sut.payInvoice("other", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an older listing dropped a retry that ended")
+    }
+
+    @Test
     fun `a node retry of the same invoice that ends while an older listing is read keeps its hold`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
         sut = repoWith(store)

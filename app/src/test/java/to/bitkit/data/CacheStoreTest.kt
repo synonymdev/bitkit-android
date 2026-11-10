@@ -213,6 +213,19 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a send whose invoice never expires keeps its hold`() = test {
+        val store = expiringStore()
+        store.addSparkSendHash("forever", expiresAt = Long.MAX_VALUE)
+        store.addLdkSendHash("forever", expiresAt = Long.MAX_VALUE)
+
+        store.trimSparkSendHashes(paid = emptySet(), failed = emptySet(), listed = emptySet(), live = emptySet())
+        store.trimLdkSendHashes(paid = emptySet(), failed = emptySet(), listed = emptySet(), live = emptySet())
+
+        assertEquals(listOf("forever"), store.data.first().sparkSendHashes, "the settle window overflowed")
+        assertEquals(listOf("forever"), store.data.first().ldkSendHashes, "the settle window overflowed")
+    }
+
+    @Test
     fun `sends no listing shows with no known expiry are dropped oldest first past the cap`() = test {
         val unlisted = (0..MAX_SPARK_SEND_HASHES).map { "unlisted$it" }
         unlisted.forEach { sut.addLdkSendHash(it) }

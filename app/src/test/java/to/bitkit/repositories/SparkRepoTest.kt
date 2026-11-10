@@ -30,6 +30,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -359,6 +360,89 @@ class SparkRepoTest : BaseUnitTest() {
         paying.await()
 
         assertTrue("hash" in store.data.first().sparkSendHashes, "A stale listing dropped a live retry's hash")
+    }
+
+    @Test
+    fun `a retry in flight when the activity sync reads spark's list keeps its hash after it ends`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendHashes = listOf("hash"))), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sending = CompletableDeferred<Unit>()
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            sending.await()
+            retry
+        }
+        var paying: Deferred<Result<String>>? = null
+        var lists = 0
+        // The retry recorded before this list ends while the list, which still shows it failed, is read.
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            // The refresh reads the list first, then the activity sync.
+            val list = paying?.let { ++lists } ?: 0
+            if (list == 2) {
+                sending.complete(Unit)
+                paying?.await()
+            }
+            if (list <= 2) listOf(failed) else listOf(failed, retry)
+        }
+        val sut = createSut(store)
+        paying = backgroundScope.async { sut.payInvoice("lnbc1280n1send", 128uL) }
+        runCurrent()
+
+        sut.start(0).getOrThrow()
+
+        assertTrue("hash" in store.data.first().sparkSendHashes, "A stale listing dropped a retry that ended")
+    }
+
+    @Test
+    fun `a retry in flight when the release reads spark's list again keeps its hash after it ends`() = test {
+        cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
+        whenever { cacheStore.removeSparkSendHash(any()) }.thenAnswer { call ->
+            cacheData.update { it.copy(sparkSendHashes = it.sparkSendHashes - call.getArgument<String>(0)) }
+        }
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sending = CompletableDeferred<Unit>()
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            sending.await()
+            sentPayment(fees = 0).copy(status = PaymentStatus.PENDING)
+        }
+        var paying: Deferred<Result<String>>? = null
+        var lists = 0
+        // The retry ends while the release's second read, which still shows it failed, is read.
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            // The refresh and the activity sync read the list first, then the release reads it again.
+            if (paying != null && ++lists == 3) {
+                sending.complete(Unit)
+                paying?.await()
+            }
+            listOf(failed)
+        }
+        val sut = createSut()
+        paying = backgroundScope.async { sut.payInvoice("lnbc1280n1send", 128uL) }
+        runCurrent()
+
+        sut.start(0).getOrThrow()
+
+        assertTrue("hash" in cacheData.value.sparkSendHashes, "The release dropped a retry that ended while it read")
+    }
+
+    @Test
+    fun `a claimed deposit hides only its own output of the transaction`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listUnclaimedDeposits() }.thenReturn(
+            listOf(0u, 1u).map { DepositInfo("txid", it, 50_000uL, false, null, null, null, null, null, null) }
+        )
+        whenever { sparkService.listPayments() }.thenReturn(listOf(depositPayment()))
+        val sut = createSut()
+
+        sut.refreshState().getOrThrow()
+
+        assertEquals(50_000uL, sut.state.value.pendingDepositSats, "another output of the claimed tx was hidden")
     }
 
     @Test
@@ -1307,6 +1391,27 @@ class SparkRepoTest : BaseUnitTest() {
             .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL, amountSats = 1_000))
         assertIs<SparkError.WithdrawalTooSmall>(sut.estimateWithdrawAllFeeSats(ADDRESS).exceptionOrNull())
         verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a balance spark refuses to quote as below the minimum is too small to withdraw`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(500uL))
+        // What the SDK answers when even its cheapest fee would leave dust.
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenAnswer {
+            throw SdkException.InvalidInput(
+                "Amount is below the minimum of 330 sats required for this address after lowest fees of 1093 sats"
+            )
+        }
+        val sut = createSut()
+
+        assertIs<SparkError.WithdrawalTooSmall>(sut.estimateWithdrawAllFeeSats(ADDRESS).exceptionOrNull())
+        assertIs<SparkError.WithdrawalTooSmall>(sut.withdrawAll(ADDRESS, confirmedFeeSats = 1_093uL).exceptionOrNull())
+
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenAnswer {
+            throw SdkException.InvalidInput("Invalid address: bad")
+        }
+        assertIs<SdkException.InvalidInput>(sut.estimateWithdrawAllFeeSats(ADDRESS).exceptionOrNull())
     }
 
     @Test

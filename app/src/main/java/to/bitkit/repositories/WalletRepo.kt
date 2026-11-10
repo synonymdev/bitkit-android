@@ -135,9 +135,12 @@ class WalletRepo @Inject constructor(
             }
         }
         repoScope.launch {
-            sparkRepo.state.map { Triple(it.shownBalanceSats, it.pendingDepositSats, it.isExiting) }
-                .distinctUntilChanged()
-                .collect { if (walletExists()) syncBalances() }
+            // The read balance too, as sends use it: it can come back to the shown one while that stays the same. An
+            // exit's start or end changes what Spending counts with no balance change.
+            sparkRepo.state.map { listOf(it.balanceSats, it.shownBalanceSats, it.pendingDepositSats) to it.isExiting }
+                .distinctUntilChanged().collect {
+                    if (walletExists()) syncBalances()
+                }
         }
     }
 

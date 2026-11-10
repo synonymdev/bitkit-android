@@ -35,6 +35,7 @@ import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -259,6 +260,20 @@ class WalletRepoTest : BaseUnitTest() {
 
         verify(lightningRepo, times(1)).createInvoice(anyOrNull(), any(), any(), any())
         assertEquals(INVOICE, sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `a read spark balance that recovers to the shown one syncs balances`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        val sparkState = MutableStateFlow(SparkState(isReady = true, balanceSats = 0uL, keptBalanceSats = 9_000uL))
+        sut = createSut(spark = sparkRepoWith(sparkState))
+        testScheduler.runCurrent()
+        clearInvocations(deriveBalanceStateUseCase)
+
+        sparkState.update { it.copy(balanceSats = 9_000uL, keptBalanceSats = null) }
+        testScheduler.runCurrent()
+
+        verify(deriveBalanceStateUseCase).invoke()
     }
 
     private fun sparkRepoWith(state: MutableStateFlow<SparkState>): SparkRepo = mock {
