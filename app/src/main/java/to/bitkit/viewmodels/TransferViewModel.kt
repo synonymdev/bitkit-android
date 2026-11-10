@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -32,6 +33,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
@@ -83,6 +85,10 @@ class TransferViewModel @Inject constructor(
     private var sparkFeeJob: Job? = null
     private var confirmedSparkFeeSats: ULong? = null
     private var sparkWithdrawJob: Job? = null
+
+    /** Whether Spark and Savings read one chain, so Spark's withdrawal reaches Savings; tests replace it. */
+    @VisibleForTesting
+    internal var sharesNodeChain: () -> Boolean = { Env.sparkSharesNodeChain }
     private var closeJob: Deferred<List<ChannelDetails>>? = null
     private var sparkFeeBalanceSats: ULong? = null
     private var sparkAddress: String? = null
@@ -452,6 +458,12 @@ class TransferViewModel @Inject constructor(
         val confirmedFeeSats = confirmedSparkFeeSats
         if (address == null || confirmedFeeSats == null) {
             Logger.warn("Skipped Spark withdrawal without an address or a priced fee", context = TAG)
+            _isSparkWithdrawFailed.update { true }
+            return
+        }
+        // On regtest Savings may read another chain than Spark, so its address there would lose Spark's funds.
+        if (!sharesNodeChain()) {
+            Logger.warn("Skipped Spark withdrawal to a Savings wallet on another chain", context = TAG)
             _isSparkWithdrawFailed.update { true }
             return
         }

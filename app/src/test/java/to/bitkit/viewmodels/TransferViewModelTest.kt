@@ -91,6 +91,7 @@ class TransferViewModelTest : BaseUnitTest() {
             clock = clock,
             sparkRepo = sparkRepo,
         )
+        sut.sharesNodeChain = { true }
     }
 
     @Test
@@ -145,6 +146,20 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
         verify(lightningRepo, never()).awaitPeerConnected(any())
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `spark is not withdrawn to a savings address on another chain`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        // A regtest Savings wallet reads its own chain unless the node is pointed at Spark's.
+        sut.sharesNodeChain = { false }
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+        assertTrue(sut.isSparkWithdrawFailed.value, "the withdrawal was skipped without telling the user")
     }
 
     @Test
