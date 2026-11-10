@@ -158,6 +158,8 @@ class SparkRepo @Inject constructor(
 
     suspend fun start(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext Result.success(Unit)
+        // A retry reads as connecting until it fails again.
+        _state.update { it.copy(hasStartFailed = false) }
         runSuspendCatching {
             if (isCollectingEvents.compareAndSet(false, true)) {
                 scope.launch { sparkService.events.collect { onSdkEvent(it) } }
@@ -170,7 +172,6 @@ class SparkRepo @Inject constructor(
                 .onFailure { Logger.warn("Failed to sync Spark after connecting", it, context = TAG) }
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
-            _state.update { it.copy(hasStartFailed = false) }
             if (!hasSyncedActivities) syncActivities().also { hasSyncedActivities = true }
         }.onFailure {
             Logger.error("Failed to start Spark wallet", it, context = TAG)
@@ -913,7 +914,7 @@ data class SparkState(
     val isReady: Boolean = false,
     /** Spark synced its payments at least once since it connected, so its payment list is complete. */
     val hasSynced: Boolean = false,
-    /** The last start failed before Spark could read its state; the next start clears it. */
+    /** The last start failed; the next start clears it when it begins. */
     val hasStartFailed: Boolean = false,
     val balanceSats: ULong = 0uL,
     /** Deposits seen on-chain that Spark claims into [balanceSats] after 3 confirmations. */

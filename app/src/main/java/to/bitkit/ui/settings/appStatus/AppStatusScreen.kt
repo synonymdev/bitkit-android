@@ -178,7 +178,8 @@ private fun Content(
                         iconRes = R.drawable.ic_asterisk,
                         state = sparkHealth,
                     ),
-                    onClick = onSparkClick,
+                    // Spark's detail shows a zero balance until Spark has read its state.
+                    onClick = { if (sparkHealth == HealthState.READY) onSparkClick() },
                 )
             }
 
