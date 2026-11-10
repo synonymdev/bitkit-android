@@ -368,7 +368,7 @@ class SparkRepo @Inject constructor(
         // Spark keeps a send it committed but didn't finish in a cache no call exposes, and a sync that reached Spark
         // can still fail to resume it, so only an expired invoice shows a missing send will never go out.
         val isFinal = isSynced && clock.now().epochSeconds.toULong() >= uncertain.expiresAt
-        val send = lightningSend(paymentHash)
+        val send = listedLightningSend(paymentHash)
         val isSettled = when (send) {
             SparkLightningSend.NotFound -> isFinal
             // A failed row may be an earlier attempt's, so it is final only when a missing one would be.
@@ -818,9 +818,24 @@ class SparkRepo @Inject constructor(
     /**
      * Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed.
      * [SparkLightningSend.Unavailable] while Spark is supported but cannot list its payments, so a send it may hold
-     * is never read as one it never made.
+     * is never read as one it never made. A send Spark may still resume reads as pending: one whose outcome Spark
+     * didn't report, unless a row settles it, and a started one with no row whose invoice is unexpired.
      */
     suspend fun lightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
+        val hash = paymentHash.lowercase()
+        val isUnlistedHeld = hash in unexpiredStartedSends()
+        val send = listedLightningSend(paymentHash)
+        val isUncertain = uncertainSends.containsKey(hash)
+        val isHeld = when (send) {
+            SparkLightningSend.NotFound -> isUncertain || isUnlistedHeld
+            is SparkLightningSend.Found -> isUncertain && send.status == PaymentStatus.FAILED
+            SparkLightningSend.Unavailable -> false
+        }
+        if (isHeld) SparkLightningSend.Found(PaymentStatus.PENDING, null) else send
+    }
+
+    /** Spark's listed record of the Lightning send with [paymentHash], as [lightningSend] reads it before its holds. */
+    private suspend fun listedLightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext SparkLightningSend.NotFound
         if (!canListPayments()) return@withContext SparkLightningSend.Unavailable
         val payments = runSuspendCatching { sparkService.listPayments() }
@@ -1033,7 +1048,7 @@ class SparkRepo @Inject constructor(
         // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
         payment.sendHash()?.let { uncertainSends.remove(it.lowercase()) }
         payment.sendHash(PaymentStatus.FAILED)?.let { hash ->
-            val latest = lightningSend(hash)
+            val latest = listedLightningSend(hash)
             val isReleased = latest == SparkLightningSend.NotFound ||
                 (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
             if (isReleased) cacheStore.removeSparkSendHash(hash)

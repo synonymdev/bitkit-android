@@ -1499,6 +1499,40 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a retry of an uncertain spark send is refused, not sent again`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        whenever { sparkService.syncWallet() }.thenAnswer { throw SdkException.Generic("operators unreachable") }
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        // Spark makes a new transfer for each send call, so a second one may pay the invoice again.
+        verify(sparkService, times(1)).send(any())
+    }
+
+    @Test
+    fun `an unlisted spark send kept from before a restart reads as pending until its invoice expires`() = test {
+        cacheData.value = AppCacheData(
+            sparkSendHashes = listOf("hash", "expired"),
+            sparkSendExpiries = mapOf("hash" to now.epochSeconds + 3_600, "expired" to now.epochSeconds - 1),
+        )
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+
+        // Paykit reads a missing send as never made, so it would drop the proof of one Spark can still resume.
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), sut.lightningSend("hash"))
+        assertEquals(SparkLightningSend.NotFound, sut.lightningSend("expired"))
+    }
+
+    @Test
     fun `a failed early claim is a failure the claim follower keeps going on`() = test {
         whenever { sparkService.claimDeposit("txid", 0u, 300uL) }
             .thenAnswer { throw SdkException.Generic("operators unreachable") }
