@@ -1284,10 +1284,10 @@ sealed interface SparkClaimStep {
     }
 }
 
-/** Spark refuses an expired Lightning invoice with this input error, at prepare and again at send. */
 internal fun SdkException.InvalidInput.isBelowMinimum(): Boolean =
     v1.startsWith("Amount is below the minimum", ignoreCase = true)
 
+/** Spark refuses an expired Lightning invoice with this input error, at prepare and again at send. */
 internal fun Throwable.isInvoiceExpired(): Boolean =
     this is SdkException.InvalidInput && v1.contains("invoice has expired", ignoreCase = true)
 
