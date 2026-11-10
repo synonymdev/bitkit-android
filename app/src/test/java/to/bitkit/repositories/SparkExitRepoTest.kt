@@ -116,6 +116,17 @@ class SparkExitRepoTest : BaseUnitTest() {
         cacheStore = mock<CacheStore> { on { data } doReturn flowOf(AppCacheData()) },
     )
 
+    private suspend fun createTransfer() = transferRepo.createTransfer(
+        any(),
+        any(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+    )
+
     private fun transfer(id: String, type: TransferType = TransferType.SPARK_EXIT) =
         TransferEntity(id = id, type = type, amountSats = 111_000L, createdAt = 0L)
 
@@ -730,6 +741,53 @@ class SparkExitRepoTest : BaseUnitTest() {
         runCurrent()
         verify(work, atLeastOnce()).scheduleFundingReminder(eq(record.createdAt), any())
         sut.onAppBackgrounded()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a start killed before its transfer is written leaves no exit to resume`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        val gate = CompletableDeferred<Result<String>>()
+        whenever(createTransfer()).doSuspendableAnswer { gate.await() }
+
+        val start = async { sut.start(fundFromSavings = false) }
+        runCurrent()
+        start.cancel()
+
+        assertNull(createSut().load(0).getOrThrow(), "no running exit lacks the transfer counting it")
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a start killed after its transfer is written leaves that transfer settled and no exit`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        // The row is in the database once the insert runs; the app dies before the start goes on.
+        val gate = CompletableDeferred<Result<String>>()
+        whenever(createTransfer()).doSuspendableAnswer { gate.await() }
+
+        val start = async { sut.start(fundFromSavings = false) }
+        runCurrent()
+        start.cancel()
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+
+        assertNull(createSut().load(0).getOrThrow(), "no running exit lacks the transfer counting it")
+        verify(transferRepo, atLeastOnce()).markSettled("transfer-1")
+    }
+
+    @Test
+    fun `a start whose transfer write fails saves no exit and releases spark`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        whenever(createTransfer()).thenReturn(Result.failure(SparkExitError("database locked")))
+
+        assertTrue(sut.start(fundFromSavings = false).isFailure)
+
+        assertNull(SparkExitStore(File(Env.sparkExitRecordPath(0))).load())
+        assertNull(sut.state.value.record)
+        verify(sparkRepo).releaseExitHold()
+        verify(sparkRepo, never()).setExiting(true, true)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

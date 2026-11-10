@@ -252,6 +252,9 @@ class SparkRepo @Inject constructor(
      */
     fun holdForExit() = _state.update { it.copy(isExiting = true) }
 
+    /** Releases the hold of an exit whose start failed before anything was saved: Spark was never disconnected. */
+    fun releaseExitHold() = _state.update { it.copy(isExiting = false) }
+
     /** Whether an exit quote has to wait first: a leaf optimization runs, or one ran or was cut short recently. */
     suspend fun needsSettling(): Boolean =
         isOptimizing.value || cacheStore.data.first().sparkOptimizationActivityAt != null

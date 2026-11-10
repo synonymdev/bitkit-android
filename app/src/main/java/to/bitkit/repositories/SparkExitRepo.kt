@@ -688,6 +688,11 @@ class SparkExitRepo @Inject constructor(
         val network = requireNotNull(sparkService.networkName) { "Spark is not available on this network" }
         val key = fundingKey(pending.fundingIndex)
         var quote = pending.quote
+        // Spark stops paying and receiving in the same step the transfer counts its balance, before any wait.
+        sparkRepo.holdForExit()
+        val transferId = transferRepo.createTransfer(TransferType.SPARK_EXIT, quote.incomingSats.toLong())
+            .onFailure { sparkRepo.releaseExitHold() }
+            .getOrThrow()
         var record = SparkExitRecord(
             network = network,
             createdAt = clock.nowMs(),
@@ -702,18 +707,18 @@ class SparkExitRepo @Inject constructor(
             skippedLeafCount = quote.prepared.skipped.size,
             fundingStrategy = SparkExitRecord.PER_NODE,
             leafTotalSats = quote.leafTotalSats,
+            transferId = transferId,
         )
-        // Saved before the transfer exists, so a failed save never leaves a transfer counted with no exit behind.
-        saveRecord(record)
+        // Saved with its transfer in one write, so no running exit is ever stored without the transfer counting it. A
+        // failed save settles the transfer again; one a killed start left behind is settled as an orphan on load.
+        runCatching { saveRecord(record) }.onFailure {
+            transferRepo.markSettled(transferId)
+            sparkRepo.releaseExitHold()
+        }.getOrThrow()
         cacheStore.update {
             val next = it.sparkExitNextFundingIndexes + (fundingIndexKey to pending.fundingIndex.toInt() + 1)
             it.copy(sparkExitNextFundingIndexes = next)
         }
-        // Spark stops paying and receiving in the same step the transfer counts its balance, before any wait.
-        sparkRepo.holdForExit()
-        val transferId = transferRepo.createTransfer(TransferType.SPARK_EXIT, quote.incomingSats.toLong()).getOrThrow()
-        record = record.copy(transferId = transferId)
-        saveRecord(record)
         val createdAt = record.createdAt
         // Published for the screens and a cancel, but driven only once the start settled the leaves it exits.
         startingCreatedAt = createdAt
