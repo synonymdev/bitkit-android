@@ -503,7 +503,8 @@ class SparkExitDriverTest : BaseUnitTest() {
         )
         sdk.checks += check(unverified, RecoveryVerdict.Valid)
         sdk.checks += check(unverified, redo)
-        repeat(2) { sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "") }
+        // The diverged generation's rebuild keeps needing more than the funding holds.
+        repeat(3) { sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "") }
 
         var record = driver(tip = 1_000u).tick(running(unverified))
         assertTrue(record.isUnverifiedAsk)
@@ -1162,6 +1163,42 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertFalse(record.isDrivingWhileFunding, "the diverged generation keeps being sent")
         record = driver(withSdk = false).tick(record)
         assertTrue(chain.broadcasts.isEmpty())
+    }
+
+    @Test
+    fun `a generation that diverges while a dropped higher fee's payment waits rebuilds from the funding it has`() =
+        test {
+            val diverged = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+            var record = funded(running(diverged, builtAt = now - interval))
+                .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
+            sdk.checks += check(diverged, redo)
+            // The higher fee's payment never reached the address: only the confirmed funding is there.
+            chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+                listOf(SparkExitFixtures.utxo("f0", value = 20_000uL))
+            sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1c")))
+
+            record = driver(tip = 1_000u).tick(record)
+
+            assertEquals(Phase.Running, record.phase, "the rebuild waited for a payment that was dropped")
+            assertEquals(2, record.generation)
+            assertEquals(listOf("f0"), sdk.recoverRequests.single().fundingInputs.map { (it as CpfpInput.P2wpkh).txid })
+        }
+
+    @Test
+    fun `a diverged generation's rebuild the funding cannot pay keeps waiting for the top-up`() = test {
+        val diverged = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        var record = funded(running(diverged, builtAt = now - interval))
+            .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
+        sdk.checks += check(diverged, redo)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", value = 20_000uL))
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(26_000uL, "")
+
+        record = driver(tip = 1_000u).tick(record)
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isRebuilding)
+        // Not built again on every tick while the top-up is out.
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1, sdk.recoverRequests.size)
     }
 
     @Test

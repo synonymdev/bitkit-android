@@ -158,6 +158,16 @@ class SparkExitDriver(
                     // Nothing to fund when every leaf is recovered cooperatively.
                     val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
                     record = when {
+                        // A generation that diverged while a top-up was awaited rebuilds from the funding it already
+                        // has when that pays for it, so a top-up that never comes does not leave the exit waiting.
+                        funded == null && record.isRedoRebuild && record.isRebuilding && isRebuildDue(record) ->
+                            build(record, sdk).let { tried ->
+                                if (tried.phase is SparkExitRecord.Phase.NeedsFunding) {
+                                    countShortOwnPayment(tried.copy(lastBuildAt = nowMillis()))
+                                } else {
+                                    tried
+                                }
+                            }
                         funded == null -> countShortOwnPayment(record)
                         // Funding for leaves a partial build skipped: only they are built, once it arrived.
                         funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
