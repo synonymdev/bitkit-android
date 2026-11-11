@@ -304,6 +304,23 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a ready spark that hasn't synced since the restore refuses an invoice from before it`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL).copy(lastSyncedAt = null))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
     fun `restored spark sends with valid invoices survive the hash cap`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
         whenever(sparkService.isConnected).thenReturn(true)

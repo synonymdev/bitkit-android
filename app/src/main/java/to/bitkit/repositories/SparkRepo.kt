@@ -312,6 +312,12 @@ class SparkRepo @Inject constructor(
                 }
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.PENDING ->
                     throw PaymentPendingException(paymentHash)
+                // Until Spark lists its sends since a restore, one of an older invoice may be missing; its own list
+                // is complete for Spark once read, so the hold ends there.
+                is SparkLightningSend.Unavailable if isUnlistedSinceRestore(method.invoiceDetails.timestamp) -> {
+                    Logger.warn("Refused a Spark send of '$paymentHash' until Spark lists its sends", context = TAG)
+                    throw SparkError.RestoredInvoiceUnverified()
+                }
                 else -> Unit
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
@@ -975,6 +981,11 @@ class SparkRepo @Inject constructor(
         val restoredAt = cache.sparkRestoredAt
         return cache.sparkHistoryUnseededSince != null ||
             restoredAt != null && clock.now().epochSeconds < restoredAt + RESTORE_HOLD_SECS
+    }
+
+    private suspend fun isUnlistedSinceRestore(invoiceCreatedAt: ULong): Boolean {
+        val unseededSince = cacheStore.data.first().sparkHistoryUnseededSince ?: return false
+        return invoiceCreatedAt < unseededSince.coerceAtLeast(0L).toULong()
     }
 
     private suspend fun refuseUnverifiedRestoredInvoice(invoiceCreatedAt: Long?, invoiceExpiresAt: Long?) {
