@@ -1102,6 +1102,33 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a zero read after a full withdrawal clears the balance even while spark's sync fails`() = test {
+        val staleZero = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        var read = info(10_000uL)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenAnswer { read }
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer {
+            read = staleZero
+            sentPayment(fees = 500)
+        }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+
+        sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).getOrThrow()
+        sut.refreshState().getOrThrow()
+
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the withdrawn balance stayed shown")
+
+        read = info(2_000uL)
+        sut.refreshState().getOrThrow()
+        read = staleZero
+        sut.refreshState().getOrThrow()
+        assertEquals(2_000uL, sut.state.value.shownBalanceSats, "a stale zero after new funds hid them")
+    }
+
+    @Test
     fun `a synced read after a failed withdrawal clears the kept balance even when it reads zero`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
