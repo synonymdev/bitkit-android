@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.lightningdevkit.ldknode.Network
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -339,5 +340,26 @@ class SparkExitRecordTest {
 
         val seen = failed.copy(isResultSeen = true)
         assertEquals(seen, SparkExitJson.decode(SparkExitJson.encode(seen)))
+    }
+
+    @Test
+    fun `a leftover sweep refused for good shows once, then its address stays listed`() {
+        val refused = SparkExitFixtures.record(SparkExitRecord.Phase.Done).copy(
+            leftover = listOf(SparkExitRecord.Leftover("ab".repeat(32), 0u, 5_035uL)),
+            leftoverSweep = SparkExitRecord.LeftoverSweep(
+                txid = "t",
+                txHex = "02",
+                valueSats = 4_000uL,
+                rejection = "non-mandatory-script-verify-flag",
+            ),
+        )
+        assertTrue(refused.showsResult, "the leftover's address and path were out of reach")
+        assertTrue(refused.hasUnseenResult, "opening the result never lets the refused sweep go")
+        assertFalse(refused.copy(isResultSeen = true).showsResult, "the refused sweep blocks every later exit")
+
+        val listed = assertNotNull(SparkExitEarlierAddress.keptChange(refused, Network.REGTEST, 0L), "in no list")
+        assertEquals(SparkExitFixtures.FUNDING_ADDRESS, listed.address)
+        assertEquals(SparkExitEarlierAddress.Kind.KEPT_CHANGE, listed.kind)
+        assertEquals(5_035uL, listed.sats)
     }
 }

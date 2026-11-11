@@ -817,7 +817,8 @@ class SparkExitDriver(
             val since = requireNotNull(built.waitingSince)
             if (height >= since + SWEEP_RELEASE_BLOCKS) {
                 Logger.info("Keeping the Spark exit leftover as dust after waiting for cheaper fees", context = TAG)
-                // Shown once more with its path, even after the result was opened: nothing else reaches that address.
+                // Shown once more with its path, even after the result was opened; the earlier exit addresses keep
+                // listing it after that.
                 return record.copy(leftoverSweep = built.copy(isDustKept = true), isResultSeen = false)
             }
             val next = built.retryAtHeight ?: ((built.checkedAtHeight ?: since) + SWEEP_RECHECK_BLOCKS)
@@ -1086,9 +1087,11 @@ class SparkExitDriver(
             is SparkExitBroadcastOutcome.Rejected if sweep.replacedTxids.isNotEmpty() && tip != null &&
                 !outcome.reason.contains("fee", ignoreCase = true) ->
                 waitForFees(record.copy(leftoverSweep = sweep))
-            is SparkExitBroadcastOutcome.Rejected -> record.copy(
-                leftoverSweep = sweep.copy(isAccepted = false, rejection = outcome.reason),
-            )
+            is SparkExitBroadcastOutcome.Rejected -> {
+                val refused = sweep.copy(isAccepted = false, rejection = outcome.reason)
+                // A refusal for anything but its fee is final: shown once more with its address, as kept change is.
+                record.copy(leftoverSweep = refused, isResultSeen = record.isResultSeen && refused.isFeeRejection)
+            }
             // Its inputs went elsewhere: what is still at the address is read and swept again.
             is SparkExitBroadcastOutcome.InputsMissing -> readAddressAgain(record, sweep)
             is SparkExitBroadcastOutcome.RetryLater,

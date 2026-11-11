@@ -220,8 +220,8 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
-     * Reads what reached each cancelled exit's address still watched, about four weeks after the cancel, so a late
-     * payment shows with its balance among the earlier exit addresses.
+     * Reads what each watched earlier exit address holds: kept change, and a cancelled exit's address for about four
+     * weeks after the cancel, so a late payment or change spent by hand shows with its balance.
      */
     suspend fun refreshEarlierAddresses() = withContext(bgDispatcher) {
         val chain = chain ?: return@withContext
@@ -355,7 +355,7 @@ class SparkExitRepo @Inject constructor(
         reportedLost: Set<String>,
     ) {
         record.transferId?.let { transferRepo.updateClaimableAtHeight(it, record.claimableAtHeight) }
-        if (record.isChangeKept && !previous.isChangeKept) {
+        if (record.isLeftoverKept && !previous.isLeftoverKept) {
             keepEarlierAddress(SparkExitEarlierAddress.keptChange(record, Env.network, clock.nowMs()))
         }
         settleIfFinished(record)

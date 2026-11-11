@@ -347,21 +347,26 @@ data class SparkExitRecord(
 
     /**
      * Emergency exit opens progress, not a new exit, while this one runs and until its leftover fee funding is swept
-     * and confirmed, or kept as dust. A rejected sweep keeps it too: progress names the address the leftover is at.
-     * An exit that failed, lost leaves or kept its change keeps it until the user opened it once; kept change then
-     * stays listed among the earlier exit addresses, so a new exit can replace the record.
+     * and confirmed, or kept as dust. An exit that failed, lost leaves or left its leftover at the funding address
+     * keeps it until the user opened it once; that address then stays listed among the earlier exit addresses, so a
+     * new exit can replace the record.
      */
     val showsResult: Boolean
-        get() = isActive || isLeftoverSweepPending || isEndedPaymentPending ||
-            (leftover.isNotEmpty() && leftoverSweep?.rejection != null) ||
-            hasUnseenResult
+        get() = isActive || isLeftoverSweepPending || isEndedPaymentPending || hasUnseenResult
 
-    /** The exit ended failed, with leaves lost or its fee change kept, and the user has not opened its result yet. */
+    /** The exit ended failed, with leaves lost or its leftover kept, and the user has not opened its result yet. */
     val hasUnseenResult: Boolean
-        get() = !isActive && (phase is Phase.Failed || lostSats > 0uL || isChangeKept) && !isResultSeen
+        get() = !isActive && (phase is Phase.Failed || lostSats > 0uL || isLeftoverKept) && !isResultSeen
 
     /** The fee change stays at the funding address for good, shown with the path that spends it. */
     val isChangeKept: Boolean get() = leftover.isNotEmpty() && leftoverSweep?.isDustKept == true
+
+    /**
+     * The leftover stays at the funding address for good: change too small to send, or a sweep refused for a reason
+     * other than its fee, which nothing retries.
+     */
+    val isLeftoverKept: Boolean
+        get() = isChangeKept || (leftover.isNotEmpty() && leftoverSweep?.rejection != null && !isLeftoverSweepPending)
 
     /** Background runs and the foreground loop keep going while the exit runs and until its leftover is swept. */
     val needsDriving: Boolean get() = isActive || isLeftoverSweepPending || isEndedPaymentPending
