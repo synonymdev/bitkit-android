@@ -188,11 +188,13 @@ fun ActivityDetailScreen(
                 val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
                 var showAddTagSheet by remember { mutableStateOf(false) }
                 var isCpfpChild by remember { mutableStateOf(false) }
+                var isSparkWithdrawal by remember { mutableStateOf(false) }
                 var boostTxDoesExist by remember { mutableStateOf<ImmutableMap<String, Boolean>>(persistentMapOf()) }
 
                 LaunchedEffect(item) {
                     if (item is Activity.Onchain) {
                         isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
+                        isSparkWithdrawal = detailViewModel.isSparkWithdrawal(item.v1.txId)
                         boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
                             detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
                         } else {
@@ -200,6 +202,7 @@ fun ActivityDetailScreen(
                         }
                     } else {
                         isCpfpChild = false
+                        isSparkWithdrawal = false
                         boostTxDoesExist = persistentMapOf()
                     }
                 }
@@ -246,6 +249,7 @@ fun ActivityDetailScreen(
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
                         isHardware = uiState.isHardwareActivity,
+                        isSparkWithdrawal = isSparkWithdrawal,
                         showContactActions = isPaykitEnabled &&
                             (!uiState.isHardwareActivity || assignedContact != null),
                         boostTxDoesExist = boostTxDoesExist,
@@ -339,6 +343,7 @@ private fun ActivityDetailContent(
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
     isHardware: Boolean = false,
+    isSparkWithdrawal: Boolean = false,
     showContactActions: Boolean = true,
     boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
@@ -676,7 +681,8 @@ private fun ActivityDetailContent(
                         }
                     }
                 }
-                val shouldEnable = shouldEnableBoostButton(item, isCpfpChild, isHardware, boostTxDoesExist)
+                val shouldEnable = !isSparkWithdrawal &&
+                    shouldEnableBoostButton(item, isCpfpChild, isHardware, boostTxDoesExist)
                 PrimaryButton(
                     text = stringResource(
                         if (hasCompletedBoost) {

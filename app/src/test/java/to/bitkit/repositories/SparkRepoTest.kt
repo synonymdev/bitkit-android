@@ -766,6 +766,15 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `tells a spark withdrawal from a transaction ldk holds`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = readySpark(balanceSats = 50_000uL)
+
+        assertTrue(sut.isWithdrawal("withdrawal"))
+        assertFalse(sut.isWithdrawal("ldk-send"))
+    }
+
+    @Test
     fun `records a withdrawal to a contact with its contact and fee`() = test {
         val sut = journaledSpark()
         whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())

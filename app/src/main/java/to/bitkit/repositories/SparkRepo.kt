@@ -671,6 +671,15 @@ class SparkRepo @Inject constructor(
         (listed + recorded).toSet()
     }
 
+    /** Whether [txid] is a Spark withdrawal, which LDK never held and so cannot boost. */
+    suspend fun isWithdrawal(txid: String): Boolean = withContext(bgDispatcher) {
+        if (cacheStore.data.first().sentSparkWithdrawals.any { it.txid == txid }) return@withContext true
+        runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments for '$txid'", it, context = TAG) }
+            .getOrDefault(emptyList())
+            .any { (it.details as? PaymentDetails.Withdraw)?.txId == txid }
+    }
+
     /**
      * What became of an attempt to withdraw exactly [amountSats] to [address]: sent once Spark's synced list holds a
      * withdrawal to it that is not one of [earlierTxids], unsent once Spark synced and no journaled withdrawal to

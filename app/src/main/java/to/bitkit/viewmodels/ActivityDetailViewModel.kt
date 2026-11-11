@@ -33,6 +33,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -46,6 +47,7 @@ class ActivityDetailViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val transferRepo: TransferRepo,
+    private val sparkRepo: SparkRepo,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
@@ -269,6 +271,8 @@ class ActivityDetailViewModel @Inject constructor(
 
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): ImmutableMap<String, Boolean> =
         activityRepo.getBoostTxDoesExist(boostTxIds, currentWalletId).toImmutableMap()
+
+    suspend fun isSparkWithdrawal(txId: String): Boolean = sparkRepo.isWithdrawal(txId)
 
     suspend fun isCpfpChildTransaction(txId: String): Boolean {
         return activityRepo.isCpfpChildTransaction(txId, currentWalletId)
