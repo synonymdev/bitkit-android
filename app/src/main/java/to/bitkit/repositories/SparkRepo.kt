@@ -61,6 +61,7 @@ import to.bitkit.services.SparkService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -783,6 +784,7 @@ class SparkRepo @Inject constructor(
                         earlierTxids,
                         tags,
                         startedAt = clock.now().epochSeconds,
+                        paymentId = UUID.randomUUID().toString(),
                     )
                     journal = opened
                     cacheStore.update { it.copy(pendingSparkWithdrawal = opened) }
@@ -791,7 +793,7 @@ class SparkRepo @Inject constructor(
                         clearJournal(opened)
                         throw it
                     }
-                    runSuspendCatching { sparkService.send(prepared) }.also { sendReturned = true }
+                    runSuspendCatching { sparkService.send(prepared, opened.paymentId) }.also { sendReturned = true }
                 } finally {
                     if (!sendReturned) endWithdrawalSend()
                     isClaimingWithdrawal.set(false)
@@ -1288,8 +1290,12 @@ class SparkRepo @Inject constructor(
             return isSaved
         }
         val journal = cacheStore.data.first().pendingSparkWithdrawal ?: return isSaved
-        // A listed withdrawal whose activity failed to save keeps its journal for the next sync to retry.
-        if (payments.any { journal.matches(it) }) return isSaved
+        // A listed withdrawal whose activity failed to save keeps its journal for the next sync to retry; one Spark
+        // failed before it had withdrawal details never pays out.
+        val isListed = payments.any {
+            journal.matches(it) && (it.details is PaymentDetails.Withdraw || it.status != PaymentStatus.FAILED)
+        }
+        if (isListed) return isSaved
         // Spark may list a withdrawal it just sent only on a later sync, so an unlisted one stays open for a while.
         if (clock.now().epochSeconds < journal.startedAt + UNLISTED_WITHDRAWAL_GRACE.inWholeSeconds) return isSaved
         Logger.warn("Dropped Spark withdrawal to '${journal.address}' that Spark never sent", context = TAG)
@@ -1593,8 +1599,15 @@ data class PendingSparkWithdrawal(
     val tags: List<String> = emptyList(),
     /** Epoch seconds the attempt started, which keeps it open while Spark may still list it. */
     val startedAt: Long = 0,
+    /** The idempotency key the send passed, which Spark keeps as the payment's id. */
+    val paymentId: String? = null,
 ) {
+    /**
+     * Whether Spark lists [payment] for this attempt: by [paymentId], also while Spark lists it without withdrawal
+     * details, or by address and amount.
+     */
     fun matches(payment: Payment): Boolean {
+        if (paymentId != null && payment.id == paymentId) return true
         val withdraw = payment.details as? PaymentDetails.Withdraw ?: return false
         return address == withdraw.destinationAddress && amountSats == payment.amount.toLong().toULong() &&
             withdraw.txId !in earlierTxids

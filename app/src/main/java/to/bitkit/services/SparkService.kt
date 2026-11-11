@@ -234,13 +234,14 @@ class SparkService @Inject constructor(
             ),
         )
 
-    suspend fun send(prepared: PrepareSendPaymentResponse): Payment {
+    /** Sends [prepared]; Spark makes one payment per [idempotencyKey], a UUID that becomes the payment's id. */
+    suspend fun send(prepared: PrepareSendPaymentResponse, idempotencyKey: String? = null): Payment {
         val options = when (prepared.paymentMethod) {
             is SendPaymentMethod.Bolt11Invoice -> bolt11SendOptions(prefersSpark)
             is SendPaymentMethod.BitcoinAddress -> SendPaymentOptions.BitcoinAddress(OnchainConfirmationSpeed.MEDIUM)
             else -> null
         }
-        return requireSdk().sendPayment(SendPaymentRequest(prepared, options)).payment
+        return requireSdk().sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
     }
 
     /** The fastest recommended fee rate, in sat/vB, from the SDK's own fee source. */
