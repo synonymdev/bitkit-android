@@ -552,6 +552,39 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded unverified rebuild that leaves a leaf behind keeps leaf-1's refund n2 on the next rebuild`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        repeat(3) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.recoverErrors += ladderRefusal("leaf-3")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2", "leaf-3")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1")))
+        val start = running(unread).copy(leafIds = listOf("leaf-1", "leaf-2", "leaf-3"))
+
+        var record = driver(tip = 1_000u).tick(start)
+        assertTrue(record.isUnverifiedAsk)
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+        // The funded resume cannot exit leaf-3 and leaves it behind; leaf-1 still reads unverified.
+        record = driver(tip = 1_001u).tick(record)
+        now += interval
+        record = driver(tip = 1_002u).tick(record)
+
+        assertEquals(1, record.generation, "the rebuild adopted a recovery without leaf-1's refund n2")
+        assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+        assertEquals(listOf("n1", "n2"), record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
     fun `an unverified rebuild's ask that diverged never sends the diverged generation again`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(
