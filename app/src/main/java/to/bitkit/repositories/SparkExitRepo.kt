@@ -1155,7 +1155,7 @@ data class SparkExitState(
 
     /**
      * What stays on Spark while the exit runs: Spark's balance beyond the quote's leaves, or, once published leaves
-     * left the balance, what the start saw beyond them, whichever is more.
+     * left the balance, what the start saw beyond them and the leaves the exit left behind, whichever is more.
      */
     val outsideExitSats: ULong?
         get() {
@@ -1163,7 +1163,8 @@ data class SparkExitState(
             // A leaf the exit left behind stays on Spark, so it counts here, not in the transfer.
             val exitLeafSats = active.leafTotalSats?.let { it.safe() - active.leftBehindLeafSats.safe() }
             val live = SparkExitMath.outsideExitSats(exitLeafSats, sparkBalanceSats) ?: 0uL
-            return maxOf(live, active.outsideSats ?: 0uL).takeIf { it > 0uL }
+            val floor = (active.outsideSats ?: 0uL).safe() + active.leftBehindLeafSats.safe()
+            return maxOf(live, floor).takeIf { it > 0uL }
         }
 
     /**
