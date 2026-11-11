@@ -1,6 +1,7 @@
 package to.bitkit.ui.components.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -83,7 +84,8 @@ fun SettingsSwitchRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    isLoading: Boolean = false,
+    // Null for rows that never load; otherwise the spinner slot stays reserved so the title never reflows.
+    isLoading: Boolean? = null,
     subtitle: String? = null,
     switchTestTag: String? = null,
     colors: SwitchColors = AppSwitchDefaults.colors,
@@ -112,14 +114,14 @@ private fun SettingsSwitchRowCore(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    isLoading: Boolean = false,
+    isLoading: Boolean? = null,
     subtitle: String? = null,
     icon: (@Composable () -> Unit)? = null,
     switchTestTag: String? = null,
     colors: SwitchColors = AppSwitchDefaults.colors,
 ) {
     val debouncedOnClick = rememberDebouncedClick(onClick = onClick)
-    val isInteractive = enabled && !isLoading
+    val isInteractive = enabled && isLoading != true
     Column(modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -134,7 +136,7 @@ private fun SettingsSwitchRowCore(
                     role = Role.Switch,
                     onValueChange = { debouncedOnClick() },
                 )
-                .semantics { if (isLoading) progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }
+                .semantics { if (isLoading == true) progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }
         ) {
             if (icon != null) {
                 icon()
@@ -152,13 +154,17 @@ private fun SettingsSwitchRowCore(
                 }
             }
 
-            if (isLoading) {
-                GradientCircularProgressIndicator(
-                    strokeWidth = 2.dp,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .testTag("${switchTestTag ?: "SettingsSwitchRow"}Loading")
-                )
+            if (isLoading != null) {
+                Box(modifier = Modifier.size(20.dp)) {
+                    if (isLoading) {
+                        GradientCircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier
+                                .matchParentSize()
+                                .testTag("${switchTestTag ?: "SettingsSwitchRow"}Loading")
+                        )
+                    }
+                }
                 HorizontalSpacer(12.dp)
             }
 
