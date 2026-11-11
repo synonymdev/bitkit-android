@@ -17325,6 +17325,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swap route hold payment with an unknown outcome stays pending`() = test {
+        val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.failure(PaymentPendingException(SWAP_HOLD_HASH)))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment(privatePaymentContext = privateContext)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pendingPaymentRepo).track(SWAP_HOLD_HASH)
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any())
+        verify(privatePaykitRepo, never()).releasePrivatePaymentList(testPublicKey, privateContext)
+    }
+
+    @Test
     fun `swap route hold payment failure event stops awaiting the claim`() = test {
         var claimCancelled = false
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))

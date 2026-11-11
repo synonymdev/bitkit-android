@@ -6911,7 +6911,9 @@ class AppViewModel @Inject constructor(
             synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
         }
         // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
-        lightningRepo.payInvoice(payment.invoice).getOrElse {
+        lightningRepo.payInvoice(payment.invoice).onFailure {
+            // Spark may have sent it, so an unknown outcome waits on the claim like a sent hold payment.
+            if (it is PaymentPendingException) return@onFailure
             holdFailure.cancel()
             clearPendingContactPaymentContext(holdPaymentHash)
             if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
