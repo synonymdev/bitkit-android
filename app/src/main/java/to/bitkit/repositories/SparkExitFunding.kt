@@ -109,6 +109,15 @@ data class SparkExitQuote(
      */
     val unexitableSats: ULong? get() = SparkExitMath.unexitableSats(sparkBalanceSats, this)
 
+    /**
+     * What stays on Spark once the exit took its leaves: Spark's balance beyond them, skipped leaves included, less the
+     * lost leaves it still counts until a sync drops them. Null when nothing.
+     */
+    val outsideSats: ULong?
+        get() = SparkExitMath.outsideExitSats(leafTotalSats, sparkBalanceSats)
+            ?.let { SparkExitMath.beyondLostLeaves(it, lostLeafSats) }
+            ?.takeIf { it > 0uL }
+
     /** Spark's balance beyond every leaf the quote lists, skipped ones included, less the lost leaves it holds. */
     val beyondLeavesSats: ULong?
         get() {

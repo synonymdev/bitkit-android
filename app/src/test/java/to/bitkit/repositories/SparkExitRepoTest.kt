@@ -5,10 +5,14 @@ import breez_sdk_spark.CooperativeRecoveryError
 import breez_sdk_spark.CooperativeRecoveryFailure
 import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.ExitTransactionStatus
+import breez_sdk_spark.RecoverFundsLeaf
+import breez_sdk_spark.RecoveryMethod
 import breez_sdk_spark.RecoveryRedoReason
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.RecoveryVerdict
 import breez_sdk_spark.SdkException
+import breez_sdk_spark.SkippedLeaf
+import breez_sdk_spark.SkippedLeafReason
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.OnchainActivity
@@ -78,10 +82,11 @@ class SparkExitRepoTest : BaseUnitTest() {
 
     private val transferRepo = mock<TransferRepo>()
     private val wiped = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    private val sparkState = MutableStateFlow(SparkState())
     private val sparkRepo = mock<SparkRepo> {
         on { walletWiped } doReturn wiped
         on { walletIndex } doReturn 0
-        on { state } doReturn MutableStateFlow(SparkState())
+        on { state } doReturn sparkState
     }
     private val work = mock<SparkExitWork>()
 
@@ -779,6 +784,28 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertEquals("transfer-2", sut.state.value.record?.transferId)
         sut.onAppBackgrounded()
+    }
+
+    @Test
+    fun `a start saves what stays on spark without the lost leaves spark still counts`() = test {
+        SparkExitLostLeafStore(File(Env.sparkExitLostLeavesPath(0))).add(listOf("leaf-lost"))
+        val dust = listOf(SkippedLeaf("dust", 1_696uL, SkippedLeafReason.FeeExceedsValue))
+        val sdk = FakeSparkExitRecovering()
+        sdk.preparedResponses += SparkExitFixtures.prepared(skipped = dust).let {
+            it.copy(leaves = it.leaves + RecoverFundsLeaf("leaf-lost", 32_768uL, RecoveryMethod.UNILATERAL))
+        }
+        sdk.preparedResponse = SparkExitFixtures.prepared(skipped = dust)
+        sparkState.value = SparkState(balanceSats = 134_464uL)
+        val sut = quotedSut(sdk)
+        val quote = sut.loadQuote().getOrThrow()
+        assertEquals(100_000uL, quote.leafTotalSats)
+        assertEquals(listOf(32_768uL), quote.lostLeafSats)
+
+        sut.start(fundFromSavings = false).getOrThrow()
+        // Stops the foreground ticks first, so a failed assertion ends the test.
+        sut.onAppBackgrounded()
+
+        assertEquals(1_696uL, sut.state.value.record?.outsideSats)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

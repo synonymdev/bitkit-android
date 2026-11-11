@@ -735,7 +735,7 @@ class SparkExitRepo @Inject constructor(
             skippedLeafCount = quote.prepared.skipped.size,
             fundingStrategy = SparkExitRecord.PER_NODE,
             leafTotalSats = quote.leafTotalSats,
-            outsideSats = SparkExitMath.outsideExitSats(quote.leafTotalSats, quote.sparkBalanceSats),
+            outsideSats = quote.outsideSats,
             transferId = transferId,
         )
         // Saved with its transfer in one write, so no running exit is ever stored without the transfer counting it. A
@@ -815,7 +815,7 @@ class SparkExitRepo @Inject constructor(
             expectedSats = fresh.incomingSats,
             skippedLeafCount = fresh.prepared.skipped.size,
             leafTotalSats = fresh.leafTotalSats,
-            outsideSats = SparkExitMath.outsideExitSats(fresh.leafTotalSats, fresh.sparkBalanceSats),
+            outsideSats = fresh.outsideSats,
             transferId = freshTransfer,
         )
         runCatching { saveRecord(requoted) }.onFailure {
