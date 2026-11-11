@@ -741,8 +741,8 @@ class SparkExitRepoTest : BaseUnitTest() {
         order.verify(
             transferRepo
         ).createTransfer(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
-        order.verify(sparkRepo).awaitOptimizationIdle()
         order.verify(sparkRepo).awaitSpendsIdle()
+        order.verify(sparkRepo).awaitOptimizationIdle()
         order.verify(sparkRepo).setExiting(true, true)
         val record = assertNotNull(sut.state.value.record)
         assertEquals(SparkExitRecord.PER_NODE, record.fundingStrategy)
@@ -752,6 +752,32 @@ class SparkExitRepoTest : BaseUnitTest() {
         // Nothing paid in yet: the one reminder is scheduled for 4 hours (10 minutes on regtest) after the start.
         runCurrent()
         verify(work, atLeastOnce()).scheduleFundingReminder(eq(record.createdAt), any())
+        sut.onAppBackgrounded()
+    }
+
+    @Test
+    fun `a start refused while a spark send is still active saves nothing and can be retried`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        var isSending = true
+        whenever(sparkRepo.awaitSpendsIdle()).doSuspendableAnswer {
+            if (isSending) throw SparkExitError("A Spark payment is still sending")
+        }
+
+        val error = sut.start(fundFromSavings = false).exceptionOrNull()
+
+        assertIs<SparkExitError>(error)
+        assertNull(sut.state.value.record)
+        assertNull(createSut().load(0).getOrThrow(), "no exit starts while a send can still spend its leaves")
+        verify(transferRepo).markSettled("transfer-1")
+        verify(sparkRepo).releaseExitHold()
+        verify(sparkRepo, never()).awaitOptimizationIdle()
+        verify(sparkRepo, never()).setExiting(any(), any())
+
+        isSending = false
+        sut.start(fundFromSavings = false).getOrThrow()
+
+        assertEquals("transfer-2", sut.state.value.record?.transferId)
         sut.onAppBackgrounded()
     }
 

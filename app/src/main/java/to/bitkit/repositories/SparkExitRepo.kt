@@ -715,6 +715,12 @@ class SparkExitRepo @Inject constructor(
         val transferId = transferRepo.createTransfer(TransferType.SPARK_EXIT, quote.incomingSats.toLong())
             .onFailure { sparkRepo.releaseExitHold() }
             .getOrThrow()
+        // A send that passed its exit check before the hold may still spend leaves. One still sending after the wait
+        // refuses the start before anything is saved, so the user starts again once it ended.
+        runCatching { sparkRepo.awaitSpendsIdle() }.onFailure {
+            withContext(NonCancellable) { transferRepo.markSettled(transferId) }
+            sparkRepo.releaseExitHold()
+        }.getOrThrow()
         var record = SparkExitRecord(
             network = network,
             createdAt = clock.nowMs(),
@@ -753,8 +759,6 @@ class SparkExitRepo @Inject constructor(
             // Reconnecting for the exit disconnects Spark, which would cut a running leaf optimization short.
             val isCurrent = try {
                 sparkRepo.awaitOptimizationIdle()
-                // A send that passed its exit check before the hold may still spend leaves: the requote comes after it.
-                sparkRepo.awaitSpendsIdle()
                 // A cancel during the wait ended this exit: nothing more of the start runs, and nothing is paid.
                 tickMutex.withLock {
                     if (!isStarting(createdAt)) return@withLock false

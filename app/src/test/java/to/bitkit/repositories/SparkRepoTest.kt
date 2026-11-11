@@ -1309,6 +1309,32 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an exit start is refused while a send stays active past the wait`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sending = CompletableDeferred<Unit>()
+        val sent = CompletableDeferred<Payment>()
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            sending.complete(Unit)
+            sent.await()
+        }
+        val sut = createSut()
+        val send = async { sut.payInvoice("lnbc1", 100uL) }
+        sending.await()
+        sut.holdForExit()
+
+        val idle = async { runCatching { sut.awaitSpendsIdle() } }
+        advanceTimeBy(2.minutes + 1.seconds)
+        runCurrent()
+
+        assertTrue(idle.isCompleted)
+        assertIs<SparkExitError>(idle.await().exceptionOrNull())
+        sent.complete(sentPayment(fees = 0))
+        send.await()
+    }
+
+    @Test
     fun `an exit starting while a withdrawal prepares withdraws nothing`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val sut = createSut()

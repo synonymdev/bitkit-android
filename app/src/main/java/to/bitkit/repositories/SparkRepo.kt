@@ -330,12 +330,14 @@ class SparkRepo @Inject constructor(
     }
 
     /**
-     * Waits for the sends that passed their exit check before [holdForExit] to finish, at most [OPTIMIZATION_WAIT], so
-     * an exit starting quotes the leaves they leave.
+     * Waits for the sends that passed their exit check before [holdForExit] to finish, so an exit starting quotes the
+     * leaves they leave. Fails with [SparkExitError] when one is still sending after [OPTIMIZATION_WAIT]: the exit must
+     * not start while a send can still spend its leaves.
      */
     suspend fun awaitSpendsIdle() {
         if (withTimeoutOrNull(OPTIMIZATION_WAIT) { spendsInFlight.first { it == 0 } } == null) {
             Logger.warn("Gave up waiting for Spark sends in flight to end", context = TAG)
+            throw SparkExitError("A Spark payment is still sending")
         }
     }
 
