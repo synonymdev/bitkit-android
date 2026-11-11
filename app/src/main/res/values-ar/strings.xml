@@ -423,6 +423,7 @@
     <string name="other__shop__intro__description">اجعل حياتك على معيار Bitcoin. أنفق Bitcoin على بطاقات الهدايا الرقمية وشرائح eSIM وشحن الهاتف والمزيد.</string>
     <string name="other__shop__intro__title">تسوّق</string>
     <string name="other__swipe">اسحب للتأكيد</string>
+    <string name="other__try_again">يرجى المحاولة مرة أخرى.</string>
     <string name="other__update_button">تحديث</string>
     <string name="other__update_critical_button">تحديث Bitkit</string>
     <string name="other__update_critical_nav_title">تحديث حرج</string>

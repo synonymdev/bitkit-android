@@ -360,6 +360,7 @@
     <string name="other__high_balance__text">&lt;accent&gt;O saldo de sua carteira ultrapassa US$ 500.&lt;/accent&gt;\nPara sua segurança, considere transferir parte de suas economias para uma carteira offline.</string>
     <string name="other__high_balance__continue">Entendido</string>
     <string name="other__high_balance__cancel">Saiba Mais</string>
+    <string name="other__try_again">Tente novamente.</string>
     <string name="other__update_critical_nav_title">Atualização Crítica</string>
     <string name="other__update_critical_title">Atualize\n&lt;accent&gt;agora&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Há uma atualização disponível para a Bitkit. Atualize para continuar usando o app.</string>

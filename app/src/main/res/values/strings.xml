@@ -653,6 +653,7 @@
     <string name="other__shop__intro__description">Get your life on the Bitcoin standard. Spend your Bitcoin on digital gift cards, eSIMs, phone refills, and more.</string>
     <string name="other__shop__intro__title">Shop</string>
     <string name="other__swipe">Swipe To Confirm</string>
+    <string name="other__try_again">Please try again.</string>
     <string name="other__update_button">Update</string>
     <string name="other__update_critical_button">Update Bitkit</string>
     <string name="other__update_critical_nav_title">Critical Update</string>

@@ -360,6 +360,7 @@
     <string name="other__high_balance__text">&lt;accent&gt;El saldo de su monedero excede $500.&lt;/accent&gt;\nPor su seguridad, considere mover parte de sus ahorros a un monedero no conectado a Internet.</string>
     <string name="other__high_balance__continue">Entendido</string>
     <string name="other__high_balance__cancel">Aprender Más</string>
+    <string name="other__try_again">Por favor, intente de nuevo.</string>
     <string name="other__update_critical_nav_title">Actualización Crítica</string>
     <string name="other__update_critical_title">Actualice\n&lt;accent&gt;Bitkit ahora&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Hay una actualización crítica de Bitkit. Debes actualizar para continuar usando Bitkit.</string>

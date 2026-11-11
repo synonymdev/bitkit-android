@@ -365,6 +365,7 @@
     <string name="other__high_balance__text">&lt;accent&gt;Le solde de votre portefeuille dépasse 500 $.&lt;/accent&gt;\nPour votre sécurité, envisagez de transférer une partie de votre Épargne vers un portefeuille hors ligne.</string>
     <string name="other__high_balance__continue">Compris</string>
     <string name="other__high_balance__cancel">En savoir plus</string>
+    <string name="other__try_again">Veuillez réessayer.</string>
     <string name="other__update_critical_nav_title">Mise à jour critique</string>
     <string name="other__update_critical_title">Mettre à jour\n&lt;accent&gt;Bitkit maintenant&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Il y a une mise à jour critique pour Bitkit. Vous devez la mettre à jour pour continuer à utiliser Bitkit.</string>
