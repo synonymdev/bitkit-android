@@ -20,5 +20,5 @@ Can be used either to grab a Bearer auth token for use in Postman, or to test pr
 1. Add the printed access token to your Postman environment in a variable named `bearerToken`.
 1. Run the app, grab the `FCM Registration token` from logcat and add it to your Postman environment, in a variable named `deviceToken`.
 1. Copy one of the sample payloads from `./messages` to the request body in Postman.
-1. Run your request and check logcat for entries of the `FCM` tag. Before processing a remote message, the first loged line says `--- new FCM ---`.
+1. Run your request and check logcat for entries of the `FCM` tag. Before processing a remote message, the first logged line says `--- new FCM ---`.
    - Whenever your access token expires, repeat step 1.
