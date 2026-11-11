@@ -428,7 +428,7 @@ private fun progressText(
     is SparkExitRecord.Phase.NeedsFunding -> when (val funding = progressFunding) {
         // A payment that covers it waits to confirm: nothing to ask for.
         is SparkExitFundingState.Ask -> stringResource(R.string.lightning__spark_exit__needs_funding_text)
-            .replace("{amount}", sparkExitAmountText(funding.sats))
+            .replace("{amount}", sparkExitSendAmountText(funding.sats))
         else -> stringResource(R.string.lightning__spark_exit__progress_text)
     }
     else -> stringResource(R.string.lightning__spark_exit__progress_text)

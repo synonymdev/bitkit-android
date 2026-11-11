@@ -25,7 +25,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import breez_sdk_spark.RecoverFundsResponse
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.SparkExitMath
 import to.bitkit.repositories.SparkExitPartialFunding
 import to.bitkit.repositories.SparkExitQuote
@@ -65,6 +68,20 @@ internal fun SparkExitStartedEffect(viewModel: SparkExitViewModel, onStarted: ()
 @Composable
 internal fun sparkExitAmountText(sats: ULong): String =
     rememberMoneyText(sats.toLong(), showSymbol = true)?.replace(Regex("</?accent>"), "") ?: sats.toString()
+
+/**
+ * An amount the user sends from another wallet, always in bitcoin: the exit needs it exact, which a fiat figure
+ * converted at another wallet's rate is not.
+ */
+@Composable
+internal fun sparkExitSendAmountText(sats: ULong): String =
+    rememberMoneyText(sats.toLong(), unit = PrimaryDisplay.BITCOIN, showSymbol = true)
+        ?.replace(Regex("</?accent>"), "")
+        ?: "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}"
+
+/** [sparkExitSendAmountText] marked as an inline accent. */
+@Composable
+internal fun sparkExitSendAmountAccent(sats: ULong): String = "<accent>${sparkExitSendAmountText(sats)}</accent>"
 
 /**
  * What Display's line height adds under a headline on Android against iOS: master's spacers under an exit headline
@@ -136,7 +153,7 @@ internal fun SparkExitFundingAddress(
         )
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__fund_external_text)
-                .replace("{amount}", sparkExitAmountAccent(requiredSats)).withAccentBoldBright(),
+                .replace("{amount}", sparkExitSendAmountAccent(requiredSats)).withAccentBoldBright(),
             color = Colors.White64,
             modifier = Modifier.fillMaxWidth()
         )
@@ -152,9 +169,9 @@ internal fun SparkExitFundingAddress(
         partial?.let {
             BodyS(
                 text = stringResource(R.string.lightning__spark_exit__fund_partial)
-                    .replace("{received}", sparkExitAmountAccent(it.receivedSats))
-                    .replace("{required}", sparkExitAmountAccent(it.requiredSats))
-                    .replace("{missing}", sparkExitAmountAccent(it.missingSats)).withAccentBoldBright(),
+                    .replace("{received}", sparkExitSendAmountAccent(it.receivedSats))
+                    .replace("{required}", sparkExitSendAmountAccent(it.requiredSats))
+                    .replace("{missing}", sparkExitSendAmountAccent(it.missingSats)).withAccentBoldBright(),
                 color = Colors.White64,
                 modifier = Modifier
                     .fillMaxWidth()

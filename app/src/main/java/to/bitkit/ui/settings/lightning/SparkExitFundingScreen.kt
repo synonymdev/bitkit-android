@@ -81,7 +81,7 @@ private fun Content(
             Display(text = stringResource(R.string.lightning__spark_exit__funding_title).withAccent())
             BodyM(
                 text = stringResource(R.string.lightning__spark_exit__funding_text)
-                    .replace("{amount}", sparkExitAmountText(fundingSats))
+                    .replace("{amount}", sparkExitSendAmountText(fundingSats))
                     .withAccentBoldBright(),
                 color = Colors.White64,
             )
