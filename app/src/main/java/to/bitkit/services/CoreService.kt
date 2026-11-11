@@ -2270,14 +2270,14 @@ class BlocktankService(
 
     // MARK: - Regtest methods
     suspend fun regtestMine(count: UInt = 1u) {
-        com.synonym.bitkitcore.regtestMine(count = count, auth = null)
+        com.synonym.bitkitcore.regtestMine(count = count, auth = Env.blocktankRegtestAuth)
     }
 
     suspend fun regtestDeposit(address: String, amountSat: ULong = 10_000_000uL): String {
         return com.synonym.bitkitcore.regtestDeposit(
             address = address,
             amountSat = amountSat,
-            auth = null,
+            auth = Env.blocktankRegtestAuth,
         )
     }
 
@@ -2285,7 +2285,7 @@ class BlocktankService(
         return com.synonym.bitkitcore.regtestPay(
             invoice = invoice,
             amountSat = amountSat,
-            auth = null,
+            auth = Env.blocktankRegtestAuth,
         )
     }
 
@@ -2298,7 +2298,7 @@ class BlocktankService(
             fundingTxId = fundingTxId,
             vout = vout,
             forceCloseAfterS = forceCloseAfterS.toULong(),
-            auth = null,
+            auth = Env.blocktankRegtestAuth,
         )
     }
 }
