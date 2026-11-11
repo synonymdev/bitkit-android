@@ -1086,9 +1086,11 @@ class SparkExitDriver(
             is SparkExitBroadcastOutcome.Rejected if sweep.replacedTxids.isNotEmpty() && tip != null &&
                 !outcome.reason.contains("fee", ignoreCase = true) ->
                 waitForFees(record.copy(leftoverSweep = sweep))
-            is SparkExitBroadcastOutcome.Rejected -> record.copy(
-                leftoverSweep = sweep.copy(isAccepted = false, rejection = outcome.reason),
-            )
+            is SparkExitBroadcastOutcome.Rejected -> {
+                val refused = sweep.copy(isAccepted = false, rejection = outcome.reason)
+                // A refusal for anything but its fee is final: shown once more with its address, as kept change is.
+                record.copy(leftoverSweep = refused, isResultSeen = record.isResultSeen && refused.isFeeRejection)
+            }
             // Its inputs went elsewhere: what is still at the address is read and swept again.
             is SparkExitBroadcastOutcome.InputsMissing -> readAddressAgain(record, sweep)
             is SparkExitBroadcastOutcome.RetryLater,

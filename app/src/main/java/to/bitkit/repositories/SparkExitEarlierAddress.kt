@@ -23,7 +23,7 @@ data class SparkExitEarlierAddress(
     val atMillis: Long,
 ) {
     enum class Kind {
-        /** Fee change too small to send, kept at the funding address for good. */
+        /** Fee funding left at the funding address for good: change too small to send, or a refused sweep's. */
         KEPT_CHANGE,
 
         /** The funding address of a cancelled exit that was forgotten: a late payment can still land there. */
@@ -37,9 +37,9 @@ data class SparkExitEarlierAddress(
     companion object {
         val WATCH_PERIOD = 28.days
 
-        /** The kept fee change of an ended exit, or null when it kept none. */
+        /** The leftover an ended exit kept at its funding address, or null when it kept none. */
         fun keptChange(record: SparkExitRecord, network: Network, atMillis: Long): SparkExitEarlierAddress? {
-            if (!record.isChangeKept) return null
+            if (!record.isLeftoverKept) return null
             val address = record.funding.firstOrNull()?.address ?: return null
             return SparkExitEarlierAddress(
                 address = address,

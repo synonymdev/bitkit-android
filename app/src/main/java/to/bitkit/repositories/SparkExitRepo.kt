@@ -355,7 +355,7 @@ class SparkExitRepo @Inject constructor(
         reportedLost: Set<String>,
     ) {
         record.transferId?.let { transferRepo.updateClaimableAtHeight(it, record.claimableAtHeight) }
-        if (record.isChangeKept && !previous.isChangeKept) {
+        if (record.isLeftoverKept && !previous.isLeftoverKept) {
             keepEarlierAddress(SparkExitEarlierAddress.keptChange(record, Env.network, clock.nowMs()))
         }
         settleIfFinished(record)
