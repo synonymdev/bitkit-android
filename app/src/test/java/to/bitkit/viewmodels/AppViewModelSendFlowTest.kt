@@ -160,6 +160,8 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
@@ -290,6 +292,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val quickPayRepo = mock<QuickPayRepo>()
     private val quickPayUnhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val transferRepo = mock<TransferRepo>()
+    private val sparkExitRepo = mock<SparkExitRepo>()
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
     private val nodeServiceFgState = NodeServiceFgState()
@@ -392,6 +395,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun tearDown() {
         sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
+    }
+
+    @Test
+    fun `a tapped exit notification stays requested until the exit loaded`() = test {
+        val loaded = CompletableDeferred<Unit>()
+        whenever(sparkExitRepo.state).thenReturn(MutableStateFlow(SparkExitState()))
+        whenever(sparkExitRepo.load(anyOrNull())).doSuspendableAnswer {
+            loaded.await()
+            Result.success(null)
+        }
+        sut.onSparkExitNotificationTapped()
+
+        val opened = async { sut.onSparkExitOpened() }
+        runCurrent()
+
+        // Clearing it earlier recomposes the screen that waits on it, which cancels the open before it navigates.
+        assertTrue(sut.isSparkExitRequested.value)
+        loaded.complete(Unit)
+        assertFalse(opened.await())
+        assertFalse(sut.isSparkExitRequested.value)
     }
 
     @Test
@@ -975,7 +998,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
         timeSource = testDispatcher.scheduler.timeSource,
-        sparkExitRepo = mock(),
+        sparkExitRepo = sparkExitRepo,
     )
 
     private suspend fun emitNodeEvent(

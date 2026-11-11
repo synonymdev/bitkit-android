@@ -148,11 +148,15 @@ class SparkExitRepo @Inject constructor(
 
     // region lifecycle
 
-    /** Loads the exit of [walletIndex] once, takes Spark off Lightning while it runs, and settles a finished one. */
-    suspend fun load(walletIndex: Int = sparkRepo.walletIndex): Result<SparkExitRecord?> = withContext(bgDispatcher) {
+    /**
+     * Loads the exit of [walletIndex], Spark's own by default, once, takes Spark off Lightning while it runs, and
+     * settles a finished one.
+     */
+    suspend fun load(walletIndex: Int? = null): Result<SparkExitRecord?> = withContext(bgDispatcher) {
         runSuspendCatching {
-            if (isLoaded && this@SparkExitRepo.walletIndex == walletIndex) return@runSuspendCatching _state.value.record
-            this@SparkExitRepo.walletIndex = walletIndex
+            val index = walletIndex ?: sparkRepo.walletIndex
+            if (isLoaded && this@SparkExitRepo.walletIndex == index) return@runSuspendCatching _state.value.record
+            this@SparkExitRepo.walletIndex = index
             val record = runSuspendCatching { store.load() }.getOrElse {
                 Logger.error("Failed to read the Spark exit record", it, context = TAG)
                 salvage()
