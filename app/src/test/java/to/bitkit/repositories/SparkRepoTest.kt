@@ -1258,6 +1258,73 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an exit starting while a send prepares sends nothing`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sut = createSut()
+        val paused = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+
+        val result = async {
+            sut.payInvoice("lnbc1", 100uL, onBeforeSend = {
+                paused.complete(Unit)
+                resume.await()
+                true
+            })
+        }
+        paused.await()
+        sut.holdForExit()
+        resume.complete(Unit)
+        val error = result.await().exceptionOrNull()
+
+        verify(sparkService, never()).send(any())
+        assertIs<SparkError.SendRefused>(error)
+    }
+
+    @Test
+    fun `an exit start waits for a send already past its exit check`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sending = CompletableDeferred<Unit>()
+        val sent = CompletableDeferred<Payment>()
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            sending.complete(Unit)
+            sent.await()
+        }
+        val sut = createSut()
+        val send = async { sut.payInvoice("lnbc1", 100uL) }
+        sending.await()
+        sut.holdForExit()
+
+        val idle = async { sut.awaitSpendsIdle() }
+        runCurrent()
+
+        assertFalse(idle.isCompleted)
+        sent.complete(sentPayment(fees = 0))
+        idle.await()
+        send.await()
+    }
+
+    @Test
+    fun `an exit starting while a withdrawal prepares withdraws nothing`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        whenever { sparkService.getInfo() }.thenAnswer {
+            sut.holdForExit()
+            info(10_000uL)
+        }
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+
+        val error = sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).exceptionOrNull()
+
+        verify(sparkService, never()).send(any())
+        assertIs<SparkError.SendRefused>(error)
+    }
+
+    @Test
     fun `an expired invoice spark refuses is a typed refusal`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val expired = SdkException.InvalidInput("Invoice has expired")

@@ -743,6 +743,8 @@ class SparkExitRepo @Inject constructor(
             // Reconnecting for the exit disconnects Spark, which would cut a running leaf optimization short.
             val isCurrent = try {
                 sparkRepo.awaitOptimizationIdle()
+                // A send that passed its exit check before the hold may still spend leaves: the requote comes after it.
+                sparkRepo.awaitSpendsIdle()
                 // A cancel during the wait ended this exit: nothing more of the start runs, and nothing is paid.
                 tickMutex.withLock {
                     if (!isStarting(createdAt)) return@withLock false

@@ -731,6 +731,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             transferRepo
         ).createTransfer(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
         order.verify(sparkRepo).awaitOptimizationIdle()
+        order.verify(sparkRepo).awaitSpendsIdle()
         order.verify(sparkRepo).setExiting(true, true)
         val record = assertNotNull(sut.state.value.record)
         assertEquals(SparkExitRecord.PER_NODE, record.fundingStrategy)

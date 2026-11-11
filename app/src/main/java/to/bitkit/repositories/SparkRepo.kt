@@ -167,6 +167,8 @@ class SparkRepo @Inject constructor(
     /** The SDK is swapping leaves with the operators; their value is in flight until it ends. */
     private val isOptimizing = MutableStateFlow(false)
 
+    private val spendsInFlight = MutableStateFlow(0)
+
     /** Watchers of the claims of deposits this app sent, by txid; they outlive the screens that start them. */
     private val claimJobs = ConcurrentHashMap<String, Job>()
 
@@ -327,6 +329,29 @@ class SparkRepo @Inject constructor(
         }
     }
 
+    /**
+     * Waits for the sends that passed their exit check before [holdForExit] to finish, at most [OPTIMIZATION_WAIT], so
+     * an exit starting quotes the leaves they leave.
+     */
+    suspend fun awaitSpendsIdle() {
+        if (withTimeoutOrNull(OPTIMIZATION_WAIT) { spendsInFlight.first { it == 0 } } == null) {
+            Logger.warn("Gave up waiting for Spark sends in flight to end", context = TAG)
+        }
+    }
+
+    private suspend fun <T> spending(send: suspend () -> T): T {
+        spendsInFlight.update { it + 1 }
+        try {
+            return send()
+        } finally {
+            spendsInFlight.update { it - 1 }
+        }
+    }
+
+    private fun ensureNotExiting() {
+        if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
+    }
+
     private suspend fun onOptimization(event: AutoOptimizationEvent) {
         when (event) {
             is AutoOptimizationEvent.Started, is AutoOptimizationEvent.RoundCompleted -> {
@@ -411,7 +436,7 @@ class SparkRepo @Inject constructor(
         runSuspendCatching {
             ensurePaymentDeadline(paymentDeadlineAt)
             if (!sparkService.isConnected) throw SparkError.SendRefused("Spark is not connected")
-            if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
+            ensureNotExiting()
             val prepared = runSuspendCatching { sparkService.prepareSend(bolt11, amountSats) }.getOrElse {
                 if (it.isInvoiceExpired()) throw SparkError.InvoiceExpired(it)
                 throw SparkError.SendRefused("Spark could not prepare the payment", it)
@@ -443,12 +468,18 @@ class SparkRepo @Inject constructor(
             val sent = try {
                 sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
-                // The checks above and saving the hash suspend, so the deadline is checked last, before the send.
-                runCatching { ensurePaymentDeadline(paymentDeadlineAt) }.onFailure {
-                    cacheStore.removeSparkSendHash(paymentHash)
-                    throw it
+                spending {
+                    // The checks above and saving the hash suspend, so the deadline and an exit that started
+                    // meanwhile are checked last, before the send.
+                    runCatching {
+                        ensurePaymentDeadline(paymentDeadlineAt)
+                        ensureNotExiting()
+                    }.onFailure {
+                        cacheStore.removeSparkSendHash(paymentHash)
+                        throw it
+                    }
+                    runSuspendCatching { sparkService.send(prepared) }
                 }
-                runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
             }
@@ -690,10 +721,14 @@ class SparkRepo @Inject constructor(
      */
     suspend fun withdrawAll(address: String, confirmedFeeSats: ULong): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
-            if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
+            ensureNotExiting()
             val prepared = prepareWithdrawAll(address)
             if (prepared.feeSats() > confirmedFeeSats) throw SparkError.WithdrawalFeeChanged()
-            val payment = sparkService.send(prepared.response)
+            val payment = spending {
+                // Preparing suspends, so an exit can start meanwhile.
+                ensureNotExiting()
+                sparkService.send(prepared.response)
+            }
             preparedWithdrawal = null
             (payment.details as? PaymentDetails.Withdraw)?.txId?.let { withdrawalTxids += it }
             Unit
