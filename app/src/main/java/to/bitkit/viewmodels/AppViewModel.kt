@@ -113,6 +113,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
 import to.bitkit.ext.isHwUserCancellation
+import to.bitkit.ext.isPaykitError
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -177,6 +178,7 @@ import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
@@ -255,7 +257,7 @@ import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
-import to.bitkit.utils.Bip21Utils
+import to.bitkit.utils.ClipboardPromptValidator
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -263,6 +265,7 @@ import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
 import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
+import to.bitkit.utils.timedsheets.sheets.MoveToSparkTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
@@ -330,6 +333,8 @@ class AppViewModel @Inject constructor(
     private val usdtSheet: UsdtTimedSheet,
     private val usdtPreferences: UsdtPreferencesRepo,
     private val highBalanceSheet: HighBalanceTimedSheet,
+    private val moveToSparkSheet: MoveToSparkTimedSheet,
+    private val moveToSparkRepo: MoveToSparkRepo,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
     private val timeSource: TimeSource,
@@ -567,6 +572,7 @@ class AppViewModel @Inject constructor(
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
+        registerSheet(moveToSparkSheet)
         registerSheet(appUpdateSheet)
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
@@ -736,7 +742,12 @@ class AppViewModel @Inject constructor(
                 sheet == null && authenticated && !forgotPin && receipt == NewTransactionSheetDetails.EMPTY
             }.collect {
                 if (it) retryUsdtIntro()
+                if (it) retryMoveToSparkIntro()
             }
+        }
+        viewModelScope.launch {
+            // Channels and Spark load after Home first checks its sheets, so the intro is checked again once they can.
+            moveToSparkRepo.canMove.collect { if (it) retryMoveToSparkIntro() }
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationFailed.collect { failed ->
@@ -2872,6 +2883,7 @@ class AppViewModel @Inject constructor(
             refreshPaymentActivity(paymentHash)
             // A failed automatic Allowance payment falls back to the request's manual flow without a send error.
             if (isAutomaticAllowancePayment(paymentHash)) return
+            if (moveToSparkRepo.isWatchedMovePayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
@@ -2919,6 +2931,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash.let { paymentHash ->
             closeSettledReceiveSheet(receiveSheetToClose)
             activityRepo.notifyPaymentActivityChanged()
+            if (moveToSparkRepo.isMovePayment(paymentHash)) return
             privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)?.let { publicKey ->
                 activityRepo.setContact(
                     contactPublicKey = publicKey,
@@ -2969,6 +2982,8 @@ class AppViewModel @Inject constructor(
         refreshPaymentActivity(paymentHash)
         // An automatic Allowance payment settles headlessly; the allowance repo posts its notice and contact tag.
         if (isAutomaticAllowancePayment(paymentHash)) return
+        // A move to Spark reports its outcome on its own screen.
+        if (moveToSparkRepo.isMovePayment(paymentHash)) return
         if (!pendingPaymentRepo.isPending(paymentHash)) {
             notifyPaymentSentOnLightning(event)
             return
@@ -3265,16 +3280,6 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            showAddressValidationError(
-                titleRes = R.string.other__scan_err_decoding,
-                descriptionRes = R.string.other__scan__error__generic,
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         if (activeHardwareWalletId == null && rejectUsdtSelfSend(input)) return@withContext
 
         if (isUsdtPaymentInput(input)) {
@@ -4913,18 +4918,6 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            if (clearIncomingPaymentRequestTarget()) return@withContext
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                description = context.getString(R.string.other__scan__error__generic),
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         SamRockSetupRequest.parse(input)?.let {
             handleSamRockSetup(it)
             return@withContext
@@ -5097,6 +5090,15 @@ class AppViewModel @Inject constructor(
                     context = TAG,
                 )
                 if (hasIncomingPaymentRequest) return
+                if (scan == null && input.trim().startsWith("bitcoin:", ignoreCase = true)) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__generic),
+                        testTag = "InvalidAddressToast",
+                    )
+                    return
+                }
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.other__qr_error_header),
@@ -7861,11 +7863,16 @@ class AppViewModel @Inject constructor(
 
     fun toast(error: Throwable) {
         if (error.isHwUserCancellation()) return
+        val description = if (error.isPaykitError()) {
+            Logger.error("Paykit error shown as toast", error, context = TAG)
+            context.getString(R.string.other__try_again)
+        } else {
+            error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.common__error_body)
+        }
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.common__error_body),
+            description = description,
         )
     }
 
@@ -7976,7 +7983,8 @@ class AppViewModel @Inject constructor(
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
-            else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
+            else -> SamRockSetupRequest.isProtocolUrl(text) ||
+                ClipboardPromptValidator.isSupported(text) { coreService.decode(it) }
         }
     }
 
@@ -8958,6 +8966,10 @@ class AppViewModel @Inject constructor(
 
     private suspend fun retryUsdtIntro() {
         if (!isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate()
+    }
+
+    private suspend fun retryMoveToSparkIntro() {
+        if (moveToSparkSheet.shouldShow()) timedSheetManager.reevaluate()
     }
 
     private fun canShowTimedSheet() = _isAuthenticated.value && !_showForgotPinSheet.value &&

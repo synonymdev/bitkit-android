@@ -108,6 +108,7 @@ fun LightningConnectionsScreen(
             navController.navigateTo(Routes.ChannelDetail(channelUi.details.channelId))
         },
         onClickSpark = { navController.navigateTo(Routes.SparkDetail) },
+        onClickMoveToSpark = { navController.navigateTo(Routes.MoveToSpark) },
         onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
         onRefresh = {
             viewModel.onPullToRefresh()
@@ -124,6 +125,7 @@ private fun Content(
     onClickExportLogs: () -> Unit = {},
     onClickChannel: (ChannelUi) -> Unit = {},
     onClickSpark: () -> Unit = {},
+    onClickMoveToSpark: () -> Unit = {},
     onOpenTx: (String) -> Unit = {},
     onRefresh: () -> Unit = {},
 ) {
@@ -234,6 +236,15 @@ private fun Content(
                             status = ChannelStatusUi.OPEN,
                             channels = uiState.openChannels,
                             onClickChannel = onClickChannel,
+                        )
+                    }
+
+                    if (uiState.canMoveToSpark) {
+                        VerticalSpacer(16.dp)
+                        PrimaryButton(
+                            text = stringResource(R.string.lightning__move_to_spark__nav_title),
+                            onClick = onClickMoveToSpark,
+                            modifier = Modifier.testTag("MoveToSpark")
                         )
                     }
 

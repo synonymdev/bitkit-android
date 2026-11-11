@@ -8,6 +8,10 @@ private const val MESSAGE_TOO_LARGE_CODE = "message_too_large"
 /** Identity error code for a signup code the homeserver refused during sign-up. */
 private const val SIGNUP_CODE_REJECTED_CODE = "signup_code_rejected"
 
+/** Paykit exception messages are raw SDK details (`code=..., context=...`), so they must not reach a toast. */
+fun Throwable.isPaykitError(): Boolean =
+    generateSequence(this) { it.cause }.any { it is PaykitException }
+
 fun Throwable.isPaykitIdentityError(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitException.Identity }
 
