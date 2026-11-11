@@ -1275,6 +1275,19 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `settles the journal of a deleted withdrawal it cannot tag`() = test {
+        val sut = journaledSpark()
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(ActivityDeletedError("withdrawal")))
+        whenever { activityRepo.addTagsToActivity(any(), any(), any()) }
+            .thenReturn(Result.failure(AppError("not found")))
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact", tags = listOf("rent")).getOrThrow()
+
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
     fun `an earlier withdrawal to the same address never settles a new attempt`() = test {
         whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
         val sut = journaledSpark()

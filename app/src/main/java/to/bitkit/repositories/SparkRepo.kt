@@ -674,6 +674,7 @@ class SparkRepo @Inject constructor(
     /** Whether [txid] is a Spark withdrawal, which LDK never held and so cannot boost. */
     suspend fun isWithdrawal(txid: String): Boolean = withContext(bgDispatcher) {
         if (cacheStore.data.first().sentSparkWithdrawals.any { it.txid == txid }) return@withContext true
+        if (!_state.value.isReady) return@withContext false
         runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments for '$txid'", it, context = TAG) }
             .getOrDefault(emptyList())
@@ -1397,9 +1398,10 @@ class SparkRepo @Inject constructor(
             seenAt = existing?.seenAt,
         )
         // The journal stays until the activity is saved, so a failed save is retried from Spark's list and on refresh.
-        val saved = activityRepo.get().upsertActivity(Activity.Onchain(activity))
+        val upserted = activityRepo.get().upsertActivity(Activity.Onchain(activity))
             .onFailure { Logger.warn("Failed to record Spark withdrawal '$txid'", it, context = TAG) }
-            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+        val isDeleted = upserted.exceptionOrNull() is ActivityDeletedError
+        val saved = upserted.isSuccess || isDeleted
         if (!saved) {
             unsavedPayments.add(payment.id)
             return false
@@ -1407,8 +1409,8 @@ class SparkRepo @Inject constructor(
         unsavedPayments.remove(payment.id)
         if (journal != null && settlesJournal) {
             // The tags picked on Confirm travel with the journal, so a recovered withdrawal keeps them too.
-            // A failed tag write keeps the journal, so the next refresh tags it again.
-            if (journal.tags.isNotEmpty()) {
+            // A failed tag write keeps the journal, so the next refresh tags it again; a deleted activity takes none.
+            if (journal.tags.isNotEmpty() && !isDeleted) {
                 activityRepo.get().addTagsToActivity(txid, journal.tags).onFailure {
                     Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG)
                     unsavedPayments.add(payment.id)
