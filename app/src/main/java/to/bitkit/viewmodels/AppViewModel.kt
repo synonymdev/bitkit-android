@@ -113,6 +113,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
 import to.bitkit.ext.isHwUserCancellation
+import to.bitkit.ext.isPaykitError
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -7781,11 +7782,16 @@ class AppViewModel @Inject constructor(
 
     fun toast(error: Throwable) {
         if (error.isHwUserCancellation()) return
+        val description = if (error.isPaykitError()) {
+            Logger.error("Paykit error shown as toast", error, context = TAG)
+            context.getString(R.string.other__try_again)
+        } else {
+            error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.common__error_body)
+        }
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.common__error_body),
+            description = description,
         )
     }
 

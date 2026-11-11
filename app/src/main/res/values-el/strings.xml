@@ -373,6 +373,7 @@
     <string name="other__shop__intro__description">Ζήσε τη ζωή σου με το Bitcoin standard. Ξόδεψε τα Bitcoin σου σε ψηφιακές δωροκάρτες, eSIMs, ανανεώσεις τηλεφώνου και άλλα.</string>
     <string name="other__shop__intro__title">Κατάστημα</string>
     <string name="other__swipe">Σύρε για επιβεβαίωση</string>
+    <string name="other__try_again">Δοκιμάστε ξανά.</string>
     <string name="other__update_button">Ενημέρωση</string>
     <string name="other__update_critical_button">Ενημέρωση Bitkit</string>
     <string name="other__update_critical_nav_title">Κρίσιμη ενημέρωση</string>

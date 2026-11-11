@@ -379,6 +379,7 @@
     <string name="other__shop__intro__description">Vive tu vida con el estándar Bitcoin. Gasta tu Bitcoin en tarjetas regalo digitales, eSIMs, recargas de móvil y más.</string>
     <string name="other__shop__intro__title">Tienda</string>
     <string name="other__swipe">Deslizar para confirmar</string>
+    <string name="other__try_again">Por favor, intente de nuevo.</string>
     <string name="other__update_button">Actualizar</string>
     <string name="other__update_critical_button">Actualizar Bitkit</string>
     <string name="other__update_critical_nav_title">Actualización Crítica</string>

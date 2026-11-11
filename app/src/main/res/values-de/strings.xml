@@ -316,6 +316,7 @@
     <string name="other__high_balance__text">&lt;accent&gt;Dein Wallet-Kontostand übersteigt $500.&lt;/accent&gt;\nZu deiner Sicherheit solltest du einen Teil deiner Ersparnisse in ein Offline-Wallet verschieben.</string>
     <string name="other__high_balance__continue">Verstanden</string>
     <string name="other__high_balance__cancel">Mehr erfahren</string>
+    <string name="other__try_again">Bitte versuchen Sie es erneut.</string>
     <string name="other__update_critical_nav_title">Kritisches Update</string>
     <string name="other__update_critical_title">Aktualisiere\n&lt;accent&gt;Bitkit jetzt&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Es gibt ein kritisches Update für Bitkit. Du musst aktualisieren, um Bitkit weiterhin zu verwenden.</string>

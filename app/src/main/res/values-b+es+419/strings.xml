@@ -380,6 +380,7 @@
     <string name="other__shop__intro__description">Adopta el estándar Bitcoin. Gasta tus Bitcoin en tarjetas de regalo digitales, eSIMs, recargas telefónicas y más.</string>
     <string name="other__shop__intro__title">Tienda</string>
     <string name="other__swipe">Deslizar para confirmar</string>
+    <string name="other__try_again">Por favor, inténtelo de nuevo.</string>
     <string name="other__update_button">Actualización</string>
     <string name="other__update_critical_button">Actualizar Bitkit</string>
     <string name="other__update_critical_nav_title">Actualización Crítica</string>
