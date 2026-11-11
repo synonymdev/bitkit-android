@@ -320,4 +320,7 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
 
     /** Spark refused to pay an expired Lightning invoice, before anything left the wallet. */
     class InvoiceExpired(cause: Throwable? = null) : SendRefused("The Lightning invoice has expired", cause)
+
+    /** Refused a still-valid invoice created before the restore, as Spark can't show it didn't pay it then. */
+    class RestoredInvoiceUnverified : SendRefused("Spark can't show it didn't pay this invoice before the restore")
 }

@@ -363,6 +363,11 @@ data class AppCacheData(
      * while the node can't list its payments, Spark holds off invoices created before it. Null when never restored.
      */
     val ldkHistoryUnseededSince: Long? = null,
+    /**
+     * When the wallet was restored, in epoch seconds. Spark's list can lack a send it made before then even after a
+     * sync, so for a while after it the node refuses a still-valid invoice created before it that Spark hasn't listed.
+     */
+    val sparkRestoredAt: Long? = null,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

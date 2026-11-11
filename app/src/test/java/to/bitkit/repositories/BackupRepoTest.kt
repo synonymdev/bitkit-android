@@ -1846,6 +1846,7 @@ class BackupRepoTest : BaseUnitTest() {
 
             assertEquals(listOf("hash"), cacheData.value.sparkSendHashes)
             assertNotNull(cacheData.value.sparkHistoryUnseededSince)
+            assertNotNull(cacheData.value.sparkRestoredAt)
         }
 
     @Test
@@ -1858,6 +1859,7 @@ class BackupRepoTest : BaseUnitTest() {
 
         assertNotNull(cacheData.value.sparkHistoryUnseededSince)
         assertNotNull(cacheData.value.ldkHistoryUnseededSince)
+        assertNotNull(cacheData.value.sparkRestoredAt)
     }
 
     @Test

@@ -220,6 +220,29 @@ class SparkRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `a pre-restore invoice spark's synced list lacks is refused over the node until it expires`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        // Spark reports Synced while its payment-history sync failed, so its list lacks the pre-restore send.
+        whenever { sparkService.listPayments() }.thenReturn(emptyList())
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val createdAt = restoredAt - 600
+
+        assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+            sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, invoiceExpiresAt = now.epochSeconds + 600)
+        }
+        assertNull(store.data.first().sparkHistoryUnseededSince, "spark's own list still seeds the kept hashes")
+        assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+            sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, invoiceExpiresAt = now.epochSeconds + 600)
+        }
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, invoiceExpiresAt = now.epochSeconds))
+        assertNull(sut.earlierLightningSend("lnbc1280n1new", "new", now.epochSeconds, now.epochSeconds + 600))
+    }
+
+    @Test
     fun `an invoice created after the restore pays over the node while spark is unsynced`() = test {
         cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
         whenever(sparkService.isConnected).thenReturn(false)
@@ -237,21 +260,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark's synced list seeds the restored hashes so a later unsynced start holds only its sends`() = test {
-        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
-        whenever(sparkService.isConnected).thenReturn(true)
-        val failed = sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED).withHash("failed")
-        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2), failed))
-        createSut(store).start(0).getOrThrow()
+    fun `spark's synced list seeds the restored hashes and a later unsynced start still refuses older invoices`() =
+        test {
+            val restoredAt = now.epochSeconds
+            val restored = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+            val store = CacheStore(InMemoryDataStore(restored), clock)
+            whenever(sparkService.isConnected).thenReturn(true)
+            val failed = sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED).withHash("failed")
+            whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2), failed))
+            createSut(store).start(0).getOrThrow()
 
-        assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
-        assertNull(store.data.first().sparkHistoryUnseededSince)
+            assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
+            assertNull(store.data.first().sparkHistoryUnseededSince)
 
-        whenever(sparkService.isConnected).thenReturn(false)
-        val restarted = createSut(store)
-        assertEquals(EarlierSend.Pending("hash"), restarted.earlierLightningSend("lnbc1280n1send", "hash"))
-        assertNull(restarted.earlierLightningSend("lnbc1280n1other", "other", invoiceCreatedAt = 1L))
-    }
+            whenever(sparkService.isConnected).thenReturn(false)
+            val restarted = createSut(store)
+            assertEquals(EarlierSend.Pending("hash"), restarted.earlierLightningSend("lnbc1280n1send", "hash"))
+            assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+                restarted.earlierLightningSend("lnbc1280n1other", "other", invoiceCreatedAt = 1L)
+            }
+            assertNull(restarted.earlierLightningSend("lnbc1280n1other", "other", invoiceCreatedAt = now.epochSeconds))
+        }
 
     @Test
     fun `a send spark's list seeded after a restore is not sent again by spark after an unsynced restart`() = test {

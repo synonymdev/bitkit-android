@@ -1052,7 +1052,11 @@ class BackupRepo @Inject constructor(
                 // invoices from before it too, until that rail lists its own sends.
                 val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
                 cacheStore.update {
-                    it.copy(sparkHistoryUnseededSince = restoredAt, ldkHistoryUnseededSince = restoredAt)
+                    it.copy(
+                        sparkHistoryUnseededSince = restoredAt,
+                        ldkHistoryUnseededSince = restoredAt,
+                        sparkRestoredAt = restoredAt,
+                    )
                 }
                 var metadataReceived = false
                 val metadataResult = performRestore(BackupCategory.METADATA, failedCategories) { dataBytes ->
@@ -1215,6 +1219,7 @@ class BackupRepo @Inject constructor(
                 backupStatuses = it.backupStatuses,
                 sparkHistoryUnseededSince = restoredAt,
                 ldkHistoryUnseededSince = restoredAt,
+                sparkRestoredAt = restoredAt,
             )
         }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)

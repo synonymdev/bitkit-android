@@ -1661,9 +1661,14 @@ class LightningRepo @Inject constructor(
         requireWalletRestoreComplete()
         // Read before the checks, so a Spark send admitted after them refuses this one at submission.
         val sparkRecordsBefore = sparkRepo.sendRecordMark()
-        // Only a restore hold needs the invoice's date.
-        val createdAt = cacheStore.data.first().sparkHistoryUnseededSince?.let { invoiceCreatedAt(bolt11) }
-        sparkRepo.earlierLightningSend(bolt11, paymentHash, createdAt)
+        // Only a restore hold needs the invoice's times.
+        val invoice = if (sparkRepo.holdsRestoredInvoices()) decodedInvoice(bolt11) else null
+        sparkRepo.earlierLightningSend(
+            bolt11,
+            paymentHash,
+            invoice?.timestampSeconds?.toEpochSeconds(),
+            invoice?.let { (it.timestampSeconds.safe() + it.expirySeconds.safe()).toEpochSeconds() },
+        )
             ?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
@@ -1751,10 +1756,13 @@ class LightningRepo @Inject constructor(
     }.getOrNull()
 
     /** When [bolt11] was created, in epoch seconds, or null when it can't be decoded. */
-    private suspend fun invoiceCreatedAt(bolt11: String): Long? = runSuspendCatching {
-        (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice?.timestampSeconds
-            ?.coerceAtMost(Long.MAX_VALUE.toULong())?.toLong()
-    }.getOrNull()
+    private suspend fun invoiceCreatedAt(bolt11: String): Long? =
+        decodedInvoice(bolt11)?.timestampSeconds?.toEpochSeconds()
+
+    private suspend fun decodedInvoice(bolt11: String) =
+        runSuspendCatching { (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice }.getOrNull()
+
+    private fun ULong.toEpochSeconds(): Long = coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
     /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */
     private fun ldkSendKey(bolt11: String, paymentHash: String?): String = (paymentHash ?: bolt11).lowercase()

@@ -104,6 +104,13 @@ class SparkRepo @Inject constructor(
 
         /** Seconds a withdrawal quote must still hold to be reused, so it can't expire mid-send. */
         private const val QUOTE_EXPIRY_MARGIN_SECS = 30uL
+
+        /**
+         * How long after a restore the node refuses a still-valid invoice created before it that Spark hasn't listed.
+         * Spark can report a sync while its payment history failed to sync, so its list alone can't clear one. A week
+         * outlasts the default expiry of common wallets (an hour to a day, CLN's a week).
+         */
+        internal const val RESTORE_HOLD_SECS = 7 * 24 * 60 * 60L
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -893,12 +900,15 @@ class SparkRepo @Inject constructor(
      * While Spark can't list its payments, a send it started for [paymentHash] counts as pending, since it may be live,
      * and after a restore, until Spark's synced list seeds the kept hashes, [SparkError.SendRefused] is thrown for an
      * invoice created before the restore ([invoiceCreatedAt] in epoch seconds, null when unknown), as the restored
-     * hashes can lack a send Spark made of it.
+     * hashes can lack a send Spark made of it. For [RESTORE_HOLD_SECS] after a restore, an invoice created before it
+     * and not yet expired ([invoiceExpiresAt], null when unknown) that Spark hasn't listed is refused with
+     * [SparkError.RestoredInvoiceUnverified] whatever Spark listed, as Spark's list can lack its sends after a sync.
      */
     suspend fun earlierLightningSend(
         bolt11: String,
         paymentHash: String?,
         invoiceCreatedAt: Long? = null,
+        invoiceExpiresAt: Long? = null,
     ): EarlierSend? =
         withContext(bgDispatcher) {
             val recordsBefore = sendRecords.get()
@@ -930,8 +940,9 @@ class SparkRepo @Inject constructor(
                 val unseededSince = cacheStore.data.first().sparkHistoryUnseededSince
                 if (sparkService.isSupported && unseededSince != null && (invoiceCreatedAt ?: 0L) < unseededSince) {
                     Logger.warn("Refused a node send until Spark lists its earlier sends once", context = TAG)
-                    throw SparkError.SendRefused("Spark hasn't listed its earlier sends yet")
+                    throw SparkError.RestoredInvoiceUnverified()
                 }
+                refuseUnverifiedRestoredInvoice(invoiceCreatedAt, invoiceExpiresAt)
                 return@withContext null
             }
             seedSendHashes(payments)
@@ -940,9 +951,16 @@ class SparkRepo @Inject constructor(
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
-                ?: return@withContext (retried() ?: paymentHash?.lowercase()?.takeIf { it in unlisted })
-                    ?.let { EarlierSend.Pending(it) }
-            if (send.status == PaymentStatus.FAILED) retried()?.let { return@withContext EarlierSend.Pending(it) }
+            if (send == null) {
+                (retried() ?: paymentHash?.lowercase()?.takeIf { it in unlisted })
+                    ?.let { return@withContext EarlierSend.Pending(it) }
+                refuseUnverifiedRestoredInvoice(invoiceCreatedAt, invoiceExpiresAt)
+                return@withContext null
+            }
+            if (send.status == PaymentStatus.FAILED) {
+                retried()?.let { return@withContext EarlierSend.Pending(it) }
+                refuseUnverifiedRestoredInvoice(invoiceCreatedAt, invoiceExpiresAt)
+            }
             val hash = (send.details as PaymentDetails.Lightning).htlcDetails.paymentHash
             when (send.status) {
                 PaymentStatus.PENDING -> EarlierSend.Pending(hash)
@@ -950,6 +968,26 @@ class SparkRepo @Inject constructor(
                 PaymentStatus.FAILED -> null
             }
         }
+
+    /** Whether a node send needs its invoice's times for the checks after a restore in [earlierLightningSend]. */
+    suspend fun holdsRestoredInvoices(): Boolean {
+        val cache = cacheStore.data.first()
+        val restoredAt = cache.sparkRestoredAt
+        return cache.sparkHistoryUnseededSince != null ||
+            restoredAt != null && clock.now().epochSeconds < restoredAt + RESTORE_HOLD_SECS
+    }
+
+    private suspend fun refuseUnverifiedRestoredInvoice(invoiceCreatedAt: Long?, invoiceExpiresAt: Long?) {
+        val restoredAt = cacheStore.data.first().sparkRestoredAt ?: return
+        val now = clock.now().epochSeconds
+        val isHeld = sparkService.isSupported &&
+            now < restoredAt + RESTORE_HOLD_SECS &&
+            (invoiceCreatedAt ?: 0L) < restoredAt &&
+            (invoiceExpiresAt == null || now < invoiceExpiresAt)
+        if (!isHeld) return
+        Logger.warn("Refused a node send of a pre-restore invoice Spark hasn't listed", context = TAG)
+        throw SparkError.RestoredInvoiceUnverified()
+    }
 
     /** The count of sends recorded so far, read before a node send's checks for [hasRecordedSendSince]. */
     fun sendRecordMark(): Long = sendRecords.get()
