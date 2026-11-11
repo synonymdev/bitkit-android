@@ -178,7 +178,7 @@ class SparkExitViewModel @Inject constructor(
             sparkExitRepo.start(_uiState.value.fundFromSavings)
                 .onSuccess {
                     savingsFeeFloorSats = null
-                    _effects.emit(SparkExitEffect.Started)
+                    _uiState.update { it.copy(isStarted = true) }
                 }
                 .onFailure {
                     // Savings never pays more than the fee confirmed: the next funding asks for the refused one.
@@ -194,10 +194,14 @@ class SparkExitViewModel @Inject constructor(
                         ToastEventBus.send(it)
                     }
                     // The exit started but paying its fee funding failed: progress shows where to fund it.
-                    if (sparkExitRepo.state.value.isExiting) _effects.emit(SparkExitEffect.Started)
+                    if (sparkExitRepo.state.value.isExiting) _uiState.update { state -> state.copy(isStarted = true) }
                 }
             _uiState.update { it.copy(isStarting = false) }
         }
+    }
+
+    fun onStartShown() {
+        _uiState.update { it.copy(isStarted = false) }
     }
 
     /** Prices the higher rates the running exit can move to, selecting the fastest. */
@@ -299,7 +303,6 @@ class SparkExitViewModel @Inject constructor(
 }
 
 sealed interface SparkExitEffect {
-    data object Started : SparkExitEffect
     data object Cancelled : SparkExitEffect
     data object FeeBumped : SparkExitEffect
 }
@@ -315,6 +318,8 @@ data class SparkExitUiState(
     val fundFromSavings: Boolean = false,
     val showsFundingAddress: Boolean = false,
     val isStarting: Boolean = false,
+    /** The exit started: whichever exit screen shows, also one the user went back to meanwhile, opens its progress. */
+    val isStarted: Boolean = false,
     val isRefreshing: Boolean = false,
     val record: SparkExitRecord? = null,
     val tipHeight: UInt? = null,

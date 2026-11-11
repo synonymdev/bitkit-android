@@ -63,6 +63,19 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a started exit stays started until a screen opens its progress`() = test {
+        whenever(repo.start(any())).thenReturn(Result.success(Unit))
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+
+        // No screen collects while the user went back from Confirm.
+        sut.start()
+
+        assertTrue(sut.uiState.value.isStarted)
+        sut.onStartShown()
+        assertFalse(sut.uiState.value.isStarted)
+    }
+
+    @Test
     fun `funding from another wallet continues only once the address holds what the quote asks`() {
         val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
         assertFalse(SparkExitUiState().canContinueFunding)

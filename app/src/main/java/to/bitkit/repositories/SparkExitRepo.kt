@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.FeeRates
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -538,7 +539,8 @@ class SparkExitRepo @Inject constructor(
         runSuspendCatching {
             if (!paymentMutex.tryLock()) throw SparkExitError("A Spark exit payment is already being made")
             try {
-                payHigherFeeLocked(option)
+                // A payment that went out is always saved, even when the fee bump screen goes away meanwhile.
+                withContext(NonCancellable) { payHigherFeeLocked(option) }
             } finally {
                 paymentMutex.unlock()
             }
@@ -726,51 +728,59 @@ class SparkExitRepo @Inject constructor(
             transferRepo.markSettled(transferId)
             sparkRepo.releaseExitHold()
         }.getOrThrow()
-        cacheStore.update {
-            val next = it.sparkExitNextFundingIndexes + (fundingIndexKey to pending.fundingIndex.toInt() + 1)
-            it.copy(sparkExitNextFundingIndexes = next)
-        }
-        val createdAt = record.createdAt
-        // Published for the screens and a cancel, but driven only once the start settled the leaves it exits.
-        startingCreatedAt = createdAt
-        _state.update { it.copy(record = record, pending = null, fundingAddress = key.address) }
-        isLoaded = true
-        // Reconnecting for the exit disconnects Spark, which would cut a running leaf optimization short.
-        val isCurrent = try {
-            sparkRepo.awaitOptimizationIdle()
-            // A cancel during the wait ended this exit: nothing more of the start runs, and nothing is paid.
-            tickMutex.withLock {
-                if (!isStarting(createdAt)) return@withLock false
-                // An optimization since the quote swapped leaves: the exit is quoted again over the leaves Spark holds.
-                requote(pending)?.let { fresh ->
-                    // A failed write goes on with the confirmed quote, as a failed requote does.
-                    val requoted = writeRequote(requireNotNull(_state.value.record), fresh) ?: return@let
-                    quote = fresh
-                    record = requoted
-                    _state.update { it.copy(record = record) }
+        // Once saved, the start runs to its end even when its screen goes away: an exit left half started would keep
+        // Spark on Lightning with its leaf optimization on, and nothing would drive or fund it.
+        withContext(NonCancellable) {
+            cacheStore.update {
+                val next = it.sparkExitNextFundingIndexes + (fundingIndexKey to pending.fundingIndex.toInt() + 1)
+                it.copy(sparkExitNextFundingIndexes = next)
+            }
+            val createdAt = record.createdAt
+            // Published for the screens and a cancel, but driven only once the start settled the leaves it exits.
+            startingCreatedAt = createdAt
+            _state.update { it.copy(record = record, pending = null, fundingAddress = key.address) }
+            isLoaded = true
+            // Reconnecting for the exit disconnects Spark, which would cut a running leaf optimization short.
+            val isCurrent = try {
+                sparkRepo.awaitOptimizationIdle()
+                // A cancel during the wait ended this exit: nothing more of the start runs, and nothing is paid.
+                tickMutex.withLock {
+                    if (!isStarting(createdAt)) return@withLock false
+                    // An optimization since the quote swapped leaves: the exit is quoted again over the leaves Spark
+                    // holds.
+                    requote(pending)?.let { fresh ->
+                        // A failed write goes on with the confirmed quote, as a failed requote does.
+                        val requoted = writeRequote(requireNotNull(_state.value.record), fresh) ?: return@let
+                        quote = fresh
+                        record = requoted
+                        _state.update { it.copy(record = record) }
+                    }
+                    // Under the lock, so a cancel can't release Spark between the check and taking it off Lightning.
+                    sparkRepo.setExiting(true, reconnect = true)
+                    true
                 }
-                // Under the lock, so a cancel can't release Spark between the check and taking it off Lightning.
-                sparkRepo.setExiting(true, reconnect = true)
-                true
+            } finally {
+                startingCreatedAt = null
             }
-        } finally {
-            startingCreatedAt = null
-        }
-        if (!isCurrent) throw SparkExitStartCancelled()
-        work.schedulePeriodic()
-        Logger.info("Started Spark exit of '${quote.exitSats}' sats over '${quote.leafIds.size}' leaves", context = TAG)
-        // Driven before paying, so a failed payment from savings still leaves the exit watching its address.
-        scope.launch { tick() }
-        onAppForegrounded()
-        // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
-        val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
-        if (fundFromSavings && savingsSats > 0uL) {
-            runSuspendCatching {
-                payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates, pending.savingsFeeSats)
+            if (!isCurrent) throw SparkExitStartCancelled()
+            work.schedulePeriodic()
+            Logger.info(
+                "Started Spark exit of '${quote.exitSats}' sats over '${quote.leafIds.size}' leaves",
+                context = TAG,
+            )
+            // Driven before paying, so a failed payment from savings still leaves the exit watching its address.
+            scope.launch { tick() }
+            onAppForegrounded()
+            // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
+            val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
+            if (fundFromSavings && savingsSats > 0uL) {
+                runSuspendCatching {
+                    payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates, pending.savingsFeeSats)
+                }
+                    // A refused payment shows on progress at once, with the offer to pay again.
+                    .onFailure { _state.value.record?.let { current -> noteSavingsSend(current) } }
+                    .getOrThrow()
             }
-                // A refused payment shows on progress at once, with the offer to pay again.
-                .onFailure { _state.value.record?.let { current -> noteSavingsSend(current) } }
-                .getOrThrow()
         }
     }
 
@@ -867,27 +877,31 @@ class SparkExitRepo @Inject constructor(
             if (!paymentMutex.tryLock()) throw SparkExitError("A Spark exit payment is already running")
             try {
                 // Under the tick lock from the check to the saved txid, as the start's payment: a cancel either ends
-                // the exit before savings pays again or finds the payment and refuses.
-                tickMutex.withLock {
-                    val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
-                    val refused = savingsSend(record)?.takeIf { SparkExitMath.isSavingsPaymentRefused(record, it) }
-                        ?: throw SparkExitError("No refused savings payment to pay again")
-                    val outcome = lightningRepo.retryOriginalOnchainSend(
-                        attemptId = refused.attemptId,
-                        walletId = refused.walletId,
-                        feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
-                    ) { check(it.attemptId == refused.attemptId && it.address == refused.address) }
-                        .getOrThrow()
-                    val txid = fundingTxid(outcome, refused.amountSats)
-                    val current = _state.value.record ?: return@withLock
-                    val paid = current.copy(fundingPaymentTxid = txid)
-                    saveRecord(paid)
-                    _state.update {
-                        it.copy(
-                            record = paid,
-                            fundingState = SparkExitMath.fundingState(paid, utxos = null),
-                            isSavingsPaymentRefused = false,
-                        )
+                // the exit before savings pays again or finds the payment and refuses. Never cut short between the two.
+                withContext(NonCancellable) {
+                    tickMutex.withLock {
+                        val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) {
+                            "No running Spark exit"
+                        }
+                        val refused = savingsSend(record)?.takeIf { SparkExitMath.isSavingsPaymentRefused(record, it) }
+                            ?: throw SparkExitError("No refused savings payment to pay again")
+                        val outcome = lightningRepo.retryOriginalOnchainSend(
+                            attemptId = refused.attemptId,
+                            walletId = refused.walletId,
+                            feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
+                        ) { check(it.attemptId == refused.attemptId && it.address == refused.address) }
+                            .getOrThrow()
+                        val txid = fundingTxid(outcome, refused.amountSats)
+                        val current = _state.value.record ?: return@withLock
+                        val paid = current.copy(fundingPaymentTxid = txid)
+                        saveRecord(paid)
+                        _state.update {
+                            it.copy(
+                                record = paid,
+                                fundingState = SparkExitMath.fundingState(paid, utxos = null),
+                                isSavingsPaymentRefused = false,
+                            )
+                        }
                     }
                 }
             } finally {
@@ -967,41 +981,47 @@ class SparkExitRepo @Inject constructor(
      */
     suspend fun cancel(): Result<SparkExitCancel> = withContext(bgDispatcher) {
         runSuspendCatching {
-            tickMutex.withLock {
-                val record = _state.value.record ?: throw SparkExitError("No Spark exit to cancel")
-                val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
-                // A savings send to the address still unresolved may be retried later: the exit keeps watching it.
-                val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
-                    .getOrElse { throw SparkExitCancelUnreadable() }
-                val isSending = attempt?.address == address && attempt.isUnresolved
-                _state.update { it.copy(isSavingsSendUnresolved = isSending) }
-                if (!canCancel) throw SparkExitError("The Spark exit can no longer be cancelled")
-                val chain = requireNotNull(chain) { "No chain host for this network" }
-                val utxos = runSuspendCatching { chain.utxos(address) }.getOrElse { throw SparkExitCancelUnreadable() }
-                record.transferId?.let { transferRepo.markSettled(it) }
-                val outcome = if (utxos.isEmpty()) {
-                    store.delete()
-                    _state.update { it.copy(record = null) }
-                    work.cancelAll()
-                    SparkExitCancel.Cancelled
-                } else {
-                    val leftover = utxos.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) }
-                    val ended = record.copy(
-                        phase = SparkExitRecord.Phase.Failed(CANCELLED_REASON),
-                        leftover = leftover,
-                        isResultSeen = true,
-                        isCancelled = true,
-                    )
-                    saveRecord(ended)
-                    _state.update { it.copy(record = ended) }
-                    work.schedulePeriodic()
-                    SparkExitCancel.Sweeping
+            // Runs to its end once begun, so a cancel that settled the transfer always releases Spark.
+            withContext(NonCancellable) {
+                tickMutex.withLock {
+                    val record = _state.value.record ?: throw SparkExitError("No Spark exit to cancel")
+                    val address = requireNotNull(record.funding.firstOrNull()?.address) {
+                        "No Spark exit funding address"
+                    }
+                    // A savings send to the address still unresolved may be retried later: the exit keeps watching it.
+                    val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
+                        .getOrElse { throw SparkExitCancelUnreadable() }
+                    val isSending = attempt?.address == address && attempt.isUnresolved
+                    _state.update { it.copy(isSavingsSendUnresolved = isSending) }
+                    if (!canCancel) throw SparkExitError("The Spark exit can no longer be cancelled")
+                    val chain = requireNotNull(chain) { "No chain host for this network" }
+                    val utxos = runSuspendCatching { chain.utxos(address) }
+                        .getOrElse { throw SparkExitCancelUnreadable() }
+                    record.transferId?.let { transferRepo.markSettled(it) }
+                    val outcome = if (utxos.isEmpty()) {
+                        store.delete()
+                        _state.update { it.copy(record = null) }
+                        work.cancelAll()
+                        SparkExitCancel.Cancelled
+                    } else {
+                        val leftover = utxos.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) }
+                        val ended = record.copy(
+                            phase = SparkExitRecord.Phase.Failed(CANCELLED_REASON),
+                            leftover = leftover,
+                            isResultSeen = true,
+                            isCancelled = true,
+                        )
+                        saveRecord(ended)
+                        _state.update { it.copy(record = ended) }
+                        work.schedulePeriodic()
+                        SparkExitCancel.Sweeping
+                    }
+                    // Nothing was paid from Spark: the balance it showed before the exit shows again.
+                    sparkRepo.releaseExitHold()
+                    sparkRepo.setExiting(false, reconnect = true)
+                    Logger.info("Cancelled the Spark exit with outcome '$outcome'", context = TAG)
+                    outcome
                 }
-                // Nothing was paid from Spark: the balance it showed before the exit shows again.
-                sparkRepo.releaseExitHold()
-                sparkRepo.setExiting(false, reconnect = true)
-                Logger.info("Cancelled the Spark exit with outcome '$outcome'", context = TAG)
-                outcome
             }
         }
     }

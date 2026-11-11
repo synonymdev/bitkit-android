@@ -841,6 +841,26 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.onAppBackgrounded()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a start whose screen goes away after its record is saved still takes spark off lightning`() = test {
+        val gate = CompletableDeferred<Unit>()
+        whenever(sparkRepo.awaitOptimizationIdle()).doSuspendableAnswer { gate.await() }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+
+        val start = async { sut.start(fundFromSavings = false) }
+        runCurrent()
+        start.cancel()
+        gate.complete(Unit)
+        runCurrent()
+
+        verify(sparkRepo).setExiting(true, true)
+        verify(work, atLeastOnce()).schedulePeriodic()
+        assertTrue(sut.state.value.isExiting)
+        sut.onAppBackgrounded()
+    }
+
     @Test
     fun `a leaf swap between the quote and the start quotes the exit again`() = test {
         val sdk = FakeSparkExitRecovering()

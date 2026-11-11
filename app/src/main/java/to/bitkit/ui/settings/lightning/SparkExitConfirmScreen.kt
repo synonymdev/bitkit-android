@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -35,9 +34,7 @@ fun SparkExitConfirmScreen(
     onStart: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) {
-        viewModel.effects.collect { if (it == SparkExitEffect.Started) onStart() }
-    }
+    SparkExitStartedEffect(viewModel, onStart)
     // Asked as the exit starts: the notifications are how a stalled background run reaches the user.
     val requestNotifications = rememberSubscriptionNotificationsRequest()
     Content(

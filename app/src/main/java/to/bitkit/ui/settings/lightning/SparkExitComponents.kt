@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -19,6 +21,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import breez_sdk_spark.RecoverFundsResponse
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
@@ -42,6 +45,21 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.viewmodels.AppViewModel
+
+/**
+ * Opens the progress of an exit that started, from whichever exit screen shows: the start runs on when the user goes
+ * back from Confirm meanwhile.
+ */
+@Composable
+internal fun SparkExitStartedEffect(viewModel: SparkExitViewModel, onStarted: () -> Unit) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isStarted = uiState.isStarted
+    LaunchedEffect(isStarted) {
+        if (!isStarted) return@LaunchedEffect
+        viewModel.onStartShown()
+        onStarted()
+    }
+}
 
 /** An amount as plain text for copy that names it, in the user's primary unit. */
 @Composable
