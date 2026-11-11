@@ -723,8 +723,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             val fromSpending = it.getArgument<Long>(3) == 0L
             val picked = endpoints.firstOrNull { endpoint ->
                 MethodId.fromRawValue(endpoint.methodId)?.isOnchain != fromSpending
-            } ?: endpoints.first()
-            PaykitRoute.Direct(picked)
+            } ?: endpoints.firstOrNull()
+            picked?.let { endpoint -> PaykitRoute.Direct(endpoint) } ?: PaykitRoute.None("No endpoint")
         }
         whenever(connectionRecovery.currentGeneration()).thenAnswer { walletGeneration }
         whenever(connectionRecovery.isCurrentGeneration(anyOrNull())).thenAnswer {
@@ -12368,6 +12368,41 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a mixed contact below its lnurl minimum offers the router only its onchain endpoint`() = test {
+        openMixedContact()
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 2_000uL, debitSat = 2_300uL)
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+
+        continueWithAmount(leg.deliveredSat)
+
+        // An LNURL whose minimum refuses the amount would win over an affordable Spark leg.
+        verify(paykitRouteRepo).route(
+            eq(leg.deliveredSat),
+            eq(listOf(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))),
+            any(),
+            any(),
+            any(),
+        )
+    }
+
+    @Test
+    fun `a mixed contact no route pays below its lnurl minimum shows the lnurl minimum`() = test {
+        openMixedContact()
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__title)).thenReturn("Amount Too Low")
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__description)).thenReturn("Min {amount}")
+        whenever(formatMoneyValue(5_000uL)).thenReturn("5000")
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.None("Spark can't cover the fee")))
+
+        continueWithAmount(2_000u)
+
+        verify(toastManager).enqueue(check { assertEquals("LnurlPayAmountTooLowToast", it.testTag) })
+    }
+
+    @Test
     fun `a mixed contact lightning can pay routes direct`() = test {
         val lnurl = openMixedContact()
         val direct = PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri)
@@ -19099,6 +19134,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         whenever(lightningRepo.canSend(any())).thenReturn(true)
         whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
+        // Below the minimum, the router gets no endpoint and the LNURL's minimum toast names the amount.
+        whenever(formatMoneyValue(any())).thenReturn("1,000 sats")
         for ((cents, route) in listOf(50uL to SendRoute.Amount, 250uL to SendRoute.Confirm)) {
             val request = paymentRequest().copy(
                 amount = PaykitAmount(PaykitAsset.USD, cents),

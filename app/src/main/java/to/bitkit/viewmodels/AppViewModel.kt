@@ -4728,28 +4728,7 @@ class AppViewModel @Inject constructor(
         }
         // The route can restore an LNURL a BOLT11 pick cleared, so its limits are read after routing.
         val payLnurl = _sendUiState.value.lnurl
-        if (payLnurl is LnurlParams.LnurlPay) {
-            val minSendable = payLnurl.data.minSendableSat()
-            if (_sendUiState.value.amount < minSendable) {
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
-                    description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
-                        .replace("{amount}", formatMoneyValue(minSendable)),
-                    testTag = "LnurlPayAmountTooLowToast",
-                )
-                return
-            }
-            if (_sendUiState.value.amount > payLnurl.data.maxSendableSat()) {
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.wallet__lnurl_pay__error_max__title),
-                    description = context.getString(R.string.wallet__lnurl_pay__error_max__description),
-                    testTag = "LnurlPayAmountTooHighToast",
-                )
-                return
-            }
-        }
+        if (payLnurl is LnurlParams.LnurlPay && !validateLnurlAmount(payLnurl, _sendUiState.value.amount)) return
 
         _sendUiState.update { it.copy(isLoading = true) }
         try {
@@ -4764,9 +4743,35 @@ class AppViewModel @Inject constructor(
         setSendEffect(SendEffect.NavigateToConfirm)
     }
 
+    /** Shows [lnurl]'s too-low or too-high toast when [amount] is outside its limits; true when it accepts it. */
+    private suspend fun validateLnurlAmount(lnurl: LnurlParams.LnurlPay, amount: ULong): Boolean {
+        val minSendable = lnurl.data.minSendableSat()
+        if (amount < minSendable) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
+                description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
+                    .replace("{amount}", formatMoneyValue(minSendable)),
+                testTag = "LnurlPayAmountTooLowToast",
+            )
+            return false
+        }
+        if (amount > lnurl.data.maxSendableSat()) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__lnurl_pay__error_max__title),
+                description = context.getString(R.string.wallet__lnurl_pay__error_max__description),
+                testTag = "LnurlPayAmountTooHighToast",
+            )
+            return false
+        }
+        return true
+    }
+
     /**
-     * Asks bitkit-core's router how to pay the contact from the selected source: Spending offers every endpoint and a
-     * Spark leg to on-chain ones, Savings only the on-chain endpoints. Direct pays the endpoint it names.
+     * Asks bitkit-core's router how to pay the contact from the selected source: Spending offers every endpoint but an
+     * LNURL whose limits refuse the amount, and a Spark leg to on-chain ones; Savings only the on-chain endpoints.
+     * Direct pays the endpoint it names.
      */
     private suspend fun routePaykitPayment(route: PaykitRouteUi): PaykitRouteOutcome {
         val state = _sendUiState.value
@@ -4776,9 +4781,15 @@ class AppViewModel @Inject constructor(
         val lightningSpendable = if (fromSpending) maxSendableLightningSats() else 0uL
         val onchainSpendable = if (fromSpending) 0uL else walletRepo.balanceState.value.maxSendOnchainSats
         _sendUiState.update { it.copy(isLoading = true) }
+        // An LNURL whose limits refuse the amount must never win over an affordable Spark leg.
+        val refusingLnurl = route.lnurl?.takeIf { fromSpending && !it.accepts(state.amount) }
         val result = paykitRouteRepo.route(
             amountSats = state.amount,
-            endpoints = if (fromSpending) route.endpoints else route.endpoints.filter { it.isOnchain() },
+            endpoints = when {
+                !fromSpending -> route.endpoints.filter { it.isOnchain() }
+                refusingLnurl != null -> route.endpoints.filterNot { it.methodId == MethodId.Lnurl.rawValue }
+                else -> route.endpoints
+            },
             lightningSpendableSats = lightningSpendable,
             onchainSpendableSats = onchainSpendable,
             quoteServiceLegs = fromSpending && route.offersSparkLeg,
@@ -4825,6 +4836,11 @@ class AppViewModel @Inject constructor(
                 _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
                 // The router's reason is English for the log: the app tells a short balance from an unusable contact.
                 val isBalanceShort = state.amount > lightningSpendable.safe() + onchainSpendable.safe()
+                // The router never saw an LNURL whose limits refuse the amount, so its limit says why.
+                if (!isBalanceShort && refusingLnurl != null) {
+                    validateLnurlAmount(refusingLnurl, state.amount)
+                    return PaykitRouteOutcome.Refused
+                }
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(
@@ -9633,6 +9649,9 @@ data class PaykitRouteUi(
 private enum class PaykitRouteOutcome { Direct, Leg, Refused, Stale }
 
 private fun PaykitEndpoint.isOnchain(): Boolean = MethodId.fromRawValue(methodId)?.isOnchain == true
+
+private fun LnurlParams.LnurlPay.accepts(amount: ULong): Boolean =
+    amount in data.minSendableSat()..data.maxSendableSat()
 
 @Immutable
 data class OnchainFeeUi(
