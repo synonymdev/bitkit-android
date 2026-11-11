@@ -688,8 +688,8 @@ class SparkRepo @Inject constructor(
 
     /**
      * What became of an attempt to withdraw exactly [amountSats] to [address]: sent once Spark's synced list holds a
-     * withdrawal to it that is not one of [earlierTxids], unsent once Spark synced and no journaled withdrawal to
-     * [address] is still settling, else unknown.
+     * completed withdrawal to it that is not one of [earlierTxids], unsent once Spark synced and no journaled or
+     * pending withdrawal to [address] is still settling, else unknown.
      */
     suspend fun withdrawalOutcome(
         address: String,
@@ -701,15 +701,17 @@ class SparkRepo @Inject constructor(
             it.address == address && it.amountSats == amountSats && it.txid !in earlierTxids
         }?.let { return@withContext SparkWithdrawalOutcome.Sent(it.txid) }
         if (!_state.value.hasSynced || isWithdrawing) return@withContext SparkWithdrawalOutcome.Unknown
-        val txid = sparkService.listPayments().firstNotNullOfOrNull { payment ->
-            val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@firstNotNullOfOrNull null
-            withdraw.txId.takeIf {
-                payment.status != PaymentStatus.FAILED && withdraw.destinationAddress == address &&
-                    payment.amount.toLong().toULong() == amountSats && it !in earlierTxids
-            }
+        val attempts = sparkService.listPayments().filter { payment ->
+            val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@filter false
+            withdraw.destinationAddress == address && payment.amount.toLong().toULong() == amountSats &&
+                withdraw.txId !in earlierTxids
         }
+        // Spark keeps a withdrawal pending until its provider accepts the payout, which can still fail it.
+        val txid = attempts.firstOrNull { it.status == PaymentStatus.COMPLETED }
+            ?.let { (it.details as PaymentDetails.Withdraw).txId }
         when {
             txid != null -> SparkWithdrawalOutcome.Sent(txid)
+            attempts.any { it.status == PaymentStatus.PENDING } -> SparkWithdrawalOutcome.Unknown
             cacheStore.data.first().pendingSparkWithdrawal?.address == address -> SparkWithdrawalOutcome.Unknown
             else -> SparkWithdrawalOutcome.Unsent
         }
@@ -780,6 +782,9 @@ class SparkRepo @Inject constructor(
                 // A failed withdrawal paid nothing: its journal closed as recorded, so the caller sees it unsent and
                 // releases the proof, private list and allowance attempt instead of showing success.
                 if (payment.status == PaymentStatus.FAILED) throw SparkError.WithdrawalNotSent()
+                // One still pending can fail until its provider accepts the payout, so its outcome stays unknown, on
+                // the pending screen, until its journal settles.
+                if (payment.status != PaymentStatus.COMPLETED) throw SparkError.WithdrawalNotCompleted()
                 (payment.details as? PaymentDetails.Withdraw)?.txId ?: payment.id
             }.onFailure {
                 Logger.error("Failed to withdraw to a Paykit contact with Spark", it, context = TAG)
@@ -1419,7 +1424,8 @@ class SparkRepo @Inject constructor(
             return false
         }
         unsavedPayments.remove(payment.id)
-        if (journal != null && settlesJournal) {
+        // A pending withdrawal can still fail, so only a completed or failed one closes its journal.
+        if (journal != null && settlesJournal && payment.status != PaymentStatus.PENDING) {
             // The tags picked on Confirm travel with the journal, so a recovered withdrawal keeps them too.
             // A failed tag write keeps the journal, so the next refresh tags it again; a deleted activity takes none.
             if (journal.tags.isNotEmpty() && !isDeleted) {
@@ -1429,7 +1435,7 @@ class SparkRepo @Inject constructor(
                     return false
                 }
             }
-            val sentTxid = txid.takeIf { payment.status != PaymentStatus.FAILED }
+            val sentTxid = txid.takeIf { payment.status == PaymentStatus.COMPLETED }
             if (clearJournal(journal, sentTxid)) {
                 _withdrawalSettlements.emit(SparkWithdrawalSettlement(journal.address, journal.amountSats, sentTxid))
             }

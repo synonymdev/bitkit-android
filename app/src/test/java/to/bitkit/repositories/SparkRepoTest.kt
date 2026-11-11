@@ -1203,6 +1203,44 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a pending withdrawal stays open until spark completes it`() = test {
+        val sut = journaledSpark()
+        val pending = contactWithdrawal().copy(status = PaymentStatus.PENDING)
+        whenever(sparkService.send(any())).thenReturn(pending)
+        whenever(sparkService.listPayments()).thenReturn(emptyList(), listOf(pending))
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertNull(result.getOrNull(), "Spark can still fail a withdrawal until its provider accepts the payout")
+        assertEquals("pubkycontact", cacheData.value.pendingSparkWithdrawal?.contact)
+        assertEquals(SparkWithdrawalOutcome.Unknown, sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()))
+
+        whenever(sparkService.listPayments()).thenReturn(listOf(contactWithdrawal()))
+        sut.start(0).getOrThrow()
+
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        assertEquals(
+            SparkWithdrawalOutcome.Sent("withdrawal"),
+            sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()),
+        )
+    }
+
+    @Test
+    fun `a pending withdrawal spark later fails closes as unsent`() = test {
+        val sut = journaledSpark()
+        val pending = contactWithdrawal().copy(status = PaymentStatus.PENDING)
+        whenever(sparkService.send(any())).thenReturn(pending)
+        whenever(sparkService.listPayments()).thenReturn(emptyList(), listOf(pending))
+        sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        whenever(sparkService.listPayments()).thenReturn(listOf(pending.copy(status = PaymentStatus.FAILED)))
+        sut.start(0).getOrThrow()
+
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        assertEquals(SparkWithdrawalOutcome.Unsent, sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()))
+    }
+
+    @Test
     fun `a withdrawal to a contact is not marked as a transfer`() = test {
         val sent = OnchainActivity.create(
             id = "withdrawal",

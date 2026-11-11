@@ -308,6 +308,9 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     /** Spark's list shows the withdrawal never went out. */
     class WithdrawalNotSent : SparkError("Spark never sent the withdrawal")
 
+    /** Spark returned the withdrawal as pending, which it can still fail, so its outcome is not known yet. */
+    class WithdrawalNotCompleted : SparkError("Spark has not completed the withdrawal yet")
+
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
      * payment, or its fee was over the caller's limit. A Paykit request or allowance attempt can then end as failed.
