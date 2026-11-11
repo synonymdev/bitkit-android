@@ -19,6 +19,8 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,6 +34,7 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val logsRepo = mock<LogsRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val sparkRepo = mock<SparkRepo>()
 
     private val lightningState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
     private val lastKnownChannels = MutableStateFlow(
@@ -44,6 +47,7 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(lightningRepo.lastKnownChannels).thenReturn(lastKnownChannels)
         whenever(lightningRepo.nodeEvents).thenReturn(emptyFlow())
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
         whenever {
             activityRepo.getClosedChannels(SortDirection.DESC)
         }.thenReturn(Result.success(emptyList()))
@@ -74,5 +78,6 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
         blocktankRepo = blocktankRepo,
         logsRepo = logsRepo,
         activityRepo = activityRepo,
+        sparkRepo = sparkRepo,
     )
 }

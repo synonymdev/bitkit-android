@@ -54,6 +54,15 @@ sealed interface PaykitAllowanceEvent {
     data object LedgerChanged : PaykitAllowanceEvent
 }
 
+/** Why automatic payments wait for the user to resume them; every covered request asks for approval meanwhile. */
+enum class PaykitAllowancePause {
+    /** The allowance ledger is behind one this wallet has read. */
+    LEDGER_BEHIND,
+
+    /** The wallet was restored from a backup. */
+    RESTORED,
+}
+
 enum class PaykitAllowanceAutoPayResult {
     /** No accepted Allowance covers the request's contact, or the request is already being paid. */
     NOT_COVERED,
@@ -98,6 +107,9 @@ class PaykitAllowanceRepo @Inject constructor(
         /** A request created up to this long before its Allowance was accepted still counts as created after it. */
         val ACCEPTANCE_CLOCK_TOLERANCE = 30.seconds
 
+        /** Lifecycle states of an allowance that pays, or may come to pay, automatically. */
+        private val PAYABLE_STATES = setOf(AllowanceLifecycleState.PROPOSED, AllowanceLifecycleState.ACCEPTED)
+
         /** Endpoints Bitkit pays automatically: bolt11 and every on-chain method of the network. */
         fun allowedPaymentEndpointIdentifiers(network: Network = Env.network): List<String> =
             (listOf(MethodId.Bolt11) + MethodId.entries.filter { it.isOnchain }).map { it.rawValueForNetwork(network) }
@@ -141,10 +153,15 @@ class PaykitAllowanceRepo @Inject constructor(
     /** Sats paid automatically per entry id, for "Paid so far". */
     val autoPaidSats: StateFlow<Map<String, ULong>> = _autoPaidSats.asStateFlow()
 
-    private val _isAutomaticPaymentPaused = MutableStateFlow(false)
+    private val _automaticPaymentPause = MutableStateFlow<PaykitAllowancePause?>(null)
 
-    /** True while the allowance ledger is behind one this wallet has read, until [resumeAutomaticPayments]. */
-    val isAutomaticPaymentPaused: StateFlow<Boolean> = _isAutomaticPaymentPaused.asStateFlow()
+    /**
+     * Why automatic payments are paused until [resumeAutomaticPayments], or null while no pause notice shows. A ledger
+     * behind this wallet comes first. A wallet restore pauses automatic payments on this device until Resume, but its
+     * notice shows only while the wallet pays through a proposed or accepted allowance, so an allowance created later
+     * on a restored wallet starts paused.
+     */
+    val automaticPaymentPause: StateFlow<PaykitAllowancePause?> = _automaticPaymentPause.asStateFlow()
 
     val events: SharedFlow<PaykitAllowanceEvent> = executor.events
 
@@ -177,12 +194,15 @@ class PaykitAllowanceRepo @Inject constructor(
                 .map { it.nodeLifecycleState.isRunning() }
                 .distinctUntilChanged()
                 .filter { it }
-                .collect {
-                    // Attempts recovery left open while the node could not list payments are settled now.
-                    executor.activeIdentity?.let { identity -> executor.recover(identity) }
-                    executor.settleOpenLightningAttempts()
-                }
+                .collect { settleAttemptsLeftOpen() }
         }
+        // Attempts recovery left open while the node or Spark could not list payments are settled once both can.
+        scope.launch { lightningRepo.isSparkSynced.filter { it }.collect { settleAttemptsLeftOpen() } }
+    }
+
+    private suspend fun settleAttemptsLeftOpen() {
+        executor.activeIdentity?.let { identity -> executor.recover(identity) }
+        executor.settleOpenLightningAttempts()
     }
 
     fun entry(id: String): PaykitAllowanceEntry? = _entries.value.firstOrNull { it.id == id }
@@ -242,7 +262,7 @@ class PaykitAllowanceRepo @Inject constructor(
         manualRequestSignatures.clear()
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()
-        _isAutomaticPaymentPaused.update { false }
+        _automaticPaymentPause.update { null }
         publish(emptyList(), PaykitAllowanceLocalState())
     }
 
@@ -252,14 +272,25 @@ class PaykitAllowanceRepo @Inject constructor(
             refreshMutex.withLock {
                 val listing = listAllowances()
                 listing.onSuccess { executor.rememberEndedAllowances(identity, it) }
-                val isPaused = executor.isLedgerBehind(identity)
+                val allowances = listing.getOrDefault(_allowances.value)
+                val pause = automaticPaymentPause(identity, allowances)
                 if (activeIdentity == identity) {
-                    _isAutomaticPaymentPaused.update { isPaused }
-                    publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
+                    _automaticPaymentPause.update { pause }
+                    publish(allowances, executor.localState(identity))
                 }
                 listing.map {}
             }
         }
+    }
+
+    private suspend fun automaticPaymentPause(
+        identity: String,
+        allowances: List<PaykitAllowance>,
+    ): PaykitAllowancePause? = when {
+        executor.isLedgerBehind(identity) -> PaykitAllowancePause.LEDGER_BEHIND
+        executor.isPausedAfterRestore() && allowances.any { it.isAllower && it.lifecycleState in PAYABLE_STATES } ->
+            PaykitAllowancePause.RESTORED
+        else -> null
     }
 
     private suspend fun <T> whileUpdating(block: suspend () -> T): T {
@@ -461,11 +492,24 @@ class PaykitAllowanceRepo @Inject constructor(
         paykitSdkService.rejectAllowance(it.counterparty, it.allowanceId)
     }
 
-    /** Resumes automatic payments from the ledger read now; see [PaykitAllowanceExecutor.acceptCurrentLedger]. */
+    /**
+     * Resumes automatic payments from the ledger read now and ends the pause after a wallet restore; see
+     * [PaykitAllowanceExecutor.acceptCurrentLedger]. Resuming from the restore notice first checks the ledger: one
+     * behind this wallet stays paused and shows its own notice, and one that cannot be read fails, so neither is
+     * accepted without the user seeing that notice.
+     */
     suspend fun resumeAutomaticPayments(): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            if (
+                _automaticPaymentPause.value == PaykitAllowancePause.RESTORED &&
+                executor.isLedgerBehindOrThrow(identity)
+            ) {
+                refresh()
+                return@runSuspendCatching
+            }
             executor.acceptCurrentLedger(identity)
+            executor.resumeAfterRestore()
             executor.recover(identity)
             refresh()
             Unit
@@ -566,11 +610,12 @@ class PaykitAllowanceRepo @Inject constructor(
             it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
         }
         if (covered.isEmpty()) return@withContext false
-        if (!canPayNow()) return@withContext markAboveLimitManual(covered, identity, signature)
+        val payable = payableNow(covered)
+        if (payable.isEmpty()) return@withContext markAboveLimitManual(covered, identity, signature)
         if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
         try {
-            whileUpdating { payCovered(covered, identity, signature) }
+            whileUpdating { payCovered(payable, identity, signature) }
         } finally {
             isProcessingRequests.set(false)
         }
@@ -589,11 +634,15 @@ class PaykitAllowanceRepo @Inject constructor(
 
     /**
      * A node that just started lists its channels before they reconnect, and a payment sent then fails with no route.
-     * Covered requests wait for the next refresh instead of falling back to the manual flow.
+     * Covered requests wait for the next refresh instead of falling back to the manual flow, except those Spark can
+     * pay: Spark pays whenever the node cannot, so it needs neither a running node nor a usable channel.
      */
-    private fun canPayNow(): Boolean {
+    private fun payableNow(covered: List<PaykitPaymentRequest>): List<PaykitPaymentRequest> {
         val state = lightningRepo.lightningState.value
-        return state.nodeLifecycleState.isRunning() && (state.channels.isEmpty() || state.channels.any { it.isUsable })
+        val nodeCanPay = state.nodeLifecycleState.isRunning() &&
+            (state.channels.isEmpty() || state.channels.any { it.isUsable })
+        if (nodeCanPay) return covered
+        return covered.filter { request -> request.allowanceSats()?.let { lightningRepo.canSendWithSpark(it) } == true }
     }
 
     /** While the node cannot pay, a request that fits no allowance must not wait for channels: it asks at once. */

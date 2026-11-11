@@ -5,8 +5,8 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 [`app/src/test/resources/paykit-issuer-interoperability.json`](../../app/src/test/resources/paykit-issuer-interoperability.json).
 
 `fixed-price-bitcoin.xml` verifies a USD-denominated request settled in BTC and an explicit
-same-asset rail price. After preparation, the Amount screen shows the fixed, uneditable payment
-amount with Savings selected. Continue opens confirmation with the same amount. The amount uses
+same-asset rail price. After preparation, confirmation opens directly with the fixed, uneditable
+payment amount, without an Amount screen in between. The amount uses
 the issuer's fixed rate; the displayed fiat estimate uses Bitkit's own market rate. The flow stops
 before broadcasting. Differing rail prices,
 fractional-satoshi Lightning payments, and dynamic quotes remain unsupported.
@@ -36,6 +36,10 @@ The accepted journey uses:
 - Endpoint payload: `{"value":"bcrt1qissuerfixture"}`, replacing the placeholder address with a valid current receive address from the issuer
 
 Rejected fixture shapes stay in unit tests because Bitkit intentionally does not present requests that fail the contract gate.
+
+`request-note-too-long.xml` checks that a request whose note does not fit one Paykit message is
+refused with "Shorten the note and try again." before anything is sent, and sends after the note is
+shortened. It uses the same two-instance setup as `request-summary.xml`.
 
 `success-dismissal.xml` matches iOS's journey: after paying a Lightning request, closing success
 must leave no error toast or duplicate payment; closing a later unpaid request must not send it.

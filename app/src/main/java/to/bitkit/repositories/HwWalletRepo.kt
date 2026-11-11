@@ -15,7 +15,11 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,6 +34,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -103,6 +108,7 @@ class HwWalletRepo @Inject constructor(
         private const val WATCHER_ID_SEPARATOR = "|"
         private val WATCHER_START_RETRY_DELAY = 30.seconds
         const val DEVICE_LABEL_MAX_LENGTH = 50
+        private const val MAX_FEE_ESTIMATES = 32
 
         /** Trezor v1 (2.4.0) tracks native SegWit accounts. */
         private val SUPPORTED_WATCHER_ADDRESS_TYPES = setOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey)
@@ -116,6 +122,24 @@ class HwWalletRepo @Inject constructor(
     private var scanBluetoothVendor = HwWalletVendor.TREZOR
 
     private val scope = appScope(ioDispatcher, TAG)
+
+    /**
+     * Exact-amount fee composes, shared by every caller asking for the same payment. A compose runs
+     * on the single core queue and takes seconds, so choosing a funding source, the confirm screen
+     * and a refresh that replaces a cancelled one all reuse one result. Keyed by the funding
+     * account's state (balance and transactions), so any change to its coins composes again; a
+     * failed compose is not kept.
+     */
+    private val feeEstimates = mutableMapOf<FeeEstimateKey, Deferred<Result<ULong>>>()
+    private val feeEstimatesLock = Any()
+
+    private data class FeeEstimateKey(
+        val walletId: String,
+        val address: String,
+        val sats: ULong,
+        val satsPerVByte: ULong,
+        val fundingState: Int,
+    )
     private val watcherMutex = Mutex()
     private val sessionMutex = Mutex()
 
@@ -754,14 +778,59 @@ class HwWalletRepo @Inject constructor(
         address: String,
         sats: ULong,
         satsPerVByte: ULong,
-    ): Result<ULong> = withContext(ioDispatcher) {
-        runSuspendCatching {
-            composeFundingOffline(
-                walletId = walletId,
-                output = ComposeOutput.Payment(address = address, amountSats = sats),
-                satsPerVByte = satsPerVByte,
-            ).fee
+    ): Result<ULong> {
+        val key = FeeEstimateKey(
+            walletId = walletId,
+            address = address,
+            sats = sats,
+            satsPerVByte = satsPerVByte,
+            fundingState = fundingState(walletId),
+        )
+        val estimate = synchronized(feeEstimatesLock) {
+            feeEstimates.keys.removeAll { it.walletId == walletId && it.fundingState != key.fundingState }
+            if (feeEstimates.size >= MAX_FEE_ESTIMATES && key !in feeEstimates) feeEstimates.clear()
+            feeEstimates[key] ?: run {
+                // Owned by the repository scope, so a caller that is cancelled mid-compose leaves
+                // the result for the next caller instead of discarding it.
+                // Started only once stored, so a compose that ends at once can still drop itself.
+                val created = scope.async(ioDispatcher, start = CoroutineStart.LAZY) {
+                    runSuspendCatching {
+                        composeFundingOffline(
+                            walletId = walletId,
+                            output = ComposeOutput.Payment(address = address, amountSats = sats),
+                            satsPerVByte = satsPerVByte,
+                        ).fee
+                    }.also { result ->
+                        // Dropped by the compose itself, not by a waiting caller, which may be gone.
+                        if (result.isFailure) forgetFeeEstimate(key, coroutineContext.job)
+                    }
+                }
+                feeEstimates[key] = created
+                created.invokeOnCompletion { cause -> if (cause != null) forgetFeeEstimate(key, created) }
+                created.start()
+                created
+            }
         }
+        return estimate.await()
+    }
+
+    private fun forgetFeeEstimate(key: FeeEstimateKey, estimate: Job) = synchronized(feeEstimatesLock) {
+        if (feeEstimates[key] === estimate) feeEstimates.remove(key)
+    }
+
+    /**
+     * Changes whenever the funding account's coins can have changed: any transaction added, replaced
+     * or dropped, or a balance change. The balance alone can return to the same total over other coins.
+     */
+    private fun fundingState(walletId: String): Int {
+        val funding = _watcherData.value.values.filter {
+            it.walletId == walletId && it.addressType == HwFundingAddressType.DEFAULT
+        }
+        val balance = funding.fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
+        val txIds = funding.flatMap { watcher ->
+            watcher.activities.filterIsInstance<Activity.Onchain>().map { it.v1.txId }
+        }.sorted()
+        return (listOf(balance.toString()) + txIds).hashCode()
     }
 
     /** Exact amount available after the coin-selection fee, computed offline from the account xpub. */

@@ -3,13 +3,20 @@ package to.bitkit.repositories
 import com.synonym.paykit.PaymentOutcome
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 class PaykitAllowancePayerTest : BaseUnitTest() {
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
@@ -18,10 +25,58 @@ class PaykitAllowancePayerTest : BaseUnitTest() {
 
     private val requestId = PaykitPaymentRequestId(paymentRequestId = "req-1", counterparty = "payee")
     private val txid = "ab".repeat(32)
+    private val paymentHash = "cd".repeat(32)
 
     @Before
     fun setUp() = test {
         whenever(paymentProofRepo.hasVerifiedOnchainProof(any(), any())).thenReturn(false)
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList())
+        whenever(lightningRepo.canListSparkPayments()).thenReturn(true)
+        whenever(lightningRepo.sparkLightningSend(any())).thenReturn(SparkLightningSend.NotFound)
+    }
+
+    @Test
+    fun `a lightning send the node does not know is read from spark`() = test {
+        val statuses = mapOf(
+            SparkPaymentStatus.COMPLETED to PaymentStatus.SUCCEEDED,
+            SparkPaymentStatus.PENDING to PaymentStatus.PENDING,
+            SparkPaymentStatus.FAILED to PaymentStatus.FAILED,
+        )
+        for ((spark, node) in statuses) {
+            whenever(lightningRepo.sparkLightningSend(paymentHash)).thenReturn(SparkLightningSend.Found(spark, null))
+
+            assertEquals(node, sut.lightningPaymentStatus(paymentHash))
+        }
+    }
+
+    @Test
+    fun `a spark retry of an invoice the node failed decides its status`() = test {
+        val failed = mock<PaymentDetails> {
+            on { direction } doReturn PaymentDirection.OUTBOUND
+            on { id } doReturn paymentHash
+            on { status } doReturn PaymentStatus.FAILED
+        }
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(failed))
+        assertEquals(PaymentStatus.FAILED, sut.lightningPaymentStatus(paymentHash))
+
+        whenever(lightningRepo.sparkLightningSend(paymentHash))
+            .thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, "preimage"))
+        assertEquals(PaymentStatus.SUCCEEDED, sut.lightningPaymentStatus(paymentHash))
+    }
+
+    @Test
+    fun `a lightning send neither rail knows is one the wallet never made`() = test {
+        assertTrue(sut.canListLightningPayments())
+        assertNull(sut.lightningPaymentStatus(paymentHash))
+    }
+
+    @Test
+    fun `a spark send is never read as unsent while spark cannot list its payments`() = test {
+        whenever(lightningRepo.canListSparkPayments()).thenReturn(false)
+        whenever(lightningRepo.sparkLightningSend(paymentHash)).thenReturn(SparkLightningSend.Unavailable)
+
+        assertFalse(sut.canListLightningPayments())
+        assertEquals(PaymentStatus.PENDING, sut.lightningPaymentStatus(paymentHash))
     }
 
     @Test

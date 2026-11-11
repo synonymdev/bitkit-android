@@ -8,13 +8,13 @@
     deposits to a Savings address and mine a block. Start on the wallet home screen. The send uses
     your own Savings address (Settings > Advanced > Address Viewer); nothing is broadcast.
 
-    Tapping the amount on the amount screen swaps the primary display unit. Do not tap it.
+    A link with an amount opens Confirm directly; the swipe opens coin selection.
   </description>
   <actions>
     <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Coin Selection" (testTag "CoinSelectPreference")</action>
     <action>Tap "Manual" (testTag "manual_button") and go back to the home screen</action>
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;own savings address&gt;?amount=0.0001" to.bitkit.dev`</action>
-    <action>Verify the amount screen shows 10 000 sats and tap Continue (testTag "ContinueAmount")</action>
+    <action>Verify the Confirm screen (testTag "ReviewAmount") shows 10 000 sats without the amount screen (testTag "SendNumberField") having been shown, then swipe the send handle (testTag "GRAB") fully to the right</action>
     <action>Verify the coin selection screen (testTag "coin_selection_screen") is visible</action>
     <action>Verify there is no element with testTag "auto_select_row" and no row labelled "Auto"</action>
     <action>Verify one row per UTXO (testTag prefix "utxo_row_") is listed, largest value first, and every switch is on (screenshot)</action>

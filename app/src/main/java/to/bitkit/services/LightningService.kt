@@ -1,11 +1,13 @@
 package to.bitkit.services
 
+import android.os.Process
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -32,10 +34,12 @@ import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
+import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.LightningBalance
+import org.lightningdevkit.ldknode.LogRecord
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -54,6 +58,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
+import to.bitkit.App
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.SettingsStore
@@ -93,6 +98,7 @@ import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.AbstractCoroutineContextElement
@@ -101,9 +107,11 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
+import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
@@ -196,6 +204,8 @@ class LightningService internal constructor(
     private val ldkQueue: CoroutineContext,
     private val onchainFeeRateFactory: (ULong) -> FeeRate = { FeeRate.fromSatPerVbUnchecked(it) },
     private val clock: Clock = Clock.System,
+    private val isAppInBackground: () -> Boolean = ::isProcessInBackground,
+    private val exitProcess: () -> Unit = { Process.killProcess(Process.myPid()) },
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -225,6 +235,9 @@ class LightningService internal constructor(
          * drain still gates, but bounded so a stuck free_node cannot permanently block rebuilds.
          */
         private val NODE_RELEASE_GATE_TIMEOUT = 90.seconds
+
+        /** Time given to the async log writer to persist the exit reason before the process is killed. */
+        private val EXIT_LOG_FLUSH_DELAY = 500.milliseconds
 
         private val DEFAULT_SCORING_FEE_PARAMETERS = ScoringFeeParameters(
             basePenaltyMsat = 1_024uL,
@@ -281,6 +294,10 @@ class LightningService internal constructor(
     @Volatile
     private var releaseJob: Job? = null
 
+    // Watches the current node's ldk-node logs for tracked tasks left detached by a timed-out stop.
+    @Volatile
+    internal var runtimeMonitor = NodeRuntimeMonitor()
+
     suspend fun setup(
         walletIndex: Int,
         customServerUrl: String? = null,
@@ -291,14 +308,17 @@ class LightningService internal constructor(
         Logger.debug("Building node…", context = TAG)
 
         val config = config(walletIndex)
+        val monitor = NodeRuntimeMonitor()
         val builtNode = build(
             walletIndex,
             customServerUrl,
             customRgsServerUrl,
             config,
+            monitor,
             channelMigration,
         )
         currentWalletIndex = walletIndex
+        runtimeMonitor = monitor
         node = builtNode
 
         Logger.info("LDK node setup", context = TAG)
@@ -320,6 +340,7 @@ class LightningService internal constructor(
         customServerUrl: String?,
         customRgsServerUrl: String?,
         config: Config,
+        runtimeMonitor: NodeRuntimeMonitor,
         channelMigration: ChannelDataMigration? = null,
     ): Node = ServiceQueue.LDK.background(ldkQueue) {
         val storedSettings = settingsStore.data.first()
@@ -335,7 +356,7 @@ class LightningService internal constructor(
             .map { it.toLdkAddressType() }
 
         val builder = Builder.fromConfig(config).apply {
-            setCustomLogger(LdkLogWriter())
+            setCustomLogger(LdkLogWriter(onRecord = runtimeMonitor::onLog))
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
             configureScorerSource()
@@ -398,6 +419,20 @@ class LightningService internal constructor(
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
+        Env.regtestEsploraUrl?.let { esploraUrl ->
+            Logger.info("Using onchain source Esplora url: '$esploraUrl'", context = TAG)
+            setChainSourceEsplora(
+                serverUrl = esploraUrl,
+                config = EsploraSyncConfig(
+                    BackgroundSyncConfig(
+                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                    ),
+                ),
+            )
+            return
+        }
         val serverUrl = customServerUrl ?: settingsStore.data.first().electrumServer
         Logger.info("Using onchain source Electrum Sever url: $serverUrl", context = TAG)
         setChainSourceElectrum(
@@ -528,6 +563,7 @@ class LightningService internal constructor(
             Logger.debug("Node already stopped", context = TAG)
             return@withContext
         }
+        val monitor = runtimeMonitor
 
         Logger.debug("Stopping node…", context = TAG)
         ServiceQueue.LDK.background(ldkQueue) {
@@ -537,8 +573,24 @@ class LightningService internal constructor(
                 }
             this@LightningService.node = null
         }
+        // Releasing a node whose stop left tasks detached shuts down its tokio runtime under them, and the first
+        // one to resume (a VSS write returning, or a thaw from the freezer) aborts the app with "A Tokio 1.x
+        // context was found, but it is being shutdown." In the background, kill the process while the runtime
+        // is alive instead; a cold start restores everything. In the foreground, release as before.
+        if (monitor.hasDetachedWork && isAppInBackground() && exitBeforeRuntimeShutdown()) return@withContext
         releaseHandle(node)
         Logger.info("Node stopped", context = TAG)
+    }
+
+    private suspend fun exitBeforeRuntimeShutdown(): Boolean {
+        Logger.warn("Exiting process: node stop left ldk_node tasks detached while in background", context = TAG)
+        delay(EXIT_LOG_FLUSH_DELAY)
+        if (!isAppInBackground()) {
+            Logger.warn("Cancelled process exit: app returned to foreground", context = TAG)
+            return false
+        }
+        exitProcess()
+        return true
     }
 
     /**
@@ -1577,4 +1629,30 @@ internal fun exactOriginalSendFee(
     val outputTotal = checkedSum(details.outputs.map { it.value })
     check(inputTotal >= outputTotal)
     return inputTotal - outputTotal
+}
+
+private fun isProcessInBackground(): Boolean = App.currentActivity?.hasStartedActivity != true
+
+/**
+ * Flags a node whose stop timed out and left tracked tasks detached on its tokio runtime.
+ *
+ * ldk-node reports this only through its log, as an `ERROR` from `ldk_node::runtime` starting with
+ * "Detaching" (background tasks, cancellable background tasks, or the event processor).
+ */
+internal class NodeRuntimeMonitor {
+    companion object {
+        private const val RUNTIME_MODULE = "ldk_node::runtime"
+        private const val DETACHING_PREFIX = "Detaching "
+    }
+
+    private val detached = AtomicBoolean(false)
+
+    val hasDetachedWork: Boolean get() = detached.get()
+
+    fun onLog(record: LogRecord) {
+        if (record.level != LdkLogLevel.ERROR) return
+        if (!record.modulePath.startsWith(RUNTIME_MODULE)) return
+        if (!record.args.startsWith(DETACHING_PREFIX)) return
+        detached.set(true)
+    }
 }
