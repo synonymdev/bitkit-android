@@ -271,6 +271,8 @@ class SparkExitRepo @Inject constructor(
         refreshFundingSeen(chain, current)
         if (current.isActive) noteSavingsSend(current)
         val store = store
+        // A reconnect for the exit that failed left Spark ready but disconnected: the tick connects it again.
+        if (current.isActive && !sparkService.isConnected) sparkRepo.reconnectForExit()
         val recovering = sparkService.exitRecovering()
         val driver = driver(chain, recovering, current, tip)
         // Read before this tick's losses are kept, so a leaf lost now is still reported once.

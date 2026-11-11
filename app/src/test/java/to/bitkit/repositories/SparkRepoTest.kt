@@ -1093,6 +1093,22 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an exit's tick connects spark again after its reconnect failed`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        sut.holdForExit()
+        // The exit's reconnect disconnected Spark, then failed to connect it.
+        whenever(sparkService.isConnected).thenReturn(false)
+        whenever { sparkService.connect(any(), any()) }.thenReturn(true)
+
+        sut.reconnectForExit()
+
+        verify(sparkService).connect(0, true)
+    }
+
+    @Test
     fun `an exit start that failed before saving keeps the kept balance`() = test {
         val sut = keptAfterFailedSync()
 

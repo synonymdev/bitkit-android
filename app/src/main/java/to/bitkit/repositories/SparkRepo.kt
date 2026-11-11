@@ -282,6 +282,17 @@ class SparkRepo @Inject constructor(
     }
 
     /**
+     * Connects Spark again when a reconnect for an exit disconnected it and then failed: Spark was ready but has no
+     * SDK, so neither the exit's builds nor its leaf optimization would run until a background run or a restart.
+     */
+    suspend fun reconnectForExit() = withContext(bgDispatcher) {
+        if (!_state.value.isReady || sparkService.isConnected) return@withContext
+        runSuspendCatching {
+            if (sparkService.connect(walletIndex, _state.value.isExiting)) refresh()
+        }.onFailure { Logger.warn("Failed to connect Spark again for the exit", it, context = TAG) }
+    }
+
+    /**
      * Holds Spark for an exit about to start: no sends, receives, spending or kept balance, in the same step the exit's
      * transfer starts counting it. [setExiting] reconnects it for the exit afterwards.
      */

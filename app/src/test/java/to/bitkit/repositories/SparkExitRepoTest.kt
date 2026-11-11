@@ -538,6 +538,21 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a tick without the sdk connects spark again for a running exit`() = test {
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(SparkExitFixtures.record())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val disconnected = mock<SparkService> { on { networkName } doReturn "regtest" }
+        val sut = createSut(disconnected, fundingChain())
+        sut.load(0).getOrThrow()
+
+        sut.tick().getOrThrow()
+
+        verify(sparkRepo).reconnectForExit()
+    }
+
+    @Test
     fun `a tick that leaves the exit short of fees asks for at least dust at once`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
