@@ -38,6 +38,7 @@ import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendPendingError
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.repositories.SparkRepo
@@ -115,7 +116,7 @@ class SparkFundingViewModel @Inject constructor(
     fun useHardwareWallet(walletId: String) {
         if (_uiState.value.hwWalletId == walletId) return
         fixedFeeFloorSats = null
-        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true) }
+        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true, txid = null) }
         refreshMax()
     }
 
@@ -148,8 +149,16 @@ class SparkFundingViewModel @Inject constructor(
 
     fun onAmountChange(sats: Long) {
         val state = _uiState.value
-        if (sats != state.amountSats || (sats > 0 && sats == state.maxSats) != state.isMax) fixedFeeFloorSats = null
-        _uiState.update { it.copy(amountSats = sats, isMax = sats > 0 && sats == it.maxSats) }
+        val isNewTransfer = sats != state.amountSats || (sats > 0 && sats == state.maxSats) != state.isMax
+        if (isNewTransfer) fixedFeeFloorSats = null
+        _uiState.update {
+            // A funding followed for the earlier amount never stands in for this one's.
+            it.copy(
+                amountSats = sats,
+                isMax = sats > 0 && sats == it.maxSats,
+                txid = it.txid.takeUnless { isNewTransfer },
+            )
+        }
     }
 
     fun quarterSats(): Long = _uiState.value.maxSats.let { max -> minOf((max * QUARTER).roundToLong(), max) }
@@ -229,6 +238,11 @@ class SparkFundingViewModel @Inject constructor(
     /** Prices again at swipe time, and asks for another swipe when the transfer got worse since it was shown. */
     fun onConfirm() {
         val shown = _uiState.value
+        // A kept funding that completed while another screen showed missed its Sent, so it leaves now instead.
+        if (shown.txid != null) {
+            viewModelScope.launch { _effects.emit(SideEffect.Sent) }
+            return
+        }
         val shownQuote = shown.quote ?: return
         if (shown.isSending || shown.isQuoting) return
         quoteJob?.cancel()
@@ -343,6 +357,8 @@ class SparkFundingViewModel @Inject constructor(
                 return@onFailure
             }
             Logger.error("Failed to fund Spark", it, context = TAG)
+            // Its dispatch started but its outcome is unknown, so it may already be on the network.
+            if (it is OnchainSendPendingError && showRetainedFunding(quote, isThisSwipes = true)) return@onFailure
             if (it is OnchainSendBlockedError && showRetainedFunding(quote, isThisSwipes = false)) return@onFailure
             toast(
                 title = R.string.lightning__close_error,

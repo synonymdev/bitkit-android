@@ -1,7 +1,9 @@
 package to.bitkit.ui.utils
 
 import android.content.Context
+import com.synonym.paykit.PaykitException
 import to.bitkit.R
+import to.bitkit.ext.isPaykitSignupCodeRejected
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.repositories.WatchOnlyAccountError
 import to.bitkit.services.PubkyRingAuthTimeoutError
@@ -27,6 +29,8 @@ private fun Throwable.pubkyAuthMessageResource() = when (this) {
     PubkyAuthRequestError.DuplicateBitkitClaim -> R.string.profile__auth_error_duplicate_claim
     is PubkyAuthRequestError.UnsupportedBitkitClaim -> R.string.profile__auth_error_unsupported_claim
     PubkyAuthRequestError.InvalidBitkitClaimCapabilities -> R.string.profile__auth_error_invalid_capabilities
+    is PaykitException.Identity if isPaykitSignupCodeRejected() -> R.string.profile__auth_error_signup_code_rejected
+    is PaykitException.Transport -> R.string.pubky_auth__identity_unavailable_desc
     is WatchOnlyAccountError.AuthorizationAccountMissing -> R.string.watch_only_accounts__setup_not_finished
     is WatchOnlyAccountError.InvalidAccountName -> R.string.watch_only_accounts__error_invalid_name
     is WatchOnlyAccountError.InvalidExtendedPublicKey -> R.string.watch_only_accounts__error_invalid_xpub

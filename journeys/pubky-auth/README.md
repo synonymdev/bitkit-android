@@ -18,10 +18,13 @@
 
 - `grant-signup.xml` checks consent, cancellation, homeserver registration, and profile setup for a fresh identity.
 - `grant-signup-existing-identity.xml` checks approval with an existing identity without opening profile setup.
+- `grant-signup-rejected-code.xml` checks the message for a signup code the homeserver refuses, and that no identity is created.
 
-Both require a fresh `pubkyauth://signup_grant` URL from a controlled requesting app, a reachable
+The first two require a fresh `pubkyauth://signup_grant` URL from a controlled requesting app, a reachable
 homeserver and authorization relay, and a valid invite when required. The new-identity fixture
-uses ordinary app permissions without a Bitkit companion claim.
+uses ordinary app permissions without a Bitkit companion claim. The rejected-code journey instead
+needs a URL whose signup token that homeserver refuses, such as the token of a link another wallet
+already completed.
 
 Deliver each grant signup request through the main wallet scanner: copy the complete URL to the
 device clipboard, tap **Scan**, then **Paste**, and allow clipboard access if prompted. Camera
