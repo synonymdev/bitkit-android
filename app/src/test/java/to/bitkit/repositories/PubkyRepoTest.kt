@@ -975,6 +975,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile without a tag change does not wait for the profile copy`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val finishCopy = CompletableDeferred<Unit>()
+        whenever { pubkyService.publishPaykitProfile(any(), any()) }.doSuspendableAnswer {
+            finishCopy.await()
+            paykitRecord(it.getArgument(0))
+        }
+        clearInvocations(pubkyService)
+
+        val save = async {
+            sut.saveProfile(name = "Renamed", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+        }
+        runCurrent()
+
+        assertTrue(save.isCompleted)
+        save.await().getOrThrow()
+        verifyBlocking(pubkyService) { publishPaykitProfile(any(), any()) }
+        finishCopy.complete(Unit)
+    }
+
+    @Test
     fun `saveProfile signs in again once when the session lacks the pubky app scope`() = test {
         val secretKey = "local_secret"
         authenticateForTesting(publicKey = VALID_SELF_KEY)

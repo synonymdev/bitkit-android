@@ -1335,11 +1335,20 @@ class PubkyRepo @Inject constructor(
         }
         // Tags live only in the Paykit copy, so a changed tag that it does not take is reported.
         val copyData = profile.toProfileData().toPaykitProfile()
-        val copyError = keptTags?.let {
+        val writeCopy = suspend {
             runSuspendCatching { profileWrite(generation) { pubkyService.publishPaykitProfile(copyData, publicKey) } }
                 .onSuccess { tagsUnavailable = false }
                 .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
-                .exceptionOrNull()
+        }
+        val copyError = keptTags?.let {
+            // With no tag change to report, the save does not wait for the copy. The write lock keeps it ahead of the
+            // next save's copy write, and a deletion refuses or waits for it.
+            if (it == baseTags) {
+                scope.launch { writeCopy() }
+                null
+            } else {
+                writeCopy().exceptionOrNull()
+            }
         }
         val saved = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
         val tagsLost = (keptTags == null || copyError != null) && tags != baseTags
