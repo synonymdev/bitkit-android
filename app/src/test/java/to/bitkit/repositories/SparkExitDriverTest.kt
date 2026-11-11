@@ -1055,6 +1055,23 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a generation that diverges while a higher fee's payment confirms is never sent again`() = test {
+        val diverged = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        var record = funded(running(diverged)).applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
+        assertTrue(record.isDrivingWhileFunding)
+        sdk.checks += check(diverged, redo)
+
+        record = driver().tick(record)
+
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isRebuilding)
+        assertTrue(record.isRedoRebuild)
+        assertFalse(record.isDrivingWhileFunding, "the diverged generation keeps being sent")
+        record = driver(withSdk = false).tick(record)
+        assertTrue(chain.broadcasts.isEmpty())
+    }
+
+    @Test
     fun `a paid higher fee rebuilds at the new rate once its payment confirms`() = test {
         var record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
             .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")

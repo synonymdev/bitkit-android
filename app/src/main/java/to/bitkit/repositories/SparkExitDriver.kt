@@ -433,8 +433,12 @@ class SparkExitDriver(
             // Finished before the higher fee was needed: running again, the next check ends it and the payment goes
             // back with the leftover.
             RecoveryVerdict.Done -> updated.copy(phase = SparkExitRecord.Phase.Running)
-            // A rebuild waits for the funding it was paid for.
-            is RecoveryVerdict.Redo -> updated
+            // The diverged generation is never sent again: its rebuild, a Redo one, waits for the funding it was paid
+            // for.
+            is RecoveryVerdict.Redo -> {
+                Logger.warn("Spark exit diverged on-chain while a top-up is awaited", context = TAG)
+                updated.copy(isRebuilding = true, isRedoRebuild = true)
+            }
         }
     }
 
