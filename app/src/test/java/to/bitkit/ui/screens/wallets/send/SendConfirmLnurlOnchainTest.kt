@@ -77,6 +77,34 @@ class SendConfirmLnurlOnchainTest {
         composeRule.onNodeWithTag("ReviewUri").assertTextEquals(ADDRESS)
     }
 
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp")
+    @Test
+    fun `a spark leg to a contact with an lnurl shows tags and no lnurl comment`() {
+        val endpoint = PaykitEndpoint(methodId = "btc-regtest-p2wpkh", value = ADDRESS)
+        val leg = ServiceRouteLeg(
+            service = "spark",
+            endpoint = endpoint,
+            deliveredSat = 2_000uL,
+            debitSat = 2_300uL,
+            atomicity = "trusted",
+            validUntilUnix = 0uL,
+        )
+        render(
+            SendUiState(
+                amount = 2_000u,
+                isAmountInputValid = true,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(LNURL.copy(commentAllowed = 100u)),
+                lightningFeeSats = 300,
+                paykitRoute = PaykitRouteUi(persistentListOf(endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        composeRule.onNodeWithTag("ReviewSwapRoute").assertExists()
+        composeRule.onNodeWithTag("CommentInput").assertDoesNotExist()
+        composeRule.onNodeWithTag("TagsAddSend").assertExists()
+    }
+
     private fun render(uiState: SendUiState) {
         composeRule.setContent {
             CompositionLocalProvider(LocalInspectionMode provides true) {

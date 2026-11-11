@@ -453,7 +453,8 @@ private fun ContentRunning(
                                 onClickTag = onClickTag,
                                 onClickAddTag = onClickAddTag,
                             )
-                            if ((uiState.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed() == true) {
+                            val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay
+                            if (uiState.paysLnurl && lnurlPay?.data?.commentAllowed() == true) {
                                 LnurlCommentSection(uiState, onEvent)
                             }
                         }
@@ -737,7 +738,7 @@ private fun LightningDetails(
     onClickAddTag: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+    val isLnurlPay = uiState.paysLnurl
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
     val description = uiState.decodedInvoice?.description
     val destination = uiState.routedPaykitRoute?.serviceLeg?.endpoint?.value
