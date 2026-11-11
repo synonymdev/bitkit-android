@@ -73,9 +73,6 @@ class SparkService @Inject constructor(
             lnurlDomain = null
             // Bitkit parses what the user scans itself, so the SDK never sends it to third-party parsers.
             useDefaultExternalInputParsers = false
-            // A Spark wallet pays an invoice as a Spark transfer only when the invoice carries the receiver's Spark
-            // address, which the SDK adds only with this set; on regtest only, like [prefersSpark].
-            preferSparkOverLightning = network == SparkNetwork.REGTEST
             // Lowering it below the spread keeps the deposit from being claimed early, and does not hold back its
             // claim at maturity.
             maxDepositClaimFee = MaxFee(
@@ -141,8 +138,8 @@ class SparkService @Inject constructor(
     var isWiping: Boolean = false
 
     /**
-     * Spark's regtest has no Lightning network, so there a Lightning invoice from another Spark wallet is paid as a
-     * Spark transfer, which lets two dev builds pay each other's invoices.
+     * On regtest, an invoice that carries a Spark address is paid as a Spark transfer. Bitkit's own invoices carry
+     * none, so two dev builds pay each other over Lightning through Spark's provider, as on mainnet.
      */
     val prefersSpark: Boolean get() = Env.network == Network.REGTEST
 
