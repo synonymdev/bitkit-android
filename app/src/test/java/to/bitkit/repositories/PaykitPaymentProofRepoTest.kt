@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import breez_sdk_spark.SdkException
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.ConversionRate
@@ -76,6 +77,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.wallets.send.HwSendRequest
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
@@ -94,6 +96,7 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 private val lenientJson = Json { ignoreUnknownKeys = true }
 
@@ -866,6 +869,89 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `lightning proof settles from spark when its event was missed`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), any())
+        ).thenReturn(record)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+
+        for (pending in listOf(SparkLightningSend.Unavailable, SparkLightningSend.NotFound)) {
+            whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH)).thenReturn(pending)
+            paymentProofRepo().reconcile()
+            assertEquals(PAYMENT_HASH, storedProofs.single().paymentIdentifier)
+        }
+        whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH))
+            .thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, PREIMAGE))
+        paymentProofRepo().reconcile()
+
+        val proofCaptor = argumentCaptor<String>()
+        verify(paykitSdkService).submitPaymentProof(
+            any(), any(), any(), any(), proofCaptor.capture(), isNull(), isNull(), isNull(), any(),
+        )
+        assertEquals(
+            """{"data":"$PREIMAGE","type":"${PaykitPaymentProofKind.Lightning.type}"}""",
+            proofCaptor.firstValue,
+        )
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `a spark retry decides a lightning proof the node failed`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val failed = mock<PaymentDetails> {
+            on { id } doReturn PAYMENT_HASH
+            on { direction } doReturn PaymentDirection.OUTBOUND
+            on { status } doReturn PaymentStatus.FAILED
+        }
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(failed)))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), any())
+        ).thenReturn(record)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+
+        val sparkPending = SparkLightningSend.Found(SparkPaymentStatus.PENDING, null)
+        for (pending in listOf(SparkLightningSend.Unavailable, sparkPending)) {
+            whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH)).thenReturn(pending)
+            paymentProofRepo().reconcile()
+            assertEquals(PAYMENT_HASH, storedProofs.single().paymentIdentifier)
+        }
+        whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH))
+            .thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, PREIMAGE))
+        paymentProofRepo().reconcile()
+
+        verify(paykitSdkService).submitPaymentProof(
+            any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), any(),
+        )
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `lightning proof is removed when spark failed the send`() = test {
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH))
+            .thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+
+        paymentProofRepo().reconcile()
+
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `allowance proof is submitted with its allowance id`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.Bolt11.rawValue)
@@ -1066,6 +1152,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             LdkError(NodeException.PersistenceFailed("io")),
             NodeException.DuplicatePayment("pending"),
             AppError("payment outcome unknown"),
+            SdkException.Generic("spark send timed out"),
         )
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
@@ -1117,6 +1204,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             NodeException.InvalidInvoice("invalid"),
             NodeException.InvalidAmount("invalid"),
             LdkError(NodeException.PaymentSendingFailed("no route")),
+            SparkError.SendRefused("Spark fee over the limit"),
+            to.bitkit.utils.AppError(SparkError.SendRefused("Spark could not prepare the payment")),
         )
         for (error in errors) {
             val request = paymentRequest(MethodId.Bolt11.rawValue)

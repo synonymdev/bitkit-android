@@ -15,6 +15,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.SparkRepo
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -35,6 +36,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     private val settingsStore: SettingsStore,
     private val clock: Clock,
     private val receivedNotificationContent: ReceivedNotificationContent,
+    private val sparkRepo: SparkRepo,
 ) {
     private val presentationClaimsLock = Any()
     private val presentationClaims = mutableSetOf<String>()
@@ -122,6 +124,11 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         } else {
             activityRepo.handleOnchainTransactionReceived(command.txid, command.details)
             if (command.details.amountSats <= 0) return false
+        }
+
+        if (sparkRepo.markWithdrawalAsTransfer(command.txid)) {
+            Logger.debug("Skipping onchain receive '${command.txid}' from a Spark withdrawal", context = TAG)
+            return false
         }
 
         if (settings.pendingRestoreActivitySeen) {

@@ -1,9 +1,11 @@
 package to.bitkit.ext
 
 import android.content.Context
+import breez_sdk_spark.SdkException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import to.bitkit.R
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.services.SparkError
 import to.bitkit.utils.LdkError
 
 fun PaymentFailureReason?.toUserMessage(context: Context): String = when (this) {
@@ -49,7 +51,10 @@ fun Throwable.toSendFailureMessage(context: Context): String {
     val fallbackMessage = context.getString(R.string.wallet__payment_failed_description)
     val rawMessage = message?.trim().orEmpty()
 
-    if (this is LdkError || rawMessage.isBlank() || rawMessage.looksInternalPaymentError()) {
+    // Spark and its SDK speak in English developer messages; they go to the log, the user gets the existing copy.
+    if (this is LdkError || this is SparkError || this is SdkException || rawMessage.isBlank() ||
+        rawMessage.looksInternalPaymentError()
+    ) {
         return fallbackMessage
     }
 
