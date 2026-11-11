@@ -255,6 +255,9 @@ class SparkRepo @Inject constructor(
 
     fun canSend(amountSats: ULong): Boolean = _state.value.isReady && _state.value.sendableSats >= amountSats
 
+    /** A withdrawal's debit already holds its fees, so it is weighed against the whole balance. */
+    private fun canWithdraw(debitSats: ULong): Boolean = _state.value.isReady && _state.value.balanceSats >= debitSats
+
     suspend fun createInvoice(amountSats: ULong?, description: String, expirySecs: UInt): Result<String> =
         withContext(bgDispatcher) {
             runSuspendCatching { sparkService.receiveBolt11(amountSats, description, expirySecs) }
@@ -638,13 +641,13 @@ class SparkRepo @Inject constructor(
     suspend fun withdrawalRouteLeg(endpoint: PaykitEndpoint, amountSats: ULong): Result<ServiceRouteLeg?> =
         withContext(bgDispatcher) {
             runSuspendCatching {
-                if (!canSend(amountSats)) return@runSuspendCatching null
+                if (!canWithdraw(amountSats)) return@runSuspendCatching null
                 val method = sparkService.prepareSend(endpoint.value, amountSats).paymentMethod
                 val quote = (method as SendPaymentMethod.BitcoinAddress).feeQuote
                 // Spark charges its fee and the L1 broadcast fee on top of what reaches the contact.
                 val speed = quote.speedMedium
                 val debitSats = amountSats.safe() + (speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()).safe()
-                if (quote.isEstimate || !canSend(debitSats)) return@runSuspendCatching null
+                if (quote.isEstimate || !canWithdraw(debitSats)) return@runSuspendCatching null
                 ServiceRouteLeg(
                     service = ROUTE_SERVICE,
                     endpoint = endpoint,

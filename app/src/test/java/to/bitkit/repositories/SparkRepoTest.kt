@@ -759,6 +759,13 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `quotes a route leg whose debit takes the whole balance`() = test {
+        val sut = readySpark(balanceSats = 20_500uL)
+
+        assertEquals(20_500uL, sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow()?.debitSat)
+    }
+
+    @Test
     fun `records a withdrawal to a contact with its contact and fee`() = test {
         val sut = journaledSpark()
         whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
