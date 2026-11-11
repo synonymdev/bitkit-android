@@ -417,7 +417,7 @@ androidComponents {
 }
 
 fun Provider<String>.stringField(): Provider<BuildConfigField<String>> =
-    map { BuildConfigField(type = "String", value = "\"$it\"", comment = null) }
+    map { BuildConfigField(type = "String", value = "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"", comment = null) }
 
 fun Provider<String>.booleanField(): Provider<BuildConfigField<String>> =
     map { BuildConfigField(type = "boolean", value = it, comment = null) }
