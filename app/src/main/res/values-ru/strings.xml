@@ -921,6 +921,8 @@
     <string name="wallet__boost_fee_custom">Ваша транзакция может быть подтверждена быстрее, если вы включите дополнительную комиссию. Установите значение ниже.</string>
     <string name="wallet__boost_fee_recomended">Ваша транзакция может быть подтверждена быстрее, если вы включите дополнительную комиссию. Вот рекомендация:</string>
     <string name="wallet__boost_increase_fee">Увеличить комиссию</string>
+    <string name="wallet__boost_pending_msg">Ускорение ожидает обработки. Обновлённые сведения о транзакции ещё не готовы.</string>
+    <string name="wallet__boost_pending_title">Ускорение ожидает обработки</string>
     <string name="wallet__boost_recomended_button">Использовать рекомендованную комиссию</string>
     <string name="wallet__boost_success_msg">Транзакция успешно ускорена.</string>
     <string name="wallet__boost_success_title">Ускорена!</string>
@@ -1331,6 +1333,7 @@
     <string name="profile__auth_error_invalid_capabilities">Запрошенный доступ не соответствует этому заявлению Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Эта ссылка авторизации Pubky недействительна.</string>
     <string name="profile__auth_error_missing_claim">В этой авторизации отсутствует обязательное заявление Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Домашний сервер не принял этот код регистрации. Попробуйте снова или используйте другую ссылку для регистрации.</string>
     <string name="profile__auth_error_timeout">Ретранслятор авторизации не ответил вовремя. Пожалуйста, попробуйте снова.</string>
     <string name="profile__auth_error_title">Ошибка Авторизации</string>
     <string name="profile__auth_error_unsupported_claim">Это заявление Bitkit не поддерживается.</string>
@@ -1565,6 +1568,7 @@
     <string name="wallet__payment_request_accepted_methods">Принимать оплату в</string>
     <string name="wallet__payment_request_after_expiry">Получено · После истечения</string>
     <string name="wallet__payment_request_amount">Сумма</string>
+    <string name="wallet__payment_request_before_request">Получено · До запроса</string>
     <string name="wallet__payment_request_choose_recipient">Выберите Получателя</string>
     <string name="wallet__payment_request_dismiss">Отклонить</string>
     <string name="wallet__payment_request_enter_pubky">Введите pubky</string>
@@ -1578,6 +1582,7 @@
     <string name="wallet__payment_request_mismatch">Платёжные данные не совпали с запросом. Платёж отменён.</string>
     <string name="wallet__payment_request_not_specified">Не указано</string>
     <string name="wallet__payment_request_note_placeholder">За что этот платёж?</string>
+    <string name="wallet__payment_request_note_too_long">Сократите заметку и попробуйте снова.</string>
     <string name="wallet__payment_request_or_pay">Запросить или Оплатить</string>
     <string name="wallet__payment_request_or_pay_description">Заплатите %1$s или запросите платёж.</string>
     <string name="wallet__payment_request_or_pay_headline">Запросить\n&lt;accent&gt;или Оплатить ₿&lt;/accent&gt;</string>

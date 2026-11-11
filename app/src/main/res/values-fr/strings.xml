@@ -1024,6 +1024,8 @@
     <string name="wallet__boost_increase_fee">Augmenter les frais</string>
     <string name="wallet__boost_fee_custom">Votre transaction peut être confirmée plus rapidement si vous incluez des frais de réseau supplémentaires. Définissez vos frais personnalisés ci-dessous.</string>
     <string name="wallet__boost_fee_recomended">Votre transaction peut être confirmée plus rapidement si vous incluez des frais de réseau supplémentaires. Voici une recommandation :</string>
+    <string name="wallet__boost_pending_msg">L’accélération est en attente. Les détails mis à jour de la transaction ne sont pas encore disponibles.</string>
+    <string name="wallet__boost_pending_title">Accélération en attente</string>
     <string name="wallet__boost_recomended_button">Utilise les frais suggérés</string>
     <string name="wallet__boost_swipe">Balayer pour booster</string>
     <string name="wallet__payment_received">Bitcoin reçus</string>
@@ -1311,6 +1313,7 @@
     <string name="profile__auth_error_invalid_capabilities">L\'accès demandé ne correspond pas à cette déclaration Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Ce lien d\'autorisation Pubky n\'est pas valide.</string>
     <string name="profile__auth_error_missing_claim">Il manque à cette autorisation la déclaration Bitkit requise.</string>
+    <string name="profile__auth_error_signup_code_rejected">Le serveur domestique n\'a pas accepté ce code d\'inscription. Réessayez ou utilisez un autre lien d\'inscription.</string>
     <string name="profile__auth_error_timeout">Le relais d\'autorisation n\'a pas répondu à temps. Veuillez réessayer.</string>
     <string name="profile__auth_error_title">Échec de l\'autorisation</string>
     <string name="profile__auth_error_unsupported_claim">Cette déclaration Bitkit n\'est pas prise en charge.</string>
@@ -1548,6 +1551,7 @@
     <string name="wallet__payment_request_accepted_methods">Accepter le paiement en</string>
     <string name="wallet__payment_request_after_expiry">Reçu · Après expiration</string>
     <string name="wallet__payment_request_amount">Montant</string>
+    <string name="wallet__payment_request_before_request">Reçu · Avant la demande</string>
     <string name="wallet__payment_request_choose_recipient">Choisir le destinataire</string>
     <string name="wallet__payment_request_contact">Contact</string>
     <string name="wallet__payment_request_date">Date</string>
@@ -1564,6 +1568,7 @@
     <string name="wallet__payment_request_not_specified">Non précisé</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">À quoi sert ce paiement ?</string>
+    <string name="wallet__payment_request_note_too_long">Raccourcissez la note et réessayez.</string>
     <string name="wallet__payment_request_or_pay">Demander ou payer</string>
     <string name="wallet__payment_request_or_pay_description">Payez %1$s ou demandez un paiement.</string>
     <string name="wallet__payment_request_or_pay_headline">Demander\n&lt;accent&gt;ou payer ₿&lt;/accent&gt;</string>

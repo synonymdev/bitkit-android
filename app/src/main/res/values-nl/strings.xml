@@ -899,6 +899,8 @@
     <string name="wallet__boost_fee_custom">Je transactie kan sneller afgehandeld worden als je een extra netwerkvergoeding toevoegt. Stel hieronder je aangepaste vergoeding in.</string>
     <string name="wallet__boost_fee_recomended">Je transactie kan sneller afgehandeld worden als je een extra netwerkvergoeding toevoegt. Hier is een aanbeveling:</string>
     <string name="wallet__boost_increase_fee">Vergoeding verhogen</string>
+    <string name="wallet__boost_pending_msg">De versnelling is in behandeling. De bijgewerkte transactiegegevens zijn nog niet beschikbaar.</string>
+    <string name="wallet__boost_pending_title">Versnelling in behandeling</string>
     <string name="wallet__boost_recomended_button">Aanbevolen vergoeding gebruiken</string>
     <string name="wallet__boost_success_msg">De transactie is succesvol geboost.</string>
     <string name="wallet__boost_success_title">Geboost!</string>
@@ -1313,6 +1315,7 @@
     <string name="profile__auth_error_invalid_capabilities">De gevraagde toegang komt niet overeen met deze Bitkit-claim.</string>
     <string name="profile__auth_error_invalid_url">Deze Pubky-autorisatielink is ongeldig.</string>
     <string name="profile__auth_error_missing_claim">Deze autorisatie mist de vereiste Bitkit-claim.</string>
+    <string name="profile__auth_error_signup_code_rejected">De homeserver heeft deze aanmeldcode niet geaccepteerd. Probeer het opnieuw of gebruik een andere aanmeldlink.</string>
     <string name="profile__auth_error_timeout">De autorisatierelay reageerde niet op tijd. Probeer het opnieuw.</string>
     <string name="profile__auth_error_title">Autorisatie mislukt</string>
     <string name="profile__auth_error_unsupported_claim">Deze Bitkit-claim wordt niet ondersteund.</string>
@@ -1550,6 +1553,7 @@
     <string name="wallet__payment_request_accepted_methods">Betaling accepteren in</string>
     <string name="wallet__payment_request_after_expiry">Ontvangen · Na vervaldatum</string>
     <string name="wallet__payment_request_amount">Bedrag</string>
+    <string name="wallet__payment_request_before_request">Ontvangen · Vóór het verzoek</string>
     <string name="wallet__payment_request_choose_recipient">Ontvanger kiezen</string>
     <string name="wallet__payment_request_contact">Contact</string>
     <string name="wallet__payment_request_dismiss">Negeren</string>
@@ -1564,6 +1568,7 @@
     <string name="wallet__payment_request_mismatch">De betaalgegevens kwamen niet overeen met het verzoek. Betaling geannuleerd.</string>
     <string name="wallet__payment_request_not_specified">Niet opgegeven</string>
     <string name="wallet__payment_request_note_placeholder">Waar is deze betaling voor?</string>
+    <string name="wallet__payment_request_note_too_long">Maak de notitie korter en probeer het opnieuw.</string>
     <string name="wallet__payment_request_or_pay">Verzoeken of betalen</string>
     <string name="wallet__payment_request_or_pay_description">Betaal %1$s of vraag een betaling aan.</string>
     <string name="wallet__payment_request_or_pay_headline">Verzoek\n&lt;accent&gt;of betaal ₿&lt;/accent&gt;</string>
