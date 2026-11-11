@@ -2756,8 +2756,15 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
-        if (shouldPayWithSpark(bolt11, null)) return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, null)
+    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
+        // Spark quotes without the node, so a payment it makes never waits for the node to run.
+        if (shouldPayWithSpark(bolt11, null)) return sparkRepo.estimateFeeSats(bolt11, null)
+        return estimateNodeRoutingFees(bolt11)
+    }
+
+    private suspend fun estimateNodeRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning(
+        "estimateRoutingFees"
+    ) {
         Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
         lightningService.estimateRoutingFees(bolt11).onSuccess {
             Logger.info("Routing fees estimated: '$it'", context = TAG)
@@ -2766,11 +2773,13 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
+    suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
+        if (shouldPayWithSpark(bolt11, amountSats)) return sparkRepo.estimateFeeSats(bolt11, amountSats)
+        return estimateNodeRoutingFeesForAmount(bolt11, amountSats)
+    }
+
+    private suspend fun estimateNodeRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
-            if (shouldPayWithSpark(bolt11, amountSats)) {
-                return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, amountSats)
-            }
             Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
                 Logger.info("Routing fees estimated: '$it'", context = TAG)

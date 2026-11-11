@@ -99,6 +99,7 @@ import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.LnurlParams
+import to.bitkit.viewmodels.QuickPayData
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
@@ -114,6 +115,14 @@ private val CHANNELS_REFRESH_INTERVAL = 1.seconds
 /** Whether Spark can pay the scanned Lightning invoice's own amount, so an amountless one still waits for the node. */
 internal fun sparkCanPayInvoice(payMethod: SendMethod, invoiceSats: ULong?, sparkState: SparkState): Boolean =
     payMethod == SendMethod.LIGHTNING && invoiceSats != null && invoiceSats > 0uL && sparkState.canSend(invoiceSats)
+
+/** Whether Spark can pay a Quick Pay invoice; an LNURL one still waits for the node. */
+internal fun sparkCanPayQuickPay(data: QuickPayData, sparkState: SparkState): Boolean =
+    data is QuickPayData.Bolt11 && sparkCanPayInvoice(SendMethod.LIGHTNING, data.sats, sparkState)
+
+/** Whether a send can go ahead now: the node runs, a hardware wallet signs it, or Spark pays it without the node. */
+internal fun canSendWithoutWaiting(isNodeRunning: Boolean, isHardwareWallet: Boolean, sparkCanPay: Boolean): Boolean =
+    isNodeRunning || isHardwareWallet || sparkCanPay
 
 /**
  * A Lightning payment Spark can pay goes ahead without the node. Otherwise the node must run, and with channels a
@@ -175,15 +184,15 @@ fun SendSheet(
     val hasAnyChannels = lightningState.channels.isNotEmpty()
     val syncNodeVariant = if (hasAnyChannels) SyncNodeVariant.LIGHTNING else SyncNodeVariant.BITCOIN
     val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
+    val sparkCanPay = sparkCanPayInvoice(sendUiState.payMethod, sendUiState.decodedInvoice?.amountSatoshis, sparkState)
     val shouldShowSyncOverlay = run {
         if (preparingRequest != null || sendUiState.paykitUsesUsdt) return@run false
         if (sendUiState.hardwareWalletId != null) return@run false
-        val invoiceSats = sendUiState.decodedInvoice?.amountSatoshis
         waitsForNode(
             isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
             hasAnyChannels = hasAnyChannels,
             hasUsableChannels = lightningState.channels.any { it.isUsable },
-            sparkCanPay = sparkCanPayInvoice(sendUiState.payMethod, invoiceSats, sparkState),
+            sparkCanPay = sparkCanPay,
         )
     }
 
@@ -521,8 +530,11 @@ fun SendSheet(
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
                         uiState = uiState,
-                        isNodeRunning = uiState.hardwareWalletId != null ||
-                            lightningState.nodeLifecycleState.isRunning(),
+                        isNodeRunning = canSendWithoutWaiting(
+                            isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                            isHardwareWallet = uiState.hardwareWalletId != null,
+                            sparkCanPay = sparkCanPay,
+                        ),
                         canAutoStart = !isOffline && !shouldShowSyncOverlay,
                         syncNodeVariant = syncNodeVariant,
                         canGoBack = navController.previousBackStackEntry != null,
@@ -700,6 +712,7 @@ fun SendSheet(
                         SendQuickPayScreen(
                             quickPayData = request.data,
                             isRequestActive = quickPayRequest?.id == request.id,
+                            canPayWithoutNode = sparkCanPayQuickPay(request.data, sparkState),
                             onPaymentComplete = { paymentHash, amountWithFee ->
                                 appViewModel.onSendSuccess(
                                     NewTransactionSheetDetails(

@@ -2,6 +2,7 @@ package to.bitkit.ui.sheets
 
 import org.junit.Test
 import to.bitkit.repositories.SparkState
+import to.bitkit.viewmodels.QuickPayData
 import to.bitkit.viewmodels.SendMethod
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -16,6 +17,14 @@ class SendSheetSyncOverlayTest {
         assertTrue(sparkCanPay)
         assertFalse(waitsForNode(false, hasAnyChannels = true, hasUsableChannels = false, sparkCanPay = sparkCanPay))
         assertFalse(waitsForNode(true, hasAnyChannels = true, hasUsableChannels = false, sparkCanPay = sparkCanPay))
+    }
+
+    @Test
+    fun `confirm and quick pay go ahead without the node when spark can pay`() {
+        assertTrue(canSendWithoutWaiting(isNodeRunning = false, isHardwareWallet = false, sparkCanPay = true))
+        assertFalse(canSendWithoutWaiting(isNodeRunning = false, isHardwareWallet = false, sparkCanPay = false))
+        assertTrue(sparkCanPayQuickPay(QuickPayData.Bolt11(1_000uL, "lnbc1"), funded))
+        assertFalse(sparkCanPayQuickPay(QuickPayData.Bolt11(1_000uL, "lnbc1"), funded.copy(isReady = false)))
     }
 
     @Test

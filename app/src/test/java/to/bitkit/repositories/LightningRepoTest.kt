@@ -4301,6 +4301,15 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a fee estimate spark pays needs no running node`() = test {
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.estimateFeeSats("bolt11", 1_000uL)).thenReturn(Result.success(3uL))
+
+        assertEquals(3uL, sut.estimateRoutingFeesForAmount("bolt11", 1_000uL).getOrThrow())
+        verify(lightningService, never()).estimateRoutingFeesForAmount(any(), any())
+    }
+
+    @Test
     fun `estimateRoutingFees should succeed when node is running`() = test {
         startNodeForTesting()
         val testBolt11 = "lnbc1u1p0abcde"
