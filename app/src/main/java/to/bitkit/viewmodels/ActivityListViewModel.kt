@@ -130,6 +130,8 @@ class ActivityListViewModel @Inject constructor(
         resync()
     }
 
+    fun resolvePublishedRbfActivity(activity: Activity): Activity = activityRepo.resolvePublishedRbfActivity(activity)
+
     fun resync() = viewModelScope.launch {
         activityRepo.syncActivities()
     }

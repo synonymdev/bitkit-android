@@ -1,0 +1,18 @@
+<journey name="Payment Request Note Too Long">
+  <description>
+    Verifies that a Payment Request whose note does not fit one Paykit message is refused before anything is sent, with a message asking to shorten the note, and that the same request sends once the note is shortened. Requires two Bitkit instances saved as each other's contacts and linked as identities. See README.md. Paste the long note from the device clipboard rather than typing it, since adb input cannot type emoji.
+  </description>
+  <actions>
+    <action>Copy a note of 256 "💜" characters to the requester's clipboard</action>
+    <action>On the requester, open the payer contact, tap Pay (testTag "ContactPay") and tap Request on the sheet</action>
+    <action>Enter 1,000 sats on the Payment Request amount screen and tap Continue (testTag "PaymentRequestAmountContinue")</action>
+    <action>Paste the copied note into the note field (testTag "PaymentRequestNote")</action>
+    <action>Tap Send (testTag "PaymentRequestSend")</action>
+    <action>Verify an error toast says "Shorten the note and try again." and the request screen stays open with Send (testTag "PaymentRequestSend") visible</action>
+    <action>On the payer, verify no new Payment Request appears</action>
+    <action>On the requester, replace the note with "Coffee" and tap Send (testTag "PaymentRequestSend")</action>
+    <action>Verify completion (testTag "PaymentRequestSent") is shown</action>
+    <action>On the payer, verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") appears with 1,000 sats and For (testTag "PaymentRequestFor") shows "Coffee"</action>
+    <action>Close the Payment Request confirmation screen without paying</action>
+  </actions>
+</journey>

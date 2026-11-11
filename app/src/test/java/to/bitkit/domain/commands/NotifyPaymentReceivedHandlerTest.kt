@@ -28,6 +28,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.SparkRepo
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import java.math.BigDecimal
@@ -58,6 +59,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     private val settingsStore: SettingsStore = mock()
     private val clock: Clock = mock()
     private val backupRepo: BackupRepo = mock()
+    private val sparkRepo: SparkRepo = mock()
     private val migrationService: MigrationService = mock()
     private val isRestoring = MutableStateFlow(false)
     private val isShowingMigrationLoading = MutableStateFlow(false)
@@ -74,6 +76,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         whenever(migrationService.isShowingMigrationLoading).thenReturn(isShowingMigrationLoading)
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
         whenever(clock.now()).thenReturn(NOW)
+        whenever { sparkRepo.markWithdrawalAsTransfer(any()) }.thenReturn(false)
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
             Result.success(
                 ConvertedAmount(
@@ -99,6 +102,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
                 currencyRepo = currencyRepo,
                 settingsStore = settingsStore,
             ),
+            sparkRepo = sparkRepo,
         )
     }
 
@@ -185,6 +189,21 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertTrue(claimed)
         sut.recordPresentation(command)
         verify(activityRepo).markOnchainActivityAsSeen("txid456", WalletScope.default)
+    }
+
+    @Test
+    fun `onchain receive from a spark withdrawal is a transfer with no received sheet`() = test {
+        val details = mock<TransactionDetails> {
+            on { amountSats } doReturn 5000L
+        }
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        whenever(sparkRepo.markWithdrawalAsTransfer("txid456")).thenReturn(true)
+
+        val result = sut(NotifyPaymentReceived.Command.Onchain(txid = "txid456", details = details))
+
+        assertTrue(result.getOrThrow() is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo).handleOnchainTransactionReceived("txid456", details)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
     }
 
     @Test

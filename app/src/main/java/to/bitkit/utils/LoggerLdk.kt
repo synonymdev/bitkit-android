@@ -181,10 +181,12 @@ class LoggerLdk @Inject constructor(
 class LdkLogWriter(
     private val maxLogLevel: LdkLogLevel = Env.ldkLogLevel,
     saver: LogSaver = AppLogger.getOrCreateSaver(),
+    private val onRecord: (LogRecord) -> Unit = {},
 ) : LogWriter {
     private val delegate: LoggerImpl = LoggerImpl(LDK, saver)
 
     override fun log(record: LogRecord) {
+        onRecord(record)
         if (record.level < maxLogLevel) return
 
         val msg = record.args
