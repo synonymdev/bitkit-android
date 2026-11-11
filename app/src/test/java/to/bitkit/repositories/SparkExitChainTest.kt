@@ -234,6 +234,15 @@ class SparkExitChainTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a step esplora reports already in the utxo set is accepted`() {
+        val classifier = SparkExitBroadcastClassifier
+        val text = "sendrawtransaction RPC error -27: Transaction outputs already in utxo set"
+        assertEquals(SparkExitBroadcastOutcome.Accepted, classifier.single(400, text))
+        val codeOnly = "sendrawtransaction RPC error -27: unknown"
+        assertEquals(SparkExitBroadcastOutcome.Accepted, classifier.classify(codeOnly))
+    }
+
+    @Test
     fun `classifies node answers`() {
         val failedPackage = """{"package_msg":"transaction failed","tx-results":"""
         val classifier = SparkExitBroadcastClassifier

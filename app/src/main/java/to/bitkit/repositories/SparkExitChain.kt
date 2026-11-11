@@ -322,6 +322,8 @@ object SparkExitBroadcastClassifier {
         "txn-already-known",
         "txn-same-nonwitness-data-in-mempool",
         "already in block chain",
+        // Core's newer wording, which esplora hosts pass on as plain text.
+        "already in utxo set",
     )
     private val notMatureMessages = listOf("non-BIP68-final", "non-final")
     private val inputsMissingMessages = listOf("bad-txns-inputs-missingorspent", "missing-inputs", "missingorspent")
@@ -441,6 +443,10 @@ object SparkExitBroadcastClassifier {
 
     private const val MAX_REASON_LENGTH = 200
 
-    /** The RPC code, also when the node's error sits JSON-escaped inside mempool's own error object. */
-    private fun hasRpcCode(code: Int, text: String) = Regex("""code\\?"\s*:\s*$code\b""").containsMatchIn(text)
+    /**
+     * The RPC code, also when the node's error sits JSON-escaped inside mempool's own error object, or as esplora's
+     * plain text (`sendrawtransaction RPC error -27: …`).
+     */
+    private fun hasRpcCode(code: Int, text: String) =
+        Regex("""(code\\?"\s*:\s*|RPC error )$code\b""").containsMatchIn(text)
 }
