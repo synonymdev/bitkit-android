@@ -321,6 +321,43 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a synced spark whose list lacks a pre-restore invoice refuses to send it`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        // Spark reports Synced while its payment-history sync failed, so its list lacks the pre-restore send.
+        val prepared = prepared(feeSats = 0uL, createdAt = (restoredAt - 600).toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertNull(store.data.first().sparkHistoryUnseededSince)
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a synced spark sends an invoice created after the restore`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL, createdAt = now.epochSeconds.toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        sut.payInvoice("lnbc1280n1send", 128uL).getOrThrow()
+
+        verify(sparkService).send(any())
+    }
+
+    @Test
     fun `restored spark sends with valid invoices survive the hash cap`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
         whenever(sparkService.isConnected).thenReturn(true)
@@ -2147,8 +2184,16 @@ class SparkRepoTest : BaseUnitTest() {
         lastSyncedAt = 1uL,
     )
 
-    private fun prepared(feeSats: ULong): PrepareSendPaymentResponse {
-        val details = mock<Bolt11InvoiceDetails> { on { paymentHash } doReturn "hash" }
+    private fun prepared(
+        feeSats: ULong,
+        createdAt: ULong = 0uL,
+        expirySecs: ULong = 0uL,
+    ): PrepareSendPaymentResponse {
+        val details = mock<Bolt11InvoiceDetails> {
+            on { paymentHash } doReturn "hash"
+            on { timestamp } doReturn createdAt
+            on { expiry } doReturn expirySecs
+        }
         return PrepareSendPaymentResponse(
             paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, feeSats),
             amount = BigInteger.valueOf(100),

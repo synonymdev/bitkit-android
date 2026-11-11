@@ -106,9 +106,9 @@ class SparkRepo @Inject constructor(
         private const val QUOTE_EXPIRY_MARGIN_SECS = 30uL
 
         /**
-         * How long after a restore the node refuses a still-valid invoice created before it that Spark hasn't listed.
-         * Spark can report a sync while its payment history failed to sync, so its list alone can't clear one. A week
-         * outlasts the default expiry of common wallets (an hour to a day, CLN's a week).
+         * How long after a restore either rail refuses a still-valid invoice created before it that Spark hasn't
+         * listed. Spark can report a sync while its payment history failed to sync, so its list alone can't clear
+         * one. A week outlasts the default expiry of common wallets (an hour to a day, CLN's a week).
          */
         internal const val RESTORE_HOLD_SECS = 7 * 24 * 60 * 60L
     }
@@ -281,7 +281,9 @@ class SparkRepo @Inject constructor(
      * when Spark refuses an expired invoice at prepare or send; and with [ServiceError.PaymentDeadlineExpired] past
      * [paymentDeadlineAt]. A failure inside the send is a [PaymentPendingException], as the payment may have been
      * dispatched, and its event decides it. An invoice this wallet already sends is not sent again: one in flight or
-     * pending fails with [PaymentPendingException], and one Spark completed returns its hash.
+     * pending fails with [PaymentPendingException], and one Spark completed returns its hash. After a restore, a
+     * still-valid invoice created before it that Spark hasn't listed as pending or paid fails with
+     * [SparkError.RestoredInvoiceUnverified], under the same rule as the node's send.
      */
     suspend fun payInvoice(
         bolt11: String,
@@ -305,6 +307,8 @@ class SparkRepo @Inject constructor(
             }
             ensurePaymentDeadline(paymentDeadlineAt)
             val paymentHash = method.invoiceDetails.paymentHash
+            val invoice = method.invoiceDetails
+            val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
             when (val earlier = lightningSend(paymentHash)) {
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.COMPLETED -> {
                     Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
@@ -318,6 +322,9 @@ class SparkRepo @Inject constructor(
                     Logger.warn("Refused a Spark send of '$paymentHash' until Spark lists its sends", context = TAG)
                     throw SparkError.RestoredInvoiceUnverified()
                 }
+                // Spark's synced list can still lack a send it made before the restore, as on the node's path.
+                SparkLightningSend.NotFound, is SparkLightningSend.Found ->
+                    refuseUnverifiedRestoredInvoice(invoice.timestamp.toEpochSeconds(), expiresAt.toEpochSeconds())
                 else -> Unit
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
@@ -325,11 +332,9 @@ class SparkRepo @Inject constructor(
             if (sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) != null) {
                 throw PaymentPendingException(paymentHash)
             }
-            val invoice = method.invoiceDetails
-            val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
             val sent = try {
                 sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
-                cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
+                cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
                 // Kept until the call returns, so a send cut off by process death or cancellation stays held.
                 cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
                 // The checks above and both writes suspend, so the deadline is checked last, before the send.
@@ -996,9 +1001,11 @@ class SparkRepo @Inject constructor(
             (invoiceCreatedAt ?: 0L) < restoredAt &&
             (invoiceExpiresAt == null || now < invoiceExpiresAt)
         if (!isHeld) return
-        Logger.warn("Refused a node send of a pre-restore invoice Spark hasn't listed", context = TAG)
+        Logger.warn("Refused a send of a pre-restore invoice Spark hasn't listed", context = TAG)
         throw SparkError.RestoredInvoiceUnverified()
     }
+
+    private fun ULong.toEpochSeconds(): Long = coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
     /** The count of sends recorded so far, read before a node send's checks for [hasRecordedSendSince]. */
     fun sendRecordMark(): Long = sendRecords.get()
