@@ -2,6 +2,7 @@ package to.bitkit.ui.utils
 
 import android.content.Context
 import com.synonym.bitkitcore.PubkyException
+import com.synonym.paykit.PaykitException
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
@@ -40,5 +41,30 @@ class PubkyAuthErrorMessageTest : BaseUnitTest() {
 
             assertEquals(localizedMessage, AppError(AppError(error)).localizedPubkyAuthMessage(context))
         }
+    }
+
+    @Test
+    fun `refused signup codes and transport failures show their own descriptions`() {
+        val cases = listOf(
+            PaykitException.Identity("signup_code_rejected", "sign up") to
+                R.string.profile__auth_error_signup_code_rejected,
+            PaykitException.Transport("transport_error", "sign up") to R.string.pubky_auth__identity_unavailable_desc,
+        )
+        cases.forEach { (error, resource) ->
+            val localizedMessage = "Localized message for $resource"
+            whenever(context.getString(resource)).thenReturn(localizedMessage)
+
+            assertEquals(localizedMessage, AppError(error).localizedPubkyAuthMessage(context))
+        }
+    }
+
+    @Test
+    fun `other identity errors keep the localized fallback`() {
+        val localizedMessage = "Localized unknown error"
+        whenever(context.getString(R.string.common__error_body)).thenReturn(localizedMessage)
+
+        val error = PaykitException.Identity("identity_error", "sign up")
+
+        assertEquals(localizedMessage, AppError(error).localizedPubkyAuthMessage(context))
     }
 }

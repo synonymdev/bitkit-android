@@ -637,6 +637,50 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark send-all funding retains its receipt without a transfer context`() = test {
+        val store = sendAllStore()
+        val attempt = store.admitSendAllTransfer(orderId = null)
+
+        val retained = store.retainPreparedReceipt(attempt.attemptId, 0, sendAllReceipt, false)
+
+        assertEquals(99_500uL, retained.amountSats)
+        assertEquals(sendAllReceipt.txid, retained.txid)
+    }
+
+    @Test
+    fun `blocktank send-all funding still needs its transfer context to retain a receipt`() = test {
+        val store = sendAllStore()
+        val attempt = store.admitSendAllTransfer(orderId = "order-1")
+
+        assertFailsWith<IllegalArgumentException> {
+            store.retainPreparedReceipt(attempt.attemptId, 0, sendAllReceipt, false)
+        }
+        assertNull(store.current()?.txid)
+    }
+
+    private val sendAllReceipt = OnchainPreparedReceipt(
+        "ab".repeat(32),
+        listOf(OnchainSendInput("11".repeat(32), 0u)),
+        "bcrt1qfunding",
+        99_500uL,
+        miningFeeSats = 500uL,
+    )
+
+    private suspend fun sendAllStore(): OnchainSendAttemptStore {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        return OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+    }
+
+    private suspend fun OnchainSendAttemptStore.admitSendAllTransfer(orderId: String?) = admit(
+        walletId = "wallet-1", requestId = null, orderId = orderId, address = sendAllReceipt.address,
+        amountSats = 99_000uL, isMaxAmount = true, feeRateSatsPerVByte = 1uL, isTransfer = true,
+        channelId = null, tags = emptyList(), beforeSendAttempt = {},
+    )
+
+    @Test
     fun `transfer balance context is durable before dispatch and survives reopen`() = test {
         var saved: String? = null
         val keychain = mock<Keychain>()

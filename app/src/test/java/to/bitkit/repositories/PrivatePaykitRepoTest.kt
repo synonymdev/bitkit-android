@@ -112,6 +112,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val settingsStore = mock<SettingsStore>()
     private val addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val lightningRepo = mock<LightningRepo>()
+    private val sparkRepo = mock<SparkRepo>()
     private val walletRepo = mock<WalletRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
@@ -197,6 +198,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever { paymentRequestRepo.refreshEligibleTarget(any()) }
             .thenReturn(Result.success(PaykitPaymentRequestTargetCheck(null, isComplete = true)))
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever { sparkRepo.receivedLightningPaymentHashes() }.thenReturn(emptySet())
+        whenever { sparkRepo.attemptedLightningPaymentHashes() }.thenReturn(emptySet())
         whenever(coreService.getAddressUsage(any())).doSuspendableAnswer {
             it.getArgument<Collection<String>>(0).associateWith { address ->
                 Result.success(coreService.isAddressUsed(address))
@@ -492,7 +495,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9)).copy(isExpired = true))
         )
         val renewed = "lnbcrt1renewed"
-        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
             .thenReturn(Result.success(renewed))
         whenever(coreService.decode(renewed))
             .thenReturn(Scanner.Lightning(lightningInvoice(renewed, byteArrayOf(8, 8, 8))))
@@ -502,7 +505,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val reservation = updates.secondValue.single().reservations.single()
         assertEquals(MethodId.Bolt11.rawValue, reservation.identifier)
         assertEquals(PublicPaykitRepo.serializePayload(renewed), reservation.payload)
-        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
     }
 
     @Test
@@ -2189,6 +2192,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 amountSats = null,
                 description = "",
                 expirySeconds = PRIVATE_BOLT11_EXPIRY_SECONDS,
+                isContactEndpoint = true,
             )
         }.thenReturn(Result.success(PRIVATE_BOLT11))
         whenever(coreService.decode(PRIVATE_BOLT11))
@@ -3141,7 +3145,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         settingsData.update { it.copy(sharesPrivatePaykitEndpoints = false) }
         sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
         runCurrent()
-        verify(lightningRepo).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
 
         settingsData.update { it.copy(sharesPrivatePaykitEndpoints = true) }
         whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).thenReturn(
@@ -3149,17 +3153,17 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         sut.enableSharingAndPrepareSavedContacts({ listOf(CONTACT_KEY) }).getOrThrow()
         runCurrent()
-        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
 
         whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).thenReturn(
             privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY)),
         )
         sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
         runCurrent()
-        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
         runCurrent()
-        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         val publications = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
         verify(paykitSdkService, times(3)).syncPrivatePaymentListsWithReservations(publications.capture(), eq(false))
         assertEquals(CONTACT_KEY, publications.secondValue.single().counterparty)
@@ -3172,14 +3176,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         preparePrivateLightningContact()
         settingsData.update { it.copy(publicPaykitOnchainEnabled = true) }
         clearInvocations(paykitSdkService)
-        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
             .thenReturn(Result.failure(AppError("invoice unavailable")))
         sut.refreshKnownSavedContactEndpoints("channel ready", forceRefreshLightning = true).getOrThrow()
         runCurrent()
         verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
 
         val refreshedInvoice = "lnbcrt1refreshed"
-        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
             .thenReturn(Result.success(refreshedInvoice))
         whenever(coreService.decode(refreshedInvoice))
             .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
@@ -3193,6 +3197,52 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `private Lightning invoice paid through Spark is replaced`() = test {
+        preparePrivateLightningContact()
+        val refreshedInvoice = "lnbcrt1refreshed"
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
+            .thenReturn(Result.success(refreshedInvoice))
+        whenever(coreService.decode(refreshedInvoice))
+            .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
+        whenever(sparkRepo.receivedLightningPaymentHashes()).thenReturn(setOf("090909"))
+        clearInvocations(paykitSdkService)
+
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+
+        val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(publication.capture(), eq(false))
+        assertEquals(
+            PublicPaykitRepo.serializePayload(refreshedInvoice),
+            publication.firstValue.single().reservations.single().payload,
+        )
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `received payment reconciliation rotates a private invoice paid through Spark`() = test {
+        preparePrivateLightningContact()
+        val refreshedInvoice = "lnbcrt1refreshed"
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
+            .thenReturn(Result.success(refreshedInvoice))
+        whenever(coreService.decode(refreshedInvoice))
+            .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
+        whenever(sparkRepo.receivedLightningPaymentHashes()).thenReturn(setOf("090909"))
+        clearInvocations(paykitSdkService)
+
+        sut.reconcileReceivedPayments().getOrThrow()
+        runCurrent()
+
+        val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(publication.capture(), eq(false))
+        assertEquals(
+            PublicPaykitRepo.serializePayload(refreshedInvoice),
+            publication.firstValue.single().reservations.single().payload,
+        )
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `forced private Lightning refresh includes contacts loaded later`() = test {
         preparePrivateLightningContact()
         sut.scheduleSavedContactPreparation(emptyList()).getOrThrow()
@@ -3201,7 +3251,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         runCurrent()
 
         val refreshedInvoice = "lnbcrt1refreshed"
-        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
             .thenReturn(Result.success(refreshedInvoice))
         whenever(coreService.decode(refreshedInvoice))
             .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
@@ -3216,11 +3266,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             PublicPaykitRepo.serializePayload(refreshedInvoice),
             publication.firstValue.single().reservations.single().payload,
         )
-        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
         sut.awaitContactPreparation()
-        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         sut.closeAndClear()
     }
 
@@ -3246,10 +3296,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         runCurrent()
         sut.awaitContactPreparation()
 
-        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
         runCurrent()
-        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         sut.closeAndClear()
     }
 
@@ -3270,7 +3320,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
 
-        verify(lightningRepo).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         sut.closeAndClear()
     }
 
@@ -3286,10 +3336,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         sut.refreshKnownSavedContactEndpoints("channel ready", forceRefreshLightning = true).getOrThrow()
         runCurrent()
-        verify(lightningRepo, times(4)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(4)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
 
         val refreshedInvoice = "lnbcrt1refreshed"
-        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
             .thenReturn(Result.success(refreshedInvoice))
         whenever(coreService.decode(refreshedInvoice))
             .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
@@ -3299,7 +3349,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         clearInvocations(paykitSdkService)
         sut.scheduleSavedContactPreparation(keys).getOrThrow()
         runCurrent()
-        verify(lightningRepo, times(5)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(5)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
         verify(paykitSdkService).syncPrivatePaymentListsWithReservations(publication.capture(), eq(false))
         assertEquals(
@@ -3309,7 +3359,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
         runCurrent()
-        verify(lightningRepo, times(5)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        verify(lightningRepo, times(5)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true)
         sut.closeAndClear()
     }
 
@@ -3322,7 +3372,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitUsdtEnabled = false,
         )
         whenever(lightningRepo.canReceive()).thenReturn(true)
-        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
             .thenReturn(Result.success(PRIVATE_BOLT11))
         whenever(coreService.decode(PRIVATE_BOLT11))
             .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
@@ -4802,7 +4852,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitUsdtEnabled = false,
         )
         whenever(lightningRepo.canReceive()).thenReturn(true)
-        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
             .thenReturn(Result.success(PRIVATE_BOLT11))
         whenever(coreService.decode(PRIVATE_BOLT11))
             .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
@@ -4821,6 +4871,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         settingsStore = settingsStore,
         addressReservationRepo = addressReservationRepo,
         lightningRepo = lightningRepo,
+        sparkRepo = sparkRepo,
         walletRepo = walletRepo,
         publicPaykitRepo = publicPaykitRepo,
         paymentRequestRepo = paymentRequestRepo,
@@ -4897,6 +4948,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         },
         failedToQueue = failedToQueue,
         failedToDeliver = failedToDeliver,
+        acknowledged = emptyList(),
     )
 
     private fun cachedPublishedContact() = PrivatePaykitContactCacheData(
@@ -4914,6 +4966,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .map { privateListSyncChange(it.counterparty) },
         failedToQueue = emptyList(),
         failedToDeliver = emptyList(),
+        acknowledged = emptyList(),
     )
 
     private fun privateListSyncChange(

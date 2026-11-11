@@ -464,7 +464,7 @@ class HwSendViewModel @Inject constructor(
             amount = request.amountSats,
             fee = result.miningFeeSats,
             feeRate = result.feeRate,
-            isTransfer = false,
+            isTransfer = request.isTransfer,
             channelId = null,
             walletId = request.walletId,
         )
@@ -584,6 +584,8 @@ data class HwSendRequest(
     val paymentRequestId: PaykitPaymentRequestId? = null,
     val paymentIdentity: String? = null,
     val paymentDeadlineAt: Instant? = null,
+    /** Marks the payment's activity as a transfer between the user's own balances. */
+    val isTransfer: Boolean = false,
 )
 
 private data class PendingHwSendBroadcast(
