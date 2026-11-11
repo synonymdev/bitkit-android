@@ -257,7 +257,7 @@ import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
-import to.bitkit.utils.Bip21Utils
+import to.bitkit.utils.ClipboardPromptValidator
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -3269,16 +3269,6 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            showAddressValidationError(
-                titleRes = R.string.other__scan_err_decoding,
-                descriptionRes = R.string.other__scan__error__generic,
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         if (activeHardwareWalletId == null && rejectUsdtSelfSend(input)) return@withContext
 
         if (isUsdtPaymentInput(input)) {
@@ -4917,18 +4907,6 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            if (clearIncomingPaymentRequestTarget()) return@withContext
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                description = context.getString(R.string.other__scan__error__generic),
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         SamRockSetupRequest.parse(input)?.let {
             handleSamRockSetup(it)
             return@withContext
@@ -5101,6 +5079,15 @@ class AppViewModel @Inject constructor(
                     context = TAG,
                 )
                 if (hasIncomingPaymentRequest) return
+                if (scan == null && input.trim().startsWith("bitcoin:", ignoreCase = true)) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__generic),
+                        testTag = "InvalidAddressToast",
+                    )
+                    return
+                }
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.other__qr_error_header),
@@ -7985,7 +7972,8 @@ class AppViewModel @Inject constructor(
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
-            else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
+            else -> SamRockSetupRequest.isProtocolUrl(text) ||
+                ClipboardPromptValidator.isSupported(text) { coreService.decode(it) }
         }
     }
 
