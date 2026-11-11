@@ -1230,6 +1230,7 @@ class BackupRepo @Inject constructor(
         )
         val parsed = decodeBackup<MetadataBackupV1>(migration.json)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
+        val restoredIndexKeys = cleanCache.sparkExitNextFundingIndexes.keys
         cacheStore.update {
             cleanCache.copy(
                 backupStatuses = it.backupStatuses,
@@ -1238,6 +1239,8 @@ class BackupRepo @Inject constructor(
                     it.sparkExitNextFundingIndexes,
                     cleanCache.sparkExitNextFundingIndexes,
                 ),
+                // The exit then looks once for funding addresses that still hold coins and nothing watches.
+                sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
             )
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }

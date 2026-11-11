@@ -226,6 +226,8 @@ class SparkExitRepo @Inject constructor(
      */
     suspend fun refreshEarlierAddresses() = withContext(bgDispatcher) {
         val chain = chain ?: return@withContext
+        runSuspendCatching { recoverFunding(chain) }
+            .onFailure { Logger.warn("Failed to look for earlier exits' funding after a restore", it, context = TAG) }
         val now = clock.nowMs()
         val watched = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList()).filter { it.isWatched(now) }
         for (entry in watched) {
@@ -1122,18 +1124,58 @@ class SparkExitRepo @Inject constructor(
 
     /**
      * With no index kept and no record, as after a restore from the phrase or from a backup older than the index, the
-     * funding addresses are scanned once and the result kept. A scan the chain fails keeps nothing.
+     * funding addresses are scanned first. A scan the chain fails keeps nothing.
      */
     private suspend fun nextFundingIndex(): UInt {
         val kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey]
         val stored = runSuspendCatching { store.load() }.getOrNull()
         if (kept != null || stored != null) return SparkExitMath.nextFundingIndex(kept, stored)
-        val chain = chain ?: return 0u
-        val scanned = SparkExitMath.scanNextFundingIndex { chain.isAddressUsed(fundingAddress(it).address) }
+        return chain?.let { recoverFunding(it) } ?: 0u
+    }
+
+    /**
+     * Finds earlier exits' funding after a restore. With no index kept and no record, scans for the next index and
+     * keeps it; with an index a restore brought back, reads each funding address below it, once. Each funding address
+     * that still holds coins and nothing watches is listed as kept change, so it is watched for good. Throws when a
+     * read fails, keeping no index and the restore pending, so it runs again on the next start.
+     *
+     * @return the index a scan found, or null when there was nothing to scan.
+     */
+    private suspend fun recoverFunding(chain: SparkExitChain): UInt? {
+        val cache = cacheStore.data.first()
+        val kept = cache.sparkExitNextFundingIndexes[fundingIndexKey]
+        val stored = runSuspendCatching { store.load() }.getOrNull()
+        val isPending = if (kept == null) stored == null else fundingIndexKey in cache.sparkExitFundingRecoveryPending
+        if (!isPending) return null
+        val addresses = mutableMapOf<UInt, String>()
+        suspend fun address(index: UInt) = addresses.getOrPut(index) { fundingAddress(index).address }
+        val used = mutableListOf<UInt>()
+        val scanned = if (kept != null) {
+            null
+        } else {
+            SparkExitMath.scanNextFundingIndex { index ->
+                chain.isAddressUsed(address(index)).also { if (it) used += index }
+            }
+        }
+        val candidates = if (kept == null) used else (0u until kept.toUInt()).toList()
+        val listed = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList()).map { it.address }
+        val watched = listed + stored?.funding?.map { it.address }.orEmpty()
+        for (index in candidates.filter { address(it) !in watched }) {
+            val address = address(index)
+            val sats = chain.utxos(address).fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+            if (sats == 0uL) continue
+            val path = SparkExitFundingKey.path(index.toInt(), Env.network)
+            keepEarlierAddress(
+                SparkExitEarlierAddress(address, path, SparkExitEarlierAddress.Kind.KEPT_CHANGE, sats, clock.nowMs())
+            )
+        }
         cacheStore.update {
             val indexes = it.sparkExitNextFundingIndexes
-            val next = maxOf(indexes[fundingIndexKey] ?: 0, scanned.toInt())
-            it.copy(sparkExitNextFundingIndexes = indexes + (fundingIndexKey to next))
+            val next = scanned?.let { found -> maxOf(indexes[fundingIndexKey] ?: 0, found.toInt()) }
+            it.copy(
+                sparkExitNextFundingIndexes = next?.let { found -> indexes + (fundingIndexKey to found) } ?: indexes,
+                sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending - fundingIndexKey,
+            )
         }
         return scanned
     }

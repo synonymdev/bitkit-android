@@ -316,6 +316,11 @@ data class AppCacheData(
      * from an address of its own.
      */
     val sparkExitNextFundingIndexes: Map<String, Int> = mapOf(),
+    /**
+     * The `{network}/wallet{n}` keys whose funding index a restore brought back, so the exit looks once for funding
+     * addresses that still hold coins and nothing watches.
+     */
+    val sparkExitFundingRecoveryPending: Set<String> = emptySet(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */

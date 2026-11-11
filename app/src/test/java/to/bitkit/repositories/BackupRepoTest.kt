@@ -1870,6 +1870,17 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a restore marks each restored spark exit funding index for a look at its funding addresses`() = test {
+        applyCacheUpdates()
+        val backedUp = mapOf("regtest/wallet0" to 3)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(sparkExitNextFundingIndexes = backedUp)))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(setOf("regtest/wallet0"), cacheData.value.sparkExitFundingRecoveryPending)
+    }
+
+    @Test
     fun `a metadata backup written before the spark exit funding index restores with none kept`() = test {
         applyCacheUpdates()
         val cache = json.parseToJsonElement(json.encodeToString(AppCacheData())).jsonObject -
