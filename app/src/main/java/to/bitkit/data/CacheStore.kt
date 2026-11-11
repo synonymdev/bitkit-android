@@ -334,6 +334,17 @@ data class AppCacheData(
     val quickPayLedger: QuickPayLedger? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /**
+     * When a Spark leaf optimization last ran or was cut short, in epoch milliseconds; cleared once it completed or
+     * an exit quote waited out the counter-swap grace. Kept across processes, since a swap the app's close cut short
+     * leaves value in flight.
+     */
+    val sparkOptimizationActivityAt: Long? = null,
+    /**
+     * The funding key index the next Spark emergency exit takes, per `{network}/wallet{n}`, so each exit pays its fees
+     * from an address of its own.
+     */
+    val sparkExitNextFundingIndexes: Map<String, Int> = mapOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */

@@ -131,6 +131,21 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `quote fails while an exit holds Spark`() = test {
+        sendable(100_000uL)
+        sparkState.value = SparkState(isReady = true, isExiting = true)
+
+        assertIs<MoveToSparkError.SparkUnavailable>(sut.quote().exceptionOrNull())
+        verify(sparkRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `a move is not offered while an exit holds Spark`() {
+        val channels = listOf(createChannelDetails().copy(isUsable = true, nextOutboundHtlcLimitMsat = 5_000_000uL))
+        assertTrue(!MoveToSparkMath.canMove(channels, SparkState(isReady = true, isExiting = true)))
+    }
+
+    @Test
     fun `a move is offered only with a usable Spark and a balance above the minimum`() {
         val channels = listOf(createChannelDetails().copy(isUsable = true, nextOutboundHtlcLimitMsat = 5_000_000uL))
         assertTrue(MoveToSparkMath.canMove(channels, SparkState(isReady = true)))
