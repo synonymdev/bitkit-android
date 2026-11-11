@@ -28,6 +28,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
@@ -60,6 +61,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     private val clock: Clock = mock()
     private val backupRepo: BackupRepo = mock()
     private val sparkRepo: SparkRepo = mock()
+    private val moveToSparkRepo: MoveToSparkRepo = mock()
     private val migrationService: MigrationService = mock()
     private val isRestoring = MutableStateFlow(false)
     private val isShowingMigrationLoading = MutableStateFlow(false)
@@ -103,6 +105,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
                 settingsStore = settingsStore,
             ),
             sparkRepo = sparkRepo,
+            moveToSparkRepo = moveToSparkRepo,
         )
     }
 
@@ -286,6 +289,21 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val paymentResult = result.getOrThrow()
         assertTrue(paymentResult is NotifyPaymentReceived.Result.Skip)
         verify(activityRepo, never()).markActivityAsSeen(any(), any())
+    }
+
+    @Test
+    fun `lightning payment returns Skip for a move to Spark`() = test {
+        val event = mock<Event.PaymentReceived> {
+            on { amountMsat } doReturn 1000000uL
+            on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn "paymentId123"
+        }
+        whenever(moveToSparkRepo.isMovePayment("hash123")).thenReturn(true)
+
+        val result = sut(NotifyPaymentReceived.Command.Lightning(event = event))
+
+        assertTrue(result.getOrThrow() is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).isActivitySeen(any(), any())
     }
 
     @Test

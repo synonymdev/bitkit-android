@@ -1629,6 +1629,27 @@ class LightningRepo @Inject constructor(
         is EarlierSend.Paid -> Result.success(paymentHash)
     }
 
+    /** Pays [bolt11] from the channels only, never falling back to Spark, which moving a channel balance needs. */
+    suspend fun payInvoiceOverLdk(
+        bolt11: String,
+        paymentHash: String,
+        sats: ULong?,
+        maxTotalRoutingFeeMsat: ULong?,
+    ): Result<PaymentId> = payInvoiceWithLdk(
+        bolt11 = bolt11,
+        sats = sats,
+        paymentHash = paymentHash,
+        paymentDeadlineAt = null,
+        maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
+        onBeforeSend = { true },
+    )
+
+    /** The routing fee for paying [amountSats] to [bolt11] from the channels, never quoted on Spark. */
+    suspend fun estimateLdkRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
+        executeWhenNodeRunning("estimateLdkRoutingFeesForAmount") {
+            lightningService.estimateRoutingFeesForAmount(bolt11, amountSats)
+        }
+
     private suspend fun payInvoiceWithLdk(
         bolt11: String,
         sats: ULong?,

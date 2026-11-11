@@ -1716,6 +1716,18 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a move to spark is recorded under its payment hash so it can be trimmed once paid`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(eq("bolt11"), eq(1_000uL), anyOrNull(), eq(5_000uL))).thenReturn("move-hash")
+
+        sut.payInvoiceOverLdk("bolt11", paymentHash = "MOVE-HASH", sats = 1_000uL, maxTotalRoutingFeeMsat = 5_000uL)
+            .getOrThrow()
+
+        verifyBlocking(cacheStore) { addLdkSendHash("move-hash") }
+    }
+
+    @Test
     fun `an invoice spark is still paying is not sent again through the node`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)

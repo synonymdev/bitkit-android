@@ -41,6 +41,9 @@ internal object Env {
         get() = BuildConfig.ESPLORA_URL.takeIf { it.isNotBlank() && network == Network.REGTEST }
 
     val isDebug = BuildConfig.DEBUG
+
+    /** Basic auth (`user:password`) for Blocktank's regtest routes, set only in debug builds. */
+    val blocktankRegtestAuth: String? get() = BuildConfig.BLOCKTANK_REGTEST_AUTH.takeIf { isDebug && it.isNotBlank() }
     const val isE2eTest = BuildConfig.E2E
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"

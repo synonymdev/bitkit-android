@@ -360,6 +360,7 @@
     <string name="other__high_balance__text">&lt;accent&gt;O saldo de sua carteira ultrapassa US$ 500.&lt;/accent&gt;\nPara sua segurança, considere transferir parte de suas economias para uma carteira offline.</string>
     <string name="other__high_balance__continue">Entendido</string>
     <string name="other__high_balance__cancel">Saiba Mais</string>
+    <string name="other__try_again">Tente novamente.</string>
     <string name="other__update_critical_nav_title">Atualização Crítica</string>
     <string name="other__update_critical_title">Atualize\n&lt;accent&gt;agora&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Há uma atualização disponível para a Bitkit. Atualize para continuar usando o app.</string>
@@ -1367,13 +1368,15 @@
     <string name="profile__disconnect_error">Falha ao desligar o perfil</string>
     <string name="profile__edit_bio">BIOGRAFIA</string>
     <string name="profile__edit_bio_placeholder">Nota breve. Fale um pouco sobre si.</string>
+    <string name="profile__edit_changed_error">O teu perfil mudou no pubky.app. A Bitkit carregou a versão mais recente, por isso faz novamente a tua alteração.</string>
     <string name="profile__edit_delete_section">ELIMINAR</string>
     <string name="profile__edit_name_placeholder">O SEU NOME</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
-    <string name="profile__edit_public_note">Tenha em atenção que as informações do perfil são guardadas em ficheiros públicos.</string>
+    <string name="profile__edit_public_note">Este é o teu perfil do pubky.app. É público, e as alterações que fazes aqui também aparecem no pubky.app.</string>
     <string name="profile__edit_save_error">Falha ao guardar o perfil</string>
     <string name="profile__edit_save_success">Perfil guardado</string>
     <string name="profile__edit_tags">ETIQUETAS</string>
+    <string name="profile__edit_tags_error">O Bitkit não conseguiu guardar as suas etiquetas. As outras alterações foram guardadas, por isso tente as etiquetas novamente.</string>
     <string name="profile__edit_unlink_section">DESASSOCIAR</string>
     <string name="profile__empty_state">Não foi possível carregar o seu perfil.</string>
     <string name="profile__intro_description">Com o seu perfil portátil, os seus contactos podem encontrá-lo e pagar-lhe em qualquer lugar.</string>
