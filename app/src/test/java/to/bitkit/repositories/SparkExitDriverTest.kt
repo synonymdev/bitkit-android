@@ -1986,7 +1986,19 @@ class SparkExitDriverTest : BaseUnitTest() {
             SparkExitSweep.refusedFeeRate(refusal, 2uL),
             "the scaled rate wrapped around, or cannot be saved",
         )
-        assertEquals(Long.MAX_VALUE.toULong(), SparkExitSweep.refusedFeeRate("fee not met, 1 < 10000000000000000000", 1uL))
+        assertEquals(
+            Long.MAX_VALUE.toULong(),
+            SparkExitSweep.refusedFeeRate("fee not met, 1 < 10000000000000000000", 1uL),
+        )
+        // The host's text from the review, at 2 sat/vB: the rate it gives saves and loads.
+        val sweep = SparkExitRecord.LeftoverSweep(
+            txid = null,
+            txHex = null,
+            valueSats = 1_764uL,
+            refusedFeeRate = SparkExitSweep.refusedFeeRate(refusal, 2uL),
+        )
+        val record = SparkExitFixtures.record(Phase.Done).copy(leftoverSweep = sweep)
+        assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
     }
 
     @Test
