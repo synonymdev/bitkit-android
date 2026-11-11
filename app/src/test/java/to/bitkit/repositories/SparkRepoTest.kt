@@ -243,6 +243,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a pre-restore invoice that outlasts a week is still refused on both rails on day 8`() = test {
+        val restoredAt = now.epochSeconds - 8 * 24 * 60 * 60L
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkRestoredAt = restoredAt)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val createdAt = restoredAt - 600
+        val expirySecs = 30 * 24 * 60 * 60L
+        val prepared = prepared(feeSats = 0uL, createdAt = createdAt.toULong(), expirySecs = expirySecs.toULong())
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        assertTrue(sut.holdsRestoredInvoices())
+        assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+            sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, createdAt + expirySecs)
+        }
+        assertIs<SparkError.RestoredInvoiceUnverified>(sut.payInvoice("lnbc1280n1send", 128uL).exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
     fun `an invoice created after the restore pays over the node while spark is unsynced`() = test {
         cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
         whenever(sparkService.isConnected).thenReturn(false)

@@ -104,13 +104,6 @@ class SparkRepo @Inject constructor(
 
         /** Seconds a withdrawal quote must still hold to be reused, so it can't expire mid-send. */
         private const val QUOTE_EXPIRY_MARGIN_SECS = 30uL
-
-        /**
-         * How long after a restore either rail refuses a still-valid invoice created before it that Spark hasn't
-         * listed. Spark can report a sync while its payment history failed to sync, so its list alone can't clear
-         * one. A week outlasts the default expiry of common wallets (an hour to a day, CLN's a week).
-         */
-        internal const val RESTORE_HOLD_SECS = 7 * 24 * 60 * 60L
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -911,8 +904,8 @@ class SparkRepo @Inject constructor(
      * While Spark can't list its payments, a send it started for [paymentHash] counts as pending, since it may be live,
      * and after a restore, until Spark's synced list seeds the kept hashes, [SparkError.SendRefused] is thrown for an
      * invoice created before the restore ([invoiceCreatedAt] in epoch seconds, null when unknown), as the restored
-     * hashes can lack a send Spark made of it. For [RESTORE_HOLD_SECS] after a restore, an invoice created before it
-     * and not yet expired ([invoiceExpiresAt], null when unknown) that Spark hasn't listed is refused with
+     * hashes can lack a send Spark made of it. After a restore, an invoice created before it and not yet expired
+     * ([invoiceExpiresAt], null when unknown) that Spark hasn't listed is refused with
      * [SparkError.RestoredInvoiceUnverified] whatever Spark listed, as Spark's list can lack its sends after a sync.
      */
     suspend fun earlierLightningSend(
@@ -983,9 +976,7 @@ class SparkRepo @Inject constructor(
     /** Whether a node send needs its invoice's times for the checks after a restore in [earlierLightningSend]. */
     suspend fun holdsRestoredInvoices(): Boolean {
         val cache = cacheStore.data.first()
-        val restoredAt = cache.sparkRestoredAt
-        return cache.sparkHistoryUnseededSince != null ||
-            restoredAt != null && clock.now().epochSeconds < restoredAt + RESTORE_HOLD_SECS
+        return cache.sparkHistoryUnseededSince != null || cache.sparkRestoredAt != null
     }
 
     private suspend fun isUnlistedSinceRestore(invoiceCreatedAt: ULong): Boolean {
@@ -993,13 +984,16 @@ class SparkRepo @Inject constructor(
         return invoiceCreatedAt < unseededSince.coerceAtLeast(0L).toULong()
     }
 
+    /**
+     * The rule both rails apply after a restore, as Spark's list can lack a send it made before it: an invoice created
+     * before the restore that hasn't expired, or one whose times are unknown, is refused with
+     * [SparkError.RestoredInvoiceUnverified] until it expires.
+     */
     private suspend fun refuseUnverifiedRestoredInvoice(invoiceCreatedAt: Long?, invoiceExpiresAt: Long?) {
         val restoredAt = cacheStore.data.first().sparkRestoredAt ?: return
-        val now = clock.now().epochSeconds
         val isHeld = sparkService.isSupported &&
-            now < restoredAt + RESTORE_HOLD_SECS &&
             (invoiceCreatedAt ?: 0L) < restoredAt &&
-            (invoiceExpiresAt == null || now < invoiceExpiresAt)
+            (invoiceExpiresAt == null || clock.now().epochSeconds < invoiceExpiresAt)
         if (!isHeld) return
         Logger.warn("Refused a send of a pre-restore invoice Spark hasn't listed", context = TAG)
         throw SparkError.RestoredInvoiceUnverified()
