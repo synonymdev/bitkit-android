@@ -1021,6 +1021,7 @@ class SparkExitRepo @Inject constructor(
                     record.transferId?.let { transferRepo.markSettled(it) }
                     val outcome = if (utxos.isEmpty()) {
                         store.delete()
+                        giveFundingIndexBack(record.fundingIndex)
                         _state.update { it.copy(record = null) }
                         work.cancelAll()
                         SparkExitCancel.Cancelled
@@ -1052,6 +1053,13 @@ class SparkExitRepo @Inject constructor(
     // region keys
 
     private val fundingIndexKey get() = "${Env.network.name.lowercase()}/wallet$walletIndex"
+
+    /** A payment landing late at a forgotten exit's funding address is seen by the next exit, which uses it. */
+    private suspend fun giveFundingIndexBack(index: UInt) = cacheStore.update {
+        val indexes = it.sparkExitNextFundingIndexes
+        val back = SparkExitMath.fundingIndexAfterForget(indexes[fundingIndexKey], index) ?: return@update it
+        it.copy(sparkExitNextFundingIndexes = indexes + (fundingIndexKey to back))
+    }
 
     private suspend fun nextFundingIndex(): UInt = SparkExitMath.nextFundingIndex(
         kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey],

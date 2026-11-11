@@ -500,6 +500,13 @@ object SparkExitMath {
         return maxOf(kept?.toUInt() ?: 0u, pastStored)
     }
 
+    /**
+     * The next funding index once an exit at [index] is forgotten: given back when it was the last one used, so the
+     * next exit watches that address again and a payment landing there late is not left where nothing looks.
+     */
+    fun fundingIndexAfterForget(kept: Int?, index: UInt): Int? =
+        if (kept != null && kept.toLong() == index.toLong() + 1) index.toInt() else kept
+
     /** Savings can pay the fee funding when its spendable balance covers the funding and the payment's own fee. */
     fun canFundFromSavings(spendableSats: ULong, fundingSats: ULong, paymentFeeSats: ULong): Boolean =
         fundingSats > 0uL && spendableSats >= fundingSats.safe() + paymentFeeSats.safe()

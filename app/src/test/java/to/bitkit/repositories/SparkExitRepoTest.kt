@@ -42,6 +42,7 @@ import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
@@ -89,6 +90,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         on { state } doReturn sparkState
     }
     private val work = mock<SparkExitWork>()
+    private val cacheStore = mock<CacheStore> { on { data } doReturn flowOf(AppCacheData()) }
 
     @Before
     fun setUp() {
@@ -118,7 +120,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             override fun now() = Instant.fromEpochSeconds(1_800_000_000)
         },
         sparkExitTip = SparkExitTip(),
-        cacheStore = mock<CacheStore> { on { data } doReturn flowOf(AppCacheData()) },
+        cacheStore = cacheStore,
     )
 
     private suspend fun createTransfer() = transferRepo.createTransfer(
@@ -883,6 +885,22 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertNull(sut.state.value.record)
         verify(sparkRepo).releaseExitHold()
         verify(sparkRepo, never()).setExiting(true, true)
+    }
+
+    @Test
+    fun `a cancel that forgets the exit gives its funding address to the next exit`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertEquals(SparkExitCancel.Cancelled, sut.cancel().getOrThrow())
+
+        val updates = argumentCaptor<(AppCacheData) -> AppCacheData>()
+        verify(cacheStore, atLeastOnce()).update(updates.capture())
+        val cache = updates.allValues.fold(AppCacheData()) { data, update -> update(data) }
+        val indexes = cache.sparkExitNextFundingIndexes
+        assertEquals(listOf(0), indexes.values.toList(), "a payment landing late at the address goes unwatched")
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

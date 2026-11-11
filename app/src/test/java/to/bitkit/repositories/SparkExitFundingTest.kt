@@ -462,6 +462,13 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a forgotten exit gives its funding address back when it was the last one used`() {
+        assertEquals(3, SparkExitMath.fundingIndexAfterForget(kept = 4, index = 3u), "a late payment goes unwatched")
+        assertEquals(6, SparkExitMath.fundingIndexAfterForget(kept = 6, index = 3u))
+        assertNull(SparkExitMath.fundingIndexAfterForget(kept = null, index = 3u))
+    }
+
+    @Test
     fun `quote names what it skips and spark's balance beyond every leaf it lists`() {
         val prepared = SparkExitFixtures.prepared()
         val beyond = SparkExitQuote(prepared, sparkBalanceSats = 150_000uL)
