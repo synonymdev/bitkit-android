@@ -4113,7 +4113,7 @@ class AppViewModel @Inject constructor(
             walletRepo.balanceState.value.maxSendOnchainSats > Defaults.dustLimit.toULong()
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint, canUseLightning || canUseOnchain)
         // The Spark leg stays offered beside USDT, so switching such a contact to Spending can still route through it.
-        val offersSparkLeg = offersSparkLeg(payment, address, canUseLightning)
+        val offersSparkLeg = offersSparkLeg(payment, address)
         paykitRouteDecided = false
         val route = PaykitRouteUi(
             endpoints = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
@@ -4288,8 +4288,12 @@ class AppViewModel @Inject constructor(
         return !canUseBitcoin && balance > 0u
     }
 
-    private fun offersSparkLeg(payment: ContactPaymentContext, address: String, canPayDirectly: Boolean): Boolean {
-        if (!paykitRouteRepo.canRouteThroughSpark || canPayDirectly || address.isEmpty()) return false
+    /**
+     * Offered whatever Lightning can pay when the payment opens: an amount entered later can pass Lightning's limit,
+     * and the router still prefers a direct payment that works.
+     */
+    private fun offersSparkLeg(payment: ContactPaymentContext, address: String): Boolean {
+        if (!paykitRouteRepo.canRouteThroughSpark || address.isEmpty()) return false
         return payment.endpoints.any { it.methodId.isOnchain }
     }
 

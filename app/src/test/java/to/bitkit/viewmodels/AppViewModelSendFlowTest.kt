@@ -12299,6 +12299,52 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a contact whose lnurl minimum lightning pays still takes spark past the lightning limit`() = test {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1sparkpastlimit",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 2_000_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 999_000uL, debitSat = 999_500uL)
+        whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(leg.deliveredSat)).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(leg.debitSat)).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        balanceState.value = BalanceState(maxSendLightningSats = 997_506u)
+        usdtEnabled.value = false
+        sut.openContactPayment(
+            paymentRequest = lnurl.uri,
+            publicKey = testPublicKey,
+            endpoints = listOf(
+                Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+                Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+            ),
+        )
+        advanceUntilIdle()
+
+        sut.setSendEvent(SendEvent.AmountChange(leg.deliveredSat))
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid, "spark covers what lightning can't")
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        verify(paykitRouteRepo).route(any(), any(), any(), any(), eq(true))
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+    }
+
+    @Test
     fun `router service leg opens the confirm screen with the leg's fee`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
