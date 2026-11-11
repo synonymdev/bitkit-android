@@ -2579,6 +2579,9 @@ class LightningRepo @Inject constructor(
     /** Whether Spark alone can pay [amountSats], which it does whenever the node cannot. */
     fun canSendWithSpark(amountSats: ULong): Boolean = sparkRepo.canSend(amountSats)
 
+    /** Whether Spark's whole balance covers a withdrawal debiting [debitSats], its fees included. */
+    fun canWithdrawWithSpark(debitSats: ULong): Boolean = sparkRepo.canWithdraw(debitSats)
+
     fun canSend(amountSats: ULong): Boolean {
         val state = _lightningState.value
         if (sparkRepo.canSend(amountSats)) return true

@@ -12223,6 +12223,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark withdrawal is weighed against spark's balance, not the lightning limit`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact").copy(deliveredSat = 999_000uL, debitSat = 999_500uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 997_506u)
+        whenever(lightningRepo.canWithdrawWithSpark(leg.deliveredSat)).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(leg.debitSat)).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
+        setSendState(
+            SendUiState(
+                address = leg.endpoint.value,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountChange(leg.deliveredSat))
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid, "continue asks spark for a quote")
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        assertTrue(sut.sendUiState.value.isAmountInputValid, "the quoted debit fits spark's balance")
+
+        whenever(lightningRepo.canWithdrawWithSpark(leg.debitSat)).thenReturn(false)
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAmountInputValid, "a debit past spark's balance can't be swiped")
+    }
+
+    @Test
     fun `router service leg opens the confirm screen with the leg's fee`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
@@ -18511,6 +18543,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         balanceState.value = BalanceState(maxSendOnchainSats = 5_000u, maxSendLightningSats = 50_000u)
         whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
         whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
             .thenReturn(Result.success(PaykitRoute.Service(leg)))
@@ -18553,6 +18586,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         balanceState.value = BalanceState(maxSendOnchainSats = 0u, maxSendLightningSats = 50_000u)
         whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
         whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
             .thenReturn(Result.success(PaykitRoute.Service(leg)))

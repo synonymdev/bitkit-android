@@ -256,7 +256,7 @@ class SparkRepo @Inject constructor(
     fun canSend(amountSats: ULong): Boolean = _state.value.isReady && _state.value.sendableSats >= amountSats
 
     /** A withdrawal's debit already holds its fees, so it is weighed against the whole balance. */
-    private fun canWithdraw(debitSats: ULong): Boolean = _state.value.isReady && _state.value.balanceSats >= debitSats
+    fun canWithdraw(debitSats: ULong): Boolean = _state.value.isReady && _state.value.balanceSats >= debitSats
 
     suspend fun createInvoice(amountSats: ULong?, description: String, expirySecs: UInt): Result<String> =
         withContext(bgDispatcher) {

@@ -4802,6 +4802,7 @@ class AppViewModel @Inject constructor(
                         lightningFeeSats = (picked.leg.debitSat - picked.leg.deliveredSat).toLong(),
                     )
                 }
+                _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
                 PaykitRouteOutcome.Leg
             }
             is PaykitRoute.None -> {
@@ -4986,6 +4987,7 @@ class AppViewModel @Inject constructor(
 
         return when (payMethod) {
             SendMethod.LIGHTNING -> {
+                sparkWithdrawalValidity(amount)?.let { return it }
                 val maxSendable = maxSendableLightningSats()
                 when (val lnurl = _sendUiState.value.lnurl) {
                     null -> amount <= maxSendable && lightningRepo.canSend(amount)
@@ -5004,6 +5006,19 @@ class AppViewModel @Inject constructor(
                 amount > Defaults.dustLimit.toULong() && amount <= maxSendable
             }
         }
+    }
+
+    /**
+     * A Spark withdrawal is paid from Spark's whole balance, so Lightning's limit never applies to it: a quoted leg is
+     * valid only when its debit fits, and before the quote an amount Spark's balance covers lets Continue ask for one.
+     * Null leaves the amount to the Lightning checks.
+     */
+    private fun sparkWithdrawalValidity(amount: ULong): Boolean? {
+        val state = _sendUiState.value
+        val route = state.paykitRoute?.takeIf { state.routesPaykitPayment && it.offersSparkLeg } ?: return null
+        val leg = route.serviceLeg?.takeIf { it.deliveredSat == amount }
+        if (leg != null) return lightningRepo.canWithdrawWithSpark(leg.debitSat)
+        return true.takeIf { lightningRepo.canWithdrawWithSpark(amount) }
     }
 
     private fun maxSendableLightningSats(): ULong {
