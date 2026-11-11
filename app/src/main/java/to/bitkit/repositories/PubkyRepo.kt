@@ -927,28 +927,36 @@ class PubkyRepo @Inject constructor(
             try {
                 runSuspendCatching {
                     withContext(ioDispatcher) {
-                        loadOwnProfile(signIn.publicKey) ?: throw PubkyProfileNotFoundError()
+                        loadOwnProfile(signIn) ?: throw PubkyProfileNotFoundError()
                     }
                 }.onSuccess { (loadedProfile, revision) ->
                     var isCurrent = false
-                    _profile.update {
-                        isCurrent = isCurrentLoad()
-                        if (isCurrent) loadedProfile else it
+                    initializeMutex.withLock {
+                        _profile.update {
+                            isCurrent = isCurrentLoad()
+                            if (isCurrent) loadedProfile else it
+                        }
+                        if (isCurrent) {
+                            ownProfileRevision = revision
+                            invalidateReadOnlyProfile()
+                        }
                     }
                     if (!isCurrent) {
                         Logger.debug("Skipped stale profile load for '${redacted(signIn.publicKey)}'", context = TAG)
                         return@onSuccess
                     }
-                    ownProfileRevision = revision
-                    invalidateReadOnlyProfile()
                     cacheMetadata(loadedProfile, isCurrentLoad)
                 }.onFailure {
                     Logger.error("Failed to load profile", it, context = TAG)
                     // A profile deleted on pubky.app is set up again rather than left unreachable.
-                    if (it is PubkyProfileNotFoundError && isCurrentLoad()) {
-                        _profile.update { null }
-                        ownProfileRevision = null
-                        settingsStore.setPubkyProfileSetupPending(true)
+                    if (it is PubkyProfileNotFoundError) {
+                        initializeMutex.withLock {
+                            if (isCurrentLoad()) {
+                                _profile.update { null }
+                                ownProfileRevision = null
+                                settingsStore.setPubkyProfileSetupPending(true)
+                            }
+                        }
                     }
                 }
                 completedProfileSignInGeneration = signIn.generation
@@ -1446,20 +1454,25 @@ class PubkyRepo @Inject constructor(
             .take(PUBKY_APP_LINKS_MAX_COUNT),
     )
 
-    private suspend fun loadOwnProfile(publicKey: String): Pair<PubkyProfile, String?>? {
+    private suspend fun loadOwnProfile(signIn: PubkySignIn): Pair<PubkyProfile, String?>? {
+        val publicKey = signIn.publicKey
         val generation = profileDeletionGeneration.get()
         val saveEpoch = profileSaveEpoch.get()
         val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
             .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
-        tagsReadEpoch.incrementAndGet()
-        tagsUnavailable = paykitRead.isFailure
+        initializeMutex.withLock {
+            requireCurrent(signIn)
+            tagsReadEpoch.incrementAndGet()
+            tagsUnavailable = paykitRead.isFailure
+        }
         val paykitData = paykitRead.getOrNull()?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         val fetched = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
         if (fetched == null) paykitRead.getOrThrow()
         val stored = pubkyStore.data.first()
+        requireCurrent(signIn)
         val hadPubkyAppProfile = publicKey in stored.pubkyAppProfileOwners
         val migrating = fetched == null && !hadPubkyAppProfile
-        var snapshot = fetched ?: paykitData?.takeIf { migrating }?.let { migrateToPubkyApp(publicKey, it, generation) }
+        var snapshot = fetched ?: paykitData?.takeIf { migrating }?.let { migrateToPubkyApp(signIn, it, generation) }
         // While the move cannot finish, the Bitkit profile is shown and the next save creates the pubky.app profile.
         snapshot ?: return paykitData?.takeIf { migrating }?.let { it.toPubkyProfile(publicKey) to null }
         val pendingAvatar = paykitData?.image?.takeIf { it.isPaykitStorage() }
@@ -1468,32 +1481,36 @@ class PubkyRepo @Inject constructor(
         if (retryingAvatar && avatarMoveSettled) {
             // An avatar set on pubky.app meanwhile wins, and only an avatar on Paykit storage is moved. An unread copy
             // settles nothing, so the move is retried on a later load.
-            pubkyStore.update { it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - publicKey) }
+            pubkyStore.update {
+                if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - publicKey) else it
+            }
         }
         if (pendingAvatar == null || avatarMoveSettled) retryingAvatar = false
         if (retryingAvatar) {
-            snapshot = moveAvatar(publicKey, checkNotNull(pendingAvatar), snapshot, generation) ?: snapshot
+            snapshot = moveAvatar(signIn, checkNotNull(pendingAvatar), snapshot, generation) ?: snapshot
         }
         if (!hadPubkyAppProfile) {
-            pubkyStore.update { it.copy(pubkyAppProfileOwners = it.pubkyAppProfileOwners + publicKey) }
+            pubkyStore.update {
+                if (isCurrent(signIn)) it.copy(pubkyAppProfileOwners = it.pubkyAppProfileOwners + publicKey) else it
+            }
         }
-        if (snapshot !== fetched) ownProfileRevision = snapshot.revision
         val avatarPending = pendingAvatar != null && snapshot.profile.image == null && (migrating || retryingAvatar)
         val profile = PubkyProfile.fromPubkyProfile(publicKey, snapshot.profile).let {
             it.copy(tags = paykitData?.tags.orEmpty(), imageUrl = if (avatarPending) pendingAvatar else it.imageUrl)
         }
         if (!avatarPending && paykitData != null && paykitData != profile.toProfileData()) {
-            publishPaykitProfileCopy(publicKey, profile, generation, saveEpoch)
+            publishPaykitProfileCopy(signIn, profile, generation, saveEpoch)
         }
         return profile to snapshot.revision
     }
 
     private suspend fun migrateToPubkyApp(
-        publicKey: String,
+        signIn: PubkySignIn,
         data: PubkyProfileData,
         generation: Long,
     ): PubkyProfileSnapshot? =
         runSuspendCatching {
+            val publicKey = signIn.publicKey
             val fitted = fitted(data.name, data.bio, data.links.map { PubkyProfileLink(it.label, it.url) })
             // An avatar already on pubky.app is kept as is; one on Paykit storage is moved below.
             val keptImage = data.image?.takeIf { it.isPubkyAppFile() }
@@ -1507,22 +1524,25 @@ class PubkyRepo @Inject constructor(
             // Recorded before the profile is created without it, so an app stopped before the move still retries it.
             // A failed create keeps it too: the create may have landed, and the next load or save handles either case.
             if (image != null) {
-                pubkyStore.update { it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending + publicKey) }
+                pubkyStore.update {
+                    if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending + publicKey) else it
+                }
             }
-            val snapshot = profileWrite(generation) {
+            val snapshot = profileWrite(signIn, generation) {
                 withPubkyAppScope { pubkyService.publishPubkyProfile(update, null, publicKey) }
             }
             Logger.info("Moved Bitkit profile to pubky.app", context = TAG)
             image ?: return@runSuspendCatching snapshot
-            moveAvatar(publicKey, image, snapshot, generation) ?: snapshot
+            moveAvatar(signIn, image, snapshot, generation) ?: snapshot
         }.onFailure { Logger.warn("Failed to move Bitkit profile to pubky.app", it, context = TAG) }.getOrNull()
 
     private suspend fun moveAvatar(
-        publicKey: String,
+        signIn: PubkySignIn,
         uri: String,
         snapshot: PubkyProfileSnapshot,
         generation: Long,
     ): PubkyProfileSnapshot? = runSuspendCatching {
+        val publicKey = signIn.publicKey
         val bytes = pubkyService.fetchFile(uri, PUBKY_APP_AVATAR_MAX_BYTES)
         val contentType = when (uri.substringAfterLast('.').lowercase()) {
             "png" -> "image/png"
@@ -1530,7 +1550,7 @@ class PubkyRepo @Inject constructor(
             "gif" -> "image/gif"
             else -> "image/jpeg"
         }
-        profileWrite(generation) {
+        profileWrite(signIn, generation) {
             val image = withPubkyAppScope { pubkyService.uploadPubkyAppAvatar(bytes, contentType, publicKey) }
             withPubkyAppScope {
                 pubkyService.publishPubkyProfile(
@@ -1541,10 +1561,14 @@ class PubkyRepo @Inject constructor(
             }
         }
     }.onSuccess {
-        pubkyStore.update { it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - publicKey) }
+        pubkyStore.update {
+            if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - signIn.publicKey) else it
+        }
     }.onFailure {
         Logger.warn("Failed to move avatar to pubky.app", it, context = TAG)
-        pubkyStore.update { it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending + publicKey) }
+        pubkyStore.update {
+            if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending + signIn.publicKey) else it
+        }
     }.getOrNull()
 
     private fun Throwable.isConcurrentUpdate() =
@@ -1601,19 +1625,25 @@ class PubkyRepo @Inject constructor(
         "/pub/pubky.app/files/" in this && codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
 
     private suspend fun publishPaykitProfileCopy(
-        publicKey: String,
+        signIn: PubkySignIn,
         profile: PubkyProfile,
         generation: Long,
         saveEpoch: Long,
     ) {
         runSuspendCatching {
-            profileWrite(generation) {
+            profileWrite(signIn, generation) {
                 // Checked under the write lock, so a save that starts after it writes its copy after this one.
                 if (profileSavesRunning.get() != 0 || profileSaveEpoch.get() != saveEpoch) return@profileWrite
-                pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile(), publicKey)
+                pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile(), signIn.publicKey)
             }
         }.onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
     }
+
+    private suspend fun <T> profileWrite(signIn: PubkySignIn, generation: Long, block: suspend () -> T): T =
+        initializeMutex.withLock {
+            requireCurrent(signIn)
+            profileWrite(generation, block)
+        }
 
     /** Runs a write of a load or save that started at [generation], refused once a profile deletion began since. */
     private suspend fun <T> profileWrite(generation: Long, block: suspend () -> T): T = profileWriteMutex.withLock {
