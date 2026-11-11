@@ -1,6 +1,6 @@
 # Send
 
-`bip21-core-validation.xml` is shared with iOS, with identical actions and fixtures. The app pins bitkit-core `0.8.0-rc13`, which includes [PR #151](https://github.com/synonymdev/bitkit-core/pull/151). Run the required checks and this journey against the pinned SDK before merging the adoption PR.
+`bip21-core-validation.xml` is shared with iOS, with identical actions and fixtures. It verifies the shared decoder’s BIP21 validation through the app’s payment flow.
 
 Deliver each `Open bitcoin:...` action with `adb shell "am start -a android.intent.action.VIEW -d '<uri>' to.bitkit.dev"`, replacing XML `&amp;` with `&` in the actual URI. Inspect errors immediately. Use `android layout` for payment state and screenshots for transient error toasts, which the semantic dump does not expose.
 
