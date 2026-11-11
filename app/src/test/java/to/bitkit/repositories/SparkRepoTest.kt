@@ -1601,6 +1601,19 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a wipe deletes the exit record and the copies set aside for support`() = test {
+        val file = File(Env.sparkExitRecordPath(0))
+        SparkExitStore(file).save(SparkExitFixtures.record())
+        SparkExitStore(file).setAside(42L)
+
+        createSut().wipe(0).getOrThrow()
+
+        assertFalse(file.exists())
+        val copies = file.parentFile?.listFiles().orEmpty().filter { "unreadable" in it.name }
+        assertTrue(copies.isEmpty(), "the wiped wallet's addresses and signed steps outlive the wipe")
+    }
+
+    @Test
     fun `wipe fails when spark storage is not deleted and clears what spark held`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.getInfo() }.thenReturn(info(5_000uL))

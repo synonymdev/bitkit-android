@@ -254,7 +254,7 @@ class SparkRepo @Inject constructor(
         _state.update { SparkState(isSupported = sparkService.isSupported) }
         val storage = runSuspendCatching { sparkService.wipeStorage(walletIndex) }
         val exitRecords = runSuspendCatching {
-            exitStore(walletIndex).delete()
+            exitStore(walletIndex).deleteWithCopies()
             SparkExitLostLeafStore(File(Env.sparkExitLostLeavesPath(walletIndex))).delete()
         }
         _walletWiped.emit(walletIndex)

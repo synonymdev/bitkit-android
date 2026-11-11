@@ -613,6 +613,16 @@ class SparkExitStore(private val file: File) {
     fun delete() {
         file.delete()
     }
+
+    /**
+     * Deletes the record and the copies [setAside] kept for support, for a wallet being wiped: they hold its addresses
+     * and signed transactions. Fails when one stays, so the wipe is retried rather than the next wallet driving it.
+     */
+    fun deleteWithCopies() {
+        val prefix = "${file.nameWithoutExtension}.unreadable-"
+        val copies = file.parentFile?.listFiles().orEmpty().filter { it.name.startsWith(prefix) }
+        (copies + file).forEach { copy -> check(!copy.exists() || copy.delete()) { "Failed to delete '${copy.name}'" } }
+    }
 }
 
 /**

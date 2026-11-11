@@ -110,7 +110,7 @@ class SparkExitRepo @Inject constructor(
                 foregroundJob?.cancel()
                 foregroundJob = null
                 tickMutex.withLock {
-                    runCatching { store.delete() }
+                    runCatching { store.deleteWithCopies() }
                         .onFailure { e ->
                             Logger.warn(
                                 "Failed to delete the wiped Spark exit record",
