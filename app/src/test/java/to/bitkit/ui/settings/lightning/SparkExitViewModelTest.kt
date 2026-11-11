@@ -67,6 +67,7 @@ class SparkExitViewModelTest : BaseUnitTest() {
     @Test
     fun `a started exit stays started until a screen opens its progress`() = test {
         whenever(repo.start(any())).thenReturn(Result.success(Unit))
+        exitState.value = SparkExitState(record = SparkExitFixtures.record())
         val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
 
         // No screen collects while the user went back from Confirm.
@@ -88,6 +89,21 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.isStarted)
 
         exitState.value = SparkExitState()
+
+        assertFalse(sut.uiState.value.isStarted, "the next exit's Quote screen would jump to Progress")
+    }
+
+    @Test
+    fun `a cancel during the start leaves no start for the next exit`() = test {
+        // The start wrote its record, then a cancel removed it before the savings payment took its lock.
+        whenever(repo.start(any())).doSuspendableAnswer {
+            exitState.value = SparkExitState(record = SparkExitFixtures.record())
+            exitState.value = SparkExitState()
+            Result.success(Unit)
+        }
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+
+        sut.start()
 
         assertFalse(sut.uiState.value.isStarted, "the next exit's Quote screen would jump to Progress")
     }

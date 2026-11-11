@@ -180,7 +180,8 @@ class SparkExitViewModel @Inject constructor(
             sparkExitRepo.start(_uiState.value.fundFromSavings)
                 .onSuccess {
                     savingsFeeFloorSats = null
-                    _uiState.update { it.copy(isStarted = true) }
+                    // A cancel during the start removed its record: nothing started for progress to show.
+                    if (sparkExitRepo.state.value.isExiting) _uiState.update { it.copy(isStarted = true) }
                 }
                 .onFailure {
                     // Savings never pays more than the fee confirmed: the next funding asks for the refused one.
