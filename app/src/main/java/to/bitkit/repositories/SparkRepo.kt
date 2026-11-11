@@ -930,7 +930,10 @@ class SparkRepo @Inject constructor(
             .filter { (it.txid.lowercase() to it.vout) !in claimedOutputs }
             .map { SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false) }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
-        val transfers = payments.toWithdrawals().filterNot { isContactWithdrawal(it.txid) }.toImmutableList()
+        // The open journal's withdrawal pays a contact, also before its send activity is written.
+        val journal = cacheStore.data.first().pendingSparkWithdrawal
+        val transfers = payments.filterNot { journal?.matches(it) == true }.toWithdrawals()
+            .filterNot { isContactWithdrawal(it.txid) }.toImmutableList()
         val failedAt = withdrawalFailedAtSecs
         val hasSyncedSince = failedAt != null && info.lastSyncError == null && (info.lastSyncedAt ?: 0uL) > failedAt
         if (info.balanceSats > 0uL || hasSyncedSince) withdrawalFailedAtSecs = null

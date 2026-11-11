@@ -919,6 +919,23 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a pending contact withdrawal is no transfer to savings while its journal is open`() = test {
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, "pubkycontact"))
+        }
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(contactWithdrawal().copy(status = PaymentStatus.PENDING)))
+
+        val sut = journaledSpark()
+
+        assertEquals(
+            emptyList(),
+            sut.state.value.withdrawals,
+            "The refresh on start runs before the contact's send is written, and the payment pays the contact",
+        )
+    }
+
+    @Test
     fun `drops a journaled withdrawal Spark never sent`() = test {
         cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
         journaledSpark()
