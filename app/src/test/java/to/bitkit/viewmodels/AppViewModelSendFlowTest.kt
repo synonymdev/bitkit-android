@@ -50,6 +50,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -971,6 +972,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         usdtPreferences = usdtPreferences,
         highBalanceSheet = mock { on { type } doReturn TimedSheetType.HIGH_BALANCE },
+        moveToSparkSheet = mock {
+            on { type } doReturn TimedSheetType.MOVE_TO_SPARK
+            onBlocking { shouldShow() } doReturn false
+        },
+        moveToSparkRepo = mock { on { canMove } doReturn emptyFlow() },
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
