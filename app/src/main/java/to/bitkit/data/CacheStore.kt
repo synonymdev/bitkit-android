@@ -220,10 +220,11 @@ class CacheStore internal constructor(
         store.updateData { data ->
             if (data.sparkHistoryUnseededSince == null) return@updateData data
             val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.sparkSendHashes.toSet()
-            val seededExpiries = expiries.mapKeys { it.key.lowercase() }.filterKeys { it in seeded }
+            // A kept hash without an expiry gets its invoice's, so the cap can't drop it while valid; a set one stays.
+            val listedExpiries = expiries.mapKeys { it.key.lowercase() }
             data.copy(
                 sparkSendHashes = seeded + data.sparkSendHashes,
-                sparkSendExpiries = seededExpiries + data.sparkSendExpiries,
+                sparkSendExpiries = listedExpiries + data.sparkSendExpiries,
                 sparkHistoryUnseededSince = null,
             )
         }

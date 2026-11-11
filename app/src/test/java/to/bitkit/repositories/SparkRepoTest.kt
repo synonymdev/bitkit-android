@@ -290,6 +290,22 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a kept spark send without an expiry gets its invoice's expiry when seeded`() = test {
+        val cache = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds, sparkSendHashes = listOf("paid0"))
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sends = (0 until MAX_SPARK_SEND_HASHES + 1).map {
+            sentPayment(fees = 2).copy(id = "send$it", timestamp = it.toULong()).withHash("paid$it")
+        }
+        whenever { sparkService.listPayments() }.thenReturn(sends)
+        whenever { sparkService.invoiceExpiresAt(any()) }.thenReturn(now.epochSeconds.toULong() + 3_600uL)
+
+        createSut(store).start(0).getOrThrow()
+
+        assertTrue("paid0" in store.data.first().sparkSendHashes, "the cap dropped a kept still-valid paid invoice")
+    }
+
+    @Test
     fun `a list read before spark's first sync seeds no hashes`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
         whenever(sparkService.isConnected).thenReturn(true)
