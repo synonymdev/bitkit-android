@@ -34,8 +34,12 @@ object SparkExitSweep {
         val match = rejection?.let { feeNotMet.find(it) }
         val paid = match?.groupValues?.get(1)?.toULongOrNull()?.takeIf { it > 0uL }
         val asked = match?.groupValues?.get(2)?.toULongOrNull()
-        val scaled = if (paid != null && asked != null) (rate * asked + paid - 1uL) / paid else 0uL
-        return maxOf(scaled, rate + 1uL)
+        if (paid == null || asked == null) return rate.safe() + 1uL.safe()
+        // A host's number can be anything: one too big to scale asks for more than any cap, which the caller applies.
+        val product = rate.safe() * asked.safe()
+        if (product == ULong.MAX_VALUE) return ULong.MAX_VALUE
+        val scaled = (product.safe() + (paid - 1uL).safe()) / paid
+        return maxOf(scaled, rate.safe() + 1uL.safe())
     }
 
     /** The inputs worth more than the fee each adds to a sweep at [feeRateSatPerVbyte]: the rest cost more to send. */

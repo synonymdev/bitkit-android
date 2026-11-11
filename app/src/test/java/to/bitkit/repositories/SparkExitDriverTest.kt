@@ -1890,6 +1890,12 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a refused minimum too big to scale asks for more than any cap`() {
+        val refusal = "mempool min fee not met, 450 < 10000000000000000000"
+        assertEquals(ULong.MAX_VALUE, SparkExitSweep.refusedFeeRate(refusal, 2uL), "the scaled rate wrapped around")
+    }
+
+    @Test
     fun `a host's refusal cannot push the leftover sweep above the network's next-block rate`() = test {
         // A host answers a 1 sat/vB sweep with an absurd ask: 22,000 sats for a ~110 vB transaction.
         chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 110 < 22000")
