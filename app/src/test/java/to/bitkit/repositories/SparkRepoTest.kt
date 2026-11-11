@@ -362,6 +362,26 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a synced spark whose list can't be read refuses a pre-restore invoice`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL, createdAt = (restoredAt - 600).toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertNull(store.data.first().sparkHistoryUnseededSince)
+        whenever { sparkService.listPayments() }.thenThrow(RuntimeException("list failed"))
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
     fun `a synced spark sends an invoice created after the restore`() = test {
         val restoredAt = now.epochSeconds - 60
         val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
