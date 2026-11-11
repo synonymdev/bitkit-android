@@ -166,6 +166,8 @@ import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
+import to.bitkit.ui.navigateToTransferFunding
+import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -237,6 +239,8 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
+    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
+    val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val profileNavigationScope = rememberCoroutineScope()
@@ -312,7 +316,11 @@ fun HomeScreen(
                     appViewModel.showSheet(Sheet.Hardware())
                 }
 
-                Suggestion.LIGHTNING -> appViewModel.showSheet(Sheet.TransferUnavailable)
+                Suggestion.LIGHTNING -> when {
+                    !sparkState.isReady -> appViewModel.showSheet(Sheet.TransferUnavailable)
+                    !hasSeenTransferIntro -> rootNavController.navigateToTransferIntro()
+                    else -> rootNavController.navigateToTransferFunding()
+                }
 
                 Suggestion.BACK_UP -> {
                     appViewModel.showSheet(Sheet.Backup(BackupRoute.Intro))

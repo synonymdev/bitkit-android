@@ -236,6 +236,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
+import to.bitkit.services.SparkError
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
@@ -774,6 +775,7 @@ class AppViewModel @Inject constructor(
         observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
+        observeSparkReady()
         observePublicPaykitEndpoints()
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
@@ -848,6 +850,17 @@ class AppViewModel @Inject constructor(
                     }
                     hadUsableChannels = hasUsableChannels
                 }
+        }
+    }
+
+    private fun observeSparkReady() {
+        viewModelScope.launch {
+            lightningRepo.isSparkReady.filter { it }.collect {
+                refreshPaykitEndpointsAfterChannelAvailabilityChanged(
+                    reason = "spark ready",
+                    forceRefreshLightning = true,
+                )
+            }
         }
     }
 
@@ -1967,6 +1980,15 @@ class AppViewModel @Inject constructor(
                     request,
                     IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable,
                 )
+            } else if (
+                result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList &&
+                requestedPaymentRequestId.value == request.id
+            ) {
+                finishFailedRequestedPaymentRequestPresentation(
+                    request = request,
+                    reason = result?.incomingPaymentRequestFailureReason
+                        ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+                )
             } else {
                 deferPaymentRequestPresentation(
                     request = request,
@@ -1987,6 +2009,24 @@ class AppViewModel @Inject constructor(
             walletGeneration = walletGeneration,
         )
         return true
+    }
+
+    private fun finishFailedRequestedPaymentRequestPresentation(
+        request: PaykitPaymentRequest,
+        reason: IncomingPaykitPaymentRequestFailureReason,
+    ) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(request.counterparty, reason)
+        val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
+        paymentRequestPresentationGeneration++
+        clearRequestedPaymentRequest()
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.slashtags__error_pay_waiting_msg),
+            testTag = "PaymentRequestWaitingForDetailsToast",
+        )
+        if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
+        completePaymentRequestPresentation(request)
     }
 
     private fun finishPrivateLinkPendingPaymentRequestPresentation(request: PaykitPaymentRequest) {
@@ -2941,6 +2981,8 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPaymentActivity(paymentHash: String) {
+        // Spark records its own sends; the node's record of the hash is an earlier attempt that would overwrite it.
+        if (lightningRepo.isSparkSend(paymentHash)) return
         runSuspendCatching { activityRepo.handlePaymentEvent(paymentHash) }.onFailure {
             Logger.warn("Failed to refresh payment activity for '$paymentHash'", it, context = TAG)
         }
@@ -6616,12 +6658,42 @@ class AppViewModel @Inject constructor(
                 val current = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (current != original || !current.isTransfer || current.requestId != null) return@runSuspendCatching
                 if (!current.hasPositiveEvidence || !current.localFollowupComplete) return@runSuspendCatching
-                if (current.txid == null || current.transferContext == null) return@runSuspendCatching
+                if (current.txid == null) return@runSuspendCatching
+                if (current.isSparkFunding && lightningRepo.isFundingFollowedOnScreen(current.attemptId)) {
+                    // The open funding screen settles it at the speed the user chose and moves on to Setting Up.
+                    hideSheet()
+                    return@runSuspendCatching
+                }
+                if (current.isSparkFunding) {
+                    lightningRepo.followRecoveredSparkFunding(current)
+                    hideSheet()
+                    // Leave the funding flow, whose confirm screen would offer the sent transfer again.
+                    mainScreenEffect(MainScreenEffect.Navigate(Routes.Home, clearStack = true))
+                    return@runSuspendCatching
+                }
+                if (current.transferContext == null) return@runSuspendCatching
                 val orderId = current.orderId ?: return@runSuspendCatching
                 hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
             }.onFailure { Logger.warn("Failed to open recovered transfer", it, context = TAG) }
         }
+    }
+
+    /** Opens Payment Pending for a transfer whose signed funding was not accepted, so it can be retried. */
+    fun showPendingTransfer(attempt: OnchainSendAttempt) {
+        if (!attempt.isTransfer || !attempt.blocksNextSend) return
+        showSheet(
+            Sheet.Send(
+                SendRoute.Pending(
+                    paymentHash = attempt.txid.orEmpty(),
+                    amount = attempt.amountSats.toLong(),
+                    observeResolution = false,
+                    isOnchain = true,
+                    walletId = attempt.walletId,
+                    refusalReason = attempt.refusalReason,
+                )
+            )
+        )
     }
 
     private fun showUnresolvedOnchainSend(
@@ -6734,6 +6806,9 @@ class AppViewModel @Inject constructor(
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
+                is SparkError.InvoiceExpired ->
+                    PaymentFailureReason.PAYMENT_EXPIRED.toSendFailureDetails(context, decodedInvoice.bolt11)
+                        .copy(message = context.getString(R.string.other__scan__error__expired))
                 else -> error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
             }
             setSendEffect(SendEffect.NavigateToError(failure))
@@ -7123,18 +7198,22 @@ class AppViewModel @Inject constructor(
             paymentDeadlineAt = paymentDeadlineAt,
             onBeforeSend = onBeforeSend,
         ).onSuccess { hash ->
-            // Wait until matching payment event is received (with timeout for hold invoices)
-            val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
-                when (it) {
-                    is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
-                    is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                        Result.failure(
-                            LightningPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
-                        )
-                    )
+            fun outcome(event: Event): Result<PaymentId>? = when (event) {
+                is Event.PaymentSuccessful if event.paymentHash == hash -> Result.success(hash)
+                is Event.PaymentFailed if event.paymentHash == hash -> Result.failure(
+                    LightningPaymentFailedError(reason = event.reason, paymentRequest = bolt11)
+                )
 
-                    else -> WatchResult.Continue()
+                else -> null
+            }
+            // Wait until matching payment event is received (with timeout for hold invoices)
+            val result = coroutineScope {
+                val watch = async(start = CoroutineStart.UNDISPATCHED) {
+                    lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+                        outcome(it)?.let { result -> WatchResult.Complete(result) } ?: WatchResult.Continue()
+                    }
                 }
+                lightningRepo.settledSparkSendEvent(hash)?.let(::outcome)?.also { watch.cancel() } ?: watch.await()
             }
             return result ?: Result.failure(PaymentPendingException(hash))
         }
@@ -7395,18 +7474,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val buffer = 2uL
-        val amountToEstimate = maxSendLightning.safe() - buffer.safe()
-
-        val feeResult = lightningRepo.estimateRoutingFeesForAmount(
-            bolt11 = bolt11,
-            amountSats = amountToEstimate
-        )
-
-        feeResult.onSuccess { fee ->
-            _sendUiState.update {
-                it.copy(estimatedRoutingFee = fee + buffer)
-            }
+        lightningRepo.estimateMaxSendFee(bolt11, maxSendLightning).onSuccess { fee ->
+            _sendUiState.update { it.copy(estimatedRoutingFee = fee) }
         }.onFailure { e ->
             Logger.error("Failed to estimate routing fee for max amount", e, context = TAG)
             _sendUiState.update { it.copy(estimatedRoutingFee = 0uL) }

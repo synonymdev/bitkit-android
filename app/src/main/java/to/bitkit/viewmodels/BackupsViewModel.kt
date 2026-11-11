@@ -18,6 +18,7 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.SparkRepo
 import javax.inject.Inject
 
 @HiltViewModel
@@ -25,6 +26,7 @@ class BackupsViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val backupRepo: BackupRepo,
     private val lightningRepo: LightningRepo,
+    private val sparkRepo: SparkRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupStatusUiState())
@@ -37,7 +39,10 @@ class BackupsViewModel @Inject constructor(
     private fun collectState() {
         viewModelScope.launch {
             cacheStore.backupStatuses.collect { cachedStatuses ->
-                val categories = BackupCategory.entries.map { category ->
+                // Spark's exit data shows only where Spark runs.
+                val categories = BackupCategory.entries.filter {
+                    it != BackupCategory.SPARK_EXIT || sparkRepo.state.value.isSupported
+                }.map { category ->
                     val cachedStatus = cachedStatuses[category] ?: BackupItemStatus(synced = 0, required = 1)
                     category.toUiState(cachedStatus)
                 }

@@ -880,6 +880,19 @@ class ActivityService(
             ?.let { cacheStore.data.first().pendingLightningMessages[it] }
 
         val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
+        // A Spark retry of an invoice the node failed shares its hash; the earlier failure never undoes its success.
+        if (existingActivity is Activity.Lightning && existingActivity.v1.status == PaymentState.SUCCEEDED &&
+            state == PaymentState.FAILED
+        ) {
+            return
+        }
+        // A Spark retry of the invoice stays pending until Spark settles it; the channel's failure can't end it.
+        // Spark records the hash before it sends and drops it only once it reports the send failed or unknown.
+        if (existingActivity is Activity.Lightning && existingActivity.v1.status == PaymentState.PENDING &&
+            state == PaymentState.FAILED && payment.id.lowercase() in cacheStore.data.first().sparkSendHashes
+        ) {
+            return
+        }
         if (existingActivity is Activity.Lightning) {
             val statusChanging = existingActivity.v1.status != state
             val needsPrivateContactAttribution = existingActivity.v1.contact == null &&

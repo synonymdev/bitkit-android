@@ -47,6 +47,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.SparkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
@@ -57,6 +58,7 @@ import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 /** New proof kinds must be readable on both platforms before either platform writes them to a wallet backup. */
 @Serializable
@@ -770,9 +772,10 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     suspend fun failLightningPayment(paymentHash: String, submissionError: Throwable): Boolean {
         val error = generateSequence(submissionError) { it.cause }
-            .firstOrNull { it is ServiceError.PaymentDeadlineExpired }
+            .firstOrNull { it is ServiceError.PaymentDeadlineExpired || it is SparkError.SendRefused }
             ?: submissionError.asNodeException() ?: submissionError
         when (error) {
+            is SparkError.SendRefused,
             is NodeNotRunningError,
             is NodeRunTimeoutError,
             is ServiceError.NodeNotSetup,
@@ -1305,25 +1308,52 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (paymentHash == null) return
         val payment = payments.firstOrNull {
             it.direction == PaymentDirection.OUTBOUND && it.id.equals(paymentHash, ignoreCase = true)
-        } ?: return
+        }
+        if (payment == null) {
+            reconcileSparkLightningProof(proof, paymentHash)
+            return
+        }
         when (payment.status) {
             PaymentStatus.PENDING -> Unit
-            PaymentStatus.FAILED -> removeProofsLocked {
-                it.kind == PaykitPaymentProofKind.Lightning &&
-                    it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
+            // A Spark retry of an invoice the node failed shares its hash and decides the payment.
+            PaymentStatus.FAILED -> when (lightningRepo.sparkLightningSend(paymentHash)) {
+                is SparkLightningSend.Found -> reconcileSparkLightningProof(proof, paymentHash)
+                SparkLightningSend.Unavailable -> Unit
+                SparkLightningSend.NotFound -> removeLightningProofsLocked(paymentHash)
             }
-            PaymentStatus.SUCCEEDED -> {
-                val preimage = (payment.kind as? PaymentKind.Bolt11)?.preimage
-                if (preimage != null && preimage.matchesPaymentHash(paymentHash)) {
-                    val completed = proof.copy(proofData = preimage.lowercase())
-                    val proofs = loadProofs().toMutableList()
-                    val index = proofs.indexOf(proof)
-                    if (index >= 0) {
-                        proofs[index] = completed
-                        persistAndSubmit(listOf(completed), proofs)
-                    }
-                }
-            }
+            PaymentStatus.SUCCEEDED -> completeLightningProofLocked(
+                proof,
+                paymentHash,
+                (payment.kind as? PaymentKind.Bolt11)?.preimage,
+            )
+        }
+    }
+
+    private suspend fun reconcileSparkLightningProof(proof: PendingPaykitPaymentProof, paymentHash: String) {
+        val send = lightningRepo.sparkLightningSend(paymentHash) as? SparkLightningSend.Found ?: return
+        when (send.status) {
+            SparkPaymentStatus.PENDING -> Unit
+            SparkPaymentStatus.FAILED -> removeLightningProofsLocked(paymentHash)
+            SparkPaymentStatus.COMPLETED -> completeLightningProofLocked(proof, paymentHash, send.preimage)
+        }
+    }
+
+    private suspend fun removeLightningProofsLocked(paymentHash: String) = removeProofsLocked {
+        it.kind == PaykitPaymentProofKind.Lightning && it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
+    }
+
+    private suspend fun completeLightningProofLocked(
+        proof: PendingPaykitPaymentProof,
+        paymentHash: String,
+        preimage: String?,
+    ) {
+        if (preimage == null || !preimage.matchesPaymentHash(paymentHash)) return
+        val completed = proof.copy(proofData = preimage.lowercase())
+        val proofs = loadProofs().toMutableList()
+        val index = proofs.indexOf(proof)
+        if (index >= 0) {
+            proofs[index] = completed
+            persistAndSubmit(listOf(completed), proofs)
         }
     }
 

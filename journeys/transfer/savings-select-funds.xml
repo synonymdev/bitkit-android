@@ -1,0 +1,30 @@
+<journey name="savings select funds">
+  <description>
+    Verifies that Transfer to Savings lets the user pick what moves: each open channel and Spark are
+    rows on the Select funds list, all selected by default, and the confirm screen shows only what is
+    selected, with Spark's withdrawal fee only while Spark is selected. With a single item (Spark
+    alone, or one channel without a Spark balance) the confirm screen shows no Advanced button and
+    moves everything, as before Spark.
+
+    Precondition: onboarded dev wallet on Spark's regtest chain (see the PR's Setup) with a Spark
+    balance and at least one open channel. Spark's regtest has no Lightning peers, so a channel there
+    needs a staged channel; on Blocktank's regtest the Spark balance cannot be funded. Start on the
+    wallet home screen. The journey stops before the swipe.
+  </description>
+  <actions>
+    <action>Tap the Spending balance card (testTag "ActivitySpending")</action>
+    <action>Tap "Transfer To Savings" (testTag "TransferToSavings")</action>
+    <action>If the transfer to savings intro appears, tap "Get Started" (testTag "SavingsIntro-button")</action>
+    <action>Tap "Continue" (testTag "AvailabilityContinue") on the funds availability screen</action>
+    <action>On the confirm screen, verify the amount is the channels' balance plus the Spark balance, a "Spark fee" amount shows, and an "Advanced" button shows</action>
+    <action>Tap "Advanced"</action>
+    <action>Verify the "Select funds to transfer" screen lists a "Spark" row with the Spark balance and one "Connection N" row per open channel, every switch on, and "Total selected" equals the confirm amount</action>
+    <action>Turn off the last "Connection N" row and verify "Total selected" drops by that row's amount</action>
+    <action>Tap "Continue" and verify the confirm amount equals the new total, "Spark fee" still shows, and the button reads "Transfer all"</action>
+    <action>Tap "Transfer all", then tap "Advanced", turn off the "Spark" row and every "Connection N" row, and verify "Continue" is disabled</action>
+    <action>Turn on the "Spark" row only and tap "Continue"</action>
+    <action>Verify the confirm amount equals the Spark balance and "Spark fee" shows</action>
+    <action>Tap "Transfer all" and verify the amount returns to the channels' balance plus the Spark balance, and the button reads "Advanced"</action>
+    <action>Tap "Advanced", turn off the "Spark" row, tap "Continue", and verify the amount equals the channels' balance with no "Spark fee"</action>
+  </actions>
+</journey>

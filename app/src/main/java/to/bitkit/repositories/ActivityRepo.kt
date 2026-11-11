@@ -857,7 +857,7 @@ class ActivityRepo @Inject constructor(
             val id = activity.rawId()
             if (cacheStore.data.first().isActivityDeleted(id, activity.walletId())) {
                 Logger.debug("Activity $id was deleted, skipping", context = TAG)
-                return@withContext Result.failure(AppError("Activity $id was deleted"))
+                return@withContext Result.failure(ActivityDeletedError(id))
             }
             coreService.activity.upsert(activity)
             notifyActivitiesChanged()
@@ -1263,3 +1263,6 @@ private data class RbfPublications(
     val generation: Long = 0,
     val replacements: Map<String, Activity.Onchain> = emptyMap(),
 )
+
+/** The user deleted the activity, so writing it again is skipped. */
+class ActivityDeletedError(id: String) : AppError("Activity $id was deleted")

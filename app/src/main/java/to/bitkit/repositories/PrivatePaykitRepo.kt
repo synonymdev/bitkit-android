@@ -81,6 +81,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val addressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val lightningRepo: LightningRepo,
+    private val sparkRepo: SparkRepo,
     private val walletRepo: WalletRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val paymentRequestRepo: PaykitPaymentRequestRepo,
@@ -1966,6 +1967,7 @@ class PrivatePaykitRepo @Inject constructor(
                 amountSats = null,
                 description = "",
                 expirySeconds = privateInvoiceExpiry.inWholeSeconds.toUInt(),
+                isContactEndpoint = true,
             ).getOrThrow()
             if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
 
@@ -2306,6 +2308,9 @@ class PrivatePaykitRepo @Inject constructor(
                             context = TAG,
                         )
                         false
+                    } else if (attemptedHashes == null) {
+                        // Unknown while the node or Spark can't list its payments: the invoice may be paid already.
+                        false
                     } else if (paymentHash in attemptedHashes) {
                         staleLightningHashes += paymentHash
                         Logger.warn(
@@ -2461,18 +2466,22 @@ class PrivatePaykitRepo @Inject constructor(
             (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice?.paymentHash?.toHex()
         }.getOrNull()
 
-    private suspend fun attemptedOutboundBolt11PaymentHashes(): Set<String> =
-        lightningRepo.getPayments().getOrElse {
+    /** Null while the node or Spark can't list its payments, so a payment either may have made isn't read as none. */
+    private suspend fun attemptedOutboundBolt11PaymentHashes(): Set<String>? {
+        val payments = lightningRepo.getPayments().getOrElse {
             if (it is CancellationException) throw it
-            emptyList()
+            return null
         }
+        val sparkHashes = sparkRepo.attemptedLightningPaymentHashes() ?: return null
+        return payments
             .filter {
                 it.direction == PaymentDirection.OUTBOUND &&
                     it.status != PaymentStatus.FAILED &&
                     it.kind is PaymentKind.Bolt11
             }
             .map { it.id.lowercase() }
-            .toSet()
+            .toSet() + sparkHashes
+    }
 
     private suspend fun isReceivedInvoiceSettled(paymentHash: String): Boolean =
         paymentHash in receivedSettledPaymentHashes()
@@ -2488,7 +2497,7 @@ class PrivatePaykitRepo @Inject constructor(
                     it.kind is PaymentKind.Bolt11
             }
             .map { it.id }
-            .toSet()
+            .toSet() + sparkRepo.receivedLightningPaymentHashes()
 
     private suspend fun rememberReceivedInvoicePaymentHash(paymentHash: String, publicKey: String) {
         if (paymentHash.isBlank()) return

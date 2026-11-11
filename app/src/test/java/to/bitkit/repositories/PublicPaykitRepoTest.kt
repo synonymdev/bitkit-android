@@ -265,7 +265,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         stubPublicInvoice("lnbc1replacement", byteArrayOf(4, 5, 6))
         val invoiceStarted = CompletableDeferred<Unit>()
         val resumeInvoice = CompletableDeferred<Unit>()
-        whenever(lightningRepo.createInvoice(null, "", PUBLIC_BOLT11_EXPIRY_SECONDS)).doSuspendableAnswer {
+        whenever(lightningRepo.createInvoice(null, "", PUBLIC_BOLT11_EXPIRY_SECONDS, true)).doSuspendableAnswer {
             invoiceStarted.complete(Unit)
             resumeInvoice.await()
             Result.success("lnbc1replacement")
@@ -962,6 +962,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
                 amountSats = null,
                 description = "",
                 expirySeconds = PUBLIC_BOLT11_EXPIRY_SECONDS,
+                isContactEndpoint = true,
             )
         ).thenReturn(Result.success(bolt11))
         whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(lightningInvoice(bolt11, paymentHash)))

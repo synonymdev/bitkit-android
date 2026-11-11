@@ -57,6 +57,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.PendingChannelMigration
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
@@ -86,6 +87,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val boltzService = mock<BoltzService>()
+    private val sparkRepo = idleSparkRepo()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -126,6 +128,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            sparkRepo = sparkRepo,
         )
     }
 
@@ -1176,6 +1179,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            sparkRepo = sparkRepo,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -1243,6 +1247,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            sparkRepo = sparkRepo,
         )
 
         testSut.start()
@@ -1299,6 +1304,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            sparkRepo = sparkRepo,
         )
 
         // Trigger restore to put state in non-idle
@@ -1339,6 +1345,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            sparkRepo = sparkRepo,
         )
 
         testSut.restoreWallet("mnemonic", null)
@@ -1430,6 +1437,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            sparkRepo = sparkRepo,
         )
         advanceUntilIdle()
 
