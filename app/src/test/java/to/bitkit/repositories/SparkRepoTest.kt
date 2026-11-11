@@ -1144,6 +1144,22 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal whose deadline passes while its journal is written never leaves`() = test {
+        val sut = journaledSpark()
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+            if (cacheData.value.pendingSparkWithdrawal != null) now += 2.minutes
+        }
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, paymentDeadlineAt = now + 1.minutes)
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
     fun `a withdrawal whose proof is starting reads as in flight before its journal is written`() = test {
         val sut = journaledSpark()
         var outcomeWhileStarting: SparkWithdrawalOutcome? = null

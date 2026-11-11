@@ -7057,7 +7057,7 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowanceAttemptId: String?,
     ) {
-        // Spark refuses a send past its deadline before writing its journal, so nothing left and no listing is needed.
+        // Spark refuses a send past its deadline before it sends and clears its journal, so no listing is needed.
         if (error is ServiceError.PaymentDeadlineExpired) {
             incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseRefusedSparkOnchainProof(it) }
             failServiceLegBeforeSend(error, preparedPaymentProofRequest, contactPaymentContext, allowanceAttemptId)

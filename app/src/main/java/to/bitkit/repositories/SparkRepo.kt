@@ -729,7 +729,7 @@ class SparkRepo @Inject constructor(
                 isWithdrawing = true
                 val sent = try {
                     if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-                    // A quote can expire while the request and its allowance are checked, so it is checked last.
+                    // A quote can expire while the request and its allowance are checked.
                     ensurePaymentDeadline(paymentDeadlineAt)
                     val journal = PendingSparkWithdrawal(
                         address,
@@ -740,6 +740,11 @@ class SparkRepo @Inject constructor(
                         startedAt = clock.now().epochSeconds,
                     )
                     cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
+                    // Saving the journal suspends, so the deadline is checked last, before the send.
+                    runCatching { ensurePaymentDeadline(paymentDeadlineAt) }.onFailure {
+                        clearJournal(journal)
+                        throw it
+                    }
                     runSuspendCatching { sparkService.send(prepared) }
                 } finally {
                     isWithdrawing = false
