@@ -94,6 +94,8 @@ class WalletRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val backupRepo = mock<BackupRepo>()
+    private val sparkExitState = MutableStateFlow(SparkExitState())
+    private val sparkExitRepo = mock<SparkExitRepo> { on { state } doReturn sparkExitState }
     private val connectionRecovery = connectionRecoveryFixture(settingsStore)
 
     companion object Fixtures {
@@ -196,6 +198,7 @@ class WalletRepoTest : BaseUnitTest() {
         hwWalletRepo = hwWalletRepo,
         connectionRecovery = connectionRecovery,
         sparkRepo = spark,
+        sparkExitRepo = sparkExitRepo,
         backupRepo = backupRepo,
     )
 
@@ -274,6 +277,32 @@ class WalletRepoTest : BaseUnitTest() {
         testScheduler.runCurrent()
 
         verify(deriveBalanceStateUseCase).invoke()
+    }
+
+    @Test
+    fun `funding reaching a running exit syncs balances`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sparkExitState.value = SparkExitState(record = SparkExitFixtures.record())
+        testScheduler.runCurrent()
+        clearInvocations(deriveBalanceStateUseCase)
+
+        sparkExitState.update { it.copy(fundingSeenSats = 5_000uL) }
+        testScheduler.runCurrent()
+
+        verify(deriveBalanceStateUseCase).invoke()
+    }
+
+    @Test
+    fun `an exit write that leaves the balances alone syncs nothing`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sparkExitState.value = SparkExitState(record = SparkExitFixtures.record())
+        testScheduler.runCurrent()
+        clearInvocations(deriveBalanceStateUseCase)
+
+        sparkExitState.update { it.copy(tipHeight = 1_000u, lastError = "error") }
+        testScheduler.runCurrent()
+
+        verify(deriveBalanceStateUseCase, never()).invoke()
     }
 
     private fun sparkRepoWith(state: MutableStateFlow<SparkState>): SparkRepo = mock {

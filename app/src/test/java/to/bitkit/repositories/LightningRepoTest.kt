@@ -335,6 +335,7 @@ class LightningRepoTest : BaseUnitTest() {
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
             sparkRepo = sparkRepo,
+            sparkExitRepo = mock { on { state } doReturn MutableStateFlow(SparkExitState()) },
             backupRepo = mock { on { restoreInProgress } doReturn MutableStateFlow(false) },
         )
     }
