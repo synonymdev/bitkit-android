@@ -21,19 +21,27 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
 import to.bitkit.models.Toast
+import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.MoveToSparkMath
+import to.bitkit.repositories.SparkDeposit
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
+import to.bitkit.repositories.SparkWithdrawal
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -47,6 +55,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val logsRepo: LogsRepo,
     private val activityRepo: ActivityRepo,
+    private val sparkRepo: SparkRepo,
 ) : ViewModel() {
 
     companion object {
@@ -92,9 +101,11 @@ class LightningConnectionsViewModel @Inject constructor(
             combine(
                 lightningRepo.lightningState,
                 lightningRepo.lastKnownChannels,
-            ) { lightningState, channels ->
-                lightningState.nodeLifecycleState.isRunning() to channels
-            }.collect { (isNodeRunning, channels) ->
+                sparkRepo.state,
+            ) { lightningState, channels, sparkState ->
+                Triple(lightningState, channels, sparkState)
+            }.collect { (lightningState, channels, sparkState) ->
+                val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
                 val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.update {
@@ -106,8 +117,12 @@ class LightningConnectionsViewModel @Inject constructor(
                         pendingConnections = channels.filterPending()
                             .map { it.mapToUiModel(channels, connectionText) }
                             .reversed().toImmutableList(),
-                        localBalance = calculateLocalBalance(channels),
+                        localBalance = calculateLocalBalance(channels).safe() + sparkState.shownBalanceSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
+                        // The cached channels outlive a stopped node; the move reads the live ones.
+                        canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
+                        spark = sparkState.toUi(lightningRepo),
+                        isSparkReceiving = sparkState.isReady,
                     )
                 }
             }
@@ -141,6 +156,7 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 
     suspend fun refreshObservedState() {
+        sparkRepo.refreshState()
         lightningRepo.sync()
         blocktankRepo.refreshOrders()
         loadClosedChannels()
@@ -217,7 +233,40 @@ data class LightningConnectionsUiState(
     val closedChannels: ImmutableList<ChannelUi> = persistentListOf(),
     val localBalance: ULong = 0u,
     val remoteBalance: ULong = 0u,
+    val spark: SparkUi? = null,
+    val isSparkReceiving: Boolean = false,
+    /** The channels hold a balance that can move to Spark, which Blocktank's channel closes make the cheaper path. */
+    val canMoveToSpark: Boolean = false,
 )
+
+/** The Spark wallet shown as a connection, present once it holds a balance or a deposit. */
+data class SparkUi(
+    val balanceSats: ULong,
+    val deposits: ImmutableList<SparkDepositUi> = persistentListOf(),
+    val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
+) {
+    val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
+    val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
+}
+
+data class SparkDepositUi(
+    val deposit: SparkDeposit,
+    /** On-chain confirmations, known for deposits this wallet sent. */
+    val confirmations: UInt? = null,
+)
+
+internal suspend fun SparkState.toUi(lightningRepo: LightningRepo): SparkUi? {
+    if (!isReady) return null
+    // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
+    if (shownBalanceSats == 0uL && deposits.isEmpty() && Env.network != Network.REGTEST) return null
+    return SparkUi(
+        balanceSats = shownBalanceSats,
+        deposits = deposits.map {
+            SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
+        }.toImmutableList(),
+        withdrawals = withdrawals,
+    )
+}
 
 data class ChannelUi(
     val name: String,

@@ -183,7 +183,6 @@ class LdkDebugViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
         File(context.cacheDir, DIR_EXPORTS).deleteRecursively()
     }
 }

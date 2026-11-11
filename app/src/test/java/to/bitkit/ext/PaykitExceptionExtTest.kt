@@ -8,6 +8,18 @@ import kotlin.test.assertTrue
 
 class PaykitExceptionExtTest {
     @Test
+    fun `wrapped transport failures are paykit errors`() {
+        val error = AppError(PaykitException.Transport("transport_error", "Pubky write lock lost"))
+
+        assertTrue(error.isPaykitError())
+    }
+
+    @Test
+    fun `generic failures are not paykit errors`() {
+        assertFalse(AppError("Native load failed").isPaykitError())
+    }
+
+    @Test
     fun `wrapped identity failures are identity errors`() {
         val error = AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
 

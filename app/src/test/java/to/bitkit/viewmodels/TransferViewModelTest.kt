@@ -5,9 +5,13 @@ import app.cash.turbine.test
 import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.ReverseSwapResponse
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -18,17 +22,23 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.repositories.TransferRepo
-import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
@@ -36,6 +46,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -46,10 +57,11 @@ class TransferViewModelTest : BaseUnitTest() {
 
     private val context = mock<Context>()
     private val lightningRepo = mock<LightningRepo>()
-    private val walletRepo = mock<WalletRepo>()
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
     private val boltzService = mock<BoltzService>()
+    private val sparkState = MutableStateFlow(SparkState())
+    private val sparkRepo = mock<SparkRepo>()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
@@ -61,20 +73,319 @@ class TransferViewModelTest : BaseUnitTest() {
         val nodeStatus = mock<NodeStatus>()
         whenever(nodeStatus.isRunning).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
-        whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(boltzService.events).thenReturn(boltzEvents)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(boltzService.isSwapSupported).thenReturn(true)
         whenever { boltzService.isSwapEnabled() }.thenReturn(true)
+        whenever(sparkRepo.state).thenReturn(sparkState)
+        whenever { sparkRepo.withdrawAll(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(SPARK_FEE))
+        whenever { lightningRepo.newAddress() }.thenReturn(Result.success(CLAIM_ADDRESS))
+        whenever { lightningRepo.closeChannel(any(), any(), anyOrNull()) }.thenReturn(Result.success(Unit))
 
         sut = TransferViewModel(
             context = context,
             lightningRepo = lightningRepo,
-            walletRepo = walletRepo,
             transferRepo = transferRepo,
             boltzService = boltzService,
             clock = clock,
+            sparkRepo = sparkRepo,
         )
+        sut.sharesNodeChain = { true }
+    }
+
+    @Test
+    fun `savings selection moves everything by default`() {
+        val selection = SavingsSelection()
+
+        assertTrue(selection.isAll)
+        assertEquals(listOf(CHANNEL_A, CHANNEL_B), selection.channels(listOf(CHANNEL_A, CHANNEL_B)))
+        assertTrue(selection.withdrawsSpark(SPARK_SATS))
+        assertFalse(selection.withdrawsSpark(0uL))
+    }
+
+    @Test
+    fun `savings selection leaves a spark balance too small to move, so the channels still move`() {
+        val selection = SavingsSelection()
+
+        assertFalse(selection.withdrawsSpark(SPARK_SATS, isSparkTooSmall = true))
+        assertEquals(listOf(CHANNEL_A), selection.channels(listOf(CHANNEL_A)))
+    }
+
+    @Test
+    fun `savings selection moves only the picked channels and spark`() {
+        val channelsOnly = SavingsSelection(channelIds = persistentSetOf(CHANNEL_B.channelId), includesSpark = false)
+        val sparkOnly = SavingsSelection(channelIds = persistentSetOf(), includesSpark = true)
+
+        assertFalse(channelsOnly.isAll)
+        assertEquals(listOf(CHANNEL_B), channelsOnly.channels(listOf(CHANNEL_A, CHANNEL_B)))
+        assertFalse(channelsOnly.withdrawsSpark(SPARK_SATS))
+        assertFalse(sparkOnly.isAll)
+        assertTrue(sparkOnly.channels(listOf(CHANNEL_A, CHANNEL_B)).isEmpty())
+        assertTrue(sparkOnly.withdrawsSpark(SPARK_SATS))
+    }
+
+    @Test
+    fun `entering transfer to savings drops a pick left from an abandoned visit`() {
+        sut.setSavingsSelection(SavingsSelection(channelIds = persistentSetOf("closed-since"), includesSpark = false))
+
+        sut.beginSavingsTransfer()
+
+        assertEquals(SavingsSelection(), sut.savingsSelection.value)
+    }
+
+    @Test
+    fun `transfer to savings with only spark withdraws spark and closes no channel`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+        assertFalse(sut.hasChannelsToClose())
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+        verify(lightningRepo, never()).awaitPeerConnected(any())
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `spark is not withdrawn to a savings address on another chain`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        // A regtest Savings wallet reads its own chain unless the node is pointed at Spark's.
+        sut.sharesNodeChain = { false }
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+        assertTrue(sut.isSparkWithdrawFailed.value, "the withdrawal was skipped without telling the user")
+    }
+
+    @Test
+    fun `the swipe resets when spark's balance is priced again before it commits`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        // A receive lands between the swipe and its commit, so the confirm screen prices the new balance.
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(NEW_SPARK_FEE))
+        sparkState.value = SparkState(balanceSats = NEW_SPARK_SATS)
+        sut.loadSparkWithdrawFee(NEW_SPARK_SATS)
+
+        val committed = sut.confirmSavingsSwipe(
+            channels = emptyList(),
+            withdrawSpark = true,
+            shownSparkSats = SPARK_SATS,
+            shownFeeSats = SPARK_FEE,
+        )
+
+        assertFalse(committed)
+        sut.closeSelectedChannels()
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+    }
+
+    @Test
+    fun `the swipe resets when spark's balance changes before the screen prices it again`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(NEW_SPARK_FEE))
+        sparkState.value = SparkState(balanceSats = NEW_SPARK_SATS)
+
+        val committed = sut.confirmSavingsSwipe(
+            channels = emptyList(),
+            withdrawSpark = true,
+            shownSparkSats = SPARK_SATS,
+            shownFeeSats = SPARK_FEE,
+        )
+
+        assertFalse(committed)
+        sut.closeSelectedChannels()
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+    }
+
+    @Test
+    fun `the swipe commits spark's withdrawal at the fee shown`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+
+        val committed = sut.confirmSavingsSwipe(
+            channels = emptyList(),
+            withdrawSpark = true,
+            shownSparkSats = SPARK_SATS,
+            shownFeeSats = SPARK_FEE,
+        )
+
+        assertTrue(committed)
+        sut.closeSelectedChannels()
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    @Test
+    fun `the swipe withdraws spark at the fee it confirmed when spark is priced again before the withdrawal`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        assertTrue(
+            sut.confirmSavingsSwipe(
+                channels = emptyList(),
+                withdrawSpark = true,
+                shownSparkSats = SPARK_SATS,
+                shownFeeSats = SPARK_FEE,
+            )
+        )
+        repriceSpark()
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    @Test
+    fun `closing instead withdraws spark at the fee shown when spark is priced again before the withdrawal`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true, SavingsTransferMode.CLOSE)
+        repriceSpark()
+
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    /** A receive lands during the transition, so the confirm screen prices Spark's new balance. */
+    private suspend fun repriceSpark() {
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }.thenReturn(Result.success(NEW_SPARK_FEE))
+        sparkState.value = SparkState(balanceSats = NEW_SPARK_SATS)
+        sut.loadSparkWithdrawFee(NEW_SPARK_SATS)
+    }
+
+    @Test
+    fun `transfer to savings with only channels leaves spark untouched`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = false)
+
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+        verify(lightningRepo).closeChannel(CHANNEL_B, false, null)
+        verify(lightningRepo, never()).closeChannel(CHANNEL_A, false, null)
+    }
+
+    @Test
+    fun `a failed spark withdrawal is reported while the selected channels still close`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        whenever { sparkRepo.withdrawAll(any(), any()) }.thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+
+        assertTrue(sut.isSparkWithdrawFailed.value)
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
+
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        assertFalse(sut.isSparkWithdrawFailed.value)
+    }
+
+    @Test
+    fun `transfer to savings with channels and spark moves both`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A, CHANNEL_B), withdrawSpark = true)
+
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
+        verify(lightningRepo).closeChannel(CHANNEL_B, false, null)
+    }
+
+    @Test
+    fun `transfer to savings with only spark ignores a quote left from a channel selection`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
+        advanceUntilIdle()
+        assertNotNull(sut.savingsSwapState.value.quote)
+
+        sut.loadSavingsSwapQuote(0uL, 0uL)
+        advanceUntilIdle()
+        assertNull(sut.savingsSwapState.value.quote)
+
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `swap to savings withdraws spark only when it is selected`() = test {
+        stubSavingsSwapHappyPath()
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
+        advanceUntilIdle()
+
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = false)
+        assertEquals(SavingsTransferMode.SWAP, sut.savingsTransferMode.value)
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `spark is not withdrawn at a fee the user was never shown`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        whenever { sparkRepo.estimateWithdrawAllFeeSats(any()) }
+            .thenReturn(Result.failure(SparkError.WithdrawalTooSmall()))
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        assertTrue(sut.isSparkWithdrawTooSmall.value)
+        assertFalse(sut.isSparkFeePricing.value)
+
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+
+        assertTrue(sut.isSparkWithdrawFailed.value)
+        verify(sparkRepo, never()).withdrawAll(any(), any())
+    }
+
+    @Test
+    fun `spark is withdrawn once per confirmed transfer`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+
+        sut.closeSelectedChannels()
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo, times(1)).withdrawAll(CLAIM_ADDRESS, SPARK_FEE)
+    }
+
+    @Test
+    fun `loadSparkWithdrawFee prices spark's withdrawal once per balance`() = test {
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE))
+
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+
+        assertEquals(SPARK_FEE, sut.sparkWithdrawFeeSats.value)
+        verify(sparkRepo, times(1)).estimateWithdrawAllFeeSats(CLAIM_ADDRESS)
+    }
+
+    @Test
+    fun `loadSparkWithdrawFee gives up on an estimate that never returns`() = test {
+        var calls = 0
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).doSuspendableAnswer {
+            if (calls++ == 0) awaitCancellation()
+            Result.success(SPARK_FEE)
+        }
+
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceTimeBy(16.seconds)
+        runCurrent()
+
+        assertNull(sut.sparkWithdrawFeeSats.value)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        assertEquals(SPARK_FEE, sut.sparkWithdrawFeeSats.value)
     }
 
     @Test
@@ -82,7 +393,7 @@ class TransferViewModelTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
 
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         val state = sut.savingsSwapState.value
@@ -98,19 +409,140 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a new transfer to savings withdraws spark to a fresh address`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        // The wallet is wiped and another restored in the same process, so the first address is no longer its own.
+        whenever { lightningRepo.newAddress() }.thenReturn(Result.success("bcrt1qrestored"))
+
+        sut.beginSavingsTransfer()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+
+        verify(sparkRepo).withdrawAll(eq("bcrt1qrestored"), any())
+        verify(sparkRepo, never()).withdrawAll(eq(CLAIM_ADDRESS), any())
+    }
+
+    @Test
+    fun `a new transfer to savings prices spark's withdrawal again`() = test {
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE + 200uL))
+
+        sut.beginSavingsTransfer()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+
+        assertEquals(SPARK_FEE + 200uL, sut.sparkWithdrawFeeSats.value)
+    }
+
+    @Test
+    fun `a spark withdrawal refused for its fee is priced again`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        whenever { sparkRepo.withdrawAll(any(), any()) }.thenReturn(Result.failure(SparkError.WithdrawalFeeChanged()))
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        sut.closeSelectedChannels()
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE + 200uL))
+
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+
+        assertEquals(SPARK_FEE + 200uL, sut.sparkWithdrawFeeSats.value)
+    }
+
+    @Test
+    fun `leaving progress during spark's withdrawal still closes the selected channels`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        val withdrawn = CompletableDeferred<Result<Unit>>()
+        whenever { sparkRepo.withdrawAll(any(), any()) }.doSuspendableAnswer { withdrawn.await() }
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+        val progress = launch { sut.closeSelectedChannels() }
+        runCurrent()
+
+        progress.cancel()
+        withdrawn.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
+    }
+
+    @Test
+    fun `a new savings transfer leaves an earlier one's channels to close`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        val withdrawn = CompletableDeferred<Result<Unit>>()
+        whenever { sparkRepo.withdrawAll(any(), any()) }.doSuspendableAnswer { withdrawn.await() }
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+        val first = launch { sut.closeSelectedChannels() }
+        runCurrent()
+        first.cancel()
+
+        // A second transfer is confirmed while the first still waits on Spark's withdrawal.
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = false)
+        sut.closeSelectedChannels()
+        withdrawn.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
+        verify(lightningRepo, times(1)).closeChannel(CHANNEL_B, false, null)
+    }
+
+    @Test
+    fun `a second savings confirm never sends spark's withdrawal again`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        val withdrawn = CompletableDeferred<Result<Unit>>()
+        whenever { sparkRepo.withdrawAll(any(), any()) }.doSuspendableAnswer { withdrawn.await() }
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+        val first = launch { sut.closeSelectedChannels() }
+        runCurrent()
+        first.cancel()
+
+        // The transfer is confirmed again while its withdrawal is still going out.
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = true)
+        val second = launch { sut.closeSelectedChannels() }
+        runCurrent()
+        withdrawn.complete(Result.success(Unit))
+        advanceUntilIdle()
+        second.join()
+
+        verify(sparkRepo, times(1)).withdrawAll(any(), any())
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote sizes the swap by the selected channels, not spark`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, channelSendableSat = CHANNEL_SENDABLE)
+        advanceUntilIdle()
+
+        assertEquals(CHANNEL_SENDABLE - CHANNEL_SENDABLE / 100uL, sut.savingsSwapState.value.maxSat)
+    }
+
+    @Test
     fun `loadSavingsSwapQuote falls back to close when below the swap minimum`() = test {
         whenever(context.getString(R.string.lightning__savings_confirm__amount_too_low)).thenReturn(TOO_LOW)
         balanceState.value = BalanceState(maxSendLightningSats = SWAP_MIN - 1uL)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
 
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         val state = sut.savingsSwapState.value
         assertNull(state.quote)
         assertEquals(0uL, state.maxSat)
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
 
         sut.startSavingsSwap()
@@ -124,13 +556,13 @@ class TransferViewModelTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenAnswer { throw AppError(BOLTZ_ERROR) }
 
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         assertNull(sut.savingsSwapState.value.quote)
         assertFalse(sut.savingsSwapState.value.isLoading)
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
@@ -139,13 +571,13 @@ class TransferViewModelTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.isSwapSupported).thenReturn(false)
 
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
         verify(boltzService, never()).reverseLimits(anyOrNull())
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
@@ -154,13 +586,13 @@ class TransferViewModelTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.isSwapEnabled()).thenReturn(false)
 
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
         verify(boltzService, never()).reverseLimits(anyOrNull())
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
@@ -168,27 +600,27 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `onTransferToSavingsConfirm swaps when a quote is ready and closes when the user opts out`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(listOf(CHANNEL_A), withdrawSpark = false)
         assertEquals(SavingsTransferMode.SWAP, sut.savingsTransferMode.value)
 
-        sut.onTransferToSavingsConfirm(emptyList(), SavingsTransferMode.CLOSE)
+        sut.onTransferToSavingsConfirm(listOf(CHANNEL_A), withdrawSpark = false, SavingsTransferMode.CLOSE)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
     @Test
     fun `onTransferToSavingsConfirm clears the outcome of an earlier swap`() = test {
         stubSavingsSwapHappyPath()
-        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        whenever(lightningRepo.payInvoiceWithNode(any())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
         sut.startSavingsSwap()
         advanceUntilIdle()
         assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.savingsSwapResult.value)
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
 
         assertNull(sut.savingsSwapResult.value)
     }
@@ -197,7 +629,7 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `onSwapAmountChange clamps to the allowed range and reprices`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.onSwapAmountChange(SWAP_MIN - 10_000uL)
@@ -208,7 +640,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap succeeds when the claim event arrives`() = test {
         stubSavingsSwapHappyPath()
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.startSavingsSwap()
@@ -222,7 +654,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap fails when the swap reports an error event`() = test {
         stubSavingsSwapHappyPath()
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.startSavingsSwap()
@@ -236,7 +668,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap returns pending when the claim does not arrive in time`() = test {
         stubSavingsSwapHappyPath()
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.startSavingsSwap()
@@ -250,8 +682,8 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap fails when the invoice payment fails`() = test {
         stubSavingsSwapHappyPath()
-        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        whenever(lightningRepo.payInvoiceWithNode(any())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.startSavingsSwap()
@@ -263,7 +695,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap ignores a second start while a swap is in flight`() = test {
         stubSavingsSwapHappyPath()
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.startSavingsSwap()
@@ -275,7 +707,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
         verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
-        verify(lightningRepo).payInvoice(any(), anyOrNull())
+        verify(lightningRepo).payInvoiceWithNode(any())
     }
 
     @Test
@@ -283,12 +715,12 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSavingsSwapHappyPath()
         whenever(context.getString(R.string.wallet__payment_route_not_found))
             .thenReturn(ROUTE_NOT_FOUND_MSG)
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.startSavingsSwap()
         runCurrent()
-        // payInvoice returns as soon as the HTLC is dispatched; the routing failure lands later.
+        // payInvoiceWithNode returns as soon as the HTLC is dispatched; the routing failure lands later.
         nodeEvents.emit(
             Event.PaymentFailed(
                 paymentId = PAYMENT_ID,
@@ -304,7 +736,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap ignores a restart once an outcome is already delivered`() = test {
         stubSavingsSwapHappyPath()
-        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT, balanceState.value.maxSendLightningSats)
         advanceUntilIdle()
 
         sut.startSavingsSwap()
@@ -319,7 +751,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
         verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
-        verify(lightningRepo).payInvoice(any(), anyOrNull())
+        verify(lightningRepo).payInvoiceWithNode(any())
     }
 
     private suspend fun stubSavingsSwapHappyPath() {
@@ -328,7 +760,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.newAddress()).thenReturn(Result.success(CLAIM_ADDRESS))
         whenever(boltzService.createReverseSwap(any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(reverseSwapResponse())
-        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_ID))
+        whenever(lightningRepo.payInvoiceWithNode(any())).thenReturn(Result.success(PAYMENT_ID))
     }
 
     private fun reverseLimits() = BoltzPairInfo(
@@ -349,6 +781,13 @@ class TransferViewModelTest : BaseUnitTest() {
     )
 
     private companion object {
+        val CHANNEL_A = createChannelDetails().copy(channelId = "channel_a")
+        val CHANNEL_B = createChannelDetails().copy(channelId = "channel_b")
+        const val SPARK_SATS = 40_000uL
+        const val NEW_SPARK_SATS = 52_000uL
+        const val SPARK_FEE = 1_470uL
+        const val NEW_SPARK_FEE = 1_620uL
+        const val CHANNEL_SENDABLE = 60_000uL
         const val TXID = "tx-abc"
         const val SPENDABLE_LN = 150_000uL
         const val REQUESTED_SAT = 200_000uL

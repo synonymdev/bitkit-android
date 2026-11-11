@@ -114,6 +114,7 @@ sealed interface Sheet {
 
 /**@param priority Priority levels for timed sheets (higher number = higher priority)*/
 enum class TimedSheetType(val priority: Int) {
+    MOVE_TO_SPARK(priority = 7),
     APP_UPDATE(priority = 6),
     USDT(priority = 5),
     BACKUP(priority = 4),

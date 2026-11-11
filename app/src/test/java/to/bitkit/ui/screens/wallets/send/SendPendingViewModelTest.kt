@@ -433,6 +433,28 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark funding pending resolves once its accepted recovery completes`() = test {
+        val original = pendingOriginal().copy(isTransfer = true)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        val winner = "cd".repeat(32)
+        val complete = original.copy(
+            txid = winner,
+            candidateTxids = original.candidateTxids + winner,
+            evidence = OnchainSendEvidence.Observed,
+            localFollowupComplete = true,
+        )
+
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(complete)
+        attemptUpdates.value++
+        advanceUntilIdle()
+
+        assertEquals(complete, sut.uiState.value.recoveredTransfer)
+        assertNull(sut.uiState.value.recoveryAttempt)
+    }
+
+    @Test
     fun `expired Shop payment can be cancelled once the network never saw it`() = test {
         val original = pendingOriginal().copy(
             requestId = PaykitPaymentRequestId("request", "payee"),

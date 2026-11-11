@@ -1,0 +1,20 @@
+<journey name="ordinary wallet during Paykit outage">
+  <description>
+    Use disposable test-network wallets with synthetic funds and compatible service fault controls.
+    Delay public endpoint publication, endpoint cleanup and an unrelated retained Paykit proof while
+    leaving wallet-node and VSS services available. Never use live funds. iOS requires public sharing
+    for the receive case, and a retained authenticated identity with Paykit UI disabled for the startup
+    case. Android must have a retained proof for the unrelated request. These controls are not currently
+    wired into the full app journey; native component coverage must not be reported as this execution.
+    Android already prepares receive data independently; iOS already presents ordinary Lightning pending
+    results independently. Both platforms must keep genuine payment-request proof requirements.
+  </description>
+  <actions>
+    <action>Edit an ordinary receive amount and note, then show its QR while public endpoint publication is delayed; verify the QR contains the current amount and note without waiting for Pubky</action>
+    <action>Close and reopen receive, restore Pubky access and verify current public endpoints reconcile without restoring a superseded invoice or a signed-out identity</action>
+    <action>With pending order or swap recovery and disabled Paykit UI, start the wallet while endpoint cleanup is delayed; verify unrelated recovery watchers start</action>
+    <action>Hold unrelated proof maintenance, send a controlled ordinary Lightning invoice that fails and verify its error appears without waiting for Paykit; verify no automatic second payment is created</action>
+    <action>Repeat with a controlled pending Lightning result and verify the original payment hash is tracked and shown as pending; do not submit another payment</action>
+    <action>Release the service faults, restart and verify retained Paykit work reconciles; a real Paykit request must still require authorization and proof bookkeeping</action>
+  </actions>
+</journey>

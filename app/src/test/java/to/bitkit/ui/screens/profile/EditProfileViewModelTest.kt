@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
@@ -25,6 +26,7 @@ import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
@@ -148,7 +150,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         verify(pubkyRepo, times(1)).forgetUnrestoredIdentity()
         verify(pubkyRepo, never()).deleteProfile()
-        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
         assertFalse(sut.uiState.value.showDeleteDialog)
 
         sut.viewModelScope.cancel()
@@ -217,7 +219,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.showDeleteConfirmation()
         advanceUntilIdle()
         verify(pubkyRepo, times(1)).deleteProfile()
-        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
         verify(pubkyRepo, never()).signOut()
         assertFalse(sut.uiState.value.showDeleteDialog)
 
@@ -233,7 +235,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
         val result = CompletableDeferred<Result<Unit>>()
-        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any())).doSuspendableAnswer { result.await() }
+        whenever(
+            pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any())
+        ).doSuspendableAnswer { result.await() }
 
         sut.save()
         advanceUntilIdle()
@@ -247,7 +251,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         sut.showDeleteConfirmation()
         advanceUntilIdle()
-        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
         verify(pubkyRepo, never()).deleteProfile()
         verify(pubkyRepo, never()).forgetUnrestoredIdentity()
         assertFalse(sut.uiState.value.showDeleteDialog)
@@ -508,6 +512,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever { pubkyRepo.checkProfileDeletionAllowed() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
+        whenever(pubkyRepo.profileEditBase()).thenReturn(ProfileEditBase(createProfile(), "revision"))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.success(Unit))

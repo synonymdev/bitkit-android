@@ -133,6 +133,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
+        .asStateFlow(initialValue = false)
+
+    fun setHasSeenSpendingIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(hasSeenSpendingIntro = value) }
+        }
+    }
+
+    val hasSeenTransferIntro = settingsStore.data.map { it.hasSeenTransferIntro }
+        .asStateFlow(initialValue = false)
+
+    fun setHasSeenTransferIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(hasSeenTransferIntro = value) }
+        }
+    }
+
     val hasSeenSavingsIntro = settingsStore.data.map { it.hasSeenSavingsIntro }
         .asStateFlow(initialValue = false)
 

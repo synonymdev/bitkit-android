@@ -1,6 +1,7 @@
 package to.bitkit.ext
 
 import android.content.Context
+import breez_sdk_spark.SdkException
 import org.junit.Test
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
@@ -8,6 +9,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.services.SparkError
 import to.bitkit.utils.LdkError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -45,6 +47,17 @@ class PaymentFailureReasonExtTest {
             message,
             LdkError(NodeException.DuplicatePayment("Duplicate payment.")).toSendFailureMessage(context),
         )
+    }
+
+    @Test
+    fun `spark failures show the existing payment failure copy`() {
+        val message = "Generic payment failed"
+        whenever(context.getString(R.string.wallet__payment_failed_description)).thenReturn(message)
+
+        val refused = SparkError.SendRefused("Spark could not prepare the payment")
+
+        assertEquals(message, refused.toSendFailureMessage(context))
+        assertEquals(message, SdkException.Generic("insufficient funds").toSendFailureMessage(context))
     }
 
     @Test

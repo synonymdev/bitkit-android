@@ -121,6 +121,10 @@ data class OnchainSendAttempt(
     val highestCandidateFee: ULong
         get() = maxOf(candidateMiningFees.values.maxOrNull() ?: 0uL, verifiedWinningFeeSats ?: 0uL)
 
+    /** A transfer from the node wallet to its Spark deposit address, which pays no order. */
+    val isSparkFunding: Boolean
+        get() = requestId == null && isTransfer && orderId == null
+
     /** A transfer to spending that pays a Blocktank order, which Bitkit no longer buys. */
     val isBlocktankFunding: Boolean
         get() = requestId == null && isTransfer && orderId != null
@@ -185,6 +189,14 @@ interface OnchainReleasing {
 class OnchainSendAttemptUnreadableError(cause: Throwable) : AppError("Failed to read on-chain send attempt", cause)
 
 class OnchainSendNotDispatchedError(cause: Throwable) : AppError("On-chain send did not reach the backend", cause)
+
+/**
+ * A send refused before broadcast because it would send another amount, or pay more mining fee, than approved, a
+ * fixed amount as well as a max one. [preparedFeeSats] is the mining fee of the refused prepared send, null when it
+ * was unknown.
+ */
+class OnchainSendChangedError(val preparedFeeSats: ULong? = null) :
+    AppError("On-chain send changed after it was approved")
 
 class OnchainSendPendingError(cause: Throwable, val txid: String? = null) :
     AppError("On-chain send outcome is unknown; do not send again", cause)
@@ -390,7 +402,8 @@ class OnchainSendAttemptStore @Inject constructor(
             } else {
                 require(current.originalInputs == null && current.candidateTxids.isEmpty() && current.txid == null)
                 require((current.isMaxAmount && current.requestId == null) || receipt.amountSats == current.amountSats)
-                if (current.isTransfer && current.isMaxAmount) {
+                // Spark funding has no order, so only a Blocktank send-all is bound to its order's amounts.
+                if (current.isBlocktankFunding && current.isMaxAmount) {
                     val context = requireNotNull(current.transferContext)
                     val originalFee = requireNotNull(context.originalOrderFeeSats)
                     val miningFee = requireNotNull(receipt.miningFeeSats)

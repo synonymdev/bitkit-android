@@ -1,0 +1,24 @@
+<journey name="send spending limit refreshes after receiving lightning">
+  <description>
+    Android regression for an already usable channel whose cached outbound capacity is zero before
+    receiving funds. Fresh balance derivation must not be overwritten by that stale channel snapshot
+    when an amountless Lightning invoice opens Send. The shared Send2 E2E fixture prepares this state.
+
+    Precondition: a fresh dev wallet with Savings funded, a usable inbound local-LND channel, and zero
+    Spending. Prepare an amountless invoice from that LND node for the outgoing recipient. Start on
+    wallet home. Do not restart the app or manually refresh after receiving the Lightning payment.
+  </description>
+  <actions>
+    <action>Receive exactly 10 000 sats through the usable Lightning channel and acknowledge the received-payment sheet</action>
+    <action>Verify Spending shows 10 000 sats on wallet home</action>
+    <action>Tap Send (testTag "Send"), handle any camera permission prompt, and tap Enter Manually (testTag "RecipientManual")</action>
+    <action>Enter the prepared amountless Lightning invoice in RecipientInput and tap AddressContinue</action>
+    <action>Verify SendNumberField is visible and the Spending funding source is selected</action>
+    <action>Tap N1, N0, N0, and N0, verifying SendNumberField reads 1 000 sats</action>
+    <action>Tap N1 once and immediately verify SendAmountExceededToast appears</action>
+    <action>Verify SendNumberField still reads 1 000 sats; do not repeat the rejected keypress</action>
+    <action>Dismiss Send and reopen the same amountless invoice</action>
+    <action>Enter 2 000 sats and verify ContinueAmount is enabled and opens payment review showing 2 000 sats</action>
+    <action>Dismiss the review without paying</action>
+  </actions>
+</journey>
