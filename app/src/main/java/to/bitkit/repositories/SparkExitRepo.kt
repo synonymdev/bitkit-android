@@ -724,6 +724,7 @@ class SparkExitRepo @Inject constructor(
             skippedLeafCount = quote.prepared.skipped.size,
             fundingStrategy = SparkExitRecord.PER_NODE,
             leafTotalSats = quote.leafTotalSats,
+            outsideSats = SparkExitMath.outsideExitSats(quote.leafTotalSats, quote.sparkBalanceSats),
             transferId = transferId,
         )
         // Saved with its transfer in one write, so no running exit is ever stored without the transfer counting it. A
@@ -805,6 +806,7 @@ class SparkExitRepo @Inject constructor(
             expectedSats = fresh.incomingSats,
             skippedLeafCount = fresh.prepared.skipped.size,
             leafTotalSats = fresh.leafTotalSats,
+            outsideSats = SparkExitMath.outsideExitSats(fresh.leafTotalSats, fresh.sparkBalanceSats),
             transferId = freshTransfer,
         )
         runCatching { saveRecord(requoted) }.onFailure {
@@ -1121,13 +1123,14 @@ data class SparkExitState(
     val showsResult: Boolean get() = record?.showsResult == true
 
     /**
-     * Spark's balance beyond the quote's leaves while the exit runs: value outside the exit, which stays on Spark. A
-     * signal only, exact while the exit's leaves still count in the balance; published leaves leave it.
+     * What stays on Spark while the exit runs: Spark's balance beyond the quote's leaves, or, once published leaves
+     * left the balance, what the start saw beyond them, whichever is more.
      */
     val outsideExitSats: ULong?
         get() {
             val active = record?.takeIf { it.isActive } ?: return null
-            return SparkExitMath.outsideExitSats(active.leafTotalSats, sparkBalanceSats)
+            val live = SparkExitMath.outsideExitSats(active.leafTotalSats, sparkBalanceSats) ?: 0uL
+            return maxOf(live, active.outsideSats ?: 0uL).takeIf { it > 0uL }
         }
 
     /**

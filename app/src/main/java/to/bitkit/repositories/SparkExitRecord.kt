@@ -66,6 +66,11 @@ data class SparkExitRecord(
     /** The value of the quote's leaves, to show what Spark holds outside the exit. */
     val leafTotalSats: ULong? = null,
     /**
+     * Spark's balance beyond the quote's leaves when the exit started: what stays on Spark, also once published leaves
+     * left the balance.
+     */
+    val outsideSats: ULong? = null,
+    /**
      * The CPFP child and fan-out txids of replaced generations, whose outputs at the funding address are not new
      * funding. The name predates the fan-out ids, kept so stored records read the same.
      */
@@ -720,6 +725,7 @@ object SparkExitJson {
             transferId = read { o.stringOrNull("transferId") },
             expectedSats = read { o.ulong("expectedSats") } ?: 0uL,
             leafTotalSats = read { o.ulongOrNull("leafTotalSats") },
+            outsideSats = read { o.ulongOrNull("outsideSats") },
             lostLeaves = read {
                 o.arrayOrEmpty("lostLeaves").map {
                     val l = it.jsonObject
@@ -828,6 +834,7 @@ object SparkExitJson {
         put("isRebuilding", r.isRebuilding)
         r.lastBuildAt?.let { put("lastBuildAt", it) }
         r.leafTotalSats?.let { put("leafTotalSats", it.toLong()) }
+        r.outsideSats?.let { put("outsideSats", it.toLong()) }
         if (r.earlierCpfpTxids.isNotEmpty()) {
             put("earlierCpfpTxids", buildJsonArray { r.earlierCpfpTxids.forEach { add(JsonPrimitive(it)) } })
         }
@@ -1021,6 +1028,7 @@ object SparkExitJson {
         isRebuilding = o.booleanOrNull("isRebuilding") ?: false,
         lastBuildAt = o.millisOrNull("lastBuildAt"),
         leafTotalSats = o.ulongOrNull("leafTotalSats"),
+        outsideSats = o.ulongOrNull("outsideSats"),
         earlierCpfpTxids = o.arrayOrEmpty("earlierCpfpTxids").map { it.jsonPrimitive.content },
         leftoverSweep = o.objectOrNull("leftoverSweep")?.let(::sweepFromJson),
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),
