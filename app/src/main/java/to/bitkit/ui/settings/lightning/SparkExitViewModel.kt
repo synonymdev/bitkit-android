@@ -59,6 +59,9 @@ class SparkExitViewModel @Inject constructor(
         private val FUNDING_POLL_INTERVAL = 15.seconds
     }
 
+    /** Spark reads the node's chain, so savings can pay a higher fee's extra funding. */
+    internal var sharesNodeChain: () -> Boolean = { Env.sparkSharesNodeChain }
+
     private val _uiState = MutableStateFlow(SparkExitUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -215,7 +218,11 @@ class SparkExitViewModel @Inject constructor(
             sparkExitRepo.feeBumpOptions()
                 .onSuccess { priced ->
                     val options = priced.map { it.withFeeFloor(feeBumpFeeFloors[it.rateSatPerVbyte]) }
-                    val bump = SparkExitFeeBumpUiState(options = options.toImmutableList(), spendableSats = spendable)
+                    val bump = SparkExitFeeBumpUiState(
+                        options = options.toImmutableList(),
+                        spendableSats = spendable,
+                        sharesNodeChain = sharesNodeChain(),
+                    )
                     // The fastest rate savings can pay for, or none when it covers no rate.
                     val selected = options.firstOrNull(bump::canPay)?.speed
                     _uiState.update { it.copy(feeBump = bump.copy(selected = selected)) }
@@ -434,6 +441,8 @@ data class SparkExitFeeBumpUiState(
     val options: ImmutableList<SparkExitFeeBumpOption> = persistentListOf(),
     val selected: FeeRate? = null,
     val spendableSats: ULong? = null,
+    /** Spark reads the node's chain, which a savings payment goes out on. */
+    val sharesNodeChain: Boolean = false,
     val isPaying: Boolean = false,
 ) {
     val selectedOption: SparkExitFeeBumpOption? get() = options.firstOrNull { it.speed == selected }
@@ -441,9 +450,9 @@ data class SparkExitFeeBumpUiState(
     /** Savings covers none of the rates offered. */
     val isSavingsShort: Boolean get() = options.isNotEmpty() && options.none(::canPay)
 
-    /** Savings covers [option]'s cost, or there is nothing to pay. */
+    /** Savings covers [option]'s cost on a chain Spark reads, or there is nothing to pay. */
     fun canPay(option: SparkExitFeeBumpOption): Boolean =
-        option.totalSats == 0uL || (spendableSats ?: 0uL) >= option.totalSats
+        option.totalSats == 0uL || (sharesNodeChain && (spendableSats ?: 0uL) >= option.totalSats)
 }
 
 private fun SparkExitFeeBumpOption.withFeeFloor(floorSats: ULong?): SparkExitFeeBumpOption {

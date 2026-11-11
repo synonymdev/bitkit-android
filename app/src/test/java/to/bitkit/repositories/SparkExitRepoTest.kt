@@ -916,7 +916,8 @@ class SparkExitRepoTest : BaseUnitTest() {
         whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
         whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
         val (keychain, core) = keyed()
-        return createSut(connectedSpark(sdk), http, keychain, core, lightning)
+        // Spark reads the node's chain, so savings can pay the exit's funding.
+        return createSut(connectedSpark(sdk), http, keychain, core, lightning).apply { sharesNodeChain = { true } }
     }
 
     @Test
@@ -1702,6 +1703,25 @@ class SparkExitRepoTest : BaseUnitTest() {
         val ended = quotedSut(FakeSparkExitRecovering())
         ended.load().getOrThrow()
         assertTrue(ended.payHigherFee(option).isFailure)
+    }
+
+    @Test
+    fun `a higher fee is never paid from savings on a chain spark does not read`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        var isPaid = false
+        stubFunding {
+            isPaid = true
+            Result.success(OnchainSendOutcome.Accepted("bump"))
+        }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.sharesNodeChain = { false }
+        sut.load().getOrThrow()
+
+        assertTrue(sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)).isFailure)
+
+        assertFalse(isPaid, "savings paid on a chain spark does not read")
+        assertEquals(2uL, assertNotNull(store.load()).feeRateSatPerVbyte)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

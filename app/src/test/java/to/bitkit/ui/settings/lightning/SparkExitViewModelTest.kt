@@ -168,11 +168,16 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertFalse(rising.copy(networkFees = SparkExitNetworkFees(2uL, 1uL)).canPayHigherFee)
 
         val fast = SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 4_200uL, 4_620uL)
-        assertTrue(SparkExitFeeBumpUiState(spendableSats = 4_620uL).canPay(fast))
-        assertFalse(SparkExitFeeBumpUiState(spendableSats = 4_619uL).canPay(fast))
-        assertTrue(SparkExitFeeBumpUiState(spendableSats = 0uL).canPay(fast.copy(extraSats = 0uL, totalSats = 0uL)))
-        assertTrue(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 1_000uL).isSavingsShort)
-        assertFalse(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 5_000uL).isSavingsShort)
+        val onChain = SparkExitFeeBumpUiState(sharesNodeChain = true)
+        assertTrue(onChain.copy(spendableSats = 4_620uL).canPay(fast))
+        assertFalse(onChain.copy(spendableSats = 4_619uL).canPay(fast))
+        assertTrue(onChain.copy(spendableSats = 0uL).canPay(fast.copy(extraSats = 0uL, totalSats = 0uL)))
+        assertTrue(onChain.copy(options = persistentListOf(fast), spendableSats = 1_000uL).isSavingsShort)
+        assertFalse(onChain.copy(options = persistentListOf(fast), spendableSats = 5_000uL).isSavingsShort)
+        // Savings pays on the node's chain: while Spark reads another, only a rate with nothing to pay is offered.
+        val offChain = SparkExitFeeBumpUiState(spendableSats = 5_000uL, sharesNodeChain = false)
+        assertFalse(offChain.canPay(fast))
+        assertTrue(offChain.canPay(fast.copy(extraSats = 0uL, totalSats = 0uL)))
     }
 
     @Test
@@ -183,7 +188,7 @@ class SparkExitViewModelTest : BaseUnitTest() {
         whenever(repo.payHigherFee(fast))
             .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
         val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
-        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        val sut = SparkExitViewModel(context, repo, sparkRepo).apply { sharesNodeChain = { true } }
         sut.loadFeeBump()
 
         sut.payHigherFee()
@@ -203,7 +208,7 @@ class SparkExitViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
         whenever(repo.payHigherFee(floored)).thenReturn(Result.success(Unit))
         val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
-        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        val sut = SparkExitViewModel(context, repo, sparkRepo).apply { sharesNodeChain = { true } }
         sut.loadFeeBump()
 
         sut.payHigherFee()

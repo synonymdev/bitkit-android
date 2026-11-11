@@ -72,6 +72,9 @@ class SparkExitRepo @Inject constructor(
     private val sparkExitTip: SparkExitTip,
     private val cacheStore: CacheStore,
 ) {
+    /** Spark reads the node's chain, so a savings payment, which goes out on it, reaches the exit. */
+    internal var sharesNodeChain: () -> Boolean = { Env.sparkSharesNodeChain }
+
     companion object {
         private const val TAG = "SparkExitRepo"
 
@@ -634,6 +637,8 @@ class SparkExitRepo @Inject constructor(
     private suspend fun payHigherFeeLocked(option: SparkExitFeeBumpOption) {
         val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
         val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
+        // On a chain Spark does not read, the exit would never see the payment.
+        require(option.extraSats == 0uL || sharesNodeChain()) { "Spark does not read the node's chain" }
         val txid = if (option.extraSats > 0uL) {
             sendFunding(address, option.extraSats, option.feeRates, option.totalSats.safe() - option.extraSats.safe())
         } else {
