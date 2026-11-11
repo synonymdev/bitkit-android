@@ -9,6 +9,7 @@ import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.singleKeyCpfpSigner
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.GetAddressResponse
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -1119,16 +1120,36 @@ class SparkExitRepo @Inject constructor(
         it.copy(sparkExitNextFundingIndexes = indexes + (fundingIndexKey to back))
     }
 
-    private suspend fun nextFundingIndex(): UInt = SparkExitMath.nextFundingIndex(
-        kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey],
-        stored = runSuspendCatching { store.load() }.getOrNull(),
-    )
+    /**
+     * With no index kept and no record, as after a restore from the phrase or from a backup older than the index, the
+     * funding addresses are scanned once and the result kept. A scan the chain fails keeps nothing.
+     */
+    private suspend fun nextFundingIndex(): UInt {
+        val kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey]
+        val stored = runSuspendCatching { store.load() }.getOrNull()
+        if (kept != null || stored != null) return SparkExitMath.nextFundingIndex(kept, stored)
+        val chain = chain ?: return 0u
+        val scanned = SparkExitMath.scanNextFundingIndex { chain.isAddressUsed(fundingAddress(it).address) }
+        cacheStore.update {
+            val indexes = it.sparkExitNextFundingIndexes
+            val next = maxOf(indexes[fundingIndexKey] ?: 0, scanned.toInt())
+            it.copy(sparkExitNextFundingIndexes = indexes + (fundingIndexKey to next))
+        }
+        return scanned
+    }
+
+    private suspend fun fundingAddress(index: UInt): GetAddressResponse {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val path = SparkExitFundingKey.path(index = index.toInt(), network = Env.network)
+        return coreService.onchain.deriveBitcoinAddress(mnemonic, path, Env.network, passphrase)
+    }
 
     private suspend fun fundingKey(index: UInt): SparkExitFundingKey.Derived {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         val path = SparkExitFundingKey.path(index = index.toInt(), network = Env.network)
-        val address = coreService.onchain.deriveBitcoinAddress(mnemonic, path, Env.network, passphrase)
+        val address = fundingAddress(index)
         val wif = coreService.onchain.derivePrivateKey(mnemonic, path, Env.network, passphrase)
         return SparkExitFundingKey.Derived(address.address, address.publicKey, SparkExitFundingKey.secretKey(wif))
     }

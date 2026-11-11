@@ -510,6 +510,26 @@ object SparkExitMath {
         return maxOf(kept?.toUInt() ?: 0u, pastStored)
     }
 
+    /** Unused funding addresses a scan reads past the last used one before it stops. */
+    const val FUNDING_SCAN_GAP_LIMIT = 20
+
+    /** The most funding addresses one scan reads, even when a host reports every one used. */
+    const val FUNDING_SCAN_MAX_ADDRESSES = 1_000
+
+    /**
+     * The funding index past the last one [isUsed] reports used, read from 0 until [FUNDING_SCAN_GAP_LIMIT] unused ones
+     * follow it, for a wallet that kept no index, such as one restored from the phrase or an older backup.
+     */
+    suspend fun scanNextFundingIndex(isUsed: suspend (UInt) -> Boolean): UInt {
+        var next = 0u
+        var index = 0u
+        while (index < next + FUNDING_SCAN_GAP_LIMIT.toUInt() && index < FUNDING_SCAN_MAX_ADDRESSES.toUInt()) {
+            if (isUsed(index)) next = index + 1u
+            index++
+        }
+        return next
+    }
+
     /** Each wallet's higher next funding index of [local] and [restored]. */
     fun mergeFundingIndexes(local: Map<String, Int>, restored: Map<String, Int>): Map<String, Int> =
         (local.keys + restored.keys).associateWith { maxOf(local[it] ?: 0, restored[it] ?: 0) }

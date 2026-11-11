@@ -71,6 +71,9 @@ sealed interface SparkExitBroadcastOutcome {
 interface SparkExitChain {
     suspend fun tipHeight(): UInt
     suspend fun utxos(address: String): List<EsploraUtxo>
+
+    /** Whether [address] has any transaction, in a block or the mempool, from `/address/{address}`. */
+    suspend fun isAddressUsed(address: String): Boolean
     suspend fun txStatus(txid: String): EsploraTxStatus
 
     /**
@@ -198,6 +201,14 @@ class EsploraSparkExitChain(
                 status = status(o.getValue("status").jsonObject),
             )
         }
+
+    override suspend fun isAddressUsed(address: String): Boolean {
+        val stats = json.parseToJsonElement(get("/address/$address")).jsonObject
+        return listOf("chain_stats", "mempool_stats").any { key ->
+            val count = stats[key]?.jsonObject?.get("tx_count")?.jsonPrimitive?.longOrNull ?: 0L
+            count > 0
+        }
+    }
 
     override suspend fun txStatus(txid: String): EsploraTxStatus =
         status(json.parseToJsonElement(get("/tx/$txid/status")).jsonObject)
