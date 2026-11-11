@@ -105,6 +105,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -1827,6 +1828,45 @@ class BackupRepoTest : BaseUnitTest() {
         verify(settingsStore, never()).update(any())
         assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
         verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
+    fun `a metadata restore keeps spark's backed-up send hashes but holds older invoices until spark lists them`() =
+        test {
+            val publicAddress = "bcrt1qpublic"
+            stubPublicAddressRestore(publicAddress)
+            stubMetadataRestore(
+                envelope = metadataEnvelope(
+                    metadata = listOf(preActivityMetadata()),
+                    cache = AppCacheData(onchainAddress = publicAddress, sparkSendHashes = listOf("hash")),
+                ),
+            )
+
+            sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+            assertEquals(listOf("hash"), cacheData.value.sparkSendHashes)
+            assertNotNull(cacheData.value.sparkHistoryUnseededSince)
+        }
+
+    @Test
+    fun `a metadata restore leaves the node's backed-up send hashes for its own list to seed`() = test {
+        val publicAddress = "bcrt1qpublic"
+        stubPublicAddressRestore(publicAddress)
+        stubMetadataRestore(
+            envelope = metadataEnvelope(
+                metadata = listOf(preActivityMetadata()),
+                cache = AppCacheData(
+                    onchainAddress = publicAddress,
+                    ldkSendHashes = listOf("hash"),
+                    ldkSendHashesSeeded = true,
+                ),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(listOf("hash"), cacheData.value.ldkSendHashes)
+        assertFalse(cacheData.value.ldkSendHashesSeeded)
     }
 
     @Test

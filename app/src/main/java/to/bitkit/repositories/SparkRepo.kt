@@ -876,9 +876,16 @@ class SparkRepo @Inject constructor(
     /**
      * Spark's pending or paid send of [bolt11], matched by the invoice or its [paymentHash], so the node never pays it
      * again; a send still inside Spark's send call is pending. Null when Spark's send failed or none is known.
-     * While Spark can't list its payments, a send it started for [paymentHash] counts as pending, since it may be live.
+     * While Spark can't list its payments, a send it started for [paymentHash] counts as pending, since it may be live,
+     * and after a restore, until Spark's synced list seeds the kept hashes, [SparkError.SendRefused] is thrown for an
+     * invoice created before the restore ([invoiceCreatedAt] in epoch seconds, null when unknown), as the restored
+     * hashes can lack a send Spark made of it.
      */
-    suspend fun earlierLightningSend(bolt11: String, paymentHash: String?): EarlierSend? =
+    suspend fun earlierLightningSend(
+        bolt11: String,
+        paymentHash: String?,
+        invoiceCreatedAt: Long? = null,
+    ): EarlierSend? =
         withContext(bgDispatcher) {
             val recordsBefore = sendRecords.get()
             val keptUncertain = cacheStore.data.first().sparkUncertainSends.keys
@@ -903,7 +910,17 @@ class SparkRepo @Inject constructor(
             } else {
                 null
             }
-            if (payments == null) return@withContext startedSend(paymentHash)?.let { EarlierSend.Pending(it) }
+            if (payments == null) {
+                startedSend(paymentHash)?.let { return@withContext EarlierSend.Pending(it) }
+                // Restored hashes can lack a send Spark made before the restore, never one of a newer invoice.
+                val unseededSince = cacheStore.data.first().sparkHistoryUnseededSince
+                if (sparkService.isSupported && unseededSince != null && (invoiceCreatedAt ?: 0L) < unseededSince) {
+                    Logger.warn("Refused a node send until Spark lists its earlier sends once", context = TAG)
+                    throw SparkError.SendRefused("Spark hasn't listed its earlier sends yet")
+                }
+                return@withContext null
+            }
+            seedSendHashes(payments)
             val send = payments
                 .latestSend {
                     it.invoice.equals(bolt11, ignoreCase = true) ||
@@ -998,12 +1015,31 @@ class SparkRepo @Inject constructor(
             ?.toSet()
     }
 
+    /** Seeds the restored send hashes from Spark's list once it has synced, so the hold on older invoices ends. */
+    private suspend fun seedRestoredSendHashes() {
+        if (cacheStore.data.first().sparkHistoryUnseededSince == null || !canListPayments()) return
+        runSuspendCatching { sparkService.listPayments() }
+            .onSuccess { seedSendHashes(it) }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+    }
+
+    /** Keeps Spark's pending and paid sends once, from a list read after it synced, so a restart holds the node off. */
+    private suspend fun seedSendHashes(payments: List<Payment>) = cacheStore.seedSparkSendHashes(
+        payments
+            .filter { it.status != PaymentStatus.FAILED }
+            .sortedBy { it.timestamp }
+            .mapNotNull { it.sendHash() },
+    )
+
     /** Records every Spark payment, returning whether all were saved, so a failed write leaves the sync to redo. */
     private suspend fun syncActivities(): Boolean {
         // Read after the records, as a send counts as in flight before it is recorded, so one of the two shows it.
         val recordsBefore = sendRecords.get()
         val inFlightBefore = sendsInFlight.keys.toSet()
+        // Read before the list, as one read before Spark's first sync can lack its restored sends.
+        val isSynced = canListPayments()
         val payments = sparkService.listPayments()
+        if (isSynced) seedSendHashes(payments)
         val isSaved = payments.map { recordActivity(it) }.all { it }
         val sendHashes = { status: PaymentStatus ->
             payments.mapNotNullTo(mutableSetOf()) { it.sendHash(status)?.lowercase() }
@@ -1051,6 +1087,7 @@ class SparkRepo @Inject constructor(
                 is SdkEvent.Synced -> {
                     // Spark also reports Synced for a partial or skipped sync, while its wallet sync still fails.
                     if (hasSyncedSince(null)) _state.update { it.copy(hasSynced = true) }
+                    seedRestoredSendHashes()
                     refresh()
                     // A send whose outcome stayed unknown past its polling settles on a later sync.
                     uncertainSends.keys.toList().forEach { trySettleUncertainSend(it) }

@@ -211,6 +211,19 @@ class CacheStore internal constructor(
         }
     }
 
+    /** After a restore, keeps [paymentHashes], Spark's pending and paid sends from its synced list, once. */
+    suspend fun seedSparkSendHashes(paymentHashes: List<String>) {
+        if (store.data.first().sparkHistoryUnseededSince == null) return
+        store.updateData { data ->
+            if (data.sparkHistoryUnseededSince == null) return@updateData data
+            val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.sparkSendHashes.toSet()
+            data.copy(
+                sparkSendHashes = seeded + data.sparkSendHashes,
+                sparkHistoryUnseededSince = null,
+            )
+        }
+    }
+
     /**
      * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, ones it didn't
      * show ([listed] is every hash it shows) whose invoice expired past [UNLISTED_SEND_SETTLE_SECS], and past the cap
@@ -323,6 +336,12 @@ data class AppCacheData(
      * there. Until then an unlistable node holds every Spark send.
      */
     val ldkSendHashesSeeded: Boolean = false,
+    /**
+     * When a metadata restore brought back [sparkSendHashes], in epoch seconds, until Spark's synced list fills them:
+     * the backup can predate a send Spark made, so meanwhile a Spark that can't list its payments holds the node off
+     * invoices created before it. Null on an install that was never restored, whose kept hashes are complete.
+     */
+    val sparkHistoryUnseededSince: Long? = null,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

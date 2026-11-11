@@ -1654,7 +1654,8 @@ class LightningRepo @Inject constructor(
         requireWalletRestoreComplete()
         // Read before the checks, so a Spark send admitted after them refuses this one at submission.
         val sparkRecordsBefore = sparkRepo.sendRecordMark()
-        sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
+        sparkRepo.earlierLightningSend(bolt11, paymentHash, invoiceCreatedAt(bolt11))
+            ?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
         val key = ldkSendKey(bolt11, paymentHash)
@@ -1736,6 +1737,10 @@ class LightningRepo @Inject constructor(
         val invoice = Bolt11Invoice.fromStr(bolt11)
         (invoice.secondsSinceEpoch().safe() + invoice.expiryTimeSeconds().safe())
             .coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
+    }.getOrNull()
+
+    private fun invoiceCreatedAt(bolt11: String): Long? = runCatching {
+        Bolt11Invoice.fromStr(bolt11).secondsSinceEpoch().coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
     }.getOrNull()
 
     /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */

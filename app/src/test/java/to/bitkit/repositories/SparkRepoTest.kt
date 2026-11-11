@@ -76,6 +76,7 @@ import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -203,6 +204,81 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isConnected).thenReturn(false)
 
         assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `a restored wallet's unsynced history refuses the node's send of an invoice from before the restore`() =
+        test {
+            cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
+            whenever(sparkService.isConnected).thenReturn(true)
+            val sut = createSut()
+
+            assertFailsWith<SparkError.SendRefused> {
+                sut.earlierLightningSend("lnbc1280n1send", "hash", invoiceCreatedAt = now.epochSeconds - 60)
+            }
+            assertFailsWith<SparkError.SendRefused> { sut.earlierLightningSend("lnbc1280n1send", "hash") }
+        }
+
+    @Test
+    fun `an invoice created after the restore pays over the node while spark is unsynced`() = test {
+        cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash", invoiceCreatedAt = now.epochSeconds + 60))
+    }
+
+    @Test
+    fun `an updated install that was never restored is never held while spark is unsynced`() = test {
+        whenever(sparkService.isConnected).thenReturn(false)
+        val sut = createSut()
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash", invoiceCreatedAt = 1L))
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `spark's synced list seeds the restored hashes so a later unsynced start holds only its sends`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED).withHash("failed")
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2), failed))
+        createSut(store).start(0).getOrThrow()
+
+        assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
+        assertNull(store.data.first().sparkHistoryUnseededSince)
+
+        whenever(sparkService.isConnected).thenReturn(false)
+        val restarted = createSut(store)
+        assertEquals(EarlierSend.Pending("hash"), restarted.earlierLightningSend("lnbc1280n1send", "hash"))
+        assertNull(restarted.earlierLightningSend("lnbc1280n1other", "other", invoiceCreatedAt = 1L))
+    }
+
+    @Test
+    fun `a list read before spark's first sync seeds no hashes`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        createSut(store).start(0).getOrThrow()
+
+        assertEquals(now.epochSeconds, store.data.first().sparkHistoryUnseededSince)
+    }
+
+    @Test
+    fun `spark's synced event seeds the restored hashes and ends the hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertEquals(now.epochSeconds, store.data.first().sparkHistoryUnseededSince)
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+
+        assertNull(store.data.first().sparkHistoryUnseededSince)
+        assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
     }
 
     @Test

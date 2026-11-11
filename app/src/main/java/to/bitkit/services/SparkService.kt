@@ -305,7 +305,8 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
 
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
-     * payment, or its fee was over the caller's limit. A Paykit request or allowance attempt can then end as failed.
+     * payment, or its fee was over the caller's limit; or the node refused one because Spark hadn't listed its earlier
+     * sends yet. A Paykit request or allowance attempt can then end as failed.
      */
     open class SendRefused(message: String, cause: Throwable? = null) : SparkError(message, cause)
 

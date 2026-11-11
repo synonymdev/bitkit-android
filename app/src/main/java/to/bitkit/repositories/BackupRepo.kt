@@ -98,6 +98,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -1201,7 +1202,15 @@ class BackupRepo @Inject constructor(
         )
         val parsed = decodeBackup<MetadataBackupV1>(migration.json)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
-        cacheStore.update { cleanCache.copy(backupStatuses = it.backupStatuses) }
+        // The backed-up send hashes can predate either rail's latest sends, so each rail's own list seeds them again.
+        val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
+        cacheStore.update {
+            cleanCache.copy(
+                backupStatuses = it.backupStatuses,
+                sparkHistoryUnseededSince = restoredAt,
+                ldkSendHashesSeeded = false,
+            )
+        }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
