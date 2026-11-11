@@ -9,6 +9,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import com.synonym.bitkitcore.LnurlPayData
+import com.synonym.bitkitcore.PaykitEndpoint
+import com.synonym.bitkitcore.ServiceRouteLeg
+import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,6 +21,7 @@ import to.bitkit.R
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.LnurlParams
+import to.bitkit.viewmodels.PaykitRouteUi
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 
@@ -29,27 +33,56 @@ class SendConfirmLnurlOnchainTest {
     @Config(sdk = [34], qualifiers = "w411dp-h891dp")
     @Test
     fun `an onchain payment to a contact with an lnurl confirms with the onchain details`() {
-        val lnurl = LnurlPayData(
-            uri = "lnurl1mixedcontact",
-            callback = "https://example.com/pay",
-            minSendable = 5_000_000u,
-            maxSendable = 100_000_000u,
-            metadataStr = "[]",
-            commentAllowed = null,
-            allowsNostr = false,
-            nostrPubkey = null,
+        render(
+            SendUiState(
+                amount = 6_000u,
+                address = ADDRESS,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                lnurl = LnurlParams.LnurlPay(LNURL),
+            ),
         )
+        val lnurlTitle = ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getString(R.string.wallet__lnurl_p_title)
+
+        composeRule.onNodeWithText(lnurlTitle).assertDoesNotExist()
+        composeRule.onNodeWithTag("SendConfirmToggleDetails").assertExists()
+        composeRule.onNodeWithTag("ReviewUri").assertTextEquals(ADDRESS)
+    }
+
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp")
+    @Test
+    fun `a spark leg to a contact with an lnurl confirms to the leg's onchain address`() {
+        val endpoint = PaykitEndpoint(methodId = "btc-regtest-p2wpkh", value = ADDRESS)
+        val leg = ServiceRouteLeg(
+            service = "spark",
+            endpoint = endpoint,
+            deliveredSat = 2_000uL,
+            debitSat = 2_300uL,
+            atomicity = "trusted",
+            validUntilUnix = 0uL,
+        )
+        render(
+            SendUiState(
+                amount = 2_000u,
+                isAmountInputValid = true,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(LNURL),
+                lightningFeeSats = 300,
+                paykitRoute = PaykitRouteUi(persistentListOf(endpoint), offersSparkLeg = true, serviceLeg = leg),
+            ),
+        )
+
+        composeRule.onNodeWithTag("ReviewSwapRoute").assertExists()
+        composeRule.onNodeWithTag("ReviewUri").assertTextEquals(ADDRESS)
+    }
+
+    private fun render(uiState: SendUiState) {
         composeRule.setContent {
             CompositionLocalProvider(LocalInspectionMode provides true) {
                 AppThemeSurface {
                     SendConfirmContent(
-                        uiState = SendUiState(
-                            amount = 6_000u,
-                            address = ADDRESS,
-                            isAmountInputValid = true,
-                            payMethod = SendMethod.ONCHAIN,
-                            lnurl = LnurlParams.LnurlPay(lnurl),
-                        ),
+                        uiState = uiState,
                         isNodeRunning = true,
                         isLoading = false,
                         showBiometrics = false,
@@ -59,15 +92,19 @@ class SendConfirmLnurlOnchainTest {
                 }
             }
         }
-        val lnurlTitle = ApplicationProvider.getApplicationContext<android.content.Context>()
-            .getString(R.string.wallet__lnurl_p_title)
-
-        composeRule.onNodeWithText(lnurlTitle).assertDoesNotExist()
-        composeRule.onNodeWithTag("SendConfirmToggleDetails").assertExists()
-        composeRule.onNodeWithTag("ReviewUri").assertTextEquals(ADDRESS)
     }
 
     private companion object {
         const val ADDRESS = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r"
+        val LNURL = LnurlPayData(
+            uri = "lnurl1mixedcontact",
+            callback = "https://example.com/pay",
+            minSendable = 5_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
     }
 }

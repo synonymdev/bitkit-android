@@ -740,10 +740,11 @@ private fun LightningDetails(
     val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
     val description = uiState.decodedInvoice?.description
-    val destination = when (val lnurl = uiState.lnurl) {
-        is LnurlParams.LnurlPay -> lnurl.data.uri
-        else -> uiState.decodedInvoice?.bolt11.orEmpty()
-    }
+    val destination = uiState.routedPaykitRoute?.serviceLeg?.endpoint?.value
+        ?: when (val lnurl = uiState.lnurl) {
+            is LnurlParams.LnurlPay -> lnurl.data.uri
+            else -> uiState.decodedInvoice?.bolt11.orEmpty()
+        }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
