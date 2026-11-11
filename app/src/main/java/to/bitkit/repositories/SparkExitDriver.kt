@@ -460,7 +460,8 @@ class SparkExitDriver(
                 // A check cannot settle a step the SDK could not read; a fresh build reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
                 val rebuilding = sent.copy(isRebuilding = true, unverifiedRebuiltAtHeight = tip, isRedoRebuild = false)
-                save(rebuilding)
+                // Saved as the valid generation: a run killed during the rebuild goes on sending it.
+                save(rebuilding.copy(isRebuilding = false))
                 val rebuilt = build(rebuilding, sdk)
                 // A rebuild that adopted nothing, such as one waiting for a leaf it could not read either, leaves the
                 // valid generation going: checked and sent every tick, and rebuilt over again once a block.

@@ -354,6 +354,8 @@ class SparkExitDriverTest : BaseUnitTest() {
         )
 
         var record = driver(tip = 1_000u).tick(running(unverified))
+        // A run killed during the rebuild resumes the valid generation, not a rebuild only the SDK moves on from.
+        assertFalse(saved.first().isRebuilding)
         assertFalse(record.isRebuilding)
         assertFalse(record.isWaitingForLeaves)
         assertEquals(1, record.generation)
