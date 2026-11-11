@@ -1829,6 +1829,51 @@ class BackupRepoTest : BaseUnitTest() {
         verify(vssBackupClient, never()).putObject(any(), any())
     }
 
+    private suspend fun applyCacheUpdates() = doAnswer {
+        val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+        cacheData.update(transform)
+    }.whenever(cacheStore).update(any())
+
+    @Test
+    fun `a restore keeps the higher spark exit funding index of the device and the backup`() = test {
+        applyCacheUpdates()
+        cacheData.value = AppCacheData(sparkExitNextFundingIndexes = mapOf("regtest/wallet0" to 5))
+        val backedUp = mapOf("regtest/wallet0" to 3, "regtest/wallet1" to 2)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(sparkExitNextFundingIndexes = backedUp)))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(
+            mapOf("regtest/wallet0" to 5, "regtest/wallet1" to 2),
+            cacheData.value.sparkExitNextFundingIndexes,
+            "an exit would fund from an address an earlier exit used",
+        )
+    }
+
+    @Test
+    fun `a restore brings back the backed-up spark exit funding index`() = test {
+        applyCacheUpdates()
+        val backedUp = mapOf("regtest/wallet0" to 3)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(sparkExitNextFundingIndexes = backedUp)))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(backedUp, cacheData.value.sparkExitNextFundingIndexes)
+    }
+
+    @Test
+    fun `a metadata backup written before the spark exit funding index restores with none kept`() = test {
+        applyCacheUpdates()
+        val cache = json.parseToJsonElement(json.encodeToString(AppCacheData())).jsonObject -
+            "sparkExitNextFundingIndexes"
+        stubMetadataRestore(envelope = envelopeWithRawField(metadataEnvelope(), "cache", JsonObject(cache).toString()))
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertFalse(BackupCategory.METADATA in failed)
+        assertTrue(cacheData.value.sparkExitNextFundingIndexes.isEmpty(), "an exit then scans for the index")
+    }
+
     @Test
     fun `metadata cache failure remains optional after public address quarantine succeeds`() = test {
         val publicAddress = "bcrt1qpublic"

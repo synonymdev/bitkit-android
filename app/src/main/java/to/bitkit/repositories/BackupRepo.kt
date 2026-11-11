@@ -1201,7 +1201,16 @@ class BackupRepo @Inject constructor(
         )
         val parsed = decodeBackup<MetadataBackupV1>(migration.json)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
-        cacheStore.update { cleanCache.copy(backupStatuses = it.backupStatuses) }
+        cacheStore.update {
+            cleanCache.copy(
+                backupStatuses = it.backupStatuses,
+                // The higher index of each wallet, so an exit never funds from an address an earlier one used.
+                sparkExitNextFundingIndexes = SparkExitMath.mergeFundingIndexes(
+                    it.sparkExitNextFundingIndexes,
+                    cleanCache.sparkExitNextFundingIndexes,
+                ),
+            )
+        }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
