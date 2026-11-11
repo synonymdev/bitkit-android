@@ -1254,6 +1254,18 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keeps the journal when the withdrawal's tags fail to save`() = test {
+        val sut = journaledSpark()
+        whenever { activityRepo.addTagsToActivity(any(), any(), any()) }
+            .thenReturn(Result.failure(AppError("disk full")))
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact", tags = listOf("rent")).getOrThrow()
+
+        assertEquals(listOf("rent"), cacheData.value.pendingSparkWithdrawal?.tags)
+    }
+
+    @Test
     fun `an earlier withdrawal to the same address never settles a new attempt`() = test {
         whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
         val sut = journaledSpark()

@@ -1398,9 +1398,13 @@ class SparkRepo @Inject constructor(
         unsavedPayments.remove(payment.id)
         if (journal != null && settlesJournal) {
             // The tags picked on Confirm travel with the journal, so a recovered withdrawal keeps them too.
+            // A failed tag write keeps the journal, so the next refresh tags it again.
             if (journal.tags.isNotEmpty()) {
-                activityRepo.get().addTagsToActivity(txid, journal.tags)
-                    .onFailure { Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG) }
+                activityRepo.get().addTagsToActivity(txid, journal.tags).onFailure {
+                    Logger.warn("Failed to tag Spark withdrawal '$txid'", it, context = TAG)
+                    unsavedPayments.add(payment.id)
+                    return false
+                }
             }
             val sentTxid = txid.takeIf { payment.status != PaymentStatus.FAILED }
             if (clearJournal(journal, sentTxid)) {
