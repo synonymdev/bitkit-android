@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -1626,6 +1627,44 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertTrue(events.none { it is Event.PaymentFailed }, "an older failure ended a send Spark may finish")
         assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+    }
+
+    @Test
+    fun `an uncertain spark retry stays held after a restart while spark lists only its older failure`() = test {
+        assertUncertainRetryHeldAfterRestart(syncError = null)
+    }
+
+    @Test
+    fun `an uncertain spark retry stays held after a restart whose first sync fails`() = test {
+        assertUncertainRetryHeldAfterRestart(syncError = SyncError.Network("operators unreachable"))
+    }
+
+    private suspend fun TestScope.assertUncertainRetryHeldAfterRestart(syncError: SyncError?) {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        // An earlier attempt of the invoice failed, and the retry's outcome is unknown when the app stops.
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        )
+        val before = createSut(store)
+        before.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(before.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        runCurrent()
+
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = syncError, lastSyncedAt = now.epochSeconds.toULong() + 1uL)
+        )
+        val after = createSut(store)
+        after.start(0).getOrThrow()
+
+        assertTrue("hash" in store.data.first().sparkSendHashes, "A restart released a retry Spark may resume")
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), after.lightningSend("hash"))
+        assertEquals(EarlierSend.Pending("hash"), after.earlierLightningSend("lnbc1", "hash"))
     }
 
     @Test
