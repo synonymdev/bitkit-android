@@ -4722,7 +4722,7 @@ class AppViewModel @Inject constructor(
                 PaykitRouteOutcome.Direct -> Unit
             }
         }
-        // The route can restore an LNURL a BOLT11 pick cleared, so its minimum is read after routing.
+        // The route can restore an LNURL a BOLT11 pick cleared, so its limits are read after routing.
         val payLnurl = _sendUiState.value.lnurl
         if (payLnurl is LnurlParams.LnurlPay) {
             val minSendable = payLnurl.data.minSendableSat()
@@ -4733,6 +4733,15 @@ class AppViewModel @Inject constructor(
                     description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
                         .replace("{amount}", formatMoneyValue(minSendable)),
                     testTag = "LnurlPayAmountTooLowToast",
+                )
+                return
+            }
+            if (_sendUiState.value.amount > payLnurl.data.maxSendableSat()) {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__lnurl_pay__error_max__title),
+                    description = context.getString(R.string.wallet__lnurl_pay__error_max__description),
+                    testTag = "LnurlPayAmountTooHighToast",
                 )
                 return
             }

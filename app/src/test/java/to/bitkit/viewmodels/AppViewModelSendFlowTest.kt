@@ -12222,6 +12222,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a reroute from bolt11 to lnurl above its maximum shows the maximum toast`() = test {
+        val (bolt11, lnurl) = openLightningContact()
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_max__title)).thenReturn("Amount Too High")
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_max__description)).thenReturn("Max")
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(bolt11)))
+        continueWithAmount(2_000u)
+        assertNull(sut.sendUiState.value.lnurl)
+
+        balanceState.value = BalanceState(maxSendLightningSats = 200_000u)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(lnurl)))
+        sut.sendEffect.test {
+            continueWithAmount(150_000u)
+
+            assertEquals(lnurl.value, (sut.sendUiState.value.lnurl as? LnurlParams.LnurlPay)?.data?.uri)
+            expectNoEvents()
+        }
+        verify(toastManager).enqueue(check { assertEquals("LnurlPayAmountTooHighToast", it.testTag) })
+    }
+
+    @Test
     fun `router direct pays the onchain endpoint it picks from savings`() = test {
         val bolt11 = PaykitEndpoint(methodId = MethodId.Bolt11.rawValue, value = "lnbcrt1routed")
         val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = REGTEST_ADDRESS)
