@@ -585,6 +585,36 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded unverified rebuild that cannot exit a leaf keeps the valid generation running`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.recoverErrors += ladderRefusal("leaf-3")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2", "leaf-3")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        val start = running(unread).copy(leafIds = listOf("leaf-1", "leaf-2", "leaf-3"))
+        var record = driver(tip = 1_000u).tick(start)
+        assertTrue(record.isUnverifiedAsk)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(1, record.generation)
+        assertFalse(record.isRebuilding, "the next tick rebuilds the exit without sending leaf-1's refund n2")
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(listOf("n1", "n2"), record.recovery?.transactions?.map { it.txid })
+        assertEquals(listOf("leaf-3"), record.leftBehindLeaves.map { it.leafId })
+    }
+
+    @Test
     fun `a funded unverified rebuild waiting for the unread leaf prepares once a block`() = test {
         val unread = SparkExitFixtures.recovery(
             listOf(

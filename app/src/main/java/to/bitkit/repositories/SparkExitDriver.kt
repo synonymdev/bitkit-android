@@ -279,7 +279,13 @@ class SparkExitDriver(
             // A leaf the SDK refuses to build is left behind, and the rest rebuilt on the next tick.
             SparkExitUnexitable.parse(it)?.takeIf { refusal -> refusal.leafId in record.exitLeafIds }?.let { refusal ->
                 Logger.warn("Leaving behind Spark exit leaf '${refusal.leafId}': '${refusal.reason}'", context = TAG)
-                return record.leaveBehind(refusal.leafId, refusal.reason).copy(isRebuilding = true, lastBuildAt = null)
+                val left = record.leaveBehind(refusal.leafId, refusal.reason)
+                // Over a valid generation that recovers a leaf this build left waiting, that generation stays,
+                // rebuilt over again under this guard once a block.
+                if (left.keepsValidGenerationOver(waitingLeafIds(record, prepared.skipped, stopped))) {
+                    return left.keepingValidGeneration()
+                }
+                return left.copy(isRebuilding = true, lastBuildAt = null)
             }
             if (it !is SdkException.InsufficientCpfpFunds) throw it
             val asked = askForFunding(record, it)
