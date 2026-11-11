@@ -368,6 +368,37 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an unverified rebuild that needs more fee funding keeps sending the valid generation`() = test {
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val readable = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        sdk.checks += check(unverified, RecoveryVerdict.Valid)
+        sdk.checks += check(readable, RecoveryVerdict.Valid)
+        sdk.recoverError = SdkException.InsufficientCpfpFunds(30_000uL, "")
+
+        var record = driver(tip = 1_000u).tick(running(unverified))
+
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertFalse(record.isRebuilding)
+        assertTrue(record.isDrivingWhileFunding, "the valid generation stops going while the top-up waits")
+        assertEquals(1, record.generation)
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertEquals(1, record.generation)
+    }
+
+    @Test
     fun `an unverified unilateral step waits while another unilateral step is ready`() = test {
         val recovery = SparkExitFixtures.recovery(
             listOf(

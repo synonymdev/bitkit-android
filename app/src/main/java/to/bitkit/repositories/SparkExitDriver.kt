@@ -197,7 +197,15 @@ class SparkExitDriver(
         return record.copy(funding = funding)
     }
 
-    private suspend fun build(start: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+    /**
+     * Builds [start]'s leaves as a new generation. With [isUnverifiedRebuild], the generation it rebuilds over is still
+     * valid: a build that asks for more fee funding keeps sending it while the top-up waits.
+     */
+    private suspend fun build(
+        start: SparkExitRecord,
+        sdk: SparkExitRecovering,
+        isUnverifiedRebuild: Boolean = false,
+    ): SparkExitRecord {
         // A build waiting for a leaf that may still move tries again only at its paced heights, or once its wait ends.
         val since = start.retrySince
         if (since != null && tip != null && !SparkExitMath.isRetryDue(since, start.retriedAt, tip) &&
@@ -245,7 +253,12 @@ class SparkExitDriver(
                 return record.leaveBehind(refusal.leafId, refusal.reason).copy(isRebuilding = true, lastBuildAt = null)
             }
             if (it !is SdkException.InsufficientCpfpFunds) throw it
-            return askForFunding(record, it)
+            val asked = askForFunding(record, it)
+            // Like a fee bump's, the valid generation keeps going while the funding it asks for comes.
+            if (isUnverifiedRebuild && asked.phase is SparkExitRecord.Phase.NeedsFunding) {
+                return asked.copy(isRebuilding = false)
+            }
+            return asked
         }
         if (built.transactions.isEmpty()) {
             // A build of only cooperative leaves the operators could not co-sign is kept, a rebuild's too: they are
@@ -462,7 +475,7 @@ class SparkExitDriver(
                 val rebuilding = sent.copy(isRebuilding = true, unverifiedRebuiltAtHeight = tip, isRedoRebuild = false)
                 // Saved as the valid generation: a run killed during the rebuild goes on sending it.
                 save(rebuilding.copy(isRebuilding = false))
-                val rebuilt = build(rebuilding, sdk)
+                val rebuilt = build(rebuilding, sdk, isUnverifiedRebuild = true)
                 // A rebuild that adopted nothing, such as one waiting for a leaf it could not read either, leaves the
                 // valid generation going: checked and sent every tick, and rebuilt over again once a block.
                 if (!rebuilt.isAdoptionPending(sent)) return rebuilt
