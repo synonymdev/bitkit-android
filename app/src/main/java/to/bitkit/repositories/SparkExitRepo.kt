@@ -1111,7 +1111,7 @@ class SparkExitRepo @Inject constructor(
 
     // region keys
 
-    private val fundingIndexKey get() = "${Env.network.name.lowercase()}/wallet$walletIndex"
+    private val fundingIndexKey get() = SparkExitMath.walletKey(Env.network, walletIndex)
 
     /** A payment landing late at a forgotten exit's funding address is seen by the next exit, which uses it. */
     private suspend fun giveFundingIndexBack(index: UInt) = cacheStore.update {

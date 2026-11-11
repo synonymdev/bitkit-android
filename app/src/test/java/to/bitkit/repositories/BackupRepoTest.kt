@@ -29,7 +29,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
@@ -71,6 +73,7 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.withPublicSharingDisabledForRestore
 import to.bitkit.di.json
+import to.bitkit.env.Env
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -83,6 +86,7 @@ import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.SparkExitBackupV1
+import to.bitkit.models.SparkExitEarlierAddressBackupV1
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -95,6 +99,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -115,6 +120,9 @@ import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class BackupRepoTest : BaseUnitTest() {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
     private val vssBackupClient = mock<VssBackupClient>()
@@ -1872,6 +1880,62 @@ class BackupRepoTest : BaseUnitTest() {
 
         assertFalse(BackupCategory.METADATA in failed)
         assertTrue(cacheData.value.sparkExitNextFundingIndexes.isEmpty(), "an exit then scans for the index")
+    }
+
+    private fun earlierAddressStore(): SparkExitEarlierAddressStore {
+        Env.initAppStoragePath(tempFolder.root.absolutePath)
+        return SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+    }
+
+    private val sparkWalletKey get() = "${Env.network.name.lowercase()}/wallet0"
+
+    @Test
+    fun `a metadata backup carries the wallet's earlier spark exit addresses`() = test {
+        val store = earlierAddressStore()
+        val kept = SparkExitEarlierAddress.Kind.KEPT_CHANGE
+        val cancelled = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
+        store.add(SparkExitEarlierAddress("bcrt1qkept", "m/84'/1'/7797'/0/2", kept, sats = 600uL, atMillis = 1L))
+        store.add(SparkExitEarlierAddress("bcrt1qcancelled", "m/84'/1'/7797'/0/0", cancelled, atMillis = 2L))
+        stubMetadataBackupReads()
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        val expected = listOf(
+            SparkExitEarlierAddressBackupV1("bcrt1qkept", "m/84'/1'/7797'/0/2", "keptChange", 1L),
+            SparkExitEarlierAddressBackupV1("bcrt1qcancelled", "m/84'/1'/7797'/0/0", "cancelledFunding", 2L),
+        )
+        assertEquals(mapOf(sparkWalletKey to expected), payload.sparkExitEarlierAddresses)
+    }
+
+    @Test
+    fun `a restore lists the backed-up earlier spark exit addresses and keeps the device's`() = test {
+        val store = earlierAddressStore()
+        val kept = SparkExitEarlierAddress.Kind.KEPT_CHANGE
+        val onDevice = SparkExitEarlierAddress("bcrt1qdevice", "m/84'/1'/7797'/0/1", kept, sats = 600uL, atMillis = 5L)
+        store.add(onDevice)
+        val backedUp = listOf(
+            SparkExitEarlierAddressBackupV1("bcrt1qdevice", "m/84'/1'/7797'/0/1", "cancelledFunding", 1L),
+            SparkExitEarlierAddressBackupV1("bcrt1qrestored", "m/84'/1'/7797'/0/2", "keptChange", 2L),
+            SparkExitEarlierAddressBackupV1("bcrt1qfuture", "m/84'/1'/7797'/0/3", "someLaterKind", 3L),
+        )
+        val envelope = json.encodeToString(
+            MetadataBackupV1(
+                createdAt = 123,
+                tagMetadata = emptyList(),
+                cache = AppCacheData(),
+                sparkExitEarlierAddresses = mapOf(sparkWalletKey to backedUp),
+            )
+        )
+        stubMetadataRestore(envelope = envelope)
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertFalse(BackupCategory.METADATA in failed, "a kind this app does not know fails the whole metadata")
+        val restored = SparkExitEarlierAddress("bcrt1qrestored", "m/84'/1'/7797'/0/2", kept, atMillis = 2L)
+        assertEquals(listOf(onDevice, restored), store.load())
     }
 
     @Test

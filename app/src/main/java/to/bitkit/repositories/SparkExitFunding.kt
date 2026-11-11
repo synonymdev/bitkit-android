@@ -530,6 +530,13 @@ object SparkExitMath {
         return next
     }
 
+    /** How the cache and the metadata backup key a wallet's exit state: `{network}/wallet{n}`. */
+    fun walletKey(network: Network, walletIndex: Int) = "${network.name.lowercase()}/wallet$walletIndex"
+
+    /** The wallet index [key] names on [network], null for another network's. */
+    fun walletIndexOf(key: String, network: Network): Int? =
+        key.takeIf { it.startsWith("${network.name.lowercase()}/wallet") }?.substringAfterLast("/wallet")?.toIntOrNull()
+
     /** Each wallet's higher next funding index of [local] and [restored]. */
     fun mergeFundingIndexes(local: Map<String, Int>, restored: Map<String, Int>): Map<String, Int> =
         (local.keys + restored.keys).associateWith { maxOf(local[it] ?: 0, restored[it] ?: 0) }
