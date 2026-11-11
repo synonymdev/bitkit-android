@@ -20,7 +20,7 @@ import kotlin.time.Instant
 /**
  * Picks how to pay a Paykit contact through bitkit-core's Paykit router: directly from a balance the wallet holds,
  * or through a Spark withdrawal to the contact's on-chain endpoint when no balance reaches the contact. The router
- * makes no network calls; the app quotes each Spark leg and runs the one the router returns.
+ * makes no network calls; the app quotes each Spark leg only when no balance pays, and runs the one the router returns.
  */
 @Singleton
 class PaykitRouteRepo @Inject constructor(
@@ -43,16 +43,19 @@ class PaykitRouteRepo @Inject constructor(
         quoteServiceLegs: Boolean,
     ): Result<PaykitRoute> = withContext(ioDispatcher) {
         runSuspendCatching {
-            paykitRoutePayment(
-                request = PaykitRouteRequest(
-                    amountSat = amountSats,
-                    contactEndpoints = endpoints,
-                    lightningSpendableSat = lightningSpendableSats,
-                    onchainSpendableSat = onchainSpendableSats,
-                    serviceLegs = if (quoteServiceLegs) serviceLegs(endpoints, amountSats) else emptyList(),
-                ),
-                network = Env.network.toCoreNetwork(),
+            val request = PaykitRouteRequest(
+                amountSat = amountSats,
+                contactEndpoints = endpoints,
+                lightningSpendableSat = lightningSpendableSats,
+                onchainSpendableSat = onchainSpendableSats,
+                serviceLegs = emptyList(),
             )
+            val network = Env.network.toCoreNetwork()
+            // The router pays directly before it weighs any leg, so legs are quoted only when no balance pays.
+            val route = paykitRoutePayment(request, network)
+            if (!quoteServiceLegs || route !is PaykitRoute.None) return@runSuspendCatching route
+            val legs = serviceLegs(endpoints, amountSats)
+            if (legs.isEmpty()) route else paykitRoutePayment(request.copy(serviceLegs = legs), network)
         }
     }
 
