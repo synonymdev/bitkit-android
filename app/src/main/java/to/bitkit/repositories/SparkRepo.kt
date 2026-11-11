@@ -226,7 +226,7 @@ class SparkRepo @Inject constructor(
 
     fun canReceive(): Boolean = _state.value.isReady
 
-    fun canSend(amountSats: ULong): Boolean = _state.value.isReady && _state.value.sendableSats >= amountSats
+    fun canSend(amountSats: ULong): Boolean = _state.value.canSend(amountSats)
 
     suspend fun createInvoice(amountSats: ULong?, description: String, expirySecs: UInt): Result<String> =
         withContext(bgDispatcher) {
@@ -1251,6 +1251,9 @@ data class SparkState(
 ) {
     /** The most Spark can send once its service fee is paid, so a payment near the full balance isn't offered. */
     val sendableSats: ULong get() = SparkFees.sendableSats(balanceSats)
+
+    /** Whether Spark is ready and can send [amountSats] once its service fee is paid. */
+    fun canSend(amountSats: ULong): Boolean = isReady && sendableSats >= amountSats
 
     /** The balance shown in Spending and on the Spark connection, which [keptBalanceSats] stands in for. */
     val shownBalanceSats: ULong get() = keptBalanceSats ?: balanceSats

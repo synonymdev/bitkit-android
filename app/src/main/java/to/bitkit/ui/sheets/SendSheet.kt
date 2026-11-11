@@ -56,6 +56,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitSubscriptionId
+import to.bitkit.repositories.SparkState
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
@@ -110,6 +111,26 @@ private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
 /** A peer reconnecting makes a channel usable again without any node event, so the overlay polls. */
 private val CHANNELS_REFRESH_INTERVAL = 1.seconds
 
+/** Whether Spark can pay the scanned Lightning invoice's own amount, so an amountless one still waits for the node. */
+internal fun sparkCanPayInvoice(payMethod: SendMethod, invoiceSats: ULong?, sparkState: SparkState): Boolean =
+    payMethod == SendMethod.LIGHTNING && invoiceSats != null && invoiceSats > 0uL && sparkState.canSend(invoiceSats)
+
+/**
+ * A Lightning payment Spark can pay goes ahead without the node. Otherwise the node must run, and with channels a
+ * payment waits for a usable one. With no channels at all there is nothing to sync into, so validation reports the
+ * missing capacity instead.
+ */
+internal fun waitsForNode(
+    isNodeRunning: Boolean,
+    hasAnyChannels: Boolean,
+    hasUsableChannels: Boolean,
+    sparkCanPay: Boolean,
+): Boolean {
+    if (sparkCanPay) return false
+    if (!isNodeRunning) return true
+    return hasAnyChannels && !hasUsableChannels
+}
+
 internal fun NavDestination.isPaymentReview(): Boolean =
     hasRoute<SendRoute.Confirm>() || hasRoute<SendRoute.PinCheck>() ||
         hasRoute<SendRoute.RecoveryPinCheck>() || hasRoute<SendRoute.HardwareSign>()
@@ -153,11 +174,17 @@ fun SendSheet(
 
     val hasAnyChannels = lightningState.channels.isNotEmpty()
     val syncNodeVariant = if (hasAnyChannels) SyncNodeVariant.LIGHTNING else SyncNodeVariant.BITCOIN
+    val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
     val shouldShowSyncOverlay = run {
         if (preparingRequest != null || sendUiState.paykitUsesUsdt) return@run false
         if (sendUiState.hardwareWalletId != null) return@run false
-        if (!lightningState.nodeLifecycleState.isRunning()) return@run true
-        hasAnyChannels && lightningState.channels.none { it.isUsable }
+        val invoiceSats = sendUiState.decodedInvoice?.amountSatoshis
+        waitsForNode(
+            isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+            hasAnyChannels = hasAnyChannels,
+            hasUsableChannels = lightningState.channels.any { it.isUsable },
+            sparkCanPay = sparkCanPayInvoice(sendUiState.payMethod, invoiceSats, sparkState),
+        )
     }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
