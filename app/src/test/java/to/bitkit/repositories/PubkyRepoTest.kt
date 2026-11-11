@@ -1229,6 +1229,32 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile keeps the stored tags when the edit began while they could not be read`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        sut.loadProfile()
+        val editBase = sut.profileEditBase()
+        doReturn(
+            paykitRecord(PubkyProfileData(name = "Test", bio = "", tags = listOf("friend", "work")).toPaykitProfile())
+        ).whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenAnswer { paykitRecord(it.getArgument(0)) }
+        sut.loadProfile()
+
+        sut.saveProfile(
+            name = "Renamed",
+            bio = "",
+            links = emptyList(),
+            tags = emptyList(),
+            imageUrl = null,
+            editBase = editBase
+        ).getOrThrow()
+
+        val copy = argumentCaptor<PaykitProfile>()
+        verifyBlocking(pubkyService, atLeastOnce()) { publishPaykitProfile(copy.capture(), any()) }
+        assertEquals(listOf("friend", "work"), PubkyProfileData.fromPaykitProfile(copy.lastValue).tags)
+    }
+
+    @Test
     fun `deleteProfile deletes the pubky app profile of a wallet identity`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
 
@@ -1298,6 +1324,43 @@ class PubkyRepoTest : BaseUnitTest() {
         load.await()
 
         assertEquals(listOf("new"), PubkyProfileData.fromPaykitProfile(copy).tags)
+    }
+
+    @Test
+    fun `a load during two saves does not write the profile copy back`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val copy = PubkyProfileData(name = "Test", bio = "", tags = listOf("old")).toPaykitProfile()
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { paykitRecord(copy) }
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenAnswer { paykitRecord(it.getArgument(0)) }
+        sut.loadProfile()
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY))
+            .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Loaded")))
+        whenever { pubkyService.publishPubkyProfile(any(), anyOrNull(), any()) }
+            .thenReturn(createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "New")))
+        // Both saves wait between their pubky.app write and their copy write, outside the write lock.
+        val savesWaiting = CompletableDeferred<Unit>()
+        val finishSaves = CompletableDeferred<Unit>()
+        var waiting = 0
+        whenever { pubkyStore.update(any()) }.doSuspendableAnswer {
+            if (++waiting <= 2) {
+                if (waiting == 2) savesWaiting.complete(Unit)
+                finishSaves.await()
+            }
+            Unit
+        }
+        clearInvocations(pubkyService)
+
+        val saves = (1..2).map {
+            async {
+                sut.saveProfile(name = "New", bio = "", links = emptyList(), tags = listOf("new"), imageUrl = null)
+            }
+        }
+        savesWaiting.await()
+        sut.loadProfile()
+
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any(), any()) }
+        finishSaves.complete(Unit)
+        saves.awaitAll()
     }
 
     @Test

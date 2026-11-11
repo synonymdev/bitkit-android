@@ -80,6 +80,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.ByteArrayOutputStream
 import java.net.URI
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -116,8 +117,11 @@ private fun Throwable.isPaykitReadTimeout(): Boolean =
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
-/** The profile an edit starts from and the pubky.app revision it was read at; null when none exists yet. */
-data class ProfileEditBase(val profile: PubkyProfile?, val revision: String?)
+/**
+ * The profile an edit starts from and the pubky.app revision it was read at; null when none exists yet. [tagsUnread] is
+ * set when the Paykit copy could not be read, so the profile's tags are not the stored ones and a save keeps those.
+ */
+data class ProfileEditBase(val profile: PubkyProfile?, val revision: String?, val tagsUnread: Boolean = false)
 
 /** The pubky.app profile changed since Bitkit loaded it, so the save was not applied. */
 class PubkyProfileChangedError(cause: Throwable) : AppError("Profile changed in pubky.app", cause = cause)
@@ -228,9 +232,10 @@ class PubkyRepo @Inject constructor(
     private val profileWriteMutex = Mutex()
     private val profileDeletionGeneration = AtomicLong(0L)
 
-    // Moved on when a save starts and when it ends, so odd while one runs. A load writes the Paykit copy back only when
-    // no save ran since it read the copy, so it never writes back tags a save replaced.
+    // Moved on when a save starts and when it ends. A load writes the Paykit copy back only when no save runs and none
+    // ran since it read the copy, so it never writes back tags a save replaced.
     private val profileSaveEpoch = AtomicLong(0L)
+    private val profileSavesRunning = AtomicInteger(0)
 
     /** Revision of the loaded pubky.app profile, which a save must still match; null when none exists. */
     @Volatile
@@ -1116,7 +1121,7 @@ class PubkyRepo @Inject constructor(
     }
 
     /** The profile and pubky.app revision an edit starts from; its save is checked against that revision. */
-    fun profileEditBase() = ProfileEditBase(_profile.value, ownProfileRevision)
+    fun profileEditBase() = ProfileEditBase(_profile.value, ownProfileRevision, tagsUnavailable)
 
     suspend fun saveProfile(
         name: String,
@@ -1149,7 +1154,8 @@ class PubkyRepo @Inject constructor(
                     tags,
                     imageUrl,
                     base = editBase.profile.takeIf { editBase.revision != null },
-                    expectedRevision = editBase.revision
+                    expectedRevision = editBase.revision,
+                    tagsUnread = editBase.tagsUnread,
                 )
             }.getOrElse {
                 if (!it.isConcurrentUpdate()) throw it
@@ -1252,11 +1258,14 @@ class PubkyRepo @Inject constructor(
         imageUrl: String?,
         base: PubkyProfile?,
         expectedRevision: String?,
+        tagsUnread: Boolean = false,
     ): SavedProfile {
         profileSaveEpoch.incrementAndGet()
+        profileSavesRunning.incrementAndGet()
         try {
-            return writeProfileOnce(publicKey, name, bio, links, tags, imageUrl, base, expectedRevision)
+            return writeProfileOnce(publicKey, name, bio, links, tags, imageUrl, base, expectedRevision, tagsUnread)
         } finally {
+            profileSavesRunning.decrementAndGet()
             profileSaveEpoch.incrementAndGet()
         }
     }
@@ -1270,9 +1279,11 @@ class PubkyRepo @Inject constructor(
         imageUrl: String?,
         base: PubkyProfile?,
         expectedRevision: String?,
+        tagsUnread: Boolean,
     ): SavedProfile {
         val generation = profileDeletionGeneration.get()
-        val copyUnread = tagsUnavailable
+        // Unread when the edit began or now: either way the form's tags are not the stored ones.
+        val copyUnread = tagsUnread || tagsUnavailable
         // A profile written without a base is fitted to pubky.app's limits, as a move is.
         val fitted = if (base == null) fitted(name, bio, links) else null
         val links = fitted?.links ?: links.map {
@@ -1302,7 +1313,7 @@ class PubkyRepo @Inject constructor(
         }
         ownProfileRevision = snapshot.revision
         val baseTags = base?.tags.orEmpty()
-        val stored = storedCopy(publicKey)
+        val stored = storedCopy(publicKey, copyUnread)
         val wasPending = publicKey in pubkyStore.data.first().pubkyAppAvatarPending
         // The form could not show an avatar still to move while the copy was unread, so it stays pending.
         val keepPending = snapshot.profile.image == null && copyUnread && wasPending
@@ -1333,7 +1344,7 @@ class PubkyRepo @Inject constructor(
         val saved = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
         val tagsLost = (keptTags == null || copyError != null) && tags != baseTags
         val tagError = PubkyProfileTagsNotSavedError(
-            ProfileEditBase(saved, snapshot.revision),
+            ProfileEditBase(saved, snapshot.revision, tagsUnread = copyUnread),
             copyError
         ).takeIf { tagsLost }
         return SavedProfile(saved, snapshot.revision, tagError)
@@ -1343,8 +1354,8 @@ class PubkyRepo @Inject constructor(
      * What a save keeps from the Paykit copy after the last load could not read it, as the form then lacked its tags
      * and the avatar still to move: empty when that load read it, null while it still cannot be read.
      */
-    private suspend fun storedCopy(publicKey: String): StoredCopy? {
-        if (!tagsUnavailable) return StoredCopy(tags = null, image = null)
+    private suspend fun storedCopy(publicKey: String, copyUnread: Boolean): StoredCopy? {
+        if (!copyUnread) return StoredCopy(tags = null, image = null)
         val record = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrElse { return null }
         val data = record?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
@@ -1525,7 +1536,7 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching {
             profileWrite(generation) {
                 // Checked under the write lock, so a save that starts after it writes its copy after this one.
-                if (saveEpoch % 2 != 0L || profileSaveEpoch.get() != saveEpoch) return@profileWrite
+                if (profileSavesRunning.get() != 0 || profileSaveEpoch.get() != saveEpoch) return@profileWrite
                 pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile(), publicKey)
             }
         }.onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
