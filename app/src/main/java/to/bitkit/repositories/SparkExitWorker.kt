@@ -89,6 +89,7 @@ class SparkExitWork @Inject constructor(
         private const val KEY_DEADLINE_AT = "deadline-at"
         private const val KEY_FEE_LOW_RATE = "fee-low-rate"
         private const val KEY_FUNDING_REMINDED = "funding-reminded-exit"
+        private const val KEY_POSTED_ALERT = "posted-alert"
         private const val NOTIFICATION_ID = 7797
 
         /** The shortest period WorkManager runs periodic work at. */
@@ -159,9 +160,14 @@ class SparkExitWork @Inject constructor(
         )
     }
 
-    /** Takes back the exit's posted notification, such as a fee ask the exit no longer has. */
-    fun dismissNotification() {
+    /**
+     * Takes back a fee ask the exit no longer has, while it is what the exit's notification shows: a loss or another
+     * alert posted over it stays.
+     */
+    fun dismissFundingAsk() {
+        if (preferences.getString(KEY_POSTED_ALERT, null) != SparkExitAlert.Funding.name) return
         context.notificationManagerCompat.cancel(NOTIFICATION_ID)
+        preferences.edit { remove(KEY_POSTED_ALERT) }
     }
 
     fun cancelDeadline() {
@@ -282,13 +288,15 @@ class SparkExitWork @Inject constructor(
             .replace("{time}", time.orEmpty())
             .replace("{amount}", amount.orEmpty())
             .replace("{rate}", feeRateSatPerVbyte?.toString().orEmpty())
-        context.pushNotification(
+        val id = context.pushNotification(
             title = context.getString(R.string.lightning__spark_exit__notification_title),
             text = text,
             extras = bundleOf(EXTRA_SPARK_EXIT to true),
             bigText = text,
             id = NOTIFICATION_ID,
         )
+        // The exit posts one notification at a time: what it shows now, so taking back a fee ask leaves any other.
+        if (id == NOTIFICATION_ID) preferences.edit { putString(KEY_POSTED_ALERT, alert.name) }
     }
 
     fun backgroundLimits(): SparkExitBackgroundLimits {
