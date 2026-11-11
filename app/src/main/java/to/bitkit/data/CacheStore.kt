@@ -174,6 +174,18 @@ class CacheStore internal constructor(
         }
     }
 
+    /** Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds. */
+    suspend fun addSparkUncertainSend(paymentHash: String, failedAt: Long) {
+        val hash = paymentHash.lowercase()
+        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt)) }
+    }
+
+    suspend fun removeSparkUncertainSend(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash !in store.data.first().sparkUncertainSends) return
+        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
+    }
+
     /** Keeps [paymentHash] with its invoice's expiry in epoch seconds, [expiresAt], when known. */
     suspend fun addLdkSendHash(paymentHash: String, expiresAt: Long? = null) {
         val hash = paymentHash.lowercase()
@@ -303,6 +315,11 @@ data class AppCacheData(
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */
     val sparkSendExpiries: Map<String, Long> = mapOf(),
+    /**
+     * Spark's sends whose outcome it didn't report, by hash, with when they failed in epoch seconds, so a restart
+     * never reads a retry's earlier failed attempt as its outcome.
+     */
+    val sparkUncertainSends: Map<String, Long> = mapOf(),
     /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
     val ldkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [ldkSendHashes] that know it. */
