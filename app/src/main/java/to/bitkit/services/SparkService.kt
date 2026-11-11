@@ -14,6 +14,7 @@ import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateRequest
 import breez_sdk_spark.ImportUnilateralExitStateResponse
+import breez_sdk_spark.InputType
 import breez_sdk_spark.ListPaymentsRequest
 import breez_sdk_spark.ListUnclaimedDepositsRequest
 import breez_sdk_spark.MaxFee
@@ -271,6 +272,10 @@ class SparkService @Inject constructor(
     }
 
     suspend fun listPayments(): List<Payment> = requireSdk().listPayments(ListPaymentsRequest()).payments
+
+    /** When [bolt11] expires, in epoch seconds, read by the SDK's own parser; null when it isn't a BOLT11 invoice. */
+    suspend fun invoiceExpiresAt(bolt11: String): ULong? =
+        (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1?.let { it.timestamp + it.expiry }
 
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */
     suspend fun exportExitState(): String = requireSdk().exportUnilateralExitState().exitState

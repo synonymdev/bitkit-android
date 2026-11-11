@@ -1032,12 +1032,19 @@ class SparkRepo @Inject constructor(
     }
 
     /** Keeps Spark's pending and paid sends once, from a list read after it synced, so a restart holds the node off. */
-    private suspend fun seedSendHashes(payments: List<Payment>) = cacheStore.seedSparkSendHashes(
-        payments
-            .filter { it.status != PaymentStatus.FAILED }
+    private suspend fun seedSendHashes(payments: List<Payment>) {
+        if (cacheStore.data.first().sparkHistoryUnseededSince == null) return
+        val sends = payments
+            .filter { it.status != PaymentStatus.FAILED && it.sendHash() != null }
             .sortedBy { it.timestamp }
-            .mapNotNull { it.sendHash() },
-    )
+        // A seeded send keeps its invoice's expiry, so Spark holds it while valid and the cap never drops it early.
+        val expiries = sends.mapNotNull { send ->
+            val invoice = (send.details as PaymentDetails.Lightning).invoice
+            val expiresAt = runSuspendCatching { sparkService.invoiceExpiresAt(invoice) }.getOrNull()
+            expiresAt?.let { requireNotNull(send.sendHash()) to it.coerceAtMost(Long.MAX_VALUE.toULong()).toLong() }
+        }.toMap()
+        cacheStore.seedSparkSendHashes(sends.mapNotNull { it.sendHash() }, expiries)
+    }
 
     /** Records every Spark payment, returning whether all were saved, so a failed write leaves the sync to redo. */
     private suspend fun syncActivities(): Boolean {

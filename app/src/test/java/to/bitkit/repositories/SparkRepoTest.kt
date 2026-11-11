@@ -254,6 +254,42 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a send spark's list seeded after a restore is not sent again by spark after an unsynced restart`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        whenever { sparkService.invoiceExpiresAt("lnbc1280n1send") }.thenReturn(now.epochSeconds.toULong() + 3_600uL)
+        createSut(store).start(0).getOrThrow()
+        assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val restarted = createSut(store)
+        restarted.start(0).getOrThrow()
+
+        restarted.payInvoice("lnbc1280n1send", 128uL)
+
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `restored spark sends with valid invoices survive the hash cap`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sends = (0..MAX_SPARK_SEND_HASHES).map {
+            sentPayment(fees = 2).copy(id = "send$it", timestamp = it.toULong()).withHash("paid$it")
+        }
+        whenever { sparkService.listPayments() }.thenReturn(sends)
+        whenever { sparkService.invoiceExpiresAt(any()) }.thenReturn(now.epochSeconds.toULong() + 3_600uL)
+
+        createSut(store).start(0).getOrThrow()
+
+        assertTrue("paid0" in store.data.first().sparkSendHashes, "the cap dropped a still-valid paid invoice")
+    }
+
+    @Test
     fun `a list read before spark's first sync seeds no hashes`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
         whenever(sparkService.isConnected).thenReturn(true)

@@ -211,14 +211,19 @@ class CacheStore internal constructor(
         }
     }
 
-    /** After a restore, keeps [paymentHashes], Spark's pending and paid sends from its synced list, once. */
-    suspend fun seedSparkSendHashes(paymentHashes: List<String>) {
+    /**
+     * After a restore, keeps [paymentHashes], Spark's pending and paid sends from its synced list, once, with their
+     * invoices' [expiries] in epoch seconds where known, so a still-valid one stays held and outlasts the cap.
+     */
+    suspend fun seedSparkSendHashes(paymentHashes: List<String>, expiries: Map<String, Long> = emptyMap()) {
         if (store.data.first().sparkHistoryUnseededSince == null) return
         store.updateData { data ->
             if (data.sparkHistoryUnseededSince == null) return@updateData data
             val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.sparkSendHashes.toSet()
+            val seededExpiries = expiries.mapKeys { it.key.lowercase() }.filterKeys { it in seeded }
             data.copy(
                 sparkSendHashes = seeded + data.sparkSendHashes,
+                sparkSendExpiries = seededExpiries + data.sparkSendExpiries,
                 sparkHistoryUnseededSince = null,
             )
         }
