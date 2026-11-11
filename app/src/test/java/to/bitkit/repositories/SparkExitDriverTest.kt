@@ -437,6 +437,42 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `funding an unverified rebuild's ask keeps the valid generation over only failed cooperative leaves`() = test {
+        val failed = CooperativeRecoveryFailure(
+            "coop-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+            failed = listOf(failed),
+        )
+        repeat(3) { sdk.checks += check(unverified, RecoveryVerdict.Valid) }
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = coopLeaf(16_384uL).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed))
+        val start = running(unverified).copy(leafIds = listOf("leaf-1", "coop-1"))
+
+        var record = driver(tip = 1_000u).tick(start)
+        assertIs<Phase.NeedsFunding>(record.phase)
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(1, record.generation, "the funded rebuild adopted a recovery without leaf-1's signed steps")
+        assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(unverified.transactions.map { it.txid }, record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
     fun `an unverified unilateral step waits while another unilateral step is ready`() = test {
         val recovery = SparkExitFixtures.recovery(
             listOf(

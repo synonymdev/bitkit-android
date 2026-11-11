@@ -162,7 +162,8 @@ class SparkExitDriver(
                         // Funding for leaves a partial build skipped: only they are built, once it arrived.
                         funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
                             ?: end(funded.ended(), funded)
-                        else -> build(funded, sdk)
+                        // Funding an unverified rebuild asked for resumes that rebuild, with its guards.
+                        else -> build(funded, sdk, isUnverifiedRebuild = funded.isUnverifiedAsk)
                     }
                 }
             }
@@ -258,7 +259,7 @@ class SparkExitDriver(
             val asked = askForFunding(record, it)
             // Like a fee bump's, the valid generation keeps going while the funding it asks for comes.
             if (isUnverifiedRebuild && asked.phase is SparkExitRecord.Phase.NeedsFunding) {
-                return asked.copy(isRebuilding = false)
+                return asked.copy(isRebuilding = false, isUnverifiedAsk = true)
             }
             return asked
         }
@@ -269,7 +270,7 @@ class SparkExitDriver(
                 val waiting = waitingLeafIds(record, prepared.skipped, stopped)
                 // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
                 // leaves are retried, past the window in which they are ours to publish.
-                if (isUnverifiedRebuild && waiting.isNotEmpty()) return record
+                if (isUnverifiedRebuild && waiting.isNotEmpty()) return record.keepingValidGeneration()
                 val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
@@ -1454,3 +1455,10 @@ object SparkExitTxOutputs {
         List(compactSize()) { Output(le(8).toULong(), take(compactSize())) }
     }.getOrNull()
 }
+
+/**
+ * The valid generation stays the exit's over a rebuild it does not adopt. Funding an unverified rebuild asked for, once
+ * adopted, goes back to running it: the funding stays the exit's for the next rebuild.
+ */
+private fun SparkExitRecord.keepingValidGeneration(): SparkExitRecord =
+    if (isUnverifiedAsk) copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false) else this

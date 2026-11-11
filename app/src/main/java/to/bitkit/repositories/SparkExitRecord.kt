@@ -116,6 +116,8 @@ data class SparkExitRecord(
     val isRebuiltFromChain: Boolean = false,
     /** The rebuild in progress started from a Redo verdict, the only one whose reproduced spent steps strike. */
     val isRedoRebuild: Boolean = false,
+    /** The fee funding asked for came from a rebuild over unverified steps, while the generation out there is valid. */
+    val isUnverifiedAsk: Boolean = false,
     /** What confirmed SWEEP and COOPERATIVE steps of replaced generations paid to [destination], by txid. */
     val earlierReceivedSats: Map<String, ULong> = emptyMap(),
     /** Each quoted leaf's value, so a leaf the first build leaves behind before any recovery lists it keeps it. */
@@ -413,6 +415,7 @@ data class SparkExitRecord(
     fun adopt(built: RecoverFundsResponse, atMillis: Long): SparkExitRecord = copy(
         spentStepStrikes = if (isRedoRebuild) spentStepStrikes(built) else spentStepStrikes,
         isRedoRebuild = false,
+        isUnverifiedAsk = false,
         earlierReceivedSats = earlierReceivedSats + recovery?.let { SparkExitMath.confirmedReceived(it, destination) }
             .orEmpty(),
         earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::fundingTxids).orEmpty()).distinct(),
@@ -938,6 +941,7 @@ object SparkExitJson {
         r.exitStateSnapshot?.let { put("exitStateSnapshot", it) }
         if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
         if (r.isRedoRebuild) put("isRedoRebuild", true)
+        if (r.isUnverifiedAsk) put("isUnverifiedAsk", true)
         r.fundingStrategy?.let { put("fundingStrategy", it) }
         if (r.failedLeaves.isNotEmpty()) {
             put(
@@ -1077,6 +1081,7 @@ object SparkExitJson {
         exitStateSnapshot = o.stringOrNull("exitStateSnapshot"),
         isRebuiltFromChain = o.booleanOrNull("isRebuiltFromChain") ?: false,
         isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,
+        isUnverifiedAsk = o.booleanOrNull("isUnverifiedAsk") ?: false,
         fundingStrategy = o.stringOrNull("fundingStrategy"),
         failedLeaves = o.arrayOrEmpty("failedLeaves").map {
             val l = it.jsonObject
