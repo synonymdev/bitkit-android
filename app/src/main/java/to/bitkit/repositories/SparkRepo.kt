@@ -344,6 +344,8 @@ class SparkRepo @Inject constructor(
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw it
                 }
+                // Kept until the call returns, so a send cut off by process death or cancellation stays held.
+                cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
@@ -351,12 +353,14 @@ class SparkRepo @Inject constructor(
             val payment = sent.getOrElse {
                 // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
                 if (it.isInvoiceExpired()) {
+                    cacheStore.removeSparkUncertainSend(paymentHash)
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw SparkError.InvoiceExpired(it)
                 }
                 // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                 // nothing, for instance when an earlier send spent it after the balance was read.
                 if (it is SdkException.InsufficientFunds) {
+                    cacheStore.removeSparkUncertainSend(paymentHash)
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw SparkError.SendRefused("Spark balance can't cover the payment", it)
                 }
@@ -364,6 +368,7 @@ class SparkRepo @Inject constructor(
                 settleUncertainSend(paymentHash, expiresAt)
                 throw PaymentPendingException(paymentHash)
             }
+            cacheStore.removeSparkUncertainSend(paymentHash)
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
             paymentHash
         }.onFailure {
@@ -1001,6 +1006,7 @@ class SparkRepo @Inject constructor(
         if (!sparkService.isSupported) return@withContext emptyMap()
         if (!canListPayments()) return@withContext null
         val unlisted = unexpiredStartedSends()
+        val uncertain = uncertainSendHashes()
         val payments = runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrElse { return@withContext null }
@@ -1011,9 +1017,13 @@ class SparkRepo @Inject constructor(
                     ?.htlcDetails?.paymentHash
             }
             .distinct()
-            .associateWith { hash -> requireNotNull(payments.latestSend(hash)).status }
+            .associateWith { hash ->
+                val status = requireNotNull(payments.latestSend(hash)).status
+                // A failed row may be an earlier attempt's, while Spark may still finish the uncertain retry.
+                if (status == PaymentStatus.FAILED && hash.lowercase() in uncertain) PaymentStatus.PENDING else status
+            }
         val listedHashes = listed.keys.mapTo(mutableSetOf()) { it.lowercase() }
-        listed + (unlisted - listedHashes).associateWith { PaymentStatus.PENDING }
+        listed + (unlisted + uncertain - listedHashes).associateWith { PaymentStatus.PENDING }
     }
 
     /**
@@ -1140,8 +1150,10 @@ class SparkRepo @Inject constructor(
     suspend fun attemptedLightningPaymentHashes(): Set<String>? {
         if (!sparkService.isSupported) return emptySet()
         val unlisted = unexpiredStartedSends()
+        val uncertain = uncertainSendHashes()
         val sends = lightningPaymentStatuses { it.paymentType == SparkPaymentType.SEND } ?: return null
-        return sends.filterValues { it.any { status -> status != PaymentStatus.FAILED } }.keys + (unlisted - sends.keys)
+        return sends.filterValues { it.any { status -> status != PaymentStatus.FAILED } }.keys +
+            (unlisted - sends.keys) + uncertain
     }
 
     /** The statuses of Spark's Lightning payments that match [filter], by lowercase payment hash. */
