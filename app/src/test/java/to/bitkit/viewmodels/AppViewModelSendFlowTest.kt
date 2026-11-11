@@ -12569,6 +12569,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a savings payment to a mixed contact below its lnurl minimum sends on-chain without the lnurl`() = test {
+        openMixedContact()
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u, maxSendOnchainSats = 100_000u)
+        whenever(formatMoneyValue(any())).thenReturn("5,000 sats")
+        whenever(lightningRepo.fetchLnurlInvoice(any(), any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("Amount is below the LNURL minimum")))
+        stubSuccessfulOnchainSend(REGTEST_ADDRESS, 2_000uL)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))))
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+        continueWithAmount(2_000u)
+
+        confirmCurrentPayment()
+
+        verify(lightningRepo, never()).fetchLnurlInvoice(any(), any(), anyOrNull())
+        verify(lightningRepo).sendOnChain(
+            address = eq(REGTEST_ADDRESS),
+            sats = any(),
+            speed = anyOrNull(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `a mixed contact lightning can pay routes direct`() = test {
         val lnurl = openMixedContact()
         val direct = PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri)

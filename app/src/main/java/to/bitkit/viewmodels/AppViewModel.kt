@@ -6590,8 +6590,9 @@ class AppViewModel @Inject constructor(
         val amount = _sendUiState.value.amount
 
         val lnurl = _sendUiState.value.lnurl
-        // A Spark leg pays the on-chain endpoint, so it fetches no invoice from the unselected LNURL.
-        val isLnurlPay = lnurl is LnurlParams.LnurlPay && _sendUiState.value.routedPaykitRoute?.serviceLeg == null
+        // An on-chain payment, from Savings or a Spark leg, fetches no invoice from the unselected LNURL.
+        val isLnurlPay = lnurl is LnurlParams.LnurlPay && _sendUiState.value.payMethod == SendMethod.LIGHTNING &&
+            _sendUiState.value.routedPaykitRoute?.serviceLeg == null
 
         if (isLnurlPay) {
             val amountMsats = lnurl.data.callbackAmountMsats(amount)
