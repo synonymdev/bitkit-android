@@ -577,6 +577,82 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark exit backup resumes when the pending restore clears`() = test {
+        assertSparkBackupResumesAfterRestore(expires = false)
+    }
+
+    @Test
+    fun `spark exit backup resumes when the pending restore expires`() = test {
+        assertSparkBackupResumesAfterRestore(expires = true)
+    }
+
+    @Test
+    fun `spark exit backup resumes when another restore interrupts its debounce`() = test {
+        assertSparkBackupResumesAfterRestore(expires = false, interruptDebounce = true)
+    }
+
+    private suspend fun TestScope.assertSparkBackupResumesAfterRestore(
+        expires: Boolean,
+        interruptDebounce: Boolean = false,
+    ) {
+        val category = BackupCategory.SPARK_EXIT
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        val sparkState = MutableStateFlow(SparkState())
+        whenever(sparkRepo.state).thenReturn(sparkState)
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state"))
+        )
+        try {
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+            sparkState.update { SparkState(isSupported = true, isReady = true, hasSynced = true) }
+            exitStateGeneration.update { 1L }
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            assertFalse(statuses.value.getValue(category).isRequired)
+            verify(vssBackupClient, never()).putObject(eq(category.name), any())
+
+            if (expires) {
+                whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(RESTORE_GATE_EXPIRED_AT))
+                advanceTimeBy(RESTORE_GATE_EXPIRED_AT)
+            } else {
+                sut.setRestorePending(false)
+            }
+            runCurrent()
+            if (interruptDebounce) {
+                assertTrue(statuses.value.getValue(category).isRequired)
+                sut.setRestorePending(true)
+                runCurrent()
+                advanceTimeBy(61_000)
+                runCurrent()
+                assertTrue(statuses.value.getValue(category).isRequired)
+                assertFalse(statuses.value.getValue(category).running)
+                verify(vssBackupClient, never()).putObject(eq(category.name), any())
+                sut.setRestorePending(false)
+                runCurrent()
+            }
+            advanceTimeBy(61_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+
+            sut.setRestorePending(true)
+            runCurrent()
+            sut.setRestorePending(false)
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
     fun `spark exit generation survives a cancelled required-status write`() = test {
         assertSparkBackupSurvivesOwnerRetirement(initiallyReady = true)
     }
