@@ -4855,8 +4855,10 @@ class AppViewModel @Inject constructor(
                 _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
                 PaykitRouteOutcome.Leg
             }
-            is PaykitRoute.None -> {
-                Logger.warn("Found no Paykit route: '${picked.reason}'", context = TAG)
+            // The app never offers Pubky Swaps providers, so a Swap route can't come back; it pays nothing either.
+            is PaykitRoute.None, is PaykitRoute.Swap -> {
+                val reason = (picked as? PaykitRoute.None)?.reason ?: "Swap routes are unsupported"
+                Logger.warn("Found no Paykit route: '$reason'", context = TAG)
                 _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
                 // The router's reason is English for the log: the app tells a short balance from an unusable contact.
                 val isAmountShort = state.amount > lightningSpendable.safe() + onchainSpendable.safe()

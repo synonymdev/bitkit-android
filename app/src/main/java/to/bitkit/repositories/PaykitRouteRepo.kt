@@ -55,6 +55,9 @@ class PaykitRouteRepo @Inject constructor(
                 lightningSpendableSat = lightningSpendableSats,
                 onchainSpendableSat = onchainSpendableSats,
                 serviceLegs = emptyList(),
+                // Only bitkit-core's Pubky Swaps route reads these, and the app never asks it, so no Swap comes back.
+                providers = emptyList(),
+                feeRateSatVb = 0uL,
             )
             val network = Env.network.toCoreNetwork()
             // The router pays directly before it weighs any leg, so legs are quoted only when no balance pays.
