@@ -1,0 +1,47 @@
+<journey name="spending confirm amount change">
+  <description>
+    Verifies that a transfer to spending never pays more than the total Spending Confirm shows
+    (synonymdev/bitkit-android#1361). The transfer is priced again at swipe. A price that costs the same
+    or less pays on that swipe, at the new amount. A price whose total is higher, or that leaves less for
+    the spending balance, pays nothing: the screen shows the new amounts and a "Fees changed" toast, and
+    the next swipe pays them. The higher-total case needs a spend of the wallet's own UTXO outside the app,
+    or a fee rate rise, which the Capabilities table does not list, so the unit test `swipe asks again when the
+    network fee rose since shown` in SparkFundingViewModelTest.kt covers it.
+
+    A larger UTXO confirms while Spending Confirm is open, so the transfer is priced at swipe against a
+    changed wallet. Coin selection may keep two inputs (150 000 + 150 000, or 150 000 + 500 000) at the
+    same fee, or spend the new UTXO alone at a lower fee; either way the fresh price costs no more than the
+    one shown, so the swipe pays at once.
+
+    The wallet's UTXOs and Spark's deposit must be on one chain the run can fund and mine, so it runs on
+    bitkit-docker's local Spark regtest, where Savings, the Spark operators and the SSP share bitkit-docker's
+    chain. Lightspark's hosted regtest can't be mined on demand. The recipe is docs/spark-regtest.md at
+    synonymdev/bitkit-docker commit cdd294a5ef7470df11ee9ea64d46f441777fdb49
+    (https://github.com/synonymdev/bitkit-docker/blob/cdd294a5ef7470df11ee9ea64d46f441777fdb49/docs/spark-regtest.md).
+
+    Not yet in this repository: the build setting that reads `SPARK_LOCAL_CONFIG_B64` and `SPARK_LOCAL_CHAIN_URL`
+    comes in a follow-up PR. Until it lands, this journey runs only on a build with that setting added.
+
+    Precondition: `./spark up` running in bitkit-docker; a dev build with that setting, built and connected as
+    the doc's "Point a Bitkit dev build at it" section says (`SPARK_LOCAL_CONFIG_B64` from `./spark config
+    --base64`, `SPARK_LOCAL_CHAIN_URL`, and the `adb reverse` ports), with Savings on bitkit-docker's Electrum
+    (`tcp://127.0.0.1:60001`); a freshly onboarded wallet with no channel
+    and exactly two confirmed on-chain UTXOs of 150 000 sats each (in bitkit-docker, `./spark send
+    &lt;savings address&gt; 150000` twice, each mining a block). Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap Receive (testTag "Receive"), tap the "Savings" receive tab (the tab row carries no test tag), tap "Show Details" (testTag "ShowDetails"), read the address from testTag "ReceiveOnchainAddress", then press back to the home screen</action>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), then "Transfer To Spending" (testTag "TransferToSpending")</action>
+    <action>If the spending intro appears, tap "Get Started" (testTag "SpendingIntro-button")</action>
+    <action>Enter 200 000 on the number pad (testTags "N2", "N0", "N0", "N0", "N0", "N0") and tap "Continue" (testTag "SpendingAmountContinue")</action>
+    <action>Verify the confirm screen is visible (testTag "SpendingConfirmMore") and wait until its network fee is shown</action>
+    <action>Note the amounts under "Network Fees" (testTag "SpendingConfirmNetworkFee") and "Total" (testTag "SpendingConfirmTotal")</action>
+    <action>In bitkit-docker, run ./spark send &lt;savings addr&gt; 500000, which pays the address and mines a block</action>
+    <action>Wait 30s for the wallet to sync the new UTXO</action>
+    <action>If the received sheet (testTag "ReceivedTransaction") is visible, tap its button (testTag "ReceivedTransactionButton")</action>
+    <action>Verify the confirm screen still shows the amounts noted before the deposit</action>
+    <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
+    <action>Verify no "Fees changed" toast appears and the setting up screen (testTag "LightningSettingUp") opens within 90s</action>
+    <action>Tap "Continue Using Bitkit" (testTag "TransferSuccess-button"), open the newest transfer in the activity list and verify its fee is no higher than the "Network Fees" amount noted</action>
+  </actions>
+</journey>

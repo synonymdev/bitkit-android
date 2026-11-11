@@ -194,12 +194,15 @@ class PaykitAllowanceRepo @Inject constructor(
                 .map { it.nodeLifecycleState.isRunning() }
                 .distinctUntilChanged()
                 .filter { it }
-                .collect {
-                    // Attempts recovery left open while the node could not list payments are settled now.
-                    executor.activeIdentity?.let { identity -> executor.recover(identity) }
-                    executor.settleOpenLightningAttempts()
-                }
+                .collect { settleAttemptsLeftOpen() }
         }
+        // Attempts recovery left open while the node or Spark could not list payments are settled once both can.
+        scope.launch { lightningRepo.isSparkSynced.filter { it }.collect { settleAttemptsLeftOpen() } }
+    }
+
+    private suspend fun settleAttemptsLeftOpen() {
+        executor.activeIdentity?.let { identity -> executor.recover(identity) }
+        executor.settleOpenLightningAttempts()
     }
 
     fun entry(id: String): PaykitAllowanceEntry? = _entries.value.firstOrNull { it.id == id }
@@ -607,11 +610,12 @@ class PaykitAllowanceRepo @Inject constructor(
             it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
         }
         if (covered.isEmpty()) return@withContext false
-        if (!canPayNow()) return@withContext markAboveLimitManual(covered, identity, signature)
+        val payable = payableNow(covered)
+        if (payable.isEmpty()) return@withContext markAboveLimitManual(covered, identity, signature)
         if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
         try {
-            whileUpdating { payCovered(covered, identity, signature) }
+            whileUpdating { payCovered(payable, identity, signature) }
         } finally {
             isProcessingRequests.set(false)
         }
@@ -630,11 +634,15 @@ class PaykitAllowanceRepo @Inject constructor(
 
     /**
      * A node that just started lists its channels before they reconnect, and a payment sent then fails with no route.
-     * Covered requests wait for the next refresh instead of falling back to the manual flow.
+     * Covered requests wait for the next refresh instead of falling back to the manual flow, except those Spark can
+     * pay: Spark pays whenever the node cannot, so it needs neither a running node nor a usable channel.
      */
-    private fun canPayNow(): Boolean {
+    private fun payableNow(covered: List<PaykitPaymentRequest>): List<PaykitPaymentRequest> {
         val state = lightningRepo.lightningState.value
-        return state.nodeLifecycleState.isRunning() && (state.channels.isEmpty() || state.channels.any { it.isUsable })
+        val nodeCanPay = state.nodeLifecycleState.isRunning() &&
+            (state.channels.isEmpty() || state.channels.any { it.isUsable })
+        if (nodeCanPay) return covered
+        return covered.filter { request -> request.allowanceSats()?.let { lightningRepo.canSendWithSpark(it) } == true }
     }
 
     /** While the node cannot pay, a request that fits no allowance must not wait for channels: it asks at once. */

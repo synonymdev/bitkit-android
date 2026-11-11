@@ -9,7 +9,9 @@ hiltAndroidx = "1.4.0"
 kotlin = "2.3.21"
 ktor = "3.6.1"
 lifecycle = "2.10.0"
-navCompose = "2.10.2"
+# 2.10 breaks predictive back: a swipe soon after a navigation seeks with the forward transitions,
+# then snaps. Stay on 2.9.x until a release fixes it (see .github/dependabot.yml).
+navCompose = "2.9.8"
 room = "2.8.5"
 slf4j = "2.0.20"
 haze = "1.7.3"
@@ -22,7 +24,8 @@ appcompat = { module = "androidx.appcompat:appcompat", version = "1.8.0" }
 barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
 biometric = { module = "androidx.biometric:biometric", version = "1.4.0-alpha05" }
 bitkit-core = { module = "com.synonym:bitkit-core-android", version = "0.8.0-rc14" }
-paykit = { module = "com.synonym:paykit-android", version = "0.1.1-rc6" }
+breez-sdk-spark = { module = "breez_sdk_spark:bindings-android", version = "0.28.0" }
+paykit = { module = "com.synonym:paykit-android", version = "0.1.1-rc7" }
 bouncycastle-pkix-jdk = { module = "org.bouncycastle:bcpkix-jdk18on", version = "1.86" }
 bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version = "1.86" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }

@@ -15,7 +15,11 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -76,6 +80,8 @@ class WalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val sparkRepo: SparkRepo,
+    private val backupRepo: BackupRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -114,6 +120,26 @@ class WalletRepo @Inject constructor(
             hwWalletRepo.wallets.collect { wallets ->
                 _balanceState.update { state -> state.copy(hardwareWallets = wallets.map { it.toBalance() }) }
             }
+        }
+        repoScope.launch {
+            // Node start and Spark-ready skip their refresh during a restore, so it runs once the restore ends.
+            backupRepo.restoreInProgress.drop(1).filter { !it }.collect {
+                val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
+                if (walletExists() && (isNodeRunning || sparkRepo.state.value.isReady)) refreshBip21()
+            }
+        }
+        repoScope.launch {
+            sparkRepo.state.map { it.isReady }.distinctUntilChanged().collect { isReady ->
+                // An address revealed before the restore reads the backup leaves an unused index behind it.
+                if (isReady && walletExists() && !backupRepo.isRestoreInProgress()) refreshBip21()
+            }
+        }
+        repoScope.launch {
+            // The read balance too, as sends use it: it can come back to the shown one while that stays the same.
+            sparkRepo.state.map { Triple(it.balanceSats, it.shownBalanceSats, it.pendingDepositSats) }
+                .distinctUntilChanged().collect {
+                    if (walletExists()) syncBalances()
+                }
         }
     }
 
@@ -414,7 +440,8 @@ class WalletRepo @Inject constructor(
     fun refreshMaxSendLightning() {
         val state = lightningRepo.lightningState.value
         if (!state.nodeLifecycleState.isRunning()) return
-        _balanceState.update { it.copy(maxSendLightningSats = state.channels.totalNextOutboundHtlcLimitSats()) }
+        val maxSendSats = maxOf(state.channels.totalNextOutboundHtlcLimitSats(), sparkRepo.state.value.sendableSats)
+        _balanceState.update { it.copy(maxSendLightningSats = maxSendSats) }
     }
 
     suspend fun syncBalances() {
@@ -991,11 +1018,15 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    /** Spark receives any amount without inbound liquidity, so no channel or CJIT is needed. */
+    fun canReceiveWithSpark(): Boolean = sparkRepo.canReceive()
+
     suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
         return@withContext currentReadyChannels().calculateRemoteBalance()
     }
 
     private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
+        if (sparkRepo.canReceive()) return true
         val readyChannels = currentReadyChannels()
         return ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = readyChannels.isNotEmpty(),

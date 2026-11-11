@@ -35,9 +35,12 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
 import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.QuickPayLedger
+import to.bitkit.models.QuickPayLedgerRecord
 import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
@@ -112,6 +115,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         SettingsData(isQuickPayEnabled = true, quickPayAmount = 5, quickPayDailyLimitMultiplier = 5),
     )
     private val lightningState = MutableStateFlow(LightningState())
+    private val sparkSynced = MutableStateFlow(false)
     private var paymentRows: List<QuickPayReconcileRow>? = null
 
     private lateinit var sut: QuickPayRepo
@@ -121,6 +125,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         paymentRows = null
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
+        whenever(lightningRepo.isSparkSynced).thenReturn(sparkSynced)
         whenever { lightningRepo.listPaymentsOrNull() }.thenReturn(null)
         whenever(currencyRepo.convertFiatToSats(5.0, USD)).thenAnswer { 1000uL }
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer { invocation ->
@@ -472,6 +477,41 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment the node failed is released once spark syncs after the node`() = test {
+        cacheStore.update {
+            it.copy(
+                quickPayLedger = QuickPayLedger(
+                    version = 1,
+                    dayKey = "2026-08-15",
+                    spentCents = 250L,
+                    records = listOf(
+                        QuickPayLedgerRecord(
+                            id = "rec",
+                            amountCents = 250L,
+                            dayKey = "2026-08-15",
+                            invoicePaymentHash = "inv",
+                            paymentId = "pid",
+                            phase = QuickPayRecordPhase.SUBMITTED,
+                        ),
+                    ),
+                ),
+            )
+        }
+        sut = repo()
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        runCurrent()
+        lightningState.value = lightningState.value.copy(lastSuccessfulSyncAt = 1L)
+        runCurrent()
+        assertEquals(250L, spentCents())
+
+        paymentRows = listOf(failedRow("inv"))
+        sparkSynced.value = true
+        runCurrent()
+
+        assertEquals(0L, spentCents())
+    }
+
+    @Test
     fun `unsupported ledger version does not wipe unrelated cache`() = test {
         cacheStore.update {
             AppCacheData(
@@ -544,6 +584,15 @@ class QuickPayRepoTest : BaseUnitTest() {
         val hashes = cacheStore.data.first().quickPayLedger!!.records.map { it.invoicePaymentHash }
         assertFalse("old" in hashes)
         assertTrue("new" in hashes)
+    }
+
+    @Test
+    fun `a spark refusal is a rejection before dispatch`() {
+        assertEquals(
+            QuickPayDispatchClass.PRE_DISPATCH_REJECTION,
+            classifyDispatchError(SparkError.SendRefused("Spark balance can't cover the payment")),
+        )
+        assertEquals(QuickPayDispatchClass.PRE_DISPATCH_REJECTION, classifyDispatchError(SparkError.InvoiceExpired()))
     }
 
     @Test

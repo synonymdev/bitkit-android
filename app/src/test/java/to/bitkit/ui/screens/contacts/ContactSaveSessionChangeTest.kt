@@ -6,6 +6,7 @@ import coil3.ImageLoader
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.ProfileSource
+import com.synonym.paykit.PubkyProfileSnapshot
 import com.synonym.paykit.PublicationStatus
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CompletableDeferred
@@ -302,6 +303,14 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
         }
         whenever(pubkyService.resolveContactProfile(owner, true, PaykitReadLane.Interactive, null))
             .thenReturn(ownerResolution(owner))
+        whenever(pubkyService.fetchPubkyProfileWithRevision(owner)).thenReturn(
+            PubkyProfileSnapshot(
+                publicKey = owner,
+                profile = checkNotNull(ownerResolution(owner).pubkyProfile),
+                revision = "revision",
+                fetchedAt = "2026-01-01T00:00:00Z",
+            )
+        )
         whenever(pubkyService.contactRecords()).thenReturn(records)
         sdkContacts[owner] = records.map { it.publicKey }.toSet()
         repo.initialize()

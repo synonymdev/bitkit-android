@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -36,6 +37,7 @@ import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
+import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.asNodeException
@@ -82,6 +84,8 @@ class QuickPayRepo @Inject constructor(
                     if (running) reconcileAgainstLdk()
                 }
         }
+        // The lookup waits for Spark's history, so a first Spark sync after the node's runs the reconcile again.
+        scope.launch { lightningRepo.isSparkSynced.filter { it }.collect { reconcileAgainstLdk() } }
     }
 
     fun attach(session: QuickPaySession): Flow<QuickPaySessionEvent> {
@@ -841,6 +845,10 @@ internal data class SpendSnapshot(
 )
 
 internal fun classifyDispatchError(error: Throwable): QuickPayDispatchClass {
+    // Spark refuses only before anything leaves the wallet, as PaykitPaymentProofRepo reads it.
+    if (generateSequence(error) { it.cause }.any { it is SparkError.SendRefused }) {
+        return QuickPayDispatchClass.PRE_DISPATCH_REJECTION
+    }
     return when (error.asNodeException()) {
         is NodeException.InvalidInvoice,
         is NodeException.InvalidAmount,

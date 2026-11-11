@@ -60,6 +60,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.PendingChannelMigration
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
@@ -90,6 +91,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val boltzService = mock<BoltzService>()
     private val pubkySwapsRouteRepo = mock<PubkySwapsRouteRepo>()
+    private val sparkRepo = idleSparkRepo()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -131,6 +133,7 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
+            sparkRepo = sparkRepo,
         )
     }
 
@@ -1243,6 +1246,7 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
+            sparkRepo = sparkRepo,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -1311,6 +1315,7 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
+            sparkRepo = sparkRepo,
         )
 
         testSut.start()
@@ -1368,6 +1373,7 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
+            sparkRepo = sparkRepo,
         )
 
         // Trigger restore to put state in non-idle
@@ -1409,6 +1415,7 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
+            sparkRepo = sparkRepo,
         )
 
         testSut.restoreWallet("mnemonic", null)
@@ -1501,6 +1508,7 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
+            sparkRepo = sparkRepo,
         )
         advanceUntilIdle()
 
