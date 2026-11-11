@@ -12200,6 +12200,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a reroute from bolt11 to lnurl below its minimum shows the minimum toast`() = test {
+        val (bolt11, lnurl) = openLightningContact()
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__title)).thenReturn("Amount Too Low")
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__description)).thenReturn("Min {amount}")
+        whenever(formatMoneyValue(1_000uL)).thenReturn("1000")
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(bolt11)))
+        continueWithAmount(2_000u)
+        assertNull(sut.sendUiState.value.lnurl)
+
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(lnurl)))
+        sut.sendEffect.test {
+            continueWithAmount(500u)
+
+            assertEquals(lnurl.value, (sut.sendUiState.value.lnurl as? LnurlParams.LnurlPay)?.data?.uri)
+            expectNoEvents()
+        }
+        verify(toastManager).enqueue(check { assertEquals("LnurlPayAmountTooLowToast", it.testTag) })
+    }
+
+    @Test
     fun `router direct pays the onchain endpoint it picks from savings`() = test {
         val bolt11 = PaykitEndpoint(methodId = MethodId.Bolt11.rawValue, value = "lnbcrt1routed")
         val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = REGTEST_ADDRESS)
