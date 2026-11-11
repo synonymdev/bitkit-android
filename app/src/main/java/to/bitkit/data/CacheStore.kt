@@ -214,6 +214,35 @@ class CacheStore internal constructor(
     }
 
     /**
+     * After a restore, keeps [paymentHashes], Spark's pending and paid sends from its synced list, once, with their
+     * invoices' [expiries] in epoch seconds where known, so a still-valid one stays held and outlasts the cap.
+     */
+    suspend fun seedSparkSendHashes(paymentHashes: List<String>, expiries: Map<String, Long> = emptyMap()) {
+        if (store.data.first().sparkHistoryUnseededSince == null) return
+        store.updateData { data ->
+            if (data.sparkHistoryUnseededSince == null) return@updateData data
+            val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.sparkSendHashes.toSet()
+            // A kept hash without an expiry gets its invoice's, so the cap can't drop it while valid; a set one stays.
+            val listedExpiries = expiries.mapKeys { it.key.lowercase() }
+            data.copy(
+                sparkSendHashes = seeded + data.sparkSendHashes,
+                sparkSendExpiries = listedExpiries + data.sparkSendExpiries,
+                sparkHistoryUnseededSince = null,
+            )
+        }
+    }
+
+    /** After a restore, keeps [paymentHashes], the node's pending and paid sends from its own list, once. */
+    suspend fun seedRestoredLdkSendHashes(paymentHashes: List<String>) {
+        if (store.data.first().ldkHistoryUnseededSince == null) return
+        store.updateData { data ->
+            if (data.ldkHistoryUnseededSince == null) return@updateData data
+            val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.ldkSendHashes.toSet()
+            data.copy(ldkSendHashes = seeded + data.ldkSendHashes, ldkHistoryUnseededSince = null)
+        }
+    }
+
+    /**
      * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, ones it didn't
      * show ([listed] is every hash it shows) whose invoice expired past [UNLISTED_SEND_SETTLE_SECS], and past the cap
      * the oldest paid or unlisted ones with no known expiry. A send that may be pending ([live]) always stays.
@@ -329,6 +358,23 @@ data class AppCacheData(
      * there. Until then an unlistable node holds every Spark send.
      */
     val ldkSendHashesSeeded: Boolean = false,
+    /**
+     * When a metadata restore brought back [sparkSendHashes], in epoch seconds, until Spark's synced list fills them:
+     * the backup can predate a send Spark made, so meanwhile a Spark that can't list its payments holds the node off
+     * invoices created before it. Null on an install that was never restored, whose kept hashes are complete.
+     */
+    val sparkHistoryUnseededSince: Long? = null,
+    /**
+     * When a metadata restore brought back [ldkSendHashes], in epoch seconds, until the node's own list fills them:
+     * while the node can't list its payments, Spark holds off invoices created before it. Null when never restored.
+     */
+    val ldkHistoryUnseededSince: Long? = null,
+    /**
+     * When the wallet was restored, in epoch seconds. Spark's list can lack a send it made before then even after a
+     * sync, so both rails refuse a still-valid invoice created before it that Spark hasn't listed as pending or paid,
+     * until that invoice expires.
+     */
+    val sparkRestoredAt: Long? = null,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts
