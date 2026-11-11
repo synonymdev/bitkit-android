@@ -1575,7 +1575,8 @@ class LightningRepo @Inject constructor(
      * The node's pending or paid send of [bolt11]. While the node can't list its payments (stopped or not started yet),
      * a send it started for the invoice may be live or paid, and its event may never come, so the node not started yet
      * is thrown rather than a Pending nothing resolves. Before the node first listed its payments, the sends it made
-     * earlier are unknown, so the same is thrown.
+     * earlier are unknown, so the same is thrown, as it is after a restore, until the node lists them, for an invoice
+     * created before the restore.
      */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
@@ -1590,6 +1591,12 @@ class LightningRepo @Inject constructor(
             }
             if (!cache.ldkSendHashesSeeded) {
                 Logger.warn("Refused a Spark send until the node lists its earlier payments once", context = TAG)
+                throw ServiceError.NodeNotStarted()
+            }
+            // Restored hashes can lack a send the node made before the restore, never one of a newer invoice.
+            val unseededSince = cache.ldkHistoryUnseededSince
+            if (unseededSince != null && (invoiceCreatedAt(bolt11) ?: 0L) < unseededSince) {
+                Logger.warn("Refused a Spark send until the node lists its payments since the restore", context = TAG)
                 throw ServiceError.NodeNotStarted()
             }
             return null
@@ -1654,7 +1661,15 @@ class LightningRepo @Inject constructor(
         requireWalletRestoreComplete()
         // Read before the checks, so a Spark send admitted after them refuses this one at submission.
         val sparkRecordsBefore = sparkRepo.sendRecordMark()
-        sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
+        // Only a restore hold needs the invoice's times.
+        val invoice = if (sparkRepo.holdsRestoredInvoices()) decodedInvoice(bolt11) else null
+        sparkRepo.earlierLightningSend(
+            bolt11,
+            paymentHash,
+            invoice?.timestampSeconds?.toEpochSeconds(),
+            invoice?.let { (it.timestampSeconds.safe() + it.expirySeconds.safe()).toEpochSeconds() },
+        )
+            ?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
         val key = ldkSendKey(bolt11, paymentHash)
@@ -1717,7 +1732,9 @@ class LightningRepo @Inject constructor(
     ) {
         val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
         val sends = outbound.filter { it.status != PaymentStatus.FAILED }.sortedBy { it.latestUpdateTimestamp }
-        cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
+        val sendHashes = sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash }
+        cacheStore.seedLdkSendHashes(sendHashes)
+        cacheStore.seedRestoredLdkSendHashes(sendHashes)
         val hashes = { status: PaymentStatus ->
             outbound.filter { it.status == status }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
@@ -1737,6 +1754,15 @@ class LightningRepo @Inject constructor(
         (invoice.secondsSinceEpoch().safe() + invoice.expiryTimeSeconds().safe())
             .coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
     }.getOrNull()
+
+    /** When [bolt11] was created, in epoch seconds, or null when it can't be decoded. */
+    private suspend fun invoiceCreatedAt(bolt11: String): Long? =
+        decodedInvoice(bolt11)?.timestampSeconds?.toEpochSeconds()
+
+    private suspend fun decodedInvoice(bolt11: String) =
+        runSuspendCatching { (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice }.getOrNull()
+
+    private fun ULong.toEpochSeconds(): Long = coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
     /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */
     private fun ldkSendKey(bolt11: String, paymentHash: String?): String = (paymentHash ?: bolt11).lowercase()
@@ -2740,8 +2766,15 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
-        if (shouldPayWithSpark(bolt11, null)) return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, null)
+    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
+        // Spark quotes without the node, so a payment it makes never waits for the node to run.
+        if (shouldPayWithSpark(bolt11, null)) return sparkRepo.estimateFeeSats(bolt11, null)
+        return estimateNodeRoutingFees(bolt11)
+    }
+
+    private suspend fun estimateNodeRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning(
+        "estimateRoutingFees"
+    ) {
         Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
         lightningService.estimateRoutingFees(bolt11).onSuccess {
             Logger.info("Routing fees estimated: '$it'", context = TAG)
@@ -2750,11 +2783,13 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
+    suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
+        if (shouldPayWithSpark(bolt11, amountSats)) return sparkRepo.estimateFeeSats(bolt11, amountSats)
+        return estimateNodeRoutingFeesForAmount(bolt11, amountSats)
+    }
+
+    private suspend fun estimateNodeRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
-            if (shouldPayWithSpark(bolt11, amountSats)) {
-                return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, amountSats)
-            }
             Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
                 Logger.info("Routing fees estimated: '$it'", context = TAG)
