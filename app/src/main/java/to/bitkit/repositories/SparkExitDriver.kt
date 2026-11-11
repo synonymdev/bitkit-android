@@ -198,11 +198,17 @@ class SparkExitDriver(
             // Funding for leaves a partial build skipped: only they are built, once it arrived.
             funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
                 ?: end(funded.ended(), funded)
-            // Funding an unverified rebuild asked for resumes that rebuild, with its guards.
-            funded.isUnverifiedAsk && !funded.isRebuilding -> build(funded, sdk, isUnverifiedRebuild = true).let {
-                // A resume that adopted nothing keeps the valid generation's retry clock, as a check's rebuild does.
-                if (it.generation != funded.generation || !it.isActive) return@let it
-                it.copy(retrySince = funded.retrySince, retriedAt = funded.retriedAt)
+            // Funding an unverified rebuild asked for resumes that rebuild, with its guards, once a block like the
+            // check's rebuild: the valid generation's retry clock does not pace it.
+            funded.isUnverifiedAsk && !funded.isRebuilding -> {
+                if (tip != null && funded.unverifiedRebuiltAtHeight == tip) return funded
+                val resumed = funded.copy(unverifiedRebuiltAtHeight = tip)
+                build(resumed, sdk, isUnverifiedRebuild = true).let {
+                    // A resume that adopted nothing keeps the valid generation's retry clock, as a check's rebuild
+                    // does.
+                    if (it.generation != resumed.generation || !it.isActive) return@let it
+                    it.copy(retrySince = resumed.retrySince, retriedAt = resumed.retriedAt)
+                }
             }
             else -> build(funded, sdk)
         }

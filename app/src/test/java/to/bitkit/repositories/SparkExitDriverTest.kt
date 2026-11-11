@@ -585,6 +585,37 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded unverified rebuild waiting for the unread leaf prepares once a block`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        repeat(4) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = SparkExitFixtures.prepared(
+            leaves = emptyList(),
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+
+        var record = driver(tip = 1_000u).tick(running(unread))
+        assertTrue(record.isUnverifiedAsk)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(2, sdk.prepareRequests.size)
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(2, sdk.prepareRequests.size, "the funded resume prepared again at the same tip")
+
+        record = driver(tip = 1_002u).tick(record)
+        assertEquals(3, sdk.prepareRequests.size, "the funded resume stopped trying at the next block")
+        assertTrue(record.isUnverifiedAsk)
+    }
+
+    @Test
     fun `an unverified rebuild's ask that diverged never sends the diverged generation again`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(
