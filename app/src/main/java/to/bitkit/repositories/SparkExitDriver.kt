@@ -199,7 +199,12 @@ class SparkExitDriver(
             funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
                 ?: end(funded.ended(), funded)
             // Funding an unverified rebuild asked for resumes that rebuild, with its guards.
-            else -> build(funded, sdk, isUnverifiedRebuild = funded.isUnverifiedAsk && !funded.isRebuilding)
+            funded.isUnverifiedAsk && !funded.isRebuilding -> build(funded, sdk, isUnverifiedRebuild = true).let {
+                // A resume that adopted nothing keeps the valid generation's retry clock, as a check's rebuild does.
+                if (it.generation != funded.generation || !it.isActive) return@let it
+                it.copy(retrySince = funded.retrySince, retriedAt = funded.retriedAt)
+            }
+            else -> build(funded, sdk)
         }
     }
 

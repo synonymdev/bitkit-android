@@ -494,6 +494,64 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded unverified rebuild that waits for the unread leaf leaves no stale retry clock`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val timelocked = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx(
+                    "n2",
+                    dependsOn = listOf("n1"),
+                    status = ExitTransactionStatus.WaitingForTimelock(3_000u),
+                ),
+            ),
+        )
+        val ready = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        sdk.checks += check(timelocked, RecoveryVerdict.Valid)
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        sdk.checks += check(ready, RecoveryVerdict.Valid)
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = SparkExitFixtures.prepared(
+            leaves = emptyList(),
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+
+        var record = driver(tip = 1_000u).tick(running(unread))
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isUnverifiedAsk)
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(1, record.generation)
+        assertNull(record.retrySince, "the funded unverified rebuild saved a retry clock at '${record.retrySince}'")
+
+        record = driver(tip = 1_002u).tick(record)
+        assertEquals(Phase.Running, record.phase)
+        assertNull(record.retrySince, "the ask ended Running with a stale retry clock '${record.retrySince}'")
+
+        record = driver(tip = 2_100u).tick(record)
+        assertEquals(Phase.Running, record.phase, "the exit ended before leaf-1's signed step n2 was sent")
+        assertEquals(1, record.generation)
+
+        record = driver(tip = 3_000u).tick(record)
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid }, "leaf-1's matured step n2 was not sent")
+    }
+
+    @Test
     fun `an unverified rebuild's ask that diverged never sends the diverged generation again`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(
