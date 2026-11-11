@@ -48,6 +48,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentFailureReason
+import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PeerDetails
@@ -104,6 +105,7 @@ import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
 import java.math.BigInteger
 import kotlin.coroutines.cancellation.CancellationException
@@ -1319,7 +1321,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an invoice the node sent is not sent through spark while the node can't list it`() = test {
+    fun `an invoice the node sent fails rather than pends through spark while the node can't list it`() = test {
         startNodeForTesting()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
         whenever(lightningService.listPayments()).thenReturn(null)
@@ -1330,7 +1332,8 @@ class LightningRepoTest : BaseUnitTest() {
         val retry = sut.payInvoice("bolt11", 1_000uL)
 
         verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
-        assertIs<PaymentPendingException>(retry.exceptionOrNull())
+        // A Pending would wait on a node event that may never come, so it fails until the node can list again.
+        assertIs<ServiceError.NodeNotStarted>(retry.exceptionOrNull())
     }
 
     @Test
@@ -1457,6 +1460,36 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node retry in flight when an older listing is read keeps its hash after it ends`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        val sent = CompletableDeferred<String>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { sent.await() }
+        val retry = async { sut.payInvoiceWithNode("h") }
+        runCurrent()
+        var isEnded = false
+        // The retry recorded before this listing ends while the listing, which still shows it failed, is read.
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            if (!isEnded) {
+                isEnded = true
+                sent.complete("h")
+                retry.await()
+            }
+            listOf(nodeSend("h", PaymentStatus.FAILED))
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("other"))
+
+        sut.payInvoice("other", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an older listing dropped a retry that ended")
+    }
+
+    @Test
     fun `a node retry of the same invoice that ends while an older listing is read keeps its hold`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
         sut = repoWith(store)
@@ -1477,9 +1510,87 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.success("h"))
 
-        sut.payInvoice("h", 1_000uL)
+        val result = sut.payInvoice("h", 1_000uL)
 
         assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an older listing released the node retry's hold")
+        assertIs<PaymentPendingException>(result.exceptionOrNull(), "Spark paid an invoice the node is retrying")
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a node send of an invoice spark admitted is refused at submission`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var nodeResult: Result<PaymentId>? = null
+        // The node starts the same invoice after Spark's checks passed, while Spark is sending it.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            check(authorizeSend())
+            nodeResult = sut.payInvoiceWithNode("h")
+            Result.success("h")
+        }
+
+        sut.payInvoice("h", 1_000uL)
+
+        assertIs<PaymentPendingException>(nodeResult?.exceptionOrNull(), "the node paid an invoice Spark is sending")
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a spark send of an invoice the node already paid settles as paid`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.SUCCEEDED)))
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+
+        // The node's own success event fired before this send, so its caller reads the settled payment instead.
+        assertEquals("h", assertIs<Event.PaymentSuccessful>(sut.settledSparkSendEvent("h")).paymentHash)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a late channel failure never fails a spark retry of the invoice`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.failure(PaymentPendingException("hash")))
+        sut.payInvoice("bolt11", 1_000uL)
+        assertTrue(sut.isSparkSend("hash"))
+
+        // The node's earlier attempt fails only after the retry went out on Spark.
+        onEvent(Event.PaymentFailed("hash", "hash", PaymentFailureReason.UNEXPECTED_ERROR))
+        runCurrent()
+
+        assertTrue(events.none { it is Event.PaymentFailed })
+    }
+
+    @Test
+    fun `a node failure arriving while spark sends the retry never fails it`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        // The node's earlier attempt fails while Spark is sending the retry, before Spark returns.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            check(it.getArgument<suspend () -> Boolean>(4)())
+            onEvent(Event.PaymentFailed("h", "h", PaymentFailureReason.UNEXPECTED_ERROR))
+            Result.success("h")
+        }
+
+        sut.payInvoice("h", 1_000uL)
+        runCurrent()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "an older node failure failed the Spark retry")
     }
 
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(

@@ -37,6 +37,7 @@ import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
+import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.asNodeException
@@ -844,6 +845,10 @@ internal data class SpendSnapshot(
 )
 
 internal fun classifyDispatchError(error: Throwable): QuickPayDispatchClass {
+    // Spark refuses only before anything leaves the wallet, as PaykitPaymentProofRepo reads it.
+    if (generateSequence(error) { it.cause }.any { it is SparkError.SendRefused }) {
+        return QuickPayDispatchClass.PRE_DISPATCH_REJECTION
+    }
     return when (error.asNodeException()) {
         is NodeException.InvalidInvoice,
         is NodeException.InvalidAmount,

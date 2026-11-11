@@ -190,8 +190,11 @@ class OnchainSendAttemptUnreadableError(cause: Throwable) : AppError("Failed to 
 
 class OnchainSendNotDispatchedError(cause: Throwable) : AppError("On-chain send did not reach the backend", cause)
 
-/** A send refused before broadcast because it would send another amount, or pay more mining fee, than approved. */
-/** [preparedFeeSats] is the mining fee of the refused prepared send, null when it was unknown. */
+/**
+ * A send refused before broadcast because it would send another amount, or pay more mining fee, than approved, a
+ * fixed amount as well as a max one. [preparedFeeSats] is the mining fee of the refused prepared send, null when it
+ * was unknown.
+ */
 class OnchainSendChangedError(val preparedFeeSats: ULong? = null) :
     AppError("On-chain send changed after it was approved")
 
