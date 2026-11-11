@@ -121,9 +121,12 @@ class SparkRepo @Inject constructor(
     @Volatile
     private var withdrawalFailedAtSecs: ULong? = null
 
-    /** Whether a withdrawal moved the whole balance, so a read of 0 is real until Spark reads a balance again. */
+    /**
+     * When a withdrawal moved the whole balance, in epoch seconds, so a read of 0 is real until a sync after it reads
+     * a balance again. A refresh that read its balance before the withdrawal can't clear it.
+     */
     @Volatile
-    private var withdrewAll = false
+    private var withdrewAllAtSecs: ULong? = null
 
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
@@ -216,7 +219,7 @@ class SparkRepo @Inject constructor(
         preparedWithdrawal = null
         withdrawalTxids.clear()
         withdrawalFailedAtSecs = null
-        withdrewAll = false
+        withdrewAllAtSecs = null
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
@@ -575,7 +578,7 @@ class SparkRepo @Inject constructor(
             Unit
         }.onSuccess {
             withdrawalFailedAtSecs = null
-            withdrewAll = true
+            withdrewAllAtSecs = clock.now().epochSeconds.toULong()
             runSuspendCatching { refresh() }
                 .onFailure { Logger.warn("Failed to refresh Spark after its withdrawal", it, context = TAG) }
         }.onFailure {
@@ -736,14 +739,17 @@ class SparkRepo @Inject constructor(
         val failedAt = withdrawalFailedAtSecs
         val hasSyncedSince = failedAt != null && info.lastSyncError == null && (info.lastSyncedAt ?: 0uL) > failedAt
         if (info.balanceSats > 0uL || hasSyncedSince) withdrawalFailedAtSecs = null
-        withdrewAll = withdrewAll && info.balanceSats == 0uL
+        val withdrewAllAt = withdrewAllAtSecs
+        if (withdrewAllAt != null && info.balanceSats > 0uL && (info.lastSyncedAt ?: 0uL) > withdrewAllAt) {
+            withdrewAllAtSecs = null
+        }
         val isStale = withdrawalFailedAtSecs != null || info.lastSyncError != null
         _state.update {
             it.copy(
                 isReady = true,
                 balanceSats = info.balanceSats,
                 keptBalanceSats = it.shownBalanceSats.takeIf { kept ->
-                    info.balanceSats == 0uL && isStale && !withdrewAll && kept > 0uL
+                    info.balanceSats == 0uL && isStale && withdrewAllAtSecs == null && kept > 0uL
                 },
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),

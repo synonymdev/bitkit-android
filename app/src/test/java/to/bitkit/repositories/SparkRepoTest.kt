@@ -1157,11 +1157,43 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertEquals(0uL, sut.state.value.shownBalanceSats, "the withdrawn balance stayed shown")
 
-        read = info(2_000uL)
+        // New funds show on a sync after the withdrawal.
+        read = info(2_000uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL)
         sut.refreshState().getOrThrow()
         read = staleZero
         sut.refreshState().getOrThrow()
         assertEquals(2_000uL, sut.state.value.shownBalanceSats, "a stale zero after new funds hid them")
+    }
+
+    @Test
+    fun `a refresh that read the balance before a full withdrawal never brings it back`() = test {
+        val staleZero = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        var read = info(10_000uL)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenAnswer { read }
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer {
+            read = staleZero
+            sentPayment(fees = 500)
+        }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        // A refresh reads the old balance, then waits on the network while the withdrawal goes out.
+        val deposits = CompletableDeferred<List<DepositInfo>>()
+        var depositReads = 0
+        whenever { sparkService.listUnclaimedDeposits() }.doSuspendableAnswer {
+            if (depositReads++ == 0) deposits.await() else emptyList()
+        }
+        val olderRefresh = async { sut.refreshState() }
+        runCurrent()
+        val withdrawal = async { sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL) }
+        runCurrent()
+        deposits.complete(emptyList())
+        olderRefresh.await().getOrThrow()
+        withdrawal.await().getOrThrow()
+
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the withdrawn balance came back")
     }
 
     @Test
