@@ -199,7 +199,9 @@ class SparkExitDriver(
 
     /**
      * Builds [start]'s leaves as a new generation. With [isUnverifiedRebuild], the generation it rebuilds over is still
-     * valid: a build that asks for more fee funding keeps sending it while the top-up waits.
+     * valid and stays the exit's, sent every tick, unless the build replaces it with signed steps: a build that asks
+     * for more fee funding keeps sending it while the top-up waits, and one of only failed cooperative leaves beside a
+     * leaf it could not read is not adopted.
      */
     private suspend fun build(
         start: SparkExitRecord,
@@ -264,8 +266,11 @@ class SparkExitDriver(
             // A build of only cooperative leaves the operators could not co-sign is kept, a rebuild's too: they are
             // retried for a week like any failed leaf, then let go.
             if (built.failed.isNotEmpty()) {
-                val adopted = record.adopt(built, nowMillis())
-                    .copy(waitingLeafIds = waitingLeafIds(record, prepared.skipped, stopped))
+                val waiting = waitingLeafIds(record, prepared.skipped, stopped)
+                // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
+                // leaves are retried, past the window in which they are ours to publish.
+                if (isUnverifiedRebuild && waiting.isNotEmpty()) return record
+                val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
                 return adopted

@@ -399,6 +399,44 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an unverified rebuild of only failed cooperative leaves keeps the valid generation`() = test {
+        val failed = CooperativeRecoveryFailure(
+            "coop-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+            failed = listOf(failed),
+        )
+        val readable = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+            failed = listOf(failed),
+        )
+        sdk.checks += check(unverified, RecoveryVerdict.Valid)
+        sdk.checks += check(readable, RecoveryVerdict.Valid)
+        sdk.preparedResponse = coopLeaf(16_384uL).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        repeat(2) { sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed)) }
+        val start = running(unverified).copy(leafIds = listOf("leaf-1", "coop-1"))
+
+        var record = driver(tip = 1_000u).tick(start)
+        assertEquals(1, record.generation, "rebuild adopted a recovery without leaf-1's signed steps")
+        assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid }, "leaf-1's matured step n2 was not sent")
+    }
+
+    @Test
     fun `an unverified unilateral step waits while another unilateral step is ready`() = test {
         val recovery = SparkExitFixtures.recovery(
             listOf(
