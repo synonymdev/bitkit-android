@@ -396,6 +396,26 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
         assertEquals(1, record.generation)
+        assertEquals(Phase.Running, record.phase, "the fee ask stayed once every step read again")
+        assertFalse(record.isUnverifiedAsk)
+    }
+
+    @Test
+    fun `an unverified rebuild's fee ask stays while a step still reads unverified`() = test {
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unverified, RecoveryVerdict.Valid) }
+        sdk.recoverError = SdkException.InsufficientCpfpFunds(30_000uL, "")
+
+        var record = driver(tip = 1_000u).tick(running(unverified))
+        record = driver(tip = 1_000u).tick(record)
+
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isUnverifiedAsk)
     }
 
     @Test

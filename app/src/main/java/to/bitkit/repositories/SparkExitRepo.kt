@@ -421,6 +421,7 @@ class SparkExitRepo @Inject constructor(
             )
         }
         if (SparkExitAlerts.isFundingAskBack(record, previous)) work.notify(SparkExitAlert.Funding)
+        if (SparkExitAlerts.isFundingAskWithdrawn(record, previous)) work.dismissNotification()
         when (record.phase) {
             // Waiting on the operators for a week needs nothing from the user, so nothing reminds them.
             SparkExitRecord.Phase.Running if record.isWaitingForOperators -> {

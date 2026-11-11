@@ -430,7 +430,18 @@ class SparkExitDriver(
             ?: return broadcastWithoutSdk(record)
         val updated = record.copy(recovery = checked.recovery)
         return when (checked.verdict) {
-            RecoveryVerdict.Valid -> broadcastReady(updated)
+            RecoveryVerdict.Valid -> {
+                // An unverified rebuild's ask ends once every step reads again: the valid generation needs nothing
+                // more. Funding paid meanwhile stays at the address, for a later rebuild or the leftover sweep.
+                val isAskOver = record.isUnverifiedAsk && record.fundingPaymentTxid == null &&
+                    checked.recovery.transactions.none { it.status == ExitTransactionStatus.Unverified }
+                val current = if (isAskOver) {
+                    updated.copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false)
+                } else {
+                    updated
+                }
+                broadcastReady(current)
+            }
             // Finished before the higher fee was needed: running again, the next check ends it and the payment goes
             // back with the leftover.
             RecoveryVerdict.Done -> updated.copy(phase = SparkExitRecord.Phase.Running)

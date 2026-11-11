@@ -39,6 +39,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.alarmManager
 import to.bitkit.ext.connectivityManager
+import to.bitkit.ext.notificationManagerCompat
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -156,6 +157,11 @@ class SparkExitWork @Inject constructor(
             warnAt = nowMillis + deadline.warnIn.inWholeMilliseconds,
             deadlineAt = nowMillis + deadline.deadlineIn.inWholeMilliseconds,
         )
+    }
+
+    /** Takes back the exit's posted notification, such as a fee ask the exit no longer has. */
+    fun dismissNotification() {
+        context.notificationManagerCompat.cancel(NOTIFICATION_ID)
     }
 
     fun cancelDeadline() {
@@ -378,6 +384,11 @@ object SparkExitAlerts {
     fun isFundingAskBack(record: SparkExitRecord, previous: SparkExitRecord): Boolean =
         previous.isAwaitingOwnPayment && !record.isAwaitingOwnPayment && record.fundingShortfallSats != null &&
             record.fundingPaymentTxid == null
+
+    /** An unverified rebuild's fee ask the tick from [previous] withdrew: the valid generation needs nothing more. */
+    fun isFundingAskWithdrawn(record: SparkExitRecord, previous: SparkExitRecord): Boolean =
+        previous.isUnverifiedAsk && previous.phase is SparkExitRecord.Phase.NeedsFunding &&
+            record.phase == SparkExitRecord.Phase.Running
 
     /** A started exit nothing was paid into: no adopted funding, no payment from savings. */
     fun isAwaitingFirstFunding(record: SparkExitRecord): Boolean =

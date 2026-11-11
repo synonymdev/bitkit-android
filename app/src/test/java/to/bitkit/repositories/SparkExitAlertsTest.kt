@@ -73,6 +73,16 @@ class SparkExitAlertsTest {
     }
 
     @Test
+    fun `an unverified rebuild's fee ask that ended is withdrawn`() {
+        val asked = SparkExitFixtures.record(Phase.NeedsFunding(5_000uL)).copy(isUnverifiedAsk = true)
+        val running = SparkExitFixtures.record(Phase.Running)
+
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(running, asked))
+        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(running, asked.copy(isUnverifiedAsk = false)))
+        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(asked, asked))
+    }
+
+    @Test
     fun `posts each lost leaf event, and a failure unless every leaf was lost`() {
         val lost = running.copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)))
         val claimed = lost.copy(phase = Phase.Failed(SparkExitDriver.LOST_REASON))
