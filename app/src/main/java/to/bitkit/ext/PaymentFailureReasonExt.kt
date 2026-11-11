@@ -51,6 +51,10 @@ fun Throwable.toSendFailureMessage(context: Context): String {
     val fallbackMessage = context.getString(R.string.wallet__payment_failed_description)
     val rawMessage = message?.trim().orEmpty()
 
+    if (generateSequence(this) { it.cause }.any { it is SparkError.RestoredInvoiceUnverified }) {
+        return context.getString(R.string.wallet__payment_restored_invoice)
+    }
+
     // Spark and its SDK speak in English developer messages; they go to the log, the user gets the existing copy.
     if (this is LdkError || this is SparkError || this is SdkException || rawMessage.isBlank() ||
         rawMessage.looksInternalPaymentError()

@@ -78,6 +78,7 @@ import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -232,6 +233,257 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isConnected).thenReturn(false)
 
         assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `a restored wallet's unsynced history refuses the node's send of an invoice from before the restore`() =
+        test {
+            cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
+            whenever(sparkService.isConnected).thenReturn(true)
+            val sut = createSut()
+
+            assertFailsWith<SparkError.SendRefused> {
+                sut.earlierLightningSend("lnbc1280n1send", "hash", invoiceCreatedAt = now.epochSeconds - 60)
+            }
+            assertFailsWith<SparkError.SendRefused> { sut.earlierLightningSend("lnbc1280n1send", "hash") }
+        }
+
+    @Test
+    fun `a pre-restore invoice spark's synced list lacks is refused over the node until it expires`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        // Spark reports Synced while its payment-history sync failed, so its list lacks the pre-restore send.
+        whenever { sparkService.listPayments() }.thenReturn(emptyList())
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val createdAt = restoredAt - 600
+
+        assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+            sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, invoiceExpiresAt = now.epochSeconds + 600)
+        }
+        assertNull(store.data.first().sparkHistoryUnseededSince, "spark's own list still seeds the kept hashes")
+        assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+            sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, invoiceExpiresAt = now.epochSeconds + 600)
+        }
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, invoiceExpiresAt = now.epochSeconds))
+        assertNull(sut.earlierLightningSend("lnbc1280n1new", "new", now.epochSeconds, now.epochSeconds + 600))
+    }
+
+    @Test
+    fun `a pre-restore invoice that outlasts a week is still refused on both rails on day 8`() = test {
+        val restoredAt = now.epochSeconds - 8 * 24 * 60 * 60L
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkRestoredAt = restoredAt)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val createdAt = restoredAt - 600
+        val expirySecs = 30 * 24 * 60 * 60L
+        val prepared = prepared(feeSats = 0uL, createdAt = createdAt.toULong(), expirySecs = expirySecs.toULong())
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        assertTrue(sut.holdsRestoredInvoices())
+        assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+            sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, createdAt + expirySecs)
+        }
+        assertIs<SparkError.RestoredInvoiceUnverified>(sut.payInvoice("lnbc1280n1send", 128uL).exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `an invoice created after the restore pays over the node while spark is unsynced`() = test {
+        cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash", invoiceCreatedAt = now.epochSeconds + 60))
+    }
+
+    @Test
+    fun `an updated install that was never restored is never held while spark is unsynced`() = test {
+        whenever(sparkService.isConnected).thenReturn(false)
+        val sut = createSut()
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash", invoiceCreatedAt = 1L))
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+    }
+
+    @Test
+    fun `spark's synced list seeds the restored hashes and a later unsynced start still refuses older invoices`() =
+        test {
+            val restoredAt = now.epochSeconds
+            val restored = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+            val store = CacheStore(InMemoryDataStore(restored), clock)
+            whenever(sparkService.isConnected).thenReturn(true)
+            val failed = sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED).withHash("failed")
+            whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2), failed))
+            createSut(store).start(0).getOrThrow()
+
+            assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
+            assertNull(store.data.first().sparkHistoryUnseededSince)
+
+            whenever(sparkService.isConnected).thenReturn(false)
+            val restarted = createSut(store)
+            assertEquals(EarlierSend.Pending("hash"), restarted.earlierLightningSend("lnbc1280n1send", "hash"))
+            assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+                restarted.earlierLightningSend("lnbc1280n1other", "other", invoiceCreatedAt = 1L)
+            }
+            assertNull(restarted.earlierLightningSend("lnbc1280n1other", "other", invoiceCreatedAt = now.epochSeconds))
+        }
+
+    @Test
+    fun `a send spark's list seeded after a restore is not sent again by spark after an unsynced restart`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        whenever { sparkService.invoiceExpiresAt("lnbc1280n1send") }.thenReturn(now.epochSeconds.toULong() + 3_600uL)
+        createSut(store).start(0).getOrThrow()
+        assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val restarted = createSut(store)
+        restarted.start(0).getOrThrow()
+
+        restarted.payInvoice("lnbc1280n1send", 128uL)
+
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a ready spark that hasn't synced since the restore refuses an invoice from before it`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL).copy(lastSyncedAt = null))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a synced spark whose list lacks a pre-restore invoice refuses to send it`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        // Spark reports Synced while its payment-history sync failed, so its list lacks the pre-restore send.
+        val prepared = prepared(feeSats = 0uL, createdAt = (restoredAt - 600).toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertNull(store.data.first().sparkHistoryUnseededSince)
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a synced spark whose list can't be read refuses a pre-restore invoice`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL, createdAt = (restoredAt - 600).toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertNull(store.data.first().sparkHistoryUnseededSince)
+        whenever { sparkService.listPayments() }.thenThrow(RuntimeException("list failed"))
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a synced spark sends an invoice created after the restore`() = test {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL, createdAt = now.epochSeconds.toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        sut.payInvoice("lnbc1280n1send", 128uL).getOrThrow()
+
+        verify(sparkService).send(any())
+    }
+
+    @Test
+    fun `restored spark sends with valid invoices survive the hash cap`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sends = (0..MAX_SPARK_SEND_HASHES).map {
+            sentPayment(fees = 2).copy(id = "send$it", timestamp = it.toULong()).withHash("paid$it")
+        }
+        whenever { sparkService.listPayments() }.thenReturn(sends)
+        whenever { sparkService.invoiceExpiresAt(any()) }.thenReturn(now.epochSeconds.toULong() + 3_600uL)
+
+        createSut(store).start(0).getOrThrow()
+
+        assertTrue("paid0" in store.data.first().sparkSendHashes, "the cap dropped a still-valid paid invoice")
+    }
+
+    @Test
+    fun `a kept spark send without an expiry gets its invoice's expiry when seeded`() = test {
+        val cache = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds, sparkSendHashes = listOf("paid0"))
+        val store = CacheStore(InMemoryDataStore(cache), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sends = (0 until MAX_SPARK_SEND_HASHES + 1).map {
+            sentPayment(fees = 2).copy(id = "send$it", timestamp = it.toULong()).withHash("paid$it")
+        }
+        whenever { sparkService.listPayments() }.thenReturn(sends)
+        whenever { sparkService.invoiceExpiresAt(any()) }.thenReturn(now.epochSeconds.toULong() + 3_600uL)
+
+        createSut(store).start(0).getOrThrow()
+
+        assertTrue("paid0" in store.data.first().sparkSendHashes, "the cap dropped a kept still-valid paid invoice")
+    }
+
+    @Test
+    fun `a list read before spark's first sync seeds no hashes`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        createSut(store).start(0).getOrThrow()
+
+        assertEquals(now.epochSeconds, store.data.first().sparkHistoryUnseededSince)
+    }
+
+    @Test
+    fun `spark's synced event seeds the restored hashes and ends the hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertEquals(now.epochSeconds, store.data.first().sparkHistoryUnseededSince)
+
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+
+        assertNull(store.data.first().sparkHistoryUnseededSince)
+        assertEquals(listOf("hash"), store.data.first().sparkSendHashes)
     }
 
     @Test
@@ -1068,6 +1320,65 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a zero read after a full withdrawal clears the balance even while spark's sync fails`() = test {
+        val staleZero = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        var read = info(10_000uL)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenAnswer { read }
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer {
+            read = staleZero
+            sentPayment(fees = 500)
+        }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+
+        sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).getOrThrow()
+        sut.refreshState().getOrThrow()
+
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the withdrawn balance stayed shown")
+
+        // New funds show on a sync after the withdrawal.
+        read = info(2_000uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL)
+        sut.refreshState().getOrThrow()
+        read = staleZero
+        sut.refreshState().getOrThrow()
+        assertEquals(2_000uL, sut.state.value.shownBalanceSats, "a stale zero after new funds hid them")
+    }
+
+    @Test
+    fun `a refresh that read the balance before a full withdrawal never brings it back`() = test {
+        val staleZero = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        var read = info(10_000uL)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenAnswer { read }
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        whenever { sparkService.send(any()) }.thenAnswer {
+            read = staleZero
+            sentPayment(fees = 500)
+        }
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        // A refresh reads the old balance, then waits on the network while the withdrawal goes out.
+        val deposits = CompletableDeferred<List<DepositInfo>>()
+        var depositReads = 0
+        whenever { sparkService.listUnclaimedDeposits() }.doSuspendableAnswer {
+            if (depositReads++ == 0) deposits.await() else emptyList()
+        }
+        val olderRefresh = async { sut.refreshState() }
+        runCurrent()
+        val withdrawal = async { sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL) }
+        runCurrent()
+        deposits.complete(emptyList())
+        olderRefresh.await().getOrThrow()
+        withdrawal.await().getOrThrow()
+
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the withdrawn balance came back")
+    }
+
+    @Test
     fun `a synced read after a failed withdrawal clears the kept balance even when it reads zero`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
@@ -1884,6 +2195,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send whose deadline passes while its uncertainty is written never leaves`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val deadline = now + 1.seconds
+        whenever { cacheStore.addSparkUncertainSend(any(), any()) }.thenAnswer {
+            now = deadline + 1.seconds
+            Unit
+        }
+        val sut = createSut()
+
+        val result = sut.payInvoice("lnbc1", 100uL, deadline, null) { true }
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
+        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+    }
+
+    @Test
     fun `an older failed row never ends an uncertain spark send while spark can't resync`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
@@ -2126,8 +2458,16 @@ class SparkRepoTest : BaseUnitTest() {
         lastSyncedAt = 1uL,
     )
 
-    private fun prepared(feeSats: ULong): PrepareSendPaymentResponse {
-        val details = mock<Bolt11InvoiceDetails> { on { paymentHash } doReturn "hash" }
+    private fun prepared(
+        feeSats: ULong,
+        createdAt: ULong = 0uL,
+        expirySecs: ULong = 0uL,
+    ): PrepareSendPaymentResponse {
+        val details = mock<Bolt11InvoiceDetails> {
+            on { paymentHash } doReturn "hash"
+            on { timestamp } doReturn createdAt
+            on { expiry } doReturn expirySecs
+        }
         return PrepareSendPaymentResponse(
             paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, feeSats),
             amount = BigInteger.valueOf(100),

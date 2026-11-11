@@ -975,6 +975,77 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile without a tag change does not wait for the profile copy`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val finishCopy = CompletableDeferred<Unit>()
+        whenever { pubkyService.publishPaykitProfile(any(), any()) }.doSuspendableAnswer {
+            finishCopy.await()
+            paykitRecord(it.getArgument(0))
+        }
+        clearInvocations(pubkyService)
+
+        val save = async {
+            sut.saveProfile(name = "Renamed", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+        }
+        runCurrent()
+
+        assertTrue(save.isCompleted)
+        save.await().getOrThrow()
+        verifyBlocking(pubkyService) { publishPaykitProfile(any(), any()) }
+        finishCopy.complete(Unit)
+    }
+
+    @Test
+    fun `a background copy write keeps a later load's unread tags`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val finishCopy = CompletableDeferred<Unit>()
+        whenever { pubkyService.publishPaykitProfile(any(), any()) }.doSuspendableAnswer {
+            finishCopy.await()
+            paykitRecord(it.getArgument(0))
+        }
+        sut.saveProfile(name = "Renamed", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+            .getOrThrow()
+        runCurrent()
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        sut.loadProfile()
+
+        finishCopy.complete(Unit)
+        runCurrent()
+
+        assertTrue(sut.profileEditBase().tagsUnread)
+    }
+
+    @Test
+    fun `a save that reads the copy itself lets the next edit remove a tag`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        var copy = PubkyProfileData(name = "Test", bio = "", tags = listOf("a", "b")).toPaykitProfile()
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { paykitRecord(copy) }
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenAnswer {
+            copy = it.getArgument(0)
+            paykitRecord(copy)
+        }
+        sut.loadProfile()
+        val editBase = sut.profileEditBase()
+        doAnswer { throw TestAppError("offline") }.whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+        sut.loadProfile()
+        doAnswer { paykitRecord(copy) }.whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+
+        sut.saveProfile(
+            name = "Test",
+            bio = "",
+            links = emptyList(),
+            tags = listOf("a"),
+            imageUrl = null,
+            editBase = editBase
+        ).getOrThrow()
+        runCurrent()
+        sut.saveProfile(name = "Test", bio = "", links = emptyList(), tags = listOf("a"), imageUrl = null).getOrThrow()
+        runCurrent()
+
+        assertEquals(listOf("a"), PubkyProfileData.fromPaykitProfile(copy).tags)
+    }
+
+    @Test
     fun `saveProfile signs in again once when the session lacks the pubky app scope`() = test {
         val secretKey = "local_secret"
         authenticateForTesting(publicKey = VALID_SELF_KEY)
@@ -1226,6 +1297,48 @@ class PubkyRepoTest : BaseUnitTest() {
         val copy = argumentCaptor<PaykitProfile>()
         verifyBlocking(pubkyService, times(2)) { publishPaykitProfile(copy.capture(), any()) }
         assertEquals(listOf("friend", "work", "vip"), PubkyProfileData.fromPaykitProfile(copy.lastValue).tags)
+    }
+
+    @Test
+    fun `a tag save after a failed read and write keeps the stored tags without the error's base`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        sut.loadProfile()
+        doReturn(
+            paykitRecord(PubkyProfileData(name = "Test", bio = "", tags = listOf("friend", "work")).toPaykitProfile())
+        )
+            .whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+        whenever(pubkyService.publishPaykitProfile(any(), any()))
+            .thenAnswer { throw TestAppError("offline") }
+            .thenAnswer { paykitRecord(it.getArgument(0)) }
+
+        sut.saveProfile(name = "Test", bio = "", links = emptyList(), tags = listOf("vip"), imageUrl = null)
+        sut.saveProfile(name = "Test", bio = "", links = emptyList(), tags = listOf("vip"), imageUrl = null)
+
+        val copy = argumentCaptor<PaykitProfile>()
+        verifyBlocking(pubkyService, times(2)) { publishPaykitProfile(copy.capture(), any()) }
+        assertEquals(listOf("friend", "work", "vip"), PubkyProfileData.fromPaykitProfile(copy.lastValue).tags)
+    }
+
+    @Test
+    fun `a name save after a failed read and write keeps the stored tags`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        sut.loadProfile()
+        doReturn(
+            paykitRecord(PubkyProfileData(name = "Test", bio = "", tags = listOf("friend", "work")).toPaykitProfile())
+        )
+            .whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+        whenever(pubkyService.publishPaykitProfile(any(), any()))
+            .thenAnswer { throw TestAppError("offline") }
+            .thenAnswer { paykitRecord(it.getArgument(0)) }
+
+        sut.saveProfile(name = "Renamed", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+        sut.saveProfile(name = "Renamed Again", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+
+        val copy = argumentCaptor<PaykitProfile>()
+        verifyBlocking(pubkyService, times(2)) { publishPaykitProfile(copy.capture(), any()) }
+        assertEquals(listOf("friend", "work"), PubkyProfileData.fromPaykitProfile(copy.lastValue).tags)
     }
 
     @Test

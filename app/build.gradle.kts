@@ -364,7 +364,7 @@ androidComponents {
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_OVERRIDE", e2eHomegateOverrideEnv.stringField())
-        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL")) {
+        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL", "BLOCKTANK_REGTEST_AUTH")) {
             val value = if (variant.buildType == "debug") localProp(key).orElse("") else provider { "" }
             buildConfigFields.put(key, value.stringField())
         }
@@ -417,7 +417,7 @@ androidComponents {
 }
 
 fun Provider<String>.stringField(): Provider<BuildConfigField<String>> =
-    map { BuildConfigField(type = "String", value = "\"$it\"", comment = null) }
+    map { BuildConfigField(type = "String", value = "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"", comment = null) }
 
 fun Provider<String>.booleanField(): Provider<BuildConfigField<String>> =
     map { BuildConfigField(type = "boolean", value = it, comment = null) }

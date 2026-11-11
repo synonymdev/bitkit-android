@@ -17,6 +17,7 @@ import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateRequest
 import breez_sdk_spark.ImportUnilateralExitStateResponse
+import breez_sdk_spark.InputType
 import breez_sdk_spark.ListPaymentsRequest
 import breez_sdk_spark.ListUnclaimedDepositsRequest
 import breez_sdk_spark.MaxFee
@@ -69,6 +70,9 @@ class SparkService @Inject constructor(
     private val keychain: Keychain,
 ) {
     companion object {
+        /** When an invoice made at [timestamp] with [expiry] seconds to live expires, in epoch seconds. */
+        internal fun invoiceExpiresAt(timestamp: ULong, expiry: ULong): ULong = timestamp.safe() + expiry.safe()
+
         private const val TAG = "SparkService"
 
         /**
@@ -286,6 +290,10 @@ class SparkService @Inject constructor(
 
     suspend fun listPayments(): List<Payment> = requireSdk().listPayments(ListPaymentsRequest()).payments
 
+    /** When [bolt11] expires, in epoch seconds, read by the SDK's own parser; null when it isn't a BOLT11 invoice. */
+    suspend fun invoiceExpiresAt(bolt11: String): ULong? =
+        (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1?.let { invoiceExpiresAt(it.timestamp, it.expiry) }
+
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */
     suspend fun exportExitState(): String = requireSdk().exportUnilateralExitState().exitState
 
@@ -338,10 +346,14 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
 
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
-     * payment, or its fee was over the caller's limit. A Paykit request or allowance attempt can then end as failed.
+     * payment, or its fee was over the caller's limit; or the node refused one because Spark hadn't listed its earlier
+     * sends yet. A Paykit request or allowance attempt can then end as failed.
      */
     open class SendRefused(message: String, cause: Throwable? = null) : SparkError(message, cause)
 
     /** Spark refused to pay an expired Lightning invoice, before anything left the wallet. */
     class InvoiceExpired(cause: Throwable? = null) : SendRefused("The Lightning invoice has expired", cause)
+
+    /** Refused a still-valid invoice created before the restore, as Spark can't show it didn't pay it then. */
+    class RestoredInvoiceUnverified : SendRefused("Spark can't show it didn't pay this invoice before the restore")
 }

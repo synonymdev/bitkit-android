@@ -57,6 +57,13 @@ class SparkServiceTest {
     }
 
     @Test
+    fun `an invoice expiry past the largest time stays at the largest time`() {
+        val farOff = SparkService.invoiceExpiresAt(timestamp = ULong.MAX_VALUE - 1uL, expiry = 3_600uL)
+        assertEquals(ULong.MAX_VALUE, farOff)
+        assertEquals(1_800_003_600uL, SparkService.invoiceExpiresAt(timestamp = 1_800_000_000uL, expiry = 3_600uL))
+    }
+
+    @Test
     fun `claim fee estimate covers the claims seen on mainnet`() {
         // Mainnet claims so far took 198 and 297 sats; the cap at 1 sat/vB stays above both.
         assertEquals(302uL, SparkService.maxDepositClaimFeeSats(fastestFeeRate = 1uL, amountSats = 2_500uL))
