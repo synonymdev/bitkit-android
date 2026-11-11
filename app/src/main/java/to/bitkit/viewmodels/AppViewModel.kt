@@ -4906,6 +4906,8 @@ class AppViewModel @Inject constructor(
                     payMethod = SendMethod.LIGHTNING,
                     decodedInvoice = null,
                     lnurl = route.lnurl ?: it.lnurl,
+                    // No invoice to estimate yet, so an earlier Spark leg's withdrawal fee would stay on Confirm.
+                    lightningFeeSats = null,
                     paykitRoute = route.copy(serviceLeg = null),
                 )
                 else -> it.copy(

@@ -12608,6 +12608,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a direct lnurl pick after a spark leg drops the leg's withdrawal fee`() = test {
+        val lnurl = openMixedContact()
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 2_000uL, debitSat = 2_300uL)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        continueWithAmount(2_000u)
+        assertEquals(300L, sut.sendUiState.value.lightningFeeSats)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri))))
+
+        continueWithAmount(6_000u)
+
+        assertNull(sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        assertNull(
+            sut.sendUiState.value.lightningFeeSats,
+            "Confirm must not show the Spark withdrawal fee for the LNURL",
+        )
+    }
+
+    @Test
     fun `a mixed contact lightning can pay routes direct`() = test {
         val lnurl = openMixedContact()
         val direct = PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri)
