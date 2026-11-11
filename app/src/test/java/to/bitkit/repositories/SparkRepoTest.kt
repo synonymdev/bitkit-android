@@ -1400,6 +1400,28 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a second withdrawal started while the first prepares is refused`() = test {
+        val sut = journaledSpark()
+        val prepared = sparkService.prepareSend("bcrt1qcontact", 20_000uL, null)
+        val prepareGate = CompletableDeferred<Unit>()
+        whenever { sparkService.prepareSend(eq("bcrt1qcontact"), eq(20_000uL), anyOrNull()) }.doSuspendableAnswer {
+            prepareGate.await()
+            prepared
+        }
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+        val first = async { sut.withdraw("bcrt1qcontact", 20_000uL, "first") }
+        runCurrent()
+
+        val second = async { sut.withdraw("bcrt1qcontact", 20_000uL, "second") }
+        runCurrent()
+        prepareGate.complete(Unit)
+
+        assertIs<SparkError.WithdrawalPending>(second.await().exceptionOrNull())
+        assertEquals("withdrawal", first.await().getOrThrow())
+        verify(sparkService, times(1)).send(any())
+    }
+
+    @Test
     fun `a foreground during an in-flight withdrawal keeps its journal until spark lists it`() = test {
         val sut = journaledSpark()
         val sendGate = CompletableDeferred<Unit>()

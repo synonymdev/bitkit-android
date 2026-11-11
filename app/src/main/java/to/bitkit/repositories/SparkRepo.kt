@@ -164,6 +164,9 @@ class SparkRepo @Inject constructor(
     @Volatile
     private var isWithdrawing = false
 
+    /** A withdrawal to a contact holds the one journal slot, from before it prepares until its send call returns. */
+    private val isClaimingWithdrawal = AtomicBoolean(false)
+
     /** The remote exit data backup was merged in, or there was none, so an upload cannot drop what it held. */
     @Volatile
     var hasMergedRemoteExitState = false
@@ -734,18 +737,22 @@ class SparkRepo @Inject constructor(
     ): Result<String> =
         withContext(bgDispatcher) {
             runSuspendCatching {
-                if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
-                val prepared = sparkService.prepareSend(address, amountSats)
-                val speed = prepared.withdrawalQuote().speedMedium
-                val debitSats = amountSats.safe() + (speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()).safe()
-                // The user confirmed the leg's debit; a quote that rose since then needs a new confirmation.
-                if (maxDebitSats != null && debitSats > maxDebitSats) throw SparkError.WithdrawalFeeChanged()
-                val earlierTxids = withdrawalTxidsTo(address)
-                // The proof onBeforeSend starts has no journal yet, so the attempt reads as in flight from here on and
-                // a reconcile meanwhile never drops that proof as unsent.
-                isWithdrawing = true
+                // Claimed before anything suspends, so a second withdrawal started while this one prepares is refused
+                // instead of overwriting its journal.
+                if (!isClaimingWithdrawal.compareAndSet(false, true)) throw SparkError.WithdrawalPending()
                 var journal: PendingSparkWithdrawal? = null
                 val sent = try {
+                    if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
+                    val prepared = sparkService.prepareSend(address, amountSats)
+                    val speed = prepared.withdrawalQuote().speedMedium
+                    val debitSats =
+                        amountSats.safe() + (speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()).safe()
+                    // The user confirmed the leg's debit; a quote that rose since then needs a new confirmation.
+                    if (maxDebitSats != null && debitSats > maxDebitSats) throw SparkError.WithdrawalFeeChanged()
+                    val earlierTxids = withdrawalTxidsTo(address)
+                    // The proof onBeforeSend starts has no journal yet, so the attempt reads as in flight from here on
+                    // and a reconcile meanwhile never drops that proof as unsent.
+                    isWithdrawing = true
                     if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
                     // A quote can expire while the request and its allowance are checked.
                     ensurePaymentDeadline(paymentDeadlineAt)
@@ -767,6 +774,7 @@ class SparkRepo @Inject constructor(
                     runSuspendCatching { sparkService.send(prepared) }
                 } finally {
                     isWithdrawing = false
+                    isClaimingWithdrawal.set(false)
                 }
                 val payment = sent.getOrElse {
                     // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
