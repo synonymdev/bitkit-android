@@ -2070,6 +2070,15 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send outside a restore hold leaves the invoice undecoded`() = test {
+        startNodeForTesting()
+        whenever(lightningService.send("bolt11", 1000uL)).thenReturn("payment-id")
+
+        assertEquals("payment-id", sut.payInvoice("bolt11", 1000uL).getOrThrow())
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
     fun `payInvoice forwards the payment deadline after final authorization`() = test {
         startNodeForTesting()
         val deadline = kotlin.time.Instant.parse("2026-10-06T12:00:00Z")

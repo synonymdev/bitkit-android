@@ -1661,7 +1661,9 @@ class LightningRepo @Inject constructor(
         requireWalletRestoreComplete()
         // Read before the checks, so a Spark send admitted after them refuses this one at submission.
         val sparkRecordsBefore = sparkRepo.sendRecordMark()
-        sparkRepo.earlierLightningSend(bolt11, paymentHash, invoiceCreatedAt(bolt11))
+        // Only a restore hold needs the invoice's date.
+        val createdAt = cacheStore.data.first().sparkHistoryUnseededSince?.let { invoiceCreatedAt(bolt11) }
+        sparkRepo.earlierLightningSend(bolt11, paymentHash, createdAt)
             ?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
