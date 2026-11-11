@@ -118,6 +118,13 @@ data class SparkExitRecord(
     val isRedoRebuild: Boolean = false,
     /** The fee funding asked for came from a rebuild over unverified steps, while the generation out there is valid. */
     val isUnverifiedAsk: Boolean = false,
+    /**
+     * A higher fee rate the steps out there are not built at yet: a fee bump whose build kept the valid generation over
+     * a leaf it would leave waiting. Built at that rate again until a build at it is adopted.
+     */
+    val isFeeBumpPending: Boolean = false,
+    /** The tip of the last build at a pending fee bump's rate, so it builds at most once a block. */
+    val feeBumpBuiltAtHeight: UInt? = null,
     /** What confirmed SWEEP and COOPERATIVE steps of replaced generations paid to [destination], by txid. */
     val earlierReceivedSats: Map<String, ULong> = emptyMap(),
     /** Each quoted leaf's value, so a leaf the first build leaves behind before any recovery lists it keeps it. */
@@ -421,6 +428,8 @@ data class SparkExitRecord(
         spentStepStrikes = if (isRedoRebuild) spentStepStrikes(built) else spentStepStrikes,
         isRedoRebuild = false,
         isUnverifiedAsk = false,
+        isFeeBumpPending = false,
+        feeBumpBuiltAtHeight = null,
         earlierReceivedSats = earlierReceivedSats + recovery?.let { SparkExitMath.confirmedReceived(it, destination) }
             .orEmpty(),
         earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::fundingTxids).orEmpty()).distinct(),
@@ -466,14 +475,20 @@ data class SparkExitRecord(
     /**
      * The exit at [rate]: with [extraSats] of funding paid in [paymentTxid], it waits for that payment as a top-up
      * and then rebuilds; with nothing to pay, it rebuilds on the next tick. Either way what has not confirmed goes
-     * out again at the new rate and replaces what is in the mempool. Not a Redo, so it strikes nothing.
+     * out again at the new rate and replaces what is in the mempool. Not a Redo, so it strikes nothing. The bump stays
+     * pending until a build at the new rate is adopted.
      */
     fun applyFeeBump(
         rate: ULong,
         extraSats: ULong,
         paymentTxid: String?,
     ): SparkExitRecord {
-        val bumped = copy(feeRateSatPerVbyte = rate, isRedoRebuild = false)
+        val bumped = copy(
+            feeRateSatPerVbyte = rate,
+            isRedoRebuild = false,
+            isFeeBumpPending = true,
+            feeBumpBuiltAtHeight = null,
+        )
         if (extraSats == 0uL) return bumped.copy(isRebuilding = true, lastBuildAt = null)
         return bumped.copy(
             phase = Phase.NeedsFunding(fundedSats.safe() + extraSats.safe()),
@@ -927,6 +942,12 @@ object SparkExitJson {
         sweep.builtAtHeight?.let { put("builtAtHeight", it.toLong()) }
     }
 
+    /** A fee bump still to be built at its rate, left out once none is pending. */
+    private fun JsonObjectBuilder.putFeeBumpState(r: SparkExitRecord) {
+        if (r.isFeeBumpPending) put("isFeeBumpPending", true)
+        r.feeBumpBuiltAtHeight?.let { put("feeBumpBuiltAtHeight", it.toLong()) }
+    }
+
     /** What the exit keeps to pace and bound its rebuilds and waits, each left out at its default. */
     private fun JsonObjectBuilder.putRebuildState(r: SparkExitRecord) {
         if (r.stallRebuilds > 0) put("stallRebuilds", r.stallRebuilds)
@@ -947,6 +968,7 @@ object SparkExitJson {
         if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
         if (r.isRedoRebuild) put("isRedoRebuild", true)
         if (r.isUnverifiedAsk) put("isUnverifiedAsk", true)
+        putFeeBumpState(r)
         r.fundingStrategy?.let { put("fundingStrategy", it) }
         if (r.failedLeaves.isNotEmpty()) {
             put(
@@ -1087,6 +1109,8 @@ object SparkExitJson {
         isRebuiltFromChain = o.booleanOrNull("isRebuiltFromChain") ?: false,
         isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,
         isUnverifiedAsk = o.booleanOrNull("isUnverifiedAsk") ?: false,
+        isFeeBumpPending = o.booleanOrNull("isFeeBumpPending") ?: false,
+        feeBumpBuiltAtHeight = o.ulongOrNull("feeBumpBuiltAtHeight")?.toUInt(),
         fundingStrategy = o.stringOrNull("fundingStrategy"),
         failedLeaves = o.arrayOrEmpty("failedLeaves").map {
             val l = it.jsonObject

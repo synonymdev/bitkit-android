@@ -235,6 +235,10 @@ class SparkExitDriver(
         sdk: SparkExitRecovering,
         isUnverifiedRebuild: Boolean = false,
     ): SparkExitRecord {
+        // A pending fee bump builds at its rate at most once a block, however the build was reached.
+        if (start.isFeeBumpPending && start.feeBumpBuiltAtHeight != tip) {
+            return build(start.copy(feeBumpBuiltAtHeight = tip), sdk, isUnverifiedRebuild)
+        }
         // A build waiting for a leaf that may still move tries again only at its paced heights, or once its wait ends.
         val since = start.retrySince
         if (since != null && tip != null && !SparkExitMath.isRetryDue(since, start.retriedAt, tip) &&
@@ -525,6 +529,9 @@ class SparkExitDriver(
                     Logger.warn("Rebuilding Spark exit over step '${stuck.txid}' that keeps failing", context = TAG)
                     return stallRebuild(sent, sdk)
                 }
+                if (sent.isFeeBumpPending && tip != null && sent.feeBumpBuiltAtHeight != tip) {
+                    return buildFeeBump(sent, sdk)
+                }
                 if (!needsUnverifiedRebuild(sent)) return sent
                 // A check cannot settle a step the SDK could not read; a fresh build reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
@@ -553,6 +560,32 @@ class SparkExitDriver(
                 // Only a rebuild over a diverged chain can find a leaf an older state claimed.
                 rebuild(updated.copy(isRedoRebuild = true), sdk)
             }
+        }
+    }
+
+    /**
+     * A fee bump whose build kept [sent], the valid generation, over a waiting leaf is built at its rate again once a
+     * block, whatever the leaf waits for, until a build at it is adopted; that build also settles any unread step. A
+     * build it does not adopt leaves [sent] going, checked and sent every tick, and one that asks for more fee funding
+     * keeps sending it while the top-up waits.
+     */
+    private suspend fun buildFeeBump(sent: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+        Logger.info("Rebuilding Spark exit at its higher fee rate '${sent.feeRateSatPerVbyte}' sat/vB", context = TAG)
+        val rebuilding = sent.copy(
+            isRebuilding = true,
+            feeBumpBuiltAtHeight = tip,
+            unverifiedRebuiltAtHeight = tip,
+            isRedoRebuild = false,
+        )
+        // Saved as the valid generation: a run killed during the rebuild goes on sending it.
+        save(rebuilding.copy(isRebuilding = false))
+        val rebuilt = build(rebuilding, sdk)
+        return when {
+            rebuilt.isAdoptionPending(sent) ->
+                rebuilt.copy(isRebuilding = false, retrySince = sent.retrySince, retriedAt = sent.retriedAt)
+            rebuilt.generation == sent.generation && rebuilt.phase is SparkExitRecord.Phase.NeedsFunding ->
+                rebuilt.copy(isRebuilding = false)
+            else -> rebuilt
         }
     }
 

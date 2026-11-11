@@ -1492,7 +1492,8 @@ class SparkExitDriverTest : BaseUnitTest() {
             sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
                 skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
             )
-            sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1")))
+            // The second build is the bump's again, at the next block.
+            repeat(2) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1"))) }
 
             record = driver(tip = 1_000u).tick(record)
 
@@ -1511,6 +1512,99 @@ class SparkExitDriverTest : BaseUnitTest() {
             record = driver(tip = 1_001u).tick(record)
             assertEquals(listOf("n2"), chain.broadcasts.map { it.txid }, "leaf-1's refund n2 was not sent")
         }
+
+    @Test
+    fun `a higher fee kept over a waiting leaf builds at the bumped rate once the leaf reads`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        var record = funded(running(unread).copy(leafIds = listOf("leaf-1", "leaf-2")))
+            .applyFeeBump(rate = 9uL, extraSats = 0uL, paymentTxid = null)
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        repeat(2) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1"))) }
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1, record.generation)
+
+        val reread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        sdk.checks += check(reread, RecoveryVerdict.Valid)
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(1, record.generation, "the rebuild that drops leaf-1's refund n2 was adopted")
+        assertFalse(record.isRebuilding, "the valid generation is no longer checked or sent")
+        assertEquals(
+            listOf("n2"),
+            chain.broadcasts.map { it.txid },
+            "leaf-1's refund n2 was not sent while the bump waits",
+        )
+
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1", "leaf-2"))
+        sdk.builds.clear()
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("b1"), SparkExitFixtures.tx("b2")))
+        sdk.checks += check(reread, RecoveryVerdict.Valid)
+        val preparesBefore = sdk.prepareRequests.size
+        record = driver(tip = 1_002u).tick(record)
+
+        assertEquals(2, record.generation, "the bump was never built at its rate")
+        assertEquals(listOf(9uL), sdk.prepareRequests.drop(preparesBefore).map { it.feeRateSatPerVbyte })
+        assertEquals(listOf("b1", "b2"), record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
+    fun `a dead fee chain beside a waiting leaf rebuilds once the leaf's step confirms`() = test {
+        val bothLeaves = listOf(
+            RecoverFundsLeaf("leaf-1", 100_000uL, RecoveryMethod.UNILATERAL),
+            RecoverFundsLeaf("leaf-2", 100_000uL, RecoveryMethod.UNILATERAL),
+        )
+        fun steps(l1: ExitTransactionStatus, node1: ExitTransactionStatus = ExitTransactionStatus.Confirmed(11_600u)) =
+            Race.recovery(node1).let {
+                it.copy(leaves = bothLeaves, transactions = it.transactions + SparkExitFixtures.tx("l1", status = l1))
+            }
+        var record = running(steps(ExitTransactionStatus.Unverified, node1 = ExitTransactionStatus.Ready)).copy(
+            leafIds = listOf("leaf-1", "leaf-2"),
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", Race.FUNDING_TXID, 0u, 20_000uL)
+            ),
+        )
+        chain.confirmedTxids = setOf(Race.NODE_1)
+        chain.unknownTxids = setOf(Race.firstTxid)
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        repeat(SparkExitDriver.STALL_REBUILDS_TO_SURFACE + 1) {
+            sdk.builds += Race.rebuilt.copy(leaves = listOf(bothLeaves[1]))
+        }
+
+        repeat(SparkExitDriver.STALL_REBUILDS_TO_SURFACE + 1) { i ->
+            sdk.checks += check(steps(ExitTransactionStatus.Unverified), RecoveryVerdict.Valid)
+            now += interval
+            record = driver(tip = 1_000u + i.toUInt()).tick(record)
+            if (record.isRebuilding) record = driver(tip = 1_000u + i.toUInt()).tick(record)
+            assertEquals(1, record.generation, "a rebuild dropped leaf-1's signed step l1")
+        }
+        assertTrue(record.isStalled)
+        val rebuildsWhileStalled = sdk.recoverRequests.size
+
+        // leaf-1 reads again and its step confirms: the exit moves, so the dead chain is rebuilt over.
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2"))
+        chain.confirmedTxids = setOf(Race.NODE_1, "l1")
+        sdk.checks += check(steps(ExitTransactionStatus.Confirmed(1_004u)), RecoveryVerdict.Valid)
+        now += interval
+        record = driver(tip = 1_005u).tick(record)
+        if (record.isRebuilding) record = driver(tip = 1_005u).tick(record)
+
+        assertEquals(rebuildsWhileStalled + 1, sdk.recoverRequests.size)
+        assertEquals(2, record.generation, "the dead fee chain was never rebuilt over")
+        assertEquals(Race.rebuiltSecond, chain.broadcasts.last().cpfpTxHex)
+    }
 
     @Test
     fun `a rebuild from the chain keeps its note until one of its steps confirms`() = test {

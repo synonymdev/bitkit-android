@@ -122,6 +122,8 @@ class SparkExitRecordTest {
                 exitStateSnapshot = "exit-state",
                 isRebuiltFromChain = true,
                 isRedoRebuild = true,
+                isFeeBumpPending = true,
+                feeBumpBuiltAtHeight = 1_004u,
                 earlierReceivedSats = mapOf("sweep-0" to 90_000uL),
             )
 
@@ -227,6 +229,8 @@ class SparkExitRecordTest {
             "exitStateSnapshot",
             "isRebuiltFromChain",
             "isRedoRebuild",
+            "isFeeBumpPending",
+            "feeBumpBuiltAtHeight",
             "earlierReceivedSats",
         ).forEach { assertFalse(it in json, it) }
         assertEquals(
