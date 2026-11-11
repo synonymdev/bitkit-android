@@ -33,6 +33,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -1843,6 +1844,93 @@ class SparkRepoTest : BaseUnitTest() {
         assertTrue("hash" in store.data.first().sparkSendHashes, "A restart released a retry Spark may resume")
         assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), after.lightningSend("hash"))
         assertEquals(EarlierSend.Pending("hash"), after.earlierLightningSend("lnbc1", "hash"))
+    }
+
+    @Test
+    fun `a spark retry cut off by process death stays held after a restart while spark lists only its older failure`() =
+        test {
+            val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+            whenever(sparkService.isConnected).thenReturn(true)
+            val prepared = unexpiredPrepared()
+            whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+            // The process dies inside Spark's send call, so the call never returns.
+            whenever { sparkService.send(any()) }.doSuspendableAnswer { awaitCancellation() }
+            whenever { sparkService.listPayments() }
+                .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+            val before = createSut(store)
+            before.start(0).getOrThrow()
+            backgroundScope.launch { before.payInvoice("lnbc1", 100uL) }
+            runCurrent()
+
+            whenever { sparkService.getInfo() }.thenReturn(
+                info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL)
+            )
+            val after = createSut(store)
+            after.start(0).getOrThrow()
+
+            assertEquals(
+                EarlierSend.Pending("hash"),
+                after.earlierLightningSend("lnbc1", "hash"),
+                "A restart released a retry Spark may resume to the node",
+            )
+            assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), after.lightningSend("hash"))
+        }
+
+    @Test
+    fun `a cancelled spark retry stays held while spark lists only its older failure`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.doSuspendableAnswer { awaitCancellation() }
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val sending = launch { sut.payInvoice("lnbc1", 100uL) }
+        runCurrent()
+
+        sending.cancel()
+        runCurrent()
+
+        assertEquals(
+            EarlierSend.Pending("hash"),
+            sut.earlierLightningSend("lnbc1", "hash"),
+            "A cancelled send released a retry Spark may resume to the node",
+        )
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), sut.lightningSend("hash"))
+    }
+
+    @Test
+    fun `an uncertain spark retry past an older failure reads as pending to paykit and quickpay`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        store.addSparkSendHash("hash", expiresAt = now.epochSeconds + 3_600)
+        store.addSparkUncertainSend("hash", now.epochSeconds)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), sut.lightningSend("hash"))
+        assertEquals(
+            PaymentStatus.PENDING,
+            sut.lightningSendStatuses()?.get("hash"),
+            "QuickPay reads an uncertain retry as failed",
+        )
+        assertTrue(
+            "hash" in sut.attemptedLightningPaymentHashes().orEmpty(),
+            "Paykit reads an uncertain retry as never attempted",
+        )
+    }
+
+    private fun unexpiredPrepared(): PrepareSendPaymentResponse {
+        val details = mock<Bolt11InvoiceDetails> {
+            on { paymentHash } doReturn "hash"
+            on { timestamp }.thenAnswer { now.epochSeconds }
+            on { expiry }.thenAnswer { 3_600L }
+        }
+        return prepared(feeSats = 0uL).copy(paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, 0uL))
     }
 
     @Test
