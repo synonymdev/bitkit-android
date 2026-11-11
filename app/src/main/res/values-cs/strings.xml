@@ -430,6 +430,7 @@
     <string name="other__shop__intro__description">Zařiď si život podle Bitcoin standardu. Utrácej své Bitcoiny za digitální dárkové karty, eSIMky, dobíjení kreditu a mnohem víc.</string>
     <string name="other__shop__intro__title">Nakoupit</string>
     <string name="other__swipe">Přejetím potvrďte</string>
+    <string name="other__try_again">Zkuste to prosím znovu.</string>
     <string name="other__update_button">Aktualizace</string>
     <string name="other__update_critical_button">Aktualizovat Bitkit</string>
     <string name="other__update_critical_nav_title">Kritická aktualizace</string>
@@ -1392,12 +1393,14 @@
     <string name="profile__disconnect_error">Profil se nepodařilo odpojit</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Krátká poznámka. Řekněte něco o sobě.</string>
+    <string name="profile__edit_changed_error">Tvůj profil se v pubky.app změnil. Bitkit načetl nejnovější verzi, proveď proto úpravu znovu.</string>
     <string name="profile__edit_delete_section">SMAZAT</string>
     <string name="profile__edit_name_placeholder">VAŠE JMÉNO</string>
-    <string name="profile__edit_public_note">Upozorňujeme, že informace o profilu jsou uloženy ve veřejných souborech.</string>
+    <string name="profile__edit_public_note">Toto je tvůj profil na pubky.app. Je veřejný a změny, které zde provedeš, se zobrazí i na pubky.app.</string>
     <string name="profile__edit_save_error">Profil se nepodařilo uložit</string>
     <string name="profile__edit_save_success">Profil uložen</string>
     <string name="profile__edit_tags">TAGY</string>
+    <string name="profile__edit_tags_error">Bitkit nemohl uložit vaše štítky. Ostatní změny byly uloženy, tak zkuste štítky znovu.</string>
     <string name="profile__edit_unlink_section">ZRUŠIT PROPOJENÍ</string>
     <string name="profile__empty_state">Váš profil nelze načíst.</string>
     <string name="profile__intro_description">Díky přenosnému profilu vás kontakty mohou kdekoli zastihnout a zaplatit vám.</string>

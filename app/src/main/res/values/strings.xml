@@ -653,6 +653,7 @@
     <string name="other__shop__intro__description">Get your life on the Bitcoin standard. Spend your Bitcoin on digital gift cards, eSIMs, phone refills, and more.</string>
     <string name="other__shop__intro__title">Shop</string>
     <string name="other__swipe">Swipe To Confirm</string>
+    <string name="other__try_again">Please try again.</string>
     <string name="other__update_button">Update</string>
     <string name="other__update_critical_button">Update Bitkit</string>
     <string name="other__update_critical_nav_title">Critical Update</string>
@@ -728,13 +729,15 @@
     <string name="profile__disconnect_error">Failed to disconnect profile</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Short note. Tell a bit about yourself.</string>
+    <string name="profile__edit_changed_error">Your profile changed in pubky.app. Bitkit loaded the latest version, so make your edit again.</string>
     <string name="profile__edit_delete_section">DELETE</string>
     <string name="profile__edit_name_placeholder">YOUR NAME</string>
     <string name="profile__edit_nav_title">Edit Profile</string>
-    <string name="profile__edit_public_note">Please note profile information is stored in public files.</string>
+    <string name="profile__edit_public_note">This is your pubky.app profile. It is public, and changes you make here also show on pubky.app.</string>
     <string name="profile__edit_save_error">Failed to save profile</string>
     <string name="profile__edit_save_success">Profile saved</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_tags_error">Bitkit could not save your tags. Your other changes were saved, so try the tags again.</string>
     <string name="profile__edit_unlink_section">UNLINK</string>
     <string name="profile__empty_state">Unable to load your profile.</string>
     <string name="profile__intro_description">With your portable profile your contacts can reach you and pay you anywhere.</string>

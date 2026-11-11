@@ -113,6 +113,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
 import to.bitkit.ext.isHwUserCancellation
+import to.bitkit.ext.isPaykitError
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -256,7 +257,7 @@ import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
-import to.bitkit.utils.Bip21Utils
+import to.bitkit.utils.ClipboardPromptValidator
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -3268,16 +3269,6 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            showAddressValidationError(
-                titleRes = R.string.other__scan_err_decoding,
-                descriptionRes = R.string.other__scan__error__generic,
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         if (activeHardwareWalletId == null && rejectUsdtSelfSend(input)) return@withContext
 
         if (isUsdtPaymentInput(input)) {
@@ -4916,18 +4907,6 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            if (clearIncomingPaymentRequestTarget()) return@withContext
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                description = context.getString(R.string.other__scan__error__generic),
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         SamRockSetupRequest.parse(input)?.let {
             handleSamRockSetup(it)
             return@withContext
@@ -5100,6 +5079,15 @@ class AppViewModel @Inject constructor(
                     context = TAG,
                 )
                 if (hasIncomingPaymentRequest) return
+                if (scan == null && input.trim().startsWith("bitcoin:", ignoreCase = true)) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__generic),
+                        testTag = "InvalidAddressToast",
+                    )
+                    return
+                }
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.other__qr_error_header),
@@ -7864,11 +7852,16 @@ class AppViewModel @Inject constructor(
 
     fun toast(error: Throwable) {
         if (error.isHwUserCancellation()) return
+        val description = if (error.isPaykitError()) {
+            Logger.error("Paykit error shown as toast", error, context = TAG)
+            context.getString(R.string.other__try_again)
+        } else {
+            error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.common__error_body)
+        }
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.common__error_body),
+            description = description,
         )
     }
 
@@ -7979,7 +7972,8 @@ class AppViewModel @Inject constructor(
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
-            else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
+            else -> SamRockSetupRequest.isProtocolUrl(text) ||
+                ClipboardPromptValidator.isSupported(text) { coreService.decode(it) }
         }
     }
 
