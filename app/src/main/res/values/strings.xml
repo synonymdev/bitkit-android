@@ -433,6 +433,9 @@
     <string name="lightning__spark_exit__done_received">{amount} reached your savings.</string>
     <string name="lightning__spark_exit__done_text">Your funds are in savings.</string>
     <string name="lightning__spark_exit__done_title">Exit\n&lt;accent&gt;complete&lt;/accent&gt;</string>
+    <string name="lightning__spark_exit__earlier_addresses">Earlier exit addresses</string>
+    <string name="lightning__spark_exit__earlier_addresses_text">Earlier emergency exits used these funding addresses. Coins left at one stay yours: spend them with your recovery phrase and its derivation path.</string>
+    <string name="lightning__spark_exit__earlier_path">Derivation path</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} was moved on-chain by the Spark operators and is not on Spark. The operators can still release it to you.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} stays on Spark.</string>
     <string name="lightning__spark_exit__failed_text">Nothing could be recovered.</string>
@@ -464,9 +467,6 @@
     <string name="lightning__spark_exit__left_behind">Stays on Spark</string>
     <string name="lightning__spark_exit__left_behind_leaves">{amount} can\'t be exited at this fee rate and stays on Spark.</string>
     <string name="lightning__spark_exit__leftover">{amount} of fee funding is still at {address}.</string>
-    <string name="lightning__spark_exit__earlier_addresses">Earlier exit addresses</string>
-    <string name="lightning__spark_exit__earlier_addresses_text">Earlier emergency exits used these funding addresses. Coins left at one stay yours: spend them with your recovery phrase and its derivation path.</string>
-    <string name="lightning__spark_exit__earlier_path">Derivation path</string>
     <string name="lightning__spark_exit__leftover_dust">{amount} of leftover fee funding is too small to send and stays at {address}, derivation path {path}.</string>
     <string name="lightning__spark_exit__leftover_rejected">{amount} of leftover fee funding could not be sent and stays at {address}, derivation path {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Sending {amount} of leftover fee funding to savings.</string>
