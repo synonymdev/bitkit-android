@@ -782,7 +782,8 @@ class SparkExitDriver(
             val since = requireNotNull(built.waitingSince)
             if (height >= since + SWEEP_RELEASE_BLOCKS) {
                 Logger.info("Keeping the Spark exit leftover as dust after waiting for cheaper fees", context = TAG)
-                return record.copy(leftoverSweep = built.copy(isDustKept = true))
+                // Shown once more with its path, even after the result was opened: nothing else reaches that address.
+                return record.copy(leftoverSweep = built.copy(isDustKept = true), isResultSeen = false)
             }
             val next = built.retryAtHeight ?: ((built.checkedAtHeight ?: since) + SWEEP_RECHECK_BLOCKS)
             if (height < next) return record

@@ -353,9 +353,12 @@ data class SparkExitRecord(
             (leftover.isNotEmpty() && leftoverSweep?.rejection != null) ||
             hasUnseenResult
 
-    /** The exit ended failed or with leaves lost, and the user has not opened its result yet. */
+    /** The exit ended failed, with leaves lost or its fee change kept, and the user has not opened its result yet. */
     val hasUnseenResult: Boolean
-        get() = !isActive && (phase is Phase.Failed || lostSats > 0uL) && !isResultSeen
+        get() = !isActive && (phase is Phase.Failed || lostSats > 0uL || isChangeKept) && !isResultSeen
+
+    /** The fee change stays at the funding address for good, shown with the path that spends it. */
+    val isChangeKept: Boolean get() = leftover.isNotEmpty() && leftoverSweep?.isDustKept == true
 
     /** Background runs and the foreground loop keep going while the exit runs and until its leftover is swept. */
     val needsDriving: Boolean get() = isActive || isLeftoverSweepPending || isEndedPaymentPending

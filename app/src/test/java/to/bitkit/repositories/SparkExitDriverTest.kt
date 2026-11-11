@@ -663,6 +663,7 @@ class SparkExitDriverTest : BaseUnitTest() {
             funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
             leftover = listOf(SparkExitRecord.Leftover("f0", 1u, 1_000uL)),
             feeRateSatPerVbyte = 9uL,
+            isResultSeen = true,
         )
 
         // At 9 sat/vB the sweep's fee leaves less than dust: it waits, and the exit is still driven.
@@ -686,6 +687,9 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
         assertTrue(chain.rawBroadcasts.isEmpty())
         assertFalse(record.needsDriving)
+        // Shown once more with the path that spends it, though its result was opened: nothing else reaches it.
+        assertTrue(record.showsResult, "the kept change loses its recovery screen")
+        assertFalse(record.copy(isResultSeen = true).showsResult)
     }
 
     @Test
