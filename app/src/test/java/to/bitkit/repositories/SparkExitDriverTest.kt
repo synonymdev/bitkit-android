@@ -523,6 +523,57 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(chain.broadcasts.none { it.txid == "n1" || it.txid == "n2" }, "a diverged step was sent again")
     }
 
+    /**
+     * An unverified rebuild that skips the leaf it could not read but builds another unilateral leaf keeps the valid
+     * generation: the unread leaf's signed steps are still sent once the chain reads again.
+     */
+    @Test
+    fun `an unverified rebuild beside another unilateral leaf keeps the valid generation`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+                SparkExitFixtures.tx("m1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx(
+                    "m2",
+                    dependsOn = listOf("m1"),
+                    status = ExitTransactionStatus.WaitingForTimelock(2_000u),
+                ),
+            ),
+        )
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        repeat(2) {
+            sdk.builds += SparkExitFixtures.recovery(
+                listOf(
+                    SparkExitFixtures.tx("m1", status = ExitTransactionStatus.Confirmed(900u)),
+                    SparkExitFixtures.tx(
+                        "m2b",
+                        dependsOn = listOf("m1"),
+                        status = ExitTransactionStatus.WaitingForTimelock(2_000u),
+                    ),
+                ),
+            )
+        }
+        val start = running(unread).copy(leafIds = listOf("leaf-1", "leaf-2"))
+
+        var record = driver(tip = 1_000u).tick(start)
+        assertEquals(1, record.generation, "rebuild adopted a recovery without leaf-1's signed steps")
+
+        // The chain reads again: whatever the record holds, its unverified steps now read as ready.
+        val held = assertNotNull(record.recovery)
+        val reread = held.copy(
+            transactions = held.transactions.map {
+                if (it.status == ExitTransactionStatus.Unverified) it.copy(status = ExitTransactionStatus.Ready) else it
+            },
+        )
+        sdk.checks += check(reread, RecoveryVerdict.Valid)
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid }, "leaf-1's matured step n2 was not sent")
+    }
+
     @Test
     fun `an unverified unilateral step waits while another unilateral step is ready`() = test {
         val recovery = SparkExitFixtures.recovery(

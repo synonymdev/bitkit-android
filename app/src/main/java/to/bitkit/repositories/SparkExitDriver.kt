@@ -285,7 +285,7 @@ class SparkExitDriver(
                 val waiting = waitingLeafIds(record, prepared.skipped, stopped)
                 // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
                 // leaves are retried, past the window in which they are ours to publish.
-                if (isUnverifiedRebuild && waiting.isNotEmpty()) return record.keepingValidGeneration()
+                if (isUnverifiedRebuild && record.recoversAny(waiting)) return record.keepingValidGeneration()
                 val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
@@ -297,8 +297,11 @@ class SparkExitDriver(
         val lost = record.lostLeaves(built).filter { !isStoppedWaiting(record, it.leafId, stopped) }
         if (lost.isNotEmpty()) return loseLeaves(record, lost)
         // A leaf that may still move is kept apart and tried again before the exit ends.
-        val adopted = record.adopt(built, nowMillis())
-            .copy(waitingLeafIds = waitingLeafIds(record, prepared.skipped, stopped))
+        val waiting = waitingLeafIds(record, prepared.skipped, stopped)
+        // An unverified rebuild of other leaves would drop the signed steps of a waiting leaf the valid generation
+        // recovers, until the other leaves' chains confirm: the valid generation stays, rebuilt over once a block.
+        if (isUnverifiedRebuild && record.recoversAny(waiting)) return record.keepingValidGeneration()
+        val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
         Logger.info(
@@ -1488,3 +1491,7 @@ object SparkExitTxOutputs {
  */
 private fun SparkExitRecord.keepingValidGeneration(): SparkExitRecord =
     if (isUnverifiedAsk) copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false) else this
+
+/** The current recovery recovers one of [leafIds]: its signed steps for them would go with a new generation. */
+private fun SparkExitRecord.recoversAny(leafIds: List<String>): Boolean =
+    recovery?.leaves?.any { it.leafId in leafIds } == true
