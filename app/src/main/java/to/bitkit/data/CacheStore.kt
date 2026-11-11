@@ -365,7 +365,8 @@ data class AppCacheData(
     val ldkHistoryUnseededSince: Long? = null,
     /**
      * When the wallet was restored, in epoch seconds. Spark's list can lack a send it made before then even after a
-     * sync, so for a while after it the node refuses a still-valid invoice created before it that Spark hasn't listed.
+     * sync, so both rails refuse a still-valid invoice created before it that Spark hasn't listed as pending or paid,
+     * until that invoice expires.
      */
     val sparkRestoredAt: Long? = null,
 ) {

@@ -309,9 +309,10 @@ class SparkRepo @Inject constructor(
                 }
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.PENDING ->
                     throw PaymentPendingException(paymentHash)
-                // Until Spark lists its sends since a restore, one of an older invoice may be missing.
+                // Before Spark has listed its sends since a restore, an older invoice is refused here; the branch
+                // below keeps refusing it after the listing, until the invoice expires.
                 is SparkLightningSend.Unavailable if isUnlistedSinceRestore(method.invoiceDetails.timestamp) -> {
-                    Logger.warn("Refused a Spark send of '$paymentHash' until Spark lists its sends", context = TAG)
+                    Logger.warn("Refused a Spark send of '$paymentHash' dated before the restore", context = TAG)
                     throw SparkError.RestoredInvoiceUnverified()
                 }
                 // Spark's list, synced or unreadable, can still lack a send it made before the restore, as on the
