@@ -644,7 +644,8 @@ class SparkRepo @Inject constructor(
 
     /**
      * A Paykit route that withdraws exactly [amountSats] to the contact's on-chain [endpoint] at medium speed, with
-     * Spark's fee on top, or null while Spark cannot send it. bitkit-core weighs it against the Pubky Swaps providers.
+     * Spark's fee on top, or null while Spark cannot send it. Fails with [SparkError.WithdrawalOverBalance] when the
+     * balance covers the amount but not the fee on top. bitkit-core weighs it against the Pubky Swaps providers.
      */
     suspend fun withdrawalRouteLeg(endpoint: PaykitEndpoint, amountSats: ULong): Result<ServiceRouteLeg?> =
         withContext(bgDispatcher) {
@@ -655,7 +656,8 @@ class SparkRepo @Inject constructor(
                 // Spark charges its fee and the L1 broadcast fee on top of what reaches the contact.
                 val speed = quote.speedMedium
                 val debitSats = amountSats.safe() + (speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()).safe()
-                if (quote.isEstimate || !canWithdraw(debitSats)) return@runSuspendCatching null
+                if (quote.isEstimate) return@runSuspendCatching null
+                if (!canWithdraw(debitSats)) throw SparkError.WithdrawalOverBalance()
                 ServiceRouteLeg(
                     service = ROUTE_SERVICE,
                     endpoint = endpoint,

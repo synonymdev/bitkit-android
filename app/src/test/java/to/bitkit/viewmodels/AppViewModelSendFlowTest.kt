@@ -12495,6 +12495,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
     }
 
+    @Test
+    fun `a spark leg whose fee the balance can't cover says the balance is short`() = test {
+        // A Spark-only wallet with 10,000 sendable pays an on-chain-only contact 9,000, and the leg fee is about 2,190.
+        val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = "bcrt1qrouted")
+        balanceState.value = BalanceState(maxSendLightningSats = 10_000u)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.failure(SparkError.WithdrawalOverBalance()))
+        setSendState(
+            SendUiState(
+                amount = 9_000u,
+                payMethod = SendMethod.LIGHTNING,
+                paykitRoute = PaykitRouteUi(persistentListOf(onchain), offersSparkLeg = true),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(check { assertEquals("PaykitRouteBalanceToast", it.testTag) })
+    }
+
     private suspend fun TestScope.routerNone(maxSendLightningSats: ULong) {
         val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = "bcrt1qrouted")
         balanceState.value = BalanceState(maxSendLightningSats = maxSendLightningSats)

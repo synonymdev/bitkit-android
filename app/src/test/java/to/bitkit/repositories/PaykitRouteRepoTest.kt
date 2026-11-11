@@ -15,8 +15,10 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 class PaykitRouteRepoTest : BaseUnitTest() {
     private val sparkRepo = mock<SparkRepo>()
@@ -80,5 +82,22 @@ class PaykitRouteRepoTest : BaseUnitTest() {
         ).getOrThrow()
 
         assertEquals(PaykitRoute.Service(leg), route)
+    }
+
+    @Test
+    fun `a spark leg whose fee the balance can't cover routes as a short balance`() = test {
+        whenever(sparkRepo.withdrawalRouteLeg(onchain, 9_000uL))
+            .thenReturn(Result.failure(SparkError.WithdrawalOverBalance()))
+
+        val route = sut.route(
+            amountSats = 9_000uL,
+            endpoints = listOf(onchain),
+            // The stand-in router pays any endpoint directly from Lightning, so none is offered.
+            lightningSpendableSats = 0uL,
+            onchainSpendableSats = 0uL,
+            quoteServiceLegs = true,
+        )
+
+        assertIs<SparkError.WithdrawalOverBalance>(route.exceptionOrNull())
     }
 }

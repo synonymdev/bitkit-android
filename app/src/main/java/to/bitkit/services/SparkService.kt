@@ -305,6 +305,9 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
 
     class WithdrawalPending : SparkError("An earlier Spark withdrawal is still settling")
 
+    /** Spark could withdraw to the contact, but its balance can't cover the amount plus the withdrawal fee. */
+    class WithdrawalOverBalance : SparkError("Spark balance can't cover the withdrawal and its fee")
+
     /** Spark's list shows the withdrawal never went out. */
     class WithdrawalNotSent : SparkError("Spark never sent the withdrawal")
 

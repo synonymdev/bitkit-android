@@ -4808,10 +4808,16 @@ class AppViewModel @Inject constructor(
             return PaykitRouteOutcome.Stale
         }
         _sendUiState.update { it.copy(isLoading = false) }
-        val picked = result.getOrElse {
-            Logger.error("Failed to route Paykit payment", it, context = TAG)
-            toast(it)
-            return PaykitRouteOutcome.Refused
+        // Spark could reach the contact, but not with the withdrawal fee on top, so no route pays for want of balance.
+        val isLegOverBalance = result.exceptionOrNull() is SparkError.WithdrawalOverBalance
+        val picked = if (isLegOverBalance) {
+            PaykitRoute.None("Spark balance can't cover the withdrawal and its fee")
+        } else {
+            result.getOrElse {
+                Logger.error("Failed to route Paykit payment", it, context = TAG)
+                toast(it)
+                return PaykitRouteOutcome.Refused
+            }
         }
         // Once the router answered, even with no route, every later source switch asks it again: a stale source
         // must never fall through to a payment the router never picked.
@@ -4835,12 +4841,13 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Found no Paykit route: '${picked.reason}'", context = TAG)
                 _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
                 // The router's reason is English for the log: the app tells a short balance from an unusable contact.
-                val isBalanceShort = state.amount > lightningSpendable.safe() + onchainSpendable.safe()
+                val isAmountShort = state.amount > lightningSpendable.safe() + onchainSpendable.safe()
                 // The router never saw an LNURL whose limits refuse the amount, so its limit says why.
-                if (!isBalanceShort && refusingLnurl != null) {
+                if (!isAmountShort && refusingLnurl != null) {
                     validateLnurlAmount(refusingLnurl, state.amount)
                     return PaykitRouteOutcome.Refused
                 }
+                val isBalanceShort = isAmountShort || isLegOverBalance
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(

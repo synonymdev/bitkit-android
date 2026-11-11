@@ -11,6 +11,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -35,6 +36,10 @@ class PaykitRouteRepo @Inject constructor(
     val canRouteThroughSpark: Boolean
         get() = sparkRepo.state.value.let { it.isReady && it.sendableSats > 0uL }
 
+    /**
+     * Fails with [SparkError.WithdrawalOverBalance] when no route pays because Spark's balance covers the amount but
+     * not the withdrawal fee on top, so the app tells a short balance from a contact it can't pay.
+     */
     suspend fun route(
         amountSats: ULong,
         endpoints: List<PaykitEndpoint>,
@@ -54,17 +59,26 @@ class PaykitRouteRepo @Inject constructor(
             // The router pays directly before it weighs any leg, so legs are quoted only when no balance pays.
             val route = paykitRoutePayment(request, network)
             if (!quoteServiceLegs || route !is PaykitRoute.None) return@runSuspendCatching route
-            val legs = serviceLegs(endpoints, amountSats)
-            if (legs.isEmpty()) route else paykitRoutePayment(request.copy(serviceLegs = legs), network)
+            val quotes = serviceLegQuotes(endpoints, amountSats)
+            val legs = quotes.mapNotNull { it.getOrNull() }
+            if (legs.isNotEmpty()) {
+                return@runSuspendCatching paykitRoutePayment(request.copy(serviceLegs = legs), network)
+            }
+            if (quotes.any { it.exceptionOrNull() is SparkError.WithdrawalOverBalance }) {
+                throw SparkError.WithdrawalOverBalance()
+            }
+            route
         }
     }
 
     /** Spark withdrawals to the contact's on-chain endpoints, each quoted with its fee. */
-    private suspend fun serviceLegs(endpoints: List<PaykitEndpoint>, amountSats: ULong): List<ServiceRouteLeg> =
-        endpoints.filter { MethodId.fromRawValue(it.methodId)?.isOnchain == true }.mapNotNull { endpoint ->
+    private suspend fun serviceLegQuotes(
+        endpoints: List<PaykitEndpoint>,
+        amountSats: ULong,
+    ): List<Result<ServiceRouteLeg?>> =
+        endpoints.filter { MethodId.fromRawValue(it.methodId)?.isOnchain == true }.map { endpoint ->
             sparkRepo.withdrawalRouteLeg(endpoint, amountSats)
                 .onFailure { Logger.warn("No Spark route to '${endpoint.methodId}'", it, context = TAG) }
-                .getOrNull()
         }
 
     /**

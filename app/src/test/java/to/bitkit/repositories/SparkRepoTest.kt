@@ -757,7 +757,7 @@ class SparkRepoTest : BaseUnitTest() {
     fun `offers no route leg the balance cannot cover with its fee`() = test {
         val sut = readySpark(balanceSats = 20_499uL)
 
-        assertEquals(null, sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow())
+        assertIs<SparkError.WithdrawalOverBalance>(sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).exceptionOrNull())
     }
 
     @Test
