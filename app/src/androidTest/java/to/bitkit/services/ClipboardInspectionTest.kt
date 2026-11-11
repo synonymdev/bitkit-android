@@ -63,24 +63,50 @@ class ClipboardInspectionTest : BaseAndroidTest() {
     }
 
     @Test
+    fun httpWrapperTerminatorsDoNotReachNativeBeforeConfirmation() = test {
+        ServerSocket(PORT, 1, InetAddress.getByName("127.0.0.1")).use { server ->
+            server.soTimeout = 1000
+            var decoderCalls = 0
+            for (terminator in listOf("\r", "\u0085", "\u2028", "\u2029")) {
+                for (prefix in listOf("", "bitkit://", "lightning:bitkit://")) {
+                    assertTrue(ClipboardPromptValidator.isSupported("${prefix}https://example.com/$terminator?lightning=$LNURL") {
+                        decoderCalls++
+                        decode(it)
+                    })
+                }
+            }
+            assertEquals(0, decoderCalls)
+            assertFalse(ClipboardPromptValidator.isSupported("https://example.com/\n?lightning=$LNURL") { decode(it) })
+            assertFailsWith<SocketTimeoutException> { server.accept() }
+        }
+    }
+
+    @Test
     fun confirmedNativeDecodeContactsTheSameLnurlFixture() = test {
         ServerSocket(PORT, 1, InetAddress.getByName("127.0.0.1")).use { server ->
             server.soTimeout = 5000
             val requests = AtomicInteger()
+            val inputs = listOf(LNURL) + listOf("\r", "\u0085", "\u2028", "\u2029").map {
+                "https://example.com/$it?lightning=$LNURL"
+            }
             val responder = thread(isDaemon = true) {
-                server.accept().use { socket ->
-                    socket.soTimeout = 5000
-                    socket.getInputStream().bufferedReader().lineSequence().takeWhile { it.isNotEmpty() }.count()
-                    requests.incrementAndGet()
-                    socket.getOutputStream().write(
-                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray(),
-                    )
+                repeat(inputs.size) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 5000
+                        socket.getInputStream().bufferedReader().lineSequence().takeWhile { it.isNotEmpty() }.count()
+                        requests.incrementAndGet()
+                        socket.getOutputStream().write(
+                            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray(),
+                        )
+                    }
                 }
             }
-            assertTrue(runSuspendCatching { decode(LNURL) }.isFailure)
+            for (input in inputs) {
+                assertTrue(runSuspendCatching { decode(input) }.isFailure)
+            }
             responder.join(5000)
             assertFalse(responder.isAlive)
-            assertEquals(1, requests.get())
+            assertEquals(inputs.size, requests.get())
         }
     }
 }

@@ -5091,6 +5091,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `clipboard HTTP wrappers with interior terminators do not invoke core before confirmation`() = test {
+        val lnurl = "lnurl1dp68gurn8ghj7mrww4exctnrdakj7"
+        for (terminator in listOf("\r", "\u0085", "\u2028", "\u2029")) {
+            for (prefix in listOf("", "bitkit://", "lightning:bitkit://")) {
+                assertTrue(sut.canDecodeClipboard("${prefix}https://example.com/$terminator?lightning=$lnurl"))
+            }
+        }
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
     fun `clipboard normalization variants do not invoke core before confirmation`() = test {
         val lnurl = "lnurl1dp68gurn8ghj7mrww4exctnrdakj7"
         for (input in listOf(

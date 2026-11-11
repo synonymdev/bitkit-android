@@ -5,7 +5,7 @@ import to.bitkit.ext.runSuspendCatching
 object ClipboardPromptValidator {
     private val lightningAddressPattern = Regex("^[a-z0-9._-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
     private val lnurlPattern = Regex(
-        "^(?:(http.*|bitcoin:.*)[&?]lightning=|lightning:)?lnurl1[02-9ac-hj-np-z]+",
+        "^(?:(http[^\\n]*|bitcoin:[^\\n]*)[&?]lightning=|lightning:)?lnurl1[02-9ac-hj-np-z]+",
         RegexOption.IGNORE_CASE,
     )
 
