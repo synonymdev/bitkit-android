@@ -12345,6 +12345,74 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a mixed contact below its lnurl minimum takes spark's onchain leg`() = test {
+        openMixedContact()
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 2_000uL, debitSat = 2_300uL)
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+
+        sut.setSendEvent(SendEvent.AmountChange(leg.deliveredSat))
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid, "spark covers what the lnurl minimum refuses")
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+
+            assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg, "the spark onchain leg pays")
+            assertEquals(SendEffect.NavigateToConfirm, expectMostRecentItem())
+        }
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `a mixed contact lightning can pay routes direct`() = test {
+        val lnurl = openMixedContact()
+        val direct = PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(direct)))
+
+        continueWithAmount(6_000u)
+
+        verify(paykitRouteRepo).route(eq(6_000uL), any(), any(), any(), any())
+        assertNull(sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+    }
+
+    /** A contact offering LNURL with a 5,000-sat minimum and on-chain, no USDT, with Spark funded and Savings empty. */
+    private suspend fun TestScope.openMixedContact(): LnurlPayData {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1mixedcontact",
+            callback = "https://example.com/pay",
+            minSendable = 5_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        usdtEnabled.value = false
+        sut.openContactPayment(
+            paymentRequest = lnurl.uri,
+            publicKey = testPublicKey,
+            endpoints = listOf(
+                Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+            ),
+        )
+        advanceUntilIdle()
+        return lnurl
+    }
+
+    @Test
     fun `router service leg opens the confirm screen with the leg's fee`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))

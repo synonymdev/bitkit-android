@@ -5291,9 +5291,10 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /** Any on-chain endpoint lets Spark pay an amount the contact's Lightning endpoints or Savings can't. */
     private fun requiresPaykitServiceRoute(payment: ContactPaymentContext): Boolean {
         if (!paykitRouteRepo.canRouteThroughSpark) return false
-        return payment.endpoints.isNotEmpty() && payment.endpoints.all { it.methodId.isOnchain }
+        return payment.endpoints.any { it.methodId.isOnchain }
     }
 
     private fun requiresPaykitAssetSelection(payment: ContactPaymentContext): Boolean =
