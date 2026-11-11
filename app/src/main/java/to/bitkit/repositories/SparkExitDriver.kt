@@ -219,10 +219,10 @@ class SparkExitDriver(
     }
 
     /**
-     * Builds [start]'s leaves as a new generation. With [isUnverifiedRebuild], the generation it rebuilds over is still
-     * valid and stays the exit's, sent every tick, unless the build replaces it with signed steps: a build that asks
-     * for more fee funding keeps sending it while the top-up waits, and one of only failed cooperative leaves beside a
-     * leaf it could not read is not adopted.
+     * Builds [start]'s leaves as a new generation. Over a generation that did not diverge, however the build was
+     * reached (an unverified rebuild, a fee bump, a rebuild after a leaf was left behind), a build that leaves
+     * waiting a leaf that generation recovers is not adopted: the generation stays the exit's, sent every tick.
+     * With [isUnverifiedRebuild], a build that asks for more fee funding also keeps sending it while the top-up waits.
      */
     private suspend fun build(
         start: SparkExitRecord,
@@ -290,7 +290,7 @@ class SparkExitDriver(
                 val waiting = waitingLeafIds(record, prepared.skipped, stopped)
                 // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
                 // leaves are retried, past the window in which they are ours to publish.
-                if (isUnverifiedRebuild && record.recoversAny(waiting)) return record.keepingValidGeneration()
+                if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
                 val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
@@ -303,9 +303,9 @@ class SparkExitDriver(
         if (lost.isNotEmpty()) return loseLeaves(record, lost)
         // A leaf that may still move is kept apart and tried again before the exit ends.
         val waiting = waitingLeafIds(record, prepared.skipped, stopped)
-        // An unverified rebuild of other leaves would drop the signed steps of a waiting leaf the valid generation
-        // recovers, until the other leaves' chains confirm: the valid generation stays, rebuilt over once a block.
-        if (isUnverifiedRebuild && record.recoversAny(waiting)) return record.keepingValidGeneration()
+        // A rebuild of other leaves would drop the signed steps of a waiting leaf the valid generation recovers, until
+        // the other leaves' chains confirm: the valid generation stays, rebuilt over once a block.
+        if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
         val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
@@ -1494,12 +1494,16 @@ object SparkExitTxOutputs {
 }
 
 /**
- * The valid generation stays the exit's over a rebuild it does not adopt. Funding an unverified rebuild asked for, once
- * adopted, goes back to running it: the funding stays the exit's for the next rebuild.
+ * The valid generation stays the exit's over a rebuild it does not adopt, running again and sent every tick. Funding
+ * adopted for the rebuild, such as a fee bump's or an unverified rebuild's ask, and a bumped rate stay the exit's for
+ * the next rebuild.
  */
 private fun SparkExitRecord.keepingValidGeneration(): SparkExitRecord =
-    if (isUnverifiedAsk) copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false) else this
+    copy(phase = SparkExitRecord.Phase.Running, isRebuilding = false, isUnverifiedAsk = false)
 
-/** The current recovery recovers one of [leafIds]: its signed steps for them would go with a new generation. */
-private fun SparkExitRecord.recoversAny(leafIds: List<String>): Boolean =
-    recovery?.leaves?.any { it.leafId in leafIds } == true
+/**
+ * The current generation did not diverge and recovers one of [leafIds]: its signed steps for them would go with a new
+ * generation that leaves them waiting.
+ */
+private fun SparkExitRecord.keepsValidGenerationOver(leafIds: List<String>): Boolean =
+    !isRedoRebuild && recovery?.leaves?.any { it.leafId in leafIds } == true

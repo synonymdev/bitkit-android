@@ -1350,6 +1350,75 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a paid higher fee keeps the valid generation over a build that drops leaf-1's refund n2`() = test {
+        val failed = CooperativeRecoveryFailure(
+            "coop-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        var record = funded(running(unread).copy(leafIds = listOf("leaf-1", "coop-1")))
+            .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(
+            SparkExitFixtures.utxo("f0", value = 20_000uL),
+            SparkExitFixtures.utxo("bump", value = 6_612uL),
+        )
+        sdk.preparedResponse = coopLeaf(16_384uL).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed))
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, record.generation, "the paid bump adopted a recovery without leaf-1's refund n2")
+        assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+        assertEquals(Phase.Running, record.phase)
+        assertFalse(record.isRebuilding)
+        assertEquals(listOf("n1", "n2"), record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
+    fun `a higher fee with nothing to pay keeps the valid generation over a build that drops leaf-1's refund n2`() =
+        test {
+            val unread = SparkExitFixtures.recovery(
+                listOf(
+                    SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                    SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+                ),
+            )
+            var record = funded(running(unread).copy(leafIds = listOf("leaf-1", "leaf-2")))
+                .applyFeeBump(rate = 9uL, extraSats = 0uL, paymentTxid = null)
+            sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
+                skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+            )
+            sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1")))
+
+            record = driver(tip = 1_000u).tick(record)
+
+            assertEquals(1, record.generation, "the bump adopted a recovery without leaf-1's refund n2")
+            assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+            assertEquals(Phase.Running, record.phase)
+            assertFalse(record.isRebuilding, "the valid generation is no longer checked or sent")
+
+            val reread = SparkExitFixtures.recovery(
+                listOf(
+                    SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                    SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+                ),
+            )
+            sdk.checks += check(reread, RecoveryVerdict.Valid)
+            record = driver(tip = 1_001u).tick(record)
+            assertEquals(listOf("n2"), chain.broadcasts.map { it.txid }, "leaf-1's refund n2 was not sent")
+        }
+
+    @Test
     fun `a rebuild from the chain keeps its note until one of its steps confirms`() = test {
         val built = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
         val record = SparkExitFixtures.record(Phase.Running)
