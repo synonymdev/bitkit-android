@@ -340,6 +340,13 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
                 .replace("{path}", path.orEmpty()).withAccentBoldBright(),
             color = Colors.White64,
         )
+        // A sweep that confirmed reached savings: sent, no longer sending.
+        sweep?.txid != null && sweep.isConfirmed -> SparkExitTxNote(
+            text = stringResource(R.string.lightning__spark_exit__leftover_swept)
+                .replace("{amount}", sparkExitAmountAccent(sweep.valueSats)),
+            txid = sweep.txid,
+            testTag = "SparkExitLeftoverSwept",
+        )
         // Its txid shows once the network accepted the sweep, as it may never go out before that.
         sweep?.txid != null && sweep.isAccepted -> SparkExitTxNote(
             text = stringResource(R.string.lightning__spark_exit__leftover_sending)
