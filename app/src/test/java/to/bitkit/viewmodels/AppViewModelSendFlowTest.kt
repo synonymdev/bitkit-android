@@ -5091,6 +5091,43 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `clipboard normalization variants do not invoke core before confirmation`() = test {
+        val lnurl = "lnurl1dp68gurn8ghj7mrww4exctnrdakj7"
+        for (input in listOf(
+            "\u0085$lnurl",
+            "bitkit://lightning: $lnurl",
+            "bitkit://bitkbitkit://it://$lnurl",
+            "bitkit://lightning: alice@example.com",
+        )) {
+            assertTrue(sut.canDecodeClipboard(input), input)
+        }
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `refused bip21 inputs show decoding errors while other scans keep generic warning`() = test {
+        val first = "bitcoin:$REGTEST_ADDRESS?amount=0.000035&message=Bitkit"
+        val doubled = first + "bitcoin:$REGTEST_ADDRESS?amount=0.00005&message=Bitkit"
+        for (input in listOf(doubled, "BITCOIN:$REGTEST_ADDRESS?amount=1&AMOUNT=2", "ordinary unsupported text")) {
+            whenever(coreService.decode(input)).doSuspendableAnswer { throw AppError("Invalid payment URI") }
+            whenever(context.getString(R.string.other__scan_err_decoding)).thenReturn("Decoding Error")
+            whenever(context.getString(R.string.other__qr_error_header)).thenReturn("Unable To Read QR")
+            sut.setIsAuthenticated(true)
+            clearInvocations(toastManager)
+            sut.onScanResult(input)
+            advanceUntilIdle()
+            val captor = argumentCaptor<Toast>()
+            verify(toastManager, atLeastOnce()).enqueue(captor.capture())
+            val expected = if (input.startsWith("bitcoin:", ignoreCase = true)) {
+                Triple(Toast.ToastType.ERROR, "Decoding Error", "InvalidAddressToast")
+            } else {
+                Triple(Toast.ToastType.WARNING, "Unable To Read QR", null)
+            }
+            assertEquals(expected, Triple(captor.lastValue.type, captor.lastValue.title, captor.lastValue.testTag))
+        }
+    }
+
+    @Test
     fun `clipboard network candidates do not invoke core before confirmation`() = test {
         for (input in listOf(
             "lnurl1dp68gurn8ghj7mrww4exctnrdakj7",

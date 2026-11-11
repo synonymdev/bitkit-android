@@ -37,7 +37,15 @@ class ClipboardInspectionTest : BaseAndroidTest() {
         ServerSocket(PORT, 1, InetAddress.getByName("127.0.0.1")).use { server ->
             server.soTimeout = 1000
             var decoderCalls = 0
-            for (input in listOf(LNURL, "lightning:$LNURL", "bitkit://$LNURL", "lightning:bitkit://$LNURL")) {
+            for (input in listOf(
+                LNURL,
+                "lightning:$LNURL",
+                "bitkit://$LNURL",
+                "lightning:bitkit://$LNURL",
+                "\u0085$LNURL",
+                "bitkit://lightning: $LNURL",
+                "bitkit://bitkbitkit://it://$LNURL",
+            )) {
                 assertTrue(ClipboardPromptValidator.isSupported(input) {
                     decoderCalls++
                     decode(it)

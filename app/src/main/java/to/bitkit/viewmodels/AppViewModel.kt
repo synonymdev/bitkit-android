@@ -5064,6 +5064,15 @@ class AppViewModel @Inject constructor(
                     context = TAG,
                 )
                 if (hasIncomingPaymentRequest) return
+                if (scan == null && input.trim().startsWith("bitcoin:", ignoreCase = true)) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__generic),
+                        testTag = "InvalidAddressToast",
+                    )
+                    return
+                }
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.other__qr_error_header),

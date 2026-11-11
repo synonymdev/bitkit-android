@@ -10,11 +10,11 @@ object ClipboardPromptValidator {
     )
 
     suspend fun isSupported(input: String, decode: suspend (String) -> Unit): Boolean {
-        var payload = input.trim().removePrefix("lightning:")
-        if (payload.startsWith("bitkit://")) {
-            payload = payload.replace("bitkit://", "")
+        var payload = input.coreTrim().removePrefix("lightning:")
+        while (payload.startsWith("bitkit://")) {
+            payload = payload.replace("bitkit://", "").coreTrim().removePrefix("lightning:")
         }
-        payload = payload.trim().removePrefix("lightning:")
+        payload = payload.coreTrim()
         if (!payload.startsWith("bitcoin:", ignoreCase = true) &&
             (lnurlPattern.containsMatchIn(payload) || lightningAddressPattern.matches(payload))
         ) {
@@ -22,4 +22,6 @@ object ClipboardPromptValidator {
         }
         return runSuspendCatching { decode(input) }.isSuccess
     }
+
+    private fun String.coreTrim() = trim { it.isWhitespace() || it == '\u0085' }
 }
