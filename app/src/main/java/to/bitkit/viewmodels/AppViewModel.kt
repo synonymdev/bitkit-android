@@ -4265,7 +4265,7 @@ class AppViewModel @Inject constructor(
         if (state.paykitUsesUsdt) return false
         val lnurl = state.lnurl as? LnurlParams.LnurlPay
         if (state.payMethod == SendMethod.LIGHTNING && lnurl != null && state.routedPaykitRoute?.serviceLeg == null &&
-            state.amount < lnurl.data.minSendableSat()
+            !lnurl.accepts(state.amount)
         ) {
             return false
         }
@@ -4482,8 +4482,14 @@ class AppViewModel @Inject constructor(
         // A source switch on Confirm asks the router again, for a request (no amount step) or a route already decided.
         if (activeIncomingPaymentRequest() != null || paykitRouteDecided) {
             _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
-                // A refused route leaves no leg or invoice to pay; switching the source again recomputes validity.
-                if (routePaykitPayment(it) == PaykitRouteOutcome.Refused) {
+                // A refused route leaves no leg or invoice to pay, and a picked LNURL past its limits can't be paid;
+                // switching the source again recomputes validity.
+                val outcome = routePaykitPayment(it)
+                val routed = _sendUiState.value
+                val lnurl = routed.lnurl as? LnurlParams.LnurlPay
+                val isPastLnurlLimits = outcome == PaykitRouteOutcome.Direct && lnurl != null &&
+                    routed.payMethod == SendMethod.LIGHTNING && !lnurl.accepts(routed.amount)
+                if (outcome == PaykitRouteOutcome.Refused || isPastLnurlLimits) {
                     _sendUiState.update { state -> state.copy(isAmountInputValid = false) }
                 }
             }

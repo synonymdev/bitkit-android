@@ -12449,6 +12449,53 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a request above a routed lnurl's maximum does not open a swipeable confirm`() = test {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1requestpastmax",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val endpoints = listOf(
+            Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+            Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+            Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+        )
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, 150_000uL),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(150_000uL)).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri))))
+        balanceState.value = BalanceState(maxSendLightningSats = 200_000u)
+        usdtEnabled.value = false
+
+        sut.openContactPayment(lnurl.uri, testPublicKey, incomingPaymentRequest = request, endpoints = endpoints)
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(150_000uL, state.amount)
+        assertEquals(lnurl.uri, (state.lnurl as? LnurlParams.LnurlPay)?.data?.uri)
+        assertNull(state.routedPaykitRoute?.serviceLeg)
+        assertFalse(
+            sut.currentSheet.value == Sheet.Send(SendRoute.Confirm) && state.isAmountInputValid,
+            "confirm opened swipeable for 150,000 sats past the lnurl's 100,000-sat maximum " +
+                "(sheet=${sut.currentSheet.value}, isAmountInputValid=${state.isAmountInputValid})",
+        )
+    }
+
+    @Test
     fun `router service leg opens the confirm screen with the leg's fee`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
