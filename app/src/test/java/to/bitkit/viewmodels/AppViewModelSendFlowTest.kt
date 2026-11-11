@@ -12550,6 +12550,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a savings payment to a mixed contact below its lnurl minimum is not blocked by the lnurl`() = test {
+        openMixedContact()
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u, maxSendOnchainSats = 100_000u)
+        whenever(formatMoneyValue(any())).thenReturn("5,000 sats")
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))))
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        sut.sendEffect.test {
+            continueWithAmount(2_000u)
+
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            verify(toastManager, never()).enqueue(argThat { testTag == "LnurlPayAmountTooLowToast" })
+            assertEquals(SendEffect.NavigateToConfirm, expectMostRecentItem())
+        }
+    }
+
+    @Test
     fun `a mixed contact lightning can pay routes direct`() = test {
         val lnurl = openMixedContact()
         val direct = PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri)

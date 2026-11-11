@@ -4737,9 +4737,14 @@ class AppViewModel @Inject constructor(
                 PaykitRouteOutcome.Direct -> Unit
             }
         }
-        // The route can restore an LNURL a BOLT11 pick cleared, so its limits are read after routing.
+        // The route can restore an LNURL a BOLT11 pick cleared, so its limits are read after routing. An on-chain
+        // pick keeps the contact's LNURL in state, and its limits never apply to that payment.
         val payLnurl = _sendUiState.value.lnurl
-        if (payLnurl is LnurlParams.LnurlPay && !validateLnurlAmount(payLnurl, _sendUiState.value.amount)) return
+        if (payLnurl is LnurlParams.LnurlPay && _sendUiState.value.payMethod == SendMethod.LIGHTNING &&
+            !validateLnurlAmount(payLnurl, _sendUiState.value.amount)
+        ) {
+            return
+        }
 
         _sendUiState.update { it.copy(isLoading = true) }
         try {
