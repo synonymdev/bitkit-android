@@ -224,6 +224,16 @@ class CacheStore internal constructor(
         }
     }
 
+    /** After a restore, keeps [paymentHashes], the node's pending and paid sends from its own list, once. */
+    suspend fun seedRestoredLdkSendHashes(paymentHashes: List<String>) {
+        if (store.data.first().ldkHistoryUnseededSince == null) return
+        store.updateData { data ->
+            if (data.ldkHistoryUnseededSince == null) return@updateData data
+            val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.ldkSendHashes.toSet()
+            data.copy(ldkSendHashes = seeded + data.ldkSendHashes, ldkHistoryUnseededSince = null)
+        }
+    }
+
     /**
      * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, ones it didn't
      * show ([listed] is every hash it shows) whose invoice expired past [UNLISTED_SEND_SETTLE_SECS], and past the cap
@@ -342,6 +352,11 @@ data class AppCacheData(
      * invoices created before it. Null on an install that was never restored, whose kept hashes are complete.
      */
     val sparkHistoryUnseededSince: Long? = null,
+    /**
+     * When a metadata restore brought back [ldkSendHashes], in epoch seconds, until the node's own list fills them:
+     * while the node can't list its payments, Spark holds off invoices created before it. Null when never restored.
+     */
+    val ldkHistoryUnseededSince: Long? = null,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

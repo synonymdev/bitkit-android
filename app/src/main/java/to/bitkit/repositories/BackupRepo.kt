@@ -1208,7 +1208,7 @@ class BackupRepo @Inject constructor(
             cleanCache.copy(
                 backupStatuses = it.backupStatuses,
                 sparkHistoryUnseededSince = restoredAt,
-                ldkSendHashesSeeded = false,
+                ldkHistoryUnseededSince = restoredAt,
             )
         }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)

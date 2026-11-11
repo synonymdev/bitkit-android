@@ -1849,7 +1849,7 @@ class BackupRepoTest : BaseUnitTest() {
         }
 
     @Test
-    fun `a metadata restore leaves the node's backed-up send hashes for its own list to seed`() = test {
+    fun `a metadata restore holds older invoices until the node lists its own sends`() = test {
         val publicAddress = "bcrt1qpublic"
         stubPublicAddressRestore(publicAddress)
         stubMetadataRestore(
@@ -1866,7 +1866,8 @@ class BackupRepoTest : BaseUnitTest() {
         sut.performFullRestoreFromLatestBackup().getOrThrow()
 
         assertEquals(listOf("hash"), cacheData.value.ldkSendHashes)
-        assertFalse(cacheData.value.ldkSendHashesSeeded)
+        assertTrue(cacheData.value.ldkSendHashesSeeded)
+        assertNotNull(cacheData.value.ldkHistoryUnseededSince)
     }
 
     @Test

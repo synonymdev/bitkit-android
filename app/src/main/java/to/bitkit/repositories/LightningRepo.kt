@@ -1575,7 +1575,8 @@ class LightningRepo @Inject constructor(
      * The node's pending or paid send of [bolt11]. While the node can't list its payments (stopped or not started yet),
      * a send it started for the invoice may be live or paid, and its event may never come, so the node not started yet
      * is thrown rather than a Pending nothing resolves. Before the node first listed its payments, the sends it made
-     * earlier are unknown, so the same is thrown.
+     * earlier are unknown, so the same is thrown, as it is after a restore, until the node lists them, for an invoice
+     * created before the restore.
      */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
@@ -1590,6 +1591,12 @@ class LightningRepo @Inject constructor(
             }
             if (!cache.ldkSendHashesSeeded) {
                 Logger.warn("Refused a Spark send until the node lists its earlier payments once", context = TAG)
+                throw ServiceError.NodeNotStarted()
+            }
+            // Restored hashes can lack a send the node made before the restore, never one of a newer invoice.
+            val unseededSince = cache.ldkHistoryUnseededSince
+            if (unseededSince != null && (invoiceCreatedAt(bolt11) ?: 0L) < unseededSince) {
+                Logger.warn("Refused a Spark send until the node lists its payments since the restore", context = TAG)
                 throw ServiceError.NodeNotStarted()
             }
             return null
@@ -1718,7 +1725,9 @@ class LightningRepo @Inject constructor(
     ) {
         val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
         val sends = outbound.filter { it.status != PaymentStatus.FAILED }.sortedBy { it.latestUpdateTimestamp }
-        cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
+        val sendHashes = sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash }
+        cacheStore.seedLdkSendHashes(sendHashes)
+        cacheStore.seedRestoredLdkSendHashes(sendHashes)
         val hashes = { status: PaymentStatus ->
             outbound.filter { it.status == status }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
@@ -1739,8 +1748,10 @@ class LightningRepo @Inject constructor(
             .coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
     }.getOrNull()
 
-    private fun invoiceCreatedAt(bolt11: String): Long? = runCatching {
-        Bolt11Invoice.fromStr(bolt11).secondsSinceEpoch().coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
+    /** When [bolt11] was created, in epoch seconds, or null when it can't be decoded. */
+    private suspend fun invoiceCreatedAt(bolt11: String): Long? = runSuspendCatching {
+        (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice?.timestampSeconds
+            ?.coerceAtMost(Long.MAX_VALUE.toULong())?.toLong()
     }.getOrNull()
 
     /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */
