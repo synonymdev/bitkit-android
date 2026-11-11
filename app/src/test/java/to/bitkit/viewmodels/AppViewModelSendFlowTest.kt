@@ -5091,6 +5091,39 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `clipboard network candidates do not invoke core before confirmation`() = test {
+        for (input in listOf(
+            "lnurl1dp68gurn8ghj7mrww4exctnrdakj7",
+            "LNURL1DP68GURN8GHJ7MRWW4EXCTNRDAKJ7",
+            "lightning:lnurl1dp68gurn8ghj7mrww4exctnrdakj7",
+            "alice@example.com",
+            "bitkit://lightning:alice@example.com",
+            "lightning:bitkit://alice@example.com",
+            "bitkit:// alice@example.com",
+            "https://example.com/pay?lightning=lnurl1dp68gurn8ghj7mrww4exctnrdakj7",
+        )) {
+            assertTrue(sut.canDecodeClipboard(input), input)
+        }
+        verify(coreService, never()).decode(any())
+        sut.mainScreenEffect.test {
+            sut.onClipboardAutoRead("alice@example.com")
+            assertEquals(MainScreenEffect.ProcessClipboardAutoRead("alice@example.com"), awaitItem())
+        }
+    }
+
+    @Test
+    fun `clipboard bip21 with LNURL metadata still uses local core validation`() = test {
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.000035&lightning=lnurl1dp68gurn8ghj7mrww4exctnrdakj7"
+        whenever(coreService.decode(uri)).thenReturn(mock())
+        assertTrue(sut.canDecodeClipboard(uri))
+        verify(coreService).decode(uri)
+        val malformed = "$uri&AMOUNT=0.00005"
+        whenever(coreService.decode(malformed)).doSuspendableAnswer { throw AppError("Invalid payment URI") }
+        assertFalse(sut.canDecodeClipboard(malformed))
+        verify(coreService).decode(malformed)
+    }
+
+    @Test
     fun `canDecodeClipboard accepts SamRock setup without core decode`() = test {
         val setupUrl = "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
         clearInvocations(coreService)

@@ -255,6 +255,7 @@ import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
+import to.bitkit.utils.ClipboardPromptValidator
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -7942,7 +7943,8 @@ class AppViewModel @Inject constructor(
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
-            else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
+            else -> SamRockSetupRequest.isProtocolUrl(text) ||
+                ClipboardPromptValidator.isSupported(text) { coreService.decode(it) }
         }
     }
 
