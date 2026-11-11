@@ -73,6 +73,9 @@ class SparkService @Inject constructor(
             lnurlDomain = null
             // Bitkit parses what the user scans itself, so the SDK never sends it to third-party parsers.
             useDefaultExternalInputParsers = false
+            // A Spark wallet pays an invoice as a Spark transfer only when the invoice carries the receiver's Spark
+            // address, which the SDK adds only with this set; on regtest only, like [prefersSpark].
+            preferSparkOverLightning = network == SparkNetwork.REGTEST
             // Lowering it below the spread keeps the deposit from being claimed early, and does not hold back its
             // claim at maturity.
             maxDepositClaimFee = MaxFee(

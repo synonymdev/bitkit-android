@@ -18,6 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SparkServiceTest {
     @get:Rule
@@ -107,5 +108,11 @@ class SparkServiceTest {
             assertFalse(config.useDefaultExternalInputParsers, "$network")
             assertEquals("key", config.apiKey)
         }
+    }
+
+    @Test
+    fun `invoices carry the spark address on regtest only, so another spark wallet pays them as a transfer`() {
+        assertTrue(SparkService.configure(defaults(Network.REGTEST), apiKey = null).preferSparkOverLightning)
+        assertFalse(SparkService.configure(defaults(Network.MAINNET), apiKey = "key").preferSparkOverLightning)
     }
 }
