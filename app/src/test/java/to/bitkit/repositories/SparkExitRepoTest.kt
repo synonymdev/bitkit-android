@@ -75,6 +75,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
 class SparkExitRepoTest : BaseUnitTest() {
@@ -943,6 +944,25 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertTrue(store.load().isEmpty(), "the running exit's funding shows as an earlier exit's")
         assertTrue(sut.state.value.earlierAddresses.isEmpty())
+    }
+
+    @Test
+    fun `a late payment to a cancelled exit's address shows with its balance for four weeks`() = test {
+        val now = 1_800_000_000_000L
+        val kind = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
+        val store = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+        val recent = now - 1.days.inWholeMilliseconds
+        val old = now - 29.days.inWholeMilliseconds
+        store.add(SparkExitEarlierAddress(funding, "m/84'/1'/7797'/0/0", kind, atMillis = recent))
+        store.add(SparkExitEarlierAddress("bcrt1qold", "m/84'/1'/7797'/0/1", kind, atMillis = old))
+        val paid = """[{"txid":"${"e1".repeat(32)}","vout":0,"value":8000,"status":{"confirmed":true}}]"""
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxos = paid))
+        sut.load().getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertEquals(listOf(8_000uL, null), sut.state.value.earlierAddresses.map { it.sats })
+        assertEquals(8_000uL, store.load().first().sats)
     }
 
     @Test

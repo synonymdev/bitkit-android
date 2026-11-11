@@ -211,10 +211,27 @@ class SparkExitRepo @Inject constructor(
         if (foregroundJob?.isActive == true) return
         foregroundJob = scope.launch {
             load().onFailure { Logger.error("Failed to load the Spark exit", it, context = TAG) }
+            refreshEarlierAddresses()
             while (isActive && _state.value.record?.needsDriving == true) {
                 tick()
                 delay(FOREGROUND_TICK_INTERVAL)
             }
+        }
+    }
+
+    /**
+     * Reads what reached each cancelled exit's address still watched, about four weeks after the cancel, so a late
+     * payment shows with its balance among the earlier exit addresses.
+     */
+    suspend fun refreshEarlierAddresses() = withContext(bgDispatcher) {
+        val chain = chain ?: return@withContext
+        val now = clock.nowMs()
+        val watched = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList()).filter { it.isWatched(now) }
+        for (entry in watched) {
+            val utxos = runSuspendCatching { chain.utxos(entry.address) }.getOrNull() ?: continue
+            val sats = utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+            runCatching { earlierAddressStore.updateSats(entry.address, sats) }
+                .onSuccess { listed -> _state.update { it.copy(earlierAddresses = listed) } }
         }
     }
 
