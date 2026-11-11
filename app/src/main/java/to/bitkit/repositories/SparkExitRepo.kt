@@ -498,6 +498,9 @@ class SparkExitRepo @Inject constructor(
                 it.copy(
                     pending = SparkExitPending(quote, destination, feeRate, fundingIndex),
                     fundingAddress = fundingAddress,
+                    // What an earlier exit's address showed is not paid toward this one.
+                    fundingSeenSats = 0uL,
+                    fundingSeenCount = 0,
                 )
             }
             quote

@@ -1033,6 +1033,19 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a new quote forgets what an earlier funding address showed`() = test {
+        val paid = """[{"txid":"${"e1".repeat(32)}","vout":0,"value":8000,"status":{"confirmed":false}}]"""
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxos = paid))
+        sut.loadQuote().getOrThrow()
+        assertEquals(8_000uL, sut.refreshFundingAddress().getOrThrow())
+
+        sut.loadQuote().getOrThrow()
+
+        assertEquals(0uL, sut.state.value.fundingSeenSats)
+        assertEquals(0, sut.state.value.fundingSeenCount)
+    }
+
+    @Test
     fun `pay from savings sends only what another wallet's payment left missing`() = test {
         stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
         val paid = """[{"txid":"${"e1".repeat(32)}","vout":0,"value":8000,"status":{"confirmed":false}}]"""
