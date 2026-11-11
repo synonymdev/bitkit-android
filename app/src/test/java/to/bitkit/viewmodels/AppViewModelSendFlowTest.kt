@@ -12115,7 +12115,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 address = leg.endpoint.value,
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12136,7 +12136,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12155,7 +12155,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             SendUiState(
                 amount = 1_000u,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(listOf(bolt11, onchain)),
+                paykitRoute = PaykitRouteUi(persistentListOf(bolt11, onchain)),
             ),
         )
 
@@ -12210,7 +12210,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             SendUiState(
                 amount = 1_000u,
                 payMethod = SendMethod.ONCHAIN,
-                paykitRoute = PaykitRouteUi(listOf(bolt11, onchain)),
+                paykitRoute = PaykitRouteUi(persistentListOf(bolt11, onchain)),
             ),
         )
 
@@ -12231,7 +12231,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             SendUiState(
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true),
             ),
         )
 
@@ -12278,7 +12278,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             SendUiState(
                 amount = 1_000u,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(listOf(onchain), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(onchain), offersSparkLeg = true),
             ),
         )
 
@@ -12327,7 +12327,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12388,7 +12388,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
         val effects = mutableListOf<SendEffect>()
@@ -12418,7 +12418,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 address = legA.endpoint.value,
                 amount = legA.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(listOf(legA.endpoint), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(legA.endpoint), offersSparkLeg = true),
             ),
         )
         sut.showSheet(Sheet.Send(SendRoute.Amount))
@@ -12431,7 +12431,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             address = endpointB.value,
             amount = 2_000uL,
             payMethod = SendMethod.LIGHTNING,
-            paykitRoute = PaykitRouteUi(listOf(endpointB), offersSparkLeg = true),
+            paykitRoute = PaykitRouteUi(persistentListOf(endpointB), offersSparkLeg = true),
         )
         setSendState(stateB)
         quote.complete(Result.success(PaykitRoute.Service(legA)))
@@ -12452,7 +12452,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 10_000u)
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quote.await() }
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
-        val route = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true)
+        val route = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true)
         setSendState(
             SendUiState(
                 address = leg.endpoint.value,
@@ -12559,7 +12559,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 address = leg.endpoint.value,
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
         val effects = mutableListOf<SendEffect>()
@@ -12593,7 +12593,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 lnurl = LnurlParams.LnurlPay(lnurl),
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true),
             ),
         )
 
@@ -12656,7 +12656,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
                 incomingPaymentRequestId = request.id,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
         val effects = mutableListOf<SendEffect>()
@@ -12684,7 +12684,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 selectedTags = persistentListOf("rent"),
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12730,7 +12730,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12762,7 +12762,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12784,7 +12784,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true),
             ),
         )
         sut.setSendEvent(SendEvent.AmountContinue)
@@ -12815,7 +12815,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true),
             ),
         )
         sut.setSendEvent(SendEvent.AmountContinue)
@@ -12853,7 +12853,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true),
             ),
         )
         sut.setSendEvent(SendEvent.AmountContinue)
@@ -12908,7 +12908,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true),
             ),
         )
         sut.setSendEvent(SendEvent.AmountContinue)
@@ -12946,7 +12946,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 isAmountInputValid = true,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -12989,7 +12989,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 
@@ -13023,7 +13023,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 address = leg.endpoint.value,
                 amount = leg.deliveredSat,
                 payMethod = SendMethod.LIGHTNING,
-                paykitRoute = PaykitRouteUi(listOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
+                paykitRoute = PaykitRouteUi(persistentListOf(leg.endpoint), offersSparkLeg = true, serviceLeg = leg),
             ),
         )
 

@@ -4117,7 +4117,8 @@ class AppViewModel @Inject constructor(
         paykitRouteDecided = false
         val route = PaykitRouteUi(
             endpoints = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
-                .map { PaykitEndpoint(methodId = it.methodId.rawValue, value = it.value) },
+                .map { PaykitEndpoint(methodId = it.methodId.rawValue, value = it.value) }
+                .toImmutableList(),
             offersSparkLeg = offersSparkLeg,
             invoice = invoice,
             lnurl = lnurl,
@@ -9588,7 +9589,7 @@ data class SendUiState(
  */
 @Stable
 data class PaykitRouteUi(
-    val endpoints: List<PaykitEndpoint>,
+    val endpoints: ImmutableList<PaykitEndpoint>,
     val offersSparkLeg: Boolean = false,
     val serviceLeg: ServiceRouteLeg? = null,
     val invoice: LightningInvoice? = null,
