@@ -1849,6 +1849,18 @@ class BackupRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `a restore without a metadata backup still holds older invoices on both rails`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertNotNull(cacheData.value.sparkHistoryUnseededSince)
+        assertNotNull(cacheData.value.ldkHistoryUnseededSince)
+    }
+
+    @Test
     fun `a metadata restore holds older invoices until the node lists its own sends`() = test {
         val publicAddress = "bcrt1qpublic"
         stubPublicAddressRestore(publicAddress)
@@ -1878,7 +1890,9 @@ class BackupRepoTest : BaseUnitTest() {
         doAnswer {
             val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
             val updated = transform(cacheData.value)
-            if (failCacheWrite && updated.backupStatuses == cacheData.value.backupStatuses) {
+            // The metadata cache write follows the restore's own write of its holds.
+            val isMetadataWrite = cacheData.value.sparkHistoryUnseededSince != null
+            if (failCacheWrite && isMetadataWrite && updated.backupStatuses == cacheData.value.backupStatuses) {
                 failCacheWrite = false
                 throw BackupRepoTestError("cache store unavailable")
             }
@@ -1894,6 +1908,7 @@ class BackupRepoTest : BaseUnitTest() {
         verify(privatePaykitRepo).restoreBackup(null)
         assertTrue(createReservationRepo(reservationStore).isUnavailableForReusableReceive(publicAddress))
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+        assertFalse(failCacheWrite, "the metadata cache write never failed")
     }
 
     @Test

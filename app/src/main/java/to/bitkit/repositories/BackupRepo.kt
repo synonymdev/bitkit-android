@@ -1048,6 +1048,12 @@ class BackupRepo @Inject constructor(
                 }
                 connectionSession.replay()
                 prepareUsdtRecoveryRestore()
+                // Armed before any category, so a restore whose metadata is missing or unreadable holds each rail off
+                // invoices from before it too, until that rail lists its own sends.
+                val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
+                cacheStore.update {
+                    it.copy(sparkHistoryUnseededSince = restoredAt, ldkHistoryUnseededSince = restoredAt)
+                }
                 var metadataReceived = false
                 val metadataResult = performRestore(BackupCategory.METADATA, failedCategories) { dataBytes ->
                     metadataReceived = true
