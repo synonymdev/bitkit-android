@@ -598,6 +598,17 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a background run that finds no exit to drive stops the background work`() = test {
+        // An unreadable record schedules the work before the run finds nothing to salvage.
+        File(Env.sparkExitRecordPath(0)).apply { parentFile?.mkdirs() }.writeText("not json")
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+
+        assertNull(createSut().runInBackground().getOrThrow())
+
+        verify(work).cancelAll()
+    }
+
+    @Test
     fun `a restarted exit signs with the funding key of its own record`() = test {
         val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))

@@ -213,7 +213,11 @@ class SparkExitRepo @Inject constructor(
         runSuspendCatching {
             // Spark has not started in a cold background run, so its wallet index is not known yet.
             load(work.activeWalletIndex()).getOrThrow()
-            if (_state.value.record?.needsDriving != true) return@runSuspendCatching _state.value.record
+            if (_state.value.record?.needsDriving != true) {
+                // Queued for a record that could not be read, or by a tick before a wipe: nothing is left to drive.
+                work.cancelAll()
+                return@runSuspendCatching _state.value.record
+            }
             tick()
             if (_state.value.isExiting && !sparkService.isConnected) {
                 // The connect keeps going past the timeout, so the next run finds Spark connecting or connected.
@@ -249,9 +253,10 @@ class SparkExitRepo @Inject constructor(
                     }
                 }
         } finally {
-            tickMutex.unlock()
-            // Every tick keeps the background work queued, so one failed or skipped run never ends the chain.
+            // Every tick keeps the background work queued, so one failed or skipped run never ends the chain. Before
+            // the unlock, so a wipe waiting on the lock cancels it after.
             if (_state.value.record?.needsDriving == true) work.schedulePeriodic()
+            tickMutex.unlock()
         }
     }
 
