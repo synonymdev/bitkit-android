@@ -714,7 +714,12 @@ class SparkExitRepo @Inject constructor(
                 val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
                 SparkExitSavingsFunding(
                     feeSats = feeSats,
-                    canPay = SparkExitMath.canFundFromSavings(spendable, fundingSats, feeSats),
+                    canPay = SparkExitMath.canFundFromSavings(
+                        spendable,
+                        fundingSats,
+                        feeSats,
+                        Env.sparkSharesNodeChain,
+                    ),
                 )
             }
         }

@@ -517,9 +517,16 @@ object SparkExitMath {
     fun fundingIndexAfterForget(kept: Int?, index: UInt): Int? =
         if (kept != null && kept.toLong() == index.toLong() + 1) index.toInt() else kept
 
-    /** Savings can pay the fee funding when its spendable balance covers the funding and the payment's own fee. */
-    fun canFundFromSavings(spendableSats: ULong, fundingSats: ULong, paymentFeeSats: ULong): Boolean =
-        fundingSats > 0uL && spendableSats >= fundingSats.safe() + paymentFeeSats.safe()
+    /**
+     * Savings can pay the fee funding when Spark reads the node's chain, which the payment goes out on
+     * ([sharesNodeChain]), and its spendable balance covers the funding and the payment's own fee.
+     */
+    fun canFundFromSavings(
+        spendableSats: ULong,
+        fundingSats: ULong,
+        paymentFeeSats: ULong,
+        sharesNodeChain: Boolean,
+    ): Boolean = sharesNodeChain && fundingSats > 0uL && spendableSats >= fundingSats.safe() + paymentFeeSats.safe()
 }
 
 /** The fee funding an exit still needs, as progress shows it. */

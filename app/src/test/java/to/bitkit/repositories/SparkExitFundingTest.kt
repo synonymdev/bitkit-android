@@ -319,9 +319,14 @@ class SparkExitFundingTest {
 
     @Test
     fun `savings must cover the funding and its fee`() {
-        assertTrue(SparkExitMath.canFundFromSavings(10_500uL, 10_000uL, 500uL))
-        assertFalse(SparkExitMath.canFundFromSavings(10_499uL, 10_000uL, 500uL))
-        assertFalse(SparkExitMath.canFundFromSavings(10_000uL, 0uL, 0uL))
+        assertTrue(SparkExitMath.canFundFromSavings(10_500uL, 10_000uL, 500uL, sharesNodeChain = true))
+        assertFalse(SparkExitMath.canFundFromSavings(10_499uL, 10_000uL, 500uL, sharesNodeChain = true))
+        assertFalse(SparkExitMath.canFundFromSavings(10_000uL, 0uL, 0uL, sharesNodeChain = true))
+    }
+
+    @Test
+    fun `savings cannot fund an exit on a chain spark does not read`() {
+        assertFalse(SparkExitMath.canFundFromSavings(10_500uL, 10_000uL, 500uL, sharesNodeChain = false))
     }
 
     @Test
