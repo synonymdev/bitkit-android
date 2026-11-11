@@ -4124,6 +4124,8 @@ class AppViewModel @Inject constructor(
             endpoints = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
                 .map { PaykitEndpoint(methodId = it.methodId.rawValue, value = it.value) },
             offersSparkLeg = offersSparkLeg,
+            invoice = invoice,
+            lnurl = lnurl,
         ).takeIf { it.endpoints.isNotEmpty() }
         val payMethod = if (offersSparkLeg && !canUseOnchain) {
             SendMethod.LIGHTNING
@@ -4842,13 +4844,16 @@ class AppViewModel @Inject constructor(
                     address = endpoint.value,
                     paykitRoute = route.copy(serviceLeg = null),
                 )
+                // An earlier pick cleared the other Lightning endpoint, so the picked one comes back from the route.
                 endpoint.methodId == MethodId.Lnurl.rawValue -> it.copy(
                     payMethod = SendMethod.LIGHTNING,
                     decodedInvoice = null,
+                    lnurl = route.lnurl ?: it.lnurl,
                     paykitRoute = route.copy(serviceLeg = null),
                 )
                 else -> it.copy(
                     payMethod = SendMethod.LIGHTNING,
+                    decodedInvoice = route.invoice ?: it.decodedInvoice,
                     lnurl = null,
                     paykitRoute = route.copy(serviceLeg = null),
                 )
@@ -9585,13 +9590,15 @@ data class SendUiState(
 
 /**
  * A contact payment bitkit-core's router picks the way for: the contact's bitcoin endpoints, whether a Spark leg may
- * reach its on-chain ones, and the leg once the router picked one.
+ * reach its on-chain ones, the leg once the router picked one, and the decoded invoice and LNURL a Direct pick pays.
  */
 @Stable
 data class PaykitRouteUi(
     val endpoints: List<PaykitEndpoint>,
     val offersSparkLeg: Boolean = false,
     val serviceLeg: ServiceRouteLeg? = null,
+    val invoice: LightningInvoice? = null,
+    val lnurl: LnurlParams.LnurlPay? = null,
 )
 
 private enum class PaykitRouteOutcome { Direct, Leg, Refused, Stale }

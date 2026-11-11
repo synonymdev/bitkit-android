@@ -12168,6 +12168,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a reroute from lnurl back to bolt11 pays the contact's invoice`() = test {
+        val (bolt11, lnurl) = openLightningContact()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(lnurl)))
+        continueWithAmount(2_000u)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(bolt11)))
+        continueWithAmount(3_000u)
+
+        assertEquals(bolt11.value, sut.sendUiState.value.decodedInvoice?.bolt11)
+        assertNull(sut.sendUiState.value.lnurl)
+    }
+
+    @Test
+    fun `a reroute from bolt11 back to lnurl pays the contact's lnurl`() = test {
+        val (bolt11, lnurl) = openLightningContact()
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(bolt11)))
+        continueWithAmount(2_000u)
+        assertNull(sut.sendUiState.value.lnurl)
+
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(lnurl)))
+        continueWithAmount(3_000u)
+
+        assertEquals(lnurl.value, (sut.sendUiState.value.lnurl as? LnurlParams.LnurlPay)?.data?.uri)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+    }
+
+    @Test
     fun `router direct pays the onchain endpoint it picks from savings`() = test {
         val bolt11 = PaykitEndpoint(methodId = MethodId.Bolt11.rawValue, value = "lnbcrt1routed")
         val onchain = PaykitEndpoint(methodId = MethodId.P2wpkh.rawValue, value = REGTEST_ADDRESS)
@@ -12999,6 +13031,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+    }
+
+    private suspend fun TestScope.openLightningContact(): Pair<PaykitEndpoint, PaykitEndpoint> {
+        val bolt11 = "lnbcrt1contactreroute"
+        val lnurl = LnurlPayData(
+            uri = "lnurl1contactreroute",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        stubLightningScan(bolt11, amountSats = 0u)
+        whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            endpoints = listOf(
+                Endpoint(MethodId.Bolt11, bolt11, rawPayload = ""),
+                Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+                // A USDT endpoint has the router pick the contact's bitcoin endpoint.
+                Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+            ),
+        )
+        advanceUntilIdle()
+        return PaykitEndpoint(MethodId.Bolt11.rawValue, bolt11) to PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri)
+    }
+
+    private fun TestScope.continueWithAmount(amount: ULong) {
+        sut.setSendEvent(SendEvent.AmountChange(amount))
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
     }
 
     private fun sparkRouteLeg(address: String) = ServiceRouteLeg(
