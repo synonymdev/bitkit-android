@@ -612,6 +612,52 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a move to spark received after its channel send keeps the send as its only activity`() = test {
+        val send = LightningActivity.create(
+            id = "hash",
+            txType = ActivityPaymentType.SENT,
+            status = PaymentState.SUCCEEDED,
+            value = 128uL,
+            invoice = "lnbc1280n1send",
+            timestamp = 1uL,
+            fee = 3uL,
+        )
+        whenever(activityRepo.getActivity(any(), any())).thenReturn(Result.success(Activity.Lightning(send)))
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+        whenever(sparkService.listPayments()).thenReturn(listOf(receivedPayment()))
+        sparkEvents.emit(SdkEvent.Synced)
+
+        verify(activityRepo, never()).upsertActivity(any())
+    }
+
+    @Test
+    fun `a move to spark received after its pending channel send marks the send succeeded`() = test {
+        val send = LightningActivity.create(
+            id = "hash",
+            txType = ActivityPaymentType.SENT,
+            status = PaymentState.PENDING,
+            value = 128uL,
+            invoice = "lnbc1280n1send",
+            timestamp = 1uL,
+            fee = 3uL,
+        )
+        whenever(activityRepo.getActivity(any(), any())).thenReturn(Result.success(Activity.Lightning(send)))
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(receivedPayment()))
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals(send.copy(status = PaymentState.SUCCEEDED), (activity.firstValue as Activity.Lightning).v1)
+    }
+
+    @Test
     fun `a start whose activity write failed syncs the activities again`() = test {
         whenever(sparkService.isConnected).thenReturn(false, true)
         whenever(sparkService.connect(0)).thenReturn(true, false)

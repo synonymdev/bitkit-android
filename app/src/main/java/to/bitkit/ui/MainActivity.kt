@@ -114,6 +114,7 @@ class MainActivity : FragmentActivity() {
             importance = NotificationManager.IMPORTANCE_LOW
         )
 
+        intent.removeNavDestinationExtras()
         val consumedLaunchIntent = savedInstanceState?.getString(KEY_CONSUMED_LAUNCH_INTENT)
         val currentLaunchIntent = intent.launchKey()
         if (currentLaunchIntent == null || currentLaunchIntent != consumedLaunchIntent) {
@@ -282,9 +283,19 @@ class MainActivity : FragmentActivity() {
             return
         }
 
+        intent.removeNavDestinationExtras()
         super.onNewIntent(intent)
         setIntent(intent)
         handleLaunchIntent(intent)
+    }
+
+    /**
+     * Navigation 2.9 opens the destination these extras name for any caller; 2.10 trusts them only from this app.
+     * Bitkit never sets them, so drop them: an exported launch can then reach only the declared deep links.
+     */
+    private fun Intent.removeNavDestinationExtras() {
+        removeExtra("android-support-nav:controller:deepLinkIds")
+        removeExtra("android-support-nav:controller:deepLinkArgs")
     }
 
     private fun handleLaunchIntent(intent: Intent) {

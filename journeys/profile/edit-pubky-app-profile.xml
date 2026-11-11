@@ -1,0 +1,18 @@
+<journey name="edit the pubky.app profile">
+  <description>
+    Precondition: a disposable wallet signed in to a Pubky profile, PIN off and an English device.
+    This checks that Edit Profile presents the profile as the user's public pubky.app profile and
+    that a name change is saved and shown again after a relaunch. Whether the change also reached
+    pubky.app is checked outside the app, under the PR's manual tests.
+  </description>
+  <actions>
+    <action>Open Profile using "ProfileButton" and wait for "ProfileViewName"</action>
+    <action>Tap "ProfileEdit" and wait for "ProfileEditName"</action>
+    <action>Verify the footer note says this is your pubky.app profile and that it is public</action>
+    <action>Replace the name with "Edited In Bitkit" and dismiss the keyboard</action>
+    <action>Tap "ProfileEditSave" and wait for "ProfileUpdatedToast"</action>
+    <action>Verify "ProfileViewName" shows "Edited In Bitkit"</action>
+    <action>Relaunch the app, open Profile using "ProfileButton" and wait for the full profile name (id "ProfileViewName", predicate exists)</action>
+    <action>Verify "ProfileViewName" shows "Edited In Bitkit"</action>
+  </actions>
+</journey>

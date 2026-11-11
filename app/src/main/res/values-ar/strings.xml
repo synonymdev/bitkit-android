@@ -516,6 +516,7 @@
     <string name="other__shop__intro__description">اجعل حياتك على معيار Bitcoin. أنفق Bitcoin على بطاقات الهدايا الرقمية وشرائح eSIM وشحن الهاتف والمزيد.</string>
     <string name="other__shop__intro__title">تسوّق</string>
     <string name="other__swipe">اسحب للتأكيد</string>
+    <string name="other__try_again">يرجى المحاولة مرة أخرى.</string>
     <string name="other__update_button">تحديث</string>
     <string name="other__update_critical_button">تحديث Bitkit</string>
     <string name="other__update_critical_nav_title">تحديث حرج</string>
@@ -1461,13 +1462,15 @@
     <string name="profile__disconnect_error">فشل فصل الملف الشخصي</string>
     <string name="profile__edit_bio">النبذة</string>
     <string name="profile__edit_bio_placeholder">ملاحظة قصيرة. أخبرنا قليلاً عن نفسك.</string>
+    <string name="profile__edit_changed_error">تغيّر ملفك الشخصي في pubky.app. حمّل Bitkit أحدث نسخة، لذا أعد إجراء تعديلك.</string>
     <string name="profile__edit_delete_section">حذف</string>
     <string name="profile__edit_name_placeholder">اسمك</string>
     <string name="profile__edit_nav_title">تعديل الملف الشخصي</string>
-    <string name="profile__edit_public_note">يرجى ملاحظة أن معلومات الملف الشخصي مخزنة في ملفات عامة.</string>
+    <string name="profile__edit_public_note">هذا هو ملفك الشخصي على pubky.app. إنه عام، والتغييرات التي تجريها هنا تظهر أيضًا على pubky.app.</string>
     <string name="profile__edit_save_error">فشل حفظ الملف الشخصي</string>
     <string name="profile__edit_save_success">تم حفظ الملف الشخصي</string>
     <string name="profile__edit_tags">العلامات</string>
+    <string name="profile__edit_tags_error">تعذّر على Bitkit حفظ وسومك. حُفظت تغييراتك الأخرى، لذا حاول حفظ الوسوم مرة أخرى.</string>
     <string name="profile__edit_unlink_section">إلغاء الربط</string>
     <string name="profile__empty_state">تعذر تحميل ملفك الشخصي.</string>
     <string name="profile__intro_description">مع ملفك الشخصي المحمول، يمكن لجهات اتصالك الوصول إليك والدفع لك في أي مكان.</string>

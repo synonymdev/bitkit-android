@@ -459,6 +459,7 @@
     <string name="other__high_balance__text">&lt;accent&gt;Dein Wallet-Kontostand übersteigt $500.&lt;/accent&gt;\nZu deiner Sicherheit solltest du einen Teil deiner Ersparnisse in ein Offline-Wallet verschieben.</string>
     <string name="other__high_balance__continue">Verstanden</string>
     <string name="other__high_balance__cancel">Mehr erfahren</string>
+    <string name="other__try_again">Bitte versuchen Sie es erneut.</string>
     <string name="other__update_critical_nav_title">Kritisches Update</string>
     <string name="other__update_critical_title">Aktualisiere\n&lt;accent&gt;Bitkit jetzt&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Es gibt ein kritisches Update für Bitkit. Du musst aktualisieren, um Bitkit weiterhin zu verwenden.</string>
@@ -1483,12 +1484,14 @@
     <string name="profile__disconnect_error">Profil konnte nicht getrennt werden</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Kurze Notiz. Erzähl ein bisschen über dich.</string>
+    <string name="profile__edit_changed_error">Dein Profil wurde in pubky.app geändert. Bitkit hat die neueste Version geladen, nimm deine Änderung bitte erneut vor.</string>
     <string name="profile__edit_delete_section">LÖSCHEN</string>
     <string name="profile__edit_name_placeholder">DEIN NAME</string>
-    <string name="profile__edit_public_note">Bitte beachte, dass Profilinformationen in öffentlichen Dateien gespeichert werden.</string>
+    <string name="profile__edit_public_note">Das ist dein pubky.app-Profil. Es ist öffentlich, und Änderungen, die du hier vornimmst, erscheinen auch auf pubky.app.</string>
     <string name="profile__edit_save_error">Profil konnte nicht gespeichert werden</string>
     <string name="profile__edit_save_success">Profil gespeichert</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_tags_error">Bitkit konnte deine Tags nicht speichern. Deine anderen Änderungen wurden gespeichert, versuche es mit den Tags erneut.</string>
     <string name="profile__edit_unlink_section">VERKNÜPFUNG AUFHEBEN</string>
     <string name="profile__empty_state">Dein Profil kann nicht geladen werden.</string>
     <string name="profile__intro_description">Mit deinem portablen Profil können deine Kontakte dich überall erreichen und bezahlen.</string>

@@ -71,6 +71,7 @@ import to.bitkit.models.HwWalletBalance
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.Routes.ExternalConnection
@@ -206,6 +207,7 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
+import to.bitkit.ui.settings.lightning.MoveToSparkScreen
 import to.bitkit.ui.settings.lightning.SparkDetailScreen
 import to.bitkit.ui.settings.lightning.SparkExitConfirmScreen
 import to.bitkit.ui.settings.lightning.SparkExitFeeBumpScreen
@@ -233,6 +235,7 @@ import to.bitkit.ui.sheets.DisablePinSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
+import to.bitkit.ui.sheets.MoveToSparkSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
@@ -785,6 +788,14 @@ fun ContentView(
                                         },
                                     )
                                 }
+
+                                TimedSheetType.MOVE_TO_SPARK -> MoveToSparkSheet(
+                                    onLater = { appViewModel.dismissTimedSheet() },
+                                    onMove = {
+                                        appViewModel.dismissTimedSheet()
+                                        navController.navigateTo(Routes.MoveToSpark)
+                                    },
+                                )
 
                                 TimedSheetType.HIGH_BALANCE -> {
                                     HighBalanceWarningSheet(
@@ -1403,6 +1414,8 @@ private fun NavGraphBuilder.home(
         SpendingWalletScreen(
             channels = lightningState.channels,
             hasSparkBalance = sparkState.shownSpendingSats > 0uL,
+            canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
+            onMoveToSparkClick = { navController.navigateTo(Routes.MoveToSpark) },
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = {
@@ -2066,6 +2079,18 @@ private fun NavGraphBuilder.lightningConnections(
             )
         }
         sparkExit(navController)
+        composableWithDefaultTransitions<Routes.MoveToSpark> {
+            MoveToSparkScreen(
+                viewModel = hiltViewModel(),
+                onBack = { navController.popBackStack() },
+                onCloseChannel = { channelId ->
+                    // Closing returns to Lightning Connections, so the close screen opens on top of it.
+                    navController.popBackStack()
+                    navController.navigateTo(Routes.LightningConnections)
+                    channelId?.let { navController.navigateTo(Routes.CloseConnection(it)) }
+                },
+            )
+        }
         deepLinkableComposable<Routes.CloseConnection> {
             val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
@@ -2621,6 +2646,9 @@ sealed interface Routes {
 
     @Serializable
     data object SparkExitFeeBump : Routes.InternalOnly
+
+    @Serializable
+    data object MoveToSpark : Routes.InternalOnly
 
     @Serializable
     data object DevSettings : Routes.DeepLinkable

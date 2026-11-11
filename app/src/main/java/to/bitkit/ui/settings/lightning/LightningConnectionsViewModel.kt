@@ -36,7 +36,9 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.SparkDeposit
 import to.bitkit.repositories.SparkExitEarlierAddress
 import to.bitkit.repositories.SparkExitRepo
@@ -107,9 +109,10 @@ class LightningConnectionsViewModel @Inject constructor(
                 sparkRepo.state,
                 sparkExitRepo.state,
             ) { lightningState, channels, sparkState, exitState ->
-                ConnectionsSnapshot(lightningState.nodeLifecycleState.isRunning(), channels, sparkState, exitState)
+                ConnectionsSnapshot(lightningState, channels, sparkState, exitState)
             }.collect { snapshot ->
-                val (isNodeRunning, channels, sparkState) = snapshot
+                val (lightningState, channels, sparkState) = snapshot
+                val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
                 val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.update {
@@ -123,6 +126,8 @@ class LightningConnectionsViewModel @Inject constructor(
                             .reversed().toImmutableList(),
                         localBalance = calculateLocalBalance(channels).safe() + sparkState.shownSpendingSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
+                        // The cached channels outlive a stopped node; the move reads the live ones.
+                        canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
                         spark = sparkState.toUi(
                             lightningRepo,
                             snapshot.exitState.showsResult,
@@ -241,6 +246,8 @@ data class LightningConnectionsUiState(
     val remoteBalance: ULong = 0u,
     val spark: SparkUi? = null,
     val isSparkReceiving: Boolean = false,
+    /** The channels hold a balance that can move to Spark, which Blocktank's channel closes make the cheaper path. */
+    val canMoveToSpark: Boolean = false,
 )
 
 /** The Spark wallet shown as a connection, present once it holds a balance or a deposit. */
@@ -301,7 +308,7 @@ internal suspend fun SparkState.toUi(
 }
 
 private data class ConnectionsSnapshot(
-    val isNodeRunning: Boolean,
+    val lightningState: LightningState,
     val channels: List<ChannelDetails>,
     val sparkState: SparkState,
     val exitState: SparkExitState,

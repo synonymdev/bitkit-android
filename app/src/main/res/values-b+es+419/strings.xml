@@ -523,6 +523,7 @@
     <string name="other__shop__intro__description">Adopta el estándar Bitcoin. Gasta tus Bitcoin en tarjetas de regalo digitales, eSIMs, recargas telefónicas y más.</string>
     <string name="other__shop__intro__title">Tienda</string>
     <string name="other__swipe">Deslizar para confirmar</string>
+    <string name="other__try_again">Por favor, inténtelo de nuevo.</string>
     <string name="other__update_button">Actualización</string>
     <string name="other__update_critical_button">Actualizar Bitkit</string>
     <string name="other__update_critical_nav_title">Actualización Crítica</string>
@@ -1487,12 +1488,14 @@
     <string name="profile__disconnect_error">No se pudo desconectar el perfil</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Nota breve. Cuente un poco sobre usted.</string>
+    <string name="profile__edit_changed_error">Tu perfil cambió en pubky.app. Bitkit cargó la versión más reciente, así que vuelve a hacer tu cambio.</string>
     <string name="profile__edit_delete_section">ELIMINAR</string>
     <string name="profile__edit_name_placeholder">SU NOMBRE</string>
-    <string name="profile__edit_public_note">Tenga en cuenta que la información del perfil se guarda en archivos públicos.</string>
+    <string name="profile__edit_public_note">Este es tu perfil de pubky.app. Es público, y los cambios que hagas aquí también se ven en pubky.app.</string>
     <string name="profile__edit_save_error">No se pudo guardar el perfil</string>
     <string name="profile__edit_save_success">Perfil guardado</string>
     <string name="profile__edit_tags">ETIQUETAS</string>
+    <string name="profile__edit_tags_error">Bitkit no pudo guardar tus etiquetas. Tus otros cambios se guardaron, así que vuelve a intentar con las etiquetas.</string>
     <string name="profile__edit_unlink_section">DESVINCULAR</string>
     <string name="profile__empty_state">No se pudo cargar su perfil.</string>
     <string name="profile__intro_description">Con su perfil portátil, sus contactos pueden encontrarlo y pagarle en cualquier lugar.</string>

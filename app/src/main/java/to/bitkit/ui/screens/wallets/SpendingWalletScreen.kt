@@ -43,6 +43,7 @@ import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.TabBar
@@ -70,6 +71,8 @@ fun SpendingWalletScreen(
     onBackClick: () -> Unit,
     balances: BalanceState = LocalBalances.current,
     hasSparkBalance: Boolean = false,
+    canMoveToSpark: Boolean = false,
+    onMoveToSparkClick: () -> Unit = {},
 ) {
     val showEmptyState by remember(balances.totalLightningSats, lightningActivities.size) {
         val hasLnFunds = balances.totalLightningSats == 0uL
@@ -175,6 +178,24 @@ fun SpendingWalletScreen(
 
             if (!showEmptyState) {
                 item { VerticalSpacer(32.dp) }
+
+                if (canMoveToSpark) {
+                    item {
+                        PrimaryButton(
+                            onClick = onMoveToSparkClick,
+                            text = stringResource(R.string.lightning__move_to_spark__nav_title),
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_lightning),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier.testTag("MoveToSpark")
+                        )
+                    }
+                    item { VerticalSpacer(16.dp) }
+                }
 
                 if (canTransfer) {
                     item {

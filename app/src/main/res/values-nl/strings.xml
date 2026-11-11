@@ -520,6 +520,7 @@
     <string name="other__shop__intro__description">Leef op de Bitcoin-standaard. Besteed je Bitcoin aan digitale cadeaubonnen, eSIM\'s, telefoonopwaarderingen en meer.</string>
     <string name="other__shop__intro__title">Winkel</string>
     <string name="other__swipe">Veeg om te bevestigen</string>
+    <string name="other__try_again">Probeer het opnieuw.</string>
     <string name="other__update_button">Bijwerken</string>
     <string name="other__update_critical_button">Bitkit bijwerken</string>
     <string name="other__update_critical_nav_title">Kritieke update</string>
@@ -1483,12 +1484,14 @@
     <string name="profile__disconnect_error">Profiel ontkoppelen mislukt</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Korte notitie. Vertel iets over uzelf.</string>
+    <string name="profile__edit_changed_error">Je profiel is gewijzigd in pubky.app. Bitkit heeft de nieuwste versie geladen, dus voer je wijziging opnieuw uit.</string>
     <string name="profile__edit_delete_section">VERWIJDEREN</string>
     <string name="profile__edit_name_placeholder">UW NAAM</string>
-    <string name="profile__edit_public_note">Let op: profielgegevens worden opgeslagen in openbare bestanden.</string>
+    <string name="profile__edit_public_note">Dit is je pubky.app-profiel. Het is openbaar, en wijzigingen die je hier maakt, verschijnen ook op pubky.app.</string>
     <string name="profile__edit_save_error">Profiel opslaan mislukt</string>
     <string name="profile__edit_save_success">Profiel opgeslagen</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_tags_error">Bitkit kon je tags niet opslaan. Je andere wijzigingen zijn opgeslagen, dus probeer de tags opnieuw.</string>
     <string name="profile__edit_unlink_section">ONTKOPPELEN</string>
     <string name="profile__empty_state">Kan uw profiel niet laden.</string>
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>
