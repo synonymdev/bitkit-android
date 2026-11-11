@@ -679,8 +679,12 @@ class SparkRepo @Inject constructor(
         (listed + recorded).toSet()
     }
 
-    /** Whether [txid] is a Spark withdrawal, which LDK never held and so cannot boost. */
-    suspend fun isWithdrawal(txid: String): Boolean = withContext(bgDispatcher) {
+    /**
+     * Whether [txid] is the sent side of a Spark withdrawal, which LDK never held and so cannot boost. Savings owns the
+     * output a withdrawal to it pays, so its receipt, not [isSent], can be boosted.
+     */
+    suspend fun isWithdrawal(txid: String, isSent: Boolean): Boolean = withContext(bgDispatcher) {
+        if (!isSent) return@withContext false
         if (cacheStore.data.first().sentSparkWithdrawals.any { it.txid == txid }) return@withContext true
         if (!_state.value.isReady) return@withContext false
         runSuspendCatching { sparkService.listPayments() }

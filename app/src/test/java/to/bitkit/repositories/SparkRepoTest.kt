@@ -772,8 +772,16 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
         val sut = readySpark(balanceSats = 50_000uL)
 
-        assertTrue(sut.isWithdrawal("withdrawal"))
-        assertFalse(sut.isWithdrawal("ldk-send"))
+        assertTrue(sut.isWithdrawal("withdrawal", isSent = true))
+        assertFalse(sut.isWithdrawal("ldk-send", isSent = true))
+    }
+
+    @Test
+    fun `the savings receipt of a spark withdrawal stays boostable`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        val sut = readySpark(balanceSats = 50_000uL)
+
+        assertFalse(sut.isWithdrawal("withdrawal", isSent = false), "Savings owns the output the withdrawal pays")
     }
 
     @Test

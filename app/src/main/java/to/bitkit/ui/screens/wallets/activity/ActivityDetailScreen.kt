@@ -194,7 +194,10 @@ fun ActivityDetailScreen(
                 LaunchedEffect(item) {
                     if (item is Activity.Onchain) {
                         isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
-                        isSparkWithdrawal = detailViewModel.isSparkWithdrawal(item.v1.txId)
+                        isSparkWithdrawal = detailViewModel.isSparkWithdrawal(
+                            item.v1.txId,
+                            isSent = item.v1.txType == PaymentType.SENT,
+                        )
                         boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
                             detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
                         } else {

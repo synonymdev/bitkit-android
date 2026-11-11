@@ -272,7 +272,7 @@ class ActivityDetailViewModel @Inject constructor(
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): ImmutableMap<String, Boolean> =
         activityRepo.getBoostTxDoesExist(boostTxIds, currentWalletId).toImmutableMap()
 
-    suspend fun isSparkWithdrawal(txId: String): Boolean = sparkRepo.isWithdrawal(txId)
+    suspend fun isSparkWithdrawal(txId: String, isSent: Boolean): Boolean = sparkRepo.isWithdrawal(txId, isSent)
 
     suspend fun isCpfpChildTransaction(txId: String): Boolean {
         return activityRepo.isCpfpChildTransaction(txId, currentWalletId)
