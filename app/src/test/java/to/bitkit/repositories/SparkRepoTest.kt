@@ -24,6 +24,7 @@ import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import breez_sdk_spark.SyncError
+import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -38,6 +39,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -53,6 +55,7 @@ import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
@@ -67,11 +70,15 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.MAX_SPARK_SEND_HASHES
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.WalletScope
+import to.bitkit.services.CoreService
+import to.bitkit.services.OnchainService
 import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
@@ -107,6 +114,9 @@ class SparkRepoTest : BaseUnitTest() {
     private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
     private val contactResolver = mock<PrivatePaykitContactResolver>()
     private val pendingPaymentRepo = PendingPaymentRepo()
+    private val onchainService = mock<OnchainService>()
+    private val coreService = mock<CoreService> { on { onchain } doReturn onchainService }
+    private val settingsStore = mock<SettingsStore> { on { data } doReturn flowOf(SettingsData()) }
     private var now = Instant.fromEpochSeconds(1_800_000_000)
     private val clock = object : Clock {
         override fun now() = this@SparkRepoTest.now
@@ -120,6 +130,8 @@ class SparkRepoTest : BaseUnitTest() {
         contactResolver = { contactResolver },
         pendingPaymentRepo = pendingPaymentRepo,
         clock = clock,
+        coreService = { coreService },
+        settingsStore = settingsStore,
     )
 
     @get:Rule
@@ -855,6 +867,92 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals("pubkycontact", onchain.contact)
         assertNull(cacheData.value.pendingSparkWithdrawal)
     }
+
+    @Test
+    fun `a completed contact withdrawal stays unconfirmed until its payout is mined`() = test {
+        val sut = journaledSpark()
+        whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal())
+
+        sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact").getOrThrow()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertFalse(
+            assertIs<Activity.Onchain>(activity.firstValue).v1.confirmed,
+            "Spark completes a withdrawal once its provider takes the payout on, before the payout is mined",
+        )
+    }
+
+    @Test
+    fun `a contact withdrawal is confirmed once the chain lists its payout in a block`() = test {
+        val sent = sentContactActivity(confirmed = false)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }.thenReturn(Result.success(sent))
+        whenever { onchainService.unspentOutputs(eq("bcrt1qcontact"), any(), anyOrNull()) }
+            .thenReturn(listOf(payoutOutput(txid = "withdrawal", confirmations = 1u)))
+
+        readySpark(balanceSats = 50_000uL)
+        advanceUntilIdle()
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, atLeastOnce()).upsertActivity(activities.capture())
+        assertTrue(activities.allValues.any { assertIs<Activity.Onchain>(it).v1.confirmed })
+    }
+
+    @Test
+    fun `a contact withdrawal whose payout is still in the mempool stays unconfirmed`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
+            .thenReturn(Result.success(sentContactActivity(confirmed = false)))
+        whenever { onchainService.unspentOutputs(eq("bcrt1qcontact"), any(), anyOrNull()) }
+            .thenReturn(listOf(payoutOutput(txid = "withdrawal", confirmations = 0u)))
+
+        readySpark(balanceSats = 50_000uL)
+        advanceUntilIdle()
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, atLeastOnce()).upsertActivity(activities.capture())
+        assertTrue(activities.allValues.none { assertIs<Activity.Onchain>(it).v1.confirmed })
+    }
+
+    @Test
+    fun `a confirmed contact withdrawal is not looked up on chain again`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
+            .thenReturn(Result.success(sentContactActivity(confirmed = true)))
+
+        readySpark(balanceSats = 50_000uL)
+        advanceUntilIdle()
+
+        verify(onchainService, never()).unspentOutputs(any(), any(), anyOrNull())
+    }
+
+    private fun sentContactActivity(confirmed: Boolean) = Activity.Onchain(
+        OnchainActivity.create(
+            id = "withdrawal",
+            txType = ActivityPaymentType.SENT,
+            txId = "withdrawal",
+            value = 20_000uL,
+            fee = 300uL,
+            address = "bcrt1qcontact",
+            timestamp = 1uL,
+            confirmed = confirmed,
+            contact = "pubkycontact",
+        )
+    )
+
+    private fun payoutOutput(txid: String, confirmations: UInt) = AccountUtxo(
+        txid = txid,
+        vout = 0u,
+        amount = 20_000uL,
+        blockHeight = if (confirmations > 0u) 100u else 0u,
+        address = "bcrt1qcontact",
+        path = "",
+        confirmations = confirmations,
+        coinbase = false,
+        own = false,
+        required = null,
+    )
 
     @Test
     fun `an accepted withdrawal stays sent after a restart whose list lacks it`() = test {

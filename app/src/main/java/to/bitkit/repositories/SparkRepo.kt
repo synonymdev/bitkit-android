@@ -45,6 +45,7 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
@@ -54,6 +55,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
+import to.bitkit.services.CoreService
 import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.utils.Logger
@@ -86,6 +88,8 @@ class SparkRepo @Inject constructor(
     private val contactResolver: Provider<PrivatePaykitContactResolver>,
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val clock: Clock,
+    private val coreService: Provider<CoreService>,
+    private val settingsStore: SettingsStore,
 ) {
     companion object {
         private const val TAG = "SparkRepo"
@@ -963,7 +967,38 @@ class SparkRepo @Inject constructor(
         payments
             .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
             .forEach { recordActivity(it) }
+        // Off the refresh, so a slow Electrum server never holds a send that waits for it.
+        scope.launch { confirmMinedPayouts(payments) }
         markTransfers(payments)
+    }
+
+    /**
+     * Spark lists a withdrawal completed once its provider took the payout on, which can be before the payout
+     * transaction is broadcast or mined, so a contact withdrawal's sent activity is confirmed only once the chain lists
+     * its payout output in a block. An output the contact already spent drops out of that list, so its activity then
+     * stays unconfirmed.
+     */
+    private suspend fun confirmMinedPayouts(payments: List<Payment>) {
+        payments.filter { it.status == PaymentStatus.COMPLETED && it.paymentType == SparkPaymentType.SEND }
+            .forEach { payment ->
+                val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@forEach
+                val sent = (activityRepo.get().getActivity(withdraw.txId).getOrNull() as? Activity.Onchain)?.v1
+                    ?.takeIf { it.txType == PaymentType.SENT && !it.confirmed } ?: return@forEach
+                val outputs = runSuspendCatching {
+                    coreService.get().onchain.unspentOutputs(
+                        address = withdraw.destinationAddress,
+                        electrumUrl = settingsStore.data.first().electrumServer,
+                        network = Env.network,
+                    )
+                }.getOrElse {
+                    Logger.warn("Failed to look up Spark withdrawal payout '${withdraw.txId}'", it, context = TAG)
+                    return@forEach
+                }
+                val isMined = outputs.any {
+                    it.txid == withdraw.txId && it.vout == withdraw.vout && it.confirmations > 0u
+                }
+                if (isMined) activityRepo.get().upsertActivity(Activity.Onchain(sent.copy(confirmed = true)))
+            }
     }
 
     private fun markClaimedDeposits(claimed: List<SparkDeposit>) {
@@ -1457,7 +1492,8 @@ class SparkRepo @Inject constructor(
             fee = payment.fees.toLong().toULong(),
             address = withdraw.destinationAddress,
             timestamp = payment.timestamp,
-            confirmed = payment.status == PaymentStatus.COMPLETED,
+            // Spark completes a withdrawal before its payout is mined, so only the chain confirms it.
+            confirmed = existing?.confirmed == true,
             doesExist = payment.status != PaymentStatus.FAILED,
             contact = existing?.contact ?: journal?.contact,
             seenAt = existing?.seenAt,

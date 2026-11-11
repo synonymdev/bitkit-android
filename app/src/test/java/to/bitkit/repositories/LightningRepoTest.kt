@@ -1728,6 +1728,8 @@ class LightningRepoTest : BaseUnitTest() {
             contactResolver = { mock() },
             pendingPaymentRepo = PendingPaymentRepo(),
             clock = Clock.System,
+            coreService = { coreService },
+            settingsStore = settingsStore,
         )
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
