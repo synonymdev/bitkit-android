@@ -483,13 +483,43 @@ class SparkExitDriverTest : BaseUnitTest() {
         var record = driver(tip = 1_000u).tick(start)
         assertIs<Phase.NeedsFunding>(record.phase)
 
-        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
         record = driver(tip = 1_001u).tick(record)
 
         assertEquals(1, record.generation, "the funded rebuild adopted a recovery without leaf-1's signed steps")
         assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
         assertEquals(Phase.Running, record.phase)
         assertEquals(unverified.transactions.map { it.txid }, record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
+    fun `an unverified rebuild's ask that diverged never sends the diverged generation again`() = test {
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        sdk.checks += check(unverified, RecoveryVerdict.Valid)
+        sdk.checks += check(unverified, redo)
+        repeat(2) { sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "") }
+
+        var record = driver(tip = 1_000u).tick(running(unverified))
+        assertTrue(record.isUnverifiedAsk)
+        record = driver(tip = 1_001u).tick(record)
+        assertTrue(record.isRebuilding)
+        assertFalse(record.isUnverifiedAsk, "the ask now waits for the diverged generation's rebuild")
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+        now += interval
+        record = driver(tip = 1_002u).tick(record)
+
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isRebuilding, "the diverged generation would be driven again")
+        record = driver(tip = 1_003u).tick(record)
+        assertTrue(chain.broadcasts.none { it.txid == "n1" || it.txid == "n2" }, "a diverged step was sent again")
     }
 
     @Test

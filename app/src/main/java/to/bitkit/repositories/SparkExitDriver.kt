@@ -163,7 +163,10 @@ class SparkExitDriver(
                         funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
                             ?: end(funded.ended(), funded)
                         // Funding an unverified rebuild asked for resumes that rebuild, with its guards.
-                        else -> build(funded, sdk, isUnverifiedRebuild = funded.isUnverifiedAsk)
+                        else -> {
+                            val isUnverified = funded.isUnverifiedAsk && !funded.isRebuilding
+                            build(funded, sdk, isUnverifiedRebuild = isUnverified)
+                        }
                     }
                 }
             }
@@ -444,12 +447,12 @@ class SparkExitDriver(
             }
             // Finished before the higher fee was needed: running again, the next check ends it and the payment goes
             // back with the leftover.
-            RecoveryVerdict.Done -> updated.copy(phase = SparkExitRecord.Phase.Running)
+            RecoveryVerdict.Done -> updated.copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false)
             // The diverged generation is never sent again: its rebuild, a Redo one, waits for the funding it was paid
             // for.
             is RecoveryVerdict.Redo -> {
                 Logger.warn("Spark exit diverged on-chain while a top-up is awaited", context = TAG)
-                updated.copy(isRebuilding = true, isRedoRebuild = true)
+                updated.copy(isRebuilding = true, isRedoRebuild = true, isUnverifiedAsk = false)
             }
         }
     }
