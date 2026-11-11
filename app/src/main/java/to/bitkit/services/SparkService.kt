@@ -62,6 +62,9 @@ class SparkService @Inject constructor(
     private val keychain: Keychain,
 ) {
     companion object {
+        /** When an invoice made at [timestamp] with [expiry] seconds to live expires, in epoch seconds. */
+        internal fun invoiceExpiresAt(timestamp: ULong, expiry: ULong): ULong = timestamp.safe() + expiry.safe()
+
         private const val TAG = "SparkService"
 
         /**
@@ -275,7 +278,7 @@ class SparkService @Inject constructor(
 
     /** When [bolt11] expires, in epoch seconds, read by the SDK's own parser; null when it isn't a BOLT11 invoice. */
     suspend fun invoiceExpiresAt(bolt11: String): ULong? =
-        (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1?.let { it.timestamp + it.expiry }
+        (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1?.let { invoiceExpiresAt(it.timestamp, it.expiry) }
 
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */
     suspend fun exportExitState(): String = requireSdk().exportUnilateralExitState().exitState
