@@ -309,13 +309,14 @@ class SparkRepo @Inject constructor(
             val sent = try {
                 sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
-                // The checks above and saving the hash suspend, so the deadline is checked last, before the send.
+                // Kept until the call returns, so a send cut off by process death or cancellation stays held.
+                cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
+                // The checks above and both writes suspend, so the deadline is checked last, before the send.
                 runCatching { ensurePaymentDeadline(paymentDeadlineAt) }.onFailure {
+                    cacheStore.removeSparkUncertainSend(paymentHash)
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw it
                 }
-                // Kept until the call returns, so a send cut off by process death or cancellation stays held.
-                cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
                 runSuspendCatching { sparkService.send(prepared) }
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())

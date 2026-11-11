@@ -1727,6 +1727,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send whose deadline passes while its uncertainty is written never leaves`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val deadline = now + 1.seconds
+        whenever { cacheStore.addSparkUncertainSend(any(), any()) }.thenAnswer {
+            now = deadline + 1.seconds
+            Unit
+        }
+        val sut = createSut()
+
+        val result = sut.payInvoice("lnbc1", 100uL, deadline, null) { true }
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
+        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+    }
+
+    @Test
     fun `an older failed row never ends an uncertain spark send while spark can't resync`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
