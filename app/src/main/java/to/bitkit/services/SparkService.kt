@@ -344,6 +344,17 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     /** The withdrawal fee rose above the fee the user confirmed. */
     class WithdrawalFeeChanged : SparkError("Spark withdrawal fee changed since it was confirmed")
 
+    class WithdrawalPending : SparkError("An earlier Spark withdrawal is still settling")
+
+    /** Spark could withdraw to the contact, but its balance can't cover the amount plus the withdrawal fee. */
+    class WithdrawalOverBalance : SparkError("Spark balance can't cover the withdrawal and its fee")
+
+    /** Spark's list shows the withdrawal never went out. */
+    class WithdrawalNotSent : SparkError("Spark never sent the withdrawal")
+
+    /** Spark returned the withdrawal as pending, which it can still fail, so its outcome is not known yet. */
+    class WithdrawalNotCompleted : SparkError("Spark has not completed the withdrawal yet")
+
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
      * payment, or its fee was over the caller's limit; or the node refused one because Spark hadn't listed its earlier

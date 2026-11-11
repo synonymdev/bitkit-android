@@ -849,6 +849,8 @@
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Receber</string>
     <string name="wallet__send_bitcoin">Enviar Bitcoin</string>
+    <string name="wallet__send_paykit_no_route__description">Este contacto não tem nenhum método de pagamento que a Bitkit possa usar agora.</string>
+    <string name="wallet__send_paykit_no_route__title">Não é possível pagar a este contacto</string>
     <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos já não estão disponíveis. A Bitkit verifica primeiro a rede e depois devolve as moedas desta transferência à sua carteira, para que a transferência original nunca seja confirmada. Isto tem uma taxa de rede.</string>
     <string name="wallet__send_to">Para</string>
     <string name="wallet__recipient_contact">Contato</string>
@@ -868,6 +870,7 @@
     <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_confirming_in">Confirmando em</string>
     <string name="wallet__send_invoice_expiration">Vencimento do invoice</string>
+    <string name="wallet__send_swap_route">Rota</string>
     <string name="wallet__send_swipe">Deslize para Pagar</string>
     <string name="wallet__send_yes">Sim, Enviar</string>
     <string name="wallet__send_dialog1">Parece que você está enviando mais de US$ 100. Deseja continuar?</string>

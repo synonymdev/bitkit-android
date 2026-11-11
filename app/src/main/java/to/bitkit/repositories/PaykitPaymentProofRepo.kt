@@ -110,6 +110,8 @@ data class PendingPaykitPaymentProof(
     val previousPrivatePaymentListVersion: ULong? = null,
     /** Set only for an automatic Allowance payment, from its submitted attempt. Manual payments omit it. */
     val allowanceId: String? = null,
+    /** An on-chain payment sent as a Spark withdrawal, settled from Spark's payment list instead of the node's. */
+    val sparkWithdrawal: Boolean = false,
 )
 
 data class PaykitOnchainPaymentProofResolution(
@@ -118,6 +120,12 @@ data class PaykitOnchainPaymentProofResolution(
     val transactionId: String,
     val walletId: String = WalletScope.default,
     val amountSats: ULong? = null,
+)
+
+/** A request whose uncertain Spark withdrawal Spark showed never sent, so its pending payment can fail. */
+data class PaykitSparkWithdrawalRelease(
+    val identity: String,
+    val requestId: PaykitPaymentRequestId,
 )
 
 @Singleton
@@ -186,6 +194,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
     private val _onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     val onchainPaymentResolutions = _onchainPaymentResolutions.asStateFlow()
+    private val _sparkWithdrawalReleases = MutableStateFlow<List<PaykitSparkWithdrawalRelease>>(emptyList())
+    val sparkWithdrawalReleases = _sparkWithdrawalReleases.asStateFlow()
 
     suspend fun prepare(
         request: PaykitPaymentRequest,
@@ -308,6 +318,48 @@ class PaykitPaymentProofRepo @Inject constructor(
         privatePaymentListVersion: ULong? = null,
         signedTx: HwFundingSignedTx? = null,
         previousPrivatePaymentListVersion: ULong? = null,
+    ): Result<Unit> = markOnchainStarted(
+        request = request,
+        address = address,
+        amountSats = amountSats,
+        walletId = walletId,
+        privatePaymentListVersion = privatePaymentListVersion,
+        signedTx = signedTx,
+        previousPrivatePaymentListVersion = previousPrivatePaymentListVersion,
+        sparkWithdrawal = false,
+    )
+
+    /** Marks the on-chain proof of [request] started for a Spark withdrawal of [amountSats] to [address]. */
+    suspend fun markSparkOnchainPaymentStarted(
+        request: PaykitPaymentRequest,
+        address: String,
+        amountSats: ULong,
+        privatePaymentListVersion: ULong? = null,
+        previousPrivatePaymentListVersion: ULong? = null,
+        earlierWithdrawalTxids: Set<String> = emptySet(),
+    ): Result<Unit> = markOnchainStarted(
+        request = request,
+        address = address,
+        amountSats = amountSats,
+        walletId = WalletScope.default,
+        privatePaymentListVersion = privatePaymentListVersion,
+        signedTx = null,
+        previousPrivatePaymentListVersion = previousPrivatePaymentListVersion,
+        sparkWithdrawal = true,
+        earlierWithdrawalTxids = earlierWithdrawalTxids,
+    )
+
+    @Suppress("LongParameterList")
+    private suspend fun markOnchainStarted(
+        request: PaykitPaymentRequest,
+        address: String,
+        amountSats: ULong,
+        walletId: String,
+        privatePaymentListVersion: ULong?,
+        signedTx: HwFundingSignedTx?,
+        previousPrivatePaymentListVersion: ULong?,
+        sparkWithdrawal: Boolean,
+        earlierWithdrawalTxids: Set<String> = emptySet(),
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
@@ -347,10 +399,122 @@ class PaykitPaymentProofRepo @Inject constructor(
                     hardwareFeeRate = signedTx?.feeRate,
                     hardwareTotalSpent = signedTx?.totalSpent,
                     hardwareDispatchAttempted = signedTx?.let { false },
+                    sparkWithdrawal = sparkWithdrawal,
+                    onchainMatchingTransactionIdsBeforeAttempt = if (sparkWithdrawal) {
+                        earlierWithdrawalTxids
+                    } else {
+                        proofs[index].onchainMatchingTransactionIdsBeforeAttempt
+                    },
                 )
                 persist(proofs)
             }
         }.onFailure { Logger.warn("Failed to mark a Paykit on-chain payment as started", it, context = TAG) }
+    }
+
+    /** Completes the started proof of [request] paid by the Spark withdrawal [txid] and delivers it. */
+    suspend fun completeSparkOnchainPayment(request: PaykitPaymentRequest, txid: String): Boolean =
+        withContext(ioDispatcher) {
+            if (!txid.isHex(HASH_BYTE_COUNT)) return@withContext false
+            val identity = currentIdentity() ?: return@withContext false
+            runSuspendCatching {
+                operationMutex.withLock {
+                    val proof = loadProofs().lastOrNull {
+                        PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                            it.sparkWithdrawal && it.paymentStarted && it.proofData == null
+                    } ?: return@withLock false
+                    completeSparkOnchainProofLocked(proof, txid)
+                }
+            }.onFailure {
+                Logger.warn("Failed to complete a Paykit proof for a Spark withdrawal", it, context = TAG)
+            }.getOrDefault(false)
+        }
+
+    /**
+     * Releases the started Spark proof of [request] when Spark shows its withdrawal never sent, so the request can be
+     * paid again; returns whether it did.
+     */
+    suspend fun releaseUnsentSparkOnchainProof(request: PaykitPaymentRequest): Boolean = withContext(ioDispatcher) {
+        val identity = currentIdentity() ?: return@withContext false
+        runSuspendCatching {
+            operationMutex.withLock {
+                val proof = loadProofs().lastOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                        it.sparkWithdrawal && it.paymentStarted && it.proofData == null
+                } ?: return@withLock false
+                reconcileSparkOnchainProof(proof)
+                loadProofs().none { it == proof }
+            }
+        }.onFailure {
+            Logger.warn("Failed to release an unsent Spark withdrawal proof", it, context = TAG)
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Releases the started Spark proof of [request] for a withdrawal Spark refused before its journal was written, so
+     * nothing left the wallet and no listing is needed; returns whether it did.
+     */
+    suspend fun releaseRefusedSparkOnchainProof(request: PaykitPaymentRequest): Boolean = withContext(ioDispatcher) {
+        val identity = currentIdentity() ?: return@withContext false
+        runSuspendCatching {
+            operationMutex.withLock {
+                val proof = loadProofs().lastOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                        it.sparkWithdrawal && it.paymentStarted && it.proofData == null
+                } ?: return@withLock false
+                releaseUnsentSparkOnchainProofLocked(proof)
+                true
+            }
+        }.onFailure {
+            Logger.warn("Failed to release a refused Spark withdrawal proof", it, context = TAG)
+        }.getOrDefault(false)
+    }
+
+    /** Settles a started Spark proof from Spark's list: completed by its own withdrawal, removed when it never sent. */
+    private suspend fun reconcileSparkOnchainProof(proof: PendingPaykitPaymentProof): Boolean {
+        if (!proof.paymentStarted || proof.proofData != null) return false
+        val address = proof.onchainAddress ?: return false
+        val amount = proof.onchainAmountSats ?: return false
+        val outcome = lightningRepo.sparkWithdrawalOutcome(
+            address,
+            amount,
+            proof.onchainMatchingTransactionIdsBeforeAttempt,
+        )
+        // The request's allowance attempt is settled first: a failed ledger write keeps the proof for the next pass.
+        return when (outcome) {
+            is SparkWithdrawalOutcome.Sent -> {
+                allowanceExecutor.get().onchainSendSettled(proof.identity, proof.requestId, outcome.txid)
+                completeSparkOnchainProofLocked(proof, outcome.txid)
+            }
+            SparkWithdrawalOutcome.Unsent -> {
+                releaseUnsentSparkOnchainProofLocked(proof)
+                false
+            }
+            SparkWithdrawalOutcome.Unknown -> false
+        }
+    }
+
+    private suspend fun releaseUnsentSparkOnchainProofLocked(proof: PendingPaykitPaymentProof) {
+        allowanceExecutor.get().onchainSendReleased(proof.identity, proof.requestId)
+        Logger.info("Released a Paykit proof whose Spark withdrawal never sent", context = TAG)
+        releaseDeniedPrivateConsumption(proof)
+        removeProofsLocked { it == proof }
+        // The pending screen of an uncertain Spark send waits on this to fail it.
+        val release = PaykitSparkWithdrawalRelease(proof.identity, proof.requestId)
+        _sparkWithdrawalReleases.update { if (release in it) it else it + release }
+    }
+
+    private suspend fun completeSparkOnchainProofLocked(proof: PendingPaykitPaymentProof, txid: String): Boolean {
+        val proofs = loadProofs().toMutableList()
+        val index = proofs.indexOf(proof)
+        if (index < 0) return false
+        val completed = proof.copy(
+            paymentIdentifier = txid.lowercase(),
+            proofData = txid.lowercase(),
+            onchainAcceptanceVerified = true,
+        )
+        proofs[index] = completed
+        // The pending screen of an uncertain Spark send waits on this resolution.
+        return persistAndSubmit(listOf(completed), proofs).also { publishOnchainResolution(completed, txid) }
     }
 
     suspend fun completeLightningPayment(paymentHash: String, preimage: String?) = withContext(ioDispatcher) {
@@ -1193,7 +1357,10 @@ class PaykitPaymentProofRepo @Inject constructor(
         }.getOrElse { return@withContext }
         if (snapshot.isEmpty()) return@withContext
         finishDeniedHardwarePreparations(snapshot)
-        snapshot.filter { it.kind == PaykitPaymentProofKind.Onchain && it.onchainWalletId == WalletScope.default }
+        snapshot.filter {
+            it.kind == PaykitPaymentProofKind.Onchain && it.onchainWalletId == WalletScope.default &&
+                !it.sparkWithdrawal
+        }
             .forEach { proof ->
                 val txid = proof.proofData ?: attempt?.txid
                 val validCompletedProof = proof.paymentStarted && proof.proofData?.isHex(HASH_BYTE_COUNT) == true &&
@@ -1261,6 +1428,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         activityReady: Boolean,
     ): Boolean {
         if (proof.hardwareDispatchDenied) return false
+        if (proof.sparkWithdrawal) {
+            return if (proof.proofData != null) submitReady(proof) else reconcileSparkOnchainProof(proof)
+        }
         if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainWalletId == WalletScope.default &&
             !activityReady
         ) {
@@ -1457,6 +1627,10 @@ class PaykitPaymentProofRepo @Inject constructor(
         _onchainPaymentResolutions.update { resolutions ->
             if (resolution in resolutions) resolutions else resolutions + resolution
         }
+    }
+
+    fun consumeSparkWithdrawalRelease(release: PaykitSparkWithdrawalRelease) {
+        _sparkWithdrawalReleases.update { it - release }
     }
 
     fun consumeOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
