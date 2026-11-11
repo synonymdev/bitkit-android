@@ -1497,7 +1497,10 @@ class SparkRepo @Inject constructor(
             ?.toSet()
     }
 
-    /** Seeds the restored send hashes from Spark's list once it has synced, so the hold on older invoices ends. */
+    /**
+     * Seeds the restored send hashes from Spark's list once it has synced. This ends only the wait for Spark's first
+     * listing: an older invoice Spark hasn't listed stays refused until it expires.
+     */
     private suspend fun seedRestoredSendHashes() {
         if (cacheStore.data.first().sparkHistoryUnseededSince == null || !canListPayments()) return
         runSuspendCatching { sparkService.listPayments() }
