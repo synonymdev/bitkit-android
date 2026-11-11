@@ -461,7 +461,11 @@ class SparkExitDriver(
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
                 val rebuilding = sent.copy(isRebuilding = true, unverifiedRebuiltAtHeight = tip, isRedoRebuild = false)
                 save(rebuilding)
-                build(rebuilding, sdk)
+                val rebuilt = build(rebuilding, sdk)
+                // A rebuild that adopted nothing, such as one waiting for a leaf it could not read either, leaves the
+                // valid generation going: checked and sent every tick, and rebuilt over again once a block.
+                if (!rebuilt.isAdoptionPending(sent)) return rebuilt
+                rebuilt.copy(isRebuilding = false, retrySince = sent.retrySince, retriedAt = sent.retriedAt)
             }
             RecoveryVerdict.Done -> {
                 // Leaves the operators moved on-chain but could not co-sign stay part of the exit, retried for a week.
@@ -682,6 +686,10 @@ class SparkExitDriver(
         if (SparkExitMath.confirmedCount(checked) <= since) return this
         return copy(stallRebuilds = 0, stallConfirmedCount = null)
     }
+
+    private fun SparkExitRecord.isAdoptionPending(before: SparkExitRecord): Boolean =
+        isRebuilding && phase == SparkExitRecord.Phase.Running && generation == before.generation &&
+            lostLeaves == before.lostLeaves
 
     private fun needsUnverifiedRebuild(record: SparkExitRecord): Boolean {
         val height = tip ?: return false

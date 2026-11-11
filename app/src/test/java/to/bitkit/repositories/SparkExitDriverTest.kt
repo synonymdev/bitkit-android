@@ -333,6 +333,39 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an unverified rebuild that adopts nothing keeps checking and sending the valid generation`() = test {
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val readable = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        sdk.checks += check(unverified, RecoveryVerdict.Valid)
+        sdk.checks += check(readable, RecoveryVerdict.Valid)
+        sdk.preparedResponse = SparkExitFixtures.prepared(
+            leaves = emptyList(),
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+
+        var record = driver(tip = 1_000u).tick(running(unverified))
+        assertFalse(record.isRebuilding)
+        assertFalse(record.isWaitingForLeaves)
+        assertEquals(1, record.generation)
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(2, sdk.checkedRecoveries.size)
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertEquals(1, record.generation)
+    }
+
+    @Test
     fun `an unverified unilateral step waits while another unilateral step is ready`() = test {
         val recovery = SparkExitFixtures.recovery(
             listOf(
