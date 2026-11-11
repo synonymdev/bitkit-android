@@ -1367,6 +1367,20 @@ class SparkRepo @Inject constructor(
             return false
         }
         val existing = (stored as? Activity.Lightning)?.v1
+        // A receive sharing its hash with a channel send is a move to Spark, which Activity shows as that send;
+        // the completed receive proves the send settled.
+        if (payment.paymentType == SparkPaymentType.RECEIVE && existing?.txType == PaymentType.SENT) {
+            if (payment.status != PaymentStatus.COMPLETED || existing.status == PaymentState.SUCCEEDED) return true
+            val settled = Activity.Lightning(existing.copy(status = PaymentState.SUCCEEDED))
+            val saved = activityRepo.get().upsertActivity(settled)
+                .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+            if (!saved) {
+                unsavedPayments.add(payment.id)
+                return false
+            }
+            unsavedPayments.remove(payment.id)
+            return true
+        }
         // Another attempt of the same invoice, on either rail, already paid it.
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
         val activity = LightningActivity.create(

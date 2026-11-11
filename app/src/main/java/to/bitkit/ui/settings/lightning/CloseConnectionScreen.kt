@@ -92,7 +92,8 @@ private fun Content(
                 Image(
                     painter = painterResource(R.drawable.exclamation_mark),
                     contentDescription = null,
-                    modifier = Modifier.size(256.dp)
+                    // 274 like iOS, so its drawing is as large as the Move to Spark zap.
+                    modifier = Modifier.size(274.dp)
                 )
             }
             Row(

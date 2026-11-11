@@ -441,6 +441,7 @@
     <string name="other__shop__intro__description">Переведите свою жизнь на стандарт Bitcoin. Тратьте Bitcoin на цифровые подарочные карты, eSIM, пополнение телефона и многое другое.</string>
     <string name="other__shop__intro__title">Магазин</string>
     <string name="other__swipe">Подтвердить</string>
+    <string name="other__try_again">Пожалуйста, попробуйте снова.</string>
     <string name="other__update_button">Обновить</string>
     <string name="other__update_critical_button">Обновить Bitkit</string>
     <string name="other__update_critical_nav_title">Критическое Обновление</string>
@@ -1411,12 +1412,14 @@
     <string name="profile__disconnect_error">Не удалось отключить профиль</string>
     <string name="profile__edit_bio">О СЕБЕ</string>
     <string name="profile__edit_bio_placeholder">Короткая заметка. Расскажите немного о себе.</string>
+    <string name="profile__edit_changed_error">Ваш профиль изменился в pubky.app. Bitkit загрузил последнюю версию, поэтому внесите изменение снова.</string>
     <string name="profile__edit_delete_section">УДАЛЕНИЕ</string>
     <string name="profile__edit_name_placeholder">ВАШЕ ИМЯ</string>
-    <string name="profile__edit_public_note">Обратите внимание: данные профиля хранятся в публичных файлах.</string>
+    <string name="profile__edit_public_note">Это ваш профиль pubky.app. Он публичный, и изменения, которые вы вносите здесь, также видны в pubky.app.</string>
     <string name="profile__edit_save_error">Не удалось сохранить профиль</string>
     <string name="profile__edit_save_success">Профиль сохранён</string>
     <string name="profile__edit_tags">ТЕГИ</string>
+    <string name="profile__edit_tags_error">Bitkit не удалось сохранить ваши теги. Остальные изменения сохранены, поэтому попробуйте сохранить теги ещё раз.</string>
     <string name="profile__edit_unlink_section">ОТВЯЗКА</string>
     <string name="profile__empty_state">Не удалось загрузить ваш профиль.</string>
     <string name="profile__intro_description">С переносимым профилем ваши контакты смогут связаться с вами и заплатить вам где угодно.</string>
