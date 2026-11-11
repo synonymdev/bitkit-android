@@ -444,18 +444,23 @@ class BackupRepo @Inject constructor(
         // Observe backup status changes for each category
         BackupCategory.entries.forEach { category ->
             owner.scope.launch {
-                cacheStore.backupStatuses
+                val statuses = cacheStore.backupStatuses
                     .map { statuses -> statuses[category] ?: BackupItemStatus() }
                     .distinctUntilChanged { old, new ->
                         old.synced == new.synced &&
                             old.required == new.required &&
                             old.running == new.running
                     }
-                    .collect { status ->
-                        if (status.shouldBackup(category)) {
-                            scheduleBackup(category, owner)
-                        }
+                val resumableStatuses = if (category == BackupCategory.SPARK_EXIT) {
+                    statuses.combine(restoreInProgress) { status, _ -> status }
+                } else {
+                    statuses
+                }
+                resumableStatuses.collect { status ->
+                    if (status.shouldBackup(category)) {
+                        scheduleBackup(category, owner)
                     }
+                }
             }
         }
     }
@@ -571,9 +576,15 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         observeBackupChanges(owner, activityRepo.activityTagsChanged, BackupCategory.METADATA)
 
-        // The admitted observation restarts on owner reopening and replays unrecorded Spark changes.
+        // Replay unrecorded Spark changes when the admitted observation or restore gate reopens.
         owner.scope.launch {
-            combine(sparkRepo.state, sparkRepo.exitStateGeneration, ::Pair).collect { (state, generation) ->
+            combine(
+                sparkRepo.state,
+                sparkRepo.exitStateGeneration,
+                restoreInProgress
+            ) { state, generation, _ ->
+                state to generation
+            }.collect { (state, generation) ->
                 val ready = state.isReady && state.hasSynced
                 if (!ready) hasBackedUpSparkConnection = false
                 val connectionNeedsBackup = ready && !hasBackedUpSparkConnection
