@@ -1327,6 +1327,25 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal spark refuses for a fee that rose past its quote closes its journal at once`() = test {
+        val sut = journaledSpark()
+        whenever { sparkService.send(any()) }.thenAnswer {
+            throw SdkException.InvalidInput(
+                "The onchain fee rose to 900 sats at the slowest speed, above the 500 sats quoted for this payment. " +
+                    "Please re-prepare the payment.",
+            )
+        }
+        clearInvocations(sparkService)
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        // Spark refreshes an expiring quote and checks its fee before it withdraws, so nothing left the wallet.
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        verify(sparkService, never()).syncWallet()
+    }
+
+    @Test
     fun `a withdrawal to a contact is not marked as a transfer`() = test {
         val sent = OnchainActivity.create(
             id = "withdrawal",

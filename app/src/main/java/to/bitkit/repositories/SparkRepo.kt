@@ -789,6 +789,12 @@ class SparkRepo @Inject constructor(
                         clearJournal(journal)
                         throw SparkError.SendRefused("Spark balance can't cover the withdrawal", it)
                     }
+                    // Spark refreshes an expiring quote and checks its fee against the prepared one before it
+                    // withdraws, so a fee rise left nothing too.
+                    if (it.isWithdrawalFeeRise()) {
+                        clearJournal(journal)
+                        throw SparkError.SendRefused("Spark's withdrawal fee rose past its quote", it)
+                    }
                     // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops. A
                     // sync that never reached Spark still returns, so only one done after the failure drops it.
                     val failedAt = clock.now().epochSeconds.toULong()
@@ -1780,6 +1786,13 @@ sealed interface SparkClaimStep {
 
 internal fun SdkException.InvalidInput.isBelowMinimum(): Boolean =
     v1.startsWith("Amount is below the minimum", ignoreCase = true)
+
+/**
+ * Spark refuses a withdrawal whose refreshed fee quote costs more than the prepared one, even at its slowest speed,
+ * with this input error before it withdraws (`affordable_speed` in the 0.28.0 SDK's `send/bitcoin_address.rs`).
+ */
+internal fun Throwable.isWithdrawalFeeRise(): Boolean =
+    this is SdkException.InvalidInput && v1.contains("onchain fee rose to", ignoreCase = true)
 
 /** Spark refuses an expired Lightning invoice with this input error, at prepare and again at send. */
 internal fun Throwable.isInvoiceExpired(): Boolean =
