@@ -659,11 +659,16 @@ class SparkRepo @Inject constructor(
             }
         }
 
-    /** Txids of the withdrawals Spark lists to [address], so a new attempt to it can tell its own withdrawal apart. */
+    /**
+     * Txids of the withdrawals Spark lists or the app recorded as sent to [address], so a new attempt to it can tell
+     * its own withdrawal apart, also while Spark's list lacks one after a restart.
+     */
     suspend fun withdrawalTxidsTo(address: String): Set<String> = withContext(bgDispatcher) {
-        sparkService.listPayments().mapNotNull { payment ->
+        val listed = sparkService.listPayments().mapNotNull { payment ->
             (payment.details as? PaymentDetails.Withdraw)?.takeIf { it.destinationAddress == address }?.txId
-        }.toSet()
+        }
+        val recorded = cacheStore.data.first().sentSparkWithdrawals.filter { it.address == address }.map { it.txid }
+        (listed + recorded).toSet()
     }
 
     /**

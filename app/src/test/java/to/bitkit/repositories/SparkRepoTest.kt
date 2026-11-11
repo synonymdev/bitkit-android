@@ -815,6 +815,21 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a cached withdrawal never settles a retry after a restart whose list lacks it`() = test {
+        journaledSpark().also { whenever { sparkService.send(any()) }.thenReturn(contactWithdrawal()) }
+            .withdraw("bcrt1qcontact", 20_000uL, "pubkycontact").getOrThrow()
+        whenever { sparkService.listPayments() }.thenReturn(emptyList())
+        val restarted = createSut().also { it.start(0).getOrThrow() }
+
+        val earlierTxids = restarted.withdrawalTxidsTo("bcrt1qcontact")
+
+        assertNotEquals(
+            SparkWithdrawalOutcome.Sent("withdrawal"),
+            restarted.withdrawalOutcome("bcrt1qcontact", 20_000uL, earlierTxids),
+        )
+    }
+
+    @Test
     fun `refuses a withdrawal while an earlier one is unsettled`() = test {
         val sut = journaledSpark()
         cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qcontact", 20_000uL, null)) }
