@@ -119,6 +119,8 @@ class SparkExitRepo @Inject constructor(
                             )
                         }
                     runCatching { lostLeafStore.delete() }
+                    runCatching { earlierAddressStore.delete() }
+                        .onFailure { e -> Logger.warn("Failed to delete the wiped exit addresses", e, context = TAG) }
                     work.cancelAll()
                     _state.update { SparkExitState() }
                     isLoaded = false
@@ -142,6 +144,17 @@ class SparkExitRepo @Inject constructor(
 
     private val lostLeafStore get() = SparkExitLostLeafStore(File(Env.sparkExitLostLeavesPath(walletIndex)))
 
+    private val earlierAddressStore
+        get() = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(walletIndex)))
+
+    /** Lists [entry] next to the record, which a later exit may then replace; a failed write only logs. */
+    private fun keepEarlierAddress(entry: SparkExitEarlierAddress?) {
+        entry ?: return
+        runCatching { earlierAddressStore.add(entry) }
+            .onSuccess { listed -> _state.update { it.copy(earlierAddresses = listed) } }
+            .onFailure { Logger.warn("Failed to keep the Spark exit address '${entry.address}'", it, context = TAG) }
+    }
+
     private val chain: SparkExitChain?
         get() = EsploraSparkExitChain.defaultHosts(sparkService.networkName)
             ?.let { EsploraSparkExitChain(it, httpClient) }
@@ -162,7 +175,12 @@ class SparkExitRepo @Inject constructor(
                 salvage()
             }
             isLoaded = true
-            _state.update { it.copy(record = record) }
+            val earlier = runCatching { earlierAddressStore.load() }
+                .onFailure { Logger.warn("Failed to read the earlier exit addresses", it, context = TAG) }
+                .getOrDefault(emptyList())
+            _state.update { it.copy(record = record, earlierAddresses = earlier) }
+            // A record that kept its change before the list existed is listed too.
+            record?.let { keepEarlierAddress(SparkExitEarlierAddress.keptChange(it, Env.network, clock.nowMs())) }
             rememberLostLeaves(record)
             record?.let { settleIfFinished(it) }
             settleOrphanedTransfers(record)
@@ -320,6 +338,9 @@ class SparkExitRepo @Inject constructor(
         reportedLost: Set<String>,
     ) {
         record.transferId?.let { transferRepo.updateClaimableAtHeight(it, record.claimableAtHeight) }
+        if (record.isChangeKept && !previous.isChangeKept) {
+            keepEarlierAddress(SparkExitEarlierAddress.keptChange(record, Env.network, clock.nowMs()))
+        }
         settleIfFinished(record)
         updateAlerts(record, previous, isOnTrack, reportedLost)
         if (!record.isActive && previous.isActive) {
@@ -763,6 +784,9 @@ class SparkExitRepo @Inject constructor(
                 val next = it.sparkExitNextFundingIndexes + (fundingIndexKey to pending.fundingIndex.toInt() + 1)
                 it.copy(sparkExitNextFundingIndexes = next)
             }
+            // A cancelled exit's address this exit funds again is this exit's now, not an earlier exit's.
+            runCatching { earlierAddressStore.remove(key.address) }
+                .onSuccess { listed -> _state.update { it.copy(earlierAddresses = listed) } }
             val createdAt = record.createdAt
             // Published for the screens and a cancel, but driven only once the start settled the leaves it exits.
             startingCreatedAt = createdAt
@@ -1030,6 +1054,8 @@ class SparkExitRepo @Inject constructor(
                         .getOrElse { throw SparkExitCancelUnreadable() }
                     record.transferId?.let { transferRepo.markSettled(it) }
                     val outcome = if (utxos.isEmpty()) {
+                        // Its address stays listed, and is read for a late payment in the foreground for four weeks.
+                        keepEarlierAddress(SparkExitEarlierAddress.cancelledFunding(record, Env.network, clock.nowMs()))
                         store.delete()
                         giveFundingIndexBack(record.fundingIndex)
                         _state.update { it.copy(record = null) }
@@ -1147,6 +1173,8 @@ data class SparkExitState(
     val isSettling: Boolean = false,
     /** What the network asks now, for the fee bump and its hint. */
     val networkFees: SparkExitNetworkFees? = null,
+    /** Funding addresses of earlier exits that hold, or may still receive, coins. */
+    val earlierAddresses: List<SparkExitEarlierAddress> = emptyList(),
 ) {
     val isExiting: Boolean get() = record?.isActive == true
 

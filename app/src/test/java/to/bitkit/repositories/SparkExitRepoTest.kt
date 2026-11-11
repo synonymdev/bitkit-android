@@ -427,6 +427,15 @@ class SparkExitRepoTest : BaseUnitTest() {
     fun `a wipe waits for the tick in flight and deletes what it saved`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(runningRecord())
+        SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0))).add(
+            SparkExitEarlierAddress(
+                address = "bcrt1qearlier",
+                path = "m/84'/1'/0'/0/3",
+                kind = SparkExitEarlierAddress.Kind.KEPT_CHANGE,
+                sats = 294uL,
+                atMillis = 0L,
+            ),
+        )
         val gate = CompletableDeferred<Unit>()
         val chain = HttpClient(
             MockEngine.create {
@@ -461,6 +470,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertNull(store.load())
         assertNull(sut.state.value.record)
         verify(work, atLeastOnce()).cancelAll()
+        assertFalse(File(Env.sparkExitEarlierAddressesPath(0)).exists(), "the wiped wallet's addresses stayed")
     }
 
     @Test
@@ -901,6 +911,62 @@ class SparkExitRepoTest : BaseUnitTest() {
         val cache = updates.allValues.fold(AppCacheData()) { data, update -> update(data) }
         val indexes = cache.sparkExitNextFundingIndexes
         assertEquals(listOf(0), indexes.values.toList(), "a payment landing late at the address goes unwatched")
+    }
+
+    @Test
+    fun `a cancel that forgets the exit keeps its funding address and path listed`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        sut.cancel().getOrThrow()
+
+        val listed = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0))).load().single()
+        assertEquals(funding, listed.address)
+        assertEquals("m/84'/1'/${SparkExitFundingKey.ACCOUNT}'/0/0", listed.path)
+        assertEquals(SparkExitEarlierAddress.Kind.CANCELLED_FUNDING, listed.kind)
+        assertEquals(listOf(listed), sut.state.value.earlierAddresses)
+    }
+
+    @Test
+    fun `an exit that funds a cancelled exit's address again takes it off the list`() = test {
+        val store = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+        val kind = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
+        store.add(SparkExitEarlierAddress(funding, "m/84'/1'/0'/0/0", kind, atMillis = 0L))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.loadQuote().getOrThrow()
+
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertTrue(store.load().isEmpty(), "the running exit's funding shows as an earlier exit's")
+        assertTrue(sut.state.value.earlierAddresses.isEmpty())
+    }
+
+    @Test
+    fun `an exit that kept its fee change lists the address, so the next exit can start`() = test {
+        val kept = SparkExitFixtures.record(Phase.Done).copy(
+            leftover = listOf(SparkExitRecord.Leftover("ab".repeat(32), 0u, 294uL)),
+            leftoverSweep = SparkExitRecord.LeftoverSweep(
+                txid = null,
+                txHex = null,
+                valueSats = 294uL,
+                isDustKept = true,
+            ),
+            isResultSeen = true,
+        )
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(kept)
+        val sut = quotedSut(FakeSparkExitRecovering())
+
+        sut.load().getOrThrow()
+
+        val listed = sut.state.value.earlierAddresses.single()
+        assertEquals(SparkExitFixtures.FUNDING_ADDRESS, listed.address)
+        assertEquals(SparkExitEarlierAddress.Kind.KEPT_CHANGE, listed.kind)
+        assertEquals(294uL, listed.sats)
+        assertEquals(listOf(listed), SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0))).load())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

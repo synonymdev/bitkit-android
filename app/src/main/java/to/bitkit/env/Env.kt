@@ -271,6 +271,13 @@ internal object Env {
         return Path(appStoragePath, network.name.lowercase(), wallet, "spark-exit-lost-leaves.json").toString()
     }
 
+    /** Earlier exits' funding addresses that hold, or may still receive, coins, kept past the exit record. */
+    fun sparkExitEarlierAddressesPath(walletIndex: Int): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val wallet = "wallet$walletIndex"
+        return Path(appStoragePath, network.name.lowercase(), wallet, "spark-exit-earlier-addresses.json").toString()
+    }
+
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }
