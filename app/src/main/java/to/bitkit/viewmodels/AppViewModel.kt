@@ -566,10 +566,6 @@ class AppViewModel @Inject constructor(
     /** The address and amount of the uncertain Spark withdrawal to a contact a pending screen waits on. */
     @Volatile
     private var uncertainSparkWithdrawal: Pair<String, ULong>? = null
-
-    /** The settlement that last closed [uncertainSparkWithdrawal]. */
-    @Volatile
-    private var lastSparkWithdrawalSettlement: SparkWithdrawalSettlement? = null
     private var isPresentingPaymentRequest = false
     private val isPaymentRequestPollingStopped = MutableStateFlow(false)
     private var isPaymentRequestOverlayVisible = false
@@ -1185,7 +1181,6 @@ class AppViewModel @Inject constructor(
     private fun handleSparkWithdrawalSettlement(settlement: SparkWithdrawalSettlement) {
         if (uncertainSparkWithdrawal != (settlement.address to settlement.amountSats)) return
         uncertainSparkWithdrawal = null
-        lastSparkWithdrawalSettlement = settlement
         if (_currentSheet.value !is Sheet.Send) return
         val txid = settlement.txid
         if (txid != null) {
@@ -7072,7 +7067,6 @@ class AppViewModel @Inject constructor(
         }
         if (incomingPaymentRequest == null && earlierTxids != null && uncertainSparkWithdrawal != attempt) {
             Logger.info("Settled a Spark withdrawal while its outcome was read", context = TAG)
-            if (lastSparkWithdrawalSettlement?.txid == null) releasePrivatePaymentListIfNeeded(contactPaymentContext)
             return
         }
         if (outcome == SparkWithdrawalOutcome.Unsent || outcome is SparkWithdrawalOutcome.Sent) {
