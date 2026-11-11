@@ -106,10 +106,15 @@ private const val MIN_RELAY_RATE = 1uL
 object SparkExitFeeEstimates {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** The highest rate in sat/vB an estimate is believed at. */
+    private const val MAX_ESTIMATE_RATE = 10_000.0
+
     fun parse(body: String): Map<Int, Double> = runCatching {
         json.parseToJsonElement(body).jsonObject.mapNotNull { (key, value) ->
             val target = key.toIntOrNull() ?: return@mapNotNull null
             val rate = (value as? JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+            // A rate no node asks for, such as 1e30, reads as no estimate rather than the largest rate there is.
+            if (!rate.isFinite() || rate <= 0.0 || rate > MAX_ESTIMATE_RATE) return@mapNotNull null
             target to rate
         }.toMap()
     }.getOrDefault(emptyMap())

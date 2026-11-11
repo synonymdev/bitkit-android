@@ -141,6 +141,16 @@ class SparkExitChainTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an estimate no node would ask for reads as none`() = test {
+        val absurd = chain(Route("a.example/api/fee-estimates", 200, """{"1":1e30,"3":2.5}"""))
+        assertEquals(SparkExitNetworkFees(fastest = 3uL, halfHour = 3uL), absurd.networkFees())
+        assertEquals(
+            mapOf(3 to 2.5),
+            SparkExitFeeEstimates.parse("""{"1":1e30,"2":0,"4":-3,"5":"NaN","6":"Infinity","3":2.5}"""),
+        )
+    }
+
+    @Test
     fun `falls back to the unversioned package path then the next host`() = test {
         val sut = chain(
             Route("a.example/api/v1/txs/package", 404, "Not Found"),
