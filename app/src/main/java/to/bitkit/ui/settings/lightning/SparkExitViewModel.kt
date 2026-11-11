@@ -84,6 +84,8 @@ class SparkExitViewModel @Inject constructor(
     private fun showExit(exit: SparkExitState, balanceSats: ULong) {
         _uiState.update {
             it.copy(
+                // A start no screen showed is forgotten once its exit ended, a cancel too: the next exit starts anew.
+                isStarted = it.isStarted && exit.isExiting,
                 record = exit.record,
                 tipHeight = exit.tipHeight,
                 fundingSeenSats = exit.fundingSeenSats,

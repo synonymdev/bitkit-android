@@ -7,6 +7,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -14,6 +15,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.models.FeeRate
 import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
+import to.bitkit.repositories.SparkExitCancel
 import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.repositories.SparkExitFixtures
 import to.bitkit.repositories.SparkExitFundingState
@@ -73,6 +75,41 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.isStarted)
         sut.onStartShown()
         assertFalse(sut.uiState.value.isStarted)
+    }
+
+    @Test
+    fun `a start no screen showed is forgotten once its exit ends`() = test {
+        whenever(repo.start(any())).thenReturn(Result.success(Unit))
+        exitState.value = SparkExitState(record = SparkExitFixtures.record(SparkExitRecord.Phase.Running))
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+
+        // The user left the exit screens while the start ran: nothing calls onStartShown.
+        sut.start()
+        assertTrue(sut.uiState.value.isStarted)
+
+        exitState.value = SparkExitState()
+
+        assertFalse(sut.uiState.value.isStarted, "the next exit's Quote screen would jump to Progress")
+    }
+
+    @Test
+    fun `cancelling an exit whose savings funding failed leaves no start for the next exit`() = test {
+        // The exit started, but paying its fee funding failed before it was submitted.
+        whenever(repo.start(any())).thenReturn(Result.failure(IllegalStateException("Savings payment failed")))
+        exitState.value = SparkExitState(record = SparkExitFixtures.record())
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+
+        // Progress was opened directly, so no screen consumes the start.
+        sut.start()
+        assertTrue(sut.uiState.value.isStarted)
+        // The repo deletes the record of a cancelled exit nothing paid into.
+        whenever(repo.cancel()).doSuspendableAnswer {
+            exitState.value = SparkExitState()
+            Result.success(SparkExitCancel.Cancelled)
+        }
+        sut.cancel()
+
+        assertFalse(sut.uiState.value.isStarted, "the next exit's Quote screen would jump to Progress")
     }
 
     @Test
