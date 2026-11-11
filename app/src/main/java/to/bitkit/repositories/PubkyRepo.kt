@@ -249,6 +249,9 @@ class PubkyRepo @Inject constructor(
     @Volatile
     private var tagsUnavailable = false
 
+    // Moved on each time a load sets tagsUnavailable, so a save clears it only if no load set it since the save began.
+    private val tagsReadEpoch = AtomicLong(0L)
+
     @Volatile
     private var restoreBase: RestoreBase? = null
     private val signInGeneration = AtomicLong(0L)
@@ -948,6 +951,7 @@ class PubkyRepo @Inject constructor(
                     restoreBase = RestoreBase(prefixedKey, it, revision = null)
                 }
             }
+            tagsReadEpoch.incrementAndGet()
             tagsUnavailable = paykitRead.isFailure
             PubkyProfile.fromPubkyProfile(prefixedKey, snapshot.profile).copy(tags = paykitData?.tags.orEmpty()).also {
                 restoreBase = RestoreBase(prefixedKey, it, snapshot.revision)
@@ -1286,6 +1290,7 @@ class PubkyRepo @Inject constructor(
         tagsUnread: Boolean,
     ): SavedProfile {
         val generation = profileDeletionGeneration.get()
+        val readEpoch = tagsReadEpoch.get()
         // Unread when the edit began or now: either way the form's tags are not the stored ones.
         val copyUnread = tagsUnread || tagsUnavailable
         // A profile written without a base is fitted to pubky.app's limits, as a move is.
@@ -1317,7 +1322,7 @@ class PubkyRepo @Inject constructor(
         }
         ownProfileRevision = snapshot.revision
         val baseTags = base?.tags.orEmpty()
-        val stored = storedCopy(publicKey, copyUnread)
+        val stored = storedCopy(publicKey, copyUnread, readEpoch)
         val wasPending = publicKey in pubkyStore.data.first().pubkyAppAvatarPending
         // The form could not show an avatar still to move while the copy was unread, so it stays pending.
         val keepPending = snapshot.profile.image == null && copyUnread && wasPending
@@ -1370,9 +1375,11 @@ class PubkyRepo @Inject constructor(
      * What a save keeps from the Paykit copy after the last load could not read it, as the form then lacked its tags
      * and the avatar still to move: empty when that load read it, null while it still cannot be read.
      */
-    private suspend fun storedCopy(publicKey: String, copyUnread: Boolean): StoredCopy? {
+    private suspend fun storedCopy(publicKey: String, copyUnread: Boolean, readEpoch: Long): StoredCopy? {
         if (!copyUnread) return StoredCopy(tags = null, image = null)
         val record = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrElse { return null }
+        // The save read the copy itself, so the tags are readable again, unless a load found otherwise meanwhile.
+        if (tagsReadEpoch.get() == readEpoch) tagsUnavailable = false
         val data = record?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
     }
@@ -1395,6 +1402,7 @@ class PubkyRepo @Inject constructor(
         val saveEpoch = profileSaveEpoch.get()
         val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
             .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
+        tagsReadEpoch.incrementAndGet()
         tagsUnavailable = paykitRead.isFailure
         val paykitData = paykitRead.getOrNull()?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         val fetched = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
