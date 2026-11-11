@@ -11,7 +11,7 @@ ktor = "3.6.1"
 lifecycle = "2.10.0"
 # 2.10 breaks predictive back: a swipe soon after a navigation seeks with the forward transitions,
 # then snaps. Stay on 2.9.x until a release fixes it (see .github/dependabot.yml).
-navCompose = "2.9.6"
+navCompose = "2.9.8"
 room = "2.8.5"
 slf4j = "2.0.20"
 haze = "1.7.3"
