@@ -1641,6 +1641,7 @@
     <string name="wallet__send_max_spending__title">Reserve Balance</string>
     <string name="wallet__send_paykit_no_route__description">This contact has no payment method Bitkit can use right now.</string>
     <string name="wallet__send_paykit_no_route__title">Can\'t pay this contact</string>
+    <string name="wallet__send_paykit_withdrawal_settling__description">An earlier withdrawal from your spending balance is still settling. Try again once it completes.</string>
     <string name="wallet__send_pending__abandon">Cancel expired payment</string>
     <string name="wallet__send_pending__abandon_checking">Checking the network. This can take up to 30 seconds.</string>
     <string name="wallet__send_pending__abandon_done">Payment cancelled. Its coins are back in your wallet.</string>

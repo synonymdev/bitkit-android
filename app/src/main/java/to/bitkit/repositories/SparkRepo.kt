@@ -645,11 +645,14 @@ class SparkRepo @Inject constructor(
     /**
      * A Paykit route that withdraws exactly [amountSats] to the contact's on-chain [endpoint] at medium speed, with
      * Spark's fee on top, or null while Spark cannot send it. Fails with [SparkError.WithdrawalOverBalance] when the
-     * balance covers the amount but not the fee on top. bitkit-core weighs it against the Pubky Swaps providers.
+     * balance covers the amount but not the fee on top, and with [SparkError.WithdrawalPending] while an earlier
+     * contact withdrawal's journal is open, as [withdraw] would refuse it. bitkit-core weighs it against the Pubky
+     * Swaps providers.
      */
     suspend fun withdrawalRouteLeg(endpoint: PaykitEndpoint, amountSats: ULong): Result<ServiceRouteLeg?> =
         withContext(bgDispatcher) {
             runSuspendCatching {
+                if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
                 if (!canWithdraw(amountSats)) return@runSuspendCatching null
                 val method = sparkService.prepareSend(endpoint.value, amountSats).paymentMethod
                 val quote = (method as SendPaymentMethod.BitcoinAddress).feeQuote

@@ -38,7 +38,8 @@ class PaykitRouteRepo @Inject constructor(
 
     /**
      * Fails with [SparkError.WithdrawalOverBalance] when no route pays because Spark's balance covers the amount but
-     * not the withdrawal fee on top, so the app tells a short balance from a contact it can't pay.
+     * not the withdrawal fee on top, so the app tells a short balance from a contact it can't pay, and with
+     * [SparkError.WithdrawalPending] when only a Spark leg could pay while an earlier contact withdrawal settles.
      */
     suspend fun route(
         amountSats: ULong,
@@ -63,6 +64,9 @@ class PaykitRouteRepo @Inject constructor(
             val legs = quotes.mapNotNull { it.getOrNull() }
             if (legs.isNotEmpty()) {
                 return@runSuspendCatching paykitRoutePayment(request.copy(serviceLegs = legs), network)
+            }
+            if (quotes.any { it.exceptionOrNull() is SparkError.WithdrawalPending }) {
+                throw SparkError.WithdrawalPending()
             }
             if (quotes.any { it.exceptionOrNull() is SparkError.WithdrawalOverBalance }) {
                 throw SparkError.WithdrawalOverBalance()

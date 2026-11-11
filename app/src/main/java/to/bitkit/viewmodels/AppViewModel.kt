@@ -4826,8 +4826,10 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isLoading = false) }
         // Spark could reach the contact, but not with the withdrawal fee on top, so no route pays for want of balance.
         val isLegOverBalance = result.exceptionOrNull() is SparkError.WithdrawalOverBalance
-        val picked = if (isLegOverBalance) {
-            PaykitRoute.None("Spark balance can't cover the withdrawal and its fee")
+        // Only a Spark leg could pay, and Spark takes one contact withdrawal at a time.
+        val isLegSettling = result.exceptionOrNull() is SparkError.WithdrawalPending
+        val picked = if (isLegOverBalance || isLegSettling) {
+            PaykitRoute.None(result.exceptionOrNull()?.message.orEmpty())
         } else {
             result.getOrElse {
                 Logger.error("Failed to route Paykit payment", it, context = TAG)
@@ -4874,13 +4876,17 @@ class AppViewModel @Inject constructor(
                         }
                     ),
                     description = context.getString(
-                        if (isBalanceShort) {
-                            R.string.wallet__send_amount_exceeded__description
-                        } else {
-                            R.string.wallet__send_paykit_no_route__description
+                        when {
+                            isBalanceShort -> R.string.wallet__send_amount_exceeded__description
+                            isLegSettling -> R.string.wallet__send_paykit_withdrawal_settling__description
+                            else -> R.string.wallet__send_paykit_no_route__description
                         }
                     ),
-                    testTag = if (isBalanceShort) "PaykitRouteBalanceToast" else "PaykitRouteNoneToast",
+                    testTag = when {
+                        isBalanceShort -> "PaykitRouteBalanceToast"
+                        isLegSettling -> "PaykitRouteSettlingToast"
+                        else -> "PaykitRouteNoneToast"
+                    },
                 )
                 PaykitRouteOutcome.Refused
             }

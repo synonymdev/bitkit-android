@@ -100,4 +100,20 @@ class PaykitRouteRepoTest : BaseUnitTest() {
 
         assertIs<SparkError.WithdrawalOverBalance>(route.exceptionOrNull())
     }
+
+    @Test
+    fun `a spark leg refused while an earlier withdrawal settles routes as settling`() = test {
+        whenever(sparkRepo.withdrawalRouteLeg(onchain, 9_000uL))
+            .thenReturn(Result.failure(SparkError.WithdrawalPending()))
+
+        val route = sut.route(
+            amountSats = 9_000uL,
+            endpoints = listOf(onchain),
+            lightningSpendableSats = 0uL,
+            onchainSpendableSats = 0uL,
+            quoteServiceLegs = true,
+        )
+
+        assertIs<SparkError.WithdrawalPending>(route.exceptionOrNull())
+    }
 }
