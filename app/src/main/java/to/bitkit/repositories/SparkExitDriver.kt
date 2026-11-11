@@ -154,30 +154,7 @@ class SparkExitDriver(
                     Logger.warn("Releasing Spark exit leaves '${record.waitingLeafIds}' unfunded", context = TAG)
                     record = end(record.ended(), record)
                 } else if (sdk != null && record.phase.requiredFundingSats != null) {
-                    val shortfall = record.fundingShortfallSats
-                    // Nothing to fund when every leaf is recovered cooperatively.
-                    val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
-                    record = when {
-                        // A generation that diverged while a top-up was awaited rebuilds from the funding it already
-                        // has when that pays for it, so a top-up that never comes does not leave the exit waiting.
-                        funded == null && record.isRedoRebuild && record.isRebuilding && isRebuildDue(record) ->
-                            build(record, sdk).let { tried ->
-                                if (tried.phase is SparkExitRecord.Phase.NeedsFunding) {
-                                    countShortOwnPayment(tried.copy(lastBuildAt = nowMillis()))
-                                } else {
-                                    tried
-                                }
-                            }
-                        funded == null -> countShortOwnPayment(record)
-                        // Funding for leaves a partial build skipped: only they are built, once it arrived.
-                        funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
-                            ?: end(funded.ended(), funded)
-                        // Funding an unverified rebuild asked for resumes that rebuild, with its guards.
-                        else -> {
-                            val isUnverified = funded.isUnverifiedAsk && !funded.isRebuilding
-                            build(funded, sdk, isUnverifiedRebuild = isUnverified)
-                        }
-                    }
+                    record = buildOnceFunded(record, sdk)
                 }
             }
             SparkExitRecord.Phase.Running if record.isRebuilding -> {
@@ -199,6 +176,31 @@ class SparkExitDriver(
         if (record.isLeftoverSweepPending) record = sweepLeftover(record)
         save(record)
         return record
+    }
+
+    /** Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild. */
+    private suspend fun buildOnceFunded(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+        val shortfall = record.fundingShortfallSats
+        // Nothing to fund when every leaf is recovered cooperatively.
+        val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
+        return when {
+            // A generation that diverged while a top-up was awaited rebuilds from the funding it already has when
+            // that pays for it, so a top-up that never comes does not leave the exit waiting.
+            funded == null && record.isRedoRebuild && record.isRebuilding && isRebuildDue(record) ->
+                build(record, sdk).let { tried ->
+                    if (tried.phase is SparkExitRecord.Phase.NeedsFunding) {
+                        countShortOwnPayment(tried.copy(lastBuildAt = nowMillis()))
+                    } else {
+                        tried
+                    }
+                }
+            funded == null -> countShortOwnPayment(record)
+            // Funding for leaves a partial build skipped: only they are built, once it arrived.
+            funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
+                ?: end(funded.ended(), funded)
+            // Funding an unverified rebuild asked for resumes that rebuild, with its guards.
+            else -> build(funded, sdk, isUnverifiedRebuild = funded.isUnverifiedAsk && !funded.isRebuilding)
+        }
     }
 
     private suspend fun adoptFunding(record: SparkExitRecord, requiredSats: ULong): SparkExitRecord? {

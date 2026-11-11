@@ -45,7 +45,7 @@ data class SparkExitEarlierAddress(
                 address = address,
                 path = SparkExitFundingKey.path(record.fundingIndex.toInt(), network),
                 kind = Kind.KEPT_CHANGE,
-                sats = record.leftover.fold(0uL) { sum, it -> sum.safe() + it.valueSats.safe() },
+                sats = record.leftover.fold(0uL) { sum, leftover -> sum.safe() + leftover.valueSats.safe() },
                 atMillis = atMillis,
             )
         }
