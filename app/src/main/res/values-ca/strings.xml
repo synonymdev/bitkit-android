@@ -1331,12 +1331,14 @@
     <string name="profile__disconnect_error">No s\'ha pogut desconnectar el perfil</string>
     <string name="profile__edit_bio">BIOGRAFIA</string>
     <string name="profile__edit_bio_placeholder">Nota breu. Explica una mica sobre tu.</string>
+    <string name="profile__edit_changed_error">El teu perfil ha canviat a pubky.app. Bitkit ha carregat la versió més recent, així que torna a fer la teva edició.</string>
     <string name="profile__edit_delete_section">ELIMINAR</string>
     <string name="profile__edit_name_placeholder">EL TEU NOM</string>
-    <string name="profile__edit_public_note">Tingues en compte que la informació del perfil es desa en fitxers públics.</string>
+    <string name="profile__edit_public_note">Aquest és el teu perfil de pubky.app. És públic, i els canvis que hi facis aquí també es veuen a pubky.app.</string>
     <string name="profile__edit_save_error">No s\'ha pogut desar el perfil</string>
     <string name="profile__edit_save_success">Perfil desat</string>
     <string name="profile__edit_tags">ETIQUETES</string>
+    <string name="profile__edit_tags_error">Bitkit no ha pogut desar les teves etiquetes. Els altres canvis s\'han desat, així que torna a provar amb les etiquetes.</string>
     <string name="profile__edit_unlink_section">DESVINCULAR</string>
     <string name="profile__empty_state">No s\'ha pogut carregar el teu perfil.</string>
     <string name="profile__intro_description">Amb el teu perfil portable, els teus contactes et poden trobar i pagar a qualsevol lloc.</string>

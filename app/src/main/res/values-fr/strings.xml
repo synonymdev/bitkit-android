@@ -1329,12 +1329,14 @@
     <string name="profile__disconnect_error">Échec de la déconnexion du profil</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Courte note. Parlez un peu de vous.</string>
+    <string name="profile__edit_changed_error">Ton profil a changé sur pubky.app. Bitkit a chargé la version la plus récente, refais donc ta modification.</string>
     <string name="profile__edit_delete_section">SUPPRIMER</string>
     <string name="profile__edit_name_placeholder">VOTRE NOM</string>
-    <string name="profile__edit_public_note">Veuillez noter que les informations de profil sont stockées dans des fichiers publics.</string>
+    <string name="profile__edit_public_note">Voici ton profil pubky.app. Il est public, et les modifications que tu fais ici apparaissent aussi sur pubky.app.</string>
     <string name="profile__edit_save_error">Échec de l\'enregistrement du profil</string>
     <string name="profile__edit_save_success">Profil enregistré</string>
     <string name="profile__edit_tags">ÉTIQUETTES</string>
+    <string name="profile__edit_tags_error">Bitkit n\'a pas pu enregistrer vos étiquettes. Vos autres modifications ont été enregistrées, réessayez pour les étiquettes.</string>
     <string name="profile__edit_unlink_section">DISSOCIER</string>
     <string name="profile__empty_state">Impossible de charger votre profil.</string>
     <string name="profile__intro_description">Grâce à votre profil portable, vos contacts peuvent vous joindre et vous payer partout.</string>

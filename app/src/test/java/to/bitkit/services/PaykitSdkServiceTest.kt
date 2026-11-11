@@ -43,6 +43,7 @@ import com.synonym.paykit.PublicContactPaymentResolution
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.PublicPaymentResolutionStatus
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
+import com.synonym.paykit.pubkyAppProfileSessionCapabilities
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -1937,6 +1938,7 @@ class PaykitSdkServiceTest {
         }
         mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
             native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+            native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
             val restoration = async { service.initializeAndImportSession("saved-session") }
             val read = async { service.resolveContactProfile(RING_PUBKY, true) }
             runCurrent()
@@ -1992,6 +1994,7 @@ class PaykitSdkServiceTest {
 
             mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
                 native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
                 if (failure is CancellationException) {
                     assertFailsWith<CancellationException> { service.initializeAndImportSession("saved-session") }
                     assertFailsWith<CancellationException> { service.contactRecords() }
@@ -2045,6 +2048,7 @@ class PaykitSdkServiceTest {
 
             mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
                 native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
                 assertSame(failure, service.initializeAndImportSession("saved-session").exceptionOrNull())
                 verify(sdk, times(1)).initialize()
                 verify(sdk, never()).publishPaykitApp(any(), any())
@@ -3420,13 +3424,13 @@ class PaykitSdkServiceTest {
                 cleared = (if (failRecovery) listOf(other) else keys).map {
                     PrivatePaymentListSyncChange(it, 1uL, null)
                 },
+                acknowledged = emptyList(),
                 failedToQueue = if (failRecovery) {
                     listOf(PrivatePaymentListSyncChange(RING_PUBKY, null, null))
                 } else {
                     emptyList()
                 },
                 failedToDeliver = emptyList(),
-                acknowledged = emptyList(),
             )
         }
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
