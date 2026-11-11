@@ -345,12 +345,13 @@ data class SparkExitRecord(
 
     /**
      * Emergency exit opens progress, not a new exit, while this one runs and until its leftover fee funding is swept
-     * and confirmed, or kept as dust. A rejected sweep keeps it too: progress names the address the leftover is at.
+     * and confirmed. A leftover left at the funding address for good, its sweep rejected or its change kept, keeps
+     * it too: progress names the address and the path that spends it, and no new exit replaces the record.
      * An exit that failed or lost leaves keeps it until the user opened it once.
      */
     val showsResult: Boolean
         get() = isActive || isLeftoverSweepPending || isEndedPaymentPending ||
-            (leftover.isNotEmpty() && leftoverSweep?.rejection != null) ||
+            (leftover.isNotEmpty() && leftoverSweep?.rejection != null) || isChangeKept ||
             hasUnseenResult
 
     /** The exit ended failed, with leaves lost or its fee change kept, and the user has not opened its result yet. */
