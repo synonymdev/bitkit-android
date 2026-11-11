@@ -153,7 +153,7 @@ private fun SettingsSwitchRowCore(
                     strokeWidth = 2.dp,
                     modifier = Modifier
                         .size(20.dp)
-                        .testTag("${switchTestTag ?: "SettingsSwitchRow"}_Loading")
+                        .testTag("${switchTestTag ?: "SettingsSwitchRow"}Loading")
                 )
                 HorizontalSpacer(12.dp)
             }

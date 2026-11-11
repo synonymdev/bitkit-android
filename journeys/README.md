@@ -181,6 +181,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `pubky-profile/cached-profile-header.xml` | same file, journey name and steps — one step differs: Android adds a screenshot check of the cached avatar, which comes from the Pubky image disk cache synonymdev/bitkit-android#1399 adds |
 | `pubky-profile/ring-choice-rows.xml` | same file, journey name and steps — Android names the rows and their lookup spinners differently (see [Identifiers](#identifiers)), checks that rows are disabled by tapping another row instead of reading the snapshot's Targets, needs no second tap on the profile button, and names the import overview by its "Import" title |
 | `pubky-profile/contact-import-after-leaving.xml` | same file, journey name and steps — Android names the Ring rows differently and has no identifiers on the import overview's profile and friend count, so those steps name the screen text here; see [Identifiers](#identifiers). synonymdev/bitkit-android#1399 adds `ContactImportOverviewImportAll`, the only contact import testTag the journeys use, under its iOS name |
+| `profile/public-private-sharing.xml` | same file and journey name; Android splits "Turn Public payments on and wait" into three steps that check the loading state (synonymdev/bitkit-android#1846). iOS keeps the single step until its sharing-row spinner gets an identifier (synonymdev/bitkit-ios#1280); see [Identifiers](#identifiers) |
 | `pubky-profile/contacts-list-loading.xml` | same file, journey name and steps — only the relaunch commands differ |
 | `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
@@ -264,6 +265,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Hardware wallet receive tab | `Tab-hardware` | `Tab-trezor` for a Trezor wallet, `Tab-jade` for a Jade |
 | Pubky Ring choice row | `PubkyChoiceIdentity` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRing_<pubky>` |
 | Pubky Ring choice row lookup spinner | `PubkyChoiceIdentityLookup` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRingLookup_<pubky>` |
+| Payment sharing row spinner | `PublicPaymentsToggleLoading`, `PrivateContactPaymentsToggleLoading` | — *(the `ProgressView` in `GeneralSettingsView.sharingRow` has no identifier; synonymdev/bitkit-ios#1280 adds these names)* |
 | Contact import overview profile and friend count | — *(no tag; the "Import" title and the "N friends" text)* | `ContactImportOverviewProfile`, `ContactImportOverviewSummary` |
 
 Three of those are unreconciled rather than intentional: the Send screen emitting both
