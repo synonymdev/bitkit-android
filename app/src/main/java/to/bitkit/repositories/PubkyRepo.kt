@@ -1322,7 +1322,7 @@ class PubkyRepo @Inject constructor(
         }
         ownProfileRevision = snapshot.revision
         val baseTags = base?.tags.orEmpty()
-        val stored = storedCopy(publicKey, copyUnread, readEpoch)
+        val stored = storedCopy(publicKey, copyUnread)
         val wasPending = publicKey in pubkyStore.data.first().pubkyAppAvatarPending
         // The form could not show an avatar still to move while the copy was unread, so it stays pending.
         val keepPending = snapshot.profile.image == null && copyUnread && wasPending
@@ -1354,8 +1354,9 @@ class PubkyRepo @Inject constructor(
                 pendingCopyWrite?.join()
                 if (it == baseTags) {
                     // With no tag change to report, the save does not wait for the copy; a deletion refuses or waits
-                    // for it. It leaves the unread flag alone, which a load may have set since.
+                    // for it. Its outcome leaves the unread flag alone, which a load may have set since.
                     pendingCopyWrite = scope.launch { writeCopy() }
+                    markTagsRead(stored, readEpoch)
                     null
                 } else {
                     writeCopy().onSuccess { tagsUnavailable = false }.exceptionOrNull()
@@ -1375,13 +1376,20 @@ class PubkyRepo @Inject constructor(
      * What a save keeps from the Paykit copy after the last load could not read it, as the form then lacked its tags
      * and the avatar still to move: empty when that load read it, null while it still cannot be read.
      */
-    private suspend fun storedCopy(publicKey: String, copyUnread: Boolean, readEpoch: Long): StoredCopy? {
+    private suspend fun storedCopy(publicKey: String, copyUnread: Boolean): StoredCopy? {
         if (!copyUnread) return StoredCopy(tags = null, image = null)
         val record = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrElse { return null }
-        // The save read the copy itself, so the tags are readable again, unless a load found otherwise meanwhile.
-        if (tagsReadEpoch.get() == readEpoch) tagsUnavailable = false
         val data = record?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
+    }
+
+    /**
+     * Clears the unread flag after a save read the copy itself and kept its tags in the profile it stores, unless a
+     * load found the copy unreadable since [readEpoch]. A save that writes the copy at once clears it only once that
+     * write succeeds, since a failed one stores the profile without the copy's tags.
+     */
+    private fun markTagsRead(stored: StoredCopy?, readEpoch: Long) {
+        if (stored?.tags != null && tagsReadEpoch.get() == readEpoch) tagsUnavailable = false
     }
 
     /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five valid links. */
