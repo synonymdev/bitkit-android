@@ -31,7 +31,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -295,8 +294,8 @@ class MainActivity : FragmentActivity() {
      * Bitkit never sets them, so drop them: an exported launch can then reach only the declared deep links.
      */
     private fun Intent.removeNavDestinationExtras() {
-        removeExtra(NavController.KEY_DEEP_LINK_IDS)
-        removeExtra(NavController.KEY_DEEP_LINK_ARGS)
+        removeExtra("android-support-nav:controller:deepLinkIds")
+        removeExtra("android-support-nav:controller:deepLinkArgs")
     }
 
     private fun handleLaunchIntent(intent: Intent) {
