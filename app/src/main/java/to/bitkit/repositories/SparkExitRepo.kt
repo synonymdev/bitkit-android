@@ -1138,7 +1138,9 @@ data class SparkExitState(
     val outsideExitSats: ULong?
         get() {
             val active = record?.takeIf { it.isActive } ?: return null
-            val live = SparkExitMath.outsideExitSats(active.leafTotalSats, sparkBalanceSats) ?: 0uL
+            // A leaf the exit left behind stays on Spark, so it counts here, not in the transfer.
+            val exitLeafSats = active.leafTotalSats?.let { it.safe() - active.leftBehindLeafSats.safe() }
+            val live = SparkExitMath.outsideExitSats(exitLeafSats, sparkBalanceSats) ?: 0uL
             return maxOf(live, active.outsideSats ?: 0uL).takeIf { it > 0uL }
         }
 
@@ -1158,6 +1160,8 @@ data class SparkExitState(
                 ?.takeIf { exit.fundingPaymentTxid == null }
                 ?.let { it.requiredSats.safe() - maxOf(exit.fundedSats, fundingSeenSats).safe() }
                 ?: 0uL
-            return ((exit.expectedSats.safe() - received.safe()).safe() - unpaid.safe()).safe() - exit.lostSats.safe()
+            // A leaf the exit left behind stays on Spark.
+            val notComing = exit.lostSats.safe() + exit.leftBehindLeafSats.safe()
+            return ((exit.expectedSats.safe() - received.safe()).safe() - unpaid.safe()).safe() - notComing.safe()
         }
 }

@@ -309,7 +309,7 @@ object SparkExitMath {
      */
     fun staysOnSparkSats(balanceSats: ULong?, record: SparkExitRecord?): ULong? {
         val leafTotal = record?.leafTotalSats ?: return null
-        val liveLeafTotal = if (leafTotal > record.lostSats) leafTotal - record.lostSats else 0uL
+        val liveLeafTotal = (leafTotal.safe() - record.lostSats.safe()).safe() - record.leftBehindLeafSats.safe()
         val beyond = outsideExitSats(liveLeafTotal, balanceSats) ?: return null
         return beyondLostLeaves(beyond, record.lostLeaves.map { it.valueSats }).takeIf { it > 0uL }
     }
