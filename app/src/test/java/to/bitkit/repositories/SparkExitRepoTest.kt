@@ -1033,6 +1033,33 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay from savings sends only what another wallet's payment left missing`() = test {
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
+        val paid = """[{"txid":"${"e1".repeat(32)}","vout":0,"value":8000,"status":{"confirmed":false}}]"""
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxos = paid))
+        sut.loadQuote().getOrThrow()
+        assertEquals(8_000uL, sut.refreshFundingAddress().getOrThrow())
+        whenever(lightning.getFeeRates()).thenReturn(Result.success(FeeRates(fast = 7u, mid = 4u, slow = 1u)))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success(300uL))
+        whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
+        sut.savingsFundingFee().getOrThrow()
+
+        sut.start(fundFromSavings = true).getOrThrow()
+        sut.onAppBackgrounded()
+
+        // The quote's 20,000 less the 8,000 that arrived, plus the 612 input fee its second payment adds at 9 sat/vB.
+        verify(lightning).calculateTotalFee(eq(12_612uL), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightning).sendOnChain(
+            eq(funding), eq(12_612uL), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `pay from savings sends at the rate its fee was priced at`() = test {
         stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
         val rates = FeeRates(fast = 7u, mid = 4u, slow = 1u)

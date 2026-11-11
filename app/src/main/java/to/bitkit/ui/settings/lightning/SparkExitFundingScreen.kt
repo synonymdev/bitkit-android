@@ -39,10 +39,9 @@ fun SparkExitFundingScreen(
     onContinue: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) {
-        viewModel.onFundingShown()
-        viewModel.loadSavingsFunding()
-    }
+    LaunchedEffect(Unit) { viewModel.onFundingShown() }
+    // Priced again once another wallet's payment shows: savings then sends only the rest.
+    LaunchedEffect(uiState.savingsFundingSats) { viewModel.loadSavingsFunding() }
     DisposableEffect(Unit) { onDispose { viewModel.stopWatchingFundingAddress() } }
     Content(
         uiState = uiState,

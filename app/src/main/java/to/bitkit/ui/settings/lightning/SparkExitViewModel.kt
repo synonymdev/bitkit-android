@@ -350,10 +350,14 @@ data class SparkExitUiState(
     val networkFees: SparkExitNetworkFees? = null,
     val feeBump: SparkExitFeeBumpUiState = SparkExitFeeBumpUiState(),
 ) {
+    /** What savings pays to the funding address: the funding less what another wallet already sent there. */
+    val savingsFundingSats: ULong
+        get() = SparkExitMath.savingsFundingSats(fundingSats, fundingSeenCount, fundingSeenSats, fundingFeeRate ?: 0uL)
+
     /** What leaves savings when it pays the fee funding: the funding and the fee of the payment that sends it. */
     val savingsTotalSats: ULong?
         get() {
-            val fundingSats = quote?.fundingSats?.takeIf { fundFromSavings && it > 0uL } ?: return null
+            val fundingSats = savingsFundingSats.takeIf { fundFromSavings && it > 0uL } ?: return null
             val feeSats = savingsFeeSats ?: return null
             return fundingSats.safe() + feeSats.safe()
         }

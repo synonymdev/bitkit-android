@@ -655,7 +655,7 @@ class SparkExitRepo @Inject constructor(
             runSuspendCatching {
                 val pending = requireNotNull(_state.value.pending) { "No Spark exit quote" }
                 val address = requireNotNull(_state.value.fundingAddress) { "No Spark exit funding address" }
-                val fundingSats = pending.quote.fundingSats
+                val fundingSats = savingsFundingSats(pending.quote.fundingSats, pending.feeRate)
                 val feeRates = lightningRepo.getFeeRates().getOrThrow()
                 val estimateSats = lightningRepo.calculateTotalFee(
                     amountSats = fundingSats,
@@ -676,6 +676,11 @@ class SparkExitRepo @Inject constructor(
                 )
             }
         }
+
+    /** What savings pays toward [fundingSats]: what the funding address still lacks after what reached it. */
+    private fun savingsFundingSats(fundingSats: ULong, feeRate: ULong): ULong = _state.value.let {
+        SparkExitMath.savingsFundingSats(fundingSats, it.fundingSeenCount, it.fundingSeenSats, feeRate)
+    }
 
     /** Reads what reached the funding address, for the funding screen while the user pays from another wallet. */
     suspend fun refreshFundingAddress(): Result<ULong> = withContext(bgDispatcher) {
@@ -791,7 +796,8 @@ class SparkExitRepo @Inject constructor(
             scope.launch { tick() }
             onAppForegrounded()
             // Savings pays at most what the user confirmed: Progress asks for the rest of a higher fresh amount.
-            val savingsSats = minOf(quote.fundingSats, pending.quote.fundingSats)
+            // Funding another wallet already sent to the address is not paid again.
+            val savingsSats = savingsFundingSats(minOf(quote.fundingSats, pending.quote.fundingSats), pending.feeRate)
             if (fundFromSavings && savingsSats > 0uL) {
                 runSuspendCatching {
                     payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates, pending.savingsFeeSats)

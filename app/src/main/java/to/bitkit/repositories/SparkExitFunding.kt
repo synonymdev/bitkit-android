@@ -387,6 +387,16 @@ object SparkExitMath {
         return SparkExitPrestartFunding(isCovered, partial)
     }
 
+    /**
+     * What savings pays to the funding address for [fundingSats]: all of it while nothing arrived, else what
+     * [prestartFunding] still finds missing once its own payment's input fee is counted, and nothing once covered.
+     */
+    fun savingsFundingSats(fundingSats: ULong, payments: Int, receivedSats: ULong, feeRateSatPerVbyte: ULong): ULong {
+        if (receivedSats == 0uL) return fundingSats
+        val funding = prestartFunding(fundingSats, payments, receivedSats, feeRateSatPerVbyte)
+        return if (funding.isCovered) 0uL else funding.partial?.missingSats ?: 0uL
+    }
+
     /** What reached the funding address against [requiredSats], once some but not all of it did; else null. */
     fun partialFunding(receivedSats: ULong, requiredSats: ULong): SparkExitPartialFunding? {
         if (receivedSats == 0uL || receivedSats >= requiredSats) return null

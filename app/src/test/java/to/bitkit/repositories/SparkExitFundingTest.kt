@@ -469,6 +469,14 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `savings pays only what the funding address still lacks`() {
+        assertEquals(20_000uL, SparkExitMath.savingsFundingSats(20_000uL, 0, 0uL, 2uL))
+        // Another wallet sent 8,000: savings sends the rest, plus the input fee its own payment adds.
+        assertEquals(12_136uL, SparkExitMath.savingsFundingSats(20_000uL, 1, 8_000uL, 2uL), "savings pays it again")
+        assertEquals(0uL, SparkExitMath.savingsFundingSats(20_000uL, 1, 20_000uL, 2uL))
+    }
+
+    @Test
     fun `quote names what it skips and spark's balance beyond every leaf it lists`() {
         val prepared = SparkExitFixtures.prepared()
         val beyond = SparkExitQuote(prepared, sparkBalanceSats = 150_000uL)

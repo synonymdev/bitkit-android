@@ -113,6 +113,21 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay from savings totals only what another wallet's payment left missing`() {
+        val state = SparkExitUiState(
+            quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL)),
+            fundFromSavings = true,
+            savingsFeeSats = 500uL,
+            fundingSeenSats = 8_000uL,
+            fundingSeenCount = 1,
+            fundingFeeRate = 2uL,
+        )
+
+        assertEquals(12_136uL, state.savingsFundingSats)
+        assertEquals(12_636uL, state.savingsTotalSats, "savings pays the funding another wallet sent again")
+    }
+
+    @Test
     fun `funding from another wallet continues only once the address holds what the quote asks`() {
         val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
         assertFalse(SparkExitUiState().canContinueFunding)
