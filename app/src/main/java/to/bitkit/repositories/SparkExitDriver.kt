@@ -248,16 +248,15 @@ class SparkExitDriver(
             return askForFunding(record, it)
         }
         if (built.transactions.isEmpty()) {
-            // A first build of only cooperative leaves the operators could not co-sign is kept: they are retried for a
-            // week like any failed leaf. A rebuild like it keeps the recovery it has and tries again on the next tick.
-            if (built.failed.isNotEmpty() && record.recovery == null) {
+            // A build of only cooperative leaves the operators could not co-sign is kept, a rebuild's too: they are
+            // retried for a week like any failed leaf, then let go.
+            if (built.failed.isNotEmpty()) {
                 val adopted = record.adopt(built, nowMillis())
                     .copy(waitingLeafIds = waitingLeafIds(record, prepared.skipped, stopped))
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
                 return adopted
             }
-            if (built.failed.isNotEmpty()) return record.copy(failedLeafCount = built.failed.size)
             return end(record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover")), record)
         }
         // A leaf the operators' watchtower stopped is waited for, not struck, until its wait is over.

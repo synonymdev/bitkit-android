@@ -793,6 +793,26 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(record.isFailedLeavesReleased)
     }
 
+    @Test
+    fun `a redo that rebuilds only cooperative leaves the operators can't sign retries them, then lets go`() = test {
+        var record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+        sdk.checks += check(assertNotNull(record.recovery), redo)
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null)
+        val failed = listOf(
+            CooperativeRecoveryFailure("leaf-1", "o", 0u, CooperativeRecoveryError.OperatorsUnavailable("down")),
+        )
+        repeat(1_100) { sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = failed) }
+
+        for (tip in 1_000u..2_010u) {
+            record = driver(tip = tip).tick(record)
+            now += interval
+        }
+
+        assertNotNull(record.failedLeafRetrySince)
+        assertEquals(Phase.Done, record.phase)
+        assertTrue(record.isFailedLeavesReleased)
+    }
+
     private val operatorsDown = CooperativeRecoveryFailure(
         "coop-1",
         "o",
