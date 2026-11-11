@@ -118,6 +118,8 @@ data class SparkExitRecord(
     val isRedoRebuild: Boolean = false,
     /** What confirmed SWEEP and COOPERATIVE steps of replaced generations paid to [destination], by txid. */
     val earlierReceivedSats: Map<String, ULong> = emptyMap(),
+    /** Each quoted leaf's value, so a leaf the first build leaves behind before any recovery lists it keeps it. */
+    val leafSats: Map<String, ULong> = emptyMap(),
     /**
      * How the funding pays the CPFP children, [PER_NODE] for exits started on SDK 0.28 and later; null funds one UTXO
      * per branch, as exits started before did. Every prepare of the exit resumes with it.
@@ -389,8 +391,9 @@ data class SparkExitRecord(
     fun leaveBehind(leafId: String, reason: String): SparkExitRecord =
         copy(leftBehindLeaves = leftBehindLeaves + LeftBehindLeaf(leafId, leafValueSats(leafId), reason))
 
-    /** What the exit knows of [leafId]'s value, from its current recovery, else 0. */
-    fun leafValueSats(leafId: String): ULong = recovery?.leaves?.firstOrNull { it.leafId == leafId }?.valueSats ?: 0uL
+    /** What the exit knows of [leafId]'s value, from its current recovery, else its quote, else 0. */
+    fun leafValueSats(leafId: String): ULong =
+        recovery?.leaves?.firstOrNull { it.leafId == leafId }?.valueSats ?: leafSats[leafId] ?: 0uL
 
     val fundedSats: ULong get() = funding.fold(0uL) { sum, f -> sum.safe() + (f.valueSats ?: 0uL).safe() }
 
@@ -754,6 +757,7 @@ object SparkExitJson {
             earlierReceivedSats = read {
                 o.objectOrNull("earlierReceivedSats")?.mapValues { it.value.jsonPrimitive.content.toULong() }
             }.orEmpty(),
+            leafSats = read { leafSatsFromJson(o) }.orEmpty(),
             landedSweepTxid = read { o.stringOrNull("landedSweepTxid") },
             sweptLeftover = read { sweptLeftoverFromJson(o) }.orEmpty(),
         )
@@ -981,6 +985,9 @@ object SparkExitJson {
                 buildJsonObject { r.earlierReceivedSats.forEach { (txid, sats) -> put(txid, sats.toLong()) } },
             )
         }
+        if (r.leafSats.isNotEmpty()) {
+            put("leafSats", buildJsonObject { r.leafSats.forEach { (leafId, sats) -> put(leafId, sats.toLong()) } })
+        }
     }
 
     private fun recordFromJson(o: JsonObject) = SparkExitRecord(
@@ -1077,7 +1084,11 @@ object SparkExitJson {
         earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),
+        leafSats = leafSatsFromJson(o),
     )
+
+    private fun leafSatsFromJson(o: JsonObject) =
+        o.objectOrNull("leafSats")?.mapValues { it.value.jsonPrimitive.content.toULong() }.orEmpty()
 
     private fun sweptLeftoverFromJson(o: JsonObject) = o.arrayOrEmpty("sweptLeftover").map {
         val l = it.jsonObject

@@ -808,6 +808,21 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals(1_696uL, sut.state.value.record?.outsideSats)
     }
 
+    @Test
+    fun `a start keeps each quoted leaf's value for a leaf its first build leaves behind`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        val record = assertNotNull(sut.state.value.record)
+        assertNull(record.recovery)
+        assertEquals(100_000uL, record.leafValueSats("leaf-1"))
+        assertEquals(100_000uL, SparkExitJson.decode(SparkExitJson.encode(record)).leafValueSats("leaf-1"))
+        assertEquals(100_000uL, record.leaveBehind("leaf-1", "refused").leftBehindLeafSats)
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `a start killed before its transfer is written leaves no exit to resume`() = test {

@@ -100,6 +100,9 @@ data class SparkExitQuote(
 
     val leafIds: List<String> get() = prepared.leaves.map { it.leafId }
 
+    /** Each listed leaf's value, kept with the exit for a leaf its first build leaves behind. */
+    val leafSats: Map<String, ULong> get() = prepared.leaves.associate { it.leafId to it.valueSats }
+
     /** The value of the leaves the quote lists, which the exit takes on-chain. */
     val leafTotalSats: ULong get() = prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
 

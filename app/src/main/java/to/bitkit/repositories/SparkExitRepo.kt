@@ -735,6 +735,7 @@ class SparkExitRepo @Inject constructor(
             skippedLeafCount = quote.prepared.skipped.size,
             fundingStrategy = SparkExitRecord.PER_NODE,
             leafTotalSats = quote.leafTotalSats,
+            leafSats = quote.leafSats,
             outsideSats = quote.outsideSats,
             transferId = transferId,
         )
@@ -815,6 +816,7 @@ class SparkExitRepo @Inject constructor(
             expectedSats = fresh.incomingSats,
             skippedLeafCount = fresh.prepared.skipped.size,
             leafTotalSats = fresh.leafTotalSats,
+            leafSats = fresh.leafSats,
             outsideSats = fresh.outsideSats,
             transferId = freshTransfer,
         )
