@@ -996,6 +996,26 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a background copy write keeps a later load's unread tags`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val finishCopy = CompletableDeferred<Unit>()
+        whenever { pubkyService.publishPaykitProfile(any(), any()) }.doSuspendableAnswer {
+            finishCopy.await()
+            paykitRecord(it.getArgument(0))
+        }
+        sut.saveProfile(name = "Renamed", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+            .getOrThrow()
+        runCurrent()
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        sut.loadProfile()
+
+        finishCopy.complete(Unit)
+        runCurrent()
+
+        assertTrue(sut.profileEditBase().tagsUnread)
+    }
+
+    @Test
     fun `saveProfile signs in again once when the session lacks the pubky app scope`() = test {
         val secretKey = "local_secret"
         authenticateForTesting(publicKey = VALID_SELF_KEY)

@@ -237,6 +237,10 @@ class PubkyRepo @Inject constructor(
     private val profileSaveEpoch = AtomicLong(0L)
     private val profileSavesRunning = AtomicInteger(0)
 
+    // Orders each save's Paykit copy write after the one an earlier save left running.
+    private val copyWriteOrder = Mutex()
+    private var pendingCopyWrite: Job? = null
+
     /** Revision of the loaded pubky.app profile, which a save must still match; null when none exists. */
     @Volatile
     private var ownProfileRevision: String? = null
@@ -1337,17 +1341,20 @@ class PubkyRepo @Inject constructor(
         val copyData = profile.toProfileData().toPaykitProfile()
         val writeCopy = suspend {
             runSuspendCatching { profileWrite(generation) { pubkyService.publishPaykitProfile(copyData, publicKey) } }
-                .onSuccess { tagsUnavailable = false }
                 .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
         }
         val copyError = keptTags?.let {
-            // With no tag change to report, the save does not wait for the copy. The write lock keeps it ahead of the
-            // next save's copy write, and a deletion refuses or waits for it.
-            if (it == baseTags) {
-                scope.launch { writeCopy() }
-                null
-            } else {
-                writeCopy().exceptionOrNull()
+            copyWriteOrder.withLock {
+                // A copy write left running by an earlier save lands first, so it never overwrites this one.
+                pendingCopyWrite?.join()
+                if (it == baseTags) {
+                    // With no tag change to report, the save does not wait for the copy; a deletion refuses or waits
+                    // for it. It leaves the unread flag alone, which a load may have set since.
+                    pendingCopyWrite = scope.launch { writeCopy() }
+                    null
+                } else {
+                    writeCopy().onSuccess { tagsUnavailable = false }.exceptionOrNull()
+                }
             }
         }
         val saved = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
