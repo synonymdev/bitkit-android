@@ -27,9 +27,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
@@ -47,6 +44,7 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -95,8 +93,10 @@ data class PaykitUsdtReceipt(
     val receivedAtMillis: Long,
     val underpaid: Boolean,
     val afterExpiry: Boolean,
+    /** Paid earlier than the payee recorded its own proposal, so it does not count as paying the request. */
+    val beforeRequest: Boolean = false,
 ) {
-    val satisfied: Boolean get() = verified && !underpaid && !afterExpiry
+    val satisfied: Boolean get() = verified && !underpaid && !afterExpiry && !beforeRequest
 
     fun matches(request: PaykitPaymentRequest): Boolean =
         requestId == request.id && proofEventId == request.paymentProofEventId
@@ -114,6 +114,12 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     companion object {
         private val KEY = Keychain.Key.PAYKIT_USDT_PAYMENTS.name
         private const val TAG = "PaykitUsdtPaymentRepo"
+
+        /**
+         * How far an Arbitrum block timestamp may trail the payee's clock. The sequencer may set timestamps up to a
+         * day in the past, so a transfer counts as earlier than the request only beyond this margin.
+         */
+        internal val PAYMENT_TIME_TOLERANCE = 24.hours
 
         fun binding(
             request: PaykitPaymentRequest,
@@ -137,39 +143,6 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                 periodEndsAt = period?.endsAt.orEmpty(),
                 conversionQuoteId = quoteId.orEmpty(),
             )
-        }
-
-        fun validateProofSize(binding: UsdtPaymentProofBinding) {
-            val profile =
-                PaykitUsdtProof(
-                    UsdtPaymentProof("42161", "0x" + "0".repeat(64), "9".repeat(78), "0x" + "0".repeat(130))
-                )
-            val message = buildJsonObject {
-                put("version", 1)
-                put("kind", "paykit.payment_proof")
-                put("app_id", "bitkit")
-                put("event_id", UUID.randomUUID().toString())
-                put("payment_request_id", binding.paymentRequestId)
-                put("payment_reference", binding.paymentReference)
-                put("payment_app_id", binding.paymentAppId)
-                put("payment_endpoint_identifier", binding.paymentEndpointIdentifier)
-                put(
-                    "billing_period",
-                    if (binding.periodStartsAt.isEmpty()) {
-                        JsonNull
-                    } else {
-                        buildJsonObject {
-                            put("starts_at", binding.periodStartsAt)
-                            put("ends_at", binding.periodEndsAt)
-                        }
-                    }
-                )
-                if (binding.conversionQuoteId.isNotEmpty()) put("conversion_quote_id", binding.conversionQuoteId)
-                put("proof", Json.encodeToJsonElement(PaykitUsdtProof.serializer(), profile))
-            }
-            if (message.toString().toByteArray(Charsets.UTF_8).size > PaykitSdkService.MAX_MESSAGE_BYTES) {
-                throw PaykitPaymentRequestError.RequestUnavailable
-            }
         }
     }
 
@@ -433,7 +406,17 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                             it.billingPeriod?.sdkValue
                         )
                     }
-                    binding?.let(::validateProofSize)
+                    binding?.let {
+                        sdk.requirePaymentProofFits(
+                            paymentReference = it.paymentReference,
+                            paymentAppId = it.paymentAppId,
+                            paymentEndpointIdentifier = it.paymentEndpointIdentifier,
+                            kind = PaykitPaymentProofKind.Usdt,
+                            billingPeriod = request.billingPeriod,
+                            conversionQuoteId = it.conversionQuoteId.takeIf(String::isNotEmpty),
+                            allowanceId = null,
+                        )
+                    }
                     val attempt =
                         PaykitUsdtAttempt(
                             quote.id,
@@ -665,6 +648,11 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         updated
     }
 
+    private fun PaymentRequestRecord.isPaidBeforeProposal(paidAt: Instant): Boolean {
+        val proposedAt = proposalRecordedAt?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return false
+        return paidAt < proposedAt - PAYMENT_TIME_TOLERANCE
+    }
+
     private fun PaykitUsdtAttempt.bindingState() = copy(proof = null, proofQueued = false, paymentStarted = false)
 
     private suspend fun reconcileReceipts(reconciliation: Reconciliation) {
@@ -742,6 +730,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                 receivedAtMillis = receivedAt.toEpochMilliseconds(),
                 underpaid = amount.atomic < terms.amount.atomic,
                 afterExpiry = !terms.isValid(receivedAt),
+                beforeRequest = record.isPaidBeforeProposal(receivedAt),
             )
             mutex.withLock {
                 if (!isCurrent(reconciliation)) return@withLock

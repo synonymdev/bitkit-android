@@ -53,6 +53,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.SubscriptionClock
 import to.bitkit.env.Env
+import to.bitkit.ext.isPaykitMessageTooLarge
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PaykitAmount
@@ -307,6 +308,7 @@ sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
     data object RequestExpired : PaykitPaymentRequestError("Payment request has expired")
     data object OperationInProgress : PaykitPaymentRequestError("Payment request operation is already in progress")
     data object SubscriptionTooLong : PaykitPaymentRequestError("Subscription proposal exceeds the message size limit")
+    data object RequestTooLong : PaykitPaymentRequestError("Payment request proposal exceeds the message size limit")
 }
 
 enum class PaykitPaymentRequestRefreshMode {
@@ -898,10 +900,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         proposalDate
                     )
                     actionVersion++
-                    val record = paykitSdkService.proposePaymentRequest(
+                    val record = proposeWithinMessageLimit(
                         counterparty = target.publicKey,
                         proposal = proposal,
                         expectedIdentity = expectedIdentity,
+                        tooLong = PaykitPaymentRequestError.RequestTooLong,
                     )
                     val reports = processPendingMessages(target.publicKey)
 
@@ -923,6 +926,19 @@ class PaykitPaymentRequestRepo @Inject constructor(
             Logger.warn("Failed to create Paykit payment request", it, context = TAG)
         }
     }
+
+    private suspend fun proposeWithinMessageLimit(
+        counterparty: String,
+        proposal: PaykitPaymentRequestProposalTerms,
+        expectedIdentity: String,
+        tooLong: PaykitPaymentRequestError,
+    ): PaymentRequestRecord = runSuspendCatching {
+        paykitSdkService.proposePaymentRequest(
+            counterparty = counterparty,
+            proposal = proposal,
+            expectedIdentity = expectedIdentity,
+        )
+    }.getOrElse { throw if (it.isPaykitMessageTooLarge()) tooLong else it }
 
     private fun buildPaymentRequestProposal(
         draft: PaykitPaymentRequestDraft,
@@ -996,10 +1012,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val proposal = buildSubscriptionProposal(draft, name, description, iconUri, endpoints, clock.now())
         PaykitSubscriptionProposal.validate(proposal)
         actionVersion++
-        val record = paykitSdkService.proposePaymentRequest(
+        val record = proposeWithinMessageLimit(
             counterparty = target.publicKey,
             proposal = proposal,
             expectedIdentity = expectedIdentity,
+            tooLong = PaykitPaymentRequestError.SubscriptionTooLong,
         )
         val reports = processPendingMessages(target.publicKey)
         val deliveryStatus = if (proposalWasSent(record, reports, generation, expectedIdentity)) {

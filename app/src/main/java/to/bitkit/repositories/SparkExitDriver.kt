@@ -93,6 +93,11 @@ class SparkExitDriver(
     private val nowMillis: () -> Long,
     /** The chain tip this tick, null when it could not be read. */
     private val tip: UInt? = null,
+    /**
+     * The fast rate of Bitkit's own fee source, null when it cannot be read: with the exit's own rate, the most a
+     * leftover sweep pays, whatever the chain host asks.
+     */
+    private val trustedFeeRate: suspend () -> ULong? = { null },
 ) {
     companion object {
         private const val TAG = "SparkExitDriver"
@@ -243,16 +248,15 @@ class SparkExitDriver(
             return askForFunding(record, it)
         }
         if (built.transactions.isEmpty()) {
-            // A first build of only cooperative leaves the operators could not co-sign is kept: they are retried for a
-            // week like any failed leaf. A rebuild like it keeps the recovery it has and tries again on the next tick.
-            if (built.failed.isNotEmpty() && record.recovery == null) {
+            // A build of only cooperative leaves the operators could not co-sign is kept, a rebuild's too: they are
+            // retried for a week like any failed leaf, then let go.
+            if (built.failed.isNotEmpty()) {
                 val adopted = record.adopt(built, nowMillis())
                     .copy(waitingLeafIds = waitingLeafIds(record, prepared.skipped, stopped))
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
                 return adopted
             }
-            if (built.failed.isNotEmpty()) return record.copy(failedLeafCount = built.failed.size)
             return end(record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover")), record)
         }
         // A leaf the operators' watchtower stopped is waited for, not struck, until its wait is over.
@@ -456,8 +460,13 @@ class SparkExitDriver(
                 // A check cannot settle a step the SDK could not read; a fresh build reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
                 val rebuilding = sent.copy(isRebuilding = true, unverifiedRebuiltAtHeight = tip, isRedoRebuild = false)
-                save(rebuilding)
-                build(rebuilding, sdk)
+                // Saved as the valid generation: a run killed during the rebuild goes on sending it.
+                save(rebuilding.copy(isRebuilding = false))
+                val rebuilt = build(rebuilding, sdk)
+                // A rebuild that adopted nothing, such as one waiting for a leaf it could not read either, leaves the
+                // valid generation going: checked and sent every tick, and rebuilt over again once a block.
+                if (!rebuilt.isAdoptionPending(sent)) return rebuilt
+                rebuilt.copy(isRebuilding = false, retrySince = sent.retrySince, retriedAt = sent.retriedAt)
             }
             RecoveryVerdict.Done -> {
                 // Leaves the operators moved on-chain but could not co-sign stay part of the exit, retried for a week.
@@ -679,6 +688,10 @@ class SparkExitDriver(
         return copy(stallRebuilds = 0, stallConfirmedCount = null)
     }
 
+    private fun SparkExitRecord.isAdoptionPending(before: SparkExitRecord): Boolean =
+        isRebuilding && phase == SparkExitRecord.Phase.Running && generation == before.generation &&
+            lostLeaves == before.lostLeaves
+
     private fun needsUnverifiedRebuild(record: SparkExitRecord): Boolean {
         val height = tip ?: return false
         if (record.unverifiedRebuiltAtHeight == height) return false
@@ -788,7 +801,11 @@ class SparkExitDriver(
         val refused = built?.takeIf { it.isWaitingForFees }?.refusedFeeRate ?: 0uL
         // A refusal raises the rate up to the next block's or the exit's, never above: a node asking more is refused
         // again, and the sweep waits a block for fees to drop.
-        val cap = if (refused > 0uL) maxOf(nextBlockRate() ?: 0uL, record.feeRateSatPerVbyte) else 0uL
+        val cap = if (refused > 0uL) {
+            minOf(maxOf(nextBlockRate() ?: 0uL, record.feeRateSatPerVbyte), sweepFeeCeiling(record))
+        } else {
+            0uL
+        }
         val floor = minOf(refused, cap)
         val rate = maxOf(SparkExitMath.sweepFeeRate(economyRate(), record.feeRateSatPerVbyte), floor)
         val inputs = SparkExitSweep.worthSweeping(
@@ -891,6 +908,13 @@ class SparkExitDriver(
         .onFailure { Logger.warn("Failed to read the next-block fee rate for the leftover sweep", it, context = TAG) }
         .getOrNull()
 
+    /**
+     * The most a leftover sweep pays per vbyte: the exit's own rate, which the user confirmed, or Bitkit's own fast
+     * rate when higher. The chain host's estimates and refusals are not trusted past it.
+     */
+    private suspend fun sweepFeeCeiling(record: SparkExitRecord): ULong =
+        maxOf(record.feeRateSatPerVbyte, runSuspendCatching { trustedFeeRate() }.getOrNull() ?: 0uL)
+
     private suspend fun economyRate(): ULong? = runSuspendCatching { chain.economyFeeRate() }
         .onFailure { Logger.warn("Failed to read the economy fee rate for the leftover sweep", it, context = TAG) }
         .getOrNull()
@@ -927,7 +951,10 @@ class SparkExitDriver(
             .onFailure { Logger.warn("Failed to read the Spark exit leftover sweep fee rate", it, context = TAG) }
             .getOrNull()
             ?: return null
-        val rate = maxOf(nextBlock, (old.feeRateSatPerVbyte ?: record.feeRateSatPerVbyte) + 1uL)
+        val oldRate = old.feeRateSatPerVbyte ?: record.feeRateSatPerVbyte
+        val rate = minOf(maxOf(nextBlock, oldRate + 1uL), sweepFeeCeiling(record))
+        // At the ceiling already: sent again as it is until it confirms.
+        if (rate <= oldRate) return null
         val values = record.leftover.associate { "${it.txid}:${it.vout}" to it.valueSats }
         val inputs = SparkExitTxInputs.decode(hex)?.map {
             SparkExitSweep.Input(it.prevTxid, it.vout, values["${it.prevTxid}:${it.vout}"] ?: return null)
@@ -1055,19 +1082,30 @@ class SparkExitDriver(
     private suspend fun broadcastWithoutSdk(record: SparkExitRecord): SparkExitRecord {
         val recovery = record.recovery ?: return record
         val tip = chain.tipHeight()
-        val statuses = recovery.transactions
+        // A saved confirmation is asked again, since a reorg can undo it; it stands only while no host answers.
+        val saved = recovery.transactions
             .mapNotNull { tx -> (tx.status as? ExitTransactionStatus.Confirmed)?.let { tx.txid to it.blockHeight } }
             .associate { (txid, height) -> txid to EsploraTxStatus(true, height) }
-            .toMutableMap<String, EsploraTxStatus?>()
+        val statuses = mutableMapOf<String, EsploraTxStatus?>()
         suspend fun status(txid: String): EsploraTxStatus? {
-            if (txid !in statuses) statuses[txid] = runSuspendCatching { chain.txStatus(txid) }.getOrNull()
+            if (txid !in statuses) {
+                statuses[txid] = runSuspendCatching { chain.txStatus(txid) }.getOrNull() ?: saved[txid]
+            }
             return statuses[txid]
         }
-        var current = record
-        val transactions = recovery.transactions.map { tx ->
-            if (tx.status is ExitTransactionStatus.Confirmed) return@map tx
-            val own = status(tx.txid)
-            if (own?.confirmed == true) return@map tx.copy(status = ExitTransactionStatus.Confirmed(own.blockHeight))
+        val reorged = saved.keys.filter { status(it)?.confirmed == false }.toSet()
+        var current = if (reorged.isEmpty()) record else withReorgUndone(record, recovery, reorged)
+        val transactions = recovery.transactions.map { saved ->
+            val own = status(saved.txid)
+            if (own?.confirmed == true) {
+                val height = own.blockHeight ?: (saved.status as? ExitTransactionStatus.Confirmed)?.blockHeight
+                return@map saved.copy(status = ExitTransactionStatus.Confirmed(height))
+            }
+            val tx = if (saved.txid in reorged) {
+                saved.copy(status = ExitTransactionStatus.WaitingForDependencies)
+            } else {
+                saved
+            }
             if (!tx.dependsOn.all { status(it)?.confirmed == true }) return@map tx
             // A height the SDK already worked out still holds.
             val known = (tx.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight
@@ -1139,6 +1177,28 @@ class SparkExitDriver(
             fundingPaymentSeenAtHeight = null,
             fundingPaymentMissingSince = null,
         )
+    }
+
+    private fun withReorgUndone(
+        record: SparkExitRecord,
+        recovery: RecoverFundsResponse,
+        reorged: Set<String>,
+    ): SparkExitRecord {
+        Logger.warn("Asking again after a reorg undid Spark exit steps '$reorged'", context = TAG)
+        // What was concluded from those confirmations, a spent input or a failed fee chain, no longer holds.
+        val undone = reorged.toMutableSet()
+        while (true) {
+            val added = recovery.transactions
+                .filter { it.txid !in undone && it.dependsOn.any { parent -> parent in undone } }
+                .map { it.txid }
+            if (added.isEmpty()) break
+            undone += added
+        }
+        val log = record.broadcastLog.map {
+            if (it.generation != record.generation || it.txid !in undone) return@map it
+            it.copy(isInputSpent = false, feeChainFailures = 0)
+        }
+        return record.copy(broadcastLog = log)
     }
 
     private suspend fun parentHeight(txid: String, known: EsploraTxStatus?): UInt? {

@@ -3,7 +3,7 @@
     Drives Transfer To Spending from a passphrase (hidden) wallet. While the Trezor session that
     holds the passphrase is still open the transfer signs straight away; after the session is
     dropped Bitkit asks for the passphrase again, and a wrong one is refused instead of signing
-    from whichever wallet the device happens to have open. Requires Spark connected on its regtest, the emulator started with
+    from whichever wallet the device happens to have open. Requires Spark connected on its regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), the emulator started with
     passphrase protection enabled, the hidden wallet from passphrase-pairing.xml paired, and its
     native-segwit account holding spendable regtest funds.
   </description>

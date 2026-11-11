@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,7 @@ fun SavingsIntroScreen(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .padding(top = 130.dp)
+                .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
                 .fillMaxWidth()
                 .graphicsLayer(scaleX = -1f)
         )
@@ -54,12 +56,19 @@ fun SavingsIntroScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp)
+                .padding(horizontal = 16.dp)
                 .align(Alignment.BottomCenter)
         ) {
-            Display(stringResource(R.string.lightning__savings_intro__title).withAccent())
+            Display(
+                text = stringResource(R.string.lightning__savings_intro__title).withAccent(),
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
             Spacer(modifier = Modifier.height(8.dp))
-            BodyM(stringResource(R.string.lightning__savings_intro__text), color = Colors.White64)
+            BodyM(
+                text = stringResource(R.string.lightning__savings_intro__text),
+                color = Colors.White64,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
             PrimaryButton(

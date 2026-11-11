@@ -25,6 +25,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.FeeRate
 import to.bitkit.models.Toast
 import to.bitkit.models.safe
+import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitCancel
 import to.bitkit.repositories.SparkExitCancelUnreadable
@@ -65,6 +66,12 @@ class SparkExitViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     private var fundingWatch: Job? = null
+
+    /** The savings fee a higher-fee payment was refused for, by rate: the next confirm approves at least that. */
+    private val feeBumpFeeFloors = mutableMapOf<ULong, ULong>()
+
+    /** The savings fee a start's funding was refused for: the next funding prices and approves at least that. */
+    private var savingsFeeFloorSats: ULong? = null
 
     init {
         viewModelScope.launch {
@@ -120,7 +127,7 @@ class SparkExitViewModel @Inject constructor(
     fun loadSavingsFunding() {
         viewModelScope.launch {
             _uiState.update { it.copy(savingsFeeSats = null, hasSavingsFeeFailed = false) }
-            sparkExitRepo.savingsFundingFee()
+            sparkExitRepo.savingsFundingFee(savingsFeeFloorSats)
                 .onSuccess { funding ->
                     _uiState.update { it.copy(savingsFeeSats = funding.feeSats, canFundFromSavings = funding.canPay) }
                 }
@@ -169,15 +176,32 @@ class SparkExitViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isStarting = true) }
             sparkExitRepo.start(_uiState.value.fundFromSavings)
-                .onSuccess { _effects.emit(SparkExitEffect.Started) }
+                .onSuccess {
+                    savingsFeeFloorSats = null
+                    _uiState.update { it.copy(isStarted = true) }
+                }
                 .onFailure {
-                    // A cancel during the start already said so on progress.
-                    if (it !is SparkExitStartCancelled) ToastEventBus.send(it)
+                    // Savings never pays more than the fee confirmed: the next funding asks for the refused one.
+                    val changed = it.cause as? OnchainSendChangedError
+                    if (changed != null) {
+                        changed.preparedFeeSats?.let { fee -> savingsFeeFloorSats = fee }
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+                        )
+                    } else if (it !is SparkExitStartCancelled) {
+                        // A cancel during the start already said so on progress.
+                        ToastEventBus.send(it)
+                    }
                     // The exit started but paying its fee funding failed: progress shows where to fund it.
-                    if (sparkExitRepo.state.value.isExiting) _effects.emit(SparkExitEffect.Started)
+                    if (sparkExitRepo.state.value.isExiting) _uiState.update { state -> state.copy(isStarted = true) }
                 }
             _uiState.update { it.copy(isStarting = false) }
         }
+    }
+
+    fun onStartShown() {
+        _uiState.update { it.copy(isStarted = false) }
     }
 
     /** Prices the higher rates the running exit can move to, selecting the fastest. */
@@ -186,7 +210,8 @@ class SparkExitViewModel @Inject constructor(
             _uiState.update { it.copy(feeBump = SparkExitFeeBumpUiState(isLoading = true)) }
             val spendable = sparkExitRepo.spendableSavingsSats().getOrNull()
             sparkExitRepo.feeBumpOptions()
-                .onSuccess { options ->
+                .onSuccess { priced ->
+                    val options = priced.map { it.withFeeFloor(feeBumpFeeFloors[it.rateSatPerVbyte]) }
                     val bump = SparkExitFeeBumpUiState(options = options.toImmutableList(), spendableSats = spendable)
                     // The fastest rate savings can pay for, or none when it covers no rate.
                     val selected = options.firstOrNull(bump::canPay)?.speed
@@ -213,7 +238,22 @@ class SparkExitViewModel @Inject constructor(
             _uiState.update { it.copy(feeBump = it.feeBump.copy(isPaying = true)) }
             sparkExitRepo.payHigherFee(option)
                 .onSuccess { _effects.emit(SparkExitEffect.FeeBumped) }
-                .onFailure { ToastEventBus.send(it) }
+                .onFailure {
+                    // Savings never pays more than the fee confirmed: the rates are priced again for another confirm.
+                    val changed = it.cause as? OnchainSendChangedError
+                    if (changed != null) {
+                        // Coin selection can need more fee than the estimate: the next confirm approves what it asked.
+                        changed.preparedFeeSats?.let { fee -> feeBumpFeeFloors[option.rateSatPerVbyte] = fee }
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+                        )
+                        _uiState.update { state -> state.copy(feeBump = state.feeBump.copy(isPaying = false)) }
+                        loadFeeBump()
+                        return@launch
+                    }
+                    ToastEventBus.send(it)
+                }
             _uiState.update { it.copy(feeBump = it.feeBump.copy(isPaying = false)) }
         }
     }
@@ -263,7 +303,6 @@ class SparkExitViewModel @Inject constructor(
 }
 
 sealed interface SparkExitEffect {
-    data object Started : SparkExitEffect
     data object Cancelled : SparkExitEffect
     data object FeeBumped : SparkExitEffect
 }
@@ -279,6 +318,8 @@ data class SparkExitUiState(
     val fundFromSavings: Boolean = false,
     val showsFundingAddress: Boolean = false,
     val isStarting: Boolean = false,
+    /** The exit started: whichever exit screen shows, also one the user went back to meanwhile, opens its progress. */
+    val isStarted: Boolean = false,
     val isRefreshing: Boolean = false,
     val record: SparkExitRecord? = null,
     val tipHeight: UInt? = null,
@@ -396,4 +437,9 @@ data class SparkExitFeeBumpUiState(
     /** Savings covers [option]'s cost, or there is nothing to pay. */
     fun canPay(option: SparkExitFeeBumpOption): Boolean =
         option.totalSats == 0uL || (spendableSats ?: 0uL) >= option.totalSats
+}
+
+private fun SparkExitFeeBumpOption.withFeeFloor(floorSats: ULong?): SparkExitFeeBumpOption {
+    if (floorSats == null || extraSats == 0uL || floorSats <= totalSats.safe() - extraSats.safe()) return this
+    return copy(totalSats = extraSats.safe() + floorSats.safe())
 }

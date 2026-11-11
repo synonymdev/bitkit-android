@@ -216,13 +216,13 @@
     <string name="lightning__scores_sync_time">Pathfinding scores synchronisatietijd</string>
     <string name="lightning__setting_up__not_seen">Spark heeft je overboeking nog niet gezien. Hij wordt toegevoegd na 3 bevestigingen; je kunt dit scherm verlaten.</string>
     <string name="lightning__setting_up__pay">Betaal ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Direct kost nu ₿ {amount}. Betaal het, of wacht op 3 bevestigingen, ongeveer 30 minuten, tegen lagere kosten.</string>
+    <string name="lightning__setting_up__repriced">Direct kost nu &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Betaal het, of wacht op 3 bevestigingen, ongeveer 30 minuten, tegen lagere kosten.</string>
     <string name="lightning__setting_up__speed">Snelheid: {speed}</string>
     <string name="lightning__setting_up__step_adding">Toevoegen aan besteding</string>
-    <string name="lightning__setting_up__step_seen">Gezien door Spark</string>
-    <string name="lightning__setting_up__step_sent">Overboeking verzonden</string>
     <string name="lightning__setting_up__unavailable">Direct is niet beschikbaar voor deze overboeking. Spark voegt hem na 3 bevestigingen, ongeveer 30 minuten, toe aan je bestedingssaldo.</string>
     <string name="lightning__setting_up_button">Doorgaan met Bitkit</string>
+    <string name="lightning__setting_up_step1">Betaling verwerken</string>
+    <string name="lightning__setting_up_step2">Betaling succesvol</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Claimkosten</string>
     <string name="lightning__spark_confirmations">%1$d/3 bevestigingen</string>
@@ -272,7 +272,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit splitst het in {count} delen, één voor elke stap, zodat één vastgelopen stap de andere niet ophoudt.</string>
     <string name="lightning__spark_exit__funding_text">De exit betaalt zijn kosten uit een aparte on-chain betaling van &lt;accent&gt;{amount}&lt;/accent&gt;. Wat niet wordt uitgegeven, komt aan het einde terug naar spaargeld.</string>
     <string name="lightning__spark_exit__funding_title">Financier de\n&lt;accent&gt;kosten&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">Transactie-ID: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Gebruik dit alleen als Spark niet meer voor je werkt. Het verplaatst je bestedingssaldo naar spaargeld &lt;accent&gt;zonder de Spark-beheerders&lt;/accent&gt;.\n\nHet duurt &lt;accent&gt;tot 4 weken&lt;/accent&gt;, kost on-chain kosten die uit spaargeld worden betaald, en zeer kleine bedragen kunnen achterblijven. Het loopt op de achtergrond en Bitkit laat het je weten als het je nodig heeft.</string>
     <string name="lightning__spark_exit__intro_title">Spark verlaten\n&lt;accent&gt;via on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Blijft op Spark</string>
@@ -282,7 +281,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} aan overgebleven kostenfinanciering kon niet worden verstuurd en blijft op {address}, afleidingspad {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">{amount} aan overgebleven kostenfinanciering wordt naar spaargeld gestuurd.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} aan overgebleven kostenfinanciering is naar spaargeld gestuurd.</string>
-    <string name="lightning__spark_exit__leftover_txid">Transactie-ID: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} aan wisselgeld van de kosten komt in je spaargeld aan wanneer de netwerkkosten dalen.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} is on-chain geclaimd door een eerdere eigenaar van dit geld en kan niet worden teruggehaald.</string>
     <string name="lightning__spark_exit__nav_title">Noodexit</string>
@@ -324,7 +322,6 @@
     <string name="lightning__spark_exit__step_publish">Exittransacties publiceren</string>
     <string name="lightning__spark_exit__step_sweep">Naar spaargeld sturen</string>
     <string name="lightning__spark_exit__step_timelock">Wachten op de tijdvergrendeling</string>
-    <string name="lightning__spark_exit__sweep_txid">Transactie-ID: {txid}</string>
     <string name="lightning__spark_exit__swipe">Veeg om te verlaten</string>
     <string name="lightning__spark_exit__uneconomic">De kosten zijn hoger dan wat je zou ontvangen.</string>
     <string name="lightning__spark_exit__waiting_leaves">Een deel van deze exit kan nu niet on-chain worden gelezen. Bitkit probeert het tot een week lang opnieuw.</string>
@@ -354,7 +351,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Kosten niet beschikbaar</string>
     <string name="lightning__spending_confirm__spending_fee">Bestedingskosten</string>
     <string name="lightning__spending_confirm__total">Totaal</string>
-    <string name="lightning__spending_confirm__up_to">tot</string>
     <string name="lightning__spending_intro__button">Aan de slag</string>
     <string name="lightning__spending_intro__text">Boek geld over naar je bestedingssaldo voor directe en goedkope transacties met vrienden, familie en winkeliers.</string>
     <string name="lightning__spending_intro__title">Overboeken\n&lt;accent&gt;naar bestedingssaldo&lt;/accent&gt;</string>
@@ -1465,6 +1461,7 @@
     <string name="profile__auth_error_invalid_capabilities">De gevraagde toegang komt niet overeen met deze Bitkit-claim.</string>
     <string name="profile__auth_error_invalid_url">Deze Pubky-autorisatielink is ongeldig.</string>
     <string name="profile__auth_error_missing_claim">Deze autorisatie mist de vereiste Bitkit-claim.</string>
+    <string name="profile__auth_error_signup_code_rejected">De homeserver heeft deze aanmeldcode niet geaccepteerd. Probeer het opnieuw of gebruik een andere aanmeldlink.</string>
     <string name="profile__auth_error_timeout">De autorisatierelay reageerde niet op tijd. Probeer het opnieuw.</string>
     <string name="profile__auth_error_title">Autorisatie mislukt</string>
     <string name="profile__auth_error_unsupported_claim">Deze Bitkit-claim wordt niet ondersteund.</string>
@@ -1702,6 +1699,7 @@
     <string name="wallet__payment_request_accepted_methods">Betaling accepteren in</string>
     <string name="wallet__payment_request_after_expiry">Ontvangen · Na vervaldatum</string>
     <string name="wallet__payment_request_amount">Bedrag</string>
+    <string name="wallet__payment_request_before_request">Ontvangen · Vóór het verzoek</string>
     <string name="wallet__payment_request_choose_recipient">Ontvanger kiezen</string>
     <string name="wallet__payment_request_contact">Contact</string>
     <string name="wallet__payment_request_dismiss">Negeren</string>
@@ -1716,6 +1714,7 @@
     <string name="wallet__payment_request_mismatch">De betaalgegevens kwamen niet overeen met het verzoek. Betaling geannuleerd.</string>
     <string name="wallet__payment_request_not_specified">Niet opgegeven</string>
     <string name="wallet__payment_request_note_placeholder">Waar is deze betaling voor?</string>
+    <string name="wallet__payment_request_note_too_long">Maak de notitie korter en probeer het opnieuw.</string>
     <string name="wallet__payment_request_or_pay">Verzoeken of betalen</string>
     <string name="wallet__payment_request_or_pay_description">Betaal %1$s of vraag een betaling aan.</string>
     <string name="wallet__payment_request_or_pay_headline">Verzoek\n&lt;accent&gt;of betaal ₿&lt;/accent&gt;</string>

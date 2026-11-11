@@ -308,7 +308,7 @@
     <string name="lightning__force_nav_title">Force Transfer</string>
     <string name="lightning__force_text">Could not initiate transfer. Do you want to force this transfer? You won’t be able to use these funds for ±14 days (!)</string>
     <string name="lightning__force_title">Force\n&lt;accent&gt;Transfer&lt;/accent&gt;</string>
-    <string name="lightning__funding__button1">Transfer from Savings</string>
+    <string name="lightning__funding__button1">Transfer From Savings</string>
     <string name="lightning__funding__button2">Use Other Wallet</string>
     <string name="lightning__funding__button_hw">Transfer from HW wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
@@ -372,18 +372,19 @@
     <string name="lightning__savings_progress__title">Funds\n&lt;accent&gt;in transfer&lt;/accent&gt;</string>
     <string name="lightning__savings_settling__text">Your transfer has been initiated and is &lt;accent&gt;settling on-chain&lt;/accent&gt;. Your savings balance will update automatically once it completes.</string>
     <string name="lightning__savings_settling__title">Transfer\n&lt;accent&gt;on the way&lt;/accent&gt;</string>
-    <string name="lightning__savings_spark_failed">Your Spark balance couldn\'t move to savings and stays in your spending balance.</string>
-    <string name="lightning__savings_spark_failed_channels">Your Spark balance couldn\'t move to savings and stays in your spending balance. Your connections are moving to savings.</string>
+    <string name="lightning__savings_spark_failed">Your Spark balance could not move to savings and stays in your spending balance.</string>
+    <string name="lightning__savings_spark_failed__title">Transfer\n&lt;accent&gt;failed&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed_channels">Your channel funds are moving to savings, but your Spark balance could not move and stays in your spending balance.</string>
     <string name="lightning__scores_sync_time">Pathfinding Scores Sync Time</string>
     <string name="lightning__setting_up__not_seen">Spark hasn\'t seen your transfer yet. It\'s added after 3 confirmations; you can leave this screen.</string>
     <string name="lightning__setting_up__pay">Pay ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instant now costs ₿ {amount}. Pay it, or wait for 3 confirmations, about 30 minutes, at a lower fee.</string>
+    <string name="lightning__setting_up__repriced">Instant now costs &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Pay it to add your transfer now, or wait for 3 confirmations, about 30 minutes.</string>
     <string name="lightning__setting_up__speed">Speed: {speed}</string>
     <string name="lightning__setting_up__step_adding">Adding To Spending</string>
-    <string name="lightning__setting_up__step_seen">Seen By Spark</string>
-    <string name="lightning__setting_up__step_sent">Transfer Sent</string>
     <string name="lightning__setting_up__unavailable">Instant isn\'t available for this transfer. Spark adds it to your spending balance after 3 confirmations, about 30 minutes.</string>
     <string name="lightning__setting_up_button">Continue Using Bitkit</string>
+    <string name="lightning__setting_up_step1">Processing Payment</string>
+    <string name="lightning__setting_up_step2">Payment Successful</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Claim fee</string>
     <string name="lightning__spark_confirmations">%1$d/3 confirmations</string>
@@ -433,7 +434,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit splits it into {count} parts, one for each step, so one stuck step can\'t hold up the others.</string>
     <string name="lightning__spark_exit__funding_text">The exit pays its fees from a separate on-chain payment of &lt;accent&gt;{amount}&lt;/accent&gt;. What it doesn\'t spend comes back to savings at the end.</string>
     <string name="lightning__spark_exit__funding_title">Fund the\n&lt;accent&gt;fees&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">Transaction ID: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Use this only if Spark stops working for you. It moves your spending balance to savings &lt;accent&gt;without the Spark operators&lt;/accent&gt;.\n\nIt takes &lt;accent&gt;up to 4 weeks&lt;/accent&gt;, costs on-chain fees paid from savings, and very small amounts can stay behind. It runs in the background, and Bitkit notifies you if it needs you.</string>
     <string name="lightning__spark_exit__intro_title">Leave Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Stays on Spark</string>
@@ -443,7 +443,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} of leftover fee funding could not be sent and stays at {address}, derivation path {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Sending {amount} of leftover fee funding to savings.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} of leftover fee funding was sent to savings.</string>
-    <string name="lightning__spark_exit__leftover_txid">Transaction ID: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} of fee change will reach your savings when network fees drop.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} was claimed on-chain by an older owner of these funds and can\'t be recovered.</string>
     <string name="lightning__spark_exit__nav_title">Emergency Exit</string>
@@ -485,7 +484,6 @@
     <string name="lightning__spark_exit__step_publish">Publishing exit transactions</string>
     <string name="lightning__spark_exit__step_sweep">Sending to savings</string>
     <string name="lightning__spark_exit__step_timelock">Waiting for the timelock</string>
-    <string name="lightning__spark_exit__sweep_txid">Transaction ID: {txid}</string>
     <string name="lightning__spark_exit__swipe">Swipe To Exit</string>
     <string name="lightning__spark_exit__uneconomic">The fees are higher than what you would receive.</string>
     <string name="lightning__spark_exit__waiting_leaves">Part of this exit can\'t be read on-chain right now. Bitkit tries again for up to a week.</string>
@@ -500,23 +498,25 @@
     <string name="lightning__spending_amount__error_balance__title">Insufficient Savings</string>
     <string name="lightning__spending_amount__error_max__description">The amount you can transfer to your spending balance is currently limited to ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__title">Spending Balance Maximum</string>
-    <string name="lightning__spending_amount__error_min__description">Transfer more than ₿ {amount}, so it covers the fees to add it to your spending balance.</string>
-    <string name="lightning__spending_amount__error_min__title">Amount Too Small</string>
+    <string name="lightning__spending_amount__error_min__description">A minimum of ₿ {amount} is needed to set up your spending balance.</string>
+    <string name="lightning__spending_amount__error_min__title">Savings Balance Minimum</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about" translatable="false">≈</string>
+    <string name="lightning__spending_confirm__about" translatable="false">±</string>
     <string name="lightning__spending_confirm__amount">To spending</string>
+    <string name="lightning__spending_confirm__error_quote">Bitkit couldn\'t get the fees for this transfer. Check your connection and try again.</string>
     <string name="lightning__spending_confirm__fees_changed_network">Fees are {amount} higher because fee rates or your savings balance changed while you were on this screen. Swipe again to confirm.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Fees changed</string>
     <string name="lightning__spending_confirm__instant_text">Ready in a few minutes</string>
     <string name="lightning__spending_confirm__later_text">After 3 confirmations, about 30 minutes</string>
     <string name="lightning__spending_confirm__lsp_fee">Service fees</string>
+    <string name="lightning__spending_confirm__max_changed">The most you can transfer is now {amount}, because fee rates or your savings balance changed while you were on this screen. Swipe again to confirm.</string>
+    <string name="lightning__spending_confirm__max_changed_title">Amount changed</string>
     <string name="lightning__spending_confirm__network_fee">Network fees</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit couldn\'t get the current fees for this transfer. Check your connection and try again.</string>
     <string name="lightning__spending_confirm__quote_error_title">Fees Unavailable</string>
     <string name="lightning__spending_confirm__spending_fee">Spending fee</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">up to</string>
     <string name="lightning__spending_intro__button">Get Started</string>
     <string name="lightning__spending_intro__text">Transfer funds to your spending balance to enjoy instant and cheap transactions with friends, family, and merchants.</string>
     <string name="lightning__spending_intro__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
@@ -773,6 +773,7 @@
     <string name="profile__auth_error_invalid_capabilities">The requested access does not match this Bitkit claim.</string>
     <string name="profile__auth_error_invalid_url">This Pubky authorization link is invalid.</string>
     <string name="profile__auth_error_missing_claim">This authorization is missing its required Bitkit claim.</string>
+    <string name="profile__auth_error_signup_code_rejected">The homeserver did not accept this signup code. Try again or use another signup link.</string>
     <string name="profile__auth_error_timeout">The authorization relay did not respond in time. Please try again.</string>
     <string name="profile__auth_error_title">Authorization Failed</string>
     <string name="profile__auth_error_unsupported_claim">This Bitkit claim is not supported.</string>
@@ -1574,6 +1575,7 @@
     <string name="wallet__payment_request_accepted_methods">Accept payment in</string>
     <string name="wallet__payment_request_after_expiry">Received · After expiry</string>
     <string name="wallet__payment_request_amount">Amount</string>
+    <string name="wallet__payment_request_before_request">Received · Before request</string>
     <string name="wallet__payment_request_choose_recipient">Choose Recipient</string>
     <string name="wallet__payment_request_contact">Contact</string>
     <string name="wallet__payment_request_date">Date</string>
@@ -1590,6 +1592,7 @@
     <string name="wallet__payment_request_not_specified">Not specified</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
+    <string name="wallet__payment_request_note_too_long">Shorten the note and try again.</string>
     <string name="wallet__payment_request_or_pay">Request Or Pay</string>
     <string name="wallet__payment_request_or_pay_description">Pay %1$s or request a payment.</string>
     <string name="wallet__payment_request_or_pay_headline"><![CDATA[Request\n<accent>Or Pay ₿</accent>]]></string>
@@ -1644,13 +1647,13 @@
     <string name="wallet__payment_unknown_required_features">This Lightning invoice uses features Bitkit does not support yet.</string>
     <string name="wallet__peer_disconnected">Peer disconnected.</string>
     <string name="wallet__receive">Receive</string>
-    <string name="wallet__receive__cjit">Receive Lightning funds</string>
+    <string name="wallet__receive__cjit">Receive Lightning Funds</string>
     <string name="wallet__receive_bitcoin">Receive Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Bitcoin invoice</string>
     <string name="wallet__receive_copied">Invoice copied to clipboard</string>
     <string name="wallet__receive_lightning_invoice">Lightning invoice</string>
     <string name="wallet__receive_note_placeholder">Optional note to payer</string>
-    <string name="wallet__receive_onboarding_description">Enjoy instant and cheap bitcoin payments on the Lightning Network.</string>
+    <string name="wallet__receive_onboarding_description">Enjoy instant and cheap transactions with friends, family, and merchants.</string>
     <string name="wallet__receive_onboarding_title">Receive on &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Show Details</string>
     <string name="wallet__receive_show_qr">QR Code</string>

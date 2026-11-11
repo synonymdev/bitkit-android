@@ -36,7 +36,9 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendPendingError
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.repositories.SparkRepo
@@ -81,6 +83,7 @@ class SparkFundingViewModel @Inject constructor(
 
     private var maxJob: Job? = null
     private var quoteJob: Job? = null
+    private var amountJob: Job? = null
     private var retainedFundingJob: Job? = null
 
     /** The kept funding this screen settles, held until the screen closes so its recovery never takes over. */
@@ -88,6 +91,9 @@ class SparkFundingViewModel @Inject constructor(
 
     /** The fee rates the shown quote was priced at, so the transfer pays exactly what the screen shows. */
     private var quotedFeeRates: FeeRates? = null
+
+    /** The mining fee a refused fixed-amount funding needed, which this transfer's quotes show at least. */
+    private var fixedFeeFloorSats: ULong? = null
 
     init {
         viewModelScope.launch {
@@ -109,7 +115,8 @@ class SparkFundingViewModel @Inject constructor(
     /** Sends from the hardware wallet [walletId] instead of Savings. */
     fun useHardwareWallet(walletId: String) {
         if (_uiState.value.hwWalletId == walletId) return
-        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true) }
+        fixedFeeFloorSats = null
+        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true, txid = null) }
         refreshMax()
     }
 
@@ -141,7 +148,17 @@ class SparkFundingViewModel @Inject constructor(
     }
 
     fun onAmountChange(sats: Long) {
-        _uiState.update { it.copy(amountSats = sats, isMax = sats > 0 && sats == it.maxSats) }
+        val state = _uiState.value
+        val isNewTransfer = sats != state.amountSats || (sats > 0 && sats == state.maxSats) != state.isMax
+        if (isNewTransfer) fixedFeeFloorSats = null
+        _uiState.update {
+            // A funding followed for the earlier amount never stands in for this one's.
+            it.copy(
+                amountSats = sats,
+                isMax = sats > 0 && sats == it.maxSats,
+                txid = it.txid.takeUnless { isNewTransfer },
+            )
+        }
     }
 
     fun quarterSats(): Long = _uiState.value.maxSats.let { max -> minOf((max * QUARTER).roundToLong(), max) }
@@ -154,11 +171,17 @@ class SparkFundingViewModel @Inject constructor(
         )
     }
 
+    /** Drops a pricing still running when the amount screen leaves, so its quote never opens confirm. */
+    fun onAmountLeave() {
+        amountJob?.cancel()
+        _uiState.update { it.copy(isLoading = false) }
+    }
+
     /** Prices the transfer and moves on to the confirm screen when Savings can cover it and Spark can add it. */
     fun onAmountContinue() {
         if (_uiState.value.isLoading) return
         _uiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch {
+        amountJob = viewModelScope.launch {
             val quote = quote().getOrElse {
                 Logger.error("Failed to price Spark funding", it, context = TAG)
                 toastQuoteError()
@@ -182,10 +205,11 @@ class SparkFundingViewModel @Inject constructor(
         }
     }
 
+    /** Names the smallest amount that passes, as an amount equal to the claim fee is refused. */
     private fun toastBelowClaimFee(quote: Quote) = toast(
         title = R.string.lightning__spending_amount__error_min__title,
         description = context.getString(R.string.lightning__spending_amount__error_min__description)
-            .replace("{amount}", quote.instantFeeSats.formatToModernDisplay()),
+            .replace("{amount}", (quote.instantFeeSats + 1).formatToModernDisplay()),
     )
 
     /** Re-prices the confirm screen, so it never shows a stale quote. */
@@ -214,6 +238,11 @@ class SparkFundingViewModel @Inject constructor(
     /** Prices again at swipe time, and asks for another swipe when the transfer got worse since it was shown. */
     fun onConfirm() {
         val shown = _uiState.value
+        // A kept funding that completed while another screen showed missed its Sent, so it leaves now instead.
+        if (shown.txid != null) {
+            viewModelScope.launch { _effects.emit(SideEffect.Sent) }
+            return
+        }
         val shownQuote = shown.quote ?: return
         if (shown.isSending || shown.isQuoting) return
         quoteJob?.cancel()
@@ -241,16 +270,16 @@ class SparkFundingViewModel @Inject constructor(
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
-            val totalRise = quote.totalSats - shownQuote.totalSats
-            val spendingDrop = shownQuote.toSpendingSats(shown.speed) - quote.toSpendingSats(shown.speed)
-            if (totalRise > 0 || spendingDrop > 0) {
-                Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
-                toast(
-                    title = R.string.lightning__spending_confirm__fees_changed_title,
-                    description = context.getString(R.string.lightning__spending_confirm__fees_changed_network)
-                        .replace("{amount}", formatPrimaryAmount(maxOf(totalRise, spendingDrop))),
-                    type = Toast.ToastType.INFO,
-                )
+            val increase = quote.increaseOver(shownQuote, shown.speed)
+            if (increase > 0) {
+                // A max transfer sends what Savings can afford, so its amount moves with the fee rates and balance.
+                if (shown.isMax && quote.amountSats != shownQuote.amountSats) {
+                    Logger.info("Asking for another swipe, the max amount changed since shown", context = TAG)
+                    toastMaxChanged(quote.toSpendingSats(shown.speed))
+                } else {
+                    Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
+                    toastFeesChanged(increase)
+                }
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
@@ -300,10 +329,12 @@ class SparkFundingViewModel @Inject constructor(
                 feeRates = quotedFeeRates,
                 isTransfer = true,
                 isMaxAmount = state.isMax,
+                // Savings never pay more than the Total the user confirmed, so a higher fee asks for another swipe.
+                approvedMiningFeeSats = quote.networkFeeSats.toULong(),
             ).getOrThrow()
             if (outcome !is OnchainSendOutcome.Accepted) {
                 Logger.warn("Spark funding was not accepted: '$outcome'", context = TAG)
-                if (showRetainedFunding(quote)) return@runSuspendCatching
+                if (showRetainedFunding(quote, isThisSwipes = true)) return@runSuspendCatching
                 error("Spark funding was not accepted: '$outcome'")
             }
             withContext(NonCancellable) {
@@ -313,8 +344,22 @@ class SparkFundingViewModel @Inject constructor(
             }
             onFundingAccepted(outcome.txid, outcome.amountSats ?: quote.amountSats.toULong(), quote)
         }.onFailure {
+            val changed = it.cause as? OnchainSendChangedError
+            if (changed != null) {
+                Logger.info("Asking for another swipe, the funding changed since approved", context = TAG)
+                // A fixed amount's coin selection can need more fee than its quote,
+                // so this transfer's quotes show at least that, and the next swipe approves it.
+                if (!state.isMax) fixedFeeFloorSats = changed.preparedFeeSats
+                quote().onSuccess { repriced ->
+                    showQuote(repriced)
+                    toastFeesChanged(repriced.increaseOver(quote, state.speed))
+                }.onFailure { toastQuoteError() }
+                return@onFailure
+            }
             Logger.error("Failed to fund Spark", it, context = TAG)
-            if (it is OnchainSendBlockedError && showRetainedFunding(quote)) return@onFailure
+            // Its dispatch started but its outcome is unknown, so it may already be on the network.
+            if (it is OnchainSendPendingError && showRetainedFunding(quote, isThisSwipes = true)) return@onFailure
+            if (it is OnchainSendBlockedError && showRetainedFunding(quote, isThisSwipes = false)) return@onFailure
             toast(
                 title = R.string.lightning__close_error,
                 description = context.getString(R.string.wallet__send_error_create_tx),
@@ -323,28 +368,39 @@ class SparkFundingViewModel @Inject constructor(
         _uiState.update { it.copy(isSending = false) }
     }
 
-    private suspend fun onFundingAccepted(txid: String, amountSats: ULong, quote: Quote) {
+    /** With [ceilingSats] 0, as for a funding no swipe on this screen approved, an early claim asks first. */
+    private suspend fun onFundingAccepted(
+        txid: String,
+        amountSats: ULong,
+        quote: Quote,
+        ceilingSats: ULong = quote.instantFeeSats.toULong(),
+    ) {
         val speed = _uiState.value.speed
         withContext(NonCancellable) {
             sparkRepo.onDepositBroadcast(txid, amountSats)
-            sparkRepo.followDepositClaim(txid, speed, quote.instantFeeSats.toULong())
+            sparkRepo.followDepositClaim(txid, speed, ceilingSats)
         }
         Logger.info("Funded Spark with '$amountSats' sats in '$txid'", context = TAG)
         _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
         _effects.emit(SideEffect.Sent)
     }
 
-    // A signed funding that was not accepted is kept; Payment Pending shows it and retries it at a new fee.
-    private suspend fun showRetainedFunding(quote: Quote): Boolean {
+    // A signed funding that was not accepted is kept; Payment Pending shows it and retries it at a new fee. A swipe
+    // refused for an earlier funding approved no claim fee for it: one this screen already follows keeps its own,
+    // and one from before, as after a relaunch, asks before an early claim.
+    private suspend fun showRetainedFunding(quote: Quote, isThisSwipes: Boolean): Boolean {
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
         if (attempt == null || !attempt.isTransfer || !attempt.blocksNextSend) return false
-        watchRetainedFunding(attempt, quote)
+        when {
+            isThisSwipes -> watchRetainedFunding(attempt, quote, quote.instantFeeSats.toULong())
+            attempt.attemptId != ownedFundingAttemptId -> watchRetainedFunding(attempt, quote, ceilingSats = 0uL)
+        }
         _effects.emit(SideEffect.FundingPending(attempt))
         return true
     }
 
     // Payment Pending can be dismissed, so the confirm screen leaves for Setting Up once the kept funding completes.
-    private fun watchRetainedFunding(retained: OnchainSendAttempt, quote: Quote) {
+    private fun watchRetainedFunding(retained: OnchainSendAttempt, quote: Quote, ceilingSats: ULong) {
         retainedFundingJob?.cancel()
         ownedFundingAttemptId?.takeIf { it != retained.attemptId }
             ?.let { lightningRepo.followFundingOnScreen(it, isFollowed = false) }
@@ -358,7 +414,7 @@ class SparkFundingViewModel @Inject constructor(
                     it.attemptId == retained.attemptId && it.address == quote.address &&
                         it.hasPositiveEvidence && it.localFollowupComplete && it.txid != null
                 }
-            onFundingAccepted(requireNotNull(completed.txid), completed.amountSats, quote)
+            onFundingAccepted(requireNotNull(completed.txid), completed.amountSats, quote, ceilingSats)
         }
     }
 
@@ -390,7 +446,7 @@ class SparkFundingViewModel @Inject constructor(
                 address = address,
                 speed = SPEED,
                 feeRates = feeRates,
-            ).getOrThrow()
+            ).getOrThrow().coerceAtLeast(fixedFeeFloorSats ?: 0uL)
         }
         val amount = if (state.isMax) (spendable.safe() - networkFee.safe()) else state.amountSats.toULong()
         val instantFee = sparkRepo.estimateDepositClaimFeeSats(amount).getOrThrow()
@@ -433,6 +489,20 @@ class SparkFundingViewModel @Inject constructor(
 
     private suspend fun spendableSats(): ULong =
         lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+
+    private fun toastFeesChanged(increaseSats: Long) = toast(
+        title = R.string.lightning__spending_confirm__fees_changed_title,
+        description = context.getString(R.string.lightning__spending_confirm__fees_changed_network)
+            .replace("{amount}", formatPrimaryAmount(increaseSats)),
+        type = Toast.ToastType.INFO,
+    )
+
+    private fun toastMaxChanged(toSpendingSats: Long) = toast(
+        title = R.string.lightning__spending_confirm__max_changed_title,
+        description = context.getString(R.string.lightning__spending_confirm__max_changed)
+            .replace("{amount}", formatPrimaryAmount(toSpendingSats)),
+        type = Toast.ToastType.INFO,
+    )
 
     private fun toastQuoteError() = toast(
         title = R.string.lightning__spending_confirm__quote_error_title,
@@ -490,6 +560,10 @@ interface SparkFundingContract {
         val spendableSats: Long,
     ) {
         val totalSats: Long get() = amountSats + networkFeeSats
+
+        /** How much more this asks than [approved]: the larger rise in the total or fall in what reaches spending. */
+        fun increaseOver(approved: Quote, speed: SparkClaimSpeed): Long =
+            maxOf(totalSats - approved.totalSats, approved.toSpendingSats(speed) - toSpendingSats(speed))
 
         /** Whether Savings can pay the amount and its network fee. */
         val isCovered: Boolean get() = totalSats <= spendableSats

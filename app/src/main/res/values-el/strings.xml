@@ -212,13 +212,13 @@
     <string name="lightning__scores_sync_time">Χρόνος συγχρονισμού βαθμολογιών εύρεσης διαδρομής</string>
     <string name="lightning__setting_up__not_seen">Το Spark δεν έχει δει ακόμα τη μεταφορά σου. Προστίθεται μετά από 3 επιβεβαιώσεις· μπορείς να φύγεις από αυτή την οθόνη.</string>
     <string name="lightning__setting_up__pay">Πλήρωσε ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Το Άμεσα κοστίζει τώρα ₿ {amount}. Πλήρωσέ το ή περίμενε 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
+    <string name="lightning__setting_up__repriced">Το Άμεσα κοστίζει τώρα &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Πλήρωσέ το ή περίμενε 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
     <string name="lightning__setting_up__speed">Ταχύτητα: {speed}</string>
     <string name="lightning__setting_up__step_adding">Προσθήκη στις δαπάνες</string>
-    <string name="lightning__setting_up__step_seen">Το είδε το Spark</string>
-    <string name="lightning__setting_up__step_sent">Η μεταφορά στάλθηκε</string>
     <string name="lightning__setting_up__unavailable">Το Άμεσα δεν είναι διαθέσιμο για αυτή τη μεταφορά. Το Spark την προσθέτει στο υπόλοιπο δαπανών σου μετά από 3 επιβεβαιώσεις, περίπου 30 λεπτά.</string>
     <string name="lightning__setting_up_button">Συνέχισε να χρησιμοποιείς το Bitkit</string>
+    <string name="lightning__setting_up_step1">Επεξεργασία πληρωμής</string>
+    <string name="lightning__setting_up_step2">Επιτυχής πληρωμή</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Χρέωση εξαργύρωσης</string>
     <string name="lightning__spark_confirmations">%1$d/3 επιβεβαιώσεις</string>
@@ -268,7 +268,6 @@
     <string name="lightning__spark_exit__funding_split">Το Bitkit τη χωρίζει σε {count} μέρη, ένα για κάθε βήμα, ώστε ένα κολλημένο βήμα να μην καθυστερεί τα άλλα.</string>
     <string name="lightning__spark_exit__funding_text">Η έξοδος πληρώνει τα τέλη της από μια ξεχωριστή on-chain πληρωμή &lt;accent&gt;{amount}&lt;/accent&gt;. Ό,τι δεν ξοδέψει επιστρέφει στις αποταμιεύσεις στο τέλος.</string>
     <string name="lightning__spark_exit__funding_title">Χρηματοδότηση\n&lt;accent&gt;τελών&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID συναλλαγής: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Χρησιμοποιήστε το μόνο αν το Spark σταματήσει να λειτουργεί για εσάς. Μεταφέρει το υπόλοιπο δαπανών σας στις αποταμιεύσεις &lt;accent&gt;χωρίς τους διαχειριστές του Spark&lt;/accent&gt;.\n\nΔιαρκεί &lt;accent&gt;έως 4 εβδομάδες&lt;/accent&gt;, κοστίζει τέλη on-chain που πληρώνονται από τις αποταμιεύσεις, και πολύ μικρά ποσά μπορεί να μείνουν πίσω. Εκτελείται στο παρασκήνιο και το Bitkit σας ειδοποιεί αν σας χρειαστεί.</string>
     <string name="lightning__spark_exit__intro_title">Έξοδος από το Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Παραμένει στο Spark</string>
@@ -278,7 +277,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} από την υπόλοιπη χρηματοδότηση τελών δεν ήταν δυνατό να σταλούν και παραμένουν στη διεύθυνση {address}, διαδρομή παραγωγής {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Αποστολή {amount} από την υπόλοιπη χρηματοδότηση τελών στις αποταμιεύσεις.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} από την υπόλοιπη χρηματοδότηση τελών στάλθηκαν στις αποταμιεύσεις.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID συναλλαγής: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} ρέστα τελών θα φτάσουν στις αποταμιεύσεις σας όταν πέσουν τα τέλη δικτύου.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} διεκδικήθηκαν on-chain από προηγούμενο κάτοχο αυτών των κεφαλαίων και δεν μπορούν να ανακτηθούν.</string>
     <string name="lightning__spark_exit__nav_title">Έξοδος Έκτακτης Ανάγκης</string>
@@ -320,7 +318,6 @@
     <string name="lightning__spark_exit__step_publish">Δημοσίευση συναλλαγών εξόδου</string>
     <string name="lightning__spark_exit__step_sweep">Αποστολή στις αποταμιεύσεις</string>
     <string name="lightning__spark_exit__step_timelock">Αναμονή για το timelock</string>
-    <string name="lightning__spark_exit__sweep_txid">ID συναλλαγής: {txid}</string>
     <string name="lightning__spark_exit__swipe">Σύρετε Για Έξοδο</string>
     <string name="lightning__spark_exit__uneconomic">Τα τέλη είναι υψηλότερα από όσα θα λαμβάνατε.</string>
     <string name="lightning__spark_exit__waiting_leaves">Μέρος αυτής της εξόδου δεν μπορεί να διαβαστεί on-chain αυτή τη στιγμή. Το Bitkit προσπαθεί ξανά για έως μία εβδομάδα.</string>
@@ -350,7 +347,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Μη διαθέσιμες χρεώσεις</string>
     <string name="lightning__spending_confirm__spending_fee">Χρέωση δαπανών</string>
     <string name="lightning__spending_confirm__total">Σύνολο</string>
-    <string name="lightning__spending_confirm__up_to">έως</string>
     <string name="lightning__spending_intro__button">Ξεκίνα</string>
     <string name="lightning__spending_intro__text">Μετέφερε κεφάλαια στο υπόλοιπο δαπανών για να απολαύσεις άμεσες και φθηνές συναλλαγές με φίλους, οικογένεια και εμπόρους.</string>
     <string name="lightning__spending_intro__title">Μεταφορά\n&lt;accent&gt;σε δαπάνες&lt;/accent&gt;</string>
@@ -1449,6 +1445,7 @@
     <string name="profile__auth_error_invalid_capabilities">Η ζητούμενη πρόσβαση δεν αντιστοιχεί σε αυτή τη δήλωση Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Αυτός ο σύνδεσμος εξουσιοδότησης Pubky δεν είναι έγκυρος.</string>
     <string name="profile__auth_error_missing_claim">Σε αυτή την εξουσιοδότηση λείπει η απαιτούμενη δήλωση Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Ο homeserver δεν δέχτηκε αυτόν τον κωδικό εγγραφής. Δοκίμασε ξανά ή χρησιμοποίησε άλλον σύνδεσμο εγγραφής.</string>
     <string name="profile__auth_error_timeout">Ο αναμεταδότης εξουσιοδότησης δεν απάντησε εγκαίρως. Δοκίμασε ξανά.</string>
     <string name="profile__auth_error_title">Η εξουσιοδότηση απέτυχε</string>
     <string name="profile__auth_error_unsupported_claim">Αυτή η δήλωση Bitkit δεν υποστηρίζεται.</string>
@@ -1697,6 +1694,7 @@
     <string name="wallet__payment_request_accepted_methods">Αποδοχή πληρωμής σε</string>
     <string name="wallet__payment_request_after_expiry">Ελήφθη · Μετά τη λήξη</string>
     <string name="wallet__payment_request_amount">Ποσό</string>
+    <string name="wallet__payment_request_before_request">Ελήφθη · Πριν από το αίτημα</string>
     <string name="wallet__payment_request_choose_recipient">Επιλογή παραλήπτη</string>
     <string name="wallet__payment_request_dismiss">Απόρριψη</string>
     <string name="wallet__payment_request_enter_pubky">Εισαγωγή pubky</string>
@@ -1710,6 +1708,7 @@
     <string name="wallet__payment_request_mismatch">Τα στοιχεία πληρωμής δεν αντιστοιχούσαν στο αίτημα. Η πληρωμή ακυρώθηκε.</string>
     <string name="wallet__payment_request_not_specified">Δεν καθορίστηκε</string>
     <string name="wallet__payment_request_note_placeholder">Για τι είναι αυτή η πληρωμή;</string>
+    <string name="wallet__payment_request_note_too_long">Συντόμευσε τη σημείωση και δοκίμασε ξανά.</string>
     <string name="wallet__payment_request_or_pay">Αίτημα ή πληρωμή</string>
     <string name="wallet__payment_request_or_pay_description">Πλήρωσε τον/την %1$s ή ζήτησε πληρωμή.</string>
     <string name="wallet__payment_request_or_pay_headline">Αίτημα\n&lt;accent&gt;ή πληρωμή ₿&lt;/accent&gt;</string>

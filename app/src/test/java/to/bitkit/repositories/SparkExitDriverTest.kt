@@ -55,6 +55,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         withSdk: Boolean = true,
         tip: UInt? = null,
         save: (SparkExitRecord) -> Unit = { saved += it },
+        trustedFeeRate: ULong? = 10uL,
     ) = SparkExitDriver(
         chain = chain,
         recovering = sdk.takeIf { withSdk },
@@ -62,6 +63,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         save = save,
         nowMillis = { now },
         tip = tip,
+        trustedFeeRate = { trustedFeeRate },
     )
 
     private val interval = SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds
@@ -331,6 +333,41 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an unverified rebuild that adopts nothing keeps checking and sending the valid generation`() = test {
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val readable = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        sdk.checks += check(unverified, RecoveryVerdict.Valid)
+        sdk.checks += check(readable, RecoveryVerdict.Valid)
+        sdk.preparedResponse = SparkExitFixtures.prepared(
+            leaves = emptyList(),
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+
+        var record = driver(tip = 1_000u).tick(running(unverified))
+        // A run killed during the rebuild resumes the valid generation, not a rebuild only the SDK moves on from.
+        assertFalse(saved.first().isRebuilding)
+        assertFalse(record.isRebuilding)
+        assertFalse(record.isWaitingForLeaves)
+        assertEquals(1, record.generation)
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(2, sdk.checkedRecoveries.size)
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertEquals(1, record.generation)
+    }
+
+    @Test
     fun `an unverified unilateral step waits while another unilateral step is ready`() = test {
         val recovery = SparkExitFixtures.recovery(
             listOf(
@@ -355,6 +392,7 @@ class SparkExitDriverTest : BaseUnitTest() {
                 SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
             ),
         )
+        chain.confirmedTxids = setOf("n1")
 
         driver(withSdk = false).tick(running(recovery))
 
@@ -629,13 +667,16 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertIs<Phase.NeedsFunding>(record.phase)
         assertTrue(record.isAwaitingOwnPayment)
         assertEquals(1_001u, record.fundingPaymentSeenAtHeight)
-        // No host knows the payment for a block: the exit forgets it and asks again.
+        // No host knows the payment for three blocks: the exit forgets it and asks again.
         chain.unknownTxids = setOf("bump")
         sdk.checks += check(recovery, RecoveryVerdict.Valid)
         record = driver(tip = 1_002u).tick(record)
         assertEquals(1_002u, record.fundingPaymentMissingSince)
         sdk.checks += check(recovery, RecoveryVerdict.Valid)
-        record = driver(tip = 1_003u).tick(record)
+        record = driver(tip = 1_004u).tick(record)
+        assertTrue(record.isAwaitingOwnPayment)
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        record = driver(tip = 1_005u).tick(record)
         assertFalse(record.isAwaitingOwnPayment)
         assertNull(record.fundingPaymentTxid)
     }
@@ -658,6 +699,19 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(SparkExitAlerts.isFundingAskBack(short, sent))
         val ask = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(short, chain.utxosByAddress[address]))
         assertEquals(20_000uL, ask.receivedSats)
+    }
+
+    @Test
+    fun `a payment from savings one host misses for a block or a single read is not forgotten`() {
+        val waiting = SparkExitFixtures.record(Phase.NeedsFunding(30_000uL)).copy(fundingPaymentTxid = "bump")
+        // Missed just before a block and just after it, seconds apart: the host may still be indexing it.
+        val missed = waiting.withOwnPaymentLooked(1_000u, isKnown = false).withOwnPaymentLooked(1_001u, isKnown = false)
+        assertTrue(missed.isAwaitingOwnPayment, "a one-block miss asked for the funding again")
+
+        // A read that finds it starts the count over; only a miss that lasts three blocks forgets it.
+        val found = missed.withOwnPaymentLooked(1_002u, isKnown = true).withOwnPaymentLooked(1_003u, isKnown = false)
+        assertTrue(found.withOwnPaymentLooked(1_005u, isKnown = false).isAwaitingOwnPayment)
+        assertFalse(found.withOwnPaymentLooked(1_006u, isKnown = false).isAwaitingOwnPayment)
     }
 
     @Test
@@ -770,6 +824,26 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(Phase.Running, record.phase)
 
         record = driver(tip = 2_009u).tick(record)
+        assertEquals(Phase.Done, record.phase)
+        assertTrue(record.isFailedLeavesReleased)
+    }
+
+    @Test
+    fun `a redo that rebuilds only cooperative leaves the operators can't sign retries them, then lets go`() = test {
+        var record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+        sdk.checks += check(assertNotNull(record.recovery), redo)
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null)
+        val failed = listOf(
+            CooperativeRecoveryFailure("leaf-1", "o", 0u, CooperativeRecoveryError.OperatorsUnavailable("down")),
+        )
+        repeat(1_100) { sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = failed) }
+
+        for (tip in 1_000u..2_010u) {
+            record = driver(tip = tip).tick(record)
+            now += interval
+        }
+
+        assertNotNull(record.failedLeafRetrySince)
         assertEquals(Phase.Done, record.phase)
         assertTrue(record.isFailedLeavesReleased)
     }
@@ -1303,10 +1377,10 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertNull(record.fundingPaymentTxid)
         assertNotNull(assertNotNull(record.leftoverSweep).txHex)
 
-        // One no host ever sees is forgotten after a block, and the exit stops.
+        // One no host sees for three blocks is forgotten, and the exit stops.
         chain.unknownTxids = setOf("gone")
         var forgotten = driver(tip = 1_000u).tick(ended.copy(fundingPaymentTxid = "gone"))
-        forgotten = driver(tip = 1_001u).tick(forgotten)
+        forgotten = driver(tip = 1_003u).tick(forgotten)
         assertNull(forgotten.fundingPaymentTxid)
         assertFalse(forgotten.needsDriving)
     }
@@ -1512,6 +1586,63 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertNull(record.surfacedRejection)
     }
 
+    private fun reorgedParentRecovery() = SparkExitFixtures.recovery(
+        listOf(
+            SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+            SparkExitFixtures.tx(
+                "r1",
+                kind = RecoveryTxKind.REFUND,
+                dependsOn = listOf("n1"),
+                status = ExitTransactionStatus.WaitingForDependencies,
+            ),
+        ),
+    )
+
+    @Test
+    fun `without the sdk a saved confirmation a reorg undid is asked again before its child goes out`() = test {
+        var record = running(reorgedParentRecovery())
+        chain.outcome = SparkExitBroadcastOutcome.InputsMissing("bad-txns-inputs-missingorspent")
+
+        record = driver(withSdk = false).tick(record)
+
+        assertTrue(chain.broadcasts.none { it.txid == "r1" })
+        val parent = record.recovery?.transactions?.first { it.txid == "n1" }
+        assertFalse(parent?.status is ExitTransactionStatus.Confirmed)
+        assertTrue(record.broadcastLog.none { it.txid == "r1" && it.isInputSpent })
+
+        // Confirmed again: its child goes out.
+        chain.confirmedTxids = setOf("n1")
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        now += SparkExitDriver.REBROADCAST_INTERVAL.inWholeMilliseconds
+        record = driver(withSdk = false).tick(record)
+
+        assertEquals(listOf("r1"), chain.broadcasts.map { it.txid }.filter { it == "r1" })
+    }
+
+    @Test
+    fun `without the sdk a reorg clears the spent input its child was refused for`() = test {
+        val spent = SparkExitRecord.BroadcastAttempt(1, "r1", 1, 0, now, "inputs missing", false, isInputSpent = true)
+        var record = running(reorgedParentRecovery()).copy(broadcastLog = listOf(spent))
+
+        record = driver(withSdk = false).tick(record)
+        assertFalse(record.broadcastLog.single { it.txid == "r1" }.isInputSpent)
+
+        chain.confirmedTxids = setOf("n1")
+        record = driver(withSdk = false).tick(record)
+
+        assertEquals(listOf("r1"), chain.broadcasts.map { it.txid }.filter { it == "r1" })
+    }
+
+    @Test
+    fun `without the sdk a saved confirmation stays while no host answers`() = test {
+        chain.statusErrorTxids = setOf("n1")
+
+        val record = driver(withSdk = false).tick(running(reorgedParentRecovery()))
+
+        assertEquals(ExitTransactionStatus.Confirmed(900u), record.recovery?.transactions?.first()?.status)
+        assertEquals(listOf("r1"), chain.broadcasts.map { it.txid })
+    }
+
     /** The qa-03 run: an older state's refund took the leaf, and every Redo rebuilt the same spent refund. */
     private fun lostLeafRecovery(leafId: String = "leaf-1") = SparkExitFixtures.recovery(
         listOf(
@@ -1605,12 +1736,12 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals("exit-state-1", record.exitStateSnapshot)
     }
 
-    private fun sweepDone(): SparkExitRecord {
-        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0".repeat(32), 1u, 25_000uL))
+    private fun sweepDone(valueSats: ULong = 25_000uL): SparkExitRecord {
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0".repeat(32), 1u, valueSats))
         return SparkExitFixtures.record(Phase.Done).copy(
             destination = SWEEP_DESTINATION,
             funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
-            leftover = listOf(SparkExitRecord.Leftover("f0".repeat(32), 1u, 25_000uL)),
+            leftover = listOf(SparkExitRecord.Leftover("f0".repeat(32), 1u, valueSats)),
         )
     }
 
@@ -1683,6 +1814,25 @@ class SparkExitDriverTest : BaseUnitTest() {
             "sweep rate '${sent.feeRateSatPerVbyte}' sat/vB, next block '${chain.nextBlockRate}', " +
                 "leftover 25000 sats, swept '${sent.valueSats}' sats",
         )
+    }
+
+    @Test
+    fun `a host quoting an absurd fee rate cannot push the leftover sweep past bitkit's own rate`() = test {
+        // The host's next block asks 5,000 sat/vB and its refusal 550,000 sats for a ~110 vB sweep of 2M sats.
+        chain.nextBlockRate = 5_000uL
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("min relay fee not met, 110 < 550000")
+        var record = driver(tip = 1_000u).tick(sweepDone(valueSats = 2_000_000uL))
+        record = driver(tip = 1_000u).tick(record)
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        record = driver(tip = 1_001u).tick(record)
+
+        val sent = assertNotNull(record.leftoverSweep)
+        assertEquals(10uL, sent.feeRateSatPerVbyte, "the refused sweep went out at the host's rate")
+
+        // A day unconfirmed: no replacement above the ceiling, the same sweep is sent again.
+        record = driver(tip = 1_145u).tick(record)
+        assertEquals(sent.txid, record.leftoverSweep?.txid)
+        assertEquals(10uL, record.leftoverSweep?.feeRateSatPerVbyte)
     }
 
     @Test
@@ -1815,7 +1965,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         val first = assertNotNull(record.leftoverSweep)
         chain.nextBlockRate = 1_000uL
 
-        record = driver(tip = 1_144u).tick(record)
+        record = driver(tip = 1_144u, trustedFeeRate = 1_000uL).tick(record)
 
         assertEquals(first.txid, record.leftoverSweep?.txid)
         assertTrue(assertNotNull(record.leftoverSweep).isAccepted)

@@ -116,6 +116,17 @@ class SparkExitRepoTest : BaseUnitTest() {
         cacheStore = mock<CacheStore> { on { data } doReturn flowOf(AppCacheData()) },
     )
 
+    private suspend fun createTransfer() = transferRepo.createTransfer(
+        any(),
+        any(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+        anyOrNull(),
+    )
+
     private fun transfer(id: String, type: TransferType = TransferType.SPARK_EXIT) =
         TransferEntity(id = id, type = type, amountSats = 111_000L, createdAt = 0L)
 
@@ -587,6 +598,17 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a background run that finds no exit to drive stops the background work`() = test {
+        // An unreadable record schedules the work before the run finds nothing to salvage.
+        File(Env.sparkExitRecordPath(0)).apply { parentFile?.mkdirs() }.writeText("not json")
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+
+        assertNull(createSut().runInBackground().getOrThrow())
+
+        verify(work).cancelAll()
+    }
+
+    @Test
     fun `a restarted exit signs with the funding key of its own record`() = test {
         val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
@@ -720,6 +742,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             transferRepo
         ).createTransfer(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
         order.verify(sparkRepo).awaitOptimizationIdle()
+        order.verify(sparkRepo).awaitSpendsIdle()
         order.verify(sparkRepo).setExiting(true, true)
         val record = assertNotNull(sut.state.value.record)
         assertEquals(SparkExitRecord.PER_NODE, record.fundingStrategy)
@@ -730,6 +753,53 @@ class SparkExitRepoTest : BaseUnitTest() {
         runCurrent()
         verify(work, atLeastOnce()).scheduleFundingReminder(eq(record.createdAt), any())
         sut.onAppBackgrounded()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a start killed before its transfer is written leaves no exit to resume`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        val gate = CompletableDeferred<Result<String>>()
+        whenever(createTransfer()).doSuspendableAnswer { gate.await() }
+
+        val start = async { sut.start(fundFromSavings = false) }
+        runCurrent()
+        start.cancel()
+
+        assertNull(createSut().load(0).getOrThrow(), "no running exit lacks the transfer counting it")
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a start killed after its transfer is written leaves that transfer settled and no exit`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        // The row is in the database once the insert runs; the app dies before the start goes on.
+        val gate = CompletableDeferred<Result<String>>()
+        whenever(createTransfer()).doSuspendableAnswer { gate.await() }
+
+        val start = async { sut.start(fundFromSavings = false) }
+        runCurrent()
+        start.cancel()
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+
+        assertNull(createSut().load(0).getOrThrow(), "no running exit lacks the transfer counting it")
+        verify(transferRepo, atLeastOnce()).markSettled("transfer-1")
+    }
+
+    @Test
+    fun `a start whose transfer write fails saves no exit and releases spark`() = test {
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        whenever(createTransfer()).thenReturn(Result.failure(SparkExitError("database locked")))
+
+        assertTrue(sut.start(fundFromSavings = false).isFailure)
+
+        assertNull(SparkExitStore(File(Env.sparkExitRecordPath(0))).load())
+        assertNull(sut.state.value.record)
+        verify(sparkRepo).releaseExitHold()
+        verify(sparkRepo, never()).setExiting(true, true)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -756,6 +826,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(sparkRepo, never()).setExiting(true, true)
     }
@@ -779,6 +850,26 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertNull(sut.state.value.record?.recovery)
         gate.complete(Unit)
         start.await().getOrThrow()
+        sut.onAppBackgrounded()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a start whose screen goes away after its record is saved still takes spark off lightning`() = test {
+        val gate = CompletableDeferred<Unit>()
+        whenever(sparkRepo.awaitOptimizationIdle()).doSuspendableAnswer { gate.await() }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+
+        val start = async { sut.start(fundFromSavings = false) }
+        runCurrent()
+        start.cancel()
+        gate.complete(Unit)
+        runCurrent()
+
+        verify(sparkRepo).setExiting(true, true)
+        verify(work, atLeastOnce()).schedulePeriodic()
+        assertTrue(sut.state.value.isExiting)
         sut.onAppBackgrounded()
     }
 
@@ -862,6 +953,31 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            // Savings never pays more fee than the one confirmed.
+            approvedMiningFeeSats = eq(300uL),
+        )
+    }
+
+    @Test
+    fun `pay from savings approves at least the fee a start was refused for`() = test {
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        whenever(lightning.getFeeRates()).thenReturn(Result.success(FeeRates(fast = 7u, mid = 4u, slow = 1u)))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success(420uL))
+        whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
+
+        assertEquals(600uL, sut.savingsFundingFee(floorSats = 600uL).getOrThrow().feeSats)
+        sut.start(fundFromSavings = true).getOrThrow()
+        sut.onAppBackgrounded()
+
+        verify(lightning).sendOnChain(
+            eq(funding), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = eq(600uL),
         )
     }
 
@@ -883,6 +999,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -907,7 +1024,9 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertTrue(sut.canCancel)
         assertEquals(SparkExitCancel.Cancelled, sut.cancel().getOrThrow())
         assertNull(store.load())
-        verify(sparkRepo).setExiting(false, false)
+        // Nothing was paid: Spark keeps the balance it showed before the exit.
+        verify(sparkRepo).releaseExitHold()
+        verify(sparkRepo).setExiting(false, true)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -1024,6 +1143,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         assertEquals("again", assertNotNull(store.load()).fundingPaymentTxid)
         assertFalse(sut.state.value.isSavingsPaymentRefused)
@@ -1079,6 +1199,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals(Phase.Failed(CANCELLED_REASON), record.phase)
         assertEquals(5_000uL, record.leftover.single().valueSats)
         assertTrue(record.needsDriving)
+        verify(sparkRepo).releaseExitHold()
     }
 
     @Test
@@ -1108,6 +1229,7 @@ class SparkExitRepoTest : BaseUnitTest() {
                 any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.doSuspendableAnswer { answer() }
         whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
@@ -1260,6 +1382,8 @@ class SparkExitRepoTest : BaseUnitTest() {
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            // The total shown less the extra funding.
+            approvedMiningFeeSats = eq(400uL),
         )
     }
 

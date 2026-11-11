@@ -150,7 +150,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit le divise en {count} parties, une pour chaque étape, afin qu\'une étape bloquée ne retarde pas les autres.</string>
     <string name="lightning__spark_exit__funding_text">La sortie paie ses frais avec un paiement on-chain séparé de &lt;accent&gt;{amount}&lt;/accent&gt;. Ce qu\'elle ne dépense pas revient à l\'épargne à la fin.</string>
     <string name="lightning__spark_exit__funding_title">Financer les\n&lt;accent&gt;frais&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID de la transaction : {txid}</string>
     <string name="lightning__spark_exit__intro_text">N\'utilisez ceci que si Spark ne fonctionne plus pour vous. Cela transfère votre solde de dépenses vers l\'épargne &lt;accent&gt;sans les opérateurs Spark&lt;/accent&gt;.\n\nCela prend &lt;accent&gt;jusqu\'à 4 semaines&lt;/accent&gt;, coûte des frais on-chain payés depuis l\'épargne, et de très petits montants peuvent rester sur place. Cela s\'exécute en arrière-plan, et Bitkit vous prévient s\'il a besoin de vous.</string>
     <string name="lightning__spark_exit__intro_title">Quitter Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Reste sur Spark</string>
@@ -160,7 +159,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} de financement des frais restant n\'a pas pu être envoyé et reste à {address}, chemin de dérivation {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Envoi de {amount} de financement des frais restant vers l\'épargne.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} de financement des frais restant a été envoyé vers l\'épargne.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID de la transaction : {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} de monnaie des frais arrivera dans votre épargne quand les frais de réseau baisseront.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} a été réclamé on-chain par un ancien propriétaire de ces fonds et ne peut pas être récupéré.</string>
     <string name="lightning__spark_exit__nav_title">Sortie d\'urgence</string>
@@ -202,7 +200,6 @@
     <string name="lightning__spark_exit__step_publish">Publication des transactions de sortie</string>
     <string name="lightning__spark_exit__step_sweep">Envoi vers l\'épargne</string>
     <string name="lightning__spark_exit__step_timelock">En attente du timelock</string>
-    <string name="lightning__spark_exit__sweep_txid">ID de la transaction : {txid}</string>
     <string name="lightning__spark_exit__swipe">Glisser pour sortir</string>
     <string name="lightning__spark_exit__uneconomic">Les frais sont supérieurs à ce que vous recevriez.</string>
     <string name="lightning__spark_exit__waiting_leaves">Une partie de cette sortie ne peut pas être lue on-chain pour le moment. Bitkit réessaie pendant une semaine au maximum.</string>
@@ -236,7 +233,6 @@
     <string name="lightning__spending_confirm__instant_text">Prêt en quelques minutes</string>
     <string name="lightning__spending_confirm__later_text">Après 3 confirmations, environ 30 minutes</string>
     <string name="lightning__spending_confirm__total">Total</string>
-    <string name="lightning__spending_confirm__up_to">jusqu\'à</string>
     <string name="lightning__spending_intro__button">Commencer</string>
     <string name="lightning__spending_intro__text">Transférez des fonds vers votre solde Dépenses pour profiter de transactions instantanées et moins chers avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__spending_intro__title">Transfert\n&lt;accent&gt;aux dépenses&lt;/accent&gt;</string>
@@ -286,13 +282,13 @@
     <string name="lightning__scores_sync_time">Heure de synchronisation des scores de routage</string>
     <string name="lightning__setting_up__not_seen">Spark n\'a pas encore vu votre transfert. Il est ajouté après 3 confirmations ; vous pouvez quitter cet écran.</string>
     <string name="lightning__setting_up__pay">Payer ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instantané coûte maintenant ₿ {amount}. Payez-le, ou attendez 3 confirmations, environ 30 minutes, pour des frais moins élevés.</string>
+    <string name="lightning__setting_up__repriced">Instantané coûte maintenant &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Payez-le, ou attendez 3 confirmations, environ 30 minutes, pour des frais moins élevés.</string>
     <string name="lightning__setting_up__speed">Vitesse : {speed}</string>
     <string name="lightning__setting_up__step_adding">Ajout aux dépenses</string>
-    <string name="lightning__setting_up__step_seen">Vu par Spark</string>
-    <string name="lightning__setting_up__step_sent">Transfert envoyé</string>
     <string name="lightning__setting_up__unavailable">Instantané n\'est pas disponible pour ce transfert. Spark l\'ajoute à votre solde de dépenses après 3 confirmations, environ 30 minutes.</string>
     <string name="lightning__setting_up_button">Continuer à utiliser Bitkit</string>
+    <string name="lightning__setting_up_step1">Traitement des paiements</string>
+    <string name="lightning__setting_up_step2">Paiement réussi</string>
     <string name="lightning__spendable_onchain">Dépensable Onchain</string>
     <string name="lightning__total_anchor_channels_reserve">Réserve totale des canaux Anchor</string>
     <string name="lightning__total_lightning">Total Lightning</string>
@@ -1463,6 +1459,7 @@
     <string name="profile__auth_error_invalid_capabilities">L\'accès demandé ne correspond pas à cette déclaration Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Ce lien d\'autorisation Pubky n\'est pas valide.</string>
     <string name="profile__auth_error_missing_claim">Il manque à cette autorisation la déclaration Bitkit requise.</string>
+    <string name="profile__auth_error_signup_code_rejected">Le serveur domestique n\'a pas accepté ce code d\'inscription. Réessayez ou utilisez un autre lien d\'inscription.</string>
     <string name="profile__auth_error_timeout">Le relais d\'autorisation n\'a pas répondu à temps. Veuillez réessayer.</string>
     <string name="profile__auth_error_title">Échec de l\'autorisation</string>
     <string name="profile__auth_error_unsupported_claim">Cette déclaration Bitkit n\'est pas prise en charge.</string>
@@ -1700,6 +1697,7 @@
     <string name="wallet__payment_request_accepted_methods">Accepter le paiement en</string>
     <string name="wallet__payment_request_after_expiry">Reçu · Après expiration</string>
     <string name="wallet__payment_request_amount">Montant</string>
+    <string name="wallet__payment_request_before_request">Reçu · Avant la demande</string>
     <string name="wallet__payment_request_choose_recipient">Choisir le destinataire</string>
     <string name="wallet__payment_request_contact">Contact</string>
     <string name="wallet__payment_request_date">Date</string>
@@ -1716,6 +1714,7 @@
     <string name="wallet__payment_request_not_specified">Non précisé</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">À quoi sert ce paiement ?</string>
+    <string name="wallet__payment_request_note_too_long">Raccourcissez la note et réessayez.</string>
     <string name="wallet__payment_request_or_pay">Demander ou payer</string>
     <string name="wallet__payment_request_or_pay_description">Payez %1$s ou demandez un paiement.</string>
     <string name="wallet__payment_request_or_pay_headline">Demander\n&lt;accent&gt;ou payer ₿&lt;/accent&gt;</string>

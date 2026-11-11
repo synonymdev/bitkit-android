@@ -96,6 +96,7 @@ class SparkExitRecordTest {
                 leftover = listOf(SparkExitRecord.Leftover("change", 3u, 700uL)),
                 isRebuilding = true,
                 leafTotalSats = 90_112uL,
+                outsideSats = 14_167uL,
                 earlierCpfpTxids = listOf("child"),
                 leftoverSweep = SparkExitRecord.LeftoverSweep(
                     "sweep",

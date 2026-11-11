@@ -155,8 +155,13 @@ class FakeSparkExitChain : SparkExitChain {
         return utxosByAddress[address].orEmpty()
     }
 
-    override suspend fun txStatus(txid: String) =
-        EsploraTxStatus(txid in confirmedTxids, if (txid in confirmedTxids) heights[txid] ?: 900u else null)
+    /** Txids whose status no host answers for. */
+    var statusErrorTxids = setOf<String>()
+
+    override suspend fun txStatus(txid: String): EsploraTxStatus {
+        if (txid in statusErrorTxids) throw SparkExitChainError("No host answered for '$txid'")
+        return EsploraTxStatus(txid in confirmedTxids, if (txid in confirmedTxids) heights[txid] ?: 900u else null)
+    }
 
     override suspend fun isTxKnown(txid: String): Boolean {
         knownLookups += txid

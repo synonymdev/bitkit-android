@@ -213,6 +213,8 @@ import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
+import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -290,6 +292,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val quickPayRepo = mock<QuickPayRepo>()
     private val quickPayUnhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val transferRepo = mock<TransferRepo>()
+    private val sparkExitRepo = mock<SparkExitRepo>()
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
     private val nodeServiceFgState = NodeServiceFgState()
@@ -392,6 +395,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun tearDown() {
         sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
+    }
+
+    @Test
+    fun `a tapped exit notification stays requested until the exit loaded`() = test {
+        val loaded = CompletableDeferred<Unit>()
+        whenever(sparkExitRepo.state).thenReturn(MutableStateFlow(SparkExitState()))
+        whenever(sparkExitRepo.load(anyOrNull())).doSuspendableAnswer {
+            loaded.await()
+            Result.success(null)
+        }
+        sut.onSparkExitNotificationTapped()
+
+        val opened = async { sut.onSparkExitOpened() }
+        runCurrent()
+
+        // Clearing it earlier recomposes the screen that waits on it, which cancels the open before it navigates.
+        assertTrue(sut.isSparkExitRequested.value)
+        loaded.complete(Unit)
+        assertFalse(opened.await())
+        assertFalse(sut.isSparkExitRequested.value)
     }
 
     @Test
@@ -975,7 +998,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
         timeSource = testDispatcher.scheduler.timeSource,
-        sparkExitRepo = mock(),
+        sparkExitRepo = sparkExitRepo,
     )
 
     private suspend fun emitNodeEvent(
@@ -7724,7 +7747,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
     }
@@ -10220,6 +10243,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unified scan offers only savings when spending cannot pay`() = test {
+        val bolt11 = "lnbcrt1spendingempty"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.canSend(any())).thenReturn(false)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertFalse(sut.sendUiState.value.isUnified)
+        assertFalse(sut.sendUiState.value.canSwitchFundingSource)
+    }
+
+    @Test
     fun `manual input of own lightning invoice shows self payment toast`() = test {
         val bolt11 = "lnbcrt1ownmanual"
         stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = OWN_NODE_ID.fromHex())
@@ -11761,6 +11804,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payment request too long to send asks to shorten the note`() = test {
+        val target = PaykitPaymentRequestTarget("pubkyrecipient")
+        val draft = PaykitPaymentRequestDraft(
+            amount = PaykitAmount(PaykitAsset.BTC, 1_000uL),
+            note = "💜".repeat(256),
+            expiresAt = Clock.System.now() + 60.seconds,
+        )
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(context.getString(R.string.wallet__payment_request_note_too_long))
+            .thenReturn("Shorten the note and try again.")
+        whenever(paykitPaymentRequestRepo.propose(draft, target, emptyList()))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestTooLong))
+        var created = false
+
+        sut.createPaymentRequest(draft, target) { created = true }
+        runCurrent()
+
+        assertFalse(created)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Shorten the note and try again.", it.description)
+            }
+        )
+    }
+
+    @Test
     fun `incoming payment request closes when it is no longer pending`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1removedpaymentrequest"
@@ -11809,6 +11879,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                     paymentDeadlineAt = anyOrNull(),
                     contactPublicKey = anyOrNull(),
+                    approvedMiningFeeSats = anyOrNull(),
                 ),
             ).doSuspendableAnswer {
                 entered.complete(Unit)
@@ -11931,6 +12002,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(
             paykitPaymentProofRepo
@@ -12096,6 +12168,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -12146,6 +12219,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
             any(),
@@ -13100,6 +13174,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -13245,6 +13320,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -13337,6 +13413,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -14593,6 +14670,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -14639,6 +14717,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -14705,6 +14784,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -14833,6 +14913,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -15044,6 +15125,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
@@ -16842,6 +16924,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)
@@ -18279,7 +18362,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())

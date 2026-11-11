@@ -4,10 +4,16 @@ import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.FeeRate
+import to.bitkit.repositories.OnchainSendChangedError
+import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.SparkExitFeeBumpOption
 import to.bitkit.repositories.SparkExitFixtures
 import to.bitkit.repositories.SparkExitFundingState
@@ -16,6 +22,7 @@ import to.bitkit.repositories.SparkExitNetworkFees
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitSavingsFunding
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
@@ -56,6 +63,19 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a started exit stays started until a screen opens its progress`() = test {
+        whenever(repo.start(any())).thenReturn(Result.success(Unit))
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+
+        // No screen collects while the user went back from Confirm.
+        sut.start()
+
+        assertTrue(sut.uiState.value.isStarted)
+        sut.onStartShown()
+        assertFalse(sut.uiState.value.isStarted)
+    }
+
+    @Test
     fun `funding from another wallet continues only once the address holds what the quote asks`() {
         val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
         assertFalse(SparkExitUiState().canContinueFunding)
@@ -85,6 +105,62 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertTrue(SparkExitFeeBumpUiState(spendableSats = 0uL).canPay(fast.copy(extraSats = 0uL, totalSats = 0uL)))
         assertTrue(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 1_000uL).isSavingsShort)
         assertFalse(SparkExitFeeBumpUiState(options = persistentListOf(fast), spendableSats = 5_000uL).isSavingsShort)
+    }
+
+    @Test
+    fun `a higher fee whose savings payment now costs more is priced again for another confirm`() = test {
+        val fast = SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 4_200uL, 4_620uL)
+        whenever(repo.spendableSavingsSats()).thenReturn(Result.success(10_000uL))
+        whenever(repo.feeBumpOptions()).thenReturn(Result.success(listOf(fast)))
+        whenever(repo.payHigherFee(fast))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.loadFeeBump()
+
+        sut.payHigherFee()
+
+        verify(repo, times(2)).feeBumpOptions()
+        assertFalse(sut.uiState.value.feeBump.isPaying)
+    }
+
+    @Test
+    fun `the next confirm after a refused higher fee approves the fee it was refused for`() = test {
+        val fast = SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 4_200uL, 4_620uL)
+        // Savings' coin selection needs 600 sats where the estimate says 420.
+        val floored = fast.copy(totalSats = 4_800uL)
+        whenever(repo.spendableSavingsSats()).thenReturn(Result.success(10_000uL))
+        whenever(repo.feeBumpOptions()).thenReturn(Result.success(listOf(fast)))
+        whenever(repo.payHigherFee(fast))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
+        whenever(repo.payHigherFee(floored)).thenReturn(Result.success(Unit))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.loadFeeBump()
+
+        sut.payHigherFee()
+        assertEquals(floored, sut.uiState.value.feeBump.selectedOption)
+        sut.payHigherFee()
+
+        verify(repo).payHigherFee(floored)
+    }
+
+    @Test
+    fun `the next funding after a start refused for a higher savings fee prices at least that fee`() = test {
+        whenever(repo.savingsFundingFee(anyOrNull())).thenReturn(Result.success(SparkExitSavingsFunding(420uL, true)))
+        whenever(repo.start(true))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 600uL))))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.loadSavingsFunding()
+        sut.onFundFromSavings()
+
+        sut.start()
+        sut.loadSavingsFunding()
+
+        // Savings' coin selection needs 600 sats where the estimate says 420: the next funding prices that.
+        verify(repo).savingsFundingFee(null)
+        verify(repo).savingsFundingFee(600uL)
     }
 
     @Test

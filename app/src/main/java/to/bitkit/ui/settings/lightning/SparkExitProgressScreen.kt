@@ -36,6 +36,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
@@ -92,6 +93,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
@@ -107,7 +109,6 @@ private fun Content(
             ) {
                 VerticalSpacer(32.dp)
                 Display(text = progressTitle(record?.phase, uiState.progressFunding).withAccent())
-                VerticalSpacer(8.dp)
                 BodyM(
                     text = progressText(
                         record = record,
@@ -119,16 +120,19 @@ private fun Content(
                 )
                 VerticalSpacer(24.dp)
                 record?.let { ProgressDetails(it, uiState, onPayHigherFee) }
-                if (record?.isActive == true) {
-                    BackgroundNotes(
-                        limits = uiState.backgroundLimits,
-                        onNotificationSettings = onNotificationSettings,
-                    )
-                }
+                if (record?.isActive == true) BackgroundNotes(uiState.backgroundLimits)
                 VerticalSpacer(32.dp)
             }
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            if (record?.isActive == true && !uiState.backgroundLimits.areNotificationsEnabled) {
+                SecondaryButton(
+                    text = stringResource(R.string.lightning__spark_exit__note_notifications_button),
+                    onClick = onNotificationSettings,
+                    testTag = "SparkExitNotificationSettings",
+                )
+                VerticalSpacer(16.dp)
+            }
             if (uiState.isSavingsPaymentRefused) {
                 SecondaryButton(
                     text = stringResource(R.string.lightning__spark_exit__fund_savings),
@@ -159,6 +163,8 @@ private fun Content(
                         title = stringResource(R.string.lightning__spark_exit__cancel_title),
                         text = stringResource(R.string.lightning__spark_exit__cancel_text),
                         confirmText = stringResource(R.string.lightning__spark_exit__cancel),
+                        dismissText = stringResource(R.string.common__cancel),
+                        confirmTextColor = Colors.Red,
                         onConfirm = {
                             isConfirming = false
                             onCancel()
@@ -184,11 +190,11 @@ private fun Content(
 private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onPayHigherFee: () -> Unit) {
     SparkExitSteps(record = record, tipHeight = uiState.tipHeight)
     uiState.sweepTxid?.let {
-        VerticalSpacer(24.dp)
+        // With the cell's own 16 dp above its caption it sits as far below the steps as on iOS.
+        VerticalSpacer(9.dp)
         SparkExitTxNote(
             text = null,
             txid = it,
-            txidRes = R.string.lightning__spark_exit__sweep_txid,
             testTag = "SparkExitSweepTxid",
         )
     }
@@ -214,13 +220,11 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             is SparkExitFundingState.Paid -> SparkExitTxNote(
                 text = stringResource(R.string.lightning__spark_exit__fund_paid),
                 txid = funding.txid,
-                txidRes = R.string.lightning__spark_exit__funding_txid,
                 testTag = "SparkExitFundingPaid",
             )
             is SparkExitFundingState.Seen -> SparkExitTxNote(
                 text = stringResource(R.string.lightning__spark_exit__fund_pending),
                 txid = funding.txid,
-                txidRes = R.string.lightning__spark_exit__funding_txid,
                 testTag = "SparkExitFundingSeen",
             )
         }
@@ -237,7 +241,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
         VerticalSpacer(16.dp)
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__waiting_operators)
-                .replace("{amount}", sparkExitAmountText(record.failedLeafSats)),
+                .replace("{amount}", sparkExitAmountAccent(record.failedLeafSats)).withAccentBoldBright(),
             color = Colors.White64,
             modifier = Modifier.testTag("SparkExitWaitingOperators")
         )
@@ -280,7 +284,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
         VerticalSpacer(16.dp)
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__outside_exit)
-                .replace("{amount}", sparkExitAmountText(it)),
+                .replace("{amount}", sparkExitAmountAccent(it)).withAccentBoldBright(),
             color = Colors.White64,
         )
     }
@@ -288,7 +292,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
         VerticalSpacer(16.dp)
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__lost_leaves)
-                .replace("{amount}", sparkExitAmountText(record.lostSats)),
+                .replace("{amount}", sparkExitAmountAccent(record.lostSats)).withAccentBoldRed(),
             color = Colors.Red,
             modifier = Modifier.testTag("SparkExitLostLeaves")
         )
@@ -297,7 +301,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
         VerticalSpacer(16.dp)
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__left_behind_leaves)
-                .replace("{amount}", sparkExitAmountText(record.leftBehindLeafSats)),
+                .replace("{amount}", sparkExitAmountAccent(record.leftBehindLeafSats)).withAccentBoldBright(),
             color = Colors.White64,
             modifier = Modifier.testTag("SparkExitLeftBehindLeaves")
         )
@@ -313,9 +317,8 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
         VerticalSpacer(16.dp)
         SparkExitTxNote(
             text = stringResource(R.string.lightning__spark_exit__leftover_swept)
-                .replace("{amount}", sparkExitAmountText(it.valueSats)),
+                .replace("{amount}", sparkExitAmountAccent(it.valueSats)),
             txid = it.txid,
-            txidRes = R.string.lightning__spark_exit__leftover_txid,
             testTag = "SparkExitLeftoverSweptEarlier",
         )
     }
@@ -326,52 +329,56 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
     when {
         record.isLeftoverWaitingForFees -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover_waiting)
-                .replace("{amount}", sparkExitAmountText(total)),
+                .replace("{amount}", sparkExitAmountAccent(total)).withAccentBoldBright(),
             color = Colors.White64,
             modifier = Modifier.testTag("SparkExitLeftoverWaiting")
         )
         sweep != null && sweep.txid == null -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover_dust)
-                .replace("{amount}", sparkExitAmountText(total))
+                .replace("{amount}", sparkExitAmountAccent(total))
                 .replace("{address}", address)
-                .replace("{path}", path.orEmpty()),
+                .replace("{path}", path.orEmpty()).withAccentBoldBright(),
             color = Colors.White64,
         )
-        sweep?.txid != null && sweep.isAccepted -> SparkExitTxNote(
+        // A sweep that confirmed reached savings: sent, no longer sending.
+        sweep?.txid != null && sweep.isConfirmed -> SparkExitTxNote(
             text = stringResource(R.string.lightning__spark_exit__leftover_swept)
-                .replace("{amount}", sparkExitAmountText(sweep.valueSats)),
+                .replace("{amount}", sparkExitAmountAccent(sweep.valueSats)),
             txid = sweep.txid,
-            txidRes = R.string.lightning__spark_exit__leftover_txid,
             testTag = "SparkExitLeftoverSwept",
+        )
+        // Its txid shows once the network accepted the sweep, as it may never go out before that.
+        sweep?.txid != null && sweep.isAccepted -> SparkExitTxNote(
+            text = stringResource(R.string.lightning__spark_exit__leftover_sending)
+                .replace("{amount}", sparkExitAmountAccent(sweep.valueSats)),
+            txid = sweep.txid,
+            testTag = "SparkExitLeftoverSending",
         )
         sweep?.txid != null && sweep.rejection == null -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover_sending)
-                .replace("{amount}", sparkExitAmountText(sweep.valueSats)),
+                .replace("{amount}", sparkExitAmountAccent(sweep.valueSats)).withAccentBoldBright(),
             color = Colors.White64,
         )
         // Refused for good: where the leftover stays, with the path a wallet needs to find it.
         sweep?.rejection != null && path != null -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover_rejected)
-                .replace("{amount}", sparkExitAmountText(total))
+                .replace("{amount}", sparkExitAmountAccent(total))
                 .replace("{address}", address)
-                .replace("{path}", path),
+                .replace("{path}", path).withAccentBoldBright(),
             color = Colors.White64,
             modifier = Modifier.testTag("SparkExitLeftoverRejected")
         )
         else -> BodyS(
             text = stringResource(R.string.lightning__spark_exit__leftover)
-                .replace("{amount}", sparkExitAmountText(total))
-                .replace("{address}", address),
+                .replace("{amount}", sparkExitAmountAccent(total))
+                .replace("{address}", address).withAccentBoldBright(),
             color = Colors.White64,
         )
     }
 }
 
 @Composable
-private fun BackgroundNotes(
-    limits: SparkExitBackgroundLimits,
-    onNotificationSettings: () -> Unit,
-) {
+private fun BackgroundNotes(limits: SparkExitBackgroundLimits) {
     val notes = listOfNotNull(
         R.string.lightning__spark_exit__note_restricted.takeIf { limits.isRestricted },
         R.string.lightning__spark_exit__note_battery_saver.takeIf { limits.isPowerSaveMode },
@@ -383,14 +390,6 @@ private fun BackgroundNotes(
     notes.forEach {
         VerticalSpacer(16.dp)
         BodyS(text = stringResource(it), color = Colors.White64)
-    }
-    if (!limits.areNotificationsEnabled) {
-        VerticalSpacer(16.dp)
-        SecondaryButton(
-            text = stringResource(R.string.lightning__spark_exit__note_notifications_button),
-            onClick = onNotificationSettings,
-            testTag = "SparkExitNotificationSettings",
-        )
     }
 }
 
@@ -417,13 +416,13 @@ private fun progressText(
     SparkExitRecord.Phase.Done -> listOfNotNull(
         // What reached savings when it is known, else only that it did.
         receivedSats?.let {
-            stringResource(R.string.lightning__spark_exit__done_received).replace("{amount}", sparkExitAmountText(it))
+            stringResource(R.string.lightning__spark_exit__done_received).replace("{amount}", sparkExitAmountAccent(it))
         } ?: stringResource(R.string.lightning__spark_exit__done_text),
         record.skippedLeafCount.takeIf { it > 0 }?.let {
             stringResource(R.string.lightning__spark_exit__partial_text).replace("{count}", "$it")
         },
         record.failedLeafSats.takeIf { record.isFailedLeavesReleased && it > 0uL }?.let {
-            stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{amount}", sparkExitAmountText(it))
+            stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{amount}", sparkExitAmountAccent(it))
         },
     ).joinToString(" ")
     SparkExitRecord.Phase.Failed(CANCELLED_REASON) ->
@@ -431,12 +430,12 @@ private fun progressText(
     is SparkExitRecord.Phase.Failed -> sparkExitFailedText(
         nothingText = stringResource(R.string.lightning__spark_exit__failed_text),
         staysText = stringResource(R.string.lightning__spark_exit__failed_stays),
-        outsideAmount = staysOnSparkSats?.let { sparkExitAmountText(it) },
+        outsideAmount = staysOnSparkSats?.let { sparkExitAmountAccent(it) },
     )
     is SparkExitRecord.Phase.NeedsFunding -> when (val funding = progressFunding) {
         // A payment that covers it waits to confirm: nothing to ask for.
         is SparkExitFundingState.Ask -> stringResource(R.string.lightning__spark_exit__needs_funding_text)
-            .replace("{amount}", sparkExitAmountText(funding.sats))
+            .replace("{amount}", sparkExitSendAmountText(funding.sats))
         else -> stringResource(R.string.lightning__spark_exit__progress_text)
     }
     else -> stringResource(R.string.lightning__spark_exit__progress_text)

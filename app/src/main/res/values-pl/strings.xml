@@ -152,7 +152,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit dzieli je na {count} części, po jednej na każdy krok, aby jeden zablokowany krok nie wstrzymywał pozostałych.</string>
     <string name="lightning__spark_exit__funding_text">Wyjście płaci swoje opłaty z osobnej płatności on-chain w wysokości &lt;accent&gt;{amount}&lt;/accent&gt;. To, czego nie wyda, wraca na koniec do Oszczędności.</string>
     <string name="lightning__spark_exit__funding_title">Sfinansuj\n&lt;accent&gt;opłaty&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID transakcji: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Używaj tego tylko wtedy, gdy Spark przestanie dla Ciebie działać. Przenosi saldo wydatków do Oszczędności &lt;accent&gt;bez operatorów Spark&lt;/accent&gt;.\n\nTrwa &lt;accent&gt;do 4 tygodni&lt;/accent&gt;, kosztuje opłaty on-chain pokrywane z Oszczędności, a bardzo małe kwoty mogą pozostać. Działa w tle, a Bitkit powiadomi Cię, jeśli będzie Cię potrzebować.</string>
     <string name="lightning__spark_exit__intro_title">Opuść Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Pozostaje na Spark</string>
@@ -162,7 +161,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} pozostałego finansowania opłat nie udało się wysłać i pozostaje pod adresem {address}, ścieżka derywacji {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Wysyłanie {amount} pozostałego finansowania opłat do Oszczędności.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} pozostałego finansowania opłat wysłano do Oszczędności.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID transakcji: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} reszty z opłat trafi do Twoich Oszczędności, gdy opłaty sieciowe spadną.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} zostało przejęte on-chain przez wcześniejszego właściciela tych środków i nie można go odzyskać.</string>
     <string name="lightning__spark_exit__nav_title">Wyjście awaryjne</string>
@@ -204,7 +202,6 @@
     <string name="lightning__spark_exit__step_publish">Publikowanie transakcji wyjścia</string>
     <string name="lightning__spark_exit__step_sweep">Wysyłanie do Oszczędności</string>
     <string name="lightning__spark_exit__step_timelock">Oczekiwanie na blokadę czasową</string>
-    <string name="lightning__spark_exit__sweep_txid">ID transakcji: {txid}</string>
     <string name="lightning__spark_exit__swipe">Przesuń, aby wyjść</string>
     <string name="lightning__spark_exit__uneconomic">Opłaty są wyższe niż kwota, którą otrzymasz.</string>
     <string name="lightning__spark_exit__waiting_leaves">Części tego wyjścia nie można teraz odczytać on-chain. Bitkit będzie próbować ponownie przez maksymalnie tydzień.</string>
@@ -238,7 +235,6 @@
     <string name="lightning__spending_confirm__instant_text">Gotowe w kilka minut</string>
     <string name="lightning__spending_confirm__later_text">Po 3 potwierdzeniach, około 30 minut</string>
     <string name="lightning__spending_confirm__total">Razem</string>
-    <string name="lightning__spending_confirm__up_to">do</string>
     <string name="lightning__spending_intro__button">Rozpocznij</string>
     <string name="lightning__spending_intro__text">Przelewaj środki na swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="lightning__spending_intro__title">Prześlij \n&lt;accent&gt;na saldo wydatków&lt;/accent&gt;</string>
@@ -370,13 +366,13 @@
     <string name="lightning__scores_sync_time">Czas synchronizacji wyników ścieżek</string>
     <string name="lightning__setting_up__not_seen">Spark jeszcze nie widzi Twojego przelewu. Zostanie dodany po 3 potwierdzeniach; możesz opuścić ten ekran.</string>
     <string name="lightning__setting_up__pay">Zapłać ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Natychmiast kosztuje teraz ₿ {amount}. Zapłać albo poczekaj na 3 potwierdzenia, około 30 minut, z niższą opłatą.</string>
+    <string name="lightning__setting_up__repriced">Natychmiast kosztuje teraz &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Zapłać albo poczekaj na 3 potwierdzenia, około 30 minut, z niższą opłatą.</string>
     <string name="lightning__setting_up__speed">Prędkość: {speed}</string>
     <string name="lightning__setting_up__step_adding">Dodawanie do wydatków</string>
-    <string name="lightning__setting_up__step_seen">Widziany przez Spark</string>
-    <string name="lightning__setting_up__step_sent">Przelew wysłany</string>
     <string name="lightning__setting_up__unavailable">Natychmiast nie jest dostępne dla tego przelewu. Spark doda go do Twojego salda wydatków po 3 potwierdzeniach, około 30 minut.</string>
     <string name="lightning__setting_up_button">Kontunuuj korzystanie z Bitkit\'a</string>
+    <string name="lightning__setting_up_step1">Przetwarzanie płatności</string>
+    <string name="lightning__setting_up_step2">Płatność powiodła się</string>
     <string name="lightning__spendable_onchain">Dostępne Onchain</string>
     <string name="lightning__total_anchor_channels_reserve">Całkowita rezerwa kanałów anchor</string>
     <string name="lightning__total_lightning">Całkowite Lightning</string>
@@ -1466,6 +1462,7 @@
     <string name="profile__auth_error_invalid_capabilities">Żądany dostęp nie odpowiada temu oświadczeniu Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Ten link autoryzacji Pubky jest nieprawidłowy.</string>
     <string name="profile__auth_error_missing_claim">W tej autoryzacji brakuje wymaganego oświadczenia Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Serwer domowy nie zaakceptował tego kodu rejestracji. Spróbuj ponownie lub użyj innego linku rejestracyjnego.</string>
     <string name="profile__auth_error_timeout">Przekaźnik autoryzacji nie odpowiedział na czas. Spróbuj ponownie.</string>
     <string name="profile__auth_error_title">Autoryzacja nie powiodła się</string>
     <string name="profile__auth_error_unsupported_claim">To oświadczenie Bitkit nie jest obsługiwane.</string>
@@ -1702,6 +1699,7 @@
     <string name="wallet__payment_request_accepted_methods">Akceptuj płatność w</string>
     <string name="wallet__payment_request_after_expiry">Otrzymano · Po terminie</string>
     <string name="wallet__payment_request_amount">Kwota</string>
+    <string name="wallet__payment_request_before_request">Otrzymano · Przed żądaniem</string>
     <string name="wallet__payment_request_choose_recipient">Wybierz odbiorcę</string>
     <string name="wallet__payment_request_dismiss">Odrzuć</string>
     <string name="wallet__payment_request_enter_pubky">Wprowadź pubky</string>
@@ -1715,6 +1713,7 @@
     <string name="wallet__payment_request_mismatch">Dane płatności nie odpowiadają żądaniu. Płatność anulowana.</string>
     <string name="wallet__payment_request_not_specified">Nie określono</string>
     <string name="wallet__payment_request_note_placeholder">Za co jest ta płatność?</string>
+    <string name="wallet__payment_request_note_too_long">Skróć notatkę i spróbuj ponownie.</string>
     <string name="wallet__payment_request_or_pay">Zażądaj lub zapłać</string>
     <string name="wallet__payment_request_or_pay_description">Zapłać %1$s lub zażądaj płatności.</string>
     <string name="wallet__payment_request_or_pay_headline">Zażądaj\n&lt;accent&gt;lub zapłać ₿&lt;/accent&gt;</string>

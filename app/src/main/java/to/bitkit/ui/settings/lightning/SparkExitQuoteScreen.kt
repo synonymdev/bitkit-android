@@ -21,10 +21,12 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 
 /** What the exit takes on-chain, what it costs, and what stays behind. */
 @Composable
@@ -49,6 +51,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         Column(
             modifier = Modifier
@@ -58,7 +61,7 @@ private fun Content(
         ) {
             VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__spark_exit__quote_title).withAccent())
-            VerticalSpacer(32.dp)
+            VerticalSpacer(32.dp - SparkExitDisplayExtra)
             when {
                 uiState.quote != null -> {
                     SparkExitQuoteRows(uiState.quote)
@@ -66,8 +69,12 @@ private fun Content(
                 }
                 uiState.isQuoting && uiState.isSettling -> BodyM(
                     text = stringResource(R.string.lightning__spark_exit__quote_settling),
+                    color = Colors.White64,
                 )
-                uiState.isQuoting -> BodyM(text = stringResource(R.string.lightning__spark_exit__quote_loading))
+                uiState.isQuoting -> BodyM(
+                    text = stringResource(R.string.lightning__spark_exit__quote_loading),
+                    color = Colors.White64,
+                )
             }
             block?.let {
                 VerticalSpacer(16.dp)
@@ -106,7 +113,7 @@ private fun UnexitableNote(sats: ULong) {
     VerticalSpacer(16.dp)
     BodyS(
         text = stringResource(R.string.lightning__spark_exit__quote_outside)
-            .replace("{amount}", sparkExitAmountText(sats)),
+            .replace("{amount}", sparkExitAmountAccent(sats)).withAccentBoldBright(),
         color = Colors.White64,
         modifier = Modifier.testTag("SparkExitQuoteOutside")
     )

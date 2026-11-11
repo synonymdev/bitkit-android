@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -31,6 +33,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
@@ -80,7 +83,13 @@ class TransferViewModel @Inject constructor(
     val isSparkWithdrawTooSmall = _isSparkWithdrawTooSmall.asStateFlow()
 
     private var sparkFeeJob: Job? = null
+    private var confirmedSparkFeeSats: ULong? = null
     private var sparkWithdrawJob: Job? = null
+
+    /** Whether Spark and Savings read one chain, so Spark's withdrawal reaches Savings; tests replace it. */
+    @VisibleForTesting
+    internal var sharesNodeChain: () -> Boolean = { Env.sparkSharesNodeChain }
+    private var closeJob: Deferred<List<ChannelDetails>>? = null
     private var sparkFeeBalanceSats: ULong? = null
     private var sparkAddress: String? = null
 
@@ -307,6 +316,17 @@ class TransferViewModel @Inject constructor(
         return SavingsSwapResult.Failure(event.reason.toUserMessage(context))
     }
 
+    /** Opens Transfer to Savings with nothing left from an earlier visit that ended before the swipe. */
+    fun beginSavingsTransfer() {
+        // A wallet wipe keeps this view model, so an address kept from before may belong to the wiped wallet.
+        sparkAddress = null
+        // Spark's withdrawal fee moves, so each transfer prices it again.
+        sparkFeeJob?.cancel()
+        sparkFeeBalanceSats = null
+        _sparkWithdrawFeeSats.update { null }
+        setSavingsSelection(SavingsSelection())
+    }
+
     fun setSavingsSelection(selection: SavingsSelection) {
         _savingsSelection.update { selection }
     }
@@ -350,23 +370,54 @@ class TransferViewModel @Inject constructor(
     }
 
     /**
+     * The swipe: commits the transfer only while Spark's withdrawal is still priced at the fee shown when the swipe
+     * began, for the balance shown then. Returns false without committing when Spark's balance changed or is being
+     * priced again since, so the swipe resets instead of opening progress.
+     */
+    fun confirmSavingsSwipe(
+        channels: List<ChannelDetails>,
+        withdrawSpark: Boolean,
+        shownSparkSats: ULong,
+        shownFeeSats: ULong?,
+    ): Boolean {
+        if (withdrawSpark && !isSparkPricedAt(shownSparkSats, shownFeeSats)) {
+            Logger.info("Refused the savings swipe as Spark changed since it was shown", context = TAG)
+            return false
+        }
+        onTransferToSavingsConfirm(channels, withdrawSpark, confirmedSparkFeeSats = shownFeeSats)
+        return true
+    }
+
+    private fun isSparkPricedAt(balanceSats: ULong, feeSats: ULong?): Boolean =
+        feeSats != null &&
+            sparkFeeJob?.isActive != true &&
+            _sparkWithdrawFeeSats.value == feeSats &&
+            sparkFeeBalanceSats == balanceSats &&
+            sparkRepo.state.value.balanceSats == balanceSats
+
+    /**
      * Commit the transfer and pick how it runs. A swap needs a priced quote, so without one
      * (swaps unsupported on this network, Boltz unreachable, or an amount below the swap
-     * minimum) the transfer closes a channel exactly as it did before swaps existed.
+     * minimum) the transfer closes a channel exactly as it did before swaps existed. Spark's withdrawal pays at most
+     * [confirmedSparkFeeSats], the fee shown when the user confirmed, even if the screen prices it again after.
      */
     fun onTransferToSavingsConfirm(
         channels: List<ChannelDetails>,
         withdrawSpark: Boolean,
         mode: SavingsTransferMode = resolveSavingsTransferMode(channels),
+        confirmedSparkFeeSats: ULong? = _sparkWithdrawFeeSats.value,
     ) {
         _savingsTransferMode.update { mode }
         // Drop any outcome from an earlier attempt so the progress screen cannot act on it.
         _savingsSwapResult.update { null }
         _isSparkWithdrawFailed.update { false }
-        sparkWithdrawJob = null
+        // A withdrawal still going out is kept, so a transfer confirmed again joins it rather than sending it twice.
+        if (sparkWithdrawJob?.isActive != true) sparkWithdrawJob = null
+        closeJob = null
         _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels
         withdrawsSpark = withdrawSpark
+        this.confirmedSparkFeeSats = confirmedSparkFeeSats
     }
 
     private fun resolveSavingsTransferMode(channels: List<ChannelDetails>): SavingsTransferMode =
@@ -379,10 +430,19 @@ class TransferViewModel @Inject constructor(
     /** Whether Transfer to Savings closes channels, rather than only withdrawing Spark's balance. */
     fun hasChannelsToClose(): Boolean = channelsToClose.isNotEmpty()
 
-    /** Withdraws Spark's balance when selected, then closes the channels selected earlier, pending closure */
+    /**
+     * Withdraws Spark's balance when selected, then closes the channels selected earlier, pending closure. Once per
+     * confirmed transfer, in viewModelScope, so leaving the progress screen during the withdrawal skips no close.
+     */
     suspend fun closeSelectedChannels(): List<ChannelDetails> {
-        if (withdrawsSpark) withdrawSparkToSavings()
-        return closeChannels(channelsToClose)
+        // Read when the job starts, so a transfer confirmed while it runs never changes what it closes.
+        val channels = channelsToClose
+        val withdraws = withdrawsSpark
+        val job = closeJob ?: viewModelScope.async {
+            if (withdraws) withdrawSparkToSavings()
+            closeChannels(channels)
+        }.also { closeJob = it }
+        return job.await()
     }
 
     private suspend fun withdrawSparkToSavings() {
@@ -395,9 +455,15 @@ class TransferViewModel @Inject constructor(
         sparkFeeJob?.join()
         if (sparkRepo.state.value.spendingSats == 0uL) return
         val address = sparkWithdrawAddress()
-        val confirmedFeeSats = _sparkWithdrawFeeSats.value
+        val confirmedFeeSats = confirmedSparkFeeSats
         if (address == null || confirmedFeeSats == null) {
             Logger.warn("Skipped Spark withdrawal without an address or a priced fee", context = TAG)
+            _isSparkWithdrawFailed.update { true }
+            return
+        }
+        // On regtest Savings may read another chain than Spark, so its address there would lose Spark's funds.
+        if (!sharesNodeChain()) {
+            Logger.warn("Skipped Spark withdrawal to a Savings wallet on another chain", context = TAG)
             _isSparkWithdrawFailed.update { true }
             return
         }
@@ -406,7 +472,11 @@ class TransferViewModel @Inject constructor(
                 sparkAddress = null
                 sparkFeeBalanceSats = null
             }
-            .onFailure { _isSparkWithdrawFailed.update { true } }
+            .onFailure {
+                // A refused fee is quoted again, so the next visit doesn't show it and fail the same way.
+                sparkFeeBalanceSats = null
+                _isSparkWithdrawFailed.update { true }
+            }
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
@@ -564,7 +634,9 @@ data class SavingsSelection(
     fun channels(openChannels: List<ChannelDetails>): List<ChannelDetails> =
         channelIds?.let { ids -> openChannels.filter { it.channelId in ids } } ?: openChannels
 
-    fun withdrawsSpark(sparkSats: ULong): Boolean = includesSpark && sparkSats > 0uL
+    /** Spark moves when picked and holding a balance its withdrawal fee leaves something of ([isSparkTooSmall]). */
+    fun withdrawsSpark(sparkSats: ULong, isSparkTooSmall: Boolean = false): Boolean =
+        includesSpark && sparkSats > 0uL && !isSparkTooSmall
 }
 
 /** Whether a transfer to savings swaps funds out or closes a channel (default). */

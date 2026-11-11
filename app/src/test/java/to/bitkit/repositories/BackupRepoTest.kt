@@ -234,6 +234,12 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the latest backup time skips the spark exit data`() {
+        assertFalse(BackupCategory.SPARK_EXIT in BackupRepo.LATEST_BACKUP_TIME_CATEGORIES)
+        assertTrue(BackupCategory.WALLET in BackupRepo.LATEST_BACKUP_TIME_CATEGORIES)
+    }
+
+    @Test
     fun `restore marker storage reads leave Main responsive`() = test {
         val entered = CompletableDeferred<Thread>()
         val release = CountDownLatch(1)
@@ -1580,6 +1586,22 @@ class BackupRepoTest : BaseUnitTest() {
             assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
         }
+    }
+
+    @Test
+    fun `a restore gate that lapses by its timeout ends the restore in progress`() = test {
+        val startedAt = currentTime
+        whenever(clock.now()).thenAnswer { Instant.fromEpochMilliseconds(3_000 + currentTime - startedAt) }
+        val states = mutableListOf<Boolean>()
+        backgroundScope.launch { sut.restoreInProgress.collect { states += it } }
+        runCurrent()
+
+        sut.setRestorePending(true)
+        runCurrent()
+        advanceTimeBy(10.minutes + 1.seconds)
+        runCurrent()
+
+        assertEquals(listOf(false, true, false), states)
     }
 
     @Test

@@ -212,13 +212,13 @@
     <string name="lightning__scores_sync_time">وقت مزامنة درجات تحديد المسار</string>
     <string name="lightning__setting_up__not_seen">لم يرَ Spark تحويلك بعد. يُضاف بعد 3 تأكيدات؛ يمكنك مغادرة هذه الشاشة.</string>
     <string name="lightning__setting_up__pay">ادفع ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">أصبح الفوري يكلّف الآن ₿ {amount}. ادفعه، أو انتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
+    <string name="lightning__setting_up__repriced">أصبح الفوري يكلّف الآن &lt;accent&gt;₿ {amount}&lt;/accent&gt;. ادفعه، أو انتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
     <string name="lightning__setting_up__speed">السرعة: {speed}</string>
     <string name="lightning__setting_up__step_adding">جارٍ الإضافة إلى الإنفاق</string>
-    <string name="lightning__setting_up__step_seen">رآه Spark</string>
-    <string name="lightning__setting_up__step_sent">تم إرسال التحويل</string>
     <string name="lightning__setting_up__unavailable">الفوري غير متاح لهذا التحويل. يضيفه Spark إلى رصيد الإنفاق بعد 3 تأكيدات، نحو 30 دقيقة.</string>
     <string name="lightning__setting_up_button">متابعة استخدام Bitkit</string>
+    <string name="lightning__setting_up_step1">جارٍ معالجة الدفع</string>
+    <string name="lightning__setting_up_step2">الدفع ناجح</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">رسوم المطالبة</string>
     <string name="lightning__spark_confirmations">%1$d/3 تأكيدات</string>
@@ -268,7 +268,6 @@
     <string name="lightning__spark_exit__funding_split">يقسمه Bitkit إلى {count} أجزاء، جزء لكل خطوة، حتى لا تعطّل خطوة عالقة الخطوات الأخرى.</string>
     <string name="lightning__spark_exit__funding_text">يدفع الخروج رسومه من دفعة منفصلة على السلسلة بقيمة &lt;accent&gt;{amount}&lt;/accent&gt;. ما لا يُنفق منها يعود إلى المدخرات في النهاية.</string>
     <string name="lightning__spark_exit__funding_title">موّل\n&lt;accent&gt;الرسوم&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">معرّف المعاملة: {txid}</string>
     <string name="lightning__spark_exit__intro_text">استخدم هذا فقط إذا توقّف Spark عن العمل لديك. ينقل رصيد الإنفاق إلى المدخرات &lt;accent&gt;من دون مشغّلي Spark&lt;/accent&gt;.\n\nيستغرق &lt;accent&gt;ما يصل إلى 4 أسابيع&lt;/accent&gt;، ويكلّف رسومًا على السلسلة تُدفع من المدخرات، وقد تبقى المبالغ الصغيرة جدًا على Spark. يعمل في الخلفية، ويُعلمك Bitkit إذا احتاج إليك.</string>
     <string name="lightning__spark_exit__intro_title">غادر Spark\n&lt;accent&gt;على السلسلة&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">يبقى على Spark</string>
@@ -278,7 +277,6 @@
     <string name="lightning__spark_exit__leftover_rejected">تعذّر إرسال المتبقي من تمويل الرسوم بقيمة {amount} ويبقى على {address}، مسار الاشتقاق {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">جارٍ إرسال {amount} من تمويل الرسوم المتبقي إلى المدخرات.</string>
     <string name="lightning__spark_exit__leftover_swept">تم إرسال {amount} من تمويل الرسوم المتبقي إلى المدخرات.</string>
-    <string name="lightning__spark_exit__leftover_txid">معرّف المعاملة: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">سيصل {amount} من فكة الرسوم إلى مدخراتك عندما تنخفض رسوم الشبكة.</string>
     <string name="lightning__spark_exit__lost_leaves">طالب مالك سابق لهذه الأموال بمبلغ {amount} على السلسلة ولا يمكن استرداده.</string>
     <string name="lightning__spark_exit__nav_title">الخروج الطارئ</string>
@@ -320,7 +318,6 @@
     <string name="lightning__spark_exit__step_publish">نشر معاملات الخروج</string>
     <string name="lightning__spark_exit__step_sweep">الإرسال إلى المدخرات</string>
     <string name="lightning__spark_exit__step_timelock">انتظار القفل الزمني</string>
-    <string name="lightning__spark_exit__sweep_txid">معرّف المعاملة: {txid}</string>
     <string name="lightning__spark_exit__swipe">اسحب للخروج</string>
     <string name="lightning__spark_exit__uneconomic">الرسوم أعلى مما ستستلمه.</string>
     <string name="lightning__spark_exit__waiting_leaves">لا يمكن قراءة جزء من هذا الخروج على السلسلة الآن. يحاول Bitkit مجددًا لمدة تصل إلى أسبوع.</string>
@@ -350,7 +347,6 @@
     <string name="lightning__spending_confirm__quote_error_title">الرسوم غير متاحة</string>
     <string name="lightning__spending_confirm__spending_fee">رسوم الإنفاق</string>
     <string name="lightning__spending_confirm__total">الإجمالي</string>
-    <string name="lightning__spending_confirm__up_to">حتى</string>
     <string name="lightning__spending_intro__button">ابدأ</string>
     <string name="lightning__spending_intro__text">حوّل الأموال إلى رصيد الإنفاق للاستمتاع بمعاملات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
     <string name="lightning__spending_intro__title">تحويل\n&lt;accent&gt;إلى الإنفاق&lt;/accent&gt;</string>
@@ -1443,6 +1439,7 @@
     <string name="profile__auth_error_invalid_capabilities">الوصول المطلوب لا يطابق مطالبة Bitkit هذه.</string>
     <string name="profile__auth_error_invalid_url">رابط تفويض Pubky هذا غير صالح.</string>
     <string name="profile__auth_error_missing_claim">ينقص هذا التفويض مطالبة Bitkit المطلوبة.</string>
+    <string name="profile__auth_error_signup_code_rejected">لم يقبل الخادم الرئيسي رمز التسجيل هذا. حاول مرة أخرى أو استخدم رابط تسجيل آخر.</string>
     <string name="profile__auth_error_timeout">لم يستجب مُرحّل التفويض في الوقت المحدد. يرجى المحاولة مرة أخرى.</string>
     <string name="profile__auth_error_title">فشل التفويض</string>
     <string name="profile__auth_error_unsupported_claim">مطالبة Bitkit هذه غير مدعومة.</string>
@@ -1696,6 +1693,7 @@
     <string name="wallet__payment_request_accepted_methods">قبول الدفع بـ</string>
     <string name="wallet__payment_request_after_expiry">مستلم · بعد انتهاء الصلاحية</string>
     <string name="wallet__payment_request_amount">المبلغ</string>
+    <string name="wallet__payment_request_before_request">مستلم · قبل الطلب</string>
     <string name="wallet__payment_request_choose_recipient">اختر المستلم</string>
     <string name="wallet__payment_request_dismiss">تجاهل</string>
     <string name="wallet__payment_request_enter_pubky">أدخل pubky</string>
@@ -1709,6 +1707,7 @@
     <string name="wallet__payment_request_mismatch">لم تطابق تفاصيل الدفع الطلب. تم إلغاء الدفع.</string>
     <string name="wallet__payment_request_not_specified">غير محدد</string>
     <string name="wallet__payment_request_note_placeholder">ما الغرض من هذه الدفعة؟</string>
+    <string name="wallet__payment_request_note_too_long">اختصر الملاحظة وحاول مرة أخرى.</string>
     <string name="wallet__payment_request_or_pay">طلب أو دفع</string>
     <string name="wallet__payment_request_or_pay_description">ادفع لـ %1$s أو اطلب دفعة.</string>
     <string name="wallet__payment_request_or_pay_headline">اطلب\n&lt;accent&gt;أو ادفع ₿&lt;/accent&gt;</string>

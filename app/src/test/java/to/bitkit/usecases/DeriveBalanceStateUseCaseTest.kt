@@ -118,6 +118,25 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spending keeps what stays on spark once the exit's published leaves left its balance`() = test {
+        newBalanceDetails()
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        // The hosted-regtest run: 14,167 sats stay on Spark, the exit's 100,000 sats of leaves are published.
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isReady = true, balanceSats = 14_167uL, isExiting = true)),
+        )
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        sparkExitState.value = SparkExitState(
+            record = SparkExitFixtures.record().copy(leafTotalSats = 100_000uL, outsideSats = 14_167uL),
+            sparkBalanceSats = 14_167uL,
+        )
+
+        val balanceState = sut().getOrThrow()
+
+        assertEquals(64_167uL, balanceState.totalLightningSats)
+    }
+
+    @Test
     fun `should subtract estimated fee from channelFundableBalance`() = test {
         val fundableBalance = 75_000uL
         val fee = 2_000uL

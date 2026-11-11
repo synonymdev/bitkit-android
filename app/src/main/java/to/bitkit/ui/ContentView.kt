@@ -213,6 +213,7 @@ import to.bitkit.ui.settings.lightning.SparkExitFundingScreen
 import to.bitkit.ui.settings.lightning.SparkExitIntroScreen
 import to.bitkit.ui.settings.lightning.SparkExitProgressScreen
 import to.bitkit.ui.settings.lightning.SparkExitQuoteScreen
+import to.bitkit.ui.settings.lightning.SparkExitStartedEffect
 import to.bitkit.ui.settings.lightning.SparkExitViewModel
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
@@ -1099,7 +1100,10 @@ private fun RootNavHost(
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigateTo(Routes.SavingsConfirm) },
+                    onContinueClick = {
+                        transferViewModel.beginSavingsTransfer()
+                        navController.navigateTo(Routes.SavingsConfirm)
+                    },
                 )
             }
             deepLinkableComposable<Routes.SavingsConfirm> {
@@ -1398,7 +1402,7 @@ private fun NavGraphBuilder.home(
 
         SpendingWalletScreen(
             channels = lightningState.channels,
-            hasSparkBalance = sparkState.spendingSats > 0uL,
+            hasSparkBalance = sparkState.shownSpendingSats > 0uL,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = {
@@ -2081,6 +2085,10 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
     // Progress always sits right above the screen it returns to: Spark, which starting an exit pops back to first,
     // or the screen that opened it directly, such as App Status. Once progress is gone, a second call pops nothing.
     val leaveExit = { navController.popBackStack<Routes.SparkExitProgress>(inclusive = true) }
+    val openProgress = {
+        navController.popBackStack<Routes.SparkDetail>(inclusive = false)
+        navController.navigateTo(Routes.SparkExitProgress)
+    }
     composableWithDefaultTransitions<Routes.SparkExitIntro> {
         SparkExitIntroScreen(
             onBack = { navController.popBackStack() },
@@ -2088,8 +2096,10 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
         )
     }
     composableWithDefaultTransitions<Routes.SparkExitQuote> {
+        val viewModel = exitViewModel(it)
+        SparkExitStartedEffect(viewModel, openProgress)
         SparkExitQuoteScreen(
-            viewModel = exitViewModel(it),
+            viewModel = viewModel,
             onBack = { navController.popBackStack() },
             onContinue = { needsFunding ->
                 navController.navigateTo(if (needsFunding) Routes.SparkExitFunding else Routes.SparkExitConfirm)
@@ -2097,8 +2107,10 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
         )
     }
     composableWithDefaultTransitions<Routes.SparkExitFunding> {
+        val viewModel = exitViewModel(it)
+        SparkExitStartedEffect(viewModel, openProgress)
         SparkExitFundingScreen(
-            viewModel = exitViewModel(it),
+            viewModel = viewModel,
             onBack = { navController.popBackStack() },
             onContinue = { navController.navigateTo(Routes.SparkExitConfirm) },
         )
@@ -2107,10 +2119,7 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
         SparkExitConfirmScreen(
             viewModel = exitViewModel(it),
             onBack = { navController.popBackStack() },
-            onStart = {
-                navController.popBackStack<Routes.SparkDetail>(inclusive = false)
-                navController.navigateTo(Routes.SparkExitProgress)
-            },
+            onStart = openProgress,
         )
     }
     composableWithDefaultTransitions<Routes.SparkExitProgress> {

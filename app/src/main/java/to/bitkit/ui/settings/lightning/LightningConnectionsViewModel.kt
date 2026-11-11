@@ -120,7 +120,7 @@ class LightningConnectionsViewModel @Inject constructor(
                         pendingConnections = channels.filterPending()
                             .map { it.mapToUiModel(channels, connectionText) }
                             .reversed().toImmutableList(),
-                        localBalance = calculateLocalBalance(channels).safe() + sparkState.spendingSats.safe(),
+                        localBalance = calculateLocalBalance(channels).safe() + sparkState.shownSpendingSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
                         spark = sparkState.toUi(lightningRepo, snapshot.exitState.showsResult),
                         isSparkReceiving = sparkState.isUsable,
@@ -240,6 +240,7 @@ data class LightningConnectionsUiState(
 
 /** The Spark wallet shown as a connection, present once it holds a balance or a deposit. */
 data class SparkUi(
+    /** The balance shown, which can be a kept figure while Spark reads 0. */
     val balanceSats: ULong,
     val deposits: ImmutableList<SparkDepositUi> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
@@ -248,7 +249,10 @@ data class SparkUi(
     /** An exit runs, or ended with leftover fee funding not yet swept: Emergency exit opens its progress. */
     val showsExitResult: Boolean = false,
 ) {
-    /** The emergency exit is offered while Spark holds funds, and leads to its progress while it shows one. */
+    /**
+     * The emergency exit is offered while Spark holds funds, also a kept balance while it reads 0, and leads to its
+     * progress while it shows one.
+     */
     val showsExit get() = balanceSats > 0uL || recoverableFundsSats > 0uL || showsExitResult
 
     val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
@@ -267,9 +271,9 @@ internal suspend fun SparkState.toUi(lightningRepo: LightningRepo, showsExitResu
     if (!isReady && !showsExit) return null
     // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
     val hasExit = showsExit || recoverableFundsSats > 0uL
-    if (balanceSats == 0uL && deposits.isEmpty() && !hasExit && Env.network != Network.REGTEST) return null
+    if (shownBalanceSats == 0uL && deposits.isEmpty() && !hasExit && Env.network != Network.REGTEST) return null
     return SparkUi(
-        balanceSats = balanceSats,
+        balanceSats = shownBalanceSats,
         deposits = deposits.map {
             SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
         }.toImmutableList(),

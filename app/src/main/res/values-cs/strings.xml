@@ -219,13 +219,13 @@
     <string name="lightning__scores_sync_time">Čas synchronizace skóre hledání cest</string>
     <string name="lightning__setting_up__not_seen">Spark tvůj převod zatím neviděl. Připíše se po 3 potvrzeních; tuto obrazovku můžeš opustit.</string>
     <string name="lightning__setting_up__pay">Zaplatit ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Okamžitě nyní stojí ₿ {amount}. Zaplať, nebo počkej na 3 potvrzení, asi 30 minut, s nižším poplatkem.</string>
+    <string name="lightning__setting_up__repriced">Okamžitě nyní stojí &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Zaplať, nebo počkej na 3 potvrzení, asi 30 minut, s nižším poplatkem.</string>
     <string name="lightning__setting_up__speed">Rychlost: {speed}</string>
     <string name="lightning__setting_up__step_adding">Přidávání do výdajů</string>
-    <string name="lightning__setting_up__step_seen">Viděno Sparkem</string>
-    <string name="lightning__setting_up__step_sent">Převod odeslán</string>
     <string name="lightning__setting_up__unavailable">Okamžitě není pro tento převod dostupné. Spark ho přidá do tvého zůstatku pro výdaje po 3 potvrzeních, asi za 30 minut.</string>
     <string name="lightning__setting_up_button">Pokračujte v používání Bitkit</string>
+    <string name="lightning__setting_up_step1">Zpracování platby</string>
+    <string name="lightning__setting_up_step2">Platba úspěšně proběhla</string>
     <string name="lightning__spark">Spark</string>
     <string name="lightning__spark_claim_fee">Poplatek za připsání</string>
     <string name="lightning__spark_confirmations">%1$d/3 potvrzení</string>
@@ -275,7 +275,6 @@
     <string name="lightning__spark_exit__funding_split">Bitkit ji rozdělí na {count} částí, jednu pro každý krok, aby jeden zaseknutý krok nezdržel ostatní.</string>
     <string name="lightning__spark_exit__funding_text">Odchod platí své poplatky ze samostatné on-chain platby ve výši &lt;accent&gt;{amount}&lt;/accent&gt;. Co nespotřebuje, se na konci vrátí do úspor.</string>
     <string name="lightning__spark_exit__funding_title">Financujte\n&lt;accent&gt;poplatky&lt;/accent&gt;</string>
-    <string name="lightning__spark_exit__funding_txid">ID transakce: {txid}</string>
     <string name="lightning__spark_exit__intro_text">Použijte to, jen pokud vám Spark přestane fungovat. Přesune váš zůstatek k utrácení do úspor &lt;accent&gt;bez operátorů Sparku&lt;/accent&gt;.\n\nTrvá &lt;accent&gt;až 4 týdny&lt;/accent&gt;, stojí on-chain poplatky placené z úspor a velmi malé částky mohou zůstat na Spark. Běží na pozadí a Bitkit vás upozorní, pokud vás bude potřebovat.</string>
     <string name="lightning__spark_exit__intro_title">Opustit Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Zůstává na Spark</string>
@@ -285,7 +284,6 @@
     <string name="lightning__spark_exit__leftover_rejected">{amount} ze zbylého financování poplatků se nepodařilo odeslat a zůstává na {address}, derivační cesta {path}.</string>
     <string name="lightning__spark_exit__leftover_sending">Odesílání {amount} ze zbylého financování poplatků do úspor.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} ze zbylého financování poplatků bylo odesláno do úspor.</string>
-    <string name="lightning__spark_exit__leftover_txid">ID transakce: {txid}</string>
     <string name="lightning__spark_exit__leftover_waiting">{amount} drobných z poplatků dorazí do vašich úspor, až síťové poplatky klesnou.</string>
     <string name="lightning__spark_exit__lost_leaves">{amount} si on-chain nárokoval dřívější vlastník těchto prostředků a nelze je získat zpět.</string>
     <string name="lightning__spark_exit__nav_title">Nouzový odchod</string>
@@ -327,7 +325,6 @@
     <string name="lightning__spark_exit__step_publish">Zveřejnění transakcí odchodu</string>
     <string name="lightning__spark_exit__step_sweep">Odesílání do úspor</string>
     <string name="lightning__spark_exit__step_timelock">Čekání na časový zámek</string>
-    <string name="lightning__spark_exit__sweep_txid">ID transakce: {txid}</string>
     <string name="lightning__spark_exit__swipe">Přejeďte pro odchod</string>
     <string name="lightning__spark_exit__uneconomic">Poplatky jsou vyšší, než kolik byste obdrželi.</string>
     <string name="lightning__spark_exit__waiting_leaves">Část tohoto odchodu teď nelze on-chain načíst. Bitkit to bude zkoušet znovu až týden.</string>
@@ -357,7 +354,6 @@
     <string name="lightning__spending_confirm__quote_error_title">Poplatky nedostupné</string>
     <string name="lightning__spending_confirm__spending_fee">Poplatek za výdaje</string>
     <string name="lightning__spending_confirm__total">Celkem</string>
-    <string name="lightning__spending_confirm__up_to">až</string>
     <string name="lightning__spending_intro__button">Začít</string>
     <string name="lightning__spending_intro__text">Převeďte peníze na svůj disponibilní zůstatek a využívejte okamžité a levné transakce s přáteli, rodinou a obchodníky.</string>
     <string name="lightning__spending_intro__title">Převést\n&lt;accent&gt;do výdajů&lt;/accent&gt;</string>
@@ -1467,6 +1463,7 @@
     <string name="profile__auth_error_invalid_capabilities">Požadovaný přístup neodpovídá tomuto nároku Bitkit.</string>
     <string name="profile__auth_error_invalid_url">Tento autorizační odkaz Pubky je neplatný.</string>
     <string name="profile__auth_error_missing_claim">V této autorizaci chybí požadovaný nárok Bitkit.</string>
+    <string name="profile__auth_error_signup_code_rejected">Homeserver tento registrační kód nepřijal. Zkuste to znovu nebo použijte jiný registrační odkaz.</string>
     <string name="profile__auth_error_timeout">Autorizační relay neodpověděl včas. Zkuste to prosím znovu.</string>
     <string name="profile__auth_error_title">Autorizace se nezdařila</string>
     <string name="profile__auth_error_unsupported_claim">Tento nárok Bitkit není podporován.</string>
@@ -1703,6 +1700,7 @@
     <string name="wallet__payment_request_accepted_methods">Přijmout platbu v</string>
     <string name="wallet__payment_request_after_expiry">Přijato · Po vypršení</string>
     <string name="wallet__payment_request_amount">Částka</string>
+    <string name="wallet__payment_request_before_request">Přijato · Před žádostí</string>
     <string name="wallet__payment_request_choose_recipient">Vybrat příjemce</string>
     <string name="wallet__payment_request_dismiss">Odmítnout</string>
     <string name="wallet__payment_request_enter_pubky">Zadejte pubky</string>
@@ -1716,6 +1714,7 @@
     <string name="wallet__payment_request_mismatch">Platební údaje neodpovídaly žádosti. Platba byla zrušena.</string>
     <string name="wallet__payment_request_not_specified">Neuvedeno</string>
     <string name="wallet__payment_request_note_placeholder">Za co je tato platba?</string>
+    <string name="wallet__payment_request_note_too_long">Zkraťte poznámku a zkuste to znovu.</string>
     <string name="wallet__payment_request_or_pay">Požádat nebo zaplatit</string>
     <string name="wallet__payment_request_or_pay_description">Zaplaťte kontaktu %1$s nebo požádejte o platbu.</string>
     <string name="wallet__payment_request_or_pay_headline">Požádat\n&lt;accent&gt;nebo zaplatit ₿&lt;/accent&gt;</string>

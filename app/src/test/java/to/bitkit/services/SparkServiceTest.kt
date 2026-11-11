@@ -108,4 +108,12 @@ class SparkServiceTest {
             assertEquals("key", config.apiKey)
         }
     }
+
+    @Test
+    fun `invoices carry no spark address on any network, so every payment is a lightning payment bitkit records`() {
+        Network.entries.forEach { network ->
+            val config = SparkService.configure(defaults(network), apiKey = null, isExiting = false)
+            assertFalse(config.preferSparkOverLightning, "$network")
+        }
+    }
 }

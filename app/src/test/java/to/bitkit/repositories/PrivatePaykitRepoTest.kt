@@ -3220,6 +3220,29 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `received payment reconciliation rotates a private invoice paid through Spark`() = test {
+        preparePrivateLightningContact()
+        val refreshedInvoice = "lnbcrt1refreshed"
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS, true))
+            .thenReturn(Result.success(refreshedInvoice))
+        whenever(coreService.decode(refreshedInvoice))
+            .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
+        whenever(sparkRepo.receivedLightningPaymentHashes()).thenReturn(setOf("090909"))
+        clearInvocations(paykitSdkService)
+
+        sut.reconcileReceivedPayments().getOrThrow()
+        runCurrent()
+
+        val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(publication.capture(), eq(false))
+        assertEquals(
+            PublicPaykitRepo.serializePayload(refreshedInvoice),
+            publication.firstValue.single().reservations.single().payload,
+        )
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `forced private Lightning refresh includes contacts loaded later`() = test {
         preparePrivateLightningContact()
         sut.scheduleSavedContactPreparation(emptyList()).getOrThrow()
@@ -4925,6 +4948,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         },
         failedToQueue = failedToQueue,
         failedToDeliver = failedToDeliver,
+        acknowledged = emptyList(),
     )
 
     private fun cachedPublishedContact() = PrivatePaykitContactCacheData(
@@ -4942,6 +4966,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .map { privateListSyncChange(it.counterparty) },
         failedToQueue = emptyList(),
         failedToDeliver = emptyList(),
+        acknowledged = emptyList(),
     )
 
     private fun privateListSyncChange(

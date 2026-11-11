@@ -66,6 +66,11 @@ data class SparkExitRecord(
     /** The value of the quote's leaves, to show what Spark holds outside the exit. */
     val leafTotalSats: ULong? = null,
     /**
+     * Spark's balance beyond the quote's leaves when the exit started: what stays on Spark, also once published leaves
+     * left the balance.
+     */
+    val outsideSats: ULong? = null,
+    /**
      * The CPFP child and fan-out txids of replaced generations, whose outputs at the funding address are not new
      * funding. The name predates the fan-out ids, kept so stored records read the same.
      */
@@ -156,8 +161,11 @@ data class SparkExitRecord(
         /** Blocks a step a node accepted may go unconfirmed before the exit's fee rate counts as too low. */
         const val UNCONFIRMED_BLOCKS_TO_SURFACE = 6u
 
-        /** Blocks a payment from savings may be unknown to every host before the exit forgets it and asks again. */
-        const val OWN_PAYMENT_MISSING_BLOCKS = 1u
+        /**
+         * Blocks a payment from savings may be unknown to every host before the exit forgets it and asks again: long
+         * enough that a host still indexing it, or one false miss, never asks for the funding twice.
+         */
+        const val OWN_PAYMENT_MISSING_BLOCKS = 3u
 
         /** Blocks after the first look a payment from savings may stay unadopted before the exit asks again. */
         const val OWN_PAYMENT_TIMEOUT_BLOCKS = 144u
@@ -268,8 +276,9 @@ data class SparkExitRecord(
             recovery?.transactions?.all { it.status is ExitTransactionStatus.Confirmed } == true
 
     /**
-     * [fundingPaymentTxid] at [tip], when [isKnown] says whether a host knows it: forgotten once missing for a block,
-     * or 144 blocks after the first look without being adopted, so the ask and its reminder come back.
+     * [fundingPaymentTxid] at [tip], when [isKnown] says whether a host knows it: forgotten once missing for
+     * [OWN_PAYMENT_MISSING_BLOCKS] blocks, or 144 blocks after the first look without being adopted, so the ask and
+     * its reminder come back.
      */
     fun withOwnPaymentLooked(tip: UInt, isKnown: Boolean): SparkExitRecord {
         if (!isAwaitingOwnPayment && !isEndedPaymentPending) return this
@@ -716,6 +725,7 @@ object SparkExitJson {
             transferId = read { o.stringOrNull("transferId") },
             expectedSats = read { o.ulong("expectedSats") } ?: 0uL,
             leafTotalSats = read { o.ulongOrNull("leafTotalSats") },
+            outsideSats = read { o.ulongOrNull("outsideSats") },
             lostLeaves = read {
                 o.arrayOrEmpty("lostLeaves").map {
                     val l = it.jsonObject
@@ -824,6 +834,7 @@ object SparkExitJson {
         put("isRebuilding", r.isRebuilding)
         r.lastBuildAt?.let { put("lastBuildAt", it) }
         r.leafTotalSats?.let { put("leafTotalSats", it.toLong()) }
+        r.outsideSats?.let { put("outsideSats", it.toLong()) }
         if (r.earlierCpfpTxids.isNotEmpty()) {
             put("earlierCpfpTxids", buildJsonArray { r.earlierCpfpTxids.forEach { add(JsonPrimitive(it)) } })
         }
@@ -1017,6 +1028,7 @@ object SparkExitJson {
         isRebuilding = o.booleanOrNull("isRebuilding") ?: false,
         lastBuildAt = o.millisOrNull("lastBuildAt"),
         leafTotalSats = o.ulongOrNull("leafTotalSats"),
+        outsideSats = o.ulongOrNull("outsideSats"),
         earlierCpfpTxids = o.arrayOrEmpty("earlierCpfpTxids").map { it.jsonPrimitive.content },
         leftoverSweep = o.objectOrNull("leftoverSweep")?.let(::sweepFromJson),
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),

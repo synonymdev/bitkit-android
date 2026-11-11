@@ -1,0 +1,17 @@
+<journey name="grant signup rejected code">
+  <description>
+    Verifies that a signup link whose signup code the homeserver refuses shows a specific message, keeps the authorization sheet open for another try, and creates no identity. Precondition: an isolated unlocked wallet with Paykit enabled and no Pubky identity. A controlled requesting app supplies a signup_grant URL for a reachable homeserver and relay whose signup token that homeserver has already used or does not know, for example the token of a signup_grant URL another wallet already completed. The URL requests ordinary app permissions without a Bitkit companion claim.
+  </description>
+  <actions>
+    <action>Copy the prepared signup_grant URL with the refused signup token to the device clipboard</action>
+    <action>Tap the main wallet Scan button (id "Scan")</action>
+    <action>If camera permission is requested, deny it to use clipboard input</action>
+    <action>Tap Paste</action>
+    <action>Allow clipboard access if prompted</action>
+    <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>
+    <action>Verify an error toast says "The homeserver did not accept this signup code. Try again or use another signup link."</action>
+    <action>Verify the authorization sheet is still open with Authorize (id "PubkyAuthAuthorize") enabled</action>
+    <action>Verify the Create Profile screen (id "CreateProfileSave") is not shown</action>
+    <action>Close the authorization sheet and verify the wallet still has no Pubky identity</action>
+  </actions>
+</journey>

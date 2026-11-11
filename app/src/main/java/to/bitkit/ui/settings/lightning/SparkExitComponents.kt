@@ -1,45 +1,101 @@
 package to.bitkit.ui.settings.lightning
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import breez_sdk_spark.RecoverFundsResponse
 import to.bitkit.R
-import to.bitkit.ext.setClipboardText
+import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.Toast
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.SparkExitMath
 import to.bitkit.repositories.SparkExitPartialFunding
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.CaptionB
-import to.bitkit.ui.components.CaptionM
 import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.rememberMoneyText
+import to.bitkit.ui.screens.wallets.activity.Section
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.utils.BlockTimeHelpers
+import to.bitkit.viewmodels.AppViewModel
+
+/**
+ * Opens the progress of an exit that started, from whichever exit screen shows: the start runs on when the user goes
+ * back from Confirm meanwhile.
+ */
+@Composable
+internal fun SparkExitStartedEffect(viewModel: SparkExitViewModel, onStarted: () -> Unit) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isStarted = uiState.isStarted
+    LaunchedEffect(isStarted) {
+        if (!isStarted) return@LaunchedEffect
+        viewModel.onStartShown()
+        onStarted()
+    }
+}
 
 /** An amount as plain text for copy that names it, in the user's primary unit. */
 @Composable
 internal fun sparkExitAmountText(sats: ULong): String =
     rememberMoneyText(sats.toLong(), showSymbol = true)?.replace(Regex("</?accent>"), "") ?: sats.toString()
+
+/**
+ * An amount the user sends from another wallet, always in bitcoin: the exit needs it exact, which a fiat figure
+ * converted at another wallet's rate is not.
+ */
+@Composable
+internal fun sparkExitSendAmountText(sats: ULong): String =
+    rememberMoneyText(sats.toLong(), unit = PrimaryDisplay.BITCOIN, showSymbol = true)
+        ?.replace(Regex("</?accent>"), "")
+        ?: "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}"
+
+/** [sparkExitSendAmountText] marked as an inline accent. */
+@Composable
+internal fun sparkExitSendAmountAccent(sats: ULong): String = "<accent>${sparkExitSendAmountText(sats)}</accent>"
+
+/**
+ * What Display's line height adds under a headline on Android against iOS: master's spacers under an exit headline
+ * render 9 dp more here, so exit screens take it off and look the same on both apps. Measured on 2x media devices.
+ */
+internal val SparkExitDisplayExtra = 9.dp
+
+/** The amount marked as an inline accent, for a line drawn with [withAccentBoldBright] or [withAccentBoldRed]. */
+@Composable
+internal fun sparkExitAmountAccent(sats: ULong): String = "<accent>${sparkExitAmountText(sats)}</accent>"
+
+/** Bold red accents for a red line: its amounts stand out in the same red, the only red of the theme. */
+internal fun String.withAccentBoldRed() =
+    withAccent(accentStyle = SpanStyle(color = Colors.Red, fontWeight = FontWeight.Bold))
 
 @Composable
 internal fun SparkExitQuoteRows(quote: SparkExitQuote) {
@@ -80,16 +136,24 @@ internal fun SparkExitFundingAddress(
     partial: SparkExitPartialFunding? = SparkExitMath.partialFunding(seenSats, requiredSats),
     isCovered: Boolean = requiredSats > 0uL && seenSats >= requiredSats,
 ) {
-    val context = LocalContext.current
+    val app = appViewModel
+    val copied = stringResource(R.string.common__copied)
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxWidth()
     ) {
-        QrCodeImage(content = address, size = 200.dp)
+        // The receive screen's tile, at a fixed size with black space around it.
+        QrCodeImage(
+            content = address,
+            size = 200.dp,
+            modifier = Modifier
+                .padding(vertical = 16.dp)
+                .size(200.dp)
+        )
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__fund_external_text)
-                .replace("{amount}", sparkExitAmountText(requiredSats)),
+                .replace("{amount}", sparkExitSendAmountAccent(requiredSats)).withAccentBoldBright(),
             color = Colors.White64,
             modifier = Modifier.fillMaxWidth()
         )
@@ -99,15 +163,15 @@ internal fun SparkExitFundingAddress(
             overflow = TextOverflow.MiddleEllipsis,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickableAlpha { context.setClipboardText(address) }
+                .clickableAlpha(onClick = copyToClipboard(address) { app.toastCopied(copied, it) })
                 .testTag("SparkExitFundingAddress")
         )
         partial?.let {
             BodyS(
                 text = stringResource(R.string.lightning__spark_exit__fund_partial)
-                    .replace("{received}", sparkExitAmountText(it.receivedSats))
-                    .replace("{required}", sparkExitAmountText(it.requiredSats))
-                    .replace("{missing}", sparkExitAmountText(it.missingSats)),
+                    .replace("{received}", sparkExitSendAmountAccent(it.receivedSats))
+                    .replace("{required}", sparkExitSendAmountAccent(it.requiredSats))
+                    .replace("{missing}", sparkExitSendAmountAccent(it.missingSats)).withAccentBoldBright(),
                 color = Colors.White64,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,8 +179,8 @@ internal fun SparkExitFundingAddress(
             )
         }
         if (isCovered) {
-            CaptionM(
-                text = stringResource(R.string.lightning__spark_exit__fund_seen).withAccent(),
+            Caption(
+                text = stringResource(R.string.lightning__spark_exit__fund_seen),
                 color = Colors.Green,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -124,24 +188,25 @@ internal fun SparkExitFundingAddress(
     }
 }
 
-/** A line of progress with the transaction it is about, whose id copies on tap. */
+/** A line of progress with the transaction it is about, in the activity explore cell whose id copies on tap. */
 @Composable
-internal fun SparkExitTxNote(text: String?, txid: String, @StringRes txidRes: Int, testTag: String) {
-    val context = LocalContext.current
+internal fun SparkExitTxNote(text: String?, txid: String, testTag: String) {
+    val app = appViewModel
+    val copied = stringResource(R.string.common__copied)
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
             .testTag(testTag)
     ) {
-        text?.let { BodyS(text = it, color = Colors.White64) }
-        CaptionB(
-            text = stringResource(txidRes).replace("{txid}", txid),
-            maxLines = 1,
-            overflow = TextOverflow.MiddleEllipsis,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickableAlpha { context.setClipboardText(txid) }
+        text?.let { BodyS(text = it.withAccentBoldBright(), color = Colors.White64) }
+        Section(
+            title = stringResource(R.string.wallet__activity_tx_id),
+            value = txid,
+            modifier = Modifier.clickableAlpha(
+                onClick = copyToClipboard(txid) {
+                    app.toastCopied(copied, it)
+                }
+            )
         )
     }
 }
@@ -195,3 +260,6 @@ private fun SparkExitStep(title: String, isDone: Boolean, detail: String? = null
     }
     HorizontalDivider()
 }
+
+private fun AppViewModel?.toastCopied(title: String, text: String) =
+    this?.toast(type = Toast.ToastType.SUCCESS, title = title, description = text.ellipsisMiddle(40))

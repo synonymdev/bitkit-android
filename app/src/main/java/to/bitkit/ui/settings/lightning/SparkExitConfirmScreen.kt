@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -19,6 +18,7 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -34,9 +34,7 @@ fun SparkExitConfirmScreen(
     onStart: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) {
-        viewModel.effects.collect { if (it == SparkExitEffect.Started) onStart() }
-    }
+    SparkExitStartedEffect(viewModel, onStart)
     // Asked as the exit starts: the notifications are how a stalled background run reaches the user.
     val requestNotifications = rememberSubscriptionNotificationsRequest()
     Content(
@@ -59,6 +57,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         Column(
             modifier = Modifier
@@ -68,7 +67,6 @@ private fun Content(
         ) {
             VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__spark_exit__confirm_title).withAccent())
-            VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(R.string.lightning__spark_exit__confirm_text).withAccentBoldBright(),
                 color = Colors.White64,
