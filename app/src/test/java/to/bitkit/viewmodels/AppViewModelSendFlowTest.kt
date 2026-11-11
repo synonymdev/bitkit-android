@@ -238,6 +238,7 @@ import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PendingChannelMigration
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
@@ -12900,6 +12901,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `a spark leg refused at its deadline releases the request proof without a spark sync`() = test {
+        refuseSparkLeg(ServiceError.PaymentDeadlineExpired())
+    }
+
+    @Test
+    fun `a spark leg spark refuses before sending releases the request proof without a spark sync`() = test {
+        refuseSparkLeg(SparkError.SendRefused("Spark balance can't cover the withdrawal"))
+    }
+
+    private suspend fun TestScope.refuseSparkLeg(error: Throwable) {
         val leg = sparkRouteLeg("bcrt1qroutedrequest")
         val request = paymentRequest().copy(
             amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
@@ -12926,7 +12936,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ).doSuspendableAnswer {
             val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
             onBeforeSend()
-            Result.failure(ServiceError.PaymentDeadlineExpired())
+            Result.failure(error)
         }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(

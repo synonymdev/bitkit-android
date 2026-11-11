@@ -744,11 +744,12 @@ class SparkRepo @Inject constructor(
                 // The proof onBeforeSend starts has no journal yet, so the attempt reads as in flight from here on and
                 // a reconcile meanwhile never drops that proof as unsent.
                 isWithdrawing = true
+                var journal: PendingSparkWithdrawal? = null
                 val sent = try {
                     if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
                     // A quote can expire while the request and its allowance are checked.
                     ensurePaymentDeadline(paymentDeadlineAt)
-                    val journal = PendingSparkWithdrawal(
+                    val opened = PendingSparkWithdrawal(
                         address,
                         amountSats,
                         contact,
@@ -756,10 +757,11 @@ class SparkRepo @Inject constructor(
                         tags,
                         startedAt = clock.now().epochSeconds,
                     )
-                    cacheStore.update { it.copy(pendingSparkWithdrawal = journal) }
+                    journal = opened
+                    cacheStore.update { it.copy(pendingSparkWithdrawal = opened) }
                     // Saving the journal suspends, so the deadline is checked last, before the send.
                     runCatching { ensurePaymentDeadline(paymentDeadlineAt) }.onFailure {
-                        clearJournal(journal)
+                        clearJournal(opened)
                         throw it
                     }
                     runSuspendCatching { sparkService.send(prepared) }
@@ -767,6 +769,12 @@ class SparkRepo @Inject constructor(
                     isWithdrawing = false
                 }
                 val payment = sent.getOrElse {
+                    // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
+                    // nothing and the journal closes at once, as on the Lightning rail.
+                    if (it is SdkException.InsufficientFunds) {
+                        clearJournal(journal)
+                        throw SparkError.SendRefused("Spark balance can't cover the withdrawal", it)
+                    }
                     // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops. A
                     // sync that never reached Spark still returns, so only one done after the failure drops it.
                     val failedAt = clock.now().epochSeconds.toULong()

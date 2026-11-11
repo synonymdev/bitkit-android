@@ -53,6 +53,7 @@ import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -1238,6 +1239,20 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertNull(cacheData.value.pendingSparkWithdrawal)
         assertEquals(SparkWithdrawalOutcome.Unsent, sut.withdrawalOutcome("bcrt1qcontact", 20_000uL, emptySet()))
+    }
+
+    @Test
+    fun `a withdrawal spark refuses for its balance closes its journal at once`() = test {
+        val sut = journaledSpark()
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.InsufficientFunds(null) }
+        clearInvocations(sparkService)
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        // Spark picks the leaves to spend before anything reaches its operators, so nothing left the wallet.
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+        verify(sparkService, never()).syncWallet()
     }
 
     @Test
