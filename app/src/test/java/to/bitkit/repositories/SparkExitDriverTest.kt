@@ -774,12 +774,9 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
         assertTrue(chain.rawBroadcasts.isEmpty())
         assertFalse(record.needsDriving)
-        // Shown with the path that spends it, even once its result was opened: nothing else reaches it.
+        // Shown once with the path that spends it; the earlier exit addresses keep it after that.
         assertTrue(record.showsResult, "the kept change loses its recovery screen")
-        assertTrue(
-            record.copy(isResultSeen = true).showsResult,
-            "the funding address and its path went out of reach once the result was opened",
-        )
+        assertFalse(record.copy(isResultSeen = true).showsResult, "kept change blocks every later exit")
     }
 
     @Test
