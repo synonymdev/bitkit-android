@@ -27,7 +27,7 @@ object SparkExitSweep {
     /**
      * The least rate a node takes after it refused a sweep built at [feeRateSatPerVbyte] with [rejection], such as
      * `min relay fee not met, 450 < 674` (fees in sats): that rate scaled to the fee asked for, rounded up, and at
-     * least one more than the refused rate.
+     * least one more than the refused rate. Never above [MAX_REFUSED_FEE_RATE], so the record can save it.
      */
     fun refusedFeeRate(rejection: String?, feeRateSatPerVbyte: ULong): ULong {
         val rate = maxOf(1uL, feeRateSatPerVbyte)
@@ -37,10 +37,13 @@ object SparkExitSweep {
         if (paid == null || asked == null) return rate.safe() + 1uL.safe()
         // A host's number can be anything: one too big to scale asks for more than any cap, which the caller applies.
         val product = rate.safe() * asked.safe()
-        if (product == ULong.MAX_VALUE) return ULong.MAX_VALUE
+        if (product == ULong.MAX_VALUE) return MAX_REFUSED_FEE_RATE
         val scaled = (product.safe() + (paid - 1uL).safe()) / paid
-        return maxOf(scaled, rate.safe() + 1uL.safe())
+        return maxOf(scaled, rate.safe() + 1uL.safe()).coerceAtMost(MAX_REFUSED_FEE_RATE)
     }
+
+    /** The record saves rates as signed longs: anything higher reads back as negative and breaks the next load. */
+    private val MAX_REFUSED_FEE_RATE = Long.MAX_VALUE.toULong()
 
     /** The inputs worth more than the fee each adds to a sweep at [feeRateSatPerVbyte]: the rest cost more to send. */
     fun worthSweeping(inputs: List<Input>, feeRateSatPerVbyte: ULong): List<Input> {

@@ -1951,7 +1951,31 @@ class SparkExitDriverTest : BaseUnitTest() {
     @Test
     fun `a refused minimum too big to scale asks for more than any cap`() {
         val refusal = "mempool min fee not met, 450 < 10000000000000000000"
-        assertEquals(ULong.MAX_VALUE, SparkExitSweep.refusedFeeRate(refusal, 2uL), "the scaled rate wrapped around")
+        assertEquals(
+            Long.MAX_VALUE.toULong(),
+            SparkExitSweep.refusedFeeRate(refusal, 2uL),
+            "the scaled rate wrapped around, or cannot be saved",
+        )
+        assertEquals(Long.MAX_VALUE.toULong(), SparkExitSweep.refusedFeeRate("fee not met, 1 < 10000000000000000000", 1uL))
+    }
+
+    @Test
+    fun `a leftover sweep refused with a rate too big to scale saves and loads`() = test {
+        val coins = List(6) { SparkExitFixtures.utxo("%064x".format(it), 0u, 294uL) }
+        chain.utxosByAddress[SWEEP_FUNDING] = coins
+        chain.outcome = SparkExitBroadcastOutcome.Rejected("mempool min fee not met, 450 < 18446744073709551615")
+        val done = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            feeRateSatPerVbyte = 2uL,
+            leftover = coins.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) },
+        )
+
+        var record = driver(tip = 1_000u).tick(done)
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)), "the saved record did not load")
+        assertEquals(Long.MAX_VALUE.toULong(), assertNotNull(record.leftoverSweep).refusedFeeRate)
     }
 
     @Test
