@@ -75,12 +75,17 @@ class SparkExitEarlierAddressStore(private val file: File) {
         return json.decodeFromString(file.readText())
     }
 
-    /** Adds [entry], once per address: a known address keeps its entry, with [entry]'s amount when it has one. */
+    /**
+     * Adds [entry], once per address: a known address keeps its entry, with [entry]'s amount when it has one. Kept
+     * change at a cancelled exit's address, which a later exit reused, replaces that entry, so it is read for good.
+     */
     fun add(entry: SparkExitEarlierAddress): List<SparkExitEarlierAddress> {
         val known = runCatching { load() }.getOrDefault(emptyList())
         val existing = known.firstOrNull { it.address == entry.address }
         val updated = when {
             existing == null -> known + entry
+            entry.kind == SparkExitEarlierAddress.Kind.KEPT_CHANGE && existing.kind != entry.kind ->
+                known.map { if (it.address == entry.address) entry.copy(sats = entry.sats ?: it.sats) else it }
             entry.sats == null || entry.sats == existing.sats -> return known
             else -> known.map { if (it.address == entry.address) it.copy(sats = entry.sats) else it }
         }

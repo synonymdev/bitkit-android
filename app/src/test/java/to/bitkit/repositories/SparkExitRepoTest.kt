@@ -947,6 +947,24 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `kept change at a cancelled exit's reused address is read past the cancel's four weeks`() = test {
+        val store = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+        val path = "m/84'/1'/7797'/0/0"
+        val cancelledAt = 1_800_000_000_000L
+        val keptAt = cancelledAt + 20.days.inWholeMilliseconds
+        val cancelled = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
+        store.add(SparkExitEarlierAddress(funding, path, cancelled, atMillis = cancelledAt))
+
+        store.add(SparkExitEarlierAddress(funding, path, SparkExitEarlierAddress.Kind.KEPT_CHANGE, 600uL, keptAt))
+
+        val listed = store.load().single()
+        assertEquals(SparkExitEarlierAddress.Kind.KEPT_CHANGE, listed.kind, "the kept change stays a cancel's entry")
+        assertEquals(keptAt, listed.atMillis)
+        assertEquals(600uL, listed.sats)
+        assertTrue(listed.isWatched(cancelledAt + 60.days.inWholeMilliseconds), "the kept change is no longer read")
+    }
+
+    @Test
     fun `a late payment to a cancelled exit's address shows with its balance for four weeks`() = test {
         val now = 1_800_000_000_000L
         val kind = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
