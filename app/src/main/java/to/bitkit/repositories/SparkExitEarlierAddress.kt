@@ -30,9 +30,12 @@ data class SparkExitEarlierAddress(
         CANCELLED_FUNDING,
     }
 
-    /** A cancelled exit's address younger than about four weeks, read in the foreground for a late payment. */
+    /**
+     * Read in the foreground for what it holds: kept change always, so change spent by hand shows as spent, and a
+     * cancelled exit's address for about four weeks, for a late payment.
+     */
     fun isWatched(nowMillis: Long): Boolean =
-        kind == Kind.CANCELLED_FUNDING && nowMillis - atMillis < WATCH_PERIOD.inWholeMilliseconds
+        kind == Kind.KEPT_CHANGE || nowMillis - atMillis < WATCH_PERIOD.inWholeMilliseconds
 
     companion object {
         val WATCH_PERIOD = 28.days

@@ -966,6 +966,19 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `kept change spent by hand shows its current balance`() = test {
+        val store = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+        val kind = SparkExitEarlierAddress.Kind.KEPT_CHANGE
+        store.add(SparkExitEarlierAddress(funding, "m/84'/1'/7797'/0/0", kind, sats = 600uL, atMillis = 0L))
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxos = "[]"))
+        sut.load().getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertEquals(listOf(0uL), sut.state.value.earlierAddresses.map { it.sats }, "the spent change still shows")
+    }
+
+    @Test
     fun `an exit that kept its fee change lists the address, so the next exit can start`() = test {
         val kept = SparkExitFixtures.record(Phase.Done).copy(
             leftover = listOf(SparkExitRecord.Leftover("ab".repeat(32), 0u, 294uL)),
