@@ -32,10 +32,16 @@ class SparkDetailViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(bgDispatcher) {
-            combine(sparkRepo.state, sparkExitRepo.state) { state, exit -> state to exit.showsResult }
-                .collect { (state, showsResult) ->
-                    _uiState.update { it.copy(spark = state.toUi(lightningRepo, showsResult)) }
+            combine(sparkRepo.state, sparkExitRepo.state) { state, exit -> state to exit }
+                .collect { (state, exit) ->
+                    _uiState.update {
+                        it.copy(spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses))
+                    }
                 }
+        }
+        viewModelScope.launch(bgDispatcher) {
+            // A cancelled exit's address may still receive a late payment: its balance shows here.
+            sparkExitRepo.refreshEarlierAddresses()
         }
         if (Env.network == Network.REGTEST) {
             viewModelScope.launch(bgDispatcher) {
@@ -54,8 +60,11 @@ class SparkDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             sparkRepo.refreshState()
-            val showsResult = sparkExitRepo.state.value.showsResult
-            _uiState.update { it.copy(spark = sparkRepo.state.value.toUi(lightningRepo, showsResult)) }
+            sparkExitRepo.refreshEarlierAddresses()
+            val exit = sparkExitRepo.state.value
+            _uiState.update {
+                it.copy(spark = sparkRepo.state.value.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses))
+            }
             delay(500.milliseconds)
             _uiState.update { it.copy(isRefreshing = false) }
         }

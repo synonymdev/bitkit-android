@@ -28,6 +28,7 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.repositories.SparkDeposit
+import to.bitkit.repositories.SparkExitEarlierAddress
 import to.bitkit.repositories.SparkWithdrawal
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionB
@@ -154,6 +155,15 @@ private fun Content(
                     }
                 }
 
+                if (spark.earlierAddresses.isNotEmpty()) {
+                    SectionTitle(stringResource(R.string.lightning__spark_exit__earlier_addresses))
+                    BodyS(
+                        text = stringResource(R.string.lightning__spark_exit__earlier_addresses_text),
+                        color = Colors.White64,
+                    )
+                    spark.earlierAddresses.forEach { EarlierExitAddressRows(it, onCopyText) }
+                }
+
                 if (spark.withdrawals.isNotEmpty()) {
                     SectionTitle(stringResource(R.string.lightning__savings_confirm__label))
                     spark.withdrawals.forEach { withdrawal ->
@@ -197,6 +207,34 @@ private fun Content(
             }
             VerticalSpacer(16.dp)
         }
+    }
+}
+
+@Composable
+private fun EarlierExitAddressRows(entry: SparkExitEarlierAddress, onCopyText: (String) -> Unit) {
+    SectionRow(
+        name = stringResource(R.string.wallet__activity_address),
+        valueContent = {
+            CaptionB(
+                text = entry.address,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                textAlign = TextAlign.End,
+            )
+        },
+        onClick = { onCopyText(entry.address) },
+        modifier = Modifier.testTag("SparkEarlierExitAddress"),
+    )
+    SectionRow(
+        name = stringResource(R.string.lightning__spark_exit__earlier_path),
+        valueContent = { CaptionB(text = entry.path, textAlign = TextAlign.End) },
+        onClick = { onCopyText(entry.path) },
+    )
+    entry.sats?.takeIf { it > 0uL }?.let { sats ->
+        SectionRow(
+            name = stringResource(R.string.lightning__balance),
+            valueContent = { MoneyCaptionB(sats = sats.toLong(), symbol = true) },
+        )
     }
 }
 

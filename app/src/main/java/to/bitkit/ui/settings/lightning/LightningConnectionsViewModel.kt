@@ -38,6 +38,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.SparkDeposit
+import to.bitkit.repositories.SparkExitEarlierAddress
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
@@ -122,7 +123,11 @@ class LightningConnectionsViewModel @Inject constructor(
                             .reversed().toImmutableList(),
                         localBalance = calculateLocalBalance(channels).safe() + sparkState.shownSpendingSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
-                        spark = sparkState.toUi(lightningRepo, snapshot.exitState.showsResult),
+                        spark = sparkState.toUi(
+                            lightningRepo,
+                            snapshot.exitState.showsResult,
+                            snapshot.exitState.earlierAddresses,
+                        ),
                         isSparkReceiving = sparkState.isUsable,
                     )
                 }
@@ -248,6 +253,8 @@ data class SparkUi(
     val isExiting: Boolean = false,
     /** An exit runs, or ended with leftover fee funding not yet swept: Emergency exit opens its progress. */
     val showsExitResult: Boolean = false,
+    /** Earlier exits' funding addresses that hold, or may still receive, coins. */
+    val earlierAddresses: ImmutableList<SparkExitEarlierAddress> = persistentListOf(),
 ) {
     /**
      * The emergency exit is offered while Spark holds funds, also a kept balance while it reads 0, and leads to its
@@ -265,13 +272,21 @@ data class SparkDepositUi(
     val confirmations: UInt? = null,
 )
 
-internal suspend fun SparkState.toUi(lightningRepo: LightningRepo, showsExitResult: Boolean = false): SparkUi? {
+internal suspend fun SparkState.toUi(
+    lightningRepo: LightningRepo,
+    showsExitResult: Boolean = false,
+    earlierAddresses: List<SparkExitEarlierAddress> = emptyList(),
+): SparkUi? {
     val showsExit = isExiting || showsExitResult
-    // An emergency exit keeps Spark listed, also while it cannot connect, so its progress stays reachable.
-    if (!isReady && !showsExit) return null
+    // An emergency exit keeps Spark listed, also while it cannot connect, so its progress stays reachable. So do an
+    // earlier exit's addresses, once Spark is empty.
+    val hasEarlier = earlierAddresses.isNotEmpty()
+    if (!isReady && !showsExit && !hasEarlier) return null
     // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
     val hasExit = showsExit || recoverableFundsSats > 0uL
-    if (shownBalanceSats == 0uL && deposits.isEmpty() && !hasExit && Env.network != Network.REGTEST) return null
+    if (shownBalanceSats == 0uL && deposits.isEmpty() && !hasExit && !hasEarlier && Env.network != Network.REGTEST) {
+        return null
+    }
     return SparkUi(
         balanceSats = shownBalanceSats,
         deposits = deposits.map {
@@ -281,6 +296,7 @@ internal suspend fun SparkState.toUi(lightningRepo: LightningRepo, showsExitResu
         recoverableFundsSats = recoverableFundsSats,
         isExiting = isExiting,
         showsExitResult = showsExit,
+        earlierAddresses = earlierAddresses.toImmutableList(),
     )
 }
 
