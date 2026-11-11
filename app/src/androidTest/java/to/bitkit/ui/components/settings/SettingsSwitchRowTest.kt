@@ -1,5 +1,6 @@
 package to.bitkit.ui.components.settings
 
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -86,5 +87,46 @@ class SettingsSwitchRowTest {
         composeTestRule.onNodeWithTag("ContactPaymentsSwitch")
             .assertIsOff()
             .assertIsNotEnabled()
+    }
+
+    @Test
+    fun loadingRowReportsIndeterminateProgress() {
+        setPaymentsRow(isLoading = true)
+
+        composeTestRule.onNodeWithTag("PublicPaymentsToggle")
+            .assertIsOn()
+            .assertIsNotEnabled()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ProgressBarRangeInfo,
+                    ProgressBarRangeInfo.Indeterminate,
+                )
+            )
+        composeTestRule.onNodeWithTag("PublicPaymentsToggleLoading", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun idleRowReportsNoProgress() {
+        setPaymentsRow(isLoading = false)
+
+        composeTestRule.onNodeWithTag("PublicPaymentsToggle")
+            .assertIsEnabled()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ProgressBarRangeInfo))
+        composeTestRule.onNodeWithTag("PublicPaymentsToggleLoading", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    private fun setPaymentsRow(isLoading: Boolean) {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SettingsSwitchRow(
+                    title = "Public payments",
+                    isChecked = true,
+                    icon = {},
+                    onClick = {},
+                    isLoading = isLoading,
+                    switchTestTag = "PublicPaymentsToggle",
+                )
+            }
+        }
     }
 }
