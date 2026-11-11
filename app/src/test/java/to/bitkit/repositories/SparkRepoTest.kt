@@ -47,6 +47,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -1092,6 +1093,51 @@ class SparkRepoTest : BaseUnitTest() {
         }
         sut.start(0).getOrThrow()
         assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a sync whose list was read during an aged send never drops the withdrawal it returns`() = test {
+        val sut = journaledSpark()
+        whenever { sparkService.getInfo() }
+            .thenReturn(info(50_000uL).copy(lastSyncedAt = (now + 1.hours).epochSeconds.toULong()))
+        var isSending = false
+        var listsDuringSend = 0
+        val staleListRead = CompletableDeferred<Unit>()
+        val staleListReturns = CompletableDeferred<Unit>()
+        var journalWhileRecording: PendingSparkWithdrawal? = null
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            // The Synced handler's refresh lists first, then its journal settlement reads the list it settles from.
+            if (isSending && ++listsDuringSend == 2) {
+                staleListRead.complete(Unit)
+                staleListReturns.await()
+            }
+            emptyList<Payment>()
+        }
+        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+            isSending = true
+            now += 11.minutes
+            backgroundScope.launch { sparkEvents.emit(SdkEvent.Synced) }
+            staleListRead.await()
+            isSending = false
+            contactWithdrawal()
+        }
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }.doSuspendableAnswer {
+            // The stale list lands while the returned withdrawal is being recorded.
+            staleListReturns.complete(Unit)
+            withTimeoutOrNull(1.seconds) { cacheData.first { it.pendingSparkWithdrawal == null } }
+            journalWhileRecording = cacheData.value.pendingSparkWithdrawal
+            Result.success(null)
+        }
+
+        sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+        advanceUntilIdle()
+
+        assertTrue(staleListReturns.isCompleted)
+        assertNotNull(journalWhileRecording, "a stale list must not drop the journal of a withdrawal being recorded")
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("pubkycontact", assertIs<Activity.Onchain>(activity.firstValue).v1.contact)
     }
 
     @Test

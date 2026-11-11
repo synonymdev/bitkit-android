@@ -164,9 +164,15 @@ class SparkRepo @Inject constructor(
     @Volatile
     private var hasSyncedActivities = false
 
-    /** A withdrawal's send call is running, so its journal entry must not be settled before Spark lists it. */
+    /**
+     * A withdrawal's send call is running or its returned payment is being recorded, so its journal entry must not be
+     * settled before Spark lists it.
+     */
     @Volatile
     private var isWithdrawing = false
+
+    /** Counts withdrawal sends that ended, so a list read before one ended never settles its journal. */
+    private val withdrawalSendsEnded = AtomicLong(0)
 
     /** A withdrawal to a contact holds the one journal slot, from before it prepares until its send call returns. */
     private val isClaimingWithdrawal = AtomicBoolean(false)
@@ -754,6 +760,7 @@ class SparkRepo @Inject constructor(
                 // instead of overwriting its journal.
                 if (!isClaimingWithdrawal.compareAndSet(false, true)) throw SparkError.WithdrawalPending()
                 var journal: PendingSparkWithdrawal? = null
+                var sendReturned = false
                 val sent = try {
                     if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
                     val prepared = sparkService.prepareSend(address, amountSats)
@@ -784,12 +791,13 @@ class SparkRepo @Inject constructor(
                         clearJournal(opened)
                         throw it
                     }
-                    runSuspendCatching { sparkService.send(prepared) }
+                    runSuspendCatching { sparkService.send(prepared) }.also { sendReturned = true }
                 } finally {
-                    isWithdrawing = false
+                    if (!sendReturned) endWithdrawalSend()
                     isClaimingWithdrawal.set(false)
                 }
                 val payment = sent.getOrElse {
+                    endWithdrawalSend()
                     // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                     // nothing and the journal closes at once, as on the Lightning rail.
                     if (it is SdkException.InsufficientFunds) {
@@ -810,7 +818,12 @@ class SparkRepo @Inject constructor(
                     throw it
                 }
                 Logger.info("Sent Spark withdrawal '${payment.id}' with status '${payment.status}'", context = TAG)
-                recordActivity(payment)
+                // The withdrawal stays in flight until it is recorded, so a sync with an older list can't drop it.
+                try {
+                    recordActivity(payment)
+                } finally {
+                    endWithdrawalSend()
+                }
                 runSuspendCatching { refresh() }.onFailure {
                     Logger.warn("Failed to refresh Spark after withdrawal '${payment.id}'", it, context = TAG)
                 }
@@ -1265,10 +1278,15 @@ class SparkRepo @Inject constructor(
         // Read after the records, as a send counts as in flight before it is recorded, so one of the two shows it.
         val recordsBefore = sendRecords.get()
         val inFlightBefore = sendsInFlight.keys.toSet()
+        // A list read while a withdrawal was in flight, or before one ended, may lack it, so it settles no journal.
+        val sendsEndedBefore = withdrawalSendsEnded.get()
+        val wasWithdrawing = isWithdrawing
         val payments = sparkService.listPayments()
         val isSaved = payments.map { recordActivity(it) }.all { it }
         releaseFailedSends(payments, recordsBefore, inFlightBefore)
-        if (!settleJournal || isWithdrawing) return isSaved
+        if (!settleJournal || wasWithdrawing || isWithdrawing || withdrawalSendsEnded.get() != sendsEndedBefore) {
+            return isSaved
+        }
         val journal = cacheStore.data.first().pendingSparkWithdrawal ?: return isSaved
         // A listed withdrawal whose activity failed to save keeps its journal for the next sync to retry.
         if (payments.any { journal.matches(it) }) return isSaved
@@ -1285,6 +1303,11 @@ class SparkRepo @Inject constructor(
      * Clears [journal] only while it is still the open one, so a stale settle never drops a newer withdrawal's. Returns
      * whether it cleared it: only then is the settlement this attempt's to announce.
      */
+    private fun endWithdrawalSend() {
+        isWithdrawing = false
+        withdrawalSendsEnded.incrementAndGet()
+    }
+
     private suspend fun clearJournal(journal: PendingSparkWithdrawal, sentTxid: String? = null): Boolean {
         var cleared = false
         cacheStore.update {
