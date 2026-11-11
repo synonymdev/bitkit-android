@@ -12628,6 +12628,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a direct bolt11 pick after a spark leg drops the leg's withdrawal fee`() = test {
+        val bolt11 = "lnbcrt1legthenbolt11"
+        stubLightningScan(bolt11, amountSats = 0u)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        usdtEnabled.value = false
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            endpoints = listOf(
+                Endpoint(MethodId.Bolt11, bolt11, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+            ),
+        )
+        advanceUntilIdle()
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 2_000uL, debitSat = 2_300uL)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        continueWithAmount(2_000u)
+        assertEquals(300L, sut.sendUiState.value.lightningFeeSats)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.Bolt11.rawValue, bolt11))))
+
+        continueWithAmount(6_000u)
+
+        assertNull(sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
+        assertNull(
+            sut.sendUiState.value.lightningFeeSats,
+            "Confirm must not show the Spark withdrawal fee for the BOLT11 invoice",
+        )
+    }
+
+    @Test
     fun `a mixed contact lightning can pay routes direct`() = test {
         val lnurl = openMixedContact()
         val direct = PaykitEndpoint(MethodId.Lnurl.rawValue, lnurl.uri)

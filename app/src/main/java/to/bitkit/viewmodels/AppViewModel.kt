@@ -4916,6 +4916,7 @@ class AppViewModel @Inject constructor(
                     payMethod = SendMethod.LIGHTNING,
                     decodedInvoice = route.invoice ?: it.decodedInvoice,
                     lnurl = null,
+                    lightningFeeSats = null,
                     paykitRoute = route.copy(serviceLeg = null),
                 )
             }
