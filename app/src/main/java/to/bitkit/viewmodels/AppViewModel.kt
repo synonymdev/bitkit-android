@@ -7064,7 +7064,9 @@ class AppViewModel @Inject constructor(
         val attempt = leg.endpoint.value to leg.deliveredSat
         if (incomingPaymentRequest == null && earlierTxids != null) uncertainSparkWithdrawal = attempt
         val outcome = earlierTxids?.let {
-            lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, it)
+            runSuspendCatching { lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, it) }
+                .onFailure { Logger.warn("Failed to read a Spark withdrawal outcome", it, context = TAG) }
+                .getOrDefault(SparkWithdrawalOutcome.Unknown)
         }
         if (incomingPaymentRequest == null && earlierTxids != null && uncertainSparkWithdrawal != attempt) {
             Logger.info("Settled a Spark withdrawal while its outcome was read", context = TAG)

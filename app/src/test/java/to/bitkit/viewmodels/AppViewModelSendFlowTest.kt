@@ -12535,6 +12535,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
     }
 
+    @Test
+    fun `a failed spark outcome read leaves the send pending until its journal settles`() = test {
+        val leg = sparkRouteLeg("bcrt1qroutedcontact")
+        val effects = uncertainContactSparkSend(leg, SparkWithdrawalOutcome.Unknown) {
+            throw AppError("payment list read failed")
+        }
+        val pending = assertIs<SendEffect.NavigateToPending>(effects.last())
+        sut.showSheet(Sheet.Send(SendRoute.Pending(pending.paymentHash, pending.amount, false, isOnchain = true)))
+
+        sparkWithdrawalSettlements.emit(SparkWithdrawalSettlement(leg.endpoint.value, leg.deliveredSat, null))
+        runCurrent()
+
+        assertIs<SendEffect.NavigateToError>(effects.last(), "a withdrawal that never sent can be tried again")
+    }
+
     private suspend fun TestScope.uncertainContactSparkSend(
         leg: ServiceRouteLeg,
         outcome: SparkWithdrawalOutcome,
