@@ -545,7 +545,8 @@ class SparkExitDriver(
                 }
                 // A check marks a step unverified when one chain read fails and clears it on the next clean check, so
                 // only steps that were all unverified before this check are rebuilt over: one this check just turned
-                // unverified may be in flight, and holds the rebuild until the next check, as a ready one does.
+                // unverified may be in flight, and holds the rebuild as a ready one does. A step that stays unread is
+                // rebuilt at the first check, at most once a block, where no other step just turned unverified.
                 if (!needsUnverifiedRebuild(sent, stored)) return sent
                 // A step that stays unread past a check is settled by a fresh build, which reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
