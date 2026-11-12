@@ -13,4 +13,5 @@ fun idleSparkRepo(): SparkRepo = mock {
     on { state } doReturn MutableStateFlow(SparkState())
     on { nodeEvents } doReturn MutableSharedFlow()
     on { wipe(any()) } doReturn Result.success(Unit)
+    onBlocking { holdsRestoredInvoices() } doReturn false
 }

@@ -1508,6 +1508,7 @@
     <string name="wallet__payment_received">Received Bitcoin</string>
     <string name="wallet__payment_abandoned">The Lightning payment was stopped before it completed.</string>
     <string name="wallet__payment_expired">This Lightning payment expired. Please request a new invoice.</string>
+    <string name="wallet__payment_restored_invoice">Bitkit can\'t confirm this invoice wasn\'t paid before you restored your wallet. Please request a new invoice.</string>
     <string name="wallet__payment_failed_description">Your instant payment failed. Please try again.</string>
     <string name="wallet__payment_invoice_request_expired">This Lightning invoice request expired. Please request a new invoice.</string>
     <string name="wallet__payment_invoice_request_rejected">The recipient rejected this Lightning invoice request.</string>

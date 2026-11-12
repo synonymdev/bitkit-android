@@ -339,7 +339,6 @@ class ProfileViewModel @Inject constructor(
 
     override fun onCleared() {
         removalCoordinator.discard(removalConfirmation)
-        super.onCleared()
     }
 }
 

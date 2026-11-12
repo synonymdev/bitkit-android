@@ -162,6 +162,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val probePaymentB = "probe-payment-b"
     private val probeHashA = "probe-hash-a"
     private val probeHashB = "probe-hash-b"
+    private val restoredAt = 1_800_000_000L
     private val probeNodeId = "02abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef12"
 
     private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
@@ -1454,6 +1455,66 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark refuses an invoice from before the restore while the node hasn't listed since it`() = test {
+        startNodeForTesting()
+        restoredCacheWithInvoiceAt(restoredAt - 60)
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        assertIs<ServiceError.NodeNotStarted>(sut.payInvoice("bolt11", 1_000uL).exceptionOrNull())
+        whenever(coreService.decode("bolt11")).thenThrow(IllegalStateException("undecodable"))
+        assertIs<ServiceError.NodeNotStarted>(sut.payInvoice("bolt11", 1_000uL).exceptionOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `spark pays an invoice from after the restore while the node is down`() = test {
+        startNodeForTesting()
+        restoredCacheWithInvoiceAt(restoredAt + 60)
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        assertEquals("hash", sut.payInvoice("bolt11", 1_000uL).getOrThrow())
+    }
+
+    @Test
+    fun `spark is never held on an install that was never restored`() = test {
+        startNodeForTesting()
+        whenever(coreService.decode("bolt11"))
+            .thenReturn(Scanner.Lightning(lightningInvoice("bolt11").copy(timestampSeconds = 1uL)))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        assertEquals("hash", sut.payInvoice("bolt11", 1_000uL).getOrThrow())
+    }
+
+    @Test
+    fun `the node's listing after a restore seeds its hashes and ends the hold`() = test {
+        val cache = AppCacheData(ldkSendHashesSeeded = true, ldkHistoryUnseededSince = restoredAt)
+        val store = CacheStore(InMemoryDataStore(cache))
+        sut = repoWith(store)
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("paid", PaymentStatus.SUCCEEDED)))
+
+        startNodeForTesting()
+
+        assertNull(store.data.first().ldkHistoryUnseededSince)
+        assertEquals(listOf("paid"), store.data.first().ldkSendHashes)
+    }
+
+    private suspend fun restoredCacheWithInvoiceAt(createdAt: Long) {
+        val cache = AppCacheData(ldkSendHashesSeeded = true, ldkHistoryUnseededSince = restoredAt)
+        whenever(cacheStore.data).thenReturn(flowOf(cache))
+        whenever(coreService.decode("bolt11"))
+            .thenReturn(Scanner.Lightning(lightningInvoice("bolt11").copy(timestampSeconds = createdAt.toULong())))
+    }
+
+    @Test
     fun `spark waits for the node's first listing when its earlier sends were never kept`() = test {
         startNodeForTesting()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
@@ -2116,6 +2177,15 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sut.payInvoice("bolt11", 1000uL)
         assertTrue(result.isSuccess)
         assertEquals(testPaymentId, result.getOrNull())
+    }
+
+    @Test
+    fun `a node send outside a restore hold leaves the invoice undecoded`() = test {
+        startNodeForTesting()
+        whenever(lightningService.send("bolt11", 1000uL)).thenReturn("payment-id")
+
+        assertEquals("payment-id", sut.payInvoice("bolt11", 1000uL).getOrThrow())
+        verify(coreService, never()).decode(any())
     }
 
     @Test
@@ -4352,6 +4422,15 @@ class LightningRepoTest : BaseUnitTest() {
     fun `estimateRoutingFees should fail when node is not running`() = test {
         val result = sut.estimateRoutingFees("lnbc1u1p0abcde")
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `a fee estimate spark pays needs no running node`() = test {
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.estimateFeeSats("bolt11", 1_000uL)).thenReturn(Result.success(3uL))
+
+        assertEquals(3uL, sut.estimateRoutingFeesForAmount("bolt11", 1_000uL).getOrThrow())
+        verify(lightningService, never()).estimateRoutingFeesForAmount(any(), any())
     }
 
     @Test

@@ -99,6 +99,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -1169,6 +1170,17 @@ class BackupRepo @Inject constructor(
                 }
                 connectionSession.replay()
                 prepareUsdtRecoveryRestore()
+                // Armed before any category, so a restore whose metadata is missing or unreadable holds each rail off
+                // invoices from before it too: until that rail lists its own sends, and, for one Spark hasn't listed,
+                // until the invoice expires.
+                val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
+                cacheStore.update {
+                    it.copy(
+                        sparkHistoryUnseededSince = restoredAt,
+                        ldkHistoryUnseededSince = restoredAt,
+                        sparkRestoredAt = restoredAt,
+                    )
+                }
                 var metadataReceived = false
                 val metadataResult = performRestore(BackupCategory.METADATA, failedCategories) { dataBytes ->
                     metadataReceived = true
@@ -1323,7 +1335,16 @@ class BackupRepo @Inject constructor(
         )
         val parsed = decodeBackup<MetadataBackupV1>(migration.json)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
-        cacheStore.update { cleanCache.copy(backupStatuses = it.backupStatuses) }
+        // The backed-up send hashes can predate either rail's latest sends, so each rail's own list seeds them again.
+        val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
+        cacheStore.update {
+            cleanCache.copy(
+                backupStatuses = it.backupStatuses,
+                sparkHistoryUnseededSince = restoredAt,
+                ldkHistoryUnseededSince = restoredAt,
+                sparkRestoredAt = restoredAt,
+            )
+        }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
