@@ -40,6 +40,8 @@ Gradle ignores `~/.m2` by default. To test dependencies you published with `publ
 
 `-PuseMavenLocal=true` selects LDK and VSS; `false` or omitting the property disables local Maven. Unknown names fail the build. Never ship a build with local dependencies or symbolicate it with published debug symbols, because its native libraries may differ from the published AARs. For a local Bitkit Core AAR without publishing to Maven local, use [`bitkitCoreAar`](docs/usdt.md).
 
+Gradle verifies every downloaded dependency against `gradle/verification-metadata.xml`; see [dependency verification](docs/dependency-verification.md). Builds that use local artifacts fail that check by design, so pass `--dependency-verification lenient` for those local builds only.
+
 See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
 - [vss-rust-client-ffi android bindings](https://github.com/synonymdev/vss-rust-client-ffi/tree/master/bindings/android#installation)

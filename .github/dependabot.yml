@@ -38,6 +38,7 @@ updates:
         update-types:
           - major
 
+  # These PRs need gradle/verification-metadata.xml regenerated with `just deps`; see docs/dependency-verification.md.
   - package-ecosystem: gradle
     directory: /
     schedule:
