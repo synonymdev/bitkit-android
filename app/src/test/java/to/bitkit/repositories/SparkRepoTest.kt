@@ -491,8 +491,19 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a pre-restore invoice the operators show failed is refused on both rails`() = test {
-        assertRestoredInvoiceRefusedOnBothRails(status = PaymentStatus.FAILED)
+    fun `a pre-restore invoice retries on both rails after its spark send failed`() = test {
+        val sut = restoredSparkForPreRestoreInvoice(status = null, stubStatus = true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(failed, sentPayment(fees = 0))
+        sut.payInvoice("lnbc1280n1send", 128uL)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed))
+        // The operators show a send failed once every attempt at its hash was returned.
+        sendStatus = { PaymentStatus.FAILED }
+        val createdAt = now.epochSeconds - 660
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, createdAt + 3_600))
+        sut.payInvoice("lnbc1280n1send", 128uL).getOrThrow()
+        verify(sparkService, times(2)).send(any(), anyOrNull())
     }
 
     @Test

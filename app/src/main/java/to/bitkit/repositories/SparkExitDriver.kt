@@ -345,7 +345,7 @@ class SparkExitDriver(
                 // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
                 // leaves are retried, past the window in which they are ours to publish.
                 if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
-                holdingRedo(record, waiting)?.let { return it }
+                holdingRedo(record, waiting, isBuilt = true)?.let { return it }
                 val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
@@ -363,7 +363,7 @@ class SparkExitDriver(
         if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
         // A diverged generation is never sent again, so a Redo rebuild that leaves out a waiting leaf it recovers would
         // leave that leaf unsent until the rest of the exit is done: it tries again at its usual pace for a few blocks.
-        holdingRedo(record, waiting)?.let { return it }
+        holdingRedo(record, waiting, isBuilt = true)?.let { return it }
         val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
@@ -374,15 +374,20 @@ class SparkExitDriver(
         return broadcastReady(adopted)
     }
 
-    private fun holdingRedo(record: SparkExitRecord, waiting: List<String>): SparkExitRecord? {
+    private fun holdingRedo(
+        record: SparkExitRecord,
+        waiting: List<String>,
+        isBuilt: Boolean = false,
+    ): SparkExitRecord? {
         if (!record.isRedoRebuild || record.recovery?.leaves?.none { it.leafId in waiting } != false) return null
         // Without a tip the hold goes on uncounted: the failed read that skipped the leaf often fails the tip too.
         val height = tip
         val since = record.redoHeldSince ?: height
         if (height != null && since != null && height >= since && height - since >= REDO_HOLD_BLOCKS) return null
         Logger.info("Holding the Spark exit's Redo rebuild for waiting leaves '$waiting'", context = TAG)
-        // Funding a top-up already covered runs the hold at the rebuild pace, with no fee ask on screen.
-        val phase = if (record.fundingShortfallSats == null) SparkExitRecord.Phase.Running else record.phase
+        // A build the held funding paid for, or funding a top-up already covered, runs the hold at the rebuild pace,
+        // with no fee ask on screen; a later build that is short asks again.
+        val phase = if (isBuilt || record.fundingShortfallSats == null) SparkExitRecord.Phase.Running else record.phase
         return record.copy(redoHeldSince = since, lastBuildAt = nowMillis(), phase = phase)
     }
 

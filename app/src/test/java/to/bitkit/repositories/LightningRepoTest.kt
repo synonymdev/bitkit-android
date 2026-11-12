@@ -83,6 +83,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
@@ -1620,6 +1621,56 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertIs<PaymentPendingException>(nodeResult?.exceptionOrNull(), "the node paid an invoice Spark is sending")
         verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `of two overlapping spark sends of one invoice only one reaches spark`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var sends = 0
+        var isOverlapped = false
+        var overlapping: Result<PaymentId>? = null
+        // A second send of the same invoice passes its checks while the first is being sent.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            runSuspendCatching {
+                check(authorizeSend())
+                sends++
+                if (!isOverlapped) {
+                    isOverlapped = true
+                    overlapping = sut.payInvoice("h", 1_000uL)
+                }
+                "h"
+            }
+        }
+
+        sut.payInvoice("h", 1_000uL).getOrThrow()
+
+        assertIs<PaymentPendingException>(overlapping?.exceptionOrNull(), "Spark sent an invoice it is sending")
+        assertEquals(1, sends)
+    }
+
+    @Test
+    fun `a spark send of an invoice spark recorded since its checks is refused at submission`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        // An earlier Spark send of the invoice was recorded and ended after this send's checks passed.
+        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenReturn(true)
+        var isSent = false
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            runSuspendCatching {
+                isSent = authorizeSend()
+                "h"
+            }
+        }
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull(), "Spark sent an invoice it sent meanwhile")
+        assertFalse(isSent)
     }
 
     @Test

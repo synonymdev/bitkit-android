@@ -1519,8 +1519,9 @@ class LightningRepo @Inject constructor(
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             val key = ldkSendKey(bolt11, paymentHash)
-            // Read before the checks, so a node send admitted after them refuses this one at submission.
+            // Read before the checks, so a send of either rail recorded after them refuses this one at submission.
             val ldkRecordsBefore = ldkSendRecords.get()
+            val sparkRecordsBefore = sparkRepo.sendRecordMark()
             runSuspendCatching { earlierNodeSend(bolt11, paymentHash) }
                 .getOrElse { return Result.failure(it) }
                 ?.let {
@@ -1535,7 +1536,8 @@ class LightningRepo @Inject constructor(
                 val isAuthorized = onBeforeSend().also { if (it) requireWalletRestoreComplete() }
                 if (isAuthorized) {
                     isAdmitted = admitSend(key, LightningRail.Spark) {
-                        (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore
+                        (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore ||
+                            sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
                     }
                     isRefused = !isAdmitted
                     if (isRefused) throw PaymentPendingException(paymentHash ?: key)
@@ -1695,12 +1697,13 @@ class LightningRepo @Inject constructor(
 
     /**
      * The last check before a send of [key] leaves on [rail], so of two sends of one invoice only the first admitted
-     * goes out: refused while the other rail holds one, or [isSentOnOtherRail] says it recorded one since the checks.
+     * goes out: refused while the other rail holds one, or Spark does, as it doesn't refuse a repeat, or
+     * [isSentSinceChecks] says a send was recorded since the checks. The node refuses its own repeats.
      */
-    private fun admitSend(key: String, rail: LightningRail, isSentOnOtherRail: () -> Boolean): Boolean =
+    private fun admitSend(key: String, rail: LightningRail, isSentSinceChecks: () -> Boolean): Boolean =
         synchronized(admittedSends) {
             val held = admittedSends[key]
-            val isFree = (held == null || held.first == rail) && !isSentOnOtherRail()
+            val isFree = (held == null || held.first == rail && rail == LightningRail.Ldk) && !isSentSinceChecks()
             if (isFree) admittedSends[key] = rail to (held?.second ?: 0) + 1
             isFree
         }
