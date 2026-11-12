@@ -9,6 +9,7 @@ import breez_sdk_spark.RecoveryFunding
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.SkippedLeaf
 import breez_sdk_spark.SkippedLeafReason
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.FeeRate
@@ -319,9 +320,14 @@ class SparkExitFundingTest {
 
     @Test
     fun `savings must cover the funding and its fee`() {
-        assertTrue(SparkExitMath.canFundFromSavings(10_500uL, 10_000uL, 500uL))
-        assertFalse(SparkExitMath.canFundFromSavings(10_499uL, 10_000uL, 500uL))
-        assertFalse(SparkExitMath.canFundFromSavings(10_000uL, 0uL, 0uL))
+        assertTrue(SparkExitMath.canFundFromSavings(10_500uL, 10_000uL, 500uL, sharesNodeChain = true))
+        assertFalse(SparkExitMath.canFundFromSavings(10_499uL, 10_000uL, 500uL, sharesNodeChain = true))
+        assertFalse(SparkExitMath.canFundFromSavings(10_000uL, 0uL, 0uL, sharesNodeChain = true))
+    }
+
+    @Test
+    fun `savings cannot fund an exit on a chain spark does not read`() {
+        assertFalse(SparkExitMath.canFundFromSavings(10_500uL, 10_000uL, 500uL, sharesNodeChain = false))
     }
 
     @Test
@@ -719,5 +725,31 @@ class SparkExitFundingTest {
         val second = first + SparkExitFixtures.utxo("b", value = 1_000uL)
         val again = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(topUp, second))
         assertEquals(SparkExitPartialFunding(2_283uL, 2_555uL, 294uL), again.partial)
+    }
+
+    @Test
+    fun `a funding scan takes the index past the last used address and reads the gap limit past it`() = runTest {
+        val reads = mutableListOf<UInt>()
+
+        val next = SparkExitMath.scanNextFundingIndex {
+            reads += it
+            it in setOf(0u, 2u, 5u)
+        }
+
+        assertEquals(6u, next)
+        assertEquals((0u..(5u + SparkExitMath.FUNDING_SCAN_GAP_LIMIT.toUInt())).toList(), reads)
+    }
+
+    @Test
+    fun `a funding scan stops at its ceiling when every address reads as used`() = runTest {
+        var reads = 0
+
+        val next = SparkExitMath.scanNextFundingIndex {
+            reads++
+            true
+        }
+
+        assertEquals(SparkExitMath.FUNDING_SCAN_MAX_ADDRESSES.toUInt(), next)
+        assertEquals(SparkExitMath.FUNDING_SCAN_MAX_ADDRESSES, reads)
     }
 }

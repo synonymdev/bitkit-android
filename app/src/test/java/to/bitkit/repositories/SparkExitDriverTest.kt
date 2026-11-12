@@ -552,6 +552,100 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded unverified rebuild that leaves a leaf behind keeps leaf-1's refund n2 on the next rebuild`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        repeat(3) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.recoverErrors += ladderRefusal("leaf-3")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2", "leaf-3")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1")))
+        val start = running(unread).copy(leafIds = listOf("leaf-1", "leaf-2", "leaf-3"))
+
+        var record = driver(tip = 1_000u).tick(start)
+        assertTrue(record.isUnverifiedAsk)
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+        // The funded resume cannot exit leaf-3 and leaves it behind; leaf-1 still reads unverified.
+        record = driver(tip = 1_001u).tick(record)
+        now += interval
+        record = driver(tip = 1_002u).tick(record)
+
+        assertEquals(1, record.generation, "the rebuild adopted a recovery without leaf-1's refund n2")
+        assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+        assertEquals(listOf("n1", "n2"), record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
+    fun `a funded unverified rebuild that cannot exit a leaf keeps the valid generation running`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.recoverErrors += ladderRefusal("leaf-3")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2", "leaf-3")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        val start = running(unread).copy(leafIds = listOf("leaf-1", "leaf-2", "leaf-3"))
+        var record = driver(tip = 1_000u).tick(start)
+        assertTrue(record.isUnverifiedAsk)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(1, record.generation)
+        assertFalse(record.isRebuilding, "the next tick rebuilds the exit without sending leaf-1's refund n2")
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(listOf("n1", "n2"), record.recovery?.transactions?.map { it.txid })
+        assertEquals(listOf("leaf-3"), record.leftBehindLeaves.map { it.leafId })
+    }
+
+    @Test
+    fun `a funded unverified rebuild waiting for the unread leaf prepares once a block`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        repeat(4) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+        sdk.preparedResponse = SparkExitFixtures.prepared(
+            leaves = emptyList(),
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+
+        var record = driver(tip = 1_000u).tick(running(unread))
+        assertTrue(record.isUnverifiedAsk)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("f0", value = 100_000uL))
+
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(2, sdk.prepareRequests.size)
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(2, sdk.prepareRequests.size, "the funded resume prepared again at the same tip")
+
+        record = driver(tip = 1_002u).tick(record)
+        assertEquals(3, sdk.prepareRequests.size, "the funded resume stopped trying at the next block")
+        assertTrue(record.isUnverifiedAsk)
+    }
+
+    @Test
     fun `an unverified rebuild's ask that diverged never sends the diverged generation again`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(
@@ -1347,6 +1441,169 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(9uL, sdk.prepareRequests.single().feeRateSatPerVbyte)
         assertEquals(record.generation + 1, rebuilt.generation)
         assertEquals(listOf("n1b"), chain.broadcasts.map { it.txid })
+    }
+
+    @Test
+    fun `a paid higher fee keeps the valid generation over a build that drops leaf-1's refund n2`() = test {
+        val failed = CooperativeRecoveryFailure(
+            "coop-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        var record = funded(running(unread).copy(leafIds = listOf("leaf-1", "coop-1")))
+            .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(
+            SparkExitFixtures.utxo("f0", value = 20_000uL),
+            SparkExitFixtures.utxo("bump", value = 6_612uL),
+        )
+        sdk.preparedResponse = coopLeaf(16_384uL).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed))
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, record.generation, "the paid bump adopted a recovery without leaf-1's refund n2")
+        assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+        assertEquals(Phase.Running, record.phase)
+        assertFalse(record.isRebuilding)
+        assertEquals(listOf("n1", "n2"), record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
+    fun `a higher fee with nothing to pay keeps the valid generation over a build that drops leaf-1's refund n2`() =
+        test {
+            val unread = SparkExitFixtures.recovery(
+                listOf(
+                    SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                    SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+                ),
+            )
+            var record = funded(running(unread).copy(leafIds = listOf("leaf-1", "leaf-2")))
+                .applyFeeBump(rate = 9uL, extraSats = 0uL, paymentTxid = null)
+            sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
+                skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+            )
+            // The second build is the bump's again, at the next block.
+            repeat(2) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1"))) }
+
+            record = driver(tip = 1_000u).tick(record)
+
+            assertEquals(1, record.generation, "the bump adopted a recovery without leaf-1's refund n2")
+            assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
+            assertEquals(Phase.Running, record.phase)
+            assertFalse(record.isRebuilding, "the valid generation is no longer checked or sent")
+
+            val reread = SparkExitFixtures.recovery(
+                listOf(
+                    SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                    SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+                ),
+            )
+            sdk.checks += check(reread, RecoveryVerdict.Valid)
+            record = driver(tip = 1_001u).tick(record)
+            assertEquals(listOf("n2"), chain.broadcasts.map { it.txid }, "leaf-1's refund n2 was not sent")
+        }
+
+    @Test
+    fun `a higher fee kept over a waiting leaf builds at the bumped rate once the leaf reads`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        var record = funded(running(unread).copy(leafIds = listOf("leaf-1", "leaf-2")))
+            .applyFeeBump(rate = 9uL, extraSats = 0uL, paymentTxid = null)
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        repeat(2) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("m1"))) }
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1, record.generation)
+
+        val reread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        sdk.checks += check(reread, RecoveryVerdict.Valid)
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(1, record.generation, "the rebuild that drops leaf-1's refund n2 was adopted")
+        assertFalse(record.isRebuilding, "the valid generation is no longer checked or sent")
+        assertEquals(
+            listOf("n2"),
+            chain.broadcasts.map { it.txid },
+            "leaf-1's refund n2 was not sent while the bump waits",
+        )
+
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1", "leaf-2"))
+        sdk.builds.clear()
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("b1"), SparkExitFixtures.tx("b2")))
+        sdk.checks += check(reread, RecoveryVerdict.Valid)
+        val preparesBefore = sdk.prepareRequests.size
+        record = driver(tip = 1_002u).tick(record)
+
+        assertEquals(2, record.generation, "the bump was never built at its rate")
+        assertEquals(listOf(9uL), sdk.prepareRequests.drop(preparesBefore).map { it.feeRateSatPerVbyte })
+        assertEquals(listOf("b1", "b2"), record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
+    fun `a dead fee chain beside a waiting leaf rebuilds once the leaf's step confirms`() = test {
+        val bothLeaves = listOf(
+            RecoverFundsLeaf("leaf-1", 100_000uL, RecoveryMethod.UNILATERAL),
+            RecoverFundsLeaf("leaf-2", 100_000uL, RecoveryMethod.UNILATERAL),
+        )
+        fun steps(l1: ExitTransactionStatus, node1: ExitTransactionStatus = ExitTransactionStatus.Confirmed(11_600u)) =
+            Race.recovery(node1).let {
+                it.copy(leaves = bothLeaves, transactions = it.transactions + SparkExitFixtures.tx("l1", status = l1))
+            }
+        var record = running(steps(ExitTransactionStatus.Unverified, node1 = ExitTransactionStatus.Ready)).copy(
+            leafIds = listOf("leaf-1", "leaf-2"),
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", Race.FUNDING_TXID, 0u, 20_000uL)
+            ),
+        )
+        chain.confirmedTxids = setOf(Race.NODE_1)
+        chain.unknownTxids = setOf(Race.firstTxid)
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2")).copy(
+            skipped = listOf(SkippedLeaf("leaf-1", 100_000uL, SkippedLeafReason.Unverified)),
+        )
+        repeat(SparkExitDriver.STALL_REBUILDS_TO_SURFACE + 1) {
+            sdk.builds += Race.rebuilt.copy(leaves = listOf(bothLeaves[1]))
+        }
+
+        repeat(SparkExitDriver.STALL_REBUILDS_TO_SURFACE + 1) { i ->
+            sdk.checks += check(steps(ExitTransactionStatus.Unverified), RecoveryVerdict.Valid)
+            now += interval
+            record = driver(tip = 1_000u + i.toUInt()).tick(record)
+            if (record.isRebuilding) record = driver(tip = 1_000u + i.toUInt()).tick(record)
+            assertEquals(1, record.generation, "a rebuild dropped leaf-1's signed step l1")
+        }
+        assertTrue(record.isStalled)
+        val rebuildsWhileStalled = sdk.recoverRequests.size
+
+        // leaf-1 reads again and its step confirms: the exit moves, so the dead chain is rebuilt over.
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-2"))
+        chain.confirmedTxids = setOf(Race.NODE_1, "l1")
+        sdk.checks += check(steps(ExitTransactionStatus.Confirmed(1_004u)), RecoveryVerdict.Valid)
+        now += interval
+        record = driver(tip = 1_005u).tick(record)
+        if (record.isRebuilding) record = driver(tip = 1_005u).tick(record)
+
+        assertEquals(rebuildsWhileStalled + 1, sdk.recoverRequests.size)
+        assertEquals(2, record.generation, "the dead fee chain was never rebuilt over")
+        assertEquals(Race.rebuiltSecond, chain.broadcasts.last().cpfpTxHex)
     }
 
     @Test

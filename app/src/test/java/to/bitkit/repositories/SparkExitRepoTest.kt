@@ -686,9 +686,11 @@ class SparkExitRepoTest : BaseUnitTest() {
     /** A compressed regtest WIF of a 32-byte secret of 0x01s. */
     private val wif = "cMceqPhHedrhbcR9eXgzmfWy7kRqLyAxMYwFT6ABDWsiwUp9Nsq9"
 
+    private val keyedOnchain = mock<OnchainService>()
+
     private suspend fun keyed(): Pair<Keychain, CoreService> {
         val keychain = mock<Keychain> { on { loadString(any()) } doReturn "mnemonic" }
-        val onchain = mock<OnchainService>()
+        val onchain = keyedOnchain
         whenever(onchain.deriveBitcoinAddress(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(GetAddressResponse(funding, "m/84'/1'/7797'/0/0", "02ab"))
         whenever(onchain.derivePrivateKey(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(wif)
@@ -712,6 +714,7 @@ class SparkExitRepoTest : BaseUnitTest() {
                 val url = request.url.toString()
                 when {
                     url.endsWith("/address/$funding/utxo") && utxos != null -> respond(utxos)
+                    url.endsWith("/address/$funding") -> respond(addressStats(txCount = 0))
                     url.endsWith("/blocks/tip/height") -> respond("1000")
                     url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
                     else -> throw IOException("unreachable '$url'")
@@ -719,6 +722,177 @@ class SparkExitRepoTest : BaseUnitTest() {
             }
         },
     ) { defaultRequest { contentType(ContentType.Application.Json) } }
+
+    private fun addressStats(txCount: Int) =
+        """{"chain_stats":{"tx_count":$txCount},"mempool_stats":{"tx_count":0}}"""
+
+    private fun scannedAddress(index: Int) = "bcrt1qfunding$index"
+
+    /**
+     * A chain where the funding addresses at [used] have a transaction, each index its own address, and the address
+     * reads [reads] lists; [isDown] answers every address read with a server error.
+     */
+    private fun scanChain(
+        used: Set<Int>,
+        reads: MutableList<Int>,
+        isDown: Boolean = false,
+        coins: Map<Int, Int> = emptyMap(),
+    ) = HttpClient(
+        MockEngine.create {
+            dispatcher = testDispatcher
+            addHandler { request ->
+                val url = request.url.toString()
+                val index = url.substringAfter("/address/bcrt1qfunding", "").toIntOrNull()
+                val coinIndex = url.substringAfter("/address/bcrt1qfunding", "").removeSuffix("/utxo").toIntOrNull()
+                when {
+                    index != null && isDown -> respond("", HttpStatusCode.InternalServerError)
+                    index != null -> {
+                        reads += index
+                        respond(addressStats(txCount = if (index in used) 1 else 0))
+                    }
+                    url.endsWith("/utxo") && coinIndex != null -> respond(
+                        coins[coinIndex]?.let {
+                            """[{"txid":"${"ab".repeat(32)}","vout":0,"value":$it,"status":{"confirmed":true}}]"""
+                        } ?: "[]"
+                    )
+                    url.endsWith("/utxo") -> respond("[]")
+                    url.endsWith("/blocks/tip/height") -> respond("1000")
+                    url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
+                    else -> throw IOException("unreachable '$url'")
+                }
+            }
+        },
+    ) { defaultRequest { contentType(ContentType.Application.Json) } }
+
+    /** A quoted exit whose funding key at each index derives [scannedAddress] of that index. */
+    private suspend fun scannedSut(http: HttpClient): SparkExitRepo {
+        val sut = quotedSut(FakeSparkExitRecovering(), http)
+        val onchain = keyedOnchain
+        whenever(onchain.deriveBitcoinAddress(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenAnswer {
+            val path = it.getArgument<String>(1)
+            GetAddressResponse(scannedAddress(path.substringAfterLast('/').toInt()), path, "02ab")
+        }
+        return sut
+    }
+
+    private suspend fun keptFundingIndexes(): Map<String, Int> {
+        val updates = argumentCaptor<(AppCacheData) -> AppCacheData>()
+        verify(cacheStore, atLeastOnce()).update(updates.capture())
+        return updates.allValues.fold(AppCacheData()) { data, update -> update(data) }.sparkExitNextFundingIndexes
+    }
+
+    @Test
+    fun `a restored wallet with no kept funding index scans past the funding address its last exit used`() = test {
+        // Funding indexes 0 to 2 were used before the restore; index 2 still holds what a lost exit received.
+        val reads = mutableListOf<Int>()
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2), reads = reads))
+
+        sut.loadQuote().getOrThrow()
+
+        assertEquals(3u, sut.state.value.pending?.fundingIndex)
+        assertEquals(scannedAddress(3), sut.state.value.fundingAddress)
+        assertTrue(2 in reads, "the funding at index 2 goes unseen")
+        assertEquals((0..2 + SparkExitMath.FUNDING_SCAN_GAP_LIMIT).toList(), reads)
+        assertEquals(listOf(3), keptFundingIndexes().values.toList(), "the next quote scans again")
+    }
+
+    private val now = 1_800_000_000_000L
+
+    private fun keptCoins(index: Int, sats: ULong) = SparkExitEarlierAddress(
+        scannedAddress(index),
+        SparkExitFundingKey.path(index, Env.network),
+        SparkExitEarlierAddress.Kind.KEPT_CHANGE,
+        sats,
+        now,
+    )
+
+    private suspend fun keptCache(initial: AppCacheData): AppCacheData {
+        val updates = argumentCaptor<(AppCacheData) -> AppCacheData>()
+        verify(cacheStore, atLeastOnce()).update(updates.capture())
+        return updates.allValues.fold(initial) { data, update -> update(data) }
+    }
+
+    @Test
+    fun `a restored wallet with no kept funding index watches the funding addresses that still hold coins`() = test {
+        // Index 2 still holds what a lost exit received; 0 and 1 were spent by earlier exits.
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2), reads = mutableListOf(), coins = mapOf(2 to 5_000)))
+        sut.load(0).getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertEquals(listOf(keptCoins(2, 5_000uL)), sut.state.value.earlierAddresses, "the lost funding goes unwatched")
+        val stored = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0))).load()
+        assertEquals(listOf(keptCoins(2, 5_000uL)), stored)
+        assertEquals(listOf(3), keptCache(AppCacheData()).sparkExitNextFundingIndexes.values.toList())
+    }
+
+    @Test
+    fun `a funding address with history but no coins is not watched`() = test {
+        val sut = scannedSut(scanChain(used = setOf(0, 1), reads = mutableListOf(), coins = mapOf(1 to 700)))
+        sut.load(0).getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertEquals(listOf(keptCoins(1, 700uL)), sut.state.value.earlierAddresses)
+    }
+
+    @Test
+    fun `a restored funding index brings back the funding addresses that still hold coins`() = test {
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        val restored = AppCacheData(
+            sparkExitNextFundingIndexes = mapOf(key to 3),
+            sparkExitFundingRecoveryPending = setOf(key),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(restored))
+        val reads = mutableListOf<Int>()
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2), reads = reads, coins = mapOf(2 to 5_000)))
+        sut.load(0).getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertEquals(listOf(keptCoins(2, 5_000uL)), sut.state.value.earlierAddresses, "the lost funding goes unwatched")
+        assertTrue(reads.isEmpty(), "a restored index needs no scan for the next one")
+        val cache = keptCache(restored)
+        assertTrue(cache.sparkExitFundingRecoveryPending.isEmpty(), "every start reads the funding addresses again")
+        assertEquals(mapOf(key to 3), cache.sparkExitNextFundingIndexes)
+    }
+
+    @Test
+    fun `a kept funding index with no restore pending reads no funding address`() = test {
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 3))))
+        val reads = mutableListOf<Int>()
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2), reads = reads, coins = mapOf(2 to 5_000)))
+        sut.load(0).getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertTrue(reads.isEmpty())
+        assertTrue(sut.state.value.earlierAddresses.isEmpty())
+    }
+
+    @Test
+    fun `a funding index restored from the backup is used without a scan`() = test {
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 3))))
+        val reads = mutableListOf<Int>()
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2), reads = reads))
+
+        sut.loadQuote().getOrThrow()
+
+        assertEquals(3u, sut.state.value.pending?.fundingIndex)
+        assertTrue(reads.isEmpty(), "a backed-up index needs no scan")
+    }
+
+    @Test
+    fun `a funding scan the chain fails fails the quote and keeps no index`() = test {
+        val sut = scannedSut(scanChain(used = emptySet(), reads = mutableListOf(), isDown = true))
+
+        assertTrue(sut.loadQuote().isFailure, "an exit could fund from an address an earlier exit used")
+
+        assertNull(sut.state.value.pending)
+        verify(cacheStore, never()).update(any())
+    }
 
     private suspend fun quotedSut(sdk: FakeSparkExitRecovering, http: HttpClient = fundingChain()): SparkExitRepo {
         whenever(sparkRepo.needsSettling()).thenReturn(false)
@@ -742,7 +916,8 @@ class SparkExitRepoTest : BaseUnitTest() {
         whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
         whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
         val (keychain, core) = keyed()
-        return createSut(connectedSpark(sdk), http, keychain, core, lightning)
+        // Spark reads the node's chain, so savings can pay the exit's funding.
+        return createSut(connectedSpark(sdk), http, keychain, core, lightning).apply { sharesNodeChain = { true } }
     }
 
     @Test
@@ -944,6 +1119,24 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertTrue(store.load().isEmpty(), "the running exit's funding shows as an earlier exit's")
         assertTrue(sut.state.value.earlierAddresses.isEmpty())
+    }
+
+    @Test
+    fun `kept change at a cancelled exit's reused address is read past the cancel's four weeks`() = test {
+        val store = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+        val path = "m/84'/1'/7797'/0/0"
+        val cancelledAt = 1_800_000_000_000L
+        val keptAt = cancelledAt + 20.days.inWholeMilliseconds
+        val cancelled = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
+        store.add(SparkExitEarlierAddress(funding, path, cancelled, atMillis = cancelledAt))
+
+        store.add(SparkExitEarlierAddress(funding, path, SparkExitEarlierAddress.Kind.KEPT_CHANGE, 600uL, keptAt))
+
+        val listed = store.load().single()
+        assertEquals(SparkExitEarlierAddress.Kind.KEPT_CHANGE, listed.kind, "the kept change stays a cancel's entry")
+        assertEquals(keptAt, listed.atMillis)
+        assertEquals(600uL, listed.sats)
+        assertTrue(listed.isWatched(cancelledAt + 60.days.inWholeMilliseconds), "the kept change is no longer read")
     }
 
     @Test
@@ -1510,6 +1703,25 @@ class SparkExitRepoTest : BaseUnitTest() {
         val ended = quotedSut(FakeSparkExitRecovering())
         ended.load().getOrThrow()
         assertTrue(ended.payHigherFee(option).isFailure)
+    }
+
+    @Test
+    fun `a higher fee is never paid from savings on a chain spark does not read`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        var isPaid = false
+        stubFunding {
+            isPaid = true
+            Result.success(OnchainSendOutcome.Accepted("bump"))
+        }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.sharesNodeChain = { false }
+        sut.load().getOrThrow()
+
+        assertTrue(sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)).isFailure)
+
+        assertFalse(isPaid, "savings paid on a chain spark does not read")
+        assertEquals(2uL, assertNotNull(store.load()).feeRateSatPerVbyte)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

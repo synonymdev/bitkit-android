@@ -198,11 +198,17 @@ class SparkExitDriver(
             // Funding for leaves a partial build skipped: only they are built, once it arrived.
             funded.isFundingWaitingLeaves -> retryWaitingLeaves(funded, sdk, isFunded = true)
                 ?: end(funded.ended(), funded)
-            // Funding an unverified rebuild asked for resumes that rebuild, with its guards.
-            funded.isUnverifiedAsk && !funded.isRebuilding -> build(funded, sdk, isUnverifiedRebuild = true).let {
-                // A resume that adopted nothing keeps the valid generation's retry clock, as a check's rebuild does.
-                if (it.generation != funded.generation || !it.isActive) return@let it
-                it.copy(retrySince = funded.retrySince, retriedAt = funded.retriedAt)
+            // Funding an unverified rebuild asked for resumes that rebuild, with its guards, once a block like the
+            // check's rebuild: the valid generation's retry clock does not pace it.
+            funded.isUnverifiedAsk && !funded.isRebuilding -> {
+                if (tip != null && funded.unverifiedRebuiltAtHeight == tip) return funded
+                val resumed = funded.copy(unverifiedRebuiltAtHeight = tip)
+                build(resumed, sdk, isUnverifiedRebuild = true).let {
+                    // A resume that adopted nothing keeps the valid generation's retry clock, as a check's rebuild
+                    // does.
+                    if (it.generation != resumed.generation || !it.isActive) return@let it
+                    it.copy(retrySince = resumed.retrySince, retriedAt = resumed.retriedAt)
+                }
             }
             else -> build(funded, sdk)
         }
@@ -219,16 +225,20 @@ class SparkExitDriver(
     }
 
     /**
-     * Builds [start]'s leaves as a new generation. With [isUnverifiedRebuild], the generation it rebuilds over is still
-     * valid and stays the exit's, sent every tick, unless the build replaces it with signed steps: a build that asks
-     * for more fee funding keeps sending it while the top-up waits, and one of only failed cooperative leaves beside a
-     * leaf it could not read is not adopted.
+     * Builds [start]'s leaves as a new generation. Over a generation that did not diverge, however the build was
+     * reached (an unverified rebuild, a fee bump, a rebuild after a leaf was left behind), a build that leaves
+     * waiting a leaf that generation recovers is not adopted: the generation stays the exit's, sent every tick.
+     * With [isUnverifiedRebuild], a build that asks for more fee funding also keeps sending it while the top-up waits.
      */
     private suspend fun build(
         start: SparkExitRecord,
         sdk: SparkExitRecovering,
         isUnverifiedRebuild: Boolean = false,
     ): SparkExitRecord {
+        // A pending fee bump builds at its rate at most once a block, however the build was reached.
+        if (start.isFeeBumpPending && start.feeBumpBuiltAtHeight != tip) {
+            return build(start.copy(feeBumpBuiltAtHeight = tip), sdk, isUnverifiedRebuild)
+        }
         // A build waiting for a leaf that may still move tries again only at its paced heights, or once its wait ends.
         val since = start.retrySince
         if (since != null && tip != null && !SparkExitMath.isRetryDue(since, start.retriedAt, tip) &&
@@ -273,7 +283,13 @@ class SparkExitDriver(
             // A leaf the SDK refuses to build is left behind, and the rest rebuilt on the next tick.
             SparkExitUnexitable.parse(it)?.takeIf { refusal -> refusal.leafId in record.exitLeafIds }?.let { refusal ->
                 Logger.warn("Leaving behind Spark exit leaf '${refusal.leafId}': '${refusal.reason}'", context = TAG)
-                return record.leaveBehind(refusal.leafId, refusal.reason).copy(isRebuilding = true, lastBuildAt = null)
+                val left = record.leaveBehind(refusal.leafId, refusal.reason)
+                // Over a valid generation that recovers a leaf this build left waiting, that generation stays,
+                // rebuilt over again under this guard once a block.
+                if (left.keepsValidGenerationOver(waitingLeafIds(record, prepared.skipped, stopped))) {
+                    return left.keepingValidGeneration()
+                }
+                return left.copy(isRebuilding = true, lastBuildAt = null)
             }
             if (it !is SdkException.InsufficientCpfpFunds) throw it
             val asked = askForFunding(record, it)
@@ -290,7 +306,7 @@ class SparkExitDriver(
                 val waiting = waitingLeafIds(record, prepared.skipped, stopped)
                 // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
                 // leaves are retried, past the window in which they are ours to publish.
-                if (isUnverifiedRebuild && record.recoversAny(waiting)) return record.keepingValidGeneration()
+                if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
                 val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
@@ -303,9 +319,9 @@ class SparkExitDriver(
         if (lost.isNotEmpty()) return loseLeaves(record, lost)
         // A leaf that may still move is kept apart and tried again before the exit ends.
         val waiting = waitingLeafIds(record, prepared.skipped, stopped)
-        // An unverified rebuild of other leaves would drop the signed steps of a waiting leaf the valid generation
-        // recovers, until the other leaves' chains confirm: the valid generation stays, rebuilt over once a block.
-        if (isUnverifiedRebuild && record.recoversAny(waiting)) return record.keepingValidGeneration()
+        // A rebuild of other leaves would drop the signed steps of a waiting leaf the valid generation recovers, until
+        // the other leaves' chains confirm: the valid generation stays, rebuilt over once a block.
+        if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
         val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
@@ -513,6 +529,9 @@ class SparkExitDriver(
                     Logger.warn("Rebuilding Spark exit over step '${stuck.txid}' that keeps failing", context = TAG)
                     return stallRebuild(sent, sdk)
                 }
+                if (sent.isFeeBumpPending && tip != null && sent.feeBumpBuiltAtHeight != tip) {
+                    return buildFeeBump(sent, sdk)
+                }
                 if (!needsUnverifiedRebuild(sent)) return sent
                 // A check cannot settle a step the SDK could not read; a fresh build reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
@@ -541,6 +560,32 @@ class SparkExitDriver(
                 // Only a rebuild over a diverged chain can find a leaf an older state claimed.
                 rebuild(updated.copy(isRedoRebuild = true), sdk)
             }
+        }
+    }
+
+    /**
+     * A fee bump whose build kept [sent], the valid generation, over a waiting leaf is built at its rate again once a
+     * block, whatever the leaf waits for, until a build at it is adopted; that build also settles any unread step. A
+     * build it does not adopt leaves [sent] going, checked and sent every tick, and one that asks for more fee funding
+     * keeps sending it while the top-up waits.
+     */
+    private suspend fun buildFeeBump(sent: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+        Logger.info("Rebuilding Spark exit at its higher fee rate '${sent.feeRateSatPerVbyte}' sat/vB", context = TAG)
+        val rebuilding = sent.copy(
+            isRebuilding = true,
+            feeBumpBuiltAtHeight = tip,
+            unverifiedRebuiltAtHeight = tip,
+            isRedoRebuild = false,
+        )
+        // Saved as the valid generation: a run killed during the rebuild goes on sending it.
+        save(rebuilding.copy(isRebuilding = false))
+        val rebuilt = build(rebuilding, sdk)
+        return when {
+            rebuilt.isAdoptionPending(sent) ->
+                rebuilt.copy(isRebuilding = false, retrySince = sent.retrySince, retriedAt = sent.retriedAt)
+            rebuilt.generation == sent.generation && rebuilt.phase is SparkExitRecord.Phase.NeedsFunding ->
+                rebuilt.copy(isRebuilding = false)
+            else -> rebuilt
         }
     }
 
@@ -1494,12 +1539,16 @@ object SparkExitTxOutputs {
 }
 
 /**
- * The valid generation stays the exit's over a rebuild it does not adopt. Funding an unverified rebuild asked for, once
- * adopted, goes back to running it: the funding stays the exit's for the next rebuild.
+ * The valid generation stays the exit's over a rebuild it does not adopt, running again and sent every tick. Funding
+ * adopted for the rebuild, such as a fee bump's or an unverified rebuild's ask, and a bumped rate stay the exit's for
+ * the next rebuild.
  */
 private fun SparkExitRecord.keepingValidGeneration(): SparkExitRecord =
-    if (isUnverifiedAsk) copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false) else this
+    copy(phase = SparkExitRecord.Phase.Running, isRebuilding = false, isUnverifiedAsk = false)
 
-/** The current recovery recovers one of [leafIds]: its signed steps for them would go with a new generation. */
-private fun SparkExitRecord.recoversAny(leafIds: List<String>): Boolean =
-    recovery?.leaves?.any { it.leafId in leafIds } == true
+/**
+ * The current generation did not diverge and recovers one of [leafIds]: its signed steps for them would go with a new
+ * generation that leaves them waiting.
+ */
+private fun SparkExitRecord.keepsValidGenerationOver(leafIds: List<String>): Boolean =
+    !isRedoRebuild && recovery?.leaves?.any { it.leafId in leafIds } == true

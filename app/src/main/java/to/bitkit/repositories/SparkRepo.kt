@@ -141,16 +141,16 @@ class SparkRepo @Inject constructor(
     @Volatile
     private var withdrawalFailedAtSecs: ULong? = null
 
+    /** The kept balance when an exit's hold started, shown again should the exit pay nothing. */
+    @Volatile
+    private var keptBeforeExit: ULong? = null
+
     /**
      * When a withdrawal moved the whole balance, in epoch seconds, so a read of 0 is real until a sync after it reads
      * a balance again. A refresh that read its balance before the withdrawal can't clear it.
      */
     @Volatile
     private var withdrewAllAtSecs: ULong? = null
-
-    /** The kept balance when an exit's hold started, shown again should the exit pay nothing. */
-    @Volatile
-    private var keptBeforeExit: ULong? = null
 
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
@@ -278,8 +278,8 @@ class SparkRepo @Inject constructor(
         preparedWithdrawal = null
         withdrawalTxids.clear()
         withdrawalFailedAtSecs = null
-        withdrewAllAtSecs = null
         keptBeforeExit = null
+        withdrewAllAtSecs = null
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
@@ -534,8 +534,8 @@ class SparkRepo @Inject constructor(
                 spending {
                     // Kept until the call returns, so a send cut off by process death or cancellation stays held.
                     cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
-                    // The checks above and both writes suspend, so the deadline and an exit that started meanwhile are
-                    // checked last, before the send.
+                    // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
+                    // are checked last, before the send.
                     runCatching {
                         ensurePaymentDeadline(paymentDeadlineAt)
                         ensureNotExiting()

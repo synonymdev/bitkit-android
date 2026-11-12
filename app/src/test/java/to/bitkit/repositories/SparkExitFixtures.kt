@@ -150,6 +150,12 @@ class FakeSparkExitChain : SparkExitChain {
 
     override suspend fun tipHeight() = tip
 
+    /** Addresses with a transaction though they hold nothing now. */
+    var usedAddresses = setOf<String>()
+
+    override suspend fun isAddressUsed(address: String) =
+        address in usedAddresses || utxosByAddress[address].orEmpty().isNotEmpty()
+
     override suspend fun utxos(address: String): List<EsploraUtxo> {
         utxosError?.let { throw it }
         return utxosByAddress[address].orEmpty()

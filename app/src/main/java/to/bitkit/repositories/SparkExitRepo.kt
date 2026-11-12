@@ -9,6 +9,7 @@ import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.singleKeyCpfpSigner
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.GetAddressResponse
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -71,6 +72,9 @@ class SparkExitRepo @Inject constructor(
     private val sparkExitTip: SparkExitTip,
     private val cacheStore: CacheStore,
 ) {
+    /** Spark reads the node's chain, so a savings payment, which goes out on it, reaches the exit. */
+    internal var sharesNodeChain: () -> Boolean = { Env.sparkSharesNodeChain }
+
     companion object {
         private const val TAG = "SparkExitRepo"
 
@@ -225,6 +229,8 @@ class SparkExitRepo @Inject constructor(
      */
     suspend fun refreshEarlierAddresses() = withContext(bgDispatcher) {
         val chain = chain ?: return@withContext
+        runSuspendCatching { recoverFunding(chain) }
+            .onFailure { Logger.warn("Failed to look for earlier exits' funding after a restore", it, context = TAG) }
         val now = clock.nowMs()
         val watched = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList()).filter { it.isWatched(now) }
         for (entry in watched) {
@@ -631,6 +637,8 @@ class SparkExitRepo @Inject constructor(
     private suspend fun payHigherFeeLocked(option: SparkExitFeeBumpOption) {
         val record = requireNotNull(_state.value.record?.takeIf { it.isActive }) { "No running Spark exit" }
         val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
+        // On a chain Spark does not read, the exit would never see the payment.
+        require(option.extraSats == 0uL || sharesNodeChain()) { "Spark does not read the node's chain" }
         val txid = if (option.extraSats > 0uL) {
             sendFunding(address, option.extraSats, option.feeRates, option.totalSats.safe() - option.extraSats.safe())
         } else {
@@ -714,7 +722,12 @@ class SparkExitRepo @Inject constructor(
                 val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
                 SparkExitSavingsFunding(
                     feeSats = feeSats,
-                    canPay = SparkExitMath.canFundFromSavings(spendable, fundingSats, feeSats),
+                    canPay = SparkExitMath.canFundFromSavings(
+                        spendable,
+                        fundingSats,
+                        feeSats,
+                        Env.sparkSharesNodeChain,
+                    ),
                 )
             }
         }
@@ -1105,7 +1118,7 @@ class SparkExitRepo @Inject constructor(
 
     // region keys
 
-    private val fundingIndexKey get() = "${Env.network.name.lowercase()}/wallet$walletIndex"
+    private val fundingIndexKey get() = SparkExitMath.walletKey(Env.network, walletIndex)
 
     /** A payment landing late at a forgotten exit's funding address is seen by the next exit, which uses it. */
     private suspend fun giveFundingIndexBack(index: UInt) = cacheStore.update {
@@ -1114,16 +1127,76 @@ class SparkExitRepo @Inject constructor(
         it.copy(sparkExitNextFundingIndexes = indexes + (fundingIndexKey to back))
     }
 
-    private suspend fun nextFundingIndex(): UInt = SparkExitMath.nextFundingIndex(
-        kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey],
-        stored = runSuspendCatching { store.load() }.getOrNull(),
-    )
+    /**
+     * With no index kept and no record, as after a restore from the phrase or from a backup older than the index, the
+     * funding addresses are scanned first. A scan the chain fails keeps nothing.
+     */
+    private suspend fun nextFundingIndex(): UInt {
+        val kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey]
+        val stored = runSuspendCatching { store.load() }.getOrNull()
+        if (kept != null || stored != null) return SparkExitMath.nextFundingIndex(kept, stored)
+        return chain?.let { recoverFunding(it) } ?: 0u
+    }
+
+    /**
+     * Finds earlier exits' funding after a restore. With no index kept and no record, scans for the next index and
+     * keeps it; with an index a restore brought back, reads each funding address below it, once. Each funding address
+     * that still holds coins and nothing watches is listed as kept change, so it is watched for good. Throws when a
+     * read fails, keeping no index and the restore pending, so it runs again on the next start.
+     *
+     * @return the index a scan found, or null when there was nothing to scan.
+     */
+    private suspend fun recoverFunding(chain: SparkExitChain): UInt? {
+        val cache = cacheStore.data.first()
+        val kept = cache.sparkExitNextFundingIndexes[fundingIndexKey]
+        val stored = runSuspendCatching { store.load() }.getOrNull()
+        val isPending = if (kept == null) stored == null else fundingIndexKey in cache.sparkExitFundingRecoveryPending
+        if (!isPending) return null
+        val addresses = mutableMapOf<UInt, String>()
+        suspend fun address(index: UInt) = addresses.getOrPut(index) { fundingAddress(index).address }
+        val used = mutableListOf<UInt>()
+        val scanned = if (kept != null) {
+            null
+        } else {
+            SparkExitMath.scanNextFundingIndex { index ->
+                chain.isAddressUsed(address(index)).also { if (it) used += index }
+            }
+        }
+        val candidates = if (kept == null) used else (0u until kept.toUInt()).toList()
+        val listed = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList()).map { it.address }
+        val watched = listed + stored?.funding?.map { it.address }.orEmpty()
+        for (index in candidates.filter { address(it) !in watched }) {
+            val address = address(index)
+            val sats = chain.utxos(address).fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+            if (sats == 0uL) continue
+            val path = SparkExitFundingKey.path(index.toInt(), Env.network)
+            keepEarlierAddress(
+                SparkExitEarlierAddress(address, path, SparkExitEarlierAddress.Kind.KEPT_CHANGE, sats, clock.nowMs())
+            )
+        }
+        cacheStore.update {
+            val indexes = it.sparkExitNextFundingIndexes
+            val next = scanned?.let { found -> maxOf(indexes[fundingIndexKey] ?: 0, found.toInt()) }
+            it.copy(
+                sparkExitNextFundingIndexes = next?.let { found -> indexes + (fundingIndexKey to found) } ?: indexes,
+                sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending - fundingIndexKey,
+            )
+        }
+        return scanned
+    }
+
+    private suspend fun fundingAddress(index: UInt): GetAddressResponse {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val path = SparkExitFundingKey.path(index = index.toInt(), network = Env.network)
+        return coreService.onchain.deriveBitcoinAddress(mnemonic, path, Env.network, passphrase)
+    }
 
     private suspend fun fundingKey(index: UInt): SparkExitFundingKey.Derived {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         val path = SparkExitFundingKey.path(index = index.toInt(), network = Env.network)
-        val address = coreService.onchain.deriveBitcoinAddress(mnemonic, path, Env.network, passphrase)
+        val address = fundingAddress(index)
         val wif = coreService.onchain.derivePrivateKey(mnemonic, path, Env.network, passphrase)
         return SparkExitFundingKey.Derived(address.address, address.publicKey, SparkExitFundingKey.secretKey(wif))
     }

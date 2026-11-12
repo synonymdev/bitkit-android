@@ -55,6 +55,22 @@ class SparkExitChainTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an address with a transaction in a block or the mempool reads as used`() = test {
+        val stats = { chain: Int, mempool: Int ->
+            """{"chain_stats":{"tx_count":$chain},"mempool_stats":{"tx_count":$mempool}}"""
+        }
+        val sut = chain(
+            Route("a.example/api/address/bcrt1qmempool", 200, stats(0, 1)),
+            Route("a.example/api/address/bcrt1qspent", 200, stats(2, 0)),
+            Route("a.example/api/address/bcrt1qfresh", 200, stats(0, 0)),
+        )
+
+        assertTrue(sut.isAddressUsed("bcrt1qmempool"))
+        assertTrue(sut.isAddressUsed("bcrt1qspent"))
+        assertFalse(sut.isAddressUsed("bcrt1qfresh"))
+    }
+
+    @Test
     fun `sends a package as a raw json array of hex`() = test {
         val sut = chain(Route("a.example/api/v1/txs/package", 200, """{"package_msg":"success","tx-results":{}}"""))
 

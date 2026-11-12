@@ -347,6 +347,11 @@ data class AppCacheData(
      * from an address of its own.
      */
     val sparkExitNextFundingIndexes: Map<String, Int> = mapOf(),
+    /**
+     * The `{network}/wallet{n}` keys whose funding index a restore brought back, so the exit looks once for funding
+     * addresses that still hold coins and nothing watches.
+     */
+    val sparkExitFundingRecoveryPending: Set<String> = emptySet(),
     /** A Spark withdrawal to a Paykit contact that started, kept until Spark's payment list settles it. */
     val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
     /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */

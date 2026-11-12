@@ -510,6 +510,37 @@ object SparkExitMath {
         return maxOf(kept?.toUInt() ?: 0u, pastStored)
     }
 
+    /** Unused funding addresses a scan reads past the last used one before it stops. */
+    const val FUNDING_SCAN_GAP_LIMIT = 20
+
+    /** The most funding addresses one scan reads, even when a host reports every one used. */
+    const val FUNDING_SCAN_MAX_ADDRESSES = 1_000
+
+    /**
+     * The funding index past the last one [isUsed] reports used, read from 0 until [FUNDING_SCAN_GAP_LIMIT] unused ones
+     * follow it, for a wallet that kept no index, such as one restored from the phrase or an older backup.
+     */
+    suspend fun scanNextFundingIndex(isUsed: suspend (UInt) -> Boolean): UInt {
+        var next = 0u
+        var index = 0u
+        while (index < next + FUNDING_SCAN_GAP_LIMIT.toUInt() && index < FUNDING_SCAN_MAX_ADDRESSES.toUInt()) {
+            if (isUsed(index)) next = index + 1u
+            index++
+        }
+        return next
+    }
+
+    /** How the cache and the metadata backup key a wallet's exit state: `{network}/wallet{n}`. */
+    fun walletKey(network: Network, walletIndex: Int) = "${network.name.lowercase()}/wallet$walletIndex"
+
+    /** The wallet index [key] names on [network], null for another network's. */
+    fun walletIndexOf(key: String, network: Network): Int? =
+        key.takeIf { it.startsWith("${network.name.lowercase()}/wallet") }?.substringAfterLast("/wallet")?.toIntOrNull()
+
+    /** Each wallet's higher next funding index of [local] and [restored]. */
+    fun mergeFundingIndexes(local: Map<String, Int>, restored: Map<String, Int>): Map<String, Int> =
+        (local.keys + restored.keys).associateWith { maxOf(local[it] ?: 0, restored[it] ?: 0) }
+
     /**
      * The next funding index once an exit at [index] is forgotten: given back when it was the last one used, so the
      * next exit watches that address again and a payment landing there late is not left where nothing looks.
@@ -517,9 +548,16 @@ object SparkExitMath {
     fun fundingIndexAfterForget(kept: Int?, index: UInt): Int? =
         if (kept != null && kept.toLong() == index.toLong() + 1) index.toInt() else kept
 
-    /** Savings can pay the fee funding when its spendable balance covers the funding and the payment's own fee. */
-    fun canFundFromSavings(spendableSats: ULong, fundingSats: ULong, paymentFeeSats: ULong): Boolean =
-        fundingSats > 0uL && spendableSats >= fundingSats.safe() + paymentFeeSats.safe()
+    /**
+     * Savings can pay the fee funding when Spark reads the node's chain, which the payment goes out on
+     * ([sharesNodeChain]), and its spendable balance covers the funding and the payment's own fee.
+     */
+    fun canFundFromSavings(
+        spendableSats: ULong,
+        fundingSats: ULong,
+        paymentFeeSats: ULong,
+        sharesNodeChain: Boolean,
+    ): Boolean = sharesNodeChain && fundingSats > 0uL && spendableSats >= fundingSats.safe() + paymentFeeSats.safe()
 }
 
 /** The fee funding an exit still needs, as progress shows it. */

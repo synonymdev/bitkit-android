@@ -1,8 +1,11 @@
 package to.bitkit.repositories
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.models.SparkExitEarlierAddressBackupV1
 import to.bitkit.models.safe
 import java.io.File
 import java.nio.file.Files
@@ -22,13 +25,16 @@ data class SparkExitEarlierAddress(
     val sats: ULong? = null,
     val atMillis: Long,
 ) {
-    enum class Kind {
+    /** [backupName] is how both apps' metadata backups name the kind. */
+    enum class Kind(val backupName: String) {
         /** Fee funding left at the funding address for good: change too small to send, or a refused sweep's. */
-        KEPT_CHANGE,
+        KEPT_CHANGE("keptChange"),
 
         /** The funding address of a cancelled exit that was forgotten: a late payment can still land there. */
-        CANCELLED_FUNDING,
+        CANCELLED_FUNDING("cancelledFunding"),
     }
+
+    fun toBackup() = SparkExitEarlierAddressBackupV1(address, path, kind.backupName, atMillis)
 
     /**
      * Read in the foreground for what it holds: kept change always, so change spent by hand shows as spent, and a
@@ -39,6 +45,12 @@ data class SparkExitEarlierAddress(
 
     companion object {
         val WATCH_PERIOD = 28.days
+
+        /** The backed-up entry, with what it holds read again later; null for a kind this app does not know. */
+        fun fromBackup(backup: SparkExitEarlierAddressBackupV1): SparkExitEarlierAddress? {
+            val kind = Kind.entries.firstOrNull { it.backupName == backup.kind } ?: return null
+            return SparkExitEarlierAddress(backup.address, backup.path, kind, atMillis = backup.atMillis)
+        }
 
         /** The leftover an ended exit kept at its funding address, or null when it kept none. */
         fun keptChange(record: SparkExitRecord, network: Network, atMillis: Long): SparkExitEarlierAddress? {
@@ -68,6 +80,11 @@ data class SparkExitEarlierAddress(
 
 /** The earlier exits' addresses, in their own file next to the exit record. A wipe deletes it. */
 class SparkExitEarlierAddressStore(private val file: File) {
+    companion object {
+        /** Counts the writes of every wallet's list, so the metadata backup that carries them runs again. */
+        val writes = MutableStateFlow(0L)
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     fun load(): List<SparkExitEarlierAddress> {
@@ -75,12 +92,17 @@ class SparkExitEarlierAddressStore(private val file: File) {
         return json.decodeFromString(file.readText())
     }
 
-    /** Adds [entry], once per address: a known address keeps its entry, with [entry]'s amount when it has one. */
+    /**
+     * Adds [entry], once per address: a known address keeps its entry, with [entry]'s amount when it has one. Kept
+     * change at a cancelled exit's address, which a later exit reused, replaces that entry, so it is read for good.
+     */
     fun add(entry: SparkExitEarlierAddress): List<SparkExitEarlierAddress> {
         val known = runCatching { load() }.getOrDefault(emptyList())
         val existing = known.firstOrNull { it.address == entry.address }
         val updated = when {
             existing == null -> known + entry
+            entry.kind == SparkExitEarlierAddress.Kind.KEPT_CHANGE && existing.kind != entry.kind ->
+                known.map { if (it.address == entry.address) entry.copy(sats = entry.sats ?: it.sats) else it }
             entry.sats == null || entry.sats == existing.sats -> return known
             else -> known.map { if (it.address == entry.address) it.copy(sats = entry.sats) else it }
         }
@@ -115,5 +137,6 @@ class SparkExitEarlierAddressStore(private val file: File) {
         val temp = File(file.parentFile, "${file.name}.tmp")
         writeDurably(temp, json.encodeToString(entries))
         Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        writes.update { it + 1 }
     }
 }
