@@ -25,11 +25,7 @@ To regenerate:
 
 The script keeps existing entries and the `<configuration>` block. It fails if a host-specific artifact lacks its variants for other platforms. It passes `-PuseMavenLocal=false` and stops if `bitkitCoreAar` is set, so local artifacts are never recorded. If a Gradle task fails, the script still finishes the other steps but exits with an error; do not commit the file until `just deps` passes.
 
-The recorded checksums come from the artifacts in your local Gradle cache, so a new entry is only as trustworthy as that cache. To record checksums from fresh downloads instead, run the script with an empty Gradle home, which is slower because it downloads every artifact again:
-
-1. Run `fresh_home=$(mktemp -d)`.
-2. Run `GRADLE_USER_HOME="$fresh_home" just deps`. The new home has no `gradle.properties`, so the GitHub Packages credentials must come from `local.properties` or the `GITHUB_ACTOR` and `GITHUB_TOKEN` environment variables, or you copy `gradle.properties` into `$fresh_home` first.
-3. Run `rm -rf "$fresh_home"`, because the downloads take several GB.
+`just deps` always runs Gradle with a temporary Gradle home, which it deletes afterwards. It copies your `gradle.properties` into it for the GitHub Packages credentials and downloads every artifact again, because Gradle does not record parent POMs and BOMs that it serves from its cache. So it takes longer and needs several GB of free disk while it runs. New entries record the checksums of these fresh downloads, so a new entry is trusted on first use: it is only as trustworthy as the repository that served it at that time.
 
 The script records release dependencies with the tnet flavor, because a mainnet build needs secret config. This works only while no dependency or plugin differs per flavor. If you add a mainnet-only or other flavor-specific dependency or plugin, extend the task list in the script to cover it. PR CI never builds mainnet, so a missing entry would only show up when the mainnet release build fails verification.
 

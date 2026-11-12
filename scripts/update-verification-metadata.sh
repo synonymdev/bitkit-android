@@ -9,10 +9,11 @@ cd "$repo_root"
 
 metadata="gradle/verification-metadata.xml"
 aapt2_repo="https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt2"
+caller_gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
 
 # A local Bitkit Core AAR adds dependencies that only local builds use, so refuse to record them.
 # Only the property name is matched, so no value is printed.
-for properties in gradle.properties "${GRADLE_USER_HOME:-$HOME/.gradle}/gradle.properties"; do
+for properties in gradle.properties "$caller_gradle_home/gradle.properties"; do
     if [ -f "$properties" ] &&
         grep -qE '^[[:space:]]*(systemProp\.org\.gradle\.project\.)?bitkitCoreAar([[:space:]=:]|$)' "$properties"; then
         echo "Remove bitkitCoreAar from $properties before running this script." >&2
@@ -30,6 +31,32 @@ case "${GRADLE_OPTS-} ${JAVA_OPTS-} ${JAVA_TOOL_OPTIONS-}" in
         ;;
 esac
 
+# The new content goes to a file next to the metadata, so mv replaces it in one step.
+metadata_tmp="$metadata.tmp"
+gradle_status=0
+gradle_home=$(mktemp -d)
+tmp_dir=$(mktemp -d)
+on_exit() {
+    status=$?
+    rm -rf "$gradle_home" "$tmp_dir"
+    rm -f "$metadata_tmp"
+    if [ "$status" -ne 0 ] && [ "$gradle_status" -ne 0 ]; then
+        echo "The Gradle build failed, so $metadata may be incomplete. Do not commit it until just deps passes." >&2
+    fi
+    exit "$status"
+}
+trap on_exit EXIT
+trap 'exit 1' HUP INT TERM
+
+# Gradle does not record parent POMs and BOMs that it serves from its cache, so a warm Gradle
+# home leaves out entries that a build with a cold cache, such as CI, then fails on. A temporary
+# Gradle home makes Gradle download, and so record, every artifact and metadata file.
+# Only gradle.properties is copied into it, so GitHub Packages credentials set there keep working.
+if [ -f "$caller_gradle_home/gradle.properties" ]; then
+    (umask 077 && cp "$caller_gradle_home/gradle.properties" "$gradle_home/gradle.properties")
+fi
+echo "Downloading every dependency into a temporary Gradle home, which is deleted afterwards."
+
 # Release tasks use tnet as the mainnet stand-in, because mainnet needs secret config. This holds
 # only while no dependency or plugin differs per flavor: a flavor-specific one needs its tasks here.
 # They are signed with the tracked debug keystore, which is enough here because signing does not
@@ -40,7 +67,8 @@ esac
 if [ -f keystore.properties ]; then
     echo "Note: keystore.properties takes precedence over the debug keystore, so its storeFile must exist." >&2
 fi
-if KEYSTORE_FILE=app/debug.keystore KEYSTORE_PASSWORD=android \
+if GRADLE_USER_HOME="$gradle_home" \
+    KEYSTORE_FILE=app/debug.keystore KEYSTORE_PASSWORD=android \
     KEY_ALIAS=androiddebugkey KEY_PASSWORD=android \
     ./gradlew --write-verification-metadata sha256 --no-daemon --no-configuration-cache --no-build-cache \
     --continue -PuseMavenLocal=false \
@@ -54,21 +82,6 @@ fi
 
 # Gradle only records the aapt2 binary for the current host, so add the other platforms
 # from Google Maven to keep the file valid on every OS.
-# The new content goes to a file next to the metadata, so mv replaces it in one step.
-metadata_tmp="$metadata.tmp"
-tmp_dir=$(mktemp -d)
-on_exit() {
-    status=$?
-    rm -rf "$tmp_dir"
-    rm -f "$metadata_tmp"
-    if [ "$status" -ne 0 ] && [ "$gradle_status" -ne 0 ]; then
-        echo "The Gradle build failed, so $metadata may be incomplete. Do not commit it until just deps passes." >&2
-    fi
-    exit "$status"
-}
-trap on_exit EXIT
-trap 'exit 1' HUP INT TERM
-
 sha256_of() {
     if command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$1"
