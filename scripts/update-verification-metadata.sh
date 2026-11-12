@@ -16,7 +16,7 @@ aapt2_repo="https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt
 KEYSTORE_FILE=app/debug.keystore KEYSTORE_PASSWORD=android \
     KEY_ALIAS=androiddebugkey KEY_PASSWORD=android \
     ./gradlew --write-verification-metadata sha256 --no-daemon --no-configuration-cache --no-build-cache \
-    help compileDevDebugKotlin testDevDebugUnitTest detekt lintDevDebug \
+    testDevDebugUnitTest detekt lintDevDebug \
     assembleDevDebug assembleDevDebugAndroidTest assembleTnetRelease bundleTnetRelease \
     :app:syncNativeDebugSymbolArtifacts
 

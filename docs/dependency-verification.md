@@ -19,7 +19,7 @@ Regenerate the file when you change any of these:
 
 To regenerate:
 
-1. Run `just deps`. It runs `scripts/update-verification-metadata.sh`, which needs GitHub Packages credentials (see [GitHub Packages setup](../README.md#2-github-packages-setup)). It takes a long time, because it runs the full build, unit tests, detekt, Android Lint and the release builds so that Gradle records every artifact CI and release builds resolve.
+1. Run `just deps`. It runs `scripts/update-verification-metadata.sh`, which needs GitHub Packages credentials (see [GitHub Packages setup](../README.md#2-github-packages-setup)). It takes a long time, because it runs the CI and release build tasks so that Gradle records every artifact they resolve.
 2. Review the diff of `gradle/verification-metadata.xml`. New entries should match only the coordinates you changed.
 3. Commit the file in the same PR as the dependency change.
 
