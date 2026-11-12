@@ -43,6 +43,7 @@ import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
+import to.bitkit.repositories.SparkClaimChoice
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDeposit
 import to.bitkit.repositories.SparkDepositClaim
@@ -67,6 +68,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     private val feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
     private val attemptUpdates = MutableStateFlow(0L)
     private val sparkState = MutableStateFlow(SparkState())
+    private val claimChoices = MutableStateFlow<Map<String, SparkClaimChoice>>(emptyMap())
 
     private fun createSut() =
         SparkFundingViewModel(context, walletRepo, lightningRepo, sparkRepo, currencyRepo, hwWalletRepo)
@@ -82,6 +84,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         whenever(currencyRepo.currencyState).thenReturn(MutableStateFlow(CurrencyState()))
         whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(emptyMap()))
+        whenever(sparkRepo.claimChoices).thenReturn(claimChoices)
         whenever(sparkRepo.state).thenReturn(sparkState)
         whenever { sparkRepo.depositAddress() }.thenReturn(Result.success("bcrt1qspark"))
         whenever { sparkRepo.estimateDepositClaimFeeSats(any()) }.thenReturn(Result.success(1_350uL))
@@ -344,8 +347,22 @@ class SparkFundingViewModelTest : BaseUnitTest() {
 
         sut.showDeposit("txid")
 
+        verify(sparkRepo).followShownDeposit("txid")
         assertEquals("txid", sut.uiState.value.txid)
         assertEquals(SparkDepositClaim.Later, sut.uiState.value.claim)
+    }
+
+    @Test
+    fun `the transfer banner reopens a deposit with the choice made over its changed fee`() = test {
+        whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf("txid" to SparkDepositClaim.Later)))
+        claimChoices.value = mapOf("txid" to SparkClaimChoice.Waited)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.showDeposit("txid")
+
+        assertTrue(sut.uiState.value.hasWaited)
+        assertFalse(sut.uiState.value.isFeeApproved)
     }
 
     @Test
@@ -377,10 +394,13 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(sut.uiState.value.isDepositSeen)
 
-        sut.onPayRepriced()
+        claimChoices.value = mapOf("TXID" to SparkClaimChoice.Approved)
+        advanceUntilIdle()
         assertTrue(sut.uiState.value.isFeeApproved)
-        sut.onWait()
+        claimChoices.value = mapOf("TXID" to SparkClaimChoice.Waited)
+        advanceUntilIdle()
         assertTrue(sut.uiState.value.hasWaited)
+        assertFalse(sut.uiState.value.isFeeApproved)
     }
 
     @Test

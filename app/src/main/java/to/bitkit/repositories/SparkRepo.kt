@@ -219,6 +219,11 @@ class SparkRepo @Inject constructor(
     /** Where the claim of each deposit sent from the transfer flow stands, by txid. */
     val depositClaims: StateFlow<Map<String, SparkDepositClaim>> = _depositClaims.asStateFlow()
 
+    private val _claimChoices = MutableStateFlow<Map<String, SparkClaimChoice>>(emptyMap())
+
+    /** What the user chose over a changed fast transfer fee, by txid, so a reopened status screen keeps its step. */
+    val claimChoices: StateFlow<Map<String, SparkClaimChoice>> = _claimChoices.asStateFlow()
+
     private val _state = MutableStateFlow(SparkState(isSupported = sparkService.isSupported))
     val state: StateFlow<SparkState> = _state.asStateFlow()
 
@@ -304,6 +309,7 @@ class SparkRepo @Inject constructor(
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
         _depositClaims.update { emptyMap() }
+        _claimChoices.update { emptyMap() }
         _state.update { SparkState(isSupported = sparkService.isSupported) }
         val storage = runSuspendCatching { sparkService.wipeStorage(walletIndex) }
         val exitRecords = runSuspendCatching {
@@ -707,6 +713,7 @@ class SparkRepo @Inject constructor(
     /** Accepts the repriced Instant claim of [txid], at the fee the provider asks now. */
     fun payRepricedClaim(txid: String) {
         val repriced = _depositClaims.value[txid] as? SparkDepositClaim.Repriced ?: return
+        _claimChoices.update { it + (txid to SparkClaimChoice.Approved) }
         followDepositClaim(txid, SparkClaimSpeed.Instant, repriced.offer.earlyFeeSats)
     }
 
@@ -715,6 +722,9 @@ class SparkRepo @Inject constructor(
      * it, so Spark doesn't still claim it early.
      */
     fun waitForMatureClaim(txid: String) {
+        if (_depositClaims.value[txid] is SparkDepositClaim.Repriced) {
+            _claimChoices.update { it + (txid to SparkClaimChoice.Waited) }
+        }
         claimJobs.remove(txid)?.cancel()
         setDepositClaim(txid, SparkDepositClaim.Later)
         val vout = earlyClaimVouts.remove(txid) ?: return
@@ -760,6 +770,14 @@ class SparkRepo @Inject constructor(
         if (_depositClaims.value[txid] == SparkDepositClaim.Adding) return
         Logger.warn("Stopped looking for the Instant claim of Spark deposit '$txid'", context = TAG)
         setDepositClaim(txid, if (isSeen) SparkDepositClaim.Unavailable else SparkDepositClaim.NotSeen)
+    }
+
+    /**
+     * Follows the deposit in [txid] as claimed at 3 confirmations when no claim is followed for it, as after a
+     * relaunch, so it turns to [SparkDepositClaim.Claimed] once Spark adds it.
+     */
+    fun followShownDeposit(txid: String) {
+        _depositClaims.update { if (txid in it) it else it + (txid to SparkDepositClaim.Later) }
     }
 
     private fun isClaimed(txid: String): Boolean =
@@ -2156,6 +2174,9 @@ enum class SparkClaimSpeed {
 }
 
 /** Where the claim of a deposit the user sent stands. */
+/** What the user chose over a changed fast transfer fee. */
+enum class SparkClaimChoice { Approved, Waited }
+
 sealed interface SparkDepositClaim {
     /** Spark has not listed the deposit yet, or offers no early claim at this depth. */
     data object Looking : SparkDepositClaim
