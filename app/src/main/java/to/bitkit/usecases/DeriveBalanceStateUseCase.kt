@@ -13,6 +13,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BalanceState
 import to.bitkit.models.TransferType
@@ -37,7 +38,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private val sparkRepo: SparkRepo,
 ) {
     suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
             val channels = lightningRepo.getChannels().orEmpty()
             val activeTransfers = transferRepo.activeTransfers.first()
@@ -52,9 +53,10 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
-            val sparkSats = sparkRepo.state.value.shownBalanceSats
             val afterLingeringCoopClose = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
-            val totalLightningSats = afterLingeringCoopClose.safe() + sparkSats.safe()
+            val maxSendOnchainSats = getMaxSendAmount(balanceDetails)
+            val spark = sparkRepo.state.value
+            val totalLightningSats = afterLingeringCoopClose.safe() + spark.shownBalanceSats.safe()
 
             val balanceState = BalanceState(
                 totalOnchainSats = totalOnchainSats,
@@ -63,13 +65,15 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 // A payment goes over one rail, so the larger of the two balances caps it; Spark keeps its fee.
                 maxSendLightningSats = maxOf(
                     lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
-                    sparkRepo.state.value.sendableSats,
+                    spark.sendableSats,
                 ),
-                maxSendOnchainSats = getMaxSendAmount(balanceDetails),
+                maxSendOnchainSats = maxSendOnchainSats,
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
                 balanceInTransferToSpending = pendingChannelsSats.safe() +
-                    sparkRepo.state.value.pendingDepositSats.safe(),
+                    spark.pendingDepositSats.safe(),
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
+                sparkBalanceSats = spark.shownBalanceSats,
+                sparkPendingDepositSats = spark.pendingDepositSats,
             )
 
             val height = lightningRepo.lightningState.value.block()?.height
@@ -77,7 +81,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             Logger.verbose("Balances in ldk-node at block height=$height: ${jsonLogOf(balanceDetails)}", context = TAG)
             Logger.verbose("Balances in state at block height=$height: ${jsonLogOf(balanceState)}", context = TAG)
 
-            return@runCatching balanceState
+            return@runSuspendCatching balanceState
         }
     }
 

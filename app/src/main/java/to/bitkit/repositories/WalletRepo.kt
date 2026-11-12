@@ -12,7 +12,10 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -30,9 +33,11 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -47,6 +52,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.WalletScope
+import to.bitkit.models.safe
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toBalance
 import to.bitkit.models.toDerivationPath
@@ -82,6 +88,7 @@ class WalletRepo @Inject constructor(
     private val connectionRecovery: WalletConnectionRecovery,
     private val sparkRepo: SparkRepo,
     private val backupRepo: BackupRepo,
+    private val vssClients: VssClientCoordinator,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -90,6 +97,8 @@ class WalletRepo @Inject constructor(
 
     private val _balanceState = MutableStateFlow(BalanceState())
     val balanceState = _balanceState.asStateFlow()
+    private val balanceMutex = Mutex()
+    private var hasLiveBalance = false
 
     private var eventSyncJob: Job? = null
     private val receiveStateMutex = Mutex()
@@ -136,9 +145,9 @@ class WalletRepo @Inject constructor(
         }
         repoScope.launch {
             // The read balance too, as sends use it: it can come back to the shown one while that stays the same.
-            sparkRepo.state.map { Triple(it.balanceSats, it.shownBalanceSats, it.pendingDepositSats) }
+            sparkRepo.state.map { it.isReady to Triple(it.balanceSats, it.shownBalanceSats, it.pendingDepositSats) }
                 .distinctUntilChanged().collect {
-                    if (walletExists()) syncBalances()
+                    if (walletExists()) coroutineScope { launch { syncBalances() } }
                 }
         }
     }
@@ -203,32 +212,34 @@ class WalletRepo @Inject constructor(
     }
 
     fun loadFromCache() {
+        val owner = vssClients.captureOwner()
         changePendingReceiveCacheLoads(1)
         repoScope.launch {
-            receiveStateMutex.withLock {
-                var cacheData = cacheStore.data.first()
-                cacheData.balance?.let { balance -> _balanceState.update { balance } }
-                val unavailable = runSuspendCatching {
-                    privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(cacheData.onchainAddress)
-                }.getOrElse {
-                    receiveCacheValidationFailed = true
-                    Logger.warn("Failed to validate cached receive address", it, context = TAG)
-                    return@withLock
+            vssClients.withWallet(owner) {
+                receiveStateMutex.withLock {
+                    var cacheData = loadBalanceCache()
+                    val unavailable = runSuspendCatching {
+                        privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(cacheData.onchainAddress)
+                    }.getOrElse {
+                        receiveCacheValidationFailed = true
+                        Logger.warn("Failed to validate cached receive address", it, context = TAG)
+                        return@withLock
+                    }
+                    if (unavailable) {
+                        cacheData = cacheData.invalidateReceiveOnchainAddress()
+                        cacheStore.update { it.invalidateReceiveOnchainAddress() }
+                    }
+                    committedReceiveBip21 = cacheData.bip21
+                    _walletState.update {
+                        it.copy(
+                            onchainAddress = cacheData.onchainAddress,
+                            bolt11 = cacheData.bolt11,
+                            bip21 = cacheData.bip21,
+                        )
+                    }
+                    synchronized(receiveUpdateStatusLock) { updateReceivePendingState() }
+                    receiveCacheValidationFailed = false
                 }
-                if (unavailable) {
-                    cacheData = cacheData.invalidateReceiveOnchainAddress()
-                    cacheStore.update { it.invalidateReceiveOnchainAddress() }
-                }
-                committedReceiveBip21 = cacheData.bip21
-                _walletState.update {
-                    it.copy(
-                        onchainAddress = cacheData.onchainAddress,
-                        bolt11 = cacheData.bolt11,
-                        bip21 = cacheData.bip21,
-                    )
-                }
-                synchronized(receiveUpdateStatusLock) { updateReceivePendingState() }
-                receiveCacheValidationFailed = false
             }
         }.invokeOnCompletion { changePendingReceiveCacheLoads(-1) }
     }
@@ -438,20 +449,107 @@ class WalletRepo @Inject constructor(
 
     /** Re-derives the Spending limit from the published channels, without the balances call of [syncBalances]. */
     fun refreshMaxSendLightning() {
-        val state = lightningRepo.lightningState.value
-        if (!state.nodeLifecycleState.isRunning()) return
-        val maxSendSats = maxOf(state.channels.totalNextOutboundHtlcLimitSats(), sparkRepo.state.value.sendableSats)
-        _balanceState.update { it.copy(maxSendLightningSats = maxSendSats) }
+        _balanceState.update {
+            val state = lightningRepo.lightningState.value
+            if (!state.nodeLifecycleState.isRunning()) return@update it
+            it.copy(
+                maxSendLightningSats = maxOf(
+                    state.channels.totalNextOutboundHtlcLimitSats(),
+                    sparkRepo.state.value.sendableSats,
+                ),
+            )
+        }
     }
 
     suspend fun syncBalances() {
-        deriveBalanceStateUseCase().onSuccess { balanceState ->
-            runCatching { cacheStore.cacheBalance(balanceState) }
-            _balanceState.update { balanceState }
-        }.onFailure {
-            if (it !is CancellationException) {
-                Logger.warn("Could not sync balances", it, context = TAG)
+        vssClients.withWallet {
+            balanceMutex.withLock {
+                val result = deriveBalanceStateUseCase()
+                val balance = result.getOrElse {
+                    if (it is CancellationException) throw it
+                    if (it is NodeNotRunningError) {
+                        updateSparkBalance(_balanceState.value)?.let { updated -> return@getOrElse updated }
+                    }
+                    Logger.warn("Could not sync balances", it, context = TAG)
+                    return@withLock
+                }
+                val channels = lightningRepo.lightningState.value.channels
+                val hasAggregate = result.isSuccess ||
+                    (balance.sparkBalanceSats != null && balance.sparkPendingDepositSats != null)
+                if (hasAggregate) cacheBalance(balance)
+                publishBalance(balance, channels)
+                hasLiveBalance = hasLiveBalance || hasAggregate
             }
+        }
+    }
+
+    private fun updateSparkBalance(balance: BalanceState): BalanceState? {
+        val spark = sparkRepo.state.value
+        if (!spark.isReady) return null
+        val included = balance.sparkBalanceSats
+        val pending = balance.sparkPendingDepositSats
+        if (included == null || pending == null) {
+            return balance.copy(maxSendLightningSats = spark.sendableSats)
+        }
+        return balance.copy(
+            totalLightningSats = (balance.totalLightningSats.safe() - included.safe()).safe() +
+                spark.shownBalanceSats.safe(),
+            balanceInTransferToSpending = (balance.balanceInTransferToSpending.safe() - pending.safe()).safe() +
+                spark.pendingDepositSats.safe(),
+            maxSendLightningSats = spark.sendableSats,
+            sparkBalanceSats = spark.shownBalanceSats,
+            sparkPendingDepositSats = spark.pendingDepositSats,
+        )
+    }
+
+    private suspend fun loadBalanceCache(): AppCacheData = balanceMutex.withLock {
+        val hardware = hwWalletRepo.wallets.value
+        val channels = lightningRepo.lightningState.value.channels
+        cacheStore.data.first().also { data ->
+            val balance = if (hasLiveBalance) _balanceState.value else data.balance
+            balance?.let {
+                val updated = if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+                    it
+                } else {
+                    updateSparkBalance(it) ?: it
+                }
+                if (updated != it) cacheBalance(updated)
+                publishBalance(
+                    updated,
+                    if (hasLiveBalance) channels else null,
+                    refreshHardware = hwWalletRepo.wallets.value !== hardware,
+                )
+            }
+        }
+    }
+
+    private suspend fun cacheBalance(balance: BalanceState) {
+        runSuspendCatching { cacheStore.cacheBalance(balance) }
+    }
+
+    private suspend fun publishBalance(
+        balance: BalanceState,
+        previousChannels: List<ChannelDetails>?,
+        refreshHardware: Boolean = true,
+    ) {
+        currentCoroutineContext().ensureActive()
+        _balanceState.update {
+            val node = lightningRepo.lightningState.value
+            val spark = sparkRepo.state.value
+            val maxSend = when {
+                !node.nodeLifecycleState.isRunning() && spark.isReady -> spark.sendableSats
+                node.nodeLifecycleState.isRunning() && node.channels != previousChannels ->
+                    maxOf(node.channels.totalNextOutboundHtlcLimitSats(), spark.sendableSats)
+                else -> balance.maxSendLightningSats
+            }
+            balance.copy(
+                maxSendLightningSats = maxSend,
+                hardwareWallets = if (refreshHardware) {
+                    hwWalletRepo.wallets.value.map { it.toBalance() }
+                } else {
+                    balance.hardwareWallets
+                },
+            )
         }
     }
 
@@ -712,6 +810,7 @@ class WalletRepo @Inject constructor(
     fun resetState() {
         _walletState.update { WalletState() }
         _balanceState.update { BalanceState() }
+        hasLiveBalance = false
     }
 
     fun getOnchainAddress(): String = _walletState.value.onchainAddress
