@@ -1822,4 +1822,9 @@
     <string name="settings__status__exit__funding">Je potřeba financovat poplatky</string>
     <string name="settings__status__exit__pending">Probíhá</string>
     <string name="settings__status__exit__title">Nouzový odchod</string>
+    <string name="settings__status__lightning_connection__spark">Používá Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Připojování...</string>
+    <string name="settings__status__spark__ready">Připojeno</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

@@ -1820,4 +1820,9 @@
     <string name="settings__status__exit__funding">Kostenfinanciering nodig</string>
     <string name="settings__status__exit__pending">Bezig</string>
     <string name="settings__status__exit__title">Noodexit</string>
+    <string name="settings__status__lightning_connection__spark">Via Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Verbinden...</string>
+    <string name="settings__status__spark__ready">Verbonden</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

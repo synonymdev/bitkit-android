@@ -1822,4 +1822,9 @@
     <string name="settings__status__exit__funding">Potrzebne finansowanie opłat</string>
     <string name="settings__status__exit__pending">W toku</string>
     <string name="settings__status__exit__title">Wyjście awaryjne</string>
+    <string name="settings__status__lightning_connection__spark">Przez Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Łączenie...</string>
+    <string name="settings__status__spark__ready">Połączono</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

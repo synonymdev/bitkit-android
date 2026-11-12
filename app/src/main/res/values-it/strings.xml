@@ -1821,4 +1821,9 @@
     <string name="settings__status__exit__funding">Finanziamento delle commissioni necessario</string>
     <string name="settings__status__exit__pending">In corso</string>
     <string name="settings__status__exit__title">Uscita di Emergenza</string>
+    <string name="settings__status__lightning_connection__spark">Tramite Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">In connessione...</string>
+    <string name="settings__status__spark__ready">Connesso</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

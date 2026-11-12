@@ -1824,4 +1824,9 @@
     <string name="settings__status__exit__funding">يلزم تمويل الرسوم</string>
     <string name="settings__status__exit__pending">قيد التنفيذ</string>
     <string name="settings__status__exit__title">الخروج الطارئ</string>
+    <string name="settings__status__lightning_connection__spark">يستخدم Spark</string>
+    <string name="settings__status__spark__error">غير متصل</string>
+    <string name="settings__status__spark__pending">جارٍ الاتصال...</string>
+    <string name="settings__status__spark__ready">متصل</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

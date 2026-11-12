@@ -1821,4 +1821,9 @@
     <string name="settings__status__exit__funding">Financement des frais requis</string>
     <string name="settings__status__exit__pending">En cours</string>
     <string name="settings__status__exit__title">Sortie d\'urgence</string>
+    <string name="settings__status__lightning_connection__spark">Via Spark</string>
+    <string name="settings__status__spark__error">Hors ligne</string>
+    <string name="settings__status__spark__pending">Connexion...</string>
+    <string name="settings__status__spark__ready">Connecté</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

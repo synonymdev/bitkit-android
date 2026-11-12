@@ -1820,4 +1820,9 @@
     <string name="settings__status__exit__funding">Gebührenfinanzierung nötig</string>
     <string name="settings__status__exit__pending">Läuft</string>
     <string name="settings__status__exit__title">Notausstieg</string>
+    <string name="settings__status__lightning_connection__spark">Nutzt Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Verbinden...</string>
+    <string name="settings__status__spark__ready">Verbunden</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

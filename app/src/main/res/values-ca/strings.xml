@@ -1821,4 +1821,9 @@
     <string name="settings__status__exit__funding">Cal finançament de comissions</string>
     <string name="settings__status__exit__pending">En curs</string>
     <string name="settings__status__exit__title">Sortida d\'emergència</string>
+    <string name="settings__status__lightning_connection__spark">Utilitzant Spark</string>
+    <string name="settings__status__spark__error">Fora de línia</string>
+    <string name="settings__status__spark__pending">Connectant...</string>
+    <string name="settings__status__spark__ready">Connectat</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>
