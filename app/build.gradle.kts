@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.FileInputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -54,7 +55,7 @@ val localProperties by lazy {
     }
 }
 
-// macOS keychain item named like the key (`security add-generic-password -U -a "$USER" -s <KEY> -w`), read at
+// macOS keychain item named like the key (`security add-generic-password -U -a "$USER" -s <KEY> -w "$(pbpaste)"`), read at
 // build time so local secrets need no plain copy in local.properties. Absent on Linux (CI) and when no item exists.
 fun keychainProp(key: String): Provider<String> {
     val security = File("/usr/bin/security")
@@ -63,6 +64,21 @@ fun keychainProp(key: String): Provider<String> {
         commandLine(security.path, "find-generic-password", "-a", System.getProperty("user.name"), "-s", key, "-w")
         isIgnoreExitValue = true
     }.standardOutput.asText.map { it.trim() }.filter { it.isNotEmpty() }
+}
+
+// Breez's API key is a base64 certificate of 384 bytes. A cut-short key (the bare `security … -w` prompt keeps only 128
+// characters) turns Spark off at start, so a set key of another size stops the build. Only lengths are reported.
+fun breezApiKey(): Provider<String> {
+    val key = localProp("BREEZ_API_KEY").orElse("").get().trim()
+    val bytes = runCatching { Base64.getDecoder().decode(key).size }.getOrDefault(-1)
+    if (key.isNotEmpty() && bytes != 384) {
+        throw GradleException(
+            "BREEZ_API_KEY has ${key.length} characters and decodes to $bytes bytes; Breez expects a 384-byte " +
+                "certificate (512 base64 characters). Copy the key, then run: " +
+                "security add-generic-password -U -a \"\$USER\" -s BREEZ_API_KEY -w \"\$(pbpaste)\""
+        )
+    }
+    return provider { key }
 }
 
 fun localProp(key: String): Provider<String> {
@@ -368,7 +384,7 @@ androidComponents {
             "USDT_RPC_URL",
             localProp("USDT_RPC_URL").orElse("https://bitkit.to/v1/usdt/chain-rpc").stringField(),
         )
-        buildConfigFields.put("BREEZ_API_KEY", localProp("BREEZ_API_KEY").orElse("").stringField())
+        buildConfigFields.put("BREEZ_API_KEY", breezApiKey().stringField())
         buildConfigFields.put("ESPLORA_URL", localProp("ESPLORA_URL").orElse("").stringField())
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
