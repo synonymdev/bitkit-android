@@ -104,6 +104,7 @@ import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -122,6 +123,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 @Singleton
 class LightningRepo @Inject constructor(
@@ -1563,6 +1565,11 @@ class LightningRepo @Inject constructor(
                             railBefore?.let { rail -> recordSendRail(key, rail) } ?: sendRails.remove(key)
                         }
                     }
+                    .let {
+                        // Refused for a Spark send recorded since the checks, whose completion its caller may miss.
+                        val isOverlapped = isRefused && sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
+                        if (isOverlapped) settledSparkSendOutcome(paymentHash ?: key) ?: it else it
+                    }
             } finally {
                 if (isAdmitted) releaseSend(key)
             }
@@ -1625,6 +1632,15 @@ class LightningRepo @Inject constructor(
             PaymentStatus.SUCCEEDED -> EarlierSend.Paid(hash)
             PaymentStatus.FAILED -> null
         }
+    }
+
+    private suspend fun settledSparkSendOutcome(paymentHash: String): Result<PaymentId>? {
+        val send = sparkRepo.lightningSend(paymentHash) as? SparkLightningSend.Found ?: return null
+        return when (send.status) {
+            SparkPaymentStatus.COMPLETED -> Result.success(paymentHash)
+            SparkPaymentStatus.FAILED -> Result.failure(SparkError.SendRefused("Spark's earlier send of it failed"))
+            SparkPaymentStatus.PENDING -> null
+        }?.also { Logger.info("Settled the refused Spark send '$paymentHash' as '${send.status}'", context = TAG) }
     }
 
     private fun EarlierSend.toResult(): Result<PaymentId> = when (this) {

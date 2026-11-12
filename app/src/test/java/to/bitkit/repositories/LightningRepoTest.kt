@@ -99,6 +99,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
@@ -121,6 +122,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 @OptIn(kotlin.time.ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class LightningRepoTest : BaseUnitTest() {
@@ -1656,8 +1658,9 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         whenever(lightningService.listPayments()).thenReturn(emptyList())
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
-        // An earlier Spark send of the invoice was recorded and ended after this send's checks passed.
+        // An earlier Spark send of the invoice was recorded after this send's checks passed, and is still pending.
         whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenReturn(true)
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.PENDING, null))
         var isSent = false
         whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
             val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
@@ -1671,6 +1674,29 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertIs<PaymentPendingException>(result.exceptionOrNull(), "Spark sent an invoice it sent meanwhile")
         assertFalse(isSent)
+    }
+
+    @Test
+    fun `a spark send refused for an earlier spark send that settled first returns its outcome`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        // The earlier Spark send of the invoice was recorded after this send's checks passed, and completed first.
+        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            runSuspendCatching {
+                authorizeSend()
+                "h"
+            }
+        }
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, "p"))
+
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow(), "a paid send left its caller pending")
+
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
     }
 
     @Test

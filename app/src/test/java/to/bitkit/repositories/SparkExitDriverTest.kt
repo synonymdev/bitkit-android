@@ -1911,16 +1911,57 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(1_000u, record.redoHeldSince)
 
         val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
-        record = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        val asked = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
         chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        // The rebuild needs fee funding, which the held input pays.
+        sdk.preparedResponse = leaf2Unread.copy(funding = SparkExitFixtures.prepared().funding)
         val requests = sdk.recoverRequests.size
         now += interval
-        record = driver(tip = 1_001u).tick(record)
+        record = driver(tip = 1_001u).tick(asked)
 
         assertEquals(requests + 1, sdk.recoverRequests.size, "the held funding did not build the rebuild")
+        assertEquals(
+            listOf<CpfpInput>(CpfpInput.P2wpkh("f0", 1u, 20_000uL, "02ab")),
+            sdk.recoverRequests.last().fundingInputs,
+        )
         assertEquals(1, record.generation, "a rebuild left out leaf-2's steps the diverged generation recovers")
         assertEquals(Phase.Running, record.phase, "a hold the held funding paid for still asks for fees")
         assertNull(record.fundingShortfallSats)
+        assertEquals(1_000u, record.redoHeldSince)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
+
+        // A later build of the hold that comes up short asks again.
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        now += interval
+        record = driver(tip = 1_002u).tick(record)
+
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertEquals(1, record.generation)
+    }
+
+    @Test
+    fun `a redo hold of only failed cooperative leaves drops the fee ask the held funding pays`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        val asked = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        val failed = CooperativeRecoveryFailure(
+            "leaf-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed))
+        now += interval
+        record = driver(tip = 1_001u).tick(asked)
+
+        assertEquals(1, record.generation, "a failed-only rebuild left out leaf-2's steps")
+        assertEquals(Phase.Running, record.phase, "a failed-only hold the held funding paid for still asks for fees")
         assertEquals(1_000u, record.redoHeldSince)
     }
 

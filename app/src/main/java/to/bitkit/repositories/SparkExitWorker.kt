@@ -393,10 +393,13 @@ object SparkExitAlerts {
         previous.isAwaitingOwnPayment && !record.isAwaitingOwnPayment && record.fundingShortfallSats != null &&
             record.fundingPaymentTxid == null
 
-    /** An unverified rebuild's fee ask the tick from [previous] withdrew: the valid generation needs nothing more. */
+    /**
+     * A fee ask the tick from [previous] withdrew: an unverified rebuild's, as the valid generation needs nothing more,
+     * or one a Redo rebuild held through that runs with no new funding, as the held funding pays for it.
+     */
     fun isFundingAskWithdrawn(record: SparkExitRecord, previous: SparkExitRecord): Boolean =
-        previous.isUnverifiedAsk && previous.phase is SparkExitRecord.Phase.NeedsFunding &&
-            record.phase == SparkExitRecord.Phase.Running
+        (previous.isUnverifiedAsk || (previous.isRedoRebuild && record.funding == previous.funding)) &&
+            previous.phase is SparkExitRecord.Phase.NeedsFunding && record.phase == SparkExitRecord.Phase.Running
 
     /** A started exit nothing was paid into: no adopted funding, no payment from savings. */
     fun isAwaitingFirstFunding(record: SparkExitRecord): Boolean =
