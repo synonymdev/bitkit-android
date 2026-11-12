@@ -1032,11 +1032,14 @@
     <string name="wallet__send_invoice_expiration">Λήξη τιμολογίου</string>
     <string name="wallet__send_max_spending__description">Το μέγιστο δαπανήσιμο ποσό είναι λίγο χαμηλότερο λόγω απαιτούμενου αποθεματικού υπολοίπου.</string>
     <string name="wallet__send_max_spending__title">Αποθεματικό υπόλοιπο</string>
+    <string name="wallet__send_paykit_no_route__description">Αυτή η επαφή δεν έχει τρόπο πληρωμής που μπορεί να χρησιμοποιήσει το Bitkit αυτή τη στιγμή.</string>
+    <string name="wallet__send_paykit_no_route__title">Δεν είναι δυνατή η πληρωμή αυτής της επαφής</string>
     <string name="wallet__send_pending__abandon_transfer_note">Οι μεταφορές στο υπόλοιπο δαπανών δεν είναι πλέον διαθέσιμες. Το Bitkit ελέγχει πρώτα το δίκτυο και μετά επιστρέφει τα νομίσματα αυτής της μεταφοράς στο πορτοφόλι σας, ώστε η αρχική μεταφορά να μην επιβεβαιωθεί ποτέ. Αυτό έχει χρέωση δικτύου.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Πληρωμή\n&lt;accent&gt;τιμολογίου...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Επιβεβαίωση</string>
     <string name="wallet__send_sent">Τα Bitcoin στάλθηκαν</string>
+    <string name="wallet__send_swap_route">Διαδρομή</string>
     <string name="wallet__send_swipe">Σύρε για πληρωμή</string>
     <string name="wallet__send_to">Προς</string>
     <string name="wallet__send_yes">Ναι, Στείλε</string>
@@ -1724,4 +1727,9 @@
     <string name="widgets__widget__size_small">Μικρό</string>
     <string name="widgets__widget__size_wide">Φαρδύ</string>
     <string name="wallet__balance_updating">Ενημέρωση υπολοίπου…</string>
+    <string name="settings__status__lightning_connection__spark">Χρήση Spark</string>
+    <string name="settings__status__spark__error">Εκτός σύνδεσης</string>
+    <string name="settings__status__spark__pending">Σύνδεση...</string>
+    <string name="settings__status__spark__ready">Συνδεδεμένο</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

@@ -1054,6 +1054,8 @@
     <string name="wallet__send_invoice_expiration">Scadenza invoice</string>
     <string name="wallet__send_max_spending__description">L\'importo massimo spendibile e\' leggermente inferiore a causa di un saldo di riserva richiesto.</string>
     <string name="wallet__send_max_spending__title">Saldo di Riserva</string>
+    <string name="wallet__send_paykit_no_route__description">Questo contatto non ha alcun metodo di pagamento che Bitkit possa usare ora.</string>
+    <string name="wallet__send_paykit_no_route__title">Impossibile pagare questo contatto</string>
     <string name="wallet__send_pending__abandon_transfer_note">I trasferimenti al saldo di spesa non sono più disponibili. Bitkit controlla prima la rete, poi rimanda le monete di questo trasferimento al tuo wallet, così il trasferimento originale non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__description">Questo pagamento sta richiedendo un po\' più tempo del previsto. Puoi continuare a utilizzare Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento in sospeso</string>
@@ -1061,6 +1063,7 @@
     <string name="wallet__send_quickpay__title">Pagamento\n&lt;accent&gt;fattura...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Conferma</string>
     <string name="wallet__send_sent">Bitcoin Inviati</string>
+    <string name="wallet__send_swap_route">Percorso</string>
     <string name="wallet__send_swipe">Scorri per Pagare</string>
     <string name="wallet__send_to">A</string>
     <string name="wallet__send_yes">Si, Invia</string>
@@ -1725,4 +1728,9 @@
     <string name="widgets__widget__size_small">Piccolo</string>
     <string name="widgets__widget__size_wide">Largo</string>
     <string name="wallet__balance_updating">Aggiornamento del saldo…</string>
+    <string name="settings__status__lightning_connection__spark">Tramite Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">In connessione...</string>
+    <string name="settings__status__spark__ready">Connesso</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>
