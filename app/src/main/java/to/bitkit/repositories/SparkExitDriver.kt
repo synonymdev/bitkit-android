@@ -126,6 +126,9 @@ class SparkExitDriver(
         /** The least time between two builds, so a divergence that persists does not rebuild every tick. */
         val REBUILD_INTERVAL = 10.minutes
 
+        /** Blocks a Redo rebuild waits for a skipped leaf the diverged generation recovers, about an hour. */
+        const val REDO_HOLD_BLOCKS = 6u
+
         const val LOST_REASON = "Claimed by an older state"
 
         const val NO_LEAF_REASON = "No leaf can be exited"
@@ -290,7 +293,9 @@ class SparkExitDriver(
         }
         if (prepared.leaves.isEmpty()) {
             // A leaf that may still move, such as one the chain could not be read for, is waited for, about a week at
-            // most; finished leaves are not listed.
+            // most; finished leaves are not listed. A Redo hold keeps its own pace and bound: the waiting leaf's retry
+            // clock would stretch it.
+            holdingRedo(record, waitingLeafIds(record, prepared.skipped, stopped))?.let { return it }
             if (isWaiting(record, prepared.skipped, stopped)) {
                 Logger.info("Waiting for Spark exit leaves that may still move", context = TAG)
                 return record.copy(retrySince = record.retrySince ?: tip, retriedAt = tip ?: record.retriedAt)
@@ -340,6 +345,7 @@ class SparkExitDriver(
                 // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
                 // leaves are retried, past the window in which they are ours to publish.
                 if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
+                holdingRedo(record, waiting)?.let { return it }
                 val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
@@ -355,6 +361,9 @@ class SparkExitDriver(
         // A rebuild of other leaves would drop the signed steps of a waiting leaf the valid generation recovers, until
         // the other leaves' chains confirm: the valid generation stays, rebuilt over once a block.
         if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
+        // A diverged generation is never sent again, so a Redo rebuild that leaves out a waiting leaf it recovers would
+        // leave that leaf unsent until the rest of the exit is done: it tries again at its usual pace for a few blocks.
+        holdingRedo(record, waiting)?.let { return it }
         val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
@@ -363,6 +372,18 @@ class SparkExitDriver(
             context = TAG,
         )
         return broadcastReady(adopted)
+    }
+
+    private fun holdingRedo(record: SparkExitRecord, waiting: List<String>): SparkExitRecord? {
+        if (!record.isRedoRebuild || record.recovery?.leaves?.none { it.leafId in waiting } != false) return null
+        // Without a tip the hold goes on uncounted: the failed read that skipped the leaf often fails the tip too.
+        val height = tip
+        val since = record.redoHeldSince ?: height
+        if (height != null && since != null && height >= since && height - since >= REDO_HOLD_BLOCKS) return null
+        Logger.info("Holding the Spark exit's Redo rebuild for waiting leaves '$waiting'", context = TAG)
+        // Funding a top-up already covered runs the hold at the rebuild pace, with no fee ask on screen.
+        val phase = if (record.fundingShortfallSats == null) SparkExitRecord.Phase.Running else record.phase
+        return record.copy(redoHeldSince = since, lastBuildAt = nowMillis(), phase = phase)
     }
 
     private suspend fun withExitState(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {

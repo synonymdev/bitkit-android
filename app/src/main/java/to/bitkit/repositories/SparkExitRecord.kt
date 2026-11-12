@@ -116,6 +116,12 @@ data class SparkExitRecord(
     val isRebuiltFromChain: Boolean = false,
     /** The rebuild in progress started from a Redo verdict, the only one whose reproduced spent steps strike. */
     val isRedoRebuild: Boolean = false,
+    /**
+     * The tip at which a Redo rebuild first left out a waiting leaf the diverged generation recovers. The rebuild is
+     * not adopted for [SparkExitDriver.REDO_HOLD_BLOCKS] from then, so a leaf one failed read skipped is not left
+     * unsent until the rest of the exit is done.
+     */
+    val redoHeldSince: UInt? = null,
     /** The fee funding asked for came from a rebuild over unverified steps, while the generation out there is valid. */
     val isUnverifiedAsk: Boolean = false,
     /**
@@ -427,6 +433,7 @@ data class SparkExitRecord(
     fun adopt(built: RecoverFundsResponse, atMillis: Long): SparkExitRecord = copy(
         spentStepStrikes = if (isRedoRebuild) spentStepStrikes(built) else spentStepStrikes,
         isRedoRebuild = false,
+        redoHeldSince = null,
         isUnverifiedAsk = false,
         isFeeBumpPending = false,
         feeBumpBuiltAtHeight = null,
@@ -967,6 +974,7 @@ object SparkExitJson {
         r.exitStateSnapshot?.let { put("exitStateSnapshot", it) }
         if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
         if (r.isRedoRebuild) put("isRedoRebuild", true)
+        r.redoHeldSince?.let { put("redoHeldSince", it.toLong()) }
         if (r.isUnverifiedAsk) put("isUnverifiedAsk", true)
         putFeeBumpState(r)
         r.fundingStrategy?.let { put("fundingStrategy", it) }
@@ -1108,6 +1116,7 @@ object SparkExitJson {
         exitStateSnapshot = o.stringOrNull("exitStateSnapshot"),
         isRebuiltFromChain = o.booleanOrNull("isRebuiltFromChain") ?: false,
         isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,
+        redoHeldSince = o.ulongOrNull("redoHeldSince")?.toUInt(),
         isUnverifiedAsk = o.booleanOrNull("isUnverifiedAsk") ?: false,
         isFeeBumpPending = o.booleanOrNull("isFeeBumpPending") ?: false,
         feeBumpBuiltAtHeight = o.ulongOrNull("feeBumpBuiltAtHeight")?.toUInt(),
