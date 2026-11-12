@@ -889,6 +889,8 @@
     <string name="wallet__send">Senden</string>
     <string name="wallet__receive">Empfangen</string>
     <string name="wallet__send_bitcoin">Bitcoin senden</string>
+    <string name="wallet__send_paykit_no_route__description">Dieser Kontakt hat derzeit keine Zahlungsmethode, die Bitkit nutzen kann.</string>
+    <string name="wallet__send_paykit_no_route__title">Zahlung an diesen Kontakt nicht möglich</string>
     <string name="wallet__send_pending__abandon_transfer_note">Überweisungen auf dein Ausgabenguthaben sind nicht mehr verfügbar. Bitkit prüft zuerst das Netzwerk und schickt die Coins dieser Überweisung dann zurück in deine Wallet, damit die ursprüngliche Überweisung nie bestätigt wird. Dafür fällt eine Netzwerkgebühr an.</string>
     <string name="wallet__send_to">An</string>
     <string name="wallet__recipient_contact">Kontakt</string>
@@ -911,6 +913,7 @@
     <string name="wallet__send_confirming_in">Bestätigung in</string>
     <string name="wallet__send_contact_title">Kontakt auswählen</string>
     <string name="wallet__send_invoice_expiration">Rechnungsverfall</string>
+    <string name="wallet__send_swap_route">Route</string>
     <string name="wallet__send_swipe">Zum Bezahlen wischen</string>
     <string name="wallet__send_yes">Ja, senden</string>
     <string name="wallet__send_dialog1">Es scheint, dass du über $100 sendest. Möchtest du fortfahren?</string>
@@ -1726,4 +1729,9 @@
     <string name="widgets__widget__size_small">Klein</string>
     <string name="widgets__widget__size_wide">Breit</string>
     <string name="wallet__balance_updating">Kontostand wird aktualisiert…</string>
+    <string name="settings__status__lightning_connection__spark">Nutzt Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Verbinden...</string>
+    <string name="settings__status__spark__ready">Verbunden</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

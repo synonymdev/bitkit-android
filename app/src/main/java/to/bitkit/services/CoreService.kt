@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
@@ -45,6 +46,7 @@ import com.synonym.bitkitcore.getTags
 import com.synonym.bitkitcore.initDb
 import com.synonym.bitkitcore.insertActivity
 import com.synonym.bitkitcore.onchainBroadcastRawTx
+import com.synonym.bitkitcore.onchainGetAddressInfo
 import com.synonym.bitkitcore.openChannel
 import com.synonym.bitkitcore.prepareLegacyRnNativeSegwitRecoverySweep
 import com.synonym.bitkitcore.refreshActiveCjitEntries
@@ -2389,6 +2391,17 @@ class OnchainService {
                 indexLimit = indexLimit,
                 bip39Passphrase = bip39Passphrase,
             )
+        }
+    }
+
+    /** The outputs [address] holds unspent on chain, each with its confirmations, as [electrumUrl] lists them. */
+    suspend fun unspentOutputs(address: String, electrumUrl: String, network: Network?): List<AccountUtxo> {
+        return ServiceQueue.CORE.background {
+            onchainGetAddressInfo(
+                address = address,
+                electrumUrl = electrumUrl,
+                network = network?.toCoreNetwork(),
+            ).utxos
         }
     }
 

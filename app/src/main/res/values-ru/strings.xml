@@ -1073,6 +1073,8 @@
     <string name="wallet__send_invoice_expiration">Срок действия инвойса</string>
     <string name="wallet__send_max_spending__description">Максимальная сумма для траты немного меньше из-за необходимого резервного баланса.</string>
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
+    <string name="wallet__send_paykit_no_route__description">У этого контакта сейчас нет способа оплаты, который может использовать Bitkit.</string>
+    <string name="wallet__send_paykit_no_route__title">Невозможно оплатить этому контакту</string>
     <string name="wallet__send_pending__abandon_transfer_note">Переводы на баланс расходов больше недоступны. Bitkit сначала проверяет сеть, а затем возвращает монеты этого перевода в ваш кошелёк, чтобы исходный перевод никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>
@@ -1081,6 +1083,7 @@
 &lt;accent&gt;счёта...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Подтвердить</string>
     <string name="wallet__send_sent">Биткоины отправлены</string>
+    <string name="wallet__send_swap_route">Маршрут</string>
     <string name="wallet__send_swipe">Отправить</string>
     <string name="wallet__send_to">Кому</string>
     <string name="wallet__send_yes">Да, Отправить</string>
@@ -1742,4 +1745,9 @@
     <string name="widgets__widget__size_small">Маленький</string>
     <string name="widgets__widget__size_wide">Широкий</string>
     <string name="wallet__balance_updating">Обновление баланса…</string>
+    <string name="settings__status__lightning_connection__spark">Через Spark</string>
+    <string name="settings__status__spark__error">Не в сети</string>
+    <string name="settings__status__spark__pending">Подключение...</string>
+    <string name="settings__status__spark__ready">Подключено</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>
