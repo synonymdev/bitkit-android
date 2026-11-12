@@ -564,6 +564,43 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded unverified ask whose step reads again ends without a rebuild`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val ready = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.checks += check(ready, RecoveryVerdict.Valid)
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+
+        var record = driver(tip = 1_000u).tick(running(unread))
+        record = driver(tip = 1_000u).tick(record)
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isUnverifiedAsk)
+        val builds = sdk.recoverRequests.size
+
+        // A savings payment keeps the ask open; it confirms on the tick whose check reads n2 again.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("paid", value = 100_000uL))
+        record = driver(tip = 1_001u).tick(record.copy(fundingPaymentTxid = "paid"))
+
+        assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2, which the clean check made ready and sent")
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertEquals(Phase.Running, record.phase)
+        assertFalse(record.isUnverifiedAsk)
+        assertEquals(1, record.generation)
+    }
+
+    @Test
     fun `a funded unverified rebuild that waits for the unread leaf leaves no stale retry clock`() = test {
         val unread = SparkExitFixtures.recovery(
             listOf(

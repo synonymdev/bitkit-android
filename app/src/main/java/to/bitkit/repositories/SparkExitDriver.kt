@@ -201,6 +201,17 @@ class SparkExitDriver(
             // Funding an unverified rebuild asked for resumes that rebuild, with its guards, once a block like the
             // check's rebuild: the valid generation's retry clock does not pace it.
             funded.isUnverifiedAsk && !funded.isRebuilding -> {
+                // A clean check while the payment came can read the unread step again, and it is then sent: a
+                // rebuild now would conflict with it at the same fee. The ask ends, and the funding it adopted stays
+                // for a later rebuild or the leftover sweep.
+                val unilateral = funded.recovery?.transactions.orEmpty()
+                    .filter { it.kind != RecoveryTxKind.COOPERATIVE }
+                if (unilateral.any { it.status == ExitTransactionStatus.Ready } ||
+                    unilateral.none { it.status == ExitTransactionStatus.Unverified }
+                ) {
+                    Logger.info("Spark exit steps read again: no funded unverified rebuild", context = TAG)
+                    return funded.copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false)
+                }
                 if (tip != null && funded.unverifiedRebuiltAtHeight == tip) return funded
                 val resumed = funded.copy(unverifiedRebuiltAtHeight = tip)
                 build(resumed, sdk, isUnverifiedRebuild = true).let {
