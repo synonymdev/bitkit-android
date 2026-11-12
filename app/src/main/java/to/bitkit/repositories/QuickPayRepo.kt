@@ -118,25 +118,15 @@ class QuickPayRepo @Inject constructor(
 
     suspend fun canApply(amountSats: ULong): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val settings = settingsStore.data.first()
-            if (!settings.isQuickPayEnabled || amountSats == 0uL) return@runSuspendCatching false
-
-            val thresholdSats = currencyRepo.convertFiatToSats(
-                settings.quickPayAmount.toDouble(),
-                USD,
-            ).getOrNull() ?: return@runSuspendCatching false
-            if (amountSats > thresholdSats) return@runSuspendCatching false
-
-            val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull()
+            val prepared = runSuspendCatching { prepareReserve(amountSats) }.getOrNull()
                 ?: return@runSuspendCatching false
-            val reserveCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount, amountSats)
-            val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
             val snapshot = mutex.withLock { spend.snapshot() }
             if (!snapshot.supported) return@runSuspendCatching false
-            if (snapshot.spentCents + reserveCents <= capCents) return@runSuspendCatching true
+            if (snapshot.spentCents + prepared.amountCents <= prepared.capCents) return@runSuspendCatching true
 
             Logger.info(
-                "Skipping QuickPay: daily spend '${snapshot.spentCents}' + '$reserveCents' exceeds cap '$capCents'",
+                "Skipping QuickPay: daily spend '${snapshot.spentCents}' + '${prepared.amountCents}' " +
+                    "exceeds cap '${prepared.capCents}'",
                 context = TAG,
             )
             false
@@ -254,7 +244,7 @@ class QuickPayRepo @Inject constructor(
             if (prepared == null ||
                 spend.reserve(invoiceHash, prepared.amountCents, prepared.capCents, keepHashes) == null
             ) {
-                rejectCapLocked(session, invoice)
+                rejectReserveLocked(session, invoice)
                 return@withLock PreparePayResult.REJECTED
             }
             if (sessionFlows[session.id] == null) {
@@ -632,7 +622,7 @@ class QuickPayRepo @Inject constructor(
         paymentId = open.paymentId,
     )
 
-    private fun rejectCapLocked(session: QuickPaySession, invoice: ResolvedInvoice) {
+    private fun rejectReserveLocked(session: QuickPaySession, invoice: ResolvedInvoice) {
         Logger.info(
             "Skipping QuickPay pay: policy or daily spend reserve rejected '${invoice.amountSats}'",
             context = TAG,
