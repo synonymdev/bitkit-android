@@ -640,6 +640,12 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2, sent on the previous tick")
         assertTrue(record.isUnverifiedAsk)
         assertEquals(1, record.generation)
+
+        // A next tick whose check fails reads nothing, so it does not rebuild either.
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2 with no second check")
+        assertTrue(record.isUnverifiedAsk)
     }
 
     @Test

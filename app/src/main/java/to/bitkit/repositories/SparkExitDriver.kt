@@ -143,7 +143,10 @@ class SparkExitDriver(
             }
             is SparkExitRecord.Phase.AwaitingFunding, is SparkExitRecord.Phase.NeedsFunding -> {
                 // A higher fee paid from savings: the generation out there keeps going while that payment confirms.
-                if (record.isDrivingWhileFunding) record = driveWhileFunding(record)
+                var isChecked = true
+                if (record.isDrivingWhileFunding) {
+                    record = driveWhileFunding(record) ?: broadcastWithoutSdk(record).also { isChecked = false }
+                }
                 record = lookForOwnPayment(record)
                 val sdk = recovering
                 val since = record.retrySince
@@ -154,7 +157,7 @@ class SparkExitDriver(
                     Logger.warn("Releasing Spark exit leaves '${record.waitingLeafIds}' unfunded", context = TAG)
                     record = end(record.ended(), record)
                 } else if (sdk != null && record.phase.requiredFundingSats != null) {
-                    record = buildOnceFunded(record, sdk, stored = start.recovery)
+                    record = buildOnceFunded(record, sdk, stored = start.recovery, isChecked = isChecked)
                 }
             }
             SparkExitRecord.Phase.Running if record.isRebuilding -> {
@@ -180,12 +183,13 @@ class SparkExitDriver(
 
     /**
      * Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild.
-     * [stored] is the recovery from before this tick's check.
+     * [stored] is the recovery from before this tick's check, and [isChecked] says whether that check ran.
      */
     private suspend fun buildOnceFunded(
         record: SparkExitRecord,
         sdk: SparkExitRecovering,
         stored: RecoverFundsResponse?,
+        isChecked: Boolean,
     ): SparkExitRecord {
         val shortfall = record.fundingShortfallSats
         // Nothing to fund when every leaf is recovered cooperatively.
@@ -220,7 +224,9 @@ class SparkExitDriver(
                     return funded.copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false)
                 }
                 // A step this check just turned unverified may have been sent on an earlier clean check: the resume
-                // waits for the next check, as the check's own rebuild does.
+                // waits for the next check, as the check's own rebuild does. A tick whose check failed never
+                // rebuilds, as on the check path.
+                if (!isChecked) return funded
                 val unreadBefore = stored?.transactions.orEmpty()
                     .filter { it.status == ExitTransactionStatus.Unverified }
                     .map { it.txid }
@@ -487,13 +493,14 @@ class SparkExitDriver(
         return record.withOwnPaymentLooked(height, isKnown)
     }
 
-    private suspend fun driveWhileFunding(record: SparkExitRecord): SparkExitRecord {
-        val sdk = recovering ?: return broadcastWithoutSdk(record)
+    /** Checks and sends the generation out there while its top-up confirms; null when no check ran this tick. */
+    private suspend fun driveWhileFunding(record: SparkExitRecord): SparkExitRecord? {
+        val sdk = recovering ?: return null
         val stored = requireNotNull(record.recovery)
         val checked = runSuspendCatching { sdk.check(withConfirmations(stored)) }
             .onFailure { Logger.warn("Failed to check the Spark exit, sending without the SDK", it, context = TAG) }
             .getOrNull()
-            ?: return broadcastWithoutSdk(record)
+            ?: return null
         val updated = record.copy(recovery = checked.recovery)
         return when (checked.verdict) {
             RecoveryVerdict.Valid -> {
