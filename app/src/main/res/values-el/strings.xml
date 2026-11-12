@@ -1724,4 +1724,9 @@
     <string name="widgets__widget__size_small">Μικρό</string>
     <string name="widgets__widget__size_wide">Φαρδύ</string>
     <string name="wallet__balance_updating">Ενημέρωση υπολοίπου…</string>
+    <string name="settings__status__lightning_connection__spark">Χρήση Spark</string>
+    <string name="settings__status__spark__error">Εκτός σύνδεσης</string>
+    <string name="settings__status__spark__pending">Σύνδεση...</string>
+    <string name="settings__status__spark__ready">Συνδεδεμένο</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>

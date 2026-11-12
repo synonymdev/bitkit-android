@@ -1726,4 +1726,9 @@
     <string name="widgets__widget__size_small">Malý</string>
     <string name="widgets__widget__size_wide">Široký</string>
     <string name="wallet__balance_updating">Aktualizace zůstatku…</string>
+    <string name="settings__status__lightning_connection__spark">Používá Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Připojování...</string>
+    <string name="settings__status__spark__ready">Připojeno</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>
