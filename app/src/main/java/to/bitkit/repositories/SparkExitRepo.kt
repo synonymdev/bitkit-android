@@ -1139,12 +1139,13 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
-     * Finds earlier exits' funding after a restore. With no index kept and no record, scans for the next index and
-     * keeps it; with an index a restore brought back, reads each funding address below it, once. Each funding address
-     * that still holds coins and nothing watches is listed as kept change, so it is watched for good. Throws when a
-     * read fails, keeping no index and the restore pending, so it runs again on the next start.
+     * Finds earlier exits' funding after a restore. Scans for the next index and keeps it: from 0 with no index kept
+     * and no record, else from the index a restore brought back, reading each funding address below it once too. Each
+     * funding address that still holds coins and nothing watches is listed as kept change, so it is watched for good.
+     * Throws when a read or that listing fails, keeping no index and the restore pending, so it runs again on the next
+     * start.
      *
-     * @return the index a scan found, or null when there was nothing to scan.
+     * @return the index the scan found, or null when no restore was pending.
      */
     private suspend fun recoverFunding(chain: SparkExitChain): UInt? {
         val cache = cacheStore.data.first()
@@ -1155,14 +1156,12 @@ class SparkExitRepo @Inject constructor(
         val addresses = mutableMapOf<UInt, String>()
         suspend fun address(index: UInt) = addresses.getOrPut(index) { fundingAddress(index).address }
         val used = mutableListOf<UInt>()
-        val scanned = if (kept != null) {
-            null
-        } else {
-            SparkExitMath.scanNextFundingIndex { index ->
-                chain.isAddressUsed(address(index)).also { if (it) used += index }
-            }
+        // A restored index can predate the last exit's funding, when its backup didn't land, so the scan goes on from
+        // it.
+        val scanned = SparkExitMath.scanNextFundingIndex(from = kept?.toUInt() ?: 0u) { index ->
+            chain.isAddressUsed(address(index)).also { if (it) used += index }
         }
-        val candidates = if (kept == null) used else (0u until kept.toUInt()).toList()
+        val candidates = if (kept == null) used else (0u until kept.toUInt()).toList() + used
         val listed = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList()).map { it.address }
         val watched = listed + stored?.funding?.map { it.address }.orEmpty()
         for (index in candidates.filter { address(it) !in watched }) {
@@ -1170,15 +1169,17 @@ class SparkExitRepo @Inject constructor(
             val sats = chain.utxos(address).fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
             if (sats == 0uL) continue
             val path = SparkExitFundingKey.path(index.toInt(), Env.network)
-            keepEarlierAddress(
+            // A failed write throws here, so the restore stays pending and the address is looked for again.
+            val listedNow = earlierAddressStore.add(
                 SparkExitEarlierAddress(address, path, SparkExitEarlierAddress.Kind.KEPT_CHANGE, sats, clock.nowMs())
             )
+            _state.update { it.copy(earlierAddresses = listedNow) }
         }
         cacheStore.update {
             val indexes = it.sparkExitNextFundingIndexes
-            val next = scanned?.let { found -> maxOf(indexes[fundingIndexKey] ?: 0, found.toInt()) }
+            val next = maxOf(indexes[fundingIndexKey] ?: 0, scanned.toInt())
             it.copy(
-                sparkExitNextFundingIndexes = next?.let { found -> indexes + (fundingIndexKey to found) } ?: indexes,
+                sparkExitNextFundingIndexes = indexes + (fundingIndexKey to next),
                 sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending - fundingIndexKey,
             )
         }

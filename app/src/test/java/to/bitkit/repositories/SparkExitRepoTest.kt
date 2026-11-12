@@ -44,6 +44,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.atMost
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
@@ -851,10 +852,55 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.refreshEarlierAddresses()
 
         assertEquals(listOf(keptCoins(2, 5_000uL)), sut.state.value.earlierAddresses, "the lost funding goes unwatched")
-        assertTrue(reads.isEmpty(), "a restored index needs no scan for the next one")
+        assertEquals((3 until 23).toList(), reads, "a restored index is scanned forward from, once")
         val cache = keptCache(restored)
         assertTrue(cache.sparkExitFundingRecoveryPending.isEmpty(), "every start reads the funding addresses again")
         assertEquals(mapOf(key to 3), cache.sparkExitNextFundingIndexes)
+    }
+
+    @Test
+    fun `a restored funding index that predates the last exit's funding finds its coins`() = test {
+        // The backup carrying index 4 never landed: the exit that funded address 3 is lost with it.
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        val restored = AppCacheData(
+            sparkExitNextFundingIndexes = mapOf(key to 3),
+            sparkExitFundingRecoveryPending = setOf(key),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(restored))
+        val reads = mutableListOf<Int>()
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2, 3), reads = reads, coins = mapOf(3 to 7_000)))
+        sut.load(0).getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertEquals(listOf(keptCoins(3, 7_000uL)), sut.state.value.earlierAddresses, "address 3's coins stay hidden")
+        assertEquals(mapOf(key to 4), keptCache(restored).sparkExitNextFundingIndexes, "the next exit reuses address 3")
+    }
+
+    @Test
+    fun `a failed listing of a restored funding address keeps the restore pending`() = test {
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        val restored = AppCacheData(
+            sparkExitNextFundingIndexes = mapOf(key to 3),
+            sparkExitFundingRecoveryPending = setOf(key),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(restored))
+        // A non-empty folder where the list goes makes its write fail.
+        File(Env.sparkExitEarlierAddressesPath(0)).apply { mkdirs() }.resolve("blocker").writeText("x")
+        val reads = mutableListOf<Int>()
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2), reads = reads, coins = mapOf(2 to 5_000)))
+        sut.load(0).getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        val updates = argumentCaptor<(AppCacheData) -> AppCacheData>()
+        verify(cacheStore, atMost(Int.MAX_VALUE)).update(updates.capture())
+        val cache = updates.allValues.fold(restored) { data, update -> update(data) }
+        assertEquals(
+            setOf(key),
+            cache.sparkExitFundingRecoveryPending,
+            "the coin-holding address is never looked for again",
+        )
     }
 
     @Test

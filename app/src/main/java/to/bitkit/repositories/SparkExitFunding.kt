@@ -517,12 +517,13 @@ object SparkExitMath {
     const val FUNDING_SCAN_MAX_ADDRESSES = 1_000
 
     /**
-     * The funding index past the last one [isUsed] reports used, read from 0 until [FUNDING_SCAN_GAP_LIMIT] unused ones
-     * follow it, for a wallet that kept no index, such as one restored from the phrase or an older backup.
+     * The funding index past the last one [isUsed] reports used, read from [from] until [FUNDING_SCAN_GAP_LIMIT] unused
+     * ones follow it: from 0 for a wallet that kept no index, such as one restored from the phrase or an older backup,
+     * and from a restored index, which can predate the last exit's funding.
      */
-    suspend fun scanNextFundingIndex(isUsed: suspend (UInt) -> Boolean): UInt {
-        var next = 0u
-        var index = 0u
+    suspend fun scanNextFundingIndex(from: UInt = 0u, isUsed: suspend (UInt) -> Boolean): UInt {
+        var next = from
+        var index = from
         while (index < next + FUNDING_SCAN_GAP_LIMIT.toUInt() && index < FUNDING_SCAN_MAX_ADDRESSES.toUInt()) {
             if (isUsed(index)) next = index + 1u
             index++
