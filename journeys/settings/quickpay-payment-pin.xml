@@ -10,10 +10,11 @@
     QuickPay is off with the default limits: $5 a payment and 5× a day. Never enter a wrong PIN more
     than once.
 
-    The PIN pad is drawn over the QuickPay screen and reads "Please enter your PIN code". The slider
-    stops are their labels under each slider: "$1" to "$50" for the amount (testTag
-    "QuickpayAmountSlider") and "1×" to "50×" for the daily limit (testTag "QuickpayDailyLimitSlider").
-    Read the current values from the text above each slider rather than the knob position.
+    The PIN pad is drawn over the QuickPay screen and reads "Please enter your PIN code to confirm
+    this QuickPay change." The slider stops are their labels under each slider: "$1" to "$50" for
+    the amount (testTag "QuickpayAmountSlider") and "1×" to "50×" for the daily limit (testTag
+    "QuickpayDailyLimitSlider"). Read the current values from the text above each slider rather
+    than the knob position.
   </description>
   <actions>
     <action>Tap the menu button (testTag "HeaderMenu") and tap Settings (testTag "DrawerSettings")</action>
@@ -21,7 +22,7 @@
     <action>If the QuickPay intro shows, tap its Continue button (testTag "QuickpayIntro-button")</action>
     <action>Verify the Enable QuickPay switch (testTag "QuickpayToggle") is off and the text reads "below $5"</action>
     <action>Tap the Enable QuickPay switch (testTag "QuickpayToggle")</action>
-    <action>Verify the PIN pad shows and reads "Please enter your PIN code", then press back</action>
+    <action>Verify the PIN pad shows and reads "Please enter your PIN code to confirm this QuickPay change.", then press back</action>
     <action>Verify the QuickPay screen is showing and the Enable QuickPay switch (testTag "QuickpayToggle") is still off</action>
     <action>Tap the Enable QuickPay switch (testTag "QuickpayToggle") again and enter the PIN</action>
     <action>Verify the PIN pad is gone and the Enable QuickPay switch (testTag "QuickpayToggle") is on</action>

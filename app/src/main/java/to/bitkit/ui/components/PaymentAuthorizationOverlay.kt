@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
@@ -29,7 +28,7 @@ fun BoxScope.PaymentAuthorizationOverlay(
             .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
             .blockPointerInputPassthrough()
     ) {
-        UsdtAuthentication(
+        PaymentAuthentication(
             useBiometrics = useBiometrics,
             onCancel = onCancel,
             onVerified = onVerify,

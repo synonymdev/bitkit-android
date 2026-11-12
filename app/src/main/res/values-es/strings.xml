@@ -588,6 +588,7 @@
     <string name="security__pin_send_title">Introducir Código PIN</string>
     <string name="security__pin_choose_header">Elija un PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su monedero.</string>
+    <string name="security__pin_quickpay">Por favor, introduzca su código PIN para confirmar este cambio en QuickPay.</string>
     <string name="security__pin_retype_header">Vuelva a introducir el PIN de 4 dígitos</string>
     <string name="security__pin_retype_text">Vuelva a introducir su PIN de 4 dígitos para completar el proceso de configuración.</string>
     <string name="security__pin_not_match">Inténtelo de nuevo, no es el mismo PIN.</string>

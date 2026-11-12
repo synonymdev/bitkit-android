@@ -32,6 +32,7 @@ class QuickPaySettingsViewModel @Inject constructor(
     }
 
     private val authorization = MutableStateFlow<QuickPayAuthorization?>(null)
+    private var requestGeneration = 0
 
     val uiState: StateFlow<QuickPaySettingsUiState> = combine(
         settingsStore.data,
@@ -53,19 +54,31 @@ class QuickPaySettingsViewModel @Inject constructor(
         requestChange(QuickPayChange.DailyLimitMultiplier(multiplier))
 
     fun onAuthorized() {
-        val change = authorization.getAndUpdate { null }?.change ?: return
+        val authorized = authorization.getAndUpdate { null } ?: return
         viewModelScope.launch {
-            quickPayRepo.applySettingsChange(change)
-                .onFailure { Logger.error("Failed to save QuickPay change '$change'", it, context = TAG) }
+            quickPayRepo.applyAuthorizedSettingsChange(authorized)
+                .onFailure { Logger.error("Failed to save QuickPay change '${authorized.change}'", it, context = TAG) }
         }
     }
 
-    fun onAuthorizationCancelled() = authorization.update { null }
+    fun onAuthorizationCancelled() {
+        requestGeneration++
+        authorization.update { null }
+        quickPayRepo.cancelSettingsChange()
+    }
 
     private fun requestChange(change: QuickPayChange) {
+        val generation = requestGeneration
         viewModelScope.launch {
             quickPayRepo.requestSettingsChange(change)
-                .onSuccess { pending -> pending?.let { authorization.compareAndSet(null, it) } }
+                .onSuccess { pending ->
+                    pending ?: return@onSuccess
+                    if (generation != requestGeneration) {
+                        quickPayRepo.cancelSettingsChange(pending)
+                        return@onSuccess
+                    }
+                    authorization.update { pending }
+                }
                 .onFailure { Logger.error("Failed to request QuickPay change '$change'", it, context = TAG) }
         }
     }

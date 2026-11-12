@@ -52,6 +52,7 @@ import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PaymentAuthentication
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
@@ -98,7 +99,7 @@ internal fun UsdtDepositsScreen(
     DepositPolling(state.detail, lifecycle, approval != null, deposits::refreshDetail)
     BackHandler(onBack = back)
     if (authentication) {
-        UsdtAuthentication(
+        PaymentAuthentication(
             useBiometrics = settings.isBiometricEnabled,
             onCancel = {
                 authentication = false

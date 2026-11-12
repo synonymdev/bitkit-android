@@ -26,6 +26,7 @@ import com.synonym.bitkitcore.UsdtTransferStatus
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.ui.components.PaymentAuthentication
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
 import to.bitkit.ui.screens.wallets.send.AutoPayOverlay
@@ -122,7 +123,7 @@ fun PaykitUsdtReview(
             ) {
                 if (state.authenticationRequired) {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        UsdtAuthentication(
+                        PaymentAuthentication(
                             settings.isBiometricEnabled,
                             viewModel::cancelAuthentication,
                             viewModel::authenticationVerified
