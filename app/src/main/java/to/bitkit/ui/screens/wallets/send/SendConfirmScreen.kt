@@ -272,7 +272,7 @@ internal fun SendConfirmContent(
                 )
                 .navigationBarsPadding()
         ) {
-            val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+            val isLnurlPay = uiState.paysLnurl
 
             SendContactTopBar(
                 titleText = when {
@@ -365,7 +365,7 @@ private fun ContentRunning(
     var showDetails by rememberSaveable(initialShowDetails) { mutableStateOf(initialShowDetails) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val isPreparing = preparingRequest != null
-    val isLnurlPay = !isPreparing && uiState.lnurl is LnurlParams.LnurlPay
+    val isLnurlPay = !isPreparing && uiState.paysLnurl
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when {
@@ -453,7 +453,8 @@ private fun ContentRunning(
                                 onClickTag = onClickTag,
                                 onClickAddTag = onClickAddTag,
                             )
-                            if ((uiState.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed() == true) {
+                            val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay
+                            if (uiState.paysLnurl && lnurlPay?.data?.commentAllowed() == true) {
                                 LnurlCommentSection(uiState, onEvent)
                             }
                         }
@@ -737,13 +738,14 @@ private fun LightningDetails(
     onClickAddTag: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+    val isLnurlPay = uiState.paysLnurl
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
     val description = uiState.decodedInvoice?.description
-    val destination = when (val lnurl = uiState.lnurl) {
-        is LnurlParams.LnurlPay -> lnurl.data.uri
-        else -> uiState.decodedInvoice?.bolt11.orEmpty()
-    }
+    val destination = uiState.routedPaykitRoute?.serviceLeg?.endpoint?.value
+        ?: when (val lnurl = uiState.lnurl) {
+            is LnurlParams.LnurlPay -> lnurl.data.uri
+            else -> uiState.decodedInvoice?.bolt11.orEmpty()
+        }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -868,6 +870,16 @@ private fun LightningDetails(
             }
         }
 
+        if (uiState.routedPaykitRoute?.serviceLeg != null) {
+            SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
+                BodySSB(
+                    text = stringResource(R.string.wallet__send_swap_route_spark),
+                    maxLines = 1,
+                    modifier = Modifier.testTag("ReviewSwapRoute")
+                )
+            }
+        }
+
         if (!isLnurlPay && !description.isNullOrEmpty() && description.trim() != uiState.confirmationRequestNote) {
             SendCell(caption = stringResource(R.string.wallet__note)) {
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -910,6 +922,10 @@ private fun ContactRecipient(
         )
     }
 }
+
+/** An on-chain pick or a Spark leg keeps the contact's LNURL in state without paying it. */
+private val SendUiState.paysLnurl: Boolean
+    get() = lnurl is LnurlParams.LnurlPay && payMethod == SendMethod.LIGHTNING && routedPaykitRoute?.serviceLeg == null
 
 private val SendUiState.confirmationRequestNote: String?
     get() = paymentRequestNote?.trim()?.takeIf { isPaymentRequest && it.isNotEmpty() }

@@ -1843,6 +1843,22 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a manual on-chain payment found sent later is recorded succeeded with its txid`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        val attemptId = checkNotNull(sut.beginManualPayment(request, fixtures.onchainIdentifier).getOrThrow())
+        sut.finishManualPayment(attemptId, PaymentOutcome.UNKNOWN)
+        recordedOutcomes.clear()
+
+        sut.onchainSendSettled(identity, request.id, "c".repeat(64))
+
+        assertEquals(listOf(PaymentOutcomeReport(attemptId, PaymentOutcome.SUCCEEDED)), recordedOutcomes)
+        val entry = sut.localState(identity).journal.single()
+        assertEquals(Stage.SUCCEEDED, entry.stage)
+        assertEquals("c".repeat(64), entry.transactionId)
+    }
+
+    @Test
     fun `manual payment fails when the request is already recorded`() = test {
         sut.activate(identity)
         manualReservation = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.PaymentAlreadyRecorded)
