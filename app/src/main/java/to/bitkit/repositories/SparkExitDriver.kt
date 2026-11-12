@@ -135,7 +135,12 @@ class SparkExitDriver(
     }
 
     suspend fun tick(start: SparkExitRecord): SparkExitRecord {
-        var record = start
+        // A Redo's fee ask ended on an earlier tick, so its withdrawal was already seen.
+        var record = if (start.isRedoAsk && start.phase !is SparkExitRecord.Phase.NeedsFunding) {
+            start.copy(isRedoAsk = false)
+        } else {
+            start
+        }
         when (record.phase) {
             SparkExitRecord.Phase.Done, is SparkExitRecord.Phase.Failed -> {
                 if (!record.isLeftoverSweepPending && !record.isEndedPaymentPending) return record
@@ -548,7 +553,7 @@ class SparkExitDriver(
             // for.
             is RecoveryVerdict.Redo -> {
                 Logger.warn("Spark exit diverged on-chain while a top-up is awaited", context = TAG)
-                updated.copy(isRebuilding = true, isRedoRebuild = true, isUnverifiedAsk = false)
+                updated.copy(isRebuilding = true, isRedoRebuild = true, isUnverifiedAsk = false, isRedoAsk = true)
             }
         }
     }

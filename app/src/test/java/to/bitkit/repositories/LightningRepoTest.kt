@@ -1700,6 +1700,53 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send refused over a failed spark row stays pending while a spark retry is in flight`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            runSuspendCatching {
+                authorizeSend()
+                "h"
+            }
+        }
+        // A retry recorded since the checks is still inside its send call, over an earlier attempt's failed row.
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
+        whenever(sparkRepo.isSendInFlight("h")).thenReturn(true)
+
+        assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
+    }
+
+    @Test
+    fun `a spark send refused over a failed spark row stays pending once the node sent the invoice`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var isSparkRecorded = true
+        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenAnswer { isSparkRecorded }
+        // Refused for a failed Spark send recorded since the checks, while the node's retry of the invoice is sent.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            runSuspendCatching {
+                authorizeSend()
+                "h"
+            }.also {
+                isSparkRecorded = false
+                sut.payInvoiceWithNode("h").getOrThrow()
+                isSparkRecorded = true
+            }
+        }
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
+
+        assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
+        verify(lightningService).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `a spark send of an invoice the node already paid settles as paid`() = test {
         startNodeForTesting()
         whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.SUCCEEDED)))

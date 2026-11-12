@@ -83,16 +83,18 @@ class SparkExitAlertsTest {
     }
 
     @Test
-    fun `a fee ask a redo rebuild held through is withdrawn once it runs on the held funding`() {
+    fun `a fee ask a redo came during is withdrawn once it runs on the held funding`() {
         val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
         val asked = SparkExitFixtures.record(Phase.NeedsFunding(5_000uL)).copy(funding = listOf(held))
-        val redo = asked.copy(isRedoRebuild = true)
-        val running = asked.copy(phase = Phase.Running, isRedoRebuild = true)
+        val redo = asked.copy(isRedoAsk = true)
+        val running = asked.copy(phase = Phase.Running, isRedoAsk = true)
         val topUp = running.copy(funding = listOf(held, held.copy(txid = "topup", valueSats = 5_000uL)))
 
+        // On the Redo's own tick only the record after it carries the flag; on a later tick both do.
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(running, asked))
         assertTrue(SparkExitAlerts.isFundingAskWithdrawn(running, redo))
         assertFalse(SparkExitAlerts.isFundingAskWithdrawn(topUp, redo), "a top-up answered the ask")
-        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(running, asked))
+        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(running.copy(isRedoAsk = false), asked))
     }
 
     @Test

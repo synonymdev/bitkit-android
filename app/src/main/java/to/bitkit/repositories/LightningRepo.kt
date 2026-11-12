@@ -1568,7 +1568,8 @@ class LightningRepo @Inject constructor(
                     .let {
                         // Refused for a Spark send recorded since the checks, whose completion its caller may miss.
                         val isOverlapped = isRefused && sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
-                        if (isOverlapped) settledSparkSendOutcome(paymentHash ?: key) ?: it else it
+                        if (!isOverlapped) return@let it
+                        settledSparkSendOutcome(paymentHash ?: key, key, ldkRecordsBefore) ?: it
                     }
             } finally {
                 if (isAdmitted) releaseSend(key)
@@ -1634,14 +1635,24 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun settledSparkSendOutcome(paymentHash: String): Result<PaymentId>? {
+    private suspend fun settledSparkSendOutcome(
+        paymentHash: String,
+        key: String,
+        ldkRecordsBefore: Long,
+    ): Result<PaymentId>? {
         val send = sparkRepo.lightningSend(paymentHash) as? SparkLightningSend.Found ?: return null
         return when (send.status) {
             SparkPaymentStatus.COMPLETED -> Result.success(paymentHash)
+            // A failed row can be an earlier attempt's while a retry of the invoice on either rail can still pay it.
+            SparkPaymentStatus.FAILED if isSendLive(paymentHash, key, ldkRecordsBefore) -> null
             SparkPaymentStatus.FAILED -> Result.failure(SparkError.SendRefused("Spark's earlier send of it failed"))
             SparkPaymentStatus.PENDING -> null
         }?.also { Logger.info("Settled the refused Spark send '$paymentHash' as '${send.status}'", context = TAG) }
     }
+
+    private fun isSendLive(paymentHash: String, key: String, ldkRecordsBefore: Long): Boolean =
+        sparkRepo.isSendInFlight(paymentHash) || synchronized(admittedSends) { admittedSends[key] != null } ||
+            (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore
 
     private fun EarlierSend.toResult(): Result<PaymentId> = when (this) {
         is EarlierSend.Pending -> Result.failure(PaymentPendingException(paymentHash))

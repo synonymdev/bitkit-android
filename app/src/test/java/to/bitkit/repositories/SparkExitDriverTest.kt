@@ -1928,7 +1928,6 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(Phase.Running, record.phase, "a hold the held funding paid for still asks for fees")
         assertNull(record.fundingShortfallSats)
         assertEquals(1_000u, record.redoHeldSince)
-        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
 
         // A later build of the hold that comes up short asks again.
         sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
@@ -1937,6 +1936,48 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertIs<Phase.NeedsFunding>(record.phase)
         assertEquals(1, record.generation)
+    }
+
+    /** A generation asking for fee funding while it keeps going, holding 20,000 sats, whose next check returns Redo. */
+    private fun askingWhenRedoCame(builtAt: Long): SparkExitRecord {
+        val old = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old")))
+        sdk.checks += check(old, redo)
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        val asked = running(old, builtAt).copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        assertTrue(asked.isDrivingWhileFunding)
+        return asked
+    }
+
+    @Test
+    fun `a redo on a fee ask built from the held funding that tick withdraws the ask`() = test {
+        val asked = askingWhenRedoCame(builtAt = now - interval)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+
+        val record = driver(tip = 1_000u).tick(asked)
+
+        assertEquals(2, record.generation, "the held funding did not build the Redo rebuild")
+        assertEquals(Phase.Running, record.phase)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
+    }
+
+    @Test
+    fun `a redo on a fee ask built from the held funding a later tick withdraws the ask`() = test {
+        val asked = askingWhenRedoCame(builtAt = now)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+
+        val redone = driver(tip = 1_000u).tick(asked)
+        assertIs<Phase.NeedsFunding>(redone.phase, "built before the rebuild interval")
+        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(redone, asked))
+
+        now += interval
+        val record = driver(tip = 1_001u).tick(redone)
+
+        assertEquals(2, record.generation)
+        assertEquals(Phase.Running, record.phase)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, redone), "the fee ask's notification stayed")
+        sdk.checks += check(requireNotNull(record.recovery), RecoveryVerdict.Valid)
+        assertFalse(driver(tip = 1_001u).tick(record).isRedoAsk, "the ended ask stayed marked")
     }
 
     @Test
