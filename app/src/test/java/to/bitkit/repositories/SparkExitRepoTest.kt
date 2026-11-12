@@ -236,6 +236,45 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a landed sweep keeps the transfer while a cooperative step is still on its way`() = test {
+        val sweep = SparkExitFixtures.tx(
+            "s",
+            kind = RecoveryTxKind.SWEEP,
+            status = ExitTransactionStatus.Confirmed(50u),
+        )
+        fun cooperative(status: ExitTransactionStatus) =
+            SparkExitFixtures.tx("c", kind = RecoveryTxKind.COOPERATIVE, status = status)
+        val running = SparkExitFixtures.record(Phase.Running)
+        val activity = OnchainActivity.create(
+            walletId = "wallet0",
+            id = "sweep",
+            txType = PaymentType.RECEIVED,
+            txId = "s",
+            value = 90_000uL,
+            fee = 0uL,
+            address = "bcrt1qdestination",
+            timestamp = 0uL,
+            feeRate = 1uL,
+        ).copy(isTransfer = true)
+        val activityRepo = mock<ActivityRepo>()
+        whenever(activityRepo.getOnchainActivityByTxId(any(), any())).thenReturn(activity)
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.markSettled(any())).thenReturn(Result.success(Unit))
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+
+        val pending = SparkExitFixtures.recovery(listOf(sweep, cooperative(ExitTransactionStatus.Ready)))
+        store.save(running.adopt(pending, 0L))
+        createSut(activityRepo = activityRepo).load().getOrThrow()
+        verify(transferRepo, never()).markSettled(any())
+
+        val landed = SparkExitFixtures.recovery(listOf(sweep, cooperative(ExitTransactionStatus.Confirmed(51u))))
+        store.save(running.adopt(landed, 0L))
+        createSut(activityRepo = activityRepo).load().getOrThrow()
+        verify(transferRepo).markSettled("transfer-1")
+    }
+
+    @Test
     fun `a sweep seen before failed leaves are retried keeps the transfer`() = test {
         val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP)
         val failed = CooperativeRecoveryFailure(
