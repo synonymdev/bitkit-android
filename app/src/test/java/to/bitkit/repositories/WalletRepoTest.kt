@@ -342,8 +342,9 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `Spark balance changes update spending while the node start times out`() = test {
+    fun `Spark balance changes after a finished exit update spending while the node start times out`() = test {
         whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sparkExitState.value = SparkExitState(record = SparkExitFixtures.record(SparkExitRecord.Phase.Done))
         val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
         whenever(lightningRepo.lightningState).thenReturn(nodeState)
         whenever(lightningRepo.getBalancesAsync()).thenReturn(

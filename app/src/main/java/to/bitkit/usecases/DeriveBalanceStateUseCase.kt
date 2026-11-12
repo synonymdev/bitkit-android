@@ -62,7 +62,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val exit = sparkExitRepo.state.value
             val sparkSats = spark.shownSpendingSats.safe() + (exit.outsideExitSats ?: 0uL).safe()
             val sparkExitSats = getSparkExitSats(activeTransfers, exit)
-            val hasExit = spark.isExiting || exit.record != null ||
+            val hasExit = spark.isExiting || exit.isExiting ||
                 activeTransfers.any { it.type == TransferType.SPARK_EXIT }
             val totalLightningSats = afterLingeringCoopClose.safe() + sparkSats.safe()
 
