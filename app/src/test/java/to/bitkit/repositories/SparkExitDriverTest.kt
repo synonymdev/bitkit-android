@@ -1761,6 +1761,79 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(Race.rebuiltSecond, chain.broadcasts.last().cpfpTxHex)
     }
 
+    private val redoLeaves = listOf(
+        RecoverFundsLeaf("leaf-1", 100_000uL, RecoveryMethod.UNILATERAL),
+        RecoverFundsLeaf("leaf-2", 100_000uL, RecoveryMethod.UNILATERAL),
+    )
+
+    /** A generation recovering leaf-1 and leaf-2 whose check returned Redo, its rebuild due. */
+    private fun divergedOverTwoLeaves(): SparkExitRecord {
+        val old = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))).copy(leaves = redoLeaves)
+        sdk.checks += check(old, redo)
+        return running(old, builtAt = now - interval).copy(leafIds = listOf("leaf-1", "leaf-2"))
+    }
+
+    private val leaf2Unread = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1")).copy(
+        skipped = listOf(SkippedLeaf("leaf-2", 100_000uL, SkippedLeafReason.Unverified)),
+    )
+
+    @Test
+    fun `a redo rebuild beside a waiting leaf holds until the leaf reads`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, record.generation, "a rebuild left out leaf-2's steps the diverged generation recovers")
+        assertTrue(record.isRebuilding)
+        assertEquals(1_000u, record.redoHeldSince)
+        assertEquals(1, sdk.recoverRequests.size)
+        assertTrue(chain.broadcasts.isEmpty(), "the diverged generation was sent again")
+
+        // leaf-2 reads on the next build: both leaves are rebuilt together.
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1", "leaf-2"))
+            .copy(skipped = emptyList())
+        sdk.builds += SparkExitFixtures.recovery(
+            listOf(SparkExitFixtures.tx("a1"), SparkExitFixtures.tx("b1")),
+        ).copy(leaves = redoLeaves)
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(2, record.generation)
+        assertFalse(record.isRebuilding)
+        assertEquals(listOf("leaf-1", "leaf-2"), record.recovery?.leaves?.map { it.leafId })
+        assertNull(record.redoHeldSince)
+        assertTrue(record.waitingLeafIds.isEmpty())
+        assertEquals(listOf("a1", "b1"), chain.broadcasts.map { it.txid })
+    }
+
+    @Test
+    fun `a redo rebuild beside a leaf that stays unread adopts after the hold`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(SparkExitDriver.REDO_HOLD_BLOCKS.toInt() + 1) {
+            sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        }
+
+        record = driver(tip = 1_000u).tick(record)
+        for (height in 1_001u until 1_000u + SparkExitDriver.REDO_HOLD_BLOCKS) {
+            now += interval
+            record = driver(tip = height).tick(record)
+            assertEquals(1, record.generation, "adopted at '$height' before the hold ended")
+            assertEquals(1_000u, record.redoHeldSince, "the hold restarted at '$height'")
+        }
+        assertTrue(chain.broadcasts.isEmpty())
+
+        now += interval
+        record = driver(tip = 1_000u + SparkExitDriver.REDO_HOLD_BLOCKS).tick(record)
+
+        assertEquals(2, record.generation, "the rebuild waited past the hold")
+        assertEquals(listOf("leaf-2"), record.waitingLeafIds)
+        assertNull(record.redoHeldSince)
+        assertEquals(listOf("a1"), chain.broadcasts.map { it.txid })
+    }
+
     @Test
     fun `a rebuild from the chain keeps its note until one of its steps confirms`() = test {
         val built = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
@@ -2442,6 +2515,52 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertEquals(3, record.generation)
         assertEquals(mapOf("refund" to 2), record.spentStepStrikes)
+        assertTrue(record.lostLeaves.isEmpty())
+        assertEquals(Phase.Running, record.phase)
+    }
+
+    @Test
+    fun `a redo after a refund sent spent strikes it once and not again once its rebuild is accepted`() = test {
+        // A lost CPFP race comes back as Redo: the refund was refused as spent because its child's funding was.
+        val recovery = lostLeafRecovery()
+        var record = running(recovery, builtAt = 0L).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL),
+            ),
+            broadcastLog = listOf(
+                SparkExitRecord.BroadcastAttempt(1, "refund", 1, 0, now, "inputs missing", false, isInputSpent = true),
+            ),
+        )
+        sdk.preparedResponse = SparkExitFixtures.prepared()
+        // The rebuild reproduces the refund with a new child on the funding that is left.
+        val rebuilt = SparkExitFixtures.recovery(
+            recovery.transactions.map { if (it.txid == "refund") it.copy(cpfpTxHex = "03c2") else it },
+        )
+        sdk.checks += check(recovery, redo)
+        sdk.builds += rebuilt
+
+        record = driver().tick(record)
+
+        assertEquals(2, record.generation)
+        assertEquals(mapOf("refund" to 1), record.spentStepStrikes)
+        assertTrue(record.lostLeaves.isEmpty())
+        assertEquals(
+            listOf<CpfpInput>(CpfpInput.P2wpkh("f0", 1u, 20_000uL, "02ab")),
+            sdk.recoverRequests.single().fundingInputs,
+        )
+        assertEquals(listOf("03c2"), chain.broadcasts.map { it.cpfpTxHex })
+        val sent = record.broadcastLog.single { it.txid == "refund" }
+        assertTrue(sent.isAccepted)
+        assertFalse(sent.isInputSpent)
+
+        // Diverged again: the refund was accepted this generation, so its strike drops out instead of reaching two.
+        sdk.checks += check(rebuilt, redo)
+        sdk.builds += rebuilt
+        now += interval
+        record = driver().tick(record)
+
+        assertEquals(3, record.generation)
+        assertTrue(record.spentStepStrikes.isEmpty(), "the refund was struck a second time in a row")
         assertTrue(record.lostLeaves.isEmpty())
         assertEquals(Phase.Running, record.phase)
     }
