@@ -20,10 +20,10 @@ Regenerate the file when you change any of these:
 To regenerate:
 
 1. Run `just deps`. It runs `scripts/update-verification-metadata.sh`, which needs GitHub Packages credentials (see [GitHub Packages setup](../README.md#2-github-packages-setup)). It takes a long time, because it runs the CI and release build tasks so that Gradle records every artifact they resolve.
-2. Review the diff of `gradle/verification-metadata.xml`. New entries should match only the coordinates you changed.
+2. Review the diff of `gradle/verification-metadata.xml`. New entries should match only the coordinates you changed. The diff should only add components or versions for those coordinates; if it changes a checksum or adds an `also-trust` value on an existing entry, investigate the cause instead of committing it.
 3. Commit the file in the same PR as the dependency change.
 
-The script keeps existing entries and the `<configuration>` block. It fails if a host-specific artifact lacks its variants for other platforms.
+The script keeps existing entries and the `<configuration>` block. It fails if a host-specific artifact lacks its variants for other platforms. It passes `-PuseMavenLocal=false` and stops if `bitkitCoreAar` is set, so local artifacts are never recorded.
 
 ## Dependabot
 
@@ -47,7 +47,12 @@ Entries for versions the build no longer uses are harmless. To prune them, delet
 
 ## Local overrides
 
-Builds that use local artifacts, through `-PuseMavenLocal=...` or `-PbitkitCoreAar=...`, fail verification by design, because those artifacts have no recorded checksum. For those local builds only, run Gradle in lenient mode, which reports mismatches without failing: `./gradlew --dependency-verification lenient <task>`.
+Builds that use local artifacts fail verification by design:
+
+- With `-PuseMavenLocal=...`, artifacts published to Maven local do not match the recorded checksums.
+- With `-PbitkitCoreAar=...`, Gradle does not check the local AAR itself, because it is a file dependency. The build also adds `org.jetbrains.kotlinx:atomicfu:0.33.0`, which has no recorded checksum.
+
+For those local builds only, run Gradle in lenient mode: `./gradlew --dependency-verification lenient <task>`. Lenient mode reports problems instead of failing for every dependency in that build, not only the local ones, so use it for local experiments only.
 
 Never use lenient mode in CI or for a release build.
 
