@@ -13,6 +13,7 @@ import breez_sdk_spark.EventListener
 import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.FetchClaimDepositQuoteRequest
 import breez_sdk_spark.FetchClaimDepositQuoteResponse
+import breez_sdk_spark.FetchLightningSendStatusRequest
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateRequest
@@ -25,6 +26,7 @@ import breez_sdk_spark.MaxOnchainFee
 import breez_sdk_spark.OnchainConfirmationSpeed
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentRequest
+import breez_sdk_spark.PaymentStatus
 import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.PrepareSendPaymentRequest
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
@@ -127,6 +130,13 @@ class SparkService @Inject constructor(
          */
         fun bolt11SendOptions(prefersSpark: Boolean): SendPaymentOptions =
             SendPaymentOptions.Bolt11Invoice(preferSpark = prefersSpark, completionTimeoutSecs = null)
+
+        /** The route hint short channel id under which an invoice carries its Spark address, as spark-sdk sets it. */
+        private const val SPARK_ADDRESS_HINT_SCID = 17_592_187_092_992_000_001uL
+
+        /** Whether [shortChannelIds], an invoice's route hint hops, carry a Spark address. */
+        internal fun hasSparkAddressHint(shortChannelIds: List<ULong>): Boolean =
+            SPARK_ADDRESS_HINT_SCID in shortChannelIds
     }
 
     private val mutex = Mutex()
@@ -294,6 +304,17 @@ class SparkService @Inject constructor(
     /** When [bolt11] expires, in epoch seconds, read by the SDK's own parser; null when it isn't a BOLT11 invoice. */
     suspend fun invoiceExpiresAt(bolt11: String): ULong? =
         (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1?.let { invoiceExpiresAt(it.timestamp, it.expiry) }
+
+    /**
+     * This wallet's Lightning send of [bolt11] as the Spark operators record it, without the local history: null when
+     * they know none. A direct Spark transfer to the invoice's Spark address is not covered.
+     */
+    suspend fun lightningSendStatus(bolt11: String): PaymentStatus? =
+        requireSdk().fetchLightningSendStatus(FetchLightningSendStatusRequest(bolt11)).status
+
+    /** Whether [bolt11] carries a Spark address, so a send preferring Spark pays it as a direct transfer. */
+    fun carriesSparkAddress(bolt11: String): Boolean =
+        hasSparkAddressHint(Bolt11Invoice.fromStr(bolt11).routeHints().flatten().map { it.shortChannelId })
 
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */
     suspend fun exportExitState(): String = requireSdk().exportUnilateralExitState().exitState
