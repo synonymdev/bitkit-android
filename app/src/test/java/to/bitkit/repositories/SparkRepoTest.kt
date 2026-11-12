@@ -1218,6 +1218,49 @@ class SparkRepoTest : BaseUnitTest() {
         verify(payoutChain, never()).isMined(any())
     }
 
+    @Test
+    fun `a contact withdrawal is confirmed from its transaction when electrum fails`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
+            .thenReturn(Result.success(sentContactActivity(confirmed = false)))
+        whenever { onchainService.unspentOutputs(eq("bcrt1qcontact"), any(), anyOrNull()) }
+            .thenAnswer { throw IllegalStateException("electrum down") }
+        whenever { payoutChain.isMined("withdrawal") }.thenReturn(true)
+
+        readySpark(balanceSats = 50_000uL)
+        advanceUntilIdle()
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, atLeastOnce()).upsertActivity(activities.capture())
+        assertTrue(
+            activities.allValues.any { assertIs<Activity.Onchain>(it).v1.confirmed },
+            "An Electrum failure should fall back to the Esplora lookup of the payout transaction",
+        )
+    }
+
+    @Test
+    fun `confirming a mined payout keeps a seen time written during the chain lookup`() = test {
+        val unseen = sentContactActivity(confirmed = false)
+        val seen = Activity.Onchain(unseen.v1.copy(seenAt = 42uL))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        var stored: Activity = unseen
+        // A Result answer is unboxed, so the stub answers with the activity itself.
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }.thenAnswer { stored }
+        whenever { onchainService.unspentOutputs(eq("bcrt1qcontact"), any(), anyOrNull()) }.thenAnswer {
+            // The user opens the activity list while the Electrum lookup is in flight.
+            stored = seen
+            listOf(payoutOutput(txid = "withdrawal", confirmations = 1u))
+        }
+
+        readySpark(balanceSats = 50_000uL)
+        advanceUntilIdle()
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, atLeastOnce()).upsertActivity(activities.capture())
+        val confirmed = activities.allValues.map { assertIs<Activity.Onchain>(it).v1 }.single { it.confirmed }
+        assertEquals(42uL, confirmed.seenAt, "The confirm upsert reverted a seen time written during its lookup")
+    }
+
     private fun sentContactActivity(confirmed: Boolean) = Activity.Onchain(
         OnchainActivity.create(
             id = "withdrawal",

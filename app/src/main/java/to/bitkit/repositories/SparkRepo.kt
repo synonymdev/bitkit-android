@@ -1023,23 +1023,29 @@ class SparkRepo @Inject constructor(
         payments.filter { it.status == PaymentStatus.COMPLETED && it.paymentType == SparkPaymentType.SEND }
             .forEach { payment ->
                 val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@forEach
-                val sent = (activityRepo.get().getActivity(withdraw.txId).getOrNull() as? Activity.Onchain)?.v1
-                    ?.takeIf { it.txType == PaymentType.SENT && !it.confirmed } ?: return@forEach
+                unconfirmedSent(withdraw.txId) ?: return@forEach
                 val outputs = runSuspendCatching {
                     coreService.get().onchain.unspentOutputs(
                         address = withdraw.destinationAddress,
                         electrumUrl = settingsStore.data.first().electrumServer,
                         network = Env.network,
                     )
-                }.getOrElse {
+                }.onFailure {
                     Logger.warn("Failed to look up Spark withdrawal payout '${withdraw.txId}'", it, context = TAG)
-                    return@forEach
-                }
-                val payout = outputs.firstOrNull { it.txid == withdraw.txId && it.vout == withdraw.vout }
+                }.getOrNull()
+                // A failed Electrum lookup falls through to the transaction's status, as a missing output does.
+                val payout = outputs?.firstOrNull { it.txid == withdraw.txId && it.vout == withdraw.vout }
                 val isMined = payout?.let { it.confirmations > 0u } ?: (payoutChain.isMined(withdraw.txId) == true)
-                if (isMined) activityRepo.get().upsertActivity(Activity.Onchain(sent.copy(confirmed = true)))
+                if (!isMined) return@forEach
+                // Read again after the lookups, so a seen time written meanwhile isn't written back over.
+                val latest = unconfirmedSent(withdraw.txId) ?: return@forEach
+                activityRepo.get().upsertActivity(Activity.Onchain(latest.copy(confirmed = true)))
             }
     }
+
+    private suspend fun unconfirmedSent(txid: String) =
+        (activityRepo.get().getActivity(txid).getOrNull() as? Activity.Onchain)?.v1
+            ?.takeIf { it.txType == PaymentType.SENT && !it.confirmed }
 
     private fun markClaimedDeposits(claimed: List<SparkDeposit>) {
         val claimedTxids = claimed.map { it.txid.lowercase() }.toSet()
