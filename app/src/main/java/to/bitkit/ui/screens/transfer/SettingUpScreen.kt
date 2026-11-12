@@ -44,7 +44,6 @@ import to.bitkit.ui.screens.transfer.components.ProgressSteps
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.ui.utils.screenWidth
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
@@ -225,10 +224,9 @@ private fun Buttons(
         }
         return
     }
-    val randomOkText = localizedRandom(R.string.common__ok_random)
     PrimaryButton(
         text = when (frame) {
-            TransferStatusFrame.Success -> randomOkText
+            TransferStatusFrame.Success -> stringResource(R.string.lightning__setting_up__success_button)
             else -> stringResource(R.string.lightning__setting_up_button)
         },
         onClick = onContinueClick,

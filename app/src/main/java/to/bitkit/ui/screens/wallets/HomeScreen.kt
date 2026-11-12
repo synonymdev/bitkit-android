@@ -409,7 +409,9 @@ fun HomeScreen(
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
         onSpendingBannerClick = sparkState.inProgressDepositTxid?.let { txid ->
-            { rootNavController.navigateToTransferProgress(txid) }
+            {
+                rootNavController.navigateToTransferProgress(txid)
+            }
         },
         onSavingsBannerClick = appViewModel::onSparkExitBannerTapped.takeIf { isSparkExiting },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },

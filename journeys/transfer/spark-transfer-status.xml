@@ -7,7 +7,7 @@
     "Processing Payment" (step 1, Spark has not seen the deposit), "Payment Successful" (step 1 done, step 2,
     Spark lists it), "Adding To Spending Balance" (steps 1 and 2 done, step 3), all under "FUNDS IN TRANSFER"
     with "This should take a few minutes.", and ends on "Transfer Successful": "FUNDS MOVED TO SPENDING", the
-    check, and the OK button. A normal speed (Later) transfer shows the same frames with "This should take about
+    check, and "Awesome!". A normal speed (Later) transfer shows the same frames with "This should take about
     30 minutes.".
 
     Whether Spark reprices the fast transfer or offers none is the provider's call, so the run can't stage the
@@ -26,7 +26,7 @@
     <action>Verify "Instant" (testTag "SpendingConfirmInstant") is selected and swipe to confirm</action>
     <action>Verify the status screen (testTag "LightningSettingUp") shows "Transfer Funds", "FUNDS IN TRANSFER", "Please wait, your funds transfer is in progress. This should take a few minutes." (testTag "SettingUpText"), step 1 active with "Processing Payment", and "Continue Using Bitkit" (testTag "TransferSuccess-button")</action>
     <action>Wait up to 3 minutes for "Payment Successful" with step 1 checked, then for "Adding To Spending Balance" with steps 1 and 2 checked; each keeps the same headline, text and button</action>
-    <action>Wait up to 3 minutes for "Transfer Successful" (testTag "TransferSuccess"): "FUNDS MOVED TO SPENDING", "Your funds have been transferred and your spending balance is ready to use.", the check (testTag "TransferSuccessCheck") and the OK button (testTag "TransferSuccess-button")</action>
-    <action>Tap the OK button and verify the wallet home screen shows the higher Spending balance</action>
+    <action>Wait up to 3 minutes for "Transfer Successful" (testTag "TransferSuccess"): "FUNDS MOVED TO SPENDING", "Your funds have been transferred and your spending balance is ready to use.", the check (testTag "TransferSuccessCheck") and "Awesome!" (testTag "TransferSuccess-button")</action>
+    <action>Tap "Awesome!" and verify the wallet home screen shows the higher Spending balance</action>
   </actions>
 </journey>

@@ -407,6 +407,7 @@
     <string name="lightning__setting_up__step_adding_balance">Adding To Spending Balance</string>
     <string name="lightning__setting_up__step_fee_changed">Fast Transfer Fee Changed</string>
     <string name="lightning__setting_up__step_normal">Using Normal Transfer Speed</string>
+    <string name="lightning__setting_up__success_button">Awesome!</string>
     <string name="lightning__setting_up__text_fast">Please wait, your funds transfer is in progress. This should take &lt;accent&gt;a few minutes.&lt;/accent&gt;</string>
     <string name="lightning__setting_up__text_normal">Please wait, your funds transfer is in progress. This should take &lt;accent&gt;about 30 minutes.&lt;/accent&gt;</string>
     <string name="lightning__setting_up__unavailable_title">Fast transfer\n&lt;accent&gt;unavailable&lt;/accent&gt;</string>
