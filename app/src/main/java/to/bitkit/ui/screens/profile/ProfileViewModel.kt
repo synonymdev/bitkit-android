@@ -310,7 +310,8 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             tagUpdateMutex.withLock {
                 if (pubkyRepo.profileRecoveryPending.value != false) return@withLock
-                val profile = pubkyRepo.profile.value ?: return@withLock
+                val editBase = pubkyRepo.profileEditBase()
+                val profile = editBase.profile ?: return@withLock
                 val tags = transform(profile.tags)
                 if (tags == profile.tags) {
                     onSuccess()
@@ -323,6 +324,7 @@ class ProfileViewModel @Inject constructor(
                     links = profile.links,
                     tags = tags,
                     imageUrl = profile.imageUrl,
+                    editBase = editBase,
                 ).onSuccess {
                     onSuccess()
                 }.onFailure {

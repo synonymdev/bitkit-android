@@ -23,6 +23,9 @@ import to.bitkit.models.TransferType
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.SparkExitFixtures
+import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
 import to.bitkit.repositories.TransferRepo
@@ -38,6 +41,8 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     private val settingsStore: SettingsStore = mock()
     private val hwWalletRepo: HwWalletRepo = mock()
     private val sparkRepo: SparkRepo = idleSparkRepo()
+    private val sparkExitState = MutableStateFlow(SparkExitState())
+    private val sparkExitRepo = mock<SparkExitRepo> { on { state } doReturn sparkExitState }
 
     private lateinit var sut: DeriveBalanceStateUseCase
 
@@ -65,6 +70,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
             sparkRepo = sparkRepo,
+            sparkExitRepo = sparkExitRepo,
         )
     }
 
@@ -82,6 +88,58 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         // Spark keeps 0.25% of a send as its fee, so the most it can send leaves room for it.
         assertEquals(29_925uL, balanceState.maxSendLightningSats)
         assertEquals(20_000uL, balanceState.balanceInTransferToSpending)
+        assertEquals(30_000uL, balanceState.sparkBalanceSats)
+        assertEquals(20_000uL, balanceState.sparkPendingDepositSats)
+    }
+
+    @Test
+    fun `should count a spark exit's value still on its way and spark's value outside it`() = test {
+        newBalanceDetails()
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isReady = true, balanceSats = 130_000uL, isExiting = true)),
+        )
+        val transfer = newTransferEntity(type = TransferType.SPARK_EXIT, amountSats = 120_000L).copy(id = "exit-1")
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer)))
+        // Expects 120,000 back, 20,000 of it the first fee funding, of which 5,000 reached the address so far.
+        sparkExitState.value = SparkExitState(
+            record = SparkExitFixtures.record().copy(
+                transferId = "exit-1",
+                expectedSats = 120_000uL,
+                leafTotalSats = 100_000uL,
+            ),
+            fundingSeenSats = 5_000uL,
+            sparkBalanceSats = 130_000uL,
+        )
+
+        val balanceState = sut().getOrThrow()
+
+        assertEquals(105_000uL, balanceState.balanceInTransferToSavings)
+        // Lightning's 50,000 plus the 30,000 Spark holds beyond the exit's leaves.
+        assertEquals(80_000uL, balanceState.totalLightningSats)
+        assertEquals(null, balanceState.sparkBalanceSats)
+        assertEquals(null, balanceState.sparkPendingDepositSats)
+    }
+
+    @Test
+    fun `spending keeps what stays on spark once the exit's published leaves left its balance`() = test {
+        newBalanceDetails()
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        // The hosted-regtest run: 14,167 sats stay on Spark, the exit's 100,000 sats of leaves are published.
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isReady = true, balanceSats = 14_167uL, isExiting = true)),
+        )
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        sparkExitState.value = SparkExitState(
+            record = SparkExitFixtures.record().copy(leafTotalSats = 100_000uL, outsideSats = 14_167uL),
+            sparkBalanceSats = 14_167uL,
+        )
+
+        val balanceState = sut().getOrThrow()
+
+        assertEquals(64_167uL, balanceState.totalLightningSats)
+        assertEquals(null, balanceState.sparkBalanceSats)
+        assertEquals(null, balanceState.sparkPendingDepositSats)
     }
 
     @Test

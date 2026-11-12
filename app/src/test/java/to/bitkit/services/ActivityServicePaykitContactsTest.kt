@@ -14,6 +14,7 @@ import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getTransactionDetails
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
+import com.synonym.bitkitcore.upsertOnchainActivityPreservingFeeRate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -977,6 +978,10 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
                 }
                 native.`when`<Unit> { upsertActivity(any()) }.thenAnswer {
                     updates.add(it.arguments[0] as Activity)
+                    null
+                }
+                native.`when`<Unit> { upsertOnchainActivityPreservingFeeRate(any()) }.thenAnswer {
+                    updates.add(Activity.Onchain(it.arguments[0] as OnchainActivity))
                     null
                 }
                 block()
