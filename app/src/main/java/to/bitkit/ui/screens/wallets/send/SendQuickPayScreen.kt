@@ -30,6 +30,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.sheets.canSendWithoutWaiting
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -41,6 +42,7 @@ import to.bitkit.viewmodels.QuickPayViewModel
 fun SendQuickPayScreen(
     quickPayData: QuickPayData,
     isRequestActive: Boolean,
+    canPayWithoutNode: Boolean,
     onPaymentComplete: (String, Long) -> Unit,
     onPaymentPending: (String, Long, String) -> Unit,
     onFallBackToConfirm: () -> Unit,
@@ -56,8 +58,14 @@ fun SendQuickPayScreen(
         onDispose { viewModel.detach(session) }
     }
 
-    LaunchedEffect(quickPayData, lightningState.nodeLifecycleState, isRequestActive) {
-        if (isRequestActive && lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
+    // Spark pays a Quick Pay invoice it can cover without the node, so only an otherwise unpayable one waits.
+    val canPay = canSendWithoutWaiting(
+        isNodeRunning = lightningState.nodeLifecycleState is NodeLifecycleState.Running,
+        isHardwareWallet = false,
+        sparkCanPay = canPayWithoutNode,
+    )
+    LaunchedEffect(quickPayData, canPay, isRequestActive) {
+        if (isRequestActive && canPay) {
             viewModel.pay(session, quickPayData)
         }
     }
@@ -84,7 +92,7 @@ fun SendQuickPayScreen(
 
     Content(
         amount = quickPayData.sats,
-        nodeLifecycleState = lightningState.nodeLifecycleState,
+        nodeLifecycleState = if (canPay) NodeLifecycleState.Running else lightningState.nodeLifecycleState,
     )
 }
 
