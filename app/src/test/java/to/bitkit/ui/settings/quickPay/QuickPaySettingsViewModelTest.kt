@@ -139,7 +139,6 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
         sut.setQuickPayEnabled(false)
         sut.setQuickPayAmount(10)
         sut.setQuickPayDailyLimitMultiplier(3)
-        sut.setQuickPayDailyLimitMultiplier(3)
 
         assertNull(loadedState().authorization)
         assertEquals(

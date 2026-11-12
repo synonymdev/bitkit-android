@@ -2,43 +2,42 @@
   <description>
     When a PIN is required for payments, turning QuickPay on or raising either QuickPay limit asks
     for the same PIN (or biometrics) as Send before anything is saved, and a cancelled check leaves
-    the old value. Turning QuickPay off and lowering a limit never ask. Without this, anyone holding
-    an unlocked phone could turn QuickPay on and pay invoices without the payment PIN.
+    the old value. Turning QuickPay off and lowering a limit never ask.
 
     Precondition: onboarded dev wallet, start on the wallet home screen. Enable a PIN you choose under
-    Settings ▸ Security ▸ PIN Code and turn on "Also require for payments" (tag
+    Settings ▸ Security ▸ PIN Code and turn on "Also require for payments" (testTag
     "ToggleBioForPayments"); no biometrics enrolled on the device, so the PIN pad shows directly.
     QuickPay is off with the default limits: $5 a payment and 5× a day. Never enter a wrong PIN more
     than once.
 
     The PIN pad is drawn over the QuickPay screen and reads "Please enter your PIN code". The slider
-    stops are their labels under each slider: "$1" to "$50" for the amount (tag
-    "QuickpayAmountSlider") and "1×" to "50×" for the daily limit (tag "QuickpayDailyLimitSlider").
+    stops are their labels under each slider: "$1" to "$50" for the amount (testTag
+    "QuickpayAmountSlider") and "1×" to "50×" for the daily limit (testTag "QuickpayDailyLimitSlider").
     Read the current values from the text above each slider rather than the knob position.
   </description>
   <actions>
-    <action>Tap the menu button (tag "HeaderMenu") and tap Settings (tag "DrawerSettings")</action>
-    <action>Tap the General tab (tag "Tab-general") and tap QuickPay (tag "QuickpaySettings")</action>
-    <action>If the QuickPay intro shows, tap its Continue button (tag "QuickpayIntro-button")</action>
-    <action>Verify the Enable QuickPay switch (tag "QuickpayToggle") is off and the text reads "below $5"</action>
-    <action>Tap the Enable QuickPay switch (tag "QuickpayToggle")</action>
+    <action>Tap the menu button (testTag "HeaderMenu") and tap Settings (testTag "DrawerSettings")</action>
+    <action>Tap the General tab (testTag "Tab-general") and tap QuickPay (testTag "QuickpaySettings")</action>
+    <action>If the QuickPay intro shows, tap its Continue button (testTag "QuickpayIntro-button")</action>
+    <action>Verify the Enable QuickPay switch (testTag "QuickpayToggle") is off and the text reads "below $5"</action>
+    <action>Tap the Enable QuickPay switch (testTag "QuickpayToggle")</action>
     <action>Verify the PIN pad shows and reads "Please enter your PIN code", then press back</action>
-    <action>Verify the QuickPay screen is showing and the Enable QuickPay switch (tag "QuickpayToggle") is still off</action>
-    <action>Tap the Enable QuickPay switch (tag "QuickpayToggle") again and enter the PIN</action>
-    <action>Verify the PIN pad is gone and the Enable QuickPay switch (tag "QuickpayToggle") is on</action>
-    <action>Tap the "$20" stop under the amount slider (tag "QuickpayAmountSlider")</action>
+    <action>Verify the QuickPay screen is showing and the Enable QuickPay switch (testTag "QuickpayToggle") is still off</action>
+    <action>Tap the Enable QuickPay switch (testTag "QuickpayToggle") again and enter the PIN</action>
+    <action>Verify the PIN pad is gone and the Enable QuickPay switch (testTag "QuickpayToggle") is on</action>
+    <action>Tap the "$20" stop under the amount slider (testTag "QuickpayAmountSlider")</action>
     <action>Verify the PIN pad shows, then press back</action>
     <action>Verify the text above the amount slider still reads "below $5"</action>
     <action>Tap the "$20" stop under the amount slider again and enter the PIN</action>
     <action>Verify the text above the amount slider reads "below $20" and the daily text reads "Pay up to $100 per day"</action>
-    <action>Tap the "10×" stop under the daily limit slider (tag "QuickpayDailyLimitSlider")</action>
+    <action>Tap the "10×" stop under the daily limit slider (testTag "QuickpayDailyLimitSlider")</action>
     <action>Verify the PIN pad shows, then press back</action>
     <action>Verify the daily text still reads "Pay up to $100 per day"</action>
-    <action>Tap the "$1" stop under the amount slider (tag "QuickpayAmountSlider")</action>
+    <action>Tap the "$1" stop under the amount slider (testTag "QuickpayAmountSlider")</action>
     <action>Verify no PIN pad shows, the text above the amount slider reads "below $1" and the daily text reads "Pay up to $5 per day"</action>
-    <action>Tap the Enable QuickPay switch (tag "QuickpayToggle")</action>
-    <action>Verify no PIN pad shows and the Enable QuickPay switch (tag "QuickpayToggle") is off</action>
+    <action>Tap the Enable QuickPay switch (testTag "QuickpayToggle")</action>
+    <action>Verify no PIN pad shows and the Enable QuickPay switch (testTag "QuickpayToggle") is off</action>
     <action>Tap the "$5" stop under the amount slider, enter the PIN, and verify the text reads "below $5"</action>
-    <action>Press back (again past the intro, if it was shown) and verify the QuickPay row (tag "QuickpaySettings") reads "Off"</action>
+    <action>Press back (again past the intro, if it was shown) and verify the QuickPay row (testTag "QuickpaySettings") reads "Off"</action>
   </actions>
 </journey>
