@@ -3416,6 +3416,114 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertFalse(state.needsRetainedSendWarning)
     }
 
+    @Test
+    fun `a transfer over an unobserved send for another payment warns with no device contact`() = test {
+        val fixture = stubSuccessfulPayment()
+        stubReplacementPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        val original = retainedEntries[WALLET_ID]
+        clearInvocations(hwWalletRepo)
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        val isSigning = sut.signUnlessRetainedSendWarns(transferRequest(OTHER_ADDRESS))
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertFalse(isSigning)
+        assertTrue(toasts.isEmpty())
+        verifyNoInteractions(hwWalletRepo)
+        assertEquals(original, retainedEntries[WALLET_ID])
+    }
+
+    @Test
+    fun `cancelling the transfer warning stays on the screen and keeps the record`() = test {
+        val fixture = stubSuccessfulPayment()
+        stubReplacementPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        val original = retainedEntries[WALLET_ID]
+        clearInvocations(hwWalletRepo)
+
+        assertFalse(sut.signUnlessRetainedSendWarns(transferRequest(OTHER_ADDRESS)))
+        advanceUntilIdle()
+        // Cancel only closes the alert, so the next swipe warns again.
+        assertFalse(sut.signUnlessRetainedSendWarns(transferRequest(OTHER_ADDRESS)))
+        advanceUntilIdle()
+
+        verifyNoInteractions(hwWalletRepo)
+        assertEquals(original, retainedEntries[WALLET_ID])
+        assertTrue(sut.uiState.value.canLeave)
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+    }
+
+    @Test
+    fun `yes send on the transfer warning signs anew and replaces the record only once signed`() = test {
+        val fixture = stubSuccessfulPayment()
+        val replacement = stubReplacementPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        val original = retainedEntries[WALLET_ID]
+        val signing = CompletableDeferred<Result<HwFundingSignedTx>>()
+        whenever(hwWalletRepo.signFunding(WALLET_ID, replacement.funding)).doSuspendableAnswer { signing.await() }
+        var atDispatch: HwRetainedSend? = null
+        whenever(hwWalletRepo.broadcastFunding(replacement.signedTx)).doSuspendableAnswer {
+            atDispatch = retainedRecord()
+            Result.success(replacement.broadcast)
+        }
+        assertFalse(sut.signUnlessRetainedSendWarns(transferRequest(OTHER_ADDRESS)))
+
+        sut.consentToNewSignature(WALLET_ID, OTHER_ADDRESS, AMOUNT_SATS)
+        sut.signAndBroadcast(transferRequest(OTHER_ADDRESS))
+        runCurrent()
+        assertEquals(original, retainedEntries[WALLET_ID])
+
+        signing.complete(Result.success(replacement.signedTx))
+        advanceUntilIdle()
+
+        assertEquals(replacement.signedTx, atDispatch?.signedTx)
+        assertEquals(replacement.broadcast.txId, sut.results.first().txId)
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        assertNull(retainedRecord())
+    }
+
+    @Test
+    fun `a transfer of the same payment rebroadcasts the original bytes with no device prompt`() = test {
+        val fixture = stubSuccessfulPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        clearInvocations(hwWalletRepo)
+
+        // The fee is not part of the match: a retry sends the original bytes at their original fee.
+        assertTrue(sut.signUnlessRetainedSendWarns(transferRequest(ADDRESS).copy(satsPerVByte = SATS_PER_VBYTE + 3uL)))
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, never()).needsPassphrase(any())
+        verify(hwWalletRepo, never()).ensureConnected(any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        assertNull(retainedRecord())
+    }
+
+    @Test
+    fun `leaving the transfer sign flow ends consent and the next swipe warns again`() = test {
+        val fixture = stubSuccessfulPayment()
+        stubReplacementPayment()
+        whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        val original = retainedEntries[WALLET_ID]
+        sut.consentToNewSignature(WALLET_ID, OTHER_ADDRESS, AMOUNT_SATS)
+
+        sut.cancel()
+        advanceUntilIdle()
+        clearInvocations(hwWalletRepo)
+
+        assertFalse(sut.signUnlessRetainedSendWarns(transferRequest(OTHER_ADDRESS)))
+        advanceUntilIdle()
+        verifyNoInteractions(hwWalletRepo)
+        assertEquals(original, retainedEntries[WALLET_ID])
+    }
+
+    private fun transferRequest(address: String) = request().copy(address = address, isTransfer = true)
+
     private suspend fun stubReplacementPayment(): PaymentFixture {
         val funding = HwFundingTransaction(
             psbt = "other-psbt",

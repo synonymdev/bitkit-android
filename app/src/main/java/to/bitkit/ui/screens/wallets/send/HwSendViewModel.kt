@@ -561,6 +561,23 @@ class HwSendViewModel @Inject constructor(
     }
 
     /**
+     * Signs [request] for a screen with no review of its own, such as transfer to Spending. Returns false with no
+     * device contact when a retained send needs the user's consent first: the caller shows the send review's warning,
+     * and Yes, Send calls [consentToNewSignature] then [signAndBroadcast].
+     */
+    suspend fun signUnlessRetainedSendWarns(request: HwSendRequest): Boolean {
+        val status = retainedSendStatus(
+            request.address,
+            request.amountSats,
+            request.walletId,
+            hasIncomingRequest = request.paymentRequestId != null,
+        )
+        if (status == HwRetainedSendStatus.Blocking) return false
+        signAndBroadcast(request)
+        return true
+    }
+
+    /**
      * Whether the sign button offers a retry of [request]. Contacts no device, so a reopened sheet can ask.
      * An observed record still offers one: the review warns before a reopened send gets here, so it is this sheet's.
      * A payment holding consent signs anew.
