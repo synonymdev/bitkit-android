@@ -15,10 +15,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -73,7 +71,6 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -100,6 +97,7 @@ fun QrScanningScreen(
     isFullScreen: Boolean = false,
     isEmbedded: Boolean = false,
     acceptsBinaryPayload: Boolean = false,
+    readsNearby: Boolean = false,
     showsGradientBackground: Boolean = true,
     permissionDescription: String = stringResource(R.string.other__camera_permission_description),
     permissionAccentColor: Color = Colors.Brand,
@@ -137,6 +135,9 @@ fun QrScanningScreen(
 
     val context = LocalContext.current
     val resources = LocalResources.current
+    val nearbySources = rememberNearbyScanSources(enabled = readsNearby) { text, isNearby ->
+        setScanResult(QrCodePayload(text = text, rawBytes = null, isNearby = isNearby))
+    }
     val previewView = remember { PreviewView(context) }
     val preview = remember { Preview.Builder().build() }
     val analyzer = remember(acceptsBinaryPayload) {
@@ -247,6 +248,7 @@ fun QrScanningScreen(
             grantedContent = {
                 Content(
                     isPubkyScan = isPubkyScan,
+                    nearbySources = nearbySources,
                     isEmbedded = isEmbedded,
                     isFlashlightOn = isFlashlightOn,
                     previewView = previewView,
@@ -307,6 +309,7 @@ internal fun textQrCodePayload(text: String) = QrCodePayload(
 @Composable
 private fun Content(
     isPubkyScan: Boolean,
+    nearbySources: NearbyScanSources,
     isEmbedded: Boolean,
     isFlashlightOn: Boolean,
     previewView: PreviewView,
@@ -367,28 +370,17 @@ private fun Content(
             }
 
             if (isPubkyScan) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                ScannerStatusPill(
+                    text = stringResource(R.string.contacts__scanner_status),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Colors.Black50)
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_broadcast),
-                        contentDescription = null,
-                        tint = Colors.White64,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text13Up(
-                        text = stringResource(R.string.contacts__scanner_status),
-                        color = Colors.White64,
-                    )
-                }
+                        .padding(16.dp),
+                )
+            } else if (nearbySources != NearbyScanSources.None) {
+                NearbyScanStatus(
+                    sources = nearbySources,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
         if (!isEmbedded) {

@@ -266,6 +266,7 @@ import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
 import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
 import to.bitkit.utils.timedsheets.sheets.MoveToSparkTimedSheet
+import to.bitkit.utils.timedsheets.sheets.NfcTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
@@ -330,6 +331,7 @@ class AppViewModel @Inject constructor(
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
     private val quickPaySheet: QuickPayTimedSheet,
+    private val nfcSheet: NfcTimedSheet,
     private val usdtSheet: UsdtTimedSheet,
     private val usdtPreferences: UsdtPreferencesRepo,
     private val highBalanceSheet: HighBalanceTimedSheet,
@@ -577,6 +579,8 @@ class AppViewModel @Inject constructor(
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
         registerSheet(notificationsSheet)
+        // Registered before QuickPay at the same priority: the NFC sheet includes the QuickPay toggle.
+        registerSheet(nfcSheet)
         registerSheet(quickPaySheet)
         registerSheet(highBalanceSheet)
     }
@@ -3149,7 +3153,7 @@ class AppViewModel @Inject constructor(
 
                         is SendEvent.AddressChange -> onAddressChange(it.value)
                         SendEvent.AddressReset -> resetAddressInput()
-                        is SendEvent.AddressContinue -> onAddressContinue(it.data)
+                        is SendEvent.AddressContinue -> onAddressContinue(it.data, it.suppressQuickPay)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
                         SendEvent.AmountReset -> resetAmountInput()
@@ -3887,9 +3891,14 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onAddressContinue(data: String) {
+    private fun onAddressContinue(data: String, suppressQuickPay: Boolean) {
         clearActiveContactPaymentContext()
-        launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data, routePubkyKeys = true)
+        launchScan(
+            source = ScanSource.ADDRESS_CONTINUE,
+            data = data,
+            routePubkyKeys = true,
+            suppressQuickPay = suppressQuickPay,
+        )
     }
 
     fun onUsdtAmountChange(value: String) {
@@ -4807,6 +4816,7 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
         allowPubkyAuth: Boolean = isMainScanner,
+        suppressQuickPay: Boolean = false,
     ) {
         launchScan(
             source = ScanSource.SCAN_RESULT,
@@ -4815,6 +4825,7 @@ class AppViewModel @Inject constructor(
             routePubkyKeys = routePubkyKeys,
             contactPaymentContext = contactPaymentContext,
             allowPubkyAuth = allowPubkyAuth,
+            suppressQuickPay = suppressQuickPay,
         )
     }
 
@@ -7656,7 +7667,7 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    fun onScannerSheetResult(data: String) {
+    fun onScannerSheetResult(data: String, suppressQuickPay: Boolean = false) {
         val handler = scanResultHandler
         val shouldHandleAsProtocol = SamRockSetupRequest.isProtocolUrl(data.removeLightningSchemes())
         scanResultHandler = null
@@ -7673,6 +7684,7 @@ class AppViewModel @Inject constructor(
                 data = data,
                 startDelay = SCREEN_TRANSITION_DELAY,
                 routePubkyKeys = true,
+                suppressQuickPay = suppressQuickPay,
             )
         }
     }
@@ -9303,7 +9315,7 @@ sealed interface SendEvent {
 
     data object AddressReset : SendEvent
     data class AddressChange(val value: String) : SendEvent
-    data class AddressContinue(val data: String) : SendEvent
+    data class AddressContinue(val data: String, val suppressQuickPay: Boolean = false) : SendEvent
 
     data object AmountReset : SendEvent
     data object AmountContinue : SendEvent

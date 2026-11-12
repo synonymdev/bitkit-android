@@ -458,11 +458,16 @@ fun SendSheet(
                 }
                 composableWithDefaultTransitions<SendRoute.QrScanner> {
                     QrScanningScreen(
+                        readsNearby = true,
                         onBack = { navController.popBackStack() },
                         onScanSuccess = { payload ->
                             payload.text?.let {
                                 navController.popBackStack()
-                                appViewModel.onScanResult(data = it, routePubkyKeys = true)
+                                appViewModel.onScanResult(
+                                    data = it,
+                                    routePubkyKeys = true,
+                                    suppressQuickPay = payload.isNearby,
+                                )
                             }
                         },
                     )

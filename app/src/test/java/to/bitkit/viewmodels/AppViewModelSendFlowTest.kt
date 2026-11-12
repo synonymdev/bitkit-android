@@ -968,6 +968,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         backupSheet = backupSheet,
         notificationsSheet = mock { on { type } doReturn TimedSheetType.NOTIFICATIONS },
         quickPaySheet = mock { on { type } doReturn TimedSheetType.QUICK_PAY },
+        nfcSheet = mock { on { type } doReturn TimedSheetType.NFC },
         usdtSheet = usdtSheet,
 
         usdtPreferences = usdtPreferences,
