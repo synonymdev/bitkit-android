@@ -97,6 +97,7 @@ class WalletRepo @Inject constructor(
 
     private val _balanceState = MutableStateFlow(BalanceState())
     val balanceState = _balanceState.asStateFlow()
+    private val balanceSyncMutex = Mutex()
     private val balanceMutex = Mutex()
     private var hasLiveBalance = false
 
@@ -463,22 +464,24 @@ class WalletRepo @Inject constructor(
 
     suspend fun syncBalances() {
         vssClients.withWallet {
-            balanceMutex.withLock {
+            balanceSyncMutex.withLock {
                 val result = deriveBalanceStateUseCase()
-                val balance = result.getOrElse {
-                    if (it is CancellationException) throw it
-                    if (it is NodeNotRunningError) {
-                        updateSparkBalance(_balanceState.value)?.let { updated -> return@getOrElse updated }
-                    }
-                    Logger.warn("Could not sync balances", it, context = TAG)
-                    return@withLock
-                }
                 val channels = lightningRepo.lightningState.value.channels
-                val hasAggregate = result.isSuccess ||
-                    (balance.sparkBalanceSats != null && balance.sparkPendingDepositSats != null)
-                if (hasAggregate) cacheBalance(balance)
-                publishBalance(balance, channels)
-                hasLiveBalance = hasLiveBalance || hasAggregate
+                balanceMutex.withLock publish@{
+                    val balance = result.getOrElse {
+                        if (it is CancellationException) throw it
+                        if (it is NodeNotRunningError) {
+                            updateSparkBalance(_balanceState.value)?.let { updated -> return@getOrElse updated }
+                        }
+                        Logger.warn("Could not sync balances", it, context = TAG)
+                        return@publish
+                    }
+                    val hasAggregate = result.isSuccess ||
+                        (balance.sparkBalanceSats != null && balance.sparkPendingDepositSats != null)
+                    if (hasAggregate) cacheBalance(balance)
+                    publishBalance(balance, channels)
+                    hasLiveBalance = hasLiveBalance || hasAggregate
+                }
             }
         }
     }

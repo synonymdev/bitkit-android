@@ -379,6 +379,53 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cached wallet data loads during serialized balance reads`() = test {
+        val node = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting))
+        whenever(lightningRepo.lightningState).thenReturn(node)
+        val cached = AppCacheData(
+            balance = BalanceState(totalOnchainSats = 50_000uL),
+            onchainAddress = ADDRESS,
+            bolt11 = INVOICE,
+            bip21 = "bitcoin:$ADDRESS?lightning=$INVOICE",
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(cached))
+        val reading = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val fresh = BalanceState(totalOnchainSats = 60_000uL)
+        val latest = BalanceState(totalOnchainSats = 70_000uL)
+        var reads = 0
+        whenever(deriveBalanceStateUseCase.invoke()).doSuspendableAnswer {
+            if (reads++ == 0) {
+                reading.complete(Unit)
+                release.await()
+                Result.success(fresh)
+            } else {
+                Result.success(latest)
+            }
+        }
+
+        val sync = launch { sut.syncBalances() }
+        reading.await()
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        try {
+            assertEquals(cached.balance, sut.balanceState.value)
+            assertEquals(cached.onchainAddress, sut.walletState.value.onchainAddress)
+            assertEquals(cached.bolt11, sut.walletState.value.bolt11)
+            assertEquals(cached.bip21, sut.walletState.value.bip21)
+            assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+            launch { sut.syncBalances() }
+            testScheduler.runCurrent()
+        } finally {
+            release.complete(Unit)
+            sync.join()
+        }
+        testScheduler.runCurrent()
+        assertEquals(latest, sut.balanceState.value)
+        verify(cacheStore).cacheBalance(latest)
+    }
+
+    @Test
     fun `balance writes and cache hydration cannot overtake a pending update`() = test {
         var cached = AppCacheData()
         whenever(cacheStore.data).thenReturn(flow { emit(cached) })
