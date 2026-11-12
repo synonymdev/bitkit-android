@@ -636,6 +636,7 @@ class SparkExitDriverTest : BaseUnitTest() {
             listOf(SparkExitFixtures.utxo("paid", value = 100_000uL))
         record = driver(tip = 1_001u).tick(record)
 
+        assertTrue(record.funding.any { it.txid == "paid" }, "the payment was not adopted, so the hold never ran")
         assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2, sent on the previous tick")
         assertTrue(record.isUnverifiedAsk)
         assertEquals(1, record.generation)
