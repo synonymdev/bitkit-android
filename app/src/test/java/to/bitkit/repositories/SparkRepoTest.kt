@@ -123,6 +123,9 @@ class SparkRepoTest : BaseUnitTest() {
     private val payoutChain = mock<SparkPayoutChain>()
     private val settingsStore = mock<SettingsStore> { on { data } doReturn flowOf(SettingsData()) }
     private var now = Instant.fromEpochSeconds(1_800_000_000)
+
+    /** The Spark operators' answer to a send status fetch; unreachable unless a test says otherwise. */
+    private var sendStatus: () -> PaymentStatus? = { throw IllegalStateException("operators unreachable") }
     private val clock = object : Clock {
         override fun now() = this@SparkRepoTest.now
     }
@@ -155,6 +158,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.networkName).thenReturn("regtest")
+        whenever { sparkService.lightningSendStatus(any()) }.thenAnswer { sendStatus() }
         whenever { cacheStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
             cacheData.update(transform)
@@ -282,9 +286,10 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a restored wallet's unsynced history refuses the node's send of an invoice from before the restore`() =
+    fun `a restored wallet's unsynced spark refuses the node's pre-restore send while operators can't be asked`() =
         test {
-            cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
+            val restoredAt = now.epochSeconds
+            cacheData.value = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
             whenever(sparkService.isConnected).thenReturn(true)
             val sut = createSut()
 
@@ -295,7 +300,7 @@ class SparkRepoTest : BaseUnitTest() {
         }
 
     @Test
-    fun `a pre-restore invoice spark's synced list lacks is refused over the node until it expires`() = test {
+    fun `a pre-restore invoice spark's list lacks is refused over the node while operators can't be asked`() = test {
         val restoredAt = now.epochSeconds - 60
         val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
         val store = CacheStore(InMemoryDataStore(cache), clock)
@@ -340,7 +345,7 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `an invoice created after the restore pays over the node while spark is unsynced`() = test {
-        cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)
+        cacheData.value = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds, sparkRestoredAt = now.epochSeconds)
         whenever(sparkService.isConnected).thenReturn(false)
 
         assertNull(createSut().earlierLightningSend("lnbc1280n1send", "hash", invoiceCreatedAt = now.epochSeconds + 60))
@@ -394,17 +399,19 @@ class SparkRepoTest : BaseUnitTest() {
         val restarted = createSut(store)
         restarted.start(0).getOrThrow()
 
-        restarted.payInvoice("lnbc1280n1send", 128uL)
+        val result = restarted.payInvoice("lnbc1280n1send", 128uL)
 
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
         verify(sparkService, never()).send(any(), anyOrNull())
     }
 
     @Test
-    fun `a ready spark that hasn't synced since the restore refuses an invoice from before it`() = test {
-        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
+    fun `an unsynced spark refuses a pre-restore invoice while operators can't be asked`() = test {
+        val restored = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds, sparkRestoredAt = now.epochSeconds)
+        val store = CacheStore(InMemoryDataStore(restored), clock)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.getInfo() }.thenReturn(info(10_000uL).copy(lastSyncedAt = null))
-        val prepared = prepared(feeSats = 0uL)
+        val prepared = prepared(feeSats = 0uL, createdAt = (now.epochSeconds - 600).toULong(), expirySecs = 3_600uL)
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val sut = createSut(store)
@@ -417,7 +424,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a synced spark whose list lacks a pre-restore invoice refuses to send it`() = test {
+    fun `a synced spark refuses a pre-restore invoice its list lacks while operators can't be asked`() = test {
         val restoredAt = now.epochSeconds - 60
         val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
         val store = CacheStore(InMemoryDataStore(cache), clock)
@@ -437,7 +444,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a synced spark whose list can't be read refuses a pre-restore invoice`() = test {
+    fun `a synced spark whose list and operators can't be read refuses a pre-restore invoice`() = test {
         val restoredAt = now.epochSeconds - 60
         val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
         val store = CacheStore(InMemoryDataStore(cache), clock)
@@ -470,6 +477,80 @@ class SparkRepoTest : BaseUnitTest() {
 
         sut.payInvoice("lnbc1280n1send", 128uL).getOrThrow()
 
+        verify(sparkService).send(any(), anyOrNull())
+    }
+
+    @Test
+    fun `a pre-restore invoice the operators show completed is refused on both rails`() = test {
+        assertRestoredInvoiceRefusedOnBothRails(status = PaymentStatus.COMPLETED)
+    }
+
+    @Test
+    fun `a pre-restore invoice the operators show pending is refused on both rails`() = test {
+        assertRestoredInvoiceRefusedOnBothRails(status = PaymentStatus.PENDING)
+    }
+
+    @Test
+    fun `a pre-restore invoice the operators show failed is refused on both rails`() = test {
+        assertRestoredInvoiceRefusedOnBothRails(status = PaymentStatus.FAILED)
+    }
+
+    @Test
+    fun `a pre-restore invoice the operators show unsent pays on both rails when spark isn't preferred`() = test {
+        whenever(sparkService.prefersSpark).thenReturn(false)
+        whenever(sparkService.carriesSparkAddress(any())).thenReturn(true)
+        assertRestoredInvoicePaysOnBothRails()
+    }
+
+    @Test
+    fun `a pre-restore invoice the operators show unsent pays on both rails when it carries no spark address`() =
+        test {
+            whenever(sparkService.prefersSpark).thenReturn(true)
+            whenever(sparkService.carriesSparkAddress(any())).thenReturn(false)
+            assertRestoredInvoicePaysOnBothRails()
+        }
+
+    @Test
+    fun `a spark-addressed pre-restore invoice the operators show unsent is refused while spark is preferred`() = test {
+        whenever(sparkService.prefersSpark).thenReturn(true)
+        whenever(sparkService.carriesSparkAddress(any())).thenReturn(true)
+        assertRestoredInvoiceRefusedOnBothRails(status = null)
+    }
+
+    @Test
+    fun `a pre-restore invoice is refused on both rails when the operators can't be asked`() = test {
+        // setUp's status fetch fails, as when the operators are unreachable.
+        assertRestoredInvoiceRefusedOnBothRails(status = null, stubStatus = false)
+    }
+
+    private suspend fun restoredSparkForPreRestoreInvoice(status: PaymentStatus?, stubStatus: Boolean): SparkRepo {
+        val restoredAt = now.epochSeconds - 60
+        val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
+        whenever(sparkService.isConnected).thenReturn(true)
+        if (stubStatus) sendStatus = { status }
+        val prepared = prepared(feeSats = 0uL, createdAt = (restoredAt - 600).toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
+        return createSut(CacheStore(InMemoryDataStore(cache), clock)).also { it.start(0).getOrThrow() }
+    }
+
+    private suspend fun assertRestoredInvoiceRefusedOnBothRails(status: PaymentStatus?, stubStatus: Boolean = true) {
+        val sut = restoredSparkForPreRestoreInvoice(status, stubStatus)
+        val createdAt = now.epochSeconds - 660
+
+        assertFailsWith<SparkError.RestoredInvoiceUnverified> {
+            sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, createdAt + 3_600)
+        }
+        assertIs<SparkError.RestoredInvoiceUnverified>(sut.payInvoice("lnbc1280n1send", 128uL).exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    private suspend fun assertRestoredInvoicePaysOnBothRails() {
+        val sut = restoredSparkForPreRestoreInvoice(status = null, stubStatus = true)
+        val createdAt = now.epochSeconds - 660
+
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, createdAt + 3_600))
+        sut.payInvoice("lnbc1280n1send", 128uL).getOrThrow()
         verify(sparkService).send(any(), anyOrNull())
     }
 
@@ -515,7 +596,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark's synced event seeds the restored hashes and ends the hold`() = test {
+    fun `spark's synced event seeds the restored hashes`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(sparkHistoryUnseededSince = now.epochSeconds)), clock)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
