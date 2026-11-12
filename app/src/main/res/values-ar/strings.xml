@@ -386,6 +386,9 @@
     <string name="other__lnurl_withdr_success_msg">تم طلب السحب بنجاح. في انتظار الدفع.</string>
     <string name="other__lnurl_withdr_success_title">تم طلب السحب</string>
     <string name="other__logs_export_error">فشل إنشاء ملف السجلات المضغوط</string>
+    <string name="other__nfc_read_error_text">لا تحتوي هذه العلامة على طلب دفع يمكن لـ Bitkit استخدامه.</string>
+    <string name="other__nfc_read_error_title">تعذر قراءة NFC</string>
+    <string name="other__nfc_service_description">طلب دفع Bitkit</string>
     <string name="other__node_error_starting">خطأ في البدء: %1$s</string>
     <string name="other__node_initializing">جارٍ إعداد المحفظة…</string>
     <string name="other__node_running">قيد التشغيل</string>
@@ -406,6 +409,12 @@
     <string name="other__scan__error__expired">انتهت صلاحية فاتورة Lightning هذه.</string>
     <string name="other__scan__error__generic">لا يستطيع Bitkit قراءة البيانات المقدمة.</string>
     <string name="other__scan_err_decoding">خطأ في فك التشفير</string>
+    <string name="other__scan_to_pay_description">اسمح بالوصول إلى الكاميرا و Bluetooth و NFC لمسح فواتير Bitcoin والدفع بشكل أسرع.</string>
+    <string name="other__scan_to_pay_title">مسح\n&lt;accent&gt;للدفع&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">جارٍ مسح QR</string>
+    <string name="other__scanner_status_qr_bluetooth">جارٍ مسح QR و Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">جارٍ مسح QR و NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">جارٍ مسح QR و NFC و Bluetooth</string>
     <string name="other__share_qr">مشاركة رمز QR عبر</string>
     <string name="other__shop__categories__travel">السفر</string>
     <string name="other__shop__discover__esims__description">بلا حدود</string>
@@ -666,6 +675,13 @@
     <string name="settings__general_title">عام</string>
     <string name="settings__language_system_default">إعدادات النظام</string>
     <string name="settings__language_title">اللغة</string>
+    <string name="settings__nearby__subtitle">اسمح للهواتف القريبة بقراءة طلب الاستلام الخاص بك عبر Bluetooth</string>
+    <string name="settings__nearby__title">المدفوعات القريبة</string>
+    <string name="settings__nfc__intro__continue">رائع!</string>
+    <string name="settings__nfc__intro__description">يدعم Bitkit الآن مدفوعات NFC. قرّب هاتفك من جهاز دفع أو هاتف متوافق للدفع فورًا.</string>
+    <string name="settings__nfc__intro__quickpay">استخدم QuickPay للمدفوعات الصغيرة</string>
+    <string name="settings__nfc__intro__title">ادفع\n&lt;accent&gt;بلمسة واحدة فقط&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__quickpay__intro__description">يجعل Bitkit QuickPay الدفع أسرع من خلال دفع الفواتير الصغيرة تلقائيًا.</string>
     <string name="settings__quickpay__intro__title">مدفوعات\n&lt;accent&gt;سلسة&lt;/accent&gt;</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -981,6 +997,7 @@
     <string name="wallet__receive_note_placeholder">ملاحظة اختيارية للدافع</string>
     <string name="wallet__receive_onboarding_description">استمتع بمعاملات فورية ورخيصة\nمع الأصدقاء والعائلة\nوالتجار.</string>
     <string name="wallet__receive_onboarding_title">استلم على &lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
+    <string name="wallet__receive_scan_or_tap">امسح أو المس للدفع</string>
     <string name="wallet__receive_show_details">عرض التفاصيل</string>
     <string name="wallet__receive_show_qr">عرض رمز QR</string>
     <string name="wallet__receive_specify">تعديل الفاتورة</string>

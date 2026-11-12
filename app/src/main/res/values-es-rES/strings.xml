@@ -392,6 +392,9 @@
     <string name="other__lnurl_withdr_success_msg">Tu retiro se ha solicitado correctamente. Esperando el pago.</string>
     <string name="other__lnurl_withdr_success_title">Retirada solicitada</string>
     <string name="other__logs_export_error">Error al crear el archivo zip de registros</string>
+    <string name="other__nfc_read_error_text">Esta etiqueta no contiene una solicitud de pago que Bitkit pueda usar.</string>
+    <string name="other__nfc_read_error_title">Incapaz De Leer NFC</string>
+    <string name="other__nfc_service_description">Solicitud de pago de Bitkit</string>
     <string name="other__node_error_starting">Error al iniciar: %1$s</string>
     <string name="other__node_initializing">Configurando monedero…</string>
     <string name="other__node_running">En ejecución</string>
@@ -412,6 +415,12 @@
     <string name="other__scan__error__expired">Esta factura Lightning ha expirado.</string>
     <string name="other__scan__error__generic">Bitkit no puede leer los datos proporcionados.</string>
     <string name="other__scan_err_decoding">Error de descodificación</string>
+    <string name="other__scan_to_pay_description">Permite el acceso a la cámara, Bluetooth y NFC para escanear facturas de bitcoin y pagar más rápidamente.</string>
+    <string name="other__scan_to_pay_title">Escanea\n&lt;accent&gt;para pagar&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">Escaneando QR</string>
+    <string name="other__scanner_status_qr_bluetooth">Escaneando QR y Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">Escaneando QR y NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">Escaneando QR, NFC y Bluetooth</string>
     <string name="other__share_qr">Compartir código QR vía</string>
     <string name="other__shop__categories__travel">Viajes</string>
     <string name="other__shop__discover__esims__description">Sin fronteras</string>
@@ -684,6 +693,13 @@
     <string name="settings__general_title">General</string>
     <string name="settings__language_system_default">Ajustes del sistema</string>
     <string name="settings__language_title">Idioma</string>
+    <string name="settings__nearby__subtitle">Permite que los teléfonos cercanos lean tu solicitud de Recibir por Bluetooth</string>
+    <string name="settings__nearby__title">Pagos cercanos</string>
+    <string name="settings__nfc__intro__continue">¡Genial!</string>
+    <string name="settings__nfc__intro__description">Bitkit ahora admite pagos NFC. Acerca tu teléfono a un terminal de pago o a un teléfono compatible para pagar al instante.</string>
+    <string name="settings__nfc__intro__quickpay">Usa QuickPay para pagos pequeños</string>
+    <string name="settings__nfc__intro__title">Paga con\n&lt;accent&gt;un solo toque&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay hace que pagar sea más rápido pagando automáticamente facturas pequeñas.</string>
     <string name="settings__quickpay__intro__title">Pagos\n&lt;accent&gt;sin fricción&lt;/accent&gt;</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -1006,6 +1022,7 @@
     <string name="wallet__receive_note_placeholder">Nota opcional para el pagador</string>
     <string name="wallet__receive_onboarding_description">Disfruta de transacciones instantáneas y baratas\ncon amigos, familia\ny comerciantes.</string>
     <string name="wallet__receive_onboarding_title">Recibe en el &lt;accent&gt;saldo de gasto&lt;/accent&gt;</string>
+    <string name="wallet__receive_scan_or_tap">Escanea o toca para pagar</string>
     <string name="wallet__receive_show_details">Mostrar detalles</string>
     <string name="wallet__receive_show_qr">Mostrar código QR</string>
     <string name="wallet__receive_specify">Editar Factura</string>

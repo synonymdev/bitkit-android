@@ -1,5 +1,6 @@
 package to.bitkit.nfc
 
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -10,15 +11,23 @@ import java.util.concurrent.atomic.AtomicReference
  * The service and the UI run in the same process, so a process-wide holder is enough.
  */
 object NfcTagEmitter {
-    private val message = AtomicReference<ByteArray?>(null)
+    private class Published(val token: Long, val message: ByteArray)
 
-    fun publish(uri: String) {
-        message.set(NdefCodec.encodeUriMessage(uri))
+    private val tokens = AtomicLong(0)
+    private val published = AtomicReference<Published?>(null)
+
+    /** Publishes [uri] and returns the token that [clear] needs, so a later publisher is not cleared. */
+    fun publish(uri: String): Long {
+        val token = tokens.incrementAndGet()
+        published.set(Published(token, NdefCodec.encodeUriMessage(uri)))
+        return token
     }
 
-    fun clear() {
-        message.set(null)
+    /** Clears the request published with [token]; returns false when another one replaced it. */
+    fun clear(token: Long): Boolean {
+        val current = published.get() ?: return false
+        return current.token == token && published.compareAndSet(current, null)
     }
 
-    fun currentMessage(): ByteArray? = message.get()
+    fun currentMessage(): ByteArray? = published.get()?.message
 }

@@ -347,6 +347,9 @@
     <string name="onboarding__empty_wallet">Pour\ncommencer,\n&lt;accent&gt;envoyez\ndu bitcoin&lt;/accent&gt;.</string>
     <string name="onboarding__multiple_header">&lt;accent&gt;Attention :&lt;/accent&gt;\nplusieurs appareils</string>
     <string name="onboarding__multiple_text">N\'installez pas votre phrase de récupération Bitkit sur plusieurs téléphones simultanément, car cela pourrait corrompre vos données.</string>
+    <string name="other__nfc_read_error_text">Ce tag NFC ne contient aucune demande de paiement utilisable par Bitkit.</string>
+    <string name="other__nfc_read_error_title">Impossible de lire le NFC</string>
+    <string name="other__nfc_service_description">Demande de paiement Bitkit</string>
     <string name="other__qr_scan">Scannez le QR code </string>
     <string name="other__qr_error_header">Impossible de lire les QR codes</string>
     <string name="other__qr_error_text">Bitkit n\'est pas en mesure de lire ce QR code.</string>
@@ -365,6 +368,12 @@
     <string name="other__high_balance__text">&lt;accent&gt;Le solde de votre portefeuille dépasse 500 $.&lt;/accent&gt;\nPour votre sécurité, envisagez de transférer une partie de votre Épargne vers un portefeuille hors ligne.</string>
     <string name="other__high_balance__continue">Compris</string>
     <string name="other__high_balance__cancel">En savoir plus</string>
+    <string name="other__scan_to_pay_description">Autorisez l\'accès à la caméra, au Bluetooth et au NFC pour scanner les factures bitcoin et payer plus rapidement.</string>
+    <string name="other__scan_to_pay_title">Scanner\n&lt;accent&gt;pour payer&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">Scan QR</string>
+    <string name="other__scanner_status_qr_bluetooth">Scan QR et Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">Scan QR et NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">Scan QR, NFC et Bluetooth</string>
     <string name="other__try_again">Veuillez réessayer.</string>
     <string name="other__update_critical_nav_title">Mise à jour critique</string>
     <string name="other__update_critical_title">Mettre à jour\n&lt;accent&gt;Bitkit maintenant&lt;/accent&gt;</string>
@@ -552,6 +561,13 @@
     <string name="security__wiped_title">Données du wallet supprimées</string>
     <string name="security__wiped_message">Bitkit a été réinitialisé et toutes les données du walet ont été supprimées.</string>
     <string name="security__pin_enable_button">Activer le PIN</string>
+    <string name="settings__nearby__subtitle">Autorisez les téléphones à proximité à lire votre demande Recevoir via Bluetooth</string>
+    <string name="settings__nearby__title">Paiements à proximité</string>
+    <string name="settings__nfc__intro__continue">Génial !</string>
+    <string name="settings__nfc__intro__description">Bitkit prend désormais en charge les paiements NFC. Approchez votre téléphone d\'un terminal de paiement ou d\'un téléphone compatible pour payer instantanément.</string>
+    <string name="settings__nfc__intro__quickpay">Utilisez QuickPay pour les petits paiements</string>
+    <string name="settings__nfc__intro__title">Payez en\n&lt;accent&gt;un seul geste&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__settings">Paramètres</string>
     <string name="settings__dev_enabled_title">Options de développement activées</string>
     <string name="settings__dev_enabled_message">Les options pour les développeurs sont désormais activées dans l\'ensemble de l\'application.</string>
@@ -887,6 +903,7 @@
     <string name="wallet__drawer__settings">Config</string>
     <string name="wallet__drawer__status">Statut de l\'application</string>
     <string name="wallet__drawer__support">Assistance</string>
+    <string name="wallet__receive_scan_or_tap">Scannez ou approchez pour payer</string>
     <string name="wallet__send">Envoyer</string>
     <string name="wallet__receive">Recevoir</string>
     <string name="wallet__send_bitcoin">Envoyer des bitcoins</string>

@@ -386,6 +386,9 @@
     <string name="other__lnurl_withdr_success_msg">Η ανάληψή σου ζητήθηκε επιτυχώς. Αναμονή πληρωμής.</string>
     <string name="other__lnurl_withdr_success_title">Ζητήθηκε ανάληψη</string>
     <string name="other__logs_export_error">Αποτυχία δημιουργίας αρχείου zip καταγραφής</string>
+    <string name="other__nfc_read_error_text">Αυτή η ετικέτα δεν περιέχει αίτημα πληρωμής που μπορεί να χρησιμοποιήσει το Bitkit.</string>
+    <string name="other__nfc_read_error_title">Αδυναμία ανάγνωσης NFC</string>
+    <string name="other__nfc_service_description">Αίτημα πληρωμής Bitkit</string>
     <string name="other__node_error_starting">Σφάλμα εκκίνησης: %1$s</string>
     <string name="other__node_initializing">Ρύθμιση πορτοφολιού…</string>
     <string name="other__node_running">Εκτελείται</string>
@@ -406,6 +409,12 @@
     <string name="other__scan__error__expired">Αυτό το τιμολόγιο Lightning έχει λήξει.</string>
     <string name="other__scan__error__generic">Το Bitkit δεν μπορεί να διαβάσει τα παρεχόμενα δεδομένα.</string>
     <string name="other__scan_err_decoding">Σφάλμα αποκωδικοποίησης</string>
+    <string name="other__scan_to_pay_description">Επίτρεψε την πρόσβαση στην κάμερα, το Bluetooth και το NFC για να σαρώσεις τιμολόγια bitcoin και να πληρώσεις πιο γρήγορα.</string>
+    <string name="other__scan_to_pay_title">Σάρωσε\n&lt;accent&gt;για πληρωμή&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">Σάρωση QR</string>
+    <string name="other__scanner_status_qr_bluetooth">Σάρωση QR και Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">Σάρωση QR και NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">Σάρωση QR, NFC και Bluetooth</string>
     <string name="other__share_qr">Κοινοποίηση κωδικού QR μέσω</string>
     <string name="other__shop__categories__travel">Ταξίδια</string>
     <string name="other__shop__discover__esims__description">Χωρίς σύνορα</string>
@@ -666,6 +675,13 @@
     <string name="settings__general_title">Γενικά</string>
     <string name="settings__language_system_default">Ρυθμίσεις συστήματος</string>
     <string name="settings__language_title">Γλώσσα</string>
+    <string name="settings__nearby__subtitle">Επίτρεψε σε κοντινά τηλέφωνα να διαβάζουν το αίτημα Λήψης σου μέσω Bluetooth</string>
+    <string name="settings__nearby__title">Κοντινές πληρωμές</string>
+    <string name="settings__nfc__intro__continue">Τέλεια!</string>
+    <string name="settings__nfc__intro__description">Το Bitkit υποστηρίζει πλέον πληρωμές NFC. Φέρε το τηλέφωνό σου κοντά σε ένα συμβατό τερματικό πληρωμών ή τηλέφωνο για να πληρώσεις άμεσα.</string>
+    <string name="settings__nfc__intro__quickpay">Χρησιμοποίησε το QuickPay για μικρές πληρωμές</string>
+    <string name="settings__nfc__intro__title">Πλήρωσε με\n&lt;accent&gt;ένα μόνο άγγιγμα&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__quickpay__intro__description">Το Bitkit QuickPay κάνει την ολοκλήρωση αγοράς πιο γρήγορη πληρώνοντας αυτόματα μικρά τιμολόγια.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Απρόσκοπτες&lt;/accent&gt;\nπληρωμές</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -986,6 +1002,7 @@
     <string name="wallet__receive_note_placeholder">Προαιρετική σημείωση προς τον πληρωτή</string>
     <string name="wallet__receive_onboarding_description">Απόλαυσε άμεσες και φθηνές\nσυναλλαγές με φίλους, οικογένεια\nκαι εμπόρους.</string>
     <string name="wallet__receive_onboarding_title">Λήψη σε &lt;accent&gt;υπόλοιπο δαπανών&lt;/accent&gt;</string>
+    <string name="wallet__receive_scan_or_tap">Σάρωσε ή άγγιξε για πληρωμή</string>
     <string name="wallet__receive_show_details">Εμφάνιση λεπτομερειών</string>
     <string name="wallet__receive_show_qr">Εμφάνιση κωδικού QR</string>
     <string name="wallet__receive_specify">Επεξεργασία τιμολογίου</string>

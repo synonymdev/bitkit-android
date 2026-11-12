@@ -404,6 +404,9 @@
     <string name="other__lnurl_withdr_success_msg">Ваш запрос на вывод успешно отправлен. Ожидание платежа.</string>
     <string name="other__lnurl_withdr_success_title">Запрос на Вывод</string>
     <string name="other__logs_export_error">Не удалось создать zip-файл логов</string>
+    <string name="other__nfc_read_error_text">Эта метка не содержит запрос на оплату, который может использовать Bitkit.</string>
+    <string name="other__nfc_read_error_title">Не удалось прочитать NFC</string>
+    <string name="other__nfc_service_description">Запрос на оплату Bitkit</string>
     <string name="other__node_error_starting">Ошибка запуска: %1$s</string>
     <string name="other__node_initializing">Настройка кошелька…</string>
     <string name="other__node_running">Работает</string>
@@ -424,6 +427,12 @@
     <string name="other__scan__error__expired">Этот Lightning-счёт истёк.</string>
     <string name="other__scan__error__generic">Bitkit не может прочитать предоставленные данные.</string>
     <string name="other__scan_err_decoding">Ошибка Декодирования</string>
+    <string name="other__scan_to_pay_description">Разрешите доступ к камере, Bluetooth и NFC для сканирования биткоин-счетов и более быстрой оплаты.</string>
+    <string name="other__scan_to_pay_title">Сканируйте\n&lt;accent&gt;для оплаты&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">Сканирование QR</string>
+    <string name="other__scanner_status_qr_bluetooth">Сканирование QR и Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">Сканирование QR и NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">Сканирование QR, NFC и Bluetooth</string>
     <string name="other__share_qr">Поделиться QR-кодом через</string>
     <string name="other__shop__categories__travel">Путешествия</string>
     <string name="other__shop__discover__esims__description">Без границ</string>
@@ -699,6 +708,13 @@
     <string name="settings__general_title">Основные</string>
     <string name="settings__language_system_default">Системные настройки</string>
     <string name="settings__language_title">Язык</string>
+    <string name="settings__nearby__subtitle">Разрешите телефонам поблизости считывать ваш запрос на получение через Bluetooth</string>
+    <string name="settings__nearby__title">Платежи поблизости</string>
+    <string name="settings__nfc__intro__continue">Отлично!</string>
+    <string name="settings__nfc__intro__description">Bitkit теперь поддерживает NFC-платежи. Поднесите телефон к совместимому платёжному терминалу или телефону, чтобы оплатить мгновенно.</string>
+    <string name="settings__nfc__intro__quickpay">Используйте QuickPay для небольших платежей</string>
+    <string name="settings__nfc__intro__title">Оплата\n&lt;accent&gt;одним касанием&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay ускоряет оплату, автоматически оплачивая небольшие счета.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Платежи&lt;/accent&gt;
 без трения</string>
@@ -1026,6 +1042,7 @@
 транзакциями с друзьями, семьёй
 и продавцами.</string>
     <string name="wallet__receive_onboarding_title">Получить на &lt;accent&gt;баланс расходов&lt;/accent&gt;</string>
+    <string name="wallet__receive_scan_or_tap">Сканируйте или приложите для оплаты</string>
     <string name="wallet__receive_show_details">Показать детали</string>
     <string name="wallet__receive_show_qr">Показать QR-код</string>
     <string name="wallet__receive_specify">Редактировать Инвойс</string>

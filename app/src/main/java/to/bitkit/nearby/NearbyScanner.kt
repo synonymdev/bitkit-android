@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -17,26 +16,31 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
 import androidx.annotation.RequiresPermission
+import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.connectGattDirect
+import to.bitkit.ext.nowMillis
 import to.bitkit.utils.Logger
+import java.util.UUID
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Finds the closest nearby Bitkit wallet that serves a payment request and reads that request.
  *
  * While started it scans for the nearby service. Once an advertiser at or above
- * [NearbyProtocol.MIN_RSSI] is seen, it waits [CANDIDATE_WINDOW_MS] for others, connects to the
- * strongest one and reads the request. A device that fails or was already read is skipped for
- * [RETRY_AFTER_MS]. All callbacks reach [onRequest] on the main thread.
+ * [NearbyProtocol.MIN_RSSI] is seen, it waits [CANDIDATE_WINDOW] for others, connects to the
+ * strongest one and reads the request. Only payment requests ([isNearbyPaymentRequest]) reach
+ * [onRequest], on the main thread. A device whose read failed is skipped for [RETRY_AFTER]; a device
+ * whose request was delivered is skipped until [stop], so the scanner keeps listening for others.
  */
-@SuppressLint("MissingPermission") // Callers start it only after the nearby permissions are granted.
 class NearbyScanner(
     private val context: Context,
     private val onRequest: (String) -> Unit,
 ) {
-    private val bluetoothManager = context.getSystemService(BluetoothManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
     private val candidates = mutableMapOf<String, Pair<BluetoothDevice, Int>>()
-    private val skipped = mutableMapOf<String, Long>()
+    private val skippedUntil = mutableMapOf<String, Long>()
     private var isScanning = false
     private var isStarted = false
     private var session: ReadSession? = null
@@ -47,8 +51,11 @@ class NearbyScanner(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Logger.warn("Nearby scan failed: $errorCode", context = TAG)
-            isScanning = false
+            Logger.warn("Failed nearby scan with error '$errorCode'", context = TAG)
+            handler.post {
+                isScanning = false
+                handler.postDelayed(::restartScan, SCAN_RETRY_DELAY.inWholeMilliseconds)
+            }
         }
     }
 
@@ -58,6 +65,7 @@ class NearbyScanner(
         startScan()
     }
 
+    @SuppressLint("MissingPermission") // Only reachable after start(), which requires the scan permissions.
     fun stop() {
         isStarted = false
         stopScan()
@@ -65,11 +73,16 @@ class NearbyScanner(
         session?.close()
         session = null
         candidates.clear()
+        skippedUntil.clear()
     }
 
+    @SuppressLint("MissingPermission") // Scheduled only by a started scanner.
+    private fun restartScan() = startScan()
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     private fun startScan() {
         if (isScanning || session != null || !isStarted) return
-        val scanner = bluetoothManager?.adapter?.takeIf { it.isEnabled }?.bluetoothLeScanner ?: return
+        val scanner = context.bluetoothManager.adapter?.takeIf { it.isEnabled }?.bluetoothLeScanner ?: return
         val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(NearbyProtocol.SERVICE_UUID)).build()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         runCatching { scanner.startScan(listOf(filter), settings, scanCallback) }
@@ -77,22 +90,24 @@ class NearbyScanner(
             .onFailure { Logger.warn("Failed to start nearby scan", it, context = TAG) }
     }
 
+    @SuppressLint("MissingPermission") // Stops a scan that start() began with the scan permissions.
     private fun stopScan() {
         if (!isScanning) return
-        runCatching { bluetoothManager?.adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
+        runCatching { context.bluetoothManager.adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
         isScanning = false
     }
 
     private fun onCandidate(device: BluetoothDevice, rssi: Int) {
         if (!isStarted || session != null || rssi < NearbyProtocol.MIN_RSSI) return
-        val skippedAt = skipped[device.address]
-        if (skippedAt != null && System.currentTimeMillis() - skippedAt < RETRY_AFTER_MS) return
+        val until = skippedUntil[device.address]
+        if (until != null && nowMillis() < until) return
         val isFirst = candidates.isEmpty()
         val previous = candidates[device.address]?.second
         if (previous == null || rssi > previous) candidates[device.address] = device to rssi
-        if (isFirst) handler.postDelayed(::connectToClosest, CANDIDATE_WINDOW_MS)
+        if (isFirst) handler.postDelayed(::connectToClosest, CANDIDATE_WINDOW.inWholeMilliseconds)
     }
 
+    @SuppressLint("MissingPermission") // Scheduled only by a started scanner.
     private fun connectToClosest() {
         val closest = candidates.values.maxByOrNull { it.second }?.first ?: return
         candidates.clear()
@@ -101,18 +116,20 @@ class NearbyScanner(
         session = ReadSession(closest).also { it.open() }
     }
 
-    private fun finish(device: BluetoothDevice, request: String?) {
-        skipped[device.address] = System.currentTimeMillis()
+    @SuppressLint("MissingPermission") // Called from a session that a started scanner opened.
+    private fun finish(finished: ReadSession, device: BluetoothDevice, request: String?) {
+        if (session !== finished) return
         session?.close()
         session = null
+        val isPayment = request != null && isNearbyPaymentRequest(request)
+        if (request != null && !isPayment) Logger.warn("Ignored nearby request that is not a payment", context = TAG)
+        skippedUntil[device.address] = if (isPayment) Long.MAX_VALUE else nowMillis() + RETRY_AFTER.inWholeMilliseconds
         if (!isStarted) return
-        if (request != null) {
-            onRequest(request)
-        } else {
-            startScan()
-        }
+        if (isPayment) onRequest(requireNotNull(request))
+        startScan()
     }
 
+    @SuppressLint("MissingPermission") // Opened only by a started scanner, which holds BLUETOOTH_CONNECT.
     private inner class ReadSession(private val device: BluetoothDevice) : BluetoothGattCallback() {
         private var gatt: BluetoothGatt? = null
         private var length = 0
@@ -121,7 +138,7 @@ class NearbyScanner(
         private val timeout = Runnable { complete(null) }
 
         fun open() {
-            handler.postDelayed(timeout, READ_TIMEOUT_MS)
+            handler.postDelayed(timeout, READ_TIMEOUT.inWholeMilliseconds)
             gatt = runCatching { device.connectGattDirect(context, this, BluetoothDevice.TRANSPORT_LE) }
                 .onFailure { Logger.warn("Failed to connect to nearby device", it, context = TAG) }
                 .getOrNull()
@@ -141,7 +158,7 @@ class NearbyScanner(
             handler.post {
                 if (isDone) return@post
                 isDone = true
-                finish(device, request)
+                finish(this, device, request)
             }
         }
 
@@ -201,7 +218,7 @@ class NearbyScanner(
             }
         }
 
-        private fun read(gatt: BluetoothGatt, uuid: java.util.UUID): Boolean {
+        private fun read(gatt: BluetoothGatt, uuid: UUID): Boolean {
             val characteristic = gatt.getService(NearbyProtocol.SERVICE_UUID)?.getCharacteristic(uuid) ?: return false
             return gatt.readCharacteristic(characteristic)
         }
@@ -210,8 +227,9 @@ class NearbyScanner(
     private companion object {
         const val TAG = "NearbyScanner"
         const val MTU = 517
-        const val CANDIDATE_WINDOW_MS = 400L
-        const val READ_TIMEOUT_MS = 8_000L
-        const val RETRY_AFTER_MS = 10_000L
+        val CANDIDATE_WINDOW: Duration = 400.milliseconds
+        val READ_TIMEOUT: Duration = 8.seconds
+        val RETRY_AFTER: Duration = 10.seconds
+        val SCAN_RETRY_DELAY: Duration = 5.seconds
     }
 }

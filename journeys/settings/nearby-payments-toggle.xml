@@ -1,0 +1,16 @@
+<journey name="nearby payments toggle">
+  <description>
+    Settings > General lists "Nearby payments" under Payments, on by default, and the choice survives
+    leaving Settings. The toggle decides whether Receive offers its request to nearby phones over
+    Bluetooth; that broadcast needs two Bluetooth devices and is a manual test in the PR.
+
+    Precondition: onboarded dev build wallet that has not changed the setting, start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the menu button (testTag "HeaderMenu") and tap Settings</action>
+    <action>Scroll the General tab to the Payments section and verify the row "Nearby payments" (testTag "NearbyPaymentsSettings") shows its switch (testTag "NearbyPaymentsToggle") on</action>
+    <action>Tap the "Nearby payments" row and verify the switch turns off</action>
+    <action>Press back to leave Settings, open Settings again and verify "Nearby payments" is still off</action>
+    <action>Tap the "Nearby payments" row and verify the switch is on again</action>
+  </actions>
+</journey>

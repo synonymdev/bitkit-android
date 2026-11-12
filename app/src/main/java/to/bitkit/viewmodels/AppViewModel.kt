@@ -6020,7 +6020,11 @@ class AppViewModel @Inject constructor(
     ): Boolean {
         requireCurrentPaymentPreparation(walletGeneration)
         if (suppressQuickPay) {
-            Logger.info("Skipping QuickPay for '$amountSats' sats deferred across the lock", context = TAG)
+            Logger.info(
+                "Skipping QuickPay for '$amountSats' sats: suppressed for this scan " +
+                    "(deferred across the lock, or read from a nearby device)",
+                context = TAG,
+            )
             return false
         }
         if (hasActiveContactPaymentContext()) return false

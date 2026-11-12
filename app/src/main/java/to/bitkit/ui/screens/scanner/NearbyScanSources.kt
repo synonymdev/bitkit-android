@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.scanner
 
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -31,11 +32,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.ui.LocalIsAppLocked
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.shared.effects.BluetoothState
+import to.bitkit.ui.shared.effects.NearbyRole
 import to.bitkit.ui.shared.effects.NearbyScanEffect
 import to.bitkit.ui.shared.effects.NfcReaderEffect
 import to.bitkit.ui.shared.effects.NfcState
@@ -57,16 +60,19 @@ data class NearbyScanSources(
     val isBluetoothActive get() = bluetoothState == BluetoothState.ON
     val canEnableNfc get() = nfcState == NfcState.OFF
     val canEnableBluetooth
-        get() = bluetoothState == BluetoothState.NEEDS_PERMISSION || bluetoothState == BluetoothState.OFF
+        get() = bluetoothState in ENABLEABLE_BLUETOOTH_STATES
 
     companion object {
+        private val ENABLEABLE_BLUETOOTH_STATES =
+            setOf(BluetoothState.NEEDS_PERMISSION, BluetoothState.OFF, BluetoothState.LOCATION_OFF)
+
         val None = NearbyScanSources(NfcState.UNAVAILABLE, BluetoothState.UNAVAILABLE, {}, {})
     }
 }
 
 /**
- * Listens for payment requests over NFC and Bluetooth while the scanner is resumed.
- * [onRead] receives the request and whether it came over Bluetooth.
+ * Listens for payment requests over NFC and Bluetooth while the scanner is resumed and the app is
+ * unlocked. [onRead] receives the request and whether it came over Bluetooth.
  */
 @Composable
 fun rememberNearbyScanSources(
@@ -77,9 +83,10 @@ fun rememberNearbyScanSources(
     val context = LocalContext.current
     val resources = LocalResources.current
     val app = appViewModel
+    val isLocked = LocalIsAppLocked.current
     var refreshKey by remember { mutableIntStateOf(0) }
     val nfcState = rememberNfcState()
-    val bluetoothState = rememberBluetoothState(refreshKey)
+    val bluetoothState = rememberBluetoothState(NearbyRole.SCAN, refreshKey)
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -88,7 +95,7 @@ fun rememberNearbyScanSources(
         ActivityResultContracts.StartActivityForResult()
     ) { refreshKey++ }
 
-    if (nfcState == NfcState.ON) {
+    if (nfcState == NfcState.ON && !isLocked) {
         NfcReaderEffect(
             onRead = { onRead(it, false) },
             onUnreadable = {
@@ -100,7 +107,7 @@ fun rememberNearbyScanSources(
             },
         )
     }
-    NearbyScanEffect(enabled = bluetoothState == BluetoothState.ON, onRead = { onRead(it, true) })
+    NearbyScanEffect(enabled = bluetoothState == BluetoothState.ON && !isLocked, onRead = { onRead(it, true) })
 
     return NearbyScanSources(
         nfcState = nfcState,
@@ -111,6 +118,10 @@ fun rememberNearbyScanSources(
                 BluetoothState.NEEDS_PERMISSION -> permissionLauncher.launch(nearbyPermissions)
                 BluetoothState.OFF -> runCatching {
                     enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                }
+
+                BluetoothState.LOCATION_OFF -> runCatching {
+                    enableBluetoothLauncher.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                 }
 
                 else -> Unit

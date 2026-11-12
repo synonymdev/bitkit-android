@@ -239,6 +239,7 @@ fun QrScanningScreen(
             permissionState = cameraPermissionState,
             deniedContent = {
                 DeniedContent(
+                    nearbySources = nearbySources,
                     description = permissionDescription,
                     accentColor = permissionAccentColor,
                     onClickRetry = { context.startActivityAppSettings() },

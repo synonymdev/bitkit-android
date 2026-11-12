@@ -38,10 +38,10 @@ class Type4TagEmulatorTest {
     }
 
     @Test
-    fun `hides the NDEF file when nothing is published`() {
+    fun `presents no tag when nothing is published`() {
         message = null
-        sut.process(selectApp)
 
+        assertArrayEquals(Type4TagEmulator.SW_FILE_NOT_FOUND, sut.process(selectApp))
         assertArrayEquals(Type4TagEmulator.SW_FILE_NOT_FOUND, sut.process(selectNdef))
         assertArrayEquals(Type4TagEmulator.SW_FILE_NOT_FOUND, sut.process(hex("00B0000002")))
     }

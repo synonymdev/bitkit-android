@@ -6,8 +6,8 @@ package to.bitkit.nfc
  * A reader selects the NDEF tag application, reads the capability container (file E103)
  * and then the NDEF file (E104), which holds a 2-byte length followed by the message.
  * [ndefMessage] is read when the NDEF file is selected, so one tap always sees one
- * consistent request. While it returns null the NDEF file is reported as not found,
- * so a reader sees no tag content.
+ * consistent request. While it returns null the application itself is reported as not found,
+ * so a reader sees no tag.
  */
 class Type4TagEmulator(
     private val ndefMessage: () -> ByteArray?,
@@ -35,7 +35,8 @@ class Type4TagEmulator(
         val p1 = apdu[2]
         val data = commandData(apdu) ?: return SW_WRONG_LENGTH
         return when (p1) {
-            P1_SELECT_BY_NAME -> if (data.contentEquals(NDEF_AID)) {
+            // With nothing published Bitkit does not present a tag at all, so readers cannot detect it.
+            P1_SELECT_BY_NAME -> if (data.contentEquals(NDEF_AID) && ndefMessage() != null) {
                 isApplicationSelected = true
                 selectedFile = null
                 SW_OK
@@ -87,6 +88,7 @@ class Type4TagEmulator(
     companion object {
         /** NDEF Tag Application, NFC Forum Type 4 Tag specification. */
         val NDEF_AID = byteArrayOf(0xD2.toByte(), 0x76, 0x00, 0x00, 0x85.toByte(), 0x01, 0x01)
+        const val NDEF_AID_HEX = "D2760000850101"
         const val MAX_NDEF_SIZE = 0x0FFE
 
         private const val HEADER_SIZE = 4

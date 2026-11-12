@@ -25,12 +25,22 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import to.bitkit.androidServices.NdefTagService
+import to.bitkit.ext.nowMillis
 import to.bitkit.nfc.NdefCodec
 import to.bitkit.nfc.NfcTagEmitter
+import to.bitkit.nfc.Type4TagEmulator
 import to.bitkit.utils.Logger
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "NfcEffects"
-private const val DUPLICATE_READ_WINDOW_MS = 3_000L
+private val DUPLICATE_READ_WINDOW: Duration = 3.seconds
+private val NDEF_AIDS = listOf(Type4TagEmulator.NDEF_AID_HEX)
+
+/** The reader-mode owner; reader mode is activity-wide, so only the latest effect may switch it off. */
+private object ReaderModeOwner {
+    var current: Any? = null
+}
 private const val READER_FLAGS = NfcAdapter.FLAG_READER_NFC_A or
     NfcAdapter.FLAG_READER_NFC_B or
     NfcAdapter.FLAG_READER_NFC_F or
@@ -105,9 +115,10 @@ fun NfcReaderEffect(
                     currentOnUnreadable()
                     return@post
                 }
-                val now = System.currentTimeMillis()
+                val now = nowMillis()
                 val previous = lastRead
-                if (previous != null && previous.first == text && now - previous.second < DUPLICATE_READ_WINDOW_MS) {
+                val window = DUPLICATE_READ_WINDOW.inWholeMilliseconds
+                if (previous != null && previous.first == text && now - previous.second < window) {
                     return@post
                 }
                 lastRead = text to now
@@ -115,11 +126,19 @@ fun NfcReaderEffect(
             }
         }
 
-        fun enable() = runCatching { adapter.enableReaderMode(activity, callback, READER_FLAGS, null) }
-            .onFailure { Logger.warn("Failed to enable NFC reader mode", it, context = TAG) }
+        val owner = Any()
 
-        fun disable() = runCatching { adapter.disableReaderMode(activity) }
-            .onFailure { Logger.warn("Failed to disable NFC reader mode", it, context = TAG) }
+        fun enable() = runCatching {
+            adapter.enableReaderMode(activity, callback, READER_FLAGS, null)
+            ReaderModeOwner.current = owner
+        }.onFailure { Logger.warn("Failed to enable NFC reader mode", it, context = TAG) }
+
+        fun disable() {
+            if (ReaderModeOwner.current !== owner) return
+            ReaderModeOwner.current = null
+            runCatching { adapter.disableReaderMode(activity) }
+                .onFailure { Logger.warn("Failed to disable NFC reader mode", it, context = TAG) }
+        }
 
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -154,8 +173,9 @@ private fun readPaymentText(tag: Tag): String? {
 
 /**
  * Offers [uri] to NFC readers while the calling screen is resumed, through [NdefTagService].
- * The service is made the preferred one for the NDEF tag AID meanwhile, so another app that
- * registers the same AID does not answer instead.
+ * The NDEF tag AID is registered for the service only meanwhile, and the service is made the
+ * preferred one, so Bitkit does not answer readers elsewhere and another app with the same AID
+ * does not answer instead.
  */
 @Composable
 fun NfcEmitterEffect(uri: String?) {
@@ -167,16 +187,25 @@ fun NfcEmitterEffect(uri: String?) {
         if (uri.isNullOrBlank() || cardEmulation == null) return@DisposableEffect onDispose {}
         val service = ComponentName(activity, NdefTagService::class.java)
 
+        var token: Long? = null
+
         fun start() {
-            NfcTagEmitter.publish(uri)
-            runCatching { cardEmulation.setPreferredService(activity, service) }
-                .onFailure { Logger.warn("Failed to prefer NFC tag service", it, context = TAG) }
+            token = NfcTagEmitter.publish(uri)
+            runCatching {
+                cardEmulation.registerAidsForService(service, CardEmulation.CATEGORY_OTHER, NDEF_AIDS)
+                cardEmulation.setPreferredService(activity, service)
+            }.onFailure { Logger.warn("Failed to register NFC tag service", it, context = TAG) }
         }
 
         fun stop() {
-            NfcTagEmitter.clear()
-            runCatching { cardEmulation.unsetPreferredService(activity) }
-                .onFailure { Logger.warn("Failed to release NFC tag service", it, context = TAG) }
+            val published = token ?: return
+            token = null
+            // Another screen may have published since; it then owns the service registration too.
+            if (!NfcTagEmitter.clear(published)) return
+            runCatching {
+                cardEmulation.unsetPreferredService(activity)
+                cardEmulation.removeAidsForService(service, CardEmulation.CATEGORY_OTHER)
+            }.onFailure { Logger.warn("Failed to release NFC tag service", it, context = TAG) }
         }
 
         val observer = LifecycleEventObserver { _, event ->

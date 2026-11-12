@@ -60,7 +60,9 @@ fun DeniedContent(
     onClickPaste: (() -> Unit)? = {},
     description: String = stringResource(R.string.other__camera_permission_description),
     accentColor: Color = Colors.Brand,
+    nearbySources: NearbyScanSources = NearbyScanSources.None,
 ) {
+    val readsNearby = nearbySources != NearbyScanSources.None
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -77,31 +79,45 @@ fun DeniedContent(
                 .padding(32.dp)
         ) {
             Display(
-                stringResource(R.string.other__camera_permission_title)
-                    .withAccent(accentColor = accentColor),
+                stringResource(
+                    if (readsNearby) R.string.other__scan_to_pay_title else R.string.other__camera_permission_title
+                ).withAccent(accentColor = accentColor),
                 color = Colors.White,
             )
 
             VerticalSpacer(8.dp)
 
             BodyM(
-                description,
+                if (readsNearby) stringResource(R.string.other__scan_to_pay_description) else description,
                 color = Colors.White64,
                 modifier = Modifier.fillMaxWidth(),
             )
 
             VerticalSpacer(32.dp)
 
-            PrimaryButton(
-                text = stringResource(R.string.other__camera_permission_button),
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_camera),
-                        contentDescription = null,
-                    )
-                },
-                onClick = onClickRetry,
-            )
+            if (readsNearby) {
+                NearbyEnableButtons(
+                    sources = nearbySources,
+                    leading = {
+                        EnableSourceButton(
+                            icon = R.drawable.ic_camera,
+                            onClick = onClickRetry,
+                            testTag = "ScannerEnableCamera",
+                        )
+                    },
+                )
+            } else {
+                PrimaryButton(
+                    text = stringResource(R.string.other__camera_permission_button),
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_camera),
+                            contentDescription = null,
+                        )
+                    },
+                    onClick = onClickRetry,
+                )
+            }
         }
 
         FillHeight()
