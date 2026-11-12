@@ -202,6 +202,25 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a fee that can't be priced falls back to a placeholder only when allowed`() = test {
+        val rates = FeeRates(fast = 7u, mid = 4u, slow = 1u)
+        whenever(lightningService.calculateTotalFee(any(), any(), any(), anyOrNull()))
+            .doSuspendableAnswer { throw NodeException.InsufficientFunds("insufficient funds") }
+
+        val placeholder = sut.calculateTotalFee(20_000uL, "bcrt1qfunding", TransactionSpeed.Fast, feeRates = rates)
+        val strict = sut.calculateTotalFee(
+            20_000uL,
+            "bcrt1qfunding",
+            TransactionSpeed.Fast,
+            feeRates = rates,
+            allowFallback = false,
+        )
+
+        assertEquals(1_000uL, placeholder.getOrThrow())
+        assertTrue(strict.isFailure)
+    }
+
+    @Test
     fun `recovered spark funding hands only an accepted spark deposit to spark`() = test {
         val txid = "ab".repeat(32)
         val funding = pendingSendAttempt().copy(isTransfer = true, txid = txid)
@@ -317,6 +336,7 @@ class LightningRepoTest : BaseUnitTest() {
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
             sparkRepo = sparkRepo,
+            sparkExitRepo = mock { on { state } doReturn MutableStateFlow(SparkExitState()) },
             backupRepo = mock { on { restoreInProgress } doReturn MutableStateFlow(false) },
         )
     }

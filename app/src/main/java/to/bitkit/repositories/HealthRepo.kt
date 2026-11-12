@@ -97,7 +97,7 @@ class HealthRepo @Inject constructor(
         }
 
         val hasUsableChannels = lightningState.channels.any { it.isUsable }
-        val isLightningViaSpark = isOnline && !hasUsableChannels && sparkState.isReady
+        val isLightningViaSpark = isOnline && !hasUsableChannels && sparkState.isUsable
 
         val channelsHealth = when {
             !isOnline -> HealthState.ERROR
