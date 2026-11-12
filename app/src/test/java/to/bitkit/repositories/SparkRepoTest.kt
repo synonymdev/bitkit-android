@@ -272,7 +272,7 @@ class SparkRepoTest : BaseUnitTest() {
         val expirySecs = 30 * 24 * 60 * 60L
         val prepared = prepared(feeSats = 0uL, createdAt = createdAt.toULong(), expirySecs = expirySecs.toULong())
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
-        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val sut = createSut(store)
         sut.start(0).getOrThrow()
 
@@ -281,7 +281,7 @@ class SparkRepoTest : BaseUnitTest() {
             sut.earlierLightningSend("lnbc1280n1send", "hash", createdAt, createdAt + expirySecs)
         }
         assertIs<SparkError.RestoredInvoiceUnverified>(sut.payInvoice("lnbc1280n1send", 128uL).exceptionOrNull())
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
     }
 
     @Test
@@ -336,13 +336,13 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = null))
         val prepared = prepared(feeSats = 0uL)
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
-        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val restarted = createSut(store)
         restarted.start(0).getOrThrow()
 
         restarted.payInvoice("lnbc1280n1send", 128uL)
 
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
     }
 
     @Test
@@ -352,14 +352,14 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.getInfo() }.thenReturn(info(10_000uL).copy(lastSyncedAt = null))
         val prepared = prepared(feeSats = 0uL)
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
-        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val sut = createSut(store)
         sut.start(0).getOrThrow()
 
         val result = sut.payInvoice("lnbc1280n1send", 128uL)
 
         assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
     }
 
     @Test
@@ -371,7 +371,7 @@ class SparkRepoTest : BaseUnitTest() {
         // Spark reports Synced while its payment-history sync failed, so its list lacks the pre-restore send.
         val prepared = prepared(feeSats = 0uL, createdAt = (restoredAt - 600).toULong(), expirySecs = 3_600uL)
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
-        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val sut = createSut(store)
         sut.start(0).getOrThrow()
         assertNull(store.data.first().sparkHistoryUnseededSince)
@@ -379,7 +379,7 @@ class SparkRepoTest : BaseUnitTest() {
         val result = sut.payInvoice("lnbc1280n1send", 128uL)
 
         assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
     }
 
     @Test
@@ -390,7 +390,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = prepared(feeSats = 0uL, createdAt = (restoredAt - 600).toULong(), expirySecs = 3_600uL)
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
-        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val sut = createSut(store)
         sut.start(0).getOrThrow()
         assertNull(store.data.first().sparkHistoryUnseededSince)
@@ -399,7 +399,7 @@ class SparkRepoTest : BaseUnitTest() {
         val result = sut.payInvoice("lnbc1280n1send", 128uL)
 
         assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
     }
 
     @Test
@@ -410,13 +410,13 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = prepared(feeSats = 0uL, createdAt = now.epochSeconds.toULong(), expirySecs = 3_600uL)
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
-        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val sut = createSut(store)
         sut.start(0).getOrThrow()
 
         sut.payInvoice("lnbc1280n1send", 128uL).getOrThrow()
 
-        verify(sparkService).send(any())
+        verify(sparkService).send(any(), anyOrNull())
     }
 
     @Test
@@ -2288,7 +2288,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.getInfo() }.thenAnswer { read }
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
             .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
-        whenever { sparkService.send(any()) }.thenAnswer {
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer {
             read = staleZero
             sentPayment(fees = 500)
         }
@@ -2316,7 +2316,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.getInfo() }.thenAnswer { read }
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
             .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
-        whenever { sparkService.send(any()) }.thenAnswer {
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer {
             read = staleZero
             sentPayment(fees = 500)
         }
@@ -2971,7 +2971,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = prepared(feeSats = 0uL)
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
-        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val deadline = now + 1.seconds
         whenever { cacheStore.addSparkUncertainSend(any(), any()) }.thenAnswer {
             now = deadline + 1.seconds
@@ -2982,7 +2982,7 @@ class SparkRepoTest : BaseUnitTest() {
         val result = sut.payInvoice("lnbc1", 100uL, deadline, null) { true }
 
         assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
         verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
         verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
     }
