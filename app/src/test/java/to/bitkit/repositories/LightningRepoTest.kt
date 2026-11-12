@@ -1791,6 +1791,7 @@ class LightningRepoTest : BaseUnitTest() {
             clock = Clock.System,
             coreService = { coreService },
             settingsStore = settingsStore,
+            payoutChain = mock(),
         )
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
