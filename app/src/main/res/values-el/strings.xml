@@ -381,6 +381,7 @@
     <string name="lightning__conn_onboarding_title">Ενεργοποίηση\nLightning\n&lt;accent&gt;πληρωμών&lt;/accent&gt;</string>
     <string name="migration__description">Περίμενε όσο τα παλιά δεδομένα του πορτοφολιού μεταφέρονται σε αυτή τη νέα έκδοση του Bitkit. Αυτό συνήθως διαρκεί λιγότερο από ένα λεπτό.</string>
     <string name="migration__nav_title">Μετάβαση πορτοφολιού</string>
+    <string name="migration__status_error">Η κατάσταση μεταφοράς του πορτοφολιού δεν είναι διαθέσιμη. Δοκιμάστε ξανά πριν συνεχίσετε.</string>
     <string name="migration__title">ΜΕΤΑΒΑΣΗ\n&lt;accent&gt;ΠΟΡΤΟΦΟΛΙΟΥ&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Κανάλι ειδοποιήσεων για υπηρεσία προσκηνίου κόμβου Lightning</string>
     <string name="notification__channel_node__name">Ειδοποίηση κόμβου Lightning</string>
@@ -528,9 +529,13 @@
     <string name="profile__add_tag">Προσθήκη ετικέτας</string>
     <string name="profile__auth_approval_details">Λεπτομέρειες</string>
     <string name="profile__auth_approval_ok">ΟΚ</string>
+    <string name="profile__cleanup_pending">Η εκκαθάριση του προφίλ δεν ολοκληρώθηκε. Αποσυνδεθείτε τοπικά για να καταργήσετε την πρόσβαση αυτής της συσκευής χωρίς νέα προσπάθεια απομακρυσμένης διαγραφής.</string>
     <string name="profile__create_nav_title">Δημιουργία προφίλ</string>
+    <string name="profile__delete_review_description">Ορισμένες αλλαγές ενδέχεται να έχουν ολοκληρωθεί. Ελέγξτε την τρέχουσα κατάσταση πριν επιβεβαιώσετε ξανά ή αποσυνδεθείτε τοπικά.</string>
+    <string name="profile__disconnect_local_description">Αφαιρέστε την πρόσβαση αυτής της συσκευής και ολοκληρώστε την τοπική εκκαθάριση. Αυτό δεν κάνει άλλες αλλαγές στο προφίλ, τις συνδρομές ή την πρόσβασή σας στον διακομιστή.</string>
     <string name="profile__nav_title">Προφίλ</string>
     <string name="profile__retry_load">Προσπαθήστε Ξανά</string>
+    <string name="profile__review_removal">Έλεγχος</string>
     <string name="profile__suggestions">Προτάσεις</string>
     <string name="security__backup_button">Αντίγραφο ασφαλείας</string>
     <string name="security__backup_funds">Τώρα που έχεις κεφάλαια στο πορτοφόλι σου, ήρθε η ώρα να δημιουργήσεις αντίγραφο ασφαλείας των χρημάτων σου!</string>
@@ -615,6 +620,8 @@
     <string name="security__reset_dialog_desc">Είσαι σίγουρος ότι θέλεις να επαναφέρεις το πορτοφόλι Bitkit; Έχεις αντίγραφο ασφαλείας της φράσης ανάκτησης και των δεδομένων του πορτοφολιού;</string>
     <string name="security__reset_dialog_title">Επαναφορά Bitkit;</string>
     <string name="security__reset_graph_confirm">Ναι, Επαναφορά</string>
+    <string name="security__reset_pending_text">Η προηγούμενη επαναφορά του πορτοφολιού δεν ολοκληρώθηκε. Ολοκλήρωσέ την πριν δημιουργήσεις ή ανακτήσεις πορτοφόλι. Φύλαξε με ασφάλεια τη φράση ανάκτησης και το αντίγραφο ασφαλείας.</string>
+    <string name="security__reset_read_error">Δεν ήταν δυνατή η ανάγνωση της κατάστασης ανάκτησης του πορτοφολιού. Δοκίμασε ξανά πριν συνεχίσεις.</string>
     <string name="security__reset_text">Δημιούργησε πρώτα αντίγραφο ασφαλείας του πορτοφολιού για να αποφύγεις την απώλεια κεφαλαίων και δεδομένων πορτοφολιού. Η επαναφορά θα αντικαταστήσει την τρέχουσα ρύθμιση του Bitkit.</string>
     <string name="security__reset_title">Επαναφορά και ανάκτηση</string>
     <string name="security__success_bio">Ρύθμισες επιτυχώς κωδικό PIN και {biometricsName} για να βελτιώσεις την ασφάλεια του πορτοφολιού.</string>
@@ -1511,6 +1518,7 @@
     <string name="profile__unlink_error_title">Αδυναμία αποσύνδεσης pubky</string>
     <string name="profile__unlink_pubky">Αποσύνδεση pubky</string>
     <string name="profile__unlink_success">Το pubky αποσυνδέθηκε</string>
+    <string name="profile__wallet_recovery_pending">Πρέπει να ολοκληρωθεί η ανάκτηση του πορτοφολιού πριν αποσυνδεθεί αυτό το προφίλ. Ελέγξτε την ανάκτηση πορτοφολιού στις Ρυθμίσεις.</string>
     <string name="profile__your_name">Το όνομά σου</string>
     <string name="profile__your_pubky">Το pubky σου</string>
     <string name="pubky_auth__already_signed_in">Είσαι ήδη συνδεδεμένος</string>

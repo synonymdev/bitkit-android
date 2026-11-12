@@ -418,6 +418,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
     internal val receivedPaymentContactsGeneration: Long
         get() = stateGeneration.get()
 
+    internal fun invalidateReceivedPaymentContacts() {
+        stateGeneration.incrementAndGet()
+        receivedContacts = null
+    }
+
     private data class ReceivedContactsSnapshot(
         val generation: Long,
         val identity: String,

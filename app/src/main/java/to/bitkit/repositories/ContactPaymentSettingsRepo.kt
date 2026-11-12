@@ -18,6 +18,8 @@ import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,55 +32,101 @@ class ContactPaymentSettingsRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val sharingMutex = Mutex()
+    private val removalPending = AtomicBoolean(false)
+    private val wipePending = AtomicBoolean(false)
+    private val sharingEpoch = AtomicLong(0)
+
+    internal suspend fun <T> withProfileRemoval(operation: suspend () -> T): T {
+        check(!wipePending.get()) { "Wallet wipe is in progress" }
+        val epoch = sharingEpoch.get()
+        check(removalPending.compareAndSet(false, true)) { "Profile removal is already in progress" }
+        sharingEpoch.incrementAndGet()
+        try {
+            return sharingMutex.withLock {
+                check(!wipePending.get() && sharingEpoch.get() == epoch + 1) { "Profile sharing state changed" }
+                operation()
+            }
+        } finally {
+            removalPending.set(false)
+        }
+    }
+
+    /** Close sharing admission first, revoke repository removal, then drain sharing before taking the SDK barrier. */
+    internal suspend fun <T> withWalletWipe(
+        admitRepository: suspend (suspend () -> T) -> T,
+        operation: suspend () -> T,
+    ): T {
+        check(wipePending.compareAndSet(false, true)) { "Wallet wipe is already in progress" }
+        sharingEpoch.incrementAndGet()
+        try {
+            return admitRepository { sharingMutex.withLock { operation() } }
+        } finally {
+            wipePending.set(false)
+        }
+    }
+
+    private suspend fun changeSharing(
+        operation: suspend (PubkySignIn?) -> Result<Unit>,
+    ): Result<Unit> = runSuspendCatching {
+        val epoch = sharingEpoch.get()
+        val signIn = pubkyRepo.currentSignIn()
+        check(!removalPending.get() && !wipePending.get()) { "Profile removal is in progress" }
+        withContext(ioDispatcher) {
+            sharingMutex.withLock {
+                check(
+                    !removalPending.get() && !wipePending.get() && epoch == sharingEpoch.get() &&
+                        (if (signIn == null) pubkyRepo.currentSignIn() == null else pubkyRepo.isCurrent(signIn))
+                ) { "Profile sharing state changed" }
+                operation(signIn).getOrThrow()
+            }
+        }
+    }
 
     val isEnabled: Flow<Boolean> = settingsStore.data.map { it.areContactPaymentsEnabled() }
     val isPublicEnabled: Flow<Boolean> = settingsStore.data.map { it.sharesPublicPaykitEndpoints }
 
-    suspend fun setPublicEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
-        sharingMutex.withLock {
-            val signIn = pubkyRepo.currentSignIn()
-            val previous = settingsStore.data.first()
-            val canPublish = {
-                signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+    suspend fun setPublicEnabled(isEnabled: Boolean): Result<Unit> = changeSharing { signIn ->
+        val previous = settingsStore.data.first()
+        val canPublish = {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
+        val canUpdateSettings = {
+            if (signIn == null) {
+                !isEnabled && pubkyRepo.currentSignIn() == null &&
+                    !privatePaykitRepo.isProfileDeletionInProgress.value
+            } else {
+                canPublish()
             }
-            val canUpdateSettings = {
-                if (signIn == null) {
-                    !isEnabled && pubkyRepo.currentSignIn() == null &&
-                        !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
+        var enabledPersisted = false
+        var completed = false
+        try {
+            runSuspendCatching {
+                currentCoroutineContext().ensureActive()
+                if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
+                withContext(NonCancellable) {
+                    settingsStore.update {
+                        if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
+                        it.copy(
+                            hasConfirmedPublicPaykitEndpoints = isEnabled,
+                            sharesPublicPaykitEndpoints = isEnabled,
+                            publicPaykitCleanupPending = true,
+                        )
+                    }
+                    enabledPersisted = isEnabled
+                }
+                currentCoroutineContext().ensureActive()
+                if (isEnabled) {
+                    publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canPublish).getOrThrow()
                 } else {
-                    canPublish()
+                    publicPaykitRepo.syncPublishedEndpoints(false, Priority.Interactive, canPublish).getOrThrow()
                 }
-            }
-            var enabledPersisted = false
-            var completed = false
-            try {
-                runSuspendCatching {
-                    currentCoroutineContext().ensureActive()
-                    if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
-                    withContext(NonCancellable) {
-                        settingsStore.update {
-                            if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
-                            it.copy(
-                                hasConfirmedPublicPaykitEndpoints = isEnabled,
-                                sharesPublicPaykitEndpoints = isEnabled,
-                                publicPaykitCleanupPending = true,
-                            )
-                        }
-                        enabledPersisted = isEnabled
-                    }
-                    currentCoroutineContext().ensureActive()
-                    if (isEnabled) {
-                        publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canPublish).getOrThrow()
-                    } else {
-                        publicPaykitRepo.syncPublishedEndpoints(false, Priority.Interactive, canPublish).getOrThrow()
-                    }
-                }.onFailure {
-                    if (enabledPersisted) rollbackPublicEnabled(previous, canPublish, it)
-                }.also { completed = true }
-            } finally {
-                if (enabledPersisted && !completed) {
-                    withContext(NonCancellable) { restorePublicSettings(previous, canPublish) }
-                }
+            }.onFailure {
+                if (enabledPersisted) rollbackPublicEnabled(previous, canPublish, it)
+            }.also { completed = true }
+        } finally {
+            if (enabledPersisted && !completed) {
+                withContext(NonCancellable) { restorePublicSettings(previous, canPublish) }
             }
         }
     }
@@ -113,52 +161,72 @@ class ContactPaymentSettingsRepo @Inject constructor(
         }.onFailure(error::addSuppressed)
     }
 
-    suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
-        sharingMutex.withLock {
-            val contacts = pubkyRepo.contacts.value.map { it.publicKey }
-            if (isEnabled) enable(contacts) else disable(contacts)
-        }
+    suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = changeSharing { signIn ->
+        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+        if (isEnabled) enable(contacts, signIn) else disable(contacts, signIn)
     }
 
-    suspend fun reconcilePendingEndpoints(reconcile: suspend () -> Unit) = withContext(ioDispatcher) {
-        if (!sharingMutex.tryLock()) return@withContext
-        try {
-            reconcile()
-        } finally {
-            sharingMutex.unlock()
-        }
-    }
-
-    suspend fun disablePaykit(): Result<Unit> = withContext(ioDispatcher) {
-        sharingMutex.withLock {
-            runSuspendCatching {
-                val previous = settingsStore.data.first()
-                val hadPublicState = previous.hasPublicPaykitPublicationState()
-                settingsStore.update { it.paykitDisabled(markPublicCleanupPending = hadPublicState) }
-                val contacts = pubkyRepo.contacts.value.map { it.publicKey }
-                val privateCleanup = privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
-                val publicCleanup = when {
-                    hadPublicState -> publicPaykitRepo.syncPublishedEndpoints(
-                        publish = false,
-                        appSyncPriority = Priority.Interactive,
-                    )
-                    previous.sharesPrivatePaykitEndpoints -> publicPaykitRepo.syncPaykitApp(
-                        privateSharingEnabled = false,
-                    )
-                    else -> Result.success(Unit)
-                }
-                settingsStore.update { it.copy(publicPaykitCleanupPending = publicCleanup.isFailure) }
-                publicCleanup.exceptionOrNull()?.let { error ->
-                    privateCleanup.exceptionOrNull()?.let(error::addSuppressed)
-                    throw error
-                }
-                privateCleanup.getOrThrow()
+    suspend fun reconcilePendingEndpoints(waitForTurn: Boolean = false, reconcile: suspend () -> Unit) {
+        val epoch = sharingEpoch.get()
+        if (removalPending.get() || wipePending.get()) return
+        withContext(ioDispatcher) {
+            if (removalPending.get() || wipePending.get() || epoch != sharingEpoch.get()) return@withContext
+            if (waitForTurn) {
+                sharingMutex.lock()
+            } else if (!sharingMutex.tryLock()) {
+                return@withContext
+            }
+            try {
+                if (!removalPending.get() && !wipePending.get() && epoch == sharingEpoch.get()) reconcile()
+            } finally {
+                sharingMutex.unlock()
             }
         }
     }
 
-    private suspend fun enable(contacts: List<String>): Result<Unit> {
-        val signIn = pubkyRepo.currentSignIn()
+    suspend fun disablePaykit(): Result<Unit> = changeSharing { signIn ->
+        val canSync = {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
+        val canUpdateSettings = {
+            !privatePaykitRepo.isProfileDeletionInProgress.value &&
+                (if (signIn == null) pubkyRepo.currentSignIn() == null else canSync())
+        }
+        runSuspendCatching {
+            val previous = settingsStore.data.first()
+            val hadPublicState = previous.hasPublicPaykitPublicationState()
+            val needsAppCleanup = hadPublicState || previous.sharesPrivatePaykitEndpoints
+            settingsStore.update {
+                if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
+                it.paykitDisabled(markPublicCleanupPending = needsAppCleanup)
+            }
+            val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+            val privateCleanup = privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts, canSync)
+            val publicCleanup = when {
+                hadPublicState -> publicPaykitRepo.syncPublishedEndpoints(
+                    publish = false,
+                    appSyncPriority = Priority.Interactive,
+                    isStillCurrent = canSync,
+                )
+                previous.sharesPrivatePaykitEndpoints -> publicPaykitRepo.syncPaykitApp(
+                    privateSharingEnabled = false,
+                    canSync = canSync,
+                )
+                else -> Result.success(Unit)
+            }
+            settingsStore.update {
+                if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
+                it.copy(publicPaykitCleanupPending = publicCleanup.isFailure || signIn == null && needsAppCleanup)
+            }
+            publicCleanup.exceptionOrNull()?.let { error ->
+                privateCleanup.exceptionOrNull()?.let(error::addSuppressed)
+                throw error
+            }
+            privateCleanup.getOrThrow()
+        }
+    }
+
+    private suspend fun enable(contacts: List<String>, signIn: PubkySignIn?): Result<Unit> {
         val canSync = {
             signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
         }
@@ -219,8 +287,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
         }
     }
 
-    private suspend fun disable(contacts: List<String>): Result<Unit> {
-        val signIn = pubkyRepo.currentSignIn()
+    private suspend fun disable(contacts: List<String>, signIn: PubkySignIn?): Result<Unit> {
         val canSync = {
             signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
         }

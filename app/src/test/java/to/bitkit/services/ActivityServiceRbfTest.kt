@@ -6,9 +6,11 @@ import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import org.junit.Test
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -26,10 +28,19 @@ import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.PrivatePaykitCacheData
+import to.bitkit.data.PrivatePaykitCacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.WalletScope
+import to.bitkit.repositories.PaykitPaymentRequestRepo
+import to.bitkit.repositories.PaykitReceivedPaymentContacts
+import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
+import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
+import javax.inject.Provider
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -37,9 +48,32 @@ import kotlin.test.assertTrue
 
 class ActivityServiceRbfTest : BaseUnitTest() {
     private val binding = Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")
+    private val recovery = connectionRecoveryFixture(mock())
+    private val receiptCache = mock<PrivatePaykitCacheStore>()
+    private val reservations = mock<PrivatePaykitAddressReservationRepo>()
+    private val requests = mock<PaykitPaymentRequestRepo>()
+    private val resolver by lazy {
+        PrivatePaykitContactResolver(
+            testDispatcher,
+            receiptCache,
+            Provider { reservations },
+            Provider { requests },
+            ProfileRemovalStore.inMemoryForTesting(),
+            Provider { recovery },
+        )
+    }
+
+    private suspend fun prepareReceipt() {
+        whenever(receiptCache.data).thenReturn(flowOf(PrivatePaykitCacheData()))
+        whenever(requests.receivedPaymentContacts).thenReturn(PaykitReceivedPaymentContacts.Empty)
+        whenever(reservations.receiptAssignments()).thenReturn(
+            PrivatePaykitAddressReservationRepo.ReceiptAssignments(emptyList(), 0L),
+        )
+    }
+
     private val cache = mock<CacheStore>()
     private val lightning = mock<LightningService>()
-    private val sut by lazy { ActivityService(mock(), cache, lightning, mock(), mock()) }
+    private val sut by lazy { ActivityService(mock(), cache, lightning, mock(), Provider { resolver }) }
     private val genericWrites = mutableListOf<String>()
 
     @Test
@@ -84,7 +118,7 @@ class ActivityServiceRbfTest : BaseUnitTest() {
         whenever(cache.data).thenReturn(flowOf(AppCacheData()))
         withActivities { saved, _ ->
             saved["b"] = saved.getValue("b").copy(feeRate = 25uL)
-            sut.syncLdkNodePaymentsToActivities(listOf(payment("b")))
+            sut.syncLdkNodePaymentsToActivities({ listOf(payment("b")) })
             assertTrue(saved.getValue("b").confirmed)
             assertEquals(25uL, saved.getValue("b").feeRate)
             assertEquals(422uL, saved.getValue("b").fee)
@@ -134,6 +168,37 @@ class ActivityServiceRbfTest : BaseUnitTest() {
             assertEquals(listOf("a"), result.boostTxIds)
             assertEquals(setOf("original-tag", "replacement-tag"), tags.getValue("payment-b"))
             verify(lightning, never()).sync()
+        }
+    }
+
+    @Test
+    fun `wallet replacement drains held RBF publication without retiring original metadata`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(cache.data).thenReturn(
+            flow {
+                entered.complete(Unit)
+                release.await()
+                emit(AppCacheData())
+            }
+        )
+        withActivities { saved, _ ->
+            val original = saved.getValue("a")
+            val replacement = saved.getValue("b")
+            val publication = async { sut.publishRbfBoost("a", "b") }
+            entered.await()
+            var replaced = false
+            val transition = launch(start = CoroutineStart.UNDISPATCHED) {
+                recovery.withIdentityChange { replaced = true }
+            }
+            assertFalse(replaced)
+            assertFalse(transition.isCompleted)
+            release.complete(Unit)
+            assertFailsWith<CancellationException> { publication.await() }
+            transition.join()
+            assertTrue(replaced)
+            assertEquals(original, saved.getValue("a"))
+            assertEquals(replacement, saved.getValue("b"))
         }
     }
 
@@ -370,6 +435,7 @@ class ActivityServiceRbfTest : BaseUnitTest() {
         failFirstTagRead: Boolean = false,
         block: suspend CoroutineScope.(MutableMap<String, OnchainActivity>, MutableMap<String, Set<String>>) -> Unit,
     ) = ServiceQueue.CORE.background {
+        prepareReceipt()
         val wallet = WalletScope.default
         val saved = listOf("a", "b", "c").associateWith { txid ->
             OnchainActivity.create(

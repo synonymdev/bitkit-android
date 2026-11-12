@@ -137,8 +137,7 @@ class ActivityRepo @Inject constructor(
         var cancellation: CancellationException? = null
         val result = try {
             runSuspendCatching {
-                val payments = lightningRepo.getPayments().getOrThrow()
-                syncLdkNodePayments(payments).getOrThrow()
+                syncLdkNodePayments().getOrThrow()
                 boostPendingActivities()
                 transferRepo.syncTransferStates().getOrThrow()
                 getAllAvailableTags().getOrNull()
@@ -164,10 +163,12 @@ class ActivityRepo @Inject constructor(
     /**
      * Syncs `ldk-node` [PaymentDetails] list to `bitkit-core` [Activity] items.
      */
-    suspend fun syncLdkNodePayments(payments: List<PaymentDetails>): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
-            val channelIdsByTxId = findChannelsForPayments(payments)
-            coreService.activity.syncLdkNodePaymentsToActivities(payments, channelIdsByTxId = channelIdsByTxId)
+    suspend fun syncLdkNodePayments(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.syncLdkNodePaymentsToActivities(
+                payments = { lightningRepo.getPayments().getOrThrow() },
+                channelIdsByTxId = ::findChannelsForPayments,
+            )
             notifyActivitiesChanged()
         }.onFailure {
             Logger.error("Error syncing LDK payments:", it, context = TAG)
@@ -589,9 +590,7 @@ class ActivityRepo @Inject constructor(
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (syncLdkPayments) {
-                lightningRepo.getPayments().onSuccess {
-                    syncLdkNodePayments(it).getOrThrow()
-                }.getOrThrow()
+                syncLdkNodePayments().getOrThrow()
             }
 
             val normalizedKey = PubkyPublicKeyFormat.normalized(contactPublicKey) ?: contactPublicKey
@@ -625,9 +624,7 @@ class ActivityRepo @Inject constructor(
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (syncLdkPayments) {
-                lightningRepo.getPayments().onSuccess {
-                    syncLdkNodePayments(it).getOrThrow()
-                }.getOrThrow()
+                syncLdkNodePayments().getOrThrow()
             }
 
             val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments, walletId)

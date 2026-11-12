@@ -879,7 +879,6 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             payerAppId = "bitkit",
             executionClaimAppId = "bitkit",
             proposalRecordedAt = proposalRecordedAt,
-            acceptanceRecordedAt = null,
             terms = PaymentRequestTerms(
                 PaymentRequestAmount("0.05", "usd"),
                 reference,
@@ -892,6 +891,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
                 mock()
             ),
             acceptedEventId = "accepted", acceptedOutboundStatus = null,
+            acceptanceRecordedAt = null,
             rejectedEventId = null, rejectedOutboundStatus = null,
             canceledEventId = null, canceledOutboundStatus = null,
             paymentProofs = listOf(

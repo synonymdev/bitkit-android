@@ -1,6 +1,8 @@
 package to.bitkit.services
 
 import com.synonym.paykit.EndpointSyncReport
+import com.synonym.paykit.PubkyGrantLogout
+import com.synonym.paykit.PubkyGrantLogoutReceipt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
@@ -11,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.KInvocationOnMock
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
@@ -28,12 +31,36 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class PubkyServiceTest : BaseUnitTest() {
+    @Test
+    fun `cancelled queue return revokes the captured logout before releasing original admission`() = test {
+        val binding = PubkyGrantLogoutReceipt("identity", "homeserver", "original", "bitkit")
+        val native = mock<PubkyGrantLogout> { on { binding() }.thenReturn(binding) }
+        val captured = PaykitProfileLogout(native, mock()) { true }
+        val paykit = mock<PaykitSdkService>()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { paykit.captureProfileLogout(any(), any()) }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            captured
+        }
+        val sut = PubkyService(paykit)
+        val caller = launch { sut.captureProfileLogout("identity") { true } }
+        entered.await()
+        caller.cancel()
+        release.complete(Unit)
+        caller.join()
+        assertTrue(caller.isCancelled)
+        assertFalse(captured.isCurrent())
+    }
+
     @Test
     fun `paykit initialization does not hold the core queue`() = test {
         val paykit = mock<PaykitSdkService>()

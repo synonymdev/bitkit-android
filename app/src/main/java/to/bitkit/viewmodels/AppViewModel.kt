@@ -64,6 +64,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -72,6 +73,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
@@ -958,10 +960,12 @@ class AppViewModel @Inject constructor(
         val restoredSignIn = signIn ?: pubkyRepo.currentSignIn()
         val admission = canPublish ?: publicPaykitPublicationAdmission(restoredSignIn)
 
-        publicPaykitRepo.syncCurrentPublishedEndpoints(
-            canPublish = admission,
-        )
-            .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
+        contactPaymentSettingsRepo.reconcilePendingEndpoints(waitForTurn = true) {
+            publicPaykitRepo.syncCurrentPublishedEndpoints(
+                canPublish = admission,
+            )
+                .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
+        }
     }
 
     private fun publicPaykitPublicationAdmission(signIn: PubkySignIn? = pubkyRepo.currentSignIn()): () -> Boolean {
@@ -2739,7 +2743,7 @@ class AppViewModel @Inject constructor(
                 return
             }
 
-            lightningRepo.getPayments().onSuccess { activityRepo.syncLdkNodePayments(it) }
+            activityRepo.syncLdkNodePayments()
             migrationService.reapplyMetadataAfterSync()
             activityRepo.syncActivities()
             walletRepo.syncBalances()
@@ -2800,9 +2804,7 @@ class AppViewModel @Inject constructor(
         isCompletingMigration = true
 
         runCatching {
-            lightningRepo.getPayments().onSuccess { payments ->
-                activityRepo.syncLdkNodePayments(payments)
-            }.onFailure { e ->
+            activityRepo.syncLdkNodePayments().onFailure { e ->
                 Logger.warn("Failed to get payments during migration: $e", e, context = TAG)
             }
             activityRepo.markAllUnseenActivitiesAsSeen()
@@ -2827,9 +2829,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun finishMigrationSuccessfully() {
-        lightningRepo.getPayments().onSuccess { payments ->
-            activityRepo.syncLdkNodePayments(payments)
-        }
+        activityRepo.syncLdkNodePayments()
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
@@ -2848,9 +2848,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun finishMigrationWithFallbackSync() {
         walletRepo.syncBalances()
-        lightningRepo.getPayments().onSuccess { payments ->
-            activityRepo.syncLdkNodePayments(payments)
-        }
+        activityRepo.syncLdkNodePayments()
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
@@ -3031,6 +3029,9 @@ class AppViewModel @Inject constructor(
             publicPaykitRepo.refreshPublishedBolt11ForPayment(
                 paymentHash,
                 canPublish = publicPaykitPublicationAdmission(),
+                admitPublication = { publication ->
+                    contactPaymentSettingsRepo.reconcilePendingEndpoints(waitForTurn = true, reconcile = publication)
+                },
             ).onFailure {
                 Logger.warn(
                     "Failed to refresh public Paykit invoice for '$paymentHash'",
@@ -3788,7 +3789,7 @@ class AppViewModel @Inject constructor(
             val timeout = if (isContactLink) PubkyService.AUTHORIZATION_TIMEOUT else PUBKY_AUTH_DEEPLINK_TIMEOUT
             val isInitializationReady = withTimeoutOrNull(timeout) {
                 pubkyRepo.awaitInitialization()
-                if (!isContactLink) awaitPubkyAuthIdentity()
+                if (!isContactLink && !awaitPubkyAuthIdentity()) return@withTimeoutOrNull false
                 awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
@@ -3817,19 +3818,28 @@ class AppViewModel @Inject constructor(
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
     }
 
-    private suspend fun awaitPubkyAuthIdentity() {
-        while (pubkyRepo.awaitIdentityReady() == PubkyIdentityReadiness.Unavailable) {
-            if (isOnline.value == ConnectivityState.CONNECTED && pubkyRepo.localIdentityPublicKey() != null) {
-                Logger.debug("Continuing sign-in link with the stored Pubky key", context = TAG)
-                return
+    private suspend fun awaitPubkyAuthIdentity(): Boolean {
+        while (true) {
+            when (pubkyRepo.awaitIdentityReady()) {
+                PubkyIdentityReadiness.RecoveryRequired -> return false
+                PubkyIdentityReadiness.Ready, PubkyIdentityReadiness.Missing -> return true
+                PubkyIdentityReadiness.Unavailable -> {
+                    if (pubkyRepo.requiresProfileRecovery()) return false
+                    if (isOnline.value == ConnectivityState.CONNECTED && pubkyRepo.localIdentityPublicKey() != null) {
+                        return !pubkyRepo.requiresProfileRecovery()
+                    }
+                    delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)
+                    // A pending local cleanup must end this wait even while connectivity stays offline.
+                    combine(isOnline, pubkyRepo.profileRecoveryPending) { online, pending ->
+                        online == ConnectivityState.CONNECTED || pending == true
+                    }.first { it }
+                }
             }
-            delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)
-            isOnline.first { it == ConnectivityState.CONNECTED }
-            Logger.debug("Retrying Pubky session restore for a sign-in link", context = TAG)
         }
     }
 
     private suspend fun showPubkyAuthWaitToastIfRestoring() {
+        if (pubkyRepo.requiresProfileRecovery()) return
         if (pubkyRepo.publicKey.value != null) return
         if (!isPaykitUiEnabledFromSettings() || !walletRepo.walletExists()) return
         if (!runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(false)) return
@@ -8288,6 +8298,11 @@ class AppViewModel @Inject constructor(
             if (!canPresent()) return@launch
             // A stale amount above inbound liquidity would hide the Auto tab until the receive state refreshes
             if (sheetType is Sheet.Receive) walletRepo.setBip21AmountSats(null)
+            if (sheetType is Sheet.PubkyAuth && pubkyRepo.requiresProfileRecovery()) {
+                hidePubkyAuthWaitToast()
+                showPubkyIdentityUnavailableToast()
+                return@launch
+            }
             _currentSheet.update { sheetType }
         }
         sheetTransitionJob = nextJob
@@ -8442,6 +8457,37 @@ class AppViewModel @Inject constructor(
         if (lightningRepo.isRecoveryMode.value) return
         _isAuthenticated.update { false }
         Logger.debug("Locked app on background", context = TAG)
+    }
+
+    /** Cold recovery reads must not treat the ordinary UI's initial false as a loaded PIN policy. */
+    val recoveryPinRequired
+        get() = flow<Boolean?> {
+            emit(null)
+            settingsStore.data.collect { settings ->
+                emit(settings.isPinEnabled || keychain.loadString(Keychain.Key.PIN.name) != null)
+            }
+        }.catch { emit(null) }
+
+    /** Recovery authentication cannot erase a wallet whose cleanup state is unknown. */
+    @Synchronized
+    fun validateRecoveryPin(pin: String): Boolean = runCatching {
+        keychain.accessBlocking {
+            val stored = load(Keychain.Key.PIN.name)?.decodeToString() ?: return@accessBlocking false
+            val encodedAttempts = load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)?.decodeToString()
+            val remaining = if (encodedAttempts == null) {
+                Env.PIN_ATTEMPTS
+            } else {
+                encodedAttempts.toIntOrNull() ?: return@accessBlocking false
+            }
+            if (remaining !in 1..Env.PIN_ATTEMPTS) return@accessBlocking false
+            val valid = stored == pin
+            val next = if (valid) Env.PIN_ATTEMPTS else remaining - 1
+            upsert(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, next.toString().toByteArray())
+            valid
+        }
+    }.getOrElse {
+        Logger.warn("Recovery authentication is unavailable", it, context = TAG)
+        false
     }
 
     fun validatePin(pin: String): Boolean {
@@ -9405,6 +9451,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePubkyAuth(authUrl: String) {
+        if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
         val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
         val createsIdentity = isSignup &&
             (
@@ -9413,12 +9460,14 @@ class AppViewModel @Inject constructor(
                 )
         if (createsIdentity) {
             if (rejectPubkySignupForExistingIdentity()) return
+            if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
             showSheet(Sheet.PubkyAuth(authUrl))
             return
         }
 
         if (pubkyRepo.publicKey.value == null) {
             if (pubkyRepo.localIdentityPublicKey() == null) return showPubkyIdentityUnavailableToast()
+            if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
             showSheet(Sheet.PubkyAuth(authUrl))
             return
         }
@@ -9431,10 +9480,20 @@ class AppViewModel @Inject constructor(
             )
             return
         }
+        if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
         showSheet(Sheet.PubkyAuth(authUrl))
     }
 
     private suspend fun showPubkyIdentityUnavailableToast() {
+        if (pubkyRepo.requiresProfileRecovery()) {
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.profile__nav_title),
+                description = context.getString(R.string.profile__cleanup_pending),
+                visibilityTime = Toast.VISIBILITY_TIME_LONG,
+            )
+            return
+        }
         val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
         if (hasIdentity) {
             ToastEventBus.send(

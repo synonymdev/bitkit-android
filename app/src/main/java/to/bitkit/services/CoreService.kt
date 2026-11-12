@@ -67,6 +67,7 @@ import com.synonym.bitkitcore.wipeAllDatabases
 import io.ktor.client.request.get
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
@@ -99,7 +100,6 @@ import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
-import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -377,11 +377,13 @@ class ActivityService(
     private var lastPaykitContactBackfill: PaykitContactBackfillState? = null
 
     private data class PaykitContactBackfillState(
-        val contacts: PaykitReceivedPaymentContacts,
-        val generation: Long,
+        val associations: PrivatePaykitContactResolver.ReceiptSnapshot,
         val activityRevision: Long,
-        val reservationVersion: Long,
     )
+
+    private suspend fun <T> withReceiptOperation(
+        block: suspend (PrivatePaykitContactResolver.Receipt) -> T,
+    ): T = privatePaykitContactResolver.get().withReceiptOperation(block)
 
     internal suspend fun invalidatePaykitContactBackfill() = ServiceQueue.CORE.background {
         paykitActivityRevision++
@@ -609,87 +611,81 @@ class ActivityService(
         updateActivity(activityId = id, activity = activity)
     }
 
-    suspend fun backfillPaykitContacts(): Boolean = ServiceQueue.CORE.background {
-        val resolver = privatePaykitContactResolver.get()
-        val contacts = resolver.receivedPaymentContacts
-        if (contacts === PaykitReceivedPaymentContacts.Empty) {
-            lastPaykitContactBackfill = null
-            return@background false
+    suspend fun backfillPaykitContacts(): Boolean = withReceiptOperation { receipt ->
+        ServiceQueue.CORE.background {
+            receipt.requireCurrent()
+            val associations = receipt.snapshot ?: return@background false
+            val snapshot = PaykitContactBackfillState(associations, paykitActivityRevision)
+            if (snapshot == lastPaykitContactBackfill) return@background false
+            val activities = getActivities(
+                walletId = null,
+                filter = ActivityFilter.ALL,
+                txType = PaymentType.RECEIVED,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null,
+            )
+            var changed = false
+            var complete = true
+            for (activity in activities) {
+                val (contact, hydrated) = receivedPaykitContact(activity, receipt)
+                complete = complete && hydrated
+                receipt.requireCurrent()
+                val cache = cacheStore.data.first()
+                receipt.commit {
+                    val latest = getActivityById(walletId = activity.walletId(), activityId = activity.rawId())
+                    if (latest != activity) {
+                        complete = false
+                    } else if (contact != null && !cache.isContactDetached(activity.rawId(), activity.walletId()) &&
+                        !cache.isActivityDeleted(activity.rawId(), activity.walletId())
+                    ) {
+                        val updated = when (activity) {
+                            is Activity.Lightning -> Activity.Lightning(activity.v1.copy(contact = contact))
+                            is Activity.Onchain -> Activity.Onchain(activity.v1.copy(contact = contact))
+                        }
+                        updateActivity(activityId = activity.rawId(), activity = updated)
+                        changed = true
+                    }
+                }
+            }
+            receipt.commit {
+                if (complete && receipt.associationsComplete && paykitActivityRevision == snapshot.activityRevision) {
+                    lastPaykitContactBackfill = snapshot
+                }
+            }
+            changed
         }
-        val snapshot = PaykitContactBackfillState(
-            contacts = contacts,
-            generation = resolver.receivedPaymentContactsGeneration,
-            activityRevision = paykitActivityRevision,
-            reservationVersion = resolver.reservationVersion,
-        )
-        if (snapshot == lastPaykitContactBackfill) return@background false
-        val activities = getActivities(
-            walletId = null,
-            filter = ActivityFilter.ALL,
-            txType = PaymentType.RECEIVED,
-            tags = null,
-            search = null,
-            minDate = null,
-            maxDate = null,
-            limit = null,
-            sortDirection = null,
-        )
-        var changed = false
-        var complete = true
-        for (activity in activities) {
-            if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
-            if (cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) continue
-            val (updated, hydrated) = attributedPaykitActivity(activity, contacts)
-            complete = complete && hydrated
-            if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
-            if (updated != null && !cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) {
-                if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
-                updateActivity(activityId = activity.rawId(), activity = updated)
-                changed = true
+    }
+
+    private suspend fun receivedPaykitContact(
+        activity: Activity,
+        receipt: PrivatePaykitContactResolver.Receipt,
+    ): Pair<String?, Boolean> = when (activity) {
+        is Activity.Lightning -> {
+            val row = activity.v1
+            if (row.contact != null || row.txType != PaymentType.RECEIVED || row.status == PaymentState.FAILED) {
+                null to true
+            } else {
+                receipt.contactForInvoice(row.id) to true
             }
         }
-        if (complete && isCurrentPaykitContactBackfill(resolver, snapshot)) {
-            lastPaykitContactBackfill = snapshot
-        }
-        changed
-    }
-
-    private fun isCurrentPaykitContactBackfill(
-        resolver: PrivatePaykitContactResolver,
-        snapshot: PaykitContactBackfillState,
-    ): Boolean = resolver.receivedPaymentContacts === snapshot.contacts &&
-        resolver.receivedPaymentContactsGeneration == snapshot.generation &&
-        paykitActivityRevision == snapshot.activityRevision &&
-        resolver.reservationVersion == snapshot.reservationVersion
-
-    private suspend fun attributedPaykitActivity(
-        activity: Activity,
-        contacts: PaykitReceivedPaymentContacts,
-    ): Pair<Activity?, Boolean> = when (activity) {
-        is Activity.Lightning -> {
-            val contact = receivedPaykitContact(activity.v1, contacts)
-            contact?.let { Activity.Lightning(activity.v1.copy(contact = it)) } to true
-        }
         is Activity.Onchain -> {
-            val (contact, hydrated) = receivedPaykitContact(activity.v1)
-            contact?.let { Activity.Onchain(activity.v1.copy(contact = it)) } to hydrated
+            val row = activity.v1
+            if (row.contact != null || row.txType != PaymentType.RECEIVED) {
+                null to true
+            } else {
+                val details = getBitkitCoreTransactionDetails(walletId = row.walletId, txId = row.txId)
+                val addresses = details?.outputs?.mapNotNull { it.scriptpubkeyAddress }.orEmpty()
+                if (row.address !in addresses) {
+                    null to false
+                } else {
+                    receipt.contactForAddresses(row.address, addresses) to true
+                }
+            }
         }
-    }
-
-    private fun receivedPaykitContact(row: LightningActivity, contacts: PaykitReceivedPaymentContacts): String? {
-        if (row.contact != null || row.txType != PaymentType.RECEIVED || row.status == PaymentState.FAILED) return null
-        return contacts.contactsForPaymentHash(row.id).singleOrNull()
-    }
-
-    private suspend fun receivedPaykitContact(row: OnchainActivity): Pair<String?, Boolean> {
-        if (row.contact != null || row.txType != PaymentType.RECEIVED) return null to true
-        val details = getBitkitCoreTransactionDetails(walletId = row.walletId, txId = row.txId)
-        val addresses = details?.outputs?.mapNotNull { it.scriptpubkeyAddress }.orEmpty()
-        if (row.address !in addresses) return null to false
-        return privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
-            receivingAddress = row.address,
-            addresses = addresses,
-        ) to true
     }
 
     suspend fun delete(id: String, walletId: String = defaultWalletId): Boolean = ServiceQueue.CORE.background {
@@ -801,49 +797,61 @@ class ActivityService(
         com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson(json)
     }
 
-    suspend fun handlePaymentEvent(paymentHash: String) = ServiceQueue.CORE.background {
-        val payments = lightningService.listPayments() ?: run {
-            Logger.warn("No payments available for hash $paymentHash", context = TAG)
-            return@background
-        }
-
-        val payment = payments.firstOrNull { it.id == paymentHash }
-        if (payment != null) {
-            // Lightning payments don't need channel IDs, only onchain payments do
-            val channelIdsByTxId = emptyMap<String, String>()
-            processSinglePayment(payment, forceUpdate = false, channelIdsByTxId = channelIdsByTxId)
-        } else {
-            Logger.info("Payment not found for hash $paymentHash - syncing all payments", context = TAG)
-            // For full sync, we need channel IDs for onchain payments
-            // This will be handled by ActivityRepo.syncLdkNodePayments which calls findChannelsForPayments
-            syncLdkNodePaymentsToActivities(payments, channelIdsByTxId = emptyMap())
+    suspend fun handlePaymentEvent(paymentHash: String) = withReceiptOperation { receipt ->
+        ServiceQueue.CORE.background {
+            receipt.requireCurrent()
+            val payments = lightningService.listPayments() ?: run {
+                Logger.warn("No payments available for hash $paymentHash", context = TAG)
+                return@background
+            }
+            receipt.requireCurrent()
+            val payment = payments.firstOrNull { it.id == paymentHash }
+            if (payment != null) {
+                processSinglePayment(payment, false, emptyMap(), receipt)
+            } else {
+                syncReceiptPayments(payments, false, emptyMap(), receipt)
+            }
         }
     }
 
+    /** Capture wallet admission before obtaining the owner-specific payment list. */
     suspend fun syncLdkNodePaymentsToActivities(
-        payments: List<PaymentDetails>,
+        payments: suspend () -> List<PaymentDetails>,
         forceUpdate: Boolean = false,
-        channelIdsByTxId: Map<String, String> = emptyMap(),
-    ) = ServiceQueue.CORE.background {
-        val allResults = mutableListOf<Result<String>>()
+        channelIdsByTxId: suspend (List<PaymentDetails>) -> Map<String, String> = { emptyMap() },
+    ) = withReceiptOperation { receipt ->
+        val capturedPayments = payments()
+        receipt.requireCurrent()
+        val channels = channelIdsByTxId(capturedPayments)
+        receipt.requireCurrent()
+        ServiceQueue.CORE.background {
+            syncReceiptPayments(capturedPayments, forceUpdate, channels, receipt)
+        }
+    }
 
+    private suspend fun syncReceiptPayments(
+        payments: List<PaymentDetails>,
+        forceUpdate: Boolean,
+        channelIdsByTxId: Map<String, String>,
+        receipt: PrivatePaykitContactResolver.Receipt,
+    ) = coroutineScope {
+        val allResults = mutableListOf<Result<String>>()
         payments.chunked(CHUNK_SIZE).forEach { chunk ->
+            receipt.requireCurrent()
             val results = chunk.map { payment ->
                 async {
-                    runCatching {
-                        processSinglePayment(payment, forceUpdate, channelIdsByTxId)
+                    runSuspendCatching {
+                        processSinglePayment(payment, forceUpdate, channelIdsByTxId, receipt)
                         payment.id
                     }.onFailure { e ->
                         Logger.error("Error syncing payment with id: ${payment.id}:", e, context = TAG)
                     }
                 }
             }.awaitAll()
-
             allResults.addAll(results)
         }
-
+        receipt.requireCurrent()
         val (successful, failed) = allResults.partition { it.isSuccess }
-
         Logger.info("Synced ${successful.size} payments successfully, ${failed.size} failed", context = TAG)
     }
 
@@ -851,7 +859,9 @@ class ActivityService(
         payment: PaymentDetails,
         forceUpdate: Boolean,
         channelIdsByTxId: Map<String, String>,
+        receipt: PrivatePaykitContactResolver.Receipt,
     ) {
+        receipt.requireCurrent()
         val state = when (payment.status) {
             PaymentStatus.FAILED -> PaymentState.FAILED
             PaymentStatus.PENDING -> PaymentState.PENDING
@@ -866,11 +876,12 @@ class ActivityService(
                     payment = payment,
                     forceUpdate = forceUpdate,
                     channelId = channelId,
+                    receipt = receipt,
                 )
             }
 
             is PaymentKind.Bolt11 -> {
-                processBolt11(kind = kind, payment = payment, state = state)
+                processBolt11(kind = kind, payment = payment, state = state, receipt = receipt)
             }
 
             else -> Unit // Handle spontaneous payments if needed
@@ -881,6 +892,7 @@ class ActivityService(
         kind: PaymentKind.Bolt11,
         payment: PaymentDetails,
         state: PaymentState,
+        receipt: PrivatePaykitContactResolver.Receipt,
     ) {
         // Skip pending inbound payments, just means an invoice was created
         if (
@@ -893,81 +905,64 @@ class ActivityService(
         val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
             ?.let { cacheStore.data.first().pendingLightningMessages[it] }
 
-        // A send whose hash we received in Spark paid our own invoice, a move to Spark; once it succeeds it replaces
-        // that receive.
-        val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)?.takeUnless {
-            it is Activity.Lightning && it.v1.txType == PaymentType.RECEIVED &&
-                payment.direction == PaymentDirection.OUTBOUND && state == PaymentState.SUCCEEDED
+        val resolvedContact = if (payment.direction == PaymentDirection.INBOUND && state != PaymentState.FAILED) {
+            receipt.contactForInvoice(payment.id)
+        } else {
+            null
         }
-        // Another attempt of the same invoice, or the Spark receive of a move, already settled it; a pending or failed
-        // update never undoes that success.
-        if (existingActivity is Activity.Lightning && existingActivity.v1.status == PaymentState.SUCCEEDED &&
-            state != PaymentState.SUCCEEDED
-        ) {
-            return
-        }
-        // A Spark retry of the invoice stays pending until Spark settles it; the channel's failure can't end it.
-        // Spark records the hash before it sends and drops it only once it reports the send failed or unknown.
-        if (existingActivity is Activity.Lightning && existingActivity.v1.status == PaymentState.PENDING &&
-            state == PaymentState.FAILED && payment.id.lowercase() in cacheStore.data.first().sparkSendHashes
-        ) {
-            return
-        }
-        if (existingActivity is Activity.Lightning) {
-            val statusChanging = existingActivity.v1.status != state
-            // The Spark receive of a move can settle the send before the node's routing fee is recorded.
-            val feeChanging = payment.feePaidMsat?.let { msatFloorOf(it) != existingActivity.v1.fee } == true
-            val needsPrivateContactAttribution = existingActivity.v1.contact == null &&
-                payment.direction == PaymentDirection.INBOUND
-            if ((existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
-                !statusChanging &&
-                !feeChanging &&
-                !needsPrivateContactAttribution
+        receipt.requireCurrent()
+        val cache = cacheStore.data.first()
+        val applied = receipt.commit {
+            if (cache.isActivityDeleted(payment.id, defaultWalletId)) return@commit false
+            // A send whose hash we received in Spark paid our own invoice; success replaces that receive.
+            val existing = (getActivityById(walletId = defaultWalletId, activityId = payment.id) as? Activity.Lightning)
+                ?.takeUnless {
+                    it.v1.txType == PaymentType.RECEIVED && payment.direction == PaymentDirection.OUTBOUND &&
+                        state == PaymentState.SUCCEEDED
+                }
+            // A pending or failed update cannot undo success or end a pending Spark retry.
+            if (existing?.v1?.status == PaymentState.SUCCEEDED && state != PaymentState.SUCCEEDED) return@commit false
+            if (existing?.v1?.status == PaymentState.PENDING && state == PaymentState.FAILED &&
+                payment.id.lowercase() in cache.sparkSendHashes
             ) {
-                return
+                return@commit false
             }
+            val contact = existing?.v1?.contact ?: resolvedContact.takeUnless {
+                cache.isContactDetached(payment.id, defaultWalletId)
+            }
+            val feeChanging = payment.feePaidMsat?.let { msatFloorOf(it) != existing?.v1?.fee } == true
+            if (existing != null && (existing.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
+                existing.v1.status == state && !feeChanging && !(existing.v1.contact == null && contact != null)
+            ) {
+                return@commit false
+            }
+            val ln = if (existing != null) {
+                existing.v1.withPaymentUpdate(payment, kind, state, contact)
+            } else {
+                LightningActivity.create(
+                    id = payment.id,
+                    txType = payment.direction.toPaymentType(),
+                    status = state,
+                    value = payment.amountSats ?: 0u,
+                    invoice = kind.bolt11 ?: "Loading...",
+                    timestamp = payment.latestUpdateTimestamp,
+                    fee = msatFloorOf(payment.feePaidMsat ?: 0u),
+                    message = kind.description.orEmpty(),
+                    preimage = kind.preimage,
+                    contact = contact,
+                    seenAt = null,
+                )
+            }.withPendingMessage(pendingMessage = pendingMessage, description = kind.description)
+            if (existing != Activity.Lightning(ln)) paykitActivityRevision++
+            if (existing != null) {
+                updateActivity(activityId = payment.id, activity = Activity.Lightning(ln))
+            } else {
+                upsertActivity(Activity.Lightning(ln))
+            }
+            true
         }
 
-        val contact = existingActivity
-            ?.takeIf { it is Activity.Lightning }
-            ?.let { (it as Activity.Lightning).v1.contact }
-            ?: payment.takeUnless {
-                it.status == PaymentStatus.FAILED || cacheStore.data.first().isContactDetached(it.id, defaultWalletId)
-            }?.let {
-                privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(it.id, it.direction)
-            }
-
-        val ln = if (existingActivity is Activity.Lightning) {
-            existingActivity.v1.withPaymentUpdate(
-                payment = payment,
-                kind = kind,
-                state = state,
-                contact = contact,
-            )
-        } else {
-            LightningActivity.create(
-                id = payment.id,
-                txType = payment.direction.toPaymentType(),
-                status = state,
-                value = payment.amountSats ?: 0u,
-                invoice = kind.bolt11 ?: "Loading...",
-                timestamp = payment.latestUpdateTimestamp,
-                fee = msatFloorOf(payment.feePaidMsat ?: 0u),
-                message = kind.description.orEmpty(),
-                preimage = kind.preimage,
-                contact = contact,
-                seenAt = null,
-            )
-        }.withPendingMessage(pendingMessage = pendingMessage, description = kind.description)
-
-        if (existingActivity != Activity.Lightning(ln)) invalidatePaykitContactBackfill()
-        if (getActivityById(walletId = defaultWalletId, activityId = payment.id) != null) {
-            updateActivity(activityId = payment.id, activity = Activity.Lightning(ln))
-        } else {
-            upsertActivity(Activity.Lightning(ln))
-        }
-
-        if (pendingMessage != null) cacheStore.removePendingLightningMessage(payment.id)
+        if (applied && pendingMessage != null) cacheStore.removePendingLightningMessage(payment.id)
     }
 
     /**
@@ -1026,6 +1021,7 @@ class ActivityService(
         kind: PaymentKind.Onchain,
         payment: PaymentDetails,
         details: BitkitCoreTransactionDetails?,
+        receipt: PrivatePaykitContactResolver.Receipt,
     ): String? {
         if (payment.direction != PaymentDirection.INBOUND) return null
 
@@ -1047,13 +1043,16 @@ class ActivityService(
                 currentWalletAddress = currentWalletAddress,
                 selectedAddressType = selectedAddressType,
             )
-            ?: findPrivateReservedAddress(details)
+            ?: findPrivateReservedAddress(details, receipt)
     }
 
-    private suspend fun findPrivateReservedAddress(details: BitkitCoreTransactionDetails): String? {
+    private suspend fun findPrivateReservedAddress(
+        details: BitkitCoreTransactionDetails,
+        receipt: PrivatePaykitContactResolver.Receipt,
+    ): String? {
         for (output in details.outputs) {
             val address = output.scriptpubkeyAddress ?: continue
-            if (privatePaykitContactResolver.get().contactPublicKeyForReservedAddress(address) != null) return address
+            if (receipt.isReservedReceiveAddress(address)) return address
         }
         return null
     }
@@ -1351,7 +1350,9 @@ class ActivityService(
         forceUpdate: Boolean,
         channelId: String? = null,
         transactionDetails: BitkitCoreTransactionDetails? = null,
+        receipt: PrivatePaykitContactResolver.Receipt,
     ) {
+        receipt.requireCurrent()
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
 
@@ -1371,7 +1372,7 @@ class ActivityService(
 
         val details = transactionDetails ?: payment.takeIf { it.direction == PaymentDirection.INBOUND }
             ?.let { fetchTransactionDetails(kind.txid) }
-        val resolvedAddress = resolveAddressForInboundPayment(kind, payment, details)
+        val resolvedAddress = resolveAddressForInboundPayment(kind, payment, details, receipt)
         val resolvedContact = if (
             payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
             !details?.outputs.isNullOrEmpty()
@@ -1386,7 +1387,7 @@ class ActivityService(
             ) {
                 null
             } else {
-                privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
+                receipt.contactForAddresses(
                     receivingAddress = resolvedAddress,
                     addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
                 )
@@ -1395,66 +1396,61 @@ class ActivityService(
             null
         }
 
+        receipt.requireCurrent()
         val cache = cacheStore.data.first()
-        val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
-            ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)?.let { Activity.Onchain(it) }
-        val existingOnchainActivity = existingActivity as? Activity.Onchain
-        if (existingOnchainActivity != null &&
-            (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
-            !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
-        ) {
-            return
-        }
-        val activityId = existingOnchainActivity?.v1?.id ?: payment.id
-        val contact = existingOnchainActivity?.v1?.contact ?: resolvedContact.takeUnless {
-            cache.isContactDetached(activityId, defaultWalletId)
-        }
+        receipt.commit {
+            val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
+                ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)?.let { Activity.Onchain(it) }
+            val existingOnchainActivity = existingActivity as? Activity.Onchain
+            if (existingOnchainActivity != null &&
+                (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
+                !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
+            ) {
+                return@commit
+            }
+            val activityId = existingOnchainActivity?.v1?.id ?: payment.id
+            val contact = existingOnchainActivity?.v1?.contact ?: resolvedContact.takeUnless {
+                cache.isContactDetached(activityId, defaultWalletId)
+            }
 
-        val ldkValue = payment.amountSats ?: 0u
-        val onChain = if (existingOnchainActivity != null) {
-            buildUpdatedOnchainActivity(
-                existingActivity = existingOnchainActivity,
-                confirmationData = confirmationData,
-                ldkValue = ldkValue,
-                ldkFeeMsat = payment.feePaidMsat ?: 0u,
-                resolvedAddress = resolvedAddress,
-                contact = contact,
-                channelId = resolvedChannelId,
-            )
-        } else {
-            buildNewOnchainActivity(
-                payment = payment,
-                kind = kind,
-                confirmationData = confirmationData,
-                resolvedAddress = resolvedAddress,
-                contact = contact,
-                channelId = resolvedChannelId,
-            )
-        }
+            val ldkValue = payment.amountSats ?: 0u
+            val onChain = if (existingOnchainActivity != null) {
+                buildUpdatedOnchainActivity(
+                    existingActivity = existingOnchainActivity,
+                    confirmationData = confirmationData,
+                    ldkValue = ldkValue,
+                    ldkFeeMsat = payment.feePaidMsat ?: 0u,
+                    resolvedAddress = resolvedAddress,
+                    contact = contact,
+                    channelId = resolvedChannelId,
+                )
+            } else {
+                buildNewOnchainActivity(
+                    payment = payment,
+                    kind = kind,
+                    confirmationData = confirmationData,
+                    resolvedAddress = resolvedAddress,
+                    contact = contact,
+                    channelId = resolvedChannelId,
+                )
+            }
 
-        if (cache.isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
-            Logger.verbose("Activity ${onChain.id} was already deleted, skipping", context = TAG)
-            return
-        }
+            if (cache.isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
+                Logger.verbose("Activity ${onChain.id} was already deleted, skipping", context = TAG)
+                return@commit
+            }
 
-        if (existingActivity != Activity.Onchain(onChain)) paykitActivityRevision++
-        if (existingActivity is Activity.Onchain) {
-            upsertOnchainActivityPreservingFeeRate(onChain)
-        } else {
-            upsertActivity(Activity.Onchain(onChain))
+            if (existingActivity != Activity.Onchain(onChain)) paykitActivityRevision++
+            if (existingActivity is Activity.Onchain) {
+                upsertOnchainActivityPreservingFeeRate(onChain)
+            } else {
+                upsertActivity(Activity.Onchain(onChain))
+            }
         }
     }
 
     private fun PaymentDirection.toPaymentType(): PaymentType =
         if (this == PaymentDirection.OUTBOUND) PaymentType.SENT else PaymentType.RECEIVED
-
-    private suspend fun privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(
-        paymentHash: String,
-        direction: PaymentDirection,
-    ): String? {
-        if (direction != PaymentDirection.INBOUND) return null
-        return privatePaykitContactResolver.get().contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)
-    }
 
     // MARK: - Test Data Generation (regtest only)
 
@@ -1640,125 +1636,142 @@ class ActivityService(
             check(restored.fee == fee && restored.feeRate == feeRate)
         }
 
-    suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {
-        ServiceQueue.CORE.background {
-            runCatching {
-                val coreDetails = mapToCoreTransactionDetails(txid, details)
-                invalidatePaykitContactBackfill()
-                upsertTransactionDetails(listOf(coreDetails))
+    suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) =
+        withReceiptOperation { receipt ->
+            ServiceQueue.CORE.background {
+                receipt.requireCurrent()
+                runCatching {
+                    val coreDetails = mapToCoreTransactionDetails(txid, details)
+                    invalidatePaykitContactBackfill()
+                    receipt.commit { upsertTransactionDetails(listOf(coreDetails)) }
 
-                val payments = lightningService.listPayments() ?: run {
-                    Logger.warn("No payments available for transaction $txid", context = TAG)
-                    return@background
+                    val payments = lightningService.listPayments() ?: run {
+                        Logger.warn("No payments available for transaction $txid", context = TAG)
+                        return@background
+                    }
+
+                    val payment = payments.firstOrNull { payment ->
+                        (payment.kind as? PaymentKind.Onchain)?.txid == txid
+                    } ?: run {
+                        Logger.warn("Payment not found for transaction $txid", context = TAG)
+                        return@background
+                    }
+
+                    processOnchainPayment(
+                        kind = payment.kind as PaymentKind.Onchain,
+                        payment = payment,
+                        forceUpdate = false,
+                        channelId = null,
+                        transactionDetails = coreDetails,
+                        receipt = receipt,
+                    )
+                }.onFailure { e ->
+                    Logger.error("Error handling onchain transaction received for $txid", e, context = TAG)
                 }
-
-                val payment = payments.firstOrNull { payment ->
-                    (payment.kind as? PaymentKind.Onchain)?.txid == txid
-                } ?: run {
-                    Logger.warn("Payment not found for transaction $txid", context = TAG)
-                    return@background
-                }
-
-                processOnchainPayment(
-                    kind = payment.kind as PaymentKind.Onchain,
-                    payment = payment,
-                    forceUpdate = false,
-                    channelId = null,
-                    transactionDetails = coreDetails,
-                )
-            }.onFailure { e ->
-                Logger.error("Error handling onchain transaction received for $txid", e, context = TAG)
             }
         }
-    }
 
-    suspend fun handleOnchainTransactionConfirmed(txid: String, details: TransactionDetails) {
-        ServiceQueue.CORE.background {
-            runCatching {
-                val coreDetails = mapToCoreTransactionDetails(txid, details)
-                invalidatePaykitContactBackfill()
-                upsertTransactionDetails(listOf(coreDetails))
+    suspend fun handleOnchainTransactionConfirmed(txid: String, details: TransactionDetails) =
+        withReceiptOperation { receipt ->
+            ServiceQueue.CORE.background {
+                receipt.requireCurrent()
+                runCatching {
+                    val coreDetails = mapToCoreTransactionDetails(txid, details)
+                    invalidatePaykitContactBackfill()
+                    receipt.commit { upsertTransactionDetails(listOf(coreDetails)) }
 
-                val payments = lightningService.listPayments() ?: run {
-                    Logger.warn("No payments available for transaction $txid", context = TAG)
-                    return@background
+                    val payments = lightningService.listPayments() ?: run {
+                        Logger.warn("No payments available for transaction $txid", context = TAG)
+                        return@background
+                    }
+
+                    val payment = payments.firstOrNull { payment ->
+                        (payment.kind as? PaymentKind.Onchain)?.txid == txid
+                    } ?: run {
+                        Logger.warn("Payment not found for transaction $txid", context = TAG)
+                        return@background
+                    }
+
+                    processOnchainPayment(
+                        kind = payment.kind as PaymentKind.Onchain,
+                        payment = payment,
+                        forceUpdate = false,
+                        channelId = null,
+                        transactionDetails = coreDetails,
+                        receipt = receipt,
+                    )
+                }.onFailure { e ->
+                    Logger.error("Error handling onchain transaction confirmed for $txid", e, context = TAG)
                 }
-
-                val payment = payments.firstOrNull { payment ->
-                    (payment.kind as? PaymentKind.Onchain)?.txid == txid
-                } ?: run {
-                    Logger.warn("Payment not found for transaction $txid", context = TAG)
-                    return@background
-                }
-
-                processOnchainPayment(
-                    kind = payment.kind as PaymentKind.Onchain,
-                    payment = payment,
-                    forceUpdate = false,
-                    channelId = null,
-                    transactionDetails = coreDetails,
-                )
-            }.onFailure { e ->
-                Logger.error("Error handling onchain transaction confirmed for $txid", e, context = TAG)
             }
         }
-    }
 
     suspend fun publishRbfBoost(originalTxId: String, replacementTxId: String): Activity.Onchain =
-        ServiceQueue.CORE.background {
-            require(originalTxId.isNotBlank() && replacementTxId.isNotBlank() && originalTxId != replacementTxId) {
-                "RBF must replace the original transaction"
-            }
-            checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) { "RBF original is not available" }
-            if (getOrCreateReplacementActivity(replacementTxId) == null) {
-                // RBF returns after broadcast, before wallet sync discovers the new payment.
-                lightningService.sync()
-                checkNotNull(getOrCreateReplacementActivity(replacementTxId)) { "RBF replacement is not available" }
-            }
-            val cache = cacheStore.data.first()
-            val original = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId))
-            val replacement = checkNotNull(getActivityByTxId(defaultWalletId, replacementTxId))
-            check(original.txType == PaymentType.SENT && replacement.txType == PaymentType.SENT)
-            check(!cache.isActivityDeleted(original.id, defaultWalletId))
-            check(!cache.isActivityDeleted(replacement.id, defaultWalletId))
-            val updated = updateReplacementActivity(
-                originalTxId,
-                replacementTxId,
-                replacement,
-                original,
-                cache.isContactDetached(replacement.id, defaultWalletId),
-            )
-            markReplacedActivity(originalTxId, original, listOf(replacementTxId))
-            updated
-        }
-
-    suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
-        ServiceQueue.CORE.background {
-            runSuspendCatching {
-                markReplacedActivity(txid, getActivityByTxId(defaultWalletId, txid), conflicts)
-                for (conflictTxid in conflicts) {
-                    runSuspendCatching {
-                        getOrCreateReplacementActivity(conflictTxid) ?: return@runSuspendCatching
-                        val cache = cacheStore.data.first()
-                        val replacedActivity = getActivityByTxId(defaultWalletId, txid)
-                        val replacement = getActivityByTxId(defaultWalletId, conflictTxid)
-                            ?: return@runSuspendCatching
-                        updateReplacementActivity(
-                            txid,
-                            conflictTxid,
-                            replacement,
-                            replacedActivity,
-                            cache.isContactDetached(replacement.id, defaultWalletId),
-                        )
-                    }.onFailure {
-                        Logger.error("Failed to handle replacement '$conflictTxid' for '$txid'", it, context = TAG)
+        withReceiptOperation { receipt ->
+            ServiceQueue.CORE.background {
+                receipt.requireCurrent()
+                require(originalTxId.isNotBlank() && replacementTxId.isNotBlank() && originalTxId != replacementTxId) {
+                    "RBF must replace the original transaction"
+                }
+                checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) { "RBF original is not available" }
+                if (getOrCreateReplacementActivity(replacementTxId, receipt) == null) {
+                    // RBF returns after broadcast, before wallet sync discovers the new payment.
+                    lightningService.sync()
+                    receipt.requireCurrent()
+                    checkNotNull(getOrCreateReplacementActivity(replacementTxId, receipt)) {
+                        "RBF replacement is not available"
                     }
                 }
-            }.onFailure {
-                Logger.error("Failed to handle replacement for '$txid'", it, context = TAG)
+                val cache = cacheStore.data.first()
+                receipt.commit {
+                    val original = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId))
+                    val replacement = checkNotNull(getActivityByTxId(defaultWalletId, replacementTxId))
+                    check(original.txType == PaymentType.SENT && replacement.txType == PaymentType.SENT)
+                    check(!cache.isActivityDeleted(original.id, defaultWalletId))
+                    check(!cache.isActivityDeleted(replacement.id, defaultWalletId))
+                    val updated = updateReplacementActivity(
+                        originalTxId,
+                        replacementTxId,
+                        replacement,
+                        original,
+                        cache.isContactDetached(replacement.id, defaultWalletId),
+                    )
+                    markReplacedActivity(originalTxId, original, listOf(replacementTxId))
+                    updated
+                }
             }
         }
-    }
+
+    suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) =
+        withReceiptOperation { receipt ->
+            ServiceQueue.CORE.background {
+                receipt.requireCurrent()
+                runSuspendCatching {
+                    receipt.commit { markReplacedActivity(txid, getActivityByTxId(defaultWalletId, txid), conflicts) }
+                    for (conflictTxid in conflicts) {
+                        runSuspendCatching {
+                            getOrCreateReplacementActivity(conflictTxid, receipt) ?: return@runSuspendCatching
+                            val cache = cacheStore.data.first()
+                            receipt.commit {
+                                val replacedActivity = getActivityByTxId(defaultWalletId, txid)
+                                val replacement = getActivityByTxId(defaultWalletId, conflictTxid) ?: return@commit
+                                updateReplacementActivity(
+                                    txid,
+                                    conflictTxid,
+                                    replacement,
+                                    replacedActivity,
+                                    cache.isContactDetached(replacement.id, defaultWalletId),
+                                )
+                            }
+                        }.onFailure {
+                            Logger.error("Failed to handle replacement '$conflictTxid' for '$txid'", it, context = TAG)
+                        }
+                    }
+                }.onFailure {
+                    Logger.error("Failed to handle replacement for '$txid'", it, context = TAG)
+                }
+            }
+        }
 
     private fun markReplacedActivity(
         txid: String,
@@ -1789,7 +1802,11 @@ class ActivityService(
         }
     }
 
-    private suspend fun getOrCreateReplacementActivity(conflictTxid: String): OnchainActivity? {
+    private suspend fun getOrCreateReplacementActivity(
+        conflictTxid: String,
+        receipt: PrivatePaykitContactResolver.Receipt,
+    ): OnchainActivity? {
+        receipt.requireCurrent()
         getActivityByTxId(defaultWalletId, conflictTxid)?.let { return it }
         val payment = lightningService.listPayments()?.firstOrNull {
             (it.kind as? PaymentKind.Onchain)?.txid == conflictTxid
@@ -1799,6 +1816,7 @@ class ActivityService(
             payment = payment,
             forceUpdate = false,
             channelId = null,
+            receipt = receipt,
         )
         return getActivityByTxId(defaultWalletId, conflictTxid)
     }

@@ -36,8 +36,10 @@ import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -60,7 +62,6 @@ import to.bitkit.models.toDerivationPath
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
-import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
@@ -87,6 +88,7 @@ class WalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val profileRemovalStore: ProfileRemovalStore,
     private val sparkRepo: SparkRepo,
     private val sparkExitRepo: SparkExitRepo,
     private val backupRepo: BackupRepo,
@@ -94,7 +96,9 @@ class WalletRepo @Inject constructor(
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
-    private val _walletState = MutableStateFlow(WalletState(walletExists = walletExists()))
+    private val _walletState = MutableStateFlow(
+        WalletState(walletExists = walletExists(), walletResetRecovery = WalletResetRecovery.Loading)
+    )
     val walletState = _walletState.asStateFlow()
 
     private val _balanceState = MutableStateFlow(BalanceState())
@@ -113,6 +117,22 @@ class WalletRepo @Inject constructor(
     private var committedReceiveBip21 = ""
 
     init {
+        repoScope.launch {
+            profileRemovalStore.walletResetRecovery.collect { recovery ->
+                runSuspendCatching {
+                    _walletState.update {
+                        it.copy(
+                            walletExists =
+                            if (recovery == WalletResetRecovery.Clear) walletExists() else it.walletExists,
+                            walletResetRecovery = recovery,
+                        )
+                    }
+                }.onFailure {
+                    _walletState.update { it.copy(walletResetRecovery = WalletResetRecovery.Unavailable) }
+                    Logger.warn("Failed to refresh wallet existence for reset recovery", it, context = TAG)
+                }
+            }
+        }
         repoScope.launch {
             lightningRepo.nodeEventUpdates.collect { update ->
                 if (!walletExists()) return@collect
@@ -773,9 +793,13 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
-        lightningRepo.setRecoveryMode(enabled = false)
         runSuspendCatching {
-            connectionRecovery.withIdentityChange {
+            connectionRecovery.withIdentityChange(isStillNeeded = {
+                profileRemovalStore.requireWalletAvailable()
+                true
+            }) {
+                profileRemovalStore.requireWalletAvailable()
+                lightningRepo.setRecoveryMode(enabled = false)
                 val mnemonic = generateEntropyMnemonic()
                 keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
                 if (bip39Passphrase != null) {
@@ -795,9 +819,13 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
-        lightningRepo.setRecoveryMode(enabled = false)
         runSuspendCatching {
-            connectionRecovery.withIdentityChange {
+            connectionRecovery.withIdentityChange(isStillNeeded = {
+                profileRemovalStore.requireWalletAvailable()
+                true
+            }) {
+                profileRemovalStore.requireWalletAvailable()
+                lightningRepo.setRecoveryMode(enabled = false)
                 keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
                 if (bip39Passphrase != null) {
                     keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
@@ -815,18 +843,31 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        wipeWalletUseCase(
-            walletIndex = walletIndex,
-            resetWalletState = ::resetState,
-            onSuccess = ::setWalletExistsState,
-        ).onFailure {
-            if (it is WipeIncomplete) setWalletExistsState()
-        }
+    suspend fun checkWalletAvailable(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching { profileRemovalStore.requireWalletAvailable() }
     }
 
+    fun refreshWalletResetRecovery() = profileRemovalStore.refreshWalletResetRecovery()
+
+    suspend fun wipeWallet(walletIndex: Int = 0, expectedPendingAttemptId: String? = null): Result<Unit> =
+        withContext(bgDispatcher) {
+            try {
+                wipeWalletUseCase(
+                    walletIndex = walletIndex,
+                    resetWalletState = ::resetState,
+                    onSuccess = {},
+                    expectedPendingAttemptId = expectedPendingAttemptId,
+                )
+            } finally {
+                runCatching { setWalletExistsState() }
+                    .onFailure { Logger.warn("Failed to refresh wallet existence after wipe", it, context = TAG) }
+            }
+        }
+
     fun resetState() {
-        _walletState.update { WalletState() }
+        _walletState.update {
+            WalletState(walletExists = it.walletExists, walletResetRecovery = it.walletResetRecovery)
+        }
         _balanceState.update { BalanceState() }
         hasLiveBalance = false
     }
@@ -1191,6 +1232,7 @@ data class WalletState(
     val bip21Description: String = "",
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val walletExists: Boolean = false,
+    val walletResetRecovery: WalletResetRecovery = WalletResetRecovery.Clear,
 )
 
 enum class SyncSource { AUTO, MANUAL }

@@ -76,6 +76,9 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.ProfileRemovalPending
+import to.bitkit.data.ProfileRemovalScope
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
@@ -165,6 +168,8 @@ class LightningRepoTest : BaseUnitTest() {
     private val restoredAt = 1_800_000_000L
     private val probeNodeId = "02abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef12"
 
+    private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
+
     @Before
     fun setUp() = runBlocking {
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()))
@@ -189,6 +194,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            profileRemovalStore = profileRemovalStore,
             sparkRepo = sparkRepo,
         )
     }
@@ -340,6 +346,7 @@ class LightningRepoTest : BaseUnitTest() {
             activityRepo = mock(),
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore, vssClients = vssClients),
+            profileRemovalStore = to.bitkit.data.ProfileRemovalStore.inMemoryForTesting(),
             sparkRepo = sparkRepo,
             sparkExitRepo = mock { on { state } doReturn MutableStateFlow(SparkExitState()) },
             backupRepo = mock { on { restoreInProgress } doReturn MutableStateFlow(false) },
@@ -470,6 +477,24 @@ class LightningRepoTest : BaseUnitTest() {
     )
 
     @Test
+    fun `pending wallet wipe rejects native startup`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(mock())
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+        val attempt = java.util.UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(attempt, ProfileRemovalScope.WALLET_WIPE) {
+            profileRemovalStore.begin(attempt)
+        }
+        val result = sut.start()
+        assertIs<ProfileRemovalPending>(result.exceptionOrNull())
+        verify(lightningService, never()).setup(any(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(lightningService, never()).start(anyOrNull(), any())
+        assertEquals(attempt, profileRemovalStore.pendingAttempt())
+    }
+
+    @Test
     fun `start should transition through correct states`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
@@ -528,6 +553,47 @@ class LightningRepoTest : BaseUnitTest() {
             SettledReceiveInvoice(bolt11 = bolt11),
             update.settledReceiveInvoice,
         )
+    }
+
+    @Test
+    fun `receipt admission cancellation preserves the active listener event dispatch`() = test {
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(activityService.handlePaymentEvent("payment-id")).doSuspendableAnswer {
+            throw CancellationException("Receipt admission refused")
+        }
+        val eventHandler = startNodeAndCaptureEvents()
+        val publishedUpdate = async { sut.nodeEventUpdates.first() }
+        val event = Event.PaymentReceived("payment-id", "010203", 1_000uL, emptyList())
+
+        val outcome = runCatching { eventHandler(event) }
+
+        try {
+            assertTrue(outcome.isSuccess)
+            assertEquals(event, publishedUpdate.await().event)
+        } finally {
+            publishedUpdate.cancel()
+        }
+    }
+
+    @Test
+    fun `cancelling the listener still propagates through received payment admission`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(activityService.handlePaymentEvent("payment-id")).doSuspendableAnswer {
+            entered.complete(Unit)
+            awaitCancellation()
+        }
+        val eventHandler = startNodeAndCaptureEvents()
+        var returned = false
+        val handling = launch {
+            eventHandler(Event.PaymentReceived("payment-id", "010203", 1_000uL, emptyList()))
+            returned = true
+        }
+        entered.await()
+        handling.cancelAndJoin()
+        assertFalse(returned)
     }
 
     @Test
@@ -1901,6 +1967,7 @@ class LightningRepoTest : BaseUnitTest() {
         urlValidator = urlValidator,
         electrumProbeService = electrumProbeService,
         sparkRepo = sparkRepo,
+        profileRemovalStore = profileRemovalStore,
     )
 
     @Test
@@ -2031,6 +2098,7 @@ class LightningRepoTest : BaseUnitTest() {
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
             sparkRepo = spark,
+            profileRemovalStore = profileRemovalStore,
         )
         startNodeForTesting()
         val first = async { spark.payInvoice("bolt11", 1_000uL) }
@@ -3256,6 +3324,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            profileRemovalStore = profileRemovalStore,
             sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
@@ -3736,6 +3805,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            profileRemovalStore = profileRemovalStore,
             sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
@@ -3807,6 +3877,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            profileRemovalStore = profileRemovalStore,
             sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
@@ -3889,6 +3960,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            profileRemovalStore = profileRemovalStore,
             sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
@@ -4369,6 +4441,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients,
             urlValidator = failingValidator,
             electrumProbeService = electrumProbeService,
+            profileRemovalStore = profileRemovalStore,
             sparkRepo = sparkRepo,
         )
         sutWithFailingValidator.setInitNodeLifecycleState()

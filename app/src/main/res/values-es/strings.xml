@@ -385,6 +385,7 @@
     <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor espera mientras los datos de tu antiguo monedero migran a esta nueva versión de Bitkit. Esto normalmente tarda menos de un minuto.</string>
     <string name="migration__nav_title">Migración del Monedero</string>
+    <string name="migration__status_error">El estado de migración de la billetera no está disponible. Reinténtalo antes de continuar.</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;MONEDERO&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notificaciones para el servicio en segundo plano del nodo Lightning</string>
     <string name="notification__channel_node__name">Notificación del nodo Lightning</string>
@@ -533,10 +534,14 @@
     <string name="profile__add_link_note">Nota: Cualquier enlace que añada será públicamente visible.</string>
     <string name="profile__add_tag">Añadir etiqueta</string>
     <string name="profile__auth_approval_details">Detalles</string>
+    <string name="profile__cleanup_pending">La limpieza del perfil está incompleta. Desconéctate localmente para retirar el acceso de este dispositivo sin volver a intentar la eliminación remota.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
+    <string name="profile__delete_review_description">Es posible que algunos cambios se hayan completado. Revisa el estado actual antes de confirmar de nuevo o desconéctate localmente.</string>
+    <string name="profile__disconnect_local_description">Elimina el acceso de este dispositivo y finaliza la limpieza local. Esto no realiza más cambios en tu perfil, tus suscripciones ni tu acceso en el servidor.</string>
     <string name="profile__edit_nav_title">Editar Perfil</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Inténtelo de nuevo</string>
+    <string name="profile__review_removal">Revisar</string>
     <string name="profile__suggestions">Sugerencias</string>
     <string name="profile__suggestions_to_add">Sugerencias para añadir</string>
     <string name="profile__unlink_confirm">Sí, desvincular</string>
@@ -611,6 +616,8 @@
     <string name="security__bio_confirm">Confirma {biometricsName}</string>
     <string name="security__bio_use">Utilizar {biometricsName}</string>
     <string name="security__bio_phone_settings">Ajustes del teléfono</string>
+    <string name="security__reset_pending_text">El restablecimiento anterior de la billetera no se completó. Complétalo antes de crear o restaurar una billetera. Guarda tu frase de recuperación y la copia de seguridad en un lugar seguro.</string>
+    <string name="security__reset_read_error">No se pudo leer el estado de recuperación de la billetera. Reinténtalo antes de continuar.</string>
     <string name="security__success_title">Cartera asegurada</string>
     <string name="security__success_bio">Has configurado correctamente un código PIN y {biometricsName} para mejorar la seguridad de tu monedero.</string>
     <string name="security__success_no_bio">Ha configurado correctamente un código PIN para mejorar la seguridad de su monedero.</string>
@@ -1515,6 +1522,7 @@
     <string name="profile__sign_out_description">Esto desconectará su perfil de Pubky de Bitkit. Puede volver a conectarlo en cualquier momento.</string>
     <string name="profile__sign_out_title">Desconectar perfil</string>
     <string name="profile__source_lost">Este pubky ya no está disponible en Pubky Ring. Su perfil se ha desconectado.</string>
+    <string name="profile__wallet_recovery_pending">Debes completar la recuperación de la cartera antes de desconectar este perfil. Revisa la recuperación de la cartera en Ajustes.</string>
     <string name="profile__your_pubky">Su pubky</string>
     <string name="pubky_auth__already_signed_in">Ya ha iniciado sesión</string>
     <string name="pubky_auth__homeserver">Servidor principal</string>
