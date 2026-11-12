@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.callbackAmountMsats
@@ -118,8 +119,11 @@ class QuickPayRepo @Inject constructor(
 
     suspend fun canApply(amountSats: ULong): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val prepared = runSuspendCatching { prepareReserve(amountSats) }.getOrNull()
-                ?: return@runSuspendCatching false
+            val policy = checkPolicy(amountSats) as? QuickPayPolicy.Allowed ?: return@runSuspendCatching false
+            val prepared = prepareReserve(amountSats, policy.settings).getOrElse {
+                if (it !is QuickPayConversionError) throw it
+                return@runSuspendCatching false
+            }
             val snapshot = mutex.withLock { spend.snapshot() }
             if (!snapshot.supported) return@runSuspendCatching false
             if (snapshot.spentCents + prepared.amountCents <= prepared.capCents) return@runSuspendCatching true
@@ -139,7 +143,8 @@ class QuickPayRepo @Inject constructor(
     ): Result<QuickPayLedgerRecord?> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (paymentHash.isBlank()) return@runSuspendCatching null
-            val prepared = prepareReserve(amountSats) ?: return@runSuspendCatching null
+            val policy = checkPolicy(amountSats) as? QuickPayPolicy.Allowed ?: return@runSuspendCatching null
+            val prepared = prepareReserve(amountSats, policy.settings).getOrThrow()
             mutex.withLock {
                 spend.reserve(
                     paymentHash,
@@ -214,10 +219,6 @@ class QuickPayRepo @Inject constructor(
         invoice: ResolvedInvoice,
         invoiceHash: String,
     ): PreparePayResult {
-        val prepared = runSuspendCatching { prepareReserve(invoice.amountSats) }.getOrElse {
-            emitToSession(session.id, QuickPaySessionEvent.Error(it, invoice.bolt11))
-            return PreparePayResult.REJECTED
-        }
         return mutex.withLock {
             val existing = opsByKey[invoiceHash]
             if (existing != null) {
@@ -240,30 +241,51 @@ class QuickPayRepo @Inject constructor(
                 registerOpLocked(recoveredOp(session, invoice, invoiceHash, open))
                 return@withLock PreparePayResult.RECOVERED
             }
-            val keepHashes = opsByKey.values.map { it.invoiceHash }.toSet()
-            if (prepared == null ||
-                spend.reserve(invoiceHash, prepared.amountCents, prepared.capCents, keepHashes) == null
-            ) {
-                rejectReserveLocked(session, invoice)
-                return@withLock PreparePayResult.REJECTED
-            }
-            if (sessionFlows[session.id] == null) {
-                spend.release(invoiceHash)
-                return@withLock PreparePayResult.REJECTED
-            }
-            registerOpLocked(
-                InFlightOp(
-                    invoiceHash = invoiceHash,
-                    displaySats = invoice.amountSats,
-                    paymentRequest = invoice.bolt11,
-                    dispatched = false,
-                    sessionId = session.id,
-                    job = currentCoroutineContext()[Job],
-                    paymentId = null,
-                ),
-            )
-            PreparePayResult.FRESH
+            reserveFreshLocked(session, invoice, invoiceHash)
         }
+    }
+
+    private suspend fun reserveFreshLocked(
+        session: QuickPaySession,
+        invoice: ResolvedInvoice,
+        invoiceHash: String,
+    ): PreparePayResult {
+        val policy = runSuspendCatching { checkPolicy(invoice.amountSats) }.getOrElse {
+            emitToSession(session.id, QuickPaySessionEvent.Error(it, invoice.bolt11))
+            return PreparePayResult.REJECTED
+        }
+        val settings = when (policy) {
+            is QuickPayPolicy.Rejected -> {
+                rejectLocked(session.id, invoice.amountSats, policy.reason)
+                return PreparePayResult.REJECTED
+            }
+            is QuickPayPolicy.Allowed -> policy.settings
+        }
+        val prepared = prepareReserve(invoice.amountSats, settings).getOrElse {
+            emitToSession(session.id, QuickPaySessionEvent.Error(it, invoice.bolt11))
+            return PreparePayResult.REJECTED
+        }
+        val keepHashes = opsByKey.values.map { it.invoiceHash }.toSet()
+        if (spend.reserve(invoiceHash, prepared.amountCents, prepared.capCents, keepHashes) == null) {
+            rejectLocked(session.id, invoice.amountSats, QuickPayRejection.DAILY_CAP)
+            return PreparePayResult.REJECTED
+        }
+        if (sessionFlows[session.id] == null) {
+            spend.release(invoiceHash)
+            return PreparePayResult.REJECTED
+        }
+        registerOpLocked(
+            InFlightOp(
+                invoiceHash = invoiceHash,
+                displaySats = invoice.amountSats,
+                paymentRequest = invoice.bolt11,
+                dispatched = false,
+                sessionId = session.id,
+                job = currentCoroutineContext()[Job],
+                paymentId = null,
+            ),
+        )
+        return PreparePayResult.FRESH
     }
 
     private suspend fun settleRecovered(invoiceHash: String) {
@@ -311,6 +333,12 @@ class QuickPayRepo @Inject constructor(
     private suspend fun tryMarkDispatched(invoiceHash: String): Boolean = mutex.withLock {
         val current = opsByKey[invoiceHash] ?: return@withLock false
         if (current.cancelBeforeDispatch) return@withLock false
+        val policy = runSuspendCatching { checkPolicy(current.displaySats) }
+            .getOrElse { QuickPayPolicy.Rejected(QuickPayRejection.SETTINGS_UNREADABLE) }
+        if (policy is QuickPayPolicy.Rejected) {
+            current.rejection = policy.reason
+            return@withLock false
+        }
         current.dispatched = true
         true
     }
@@ -355,6 +383,7 @@ class QuickPayRepo @Inject constructor(
             if (current == null || current.dispatched) return@withLock
             spend.release(invoiceHash)
             removeOpLocked(current)
+            current.rejection?.let { rejectLocked(current.sessionId, current.displaySats, it) }
         }
     }
 
@@ -622,12 +651,9 @@ class QuickPayRepo @Inject constructor(
         paymentId = open.paymentId,
     )
 
-    private fun rejectReserveLocked(session: QuickPaySession, invoice: ResolvedInvoice) {
-        Logger.info(
-            "Skipping QuickPay pay: policy or daily spend reserve rejected '${invoice.amountSats}'",
-            context = TAG,
-        )
-        emitToSession(session.id, QuickPaySessionEvent.FallBackToConfirm)
+    private fun rejectLocked(sessionId: String?, amountSats: ULong, reason: QuickPayRejection) {
+        Logger.info("Skipping QuickPay pay of '$amountSats' sats for '$reason'", context = TAG)
+        emitToSession(sessionId, QuickPaySessionEvent.FallBackToConfirm)
     }
 
     private fun registerOpLocked(op: InFlightOp) {
@@ -703,20 +729,28 @@ class QuickPayRepo @Inject constructor(
         return notified
     }
 
-    private suspend fun prepareReserve(amountSats: ULong): PreparedReserve? {
+    private suspend fun checkPolicy(amountSats: ULong): QuickPayPolicy {
         val settings = settingsStore.data.first()
-        if (!settings.isQuickPayEnabled || amountSats == 0uL) return null
+        if (!settings.isQuickPayEnabled) return QuickPayPolicy.Rejected(QuickPayRejection.DISABLED)
+        if (amountSats == 0uL) return QuickPayPolicy.Rejected(QuickPayRejection.ZERO_AMOUNT)
         val thresholdSats = currencyRepo.convertFiatToSats(
             settings.quickPayAmount.toDouble(),
             USD,
         ).getOrNull()
-        if (thresholdSats == null || thresholdSats == 0uL || amountSats > thresholdSats) return null
+        if (thresholdSats == null || thresholdSats == 0uL) {
+            return QuickPayPolicy.Rejected(QuickPayRejection.NO_THRESHOLD)
+        }
+        if (amountSats > thresholdSats) return QuickPayPolicy.Rejected(QuickPayRejection.OVER_THRESHOLD)
+        return QuickPayPolicy.Allowed(settings)
+    }
+
+    private fun prepareReserve(amountSats: ULong, settings: SettingsData): Result<PreparedReserve> = runCatching {
         val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrElse {
             throw QuickPayConversionError()
         }
         val amountCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount, amountSats)
         val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
-        return PreparedReserve(amountCents, capCents)
+        PreparedReserve(amountCents, capCents)
     }
 
     private suspend fun loadPaymentRows(): List<QuickPayReconcileRow>? =
@@ -737,6 +771,7 @@ class QuickPayRepo @Inject constructor(
         var job: Job?,
         var paymentId: String?,
         var cancelBeforeDispatch: Boolean = false,
+        var rejection: QuickPayRejection? = null,
         var emitted: Boolean = false,
         val settled: CompletableDeferred<Unit> = CompletableDeferred(),
     )
@@ -751,6 +786,20 @@ class QuickPayRepo @Inject constructor(
         val amountCents: Long,
         val capCents: Long,
     )
+
+    private sealed interface QuickPayPolicy {
+        data class Allowed(val settings: SettingsData) : QuickPayPolicy
+        data class Rejected(val reason: QuickPayRejection) : QuickPayPolicy
+    }
+
+    private enum class QuickPayRejection {
+        DISABLED,
+        ZERO_AMOUNT,
+        NO_THRESHOLD,
+        OVER_THRESHOLD,
+        DAILY_CAP,
+        SETTINGS_UNREADABLE,
+    }
 
     private enum class PreparePayResult { LIVE, RECOVERED, FRESH, REJECTED }
 

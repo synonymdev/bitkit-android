@@ -9,6 +9,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -417,6 +418,22 @@ class QuickPayRepoTest : BaseUnitTest() {
         settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
 
         assertFalse(sut.canApply(500u).getOrThrow())
+    }
+
+    @Test
+    fun `canApply is false when rates are unavailable`() = test {
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer {
+            throw QuickPayConversionError()
+        }
+
+        assertFalse(sut.canApply(500u).getOrThrow())
+    }
+
+    @Test
+    fun `canApply fails when settings cannot be read`() = test {
+        whenever(settingsStore.data).thenReturn(flow { throw AppError("settings unavailable") })
+
+        assertTrue(sut.canApply(500u).isFailure)
     }
 
     @Test
@@ -994,6 +1011,76 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertEquals(250L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `disabled quickpay falls back to confirm after a succeeded record reconciles away`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        markSubmitted(hash, "pid")
+        val reloaded = repo()
+        settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
+        assertTrue(reloaded.hasOpen(hash))
+        paymentRows = listOf(succeededRow(hash))
+        reloaded.reconcileAgainstLdk()
+        assertFalse(reloaded.hasOpen(hash))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        val session = QuickPaySession()
+
+        reloaded.attach(session).test {
+            reloaded.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertEquals(250L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `conversion failure still observes a recovered pending payment without paying`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        markSubmitted(hash, "pid")
+        val reloaded = repo()
+        paymentRows = listOf(pendingRow(hash))
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer {
+            throw QuickPayConversionError()
+        }
+        val session = QuickPaySession()
+
+        reloaded.attach(session).test {
+            reloaded.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val pending = assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+            assertEquals(hash, pending.paymentHash)
+        }
+        assertEquals(250L, spentCents())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(pendingPaymentRepo).track(hash)
+    }
+
+    @Test
+    fun `disabling quickpay before send aborts the dispatch and falls back to confirm`() = test {
+        val (bolt11, hash) = testInvoice()
+        val proceeded = CompletableDeferred<Boolean>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            assertEquals(250L, spentCents())
+            settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
+            val ok = onBeforeSend()
+            proceeded.complete(ok)
+            if (!ok) Result.failure(PaymentAbortedBeforeSend()) else Result.success("pid")
+        }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertFalse(proceeded.await())
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        assertFalse(sut.hasOpen(hash))
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
     }
 
     @Test
