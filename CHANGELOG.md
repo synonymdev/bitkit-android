@@ -18,10 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - Updated the Lightning node with upstream security fixes. #1870
-
-
-
-
+- Updated the VSS client and Paykit with upstream rustls security fixes. #1824, #1873
 
 ## [3.1.0] - 2026-11-02
 
