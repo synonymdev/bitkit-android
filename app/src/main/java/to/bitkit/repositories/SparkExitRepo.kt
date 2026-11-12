@@ -4,8 +4,8 @@ import breez_sdk_spark.CpfpFundingKind
 import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitLeafSelection
-import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.ExitTransactionStatus
+import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.singleKeyCpfpSigner
 import com.synonym.bitkitcore.Activity
