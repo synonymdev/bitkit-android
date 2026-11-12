@@ -252,13 +252,14 @@ class SparkService @Inject constructor(
             ),
         )
 
-    suspend fun send(prepared: PrepareSendPaymentResponse): Payment {
+    /** Sends [prepared]; Spark makes one payment per [idempotencyKey], a UUID that becomes the payment's id. */
+    suspend fun send(prepared: PrepareSendPaymentResponse, idempotencyKey: String? = null): Payment {
         val options = when (prepared.paymentMethod) {
             is SendPaymentMethod.Bolt11Invoice -> bolt11SendOptions(prefersSpark)
             is SendPaymentMethod.BitcoinAddress -> SendPaymentOptions.BitcoinAddress(OnchainConfirmationSpeed.MEDIUM)
             else -> null
         }
-        return requireSdk().sendPayment(SendPaymentRequest(prepared, options)).payment
+        return requireSdk().sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
     }
 
     /** The fastest recommended fee rate, in sat/vB, from the SDK's own fee source. */
@@ -343,6 +344,17 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
 
     /** The withdrawal fee rose above the fee the user confirmed. */
     class WithdrawalFeeChanged : SparkError("Spark withdrawal fee changed since it was confirmed")
+
+    class WithdrawalPending : SparkError("An earlier Spark withdrawal is still settling")
+
+    /** Spark could withdraw to the contact, but its balance can't cover the amount plus the withdrawal fee. */
+    class WithdrawalOverBalance : SparkError("Spark balance can't cover the withdrawal and its fee")
+
+    /** Spark's list shows the withdrawal never went out. */
+    class WithdrawalNotSent : SparkError("Spark never sent the withdrawal")
+
+    /** Spark returned the withdrawal as pending, which it can still fail, so its outcome is not known yet. */
+    class WithdrawalNotCompleted : SparkError("Spark has not completed the withdrawal yet")
 
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the

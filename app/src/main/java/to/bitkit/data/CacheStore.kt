@@ -18,6 +18,8 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
+import to.bitkit.repositories.PendingSparkWithdrawal
+import to.bitkit.repositories.SentSparkWithdrawal
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -350,6 +352,10 @@ data class AppCacheData(
      * addresses that still hold coins and nothing watches.
      */
     val sparkExitFundingRecoveryPending: Set<String> = emptySet(),
+    /** A Spark withdrawal to a Paykit contact that started, kept until Spark's payment list settles it. */
+    val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
+    /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */
+    val sentSparkWithdrawals: List<SentSparkWithdrawal> = listOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */

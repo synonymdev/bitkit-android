@@ -340,6 +340,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
         /** Maximum number of concurrent public capability lookups per discovery. */
         private const val PAYMENT_REQUEST_DISCOVERY_CONCURRENCY = 8
+
+        private val DECLINED_STATES = setOf(
+            PaymentRequestLifecycleState.REJECTED,
+            PaymentRequestLifecycleState.CANCELED,
+        )
     }
 
     private val operationMutex = Mutex()
@@ -1818,6 +1823,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         listOf(updatedRequest) + requests.filterNot { it.id == current.id }
                     }
                     _pendingRequests.update { requests -> requests.filterNot { it.id == current.id } }
+                    if (resultingState in DECLINED_STATES) markPresentedLocked(current.id)
                     discardExpiredRequestsLocked()
                     if (resultingState == PaymentRequestLifecycleState.ACCEPTED) {
                         scheduleAcceptedResponse(current.counterparty)
@@ -2045,8 +2051,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .onFailure { Logger.warn("Failed to prune accepted Paykit payment requests", it, context = TAG) }
     }
 
+    private suspend fun markPresentedLocked(id: PaykitPaymentRequestId) {
+        if (id in presentedRequestIds) return
+        presentedRequestIds = presentedRequestIds + id
+        val identity = activeIdentity ?: return
+        runSuspendCatching { presentationStore.save(identity, presentedRequestIds) }
+            .onFailure { Logger.warn("Failed to persist surfaced Paykit payment requests", it, context = TAG) }
+    }
+
+    // A request the user declined stays marked while the SDK still lists it,
+    // so it never pops up again if a later read reports it as proposed.
     private suspend fun prunePresentedRequestIds(requests: List<PaykitPaymentRequest>) {
-        val requestIds = requests.mapTo(mutableSetOf()) { it.id }
+        val declinedIds = _paymentRequestHistory.value
+            .filter { it.direction == PaykitPaymentRequestDirection.Incoming && it.lifecycleState in DECLINED_STATES }
+            .map { it.id }
+        val requestIds = requests.mapTo(mutableSetOf()) { it.id } + declinedIds
         val prunedIds = presentedRequestIds.intersect(requestIds)
         if (prunedIds == presentedRequestIds) return
         presentedRequestIds = prunedIds
