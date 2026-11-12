@@ -23,24 +23,30 @@ if [ -n "${ORG_GRADLE_PROJECT_bitkitCoreAar+set}" ]; then
     echo "Unset ORG_GRADLE_PROJECT_bitkitCoreAar before running this script." >&2
     exit 1
 fi
-case "${GRADLE_OPTS-} ${JAVA_OPTS-}" in
+case "${GRADLE_OPTS-} ${JAVA_OPTS-} ${JAVA_TOOL_OPTIONS-}" in
     *org.gradle.project.bitkitCoreAar*)
-        echo "Remove org.gradle.project.bitkitCoreAar from GRADLE_OPTS and JAVA_OPTS before running this script." >&2
+        echo "Remove org.gradle.project.bitkitCoreAar from GRADLE_OPTS, JAVA_OPTS and JAVA_TOOL_OPTIONS before running this script." >&2
         exit 1
         ;;
 esac
 
-# Release tasks use tnet: no dependency differs per flavor, and mainnet needs secret config.
+# Release tasks use tnet as the mainnet stand-in, because mainnet needs secret config. This holds
+# only while no dependency or plugin differs per flavor: a flavor-specific one needs its tasks here.
 # Without keystore.properties they are signed with the tracked debug keystore, which is
 # enough here because signing does not change what is resolved.
 # useMavenLocal=false keeps locally published artifacts out of the recorded checksums.
-KEYSTORE_FILE=app/debug.keystore KEYSTORE_PASSWORD=android \
+# --continue lets every task resolve its dependencies even when another task fails.
+if KEYSTORE_FILE=app/debug.keystore KEYSTORE_PASSWORD=android \
     KEY_ALIAS=androiddebugkey KEY_PASSWORD=android \
     ./gradlew --write-verification-metadata sha256 --no-daemon --no-configuration-cache --no-build-cache \
-    -PuseMavenLocal=false \
+    --continue -PuseMavenLocal=false \
     testDevDebugUnitTest detekt lintDevDebug \
     assembleDevDebug assembleDevDebugAndroidTest assembleTnetRelease bundleTnetRelease \
-    :app:syncNativeDebugSymbolArtifacts
+    :app:syncNativeDebugSymbolArtifacts; then
+    gradle_status=0
+else
+    gradle_status=$?
+fi
 
 # Gradle only records the aapt2 binary for the current host, so add the other platforms
 # from Google Maven to keep the file valid on every OS.
@@ -93,6 +99,12 @@ for version in $aapt2_versions; do
     done
 done
 
+# Gradle adds an also-trust value when an existing entry's artifact changes, so stop there.
+if grep -n 'also-trust' "$metadata" >&2; then
+    echo "$metadata has also-trust values on the lines above. Find out which artifact changed instead of committing it." >&2
+    exit 1
+fi
+
 # Fail on host-specific artifacts that lack their other-platform variants.
 missing=""
 host_artifacts=$(
@@ -110,7 +122,13 @@ for artifact in $host_artifacts; do
 done
 if [ -n "$missing" ]; then
     echo "Missing other-platform variants:$missing" >&2
+    echo "Add their checksums from the artifact's repository. If the dependency does not publish a platform, note it in docs/dependency-verification.md and adjust this check." >&2
     exit 1
+fi
+
+if [ "$gradle_status" -ne 0 ]; then
+    echo "The Gradle build failed, so $metadata may be incomplete. Do not commit it until just deps passes." >&2
+    exit "$gradle_status"
 fi
 
 echo "Updated $metadata"

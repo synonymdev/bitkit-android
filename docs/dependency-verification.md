@@ -20,10 +20,14 @@ Regenerate the file when you change any of these:
 To regenerate:
 
 1. Run `just deps`. It runs `scripts/update-verification-metadata.sh`, which needs GitHub Packages credentials (see [GitHub Packages setup](../README.md#2-github-packages-setup)). It takes a long time, because it runs the CI and release build tasks so that Gradle records every artifact they resolve.
-2. Review the diff of `gradle/verification-metadata.xml`. New entries should match only the coordinates you changed. The diff should only add components or versions for those coordinates; if it changes a checksum or adds an `also-trust` value on an existing entry, investigate the cause instead of committing it.
+2. Review the diff of `gradle/verification-metadata.xml`. New entries should match only the coordinates you changed. The diff should only add components or versions for those coordinates; if it changes a checksum or adds an `also-trust` value on an existing entry, investigate the cause instead of committing it. The script fails and prints the line numbers when the file contains an `also-trust` value.
 3. Commit the file in the same PR as the dependency change.
 
-The script keeps existing entries and the `<configuration>` block. It fails if a host-specific artifact lacks its variants for other platforms. It passes `-PuseMavenLocal=false` and stops if `bitkitCoreAar` is set, so local artifacts are never recorded.
+The script keeps existing entries and the `<configuration>` block. It fails if a host-specific artifact lacks its variants for other platforms. It passes `-PuseMavenLocal=false` and stops if `bitkitCoreAar` is set, so local artifacts are never recorded. If a Gradle task fails, the script still finishes the other steps but exits with an error; do not commit the file until `just deps` passes.
+
+The recorded checksums come from the artifacts in your local Gradle cache, so a new entry is only as trustworthy as that cache. To record checksums from fresh downloads instead, run `GRADLE_USER_HOME=$(mktemp -d) just deps`, which is slower because it downloads every artifact again.
+
+The script records release dependencies with the tnet flavor, because a mainnet build needs secret config. This works only while no dependency or plugin differs per flavor. If you add a mainnet-only or other flavor-specific dependency or plugin, extend the task list in the script to cover it. PR CI never builds mainnet, so a missing entry would only show up when the mainnet release build fails verification.
 
 ## Dependabot
 
@@ -34,6 +38,8 @@ After someone else pushes to a Dependabot branch, Dependabot stops rebasing that
 ## Host-specific artifacts
 
 Google Maven publishes `aapt2` once per operating system. Gradle records only the variant for the machine that runs `just deps`, so the script downloads the linux, osx and windows variants from Google Maven and adds their checksums. The file then works on every OS.
+
+The script fails when any artifact named for one of these platforms lacks its other variants. To fix it, add the missing variant's checksum from the artifact's repository. If the dependency does not publish that platform, note the exception in this section and adjust the check in the script.
 
 ## Device test artifacts
 
