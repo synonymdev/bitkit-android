@@ -453,7 +453,7 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun runSparkWithdrawal() {
         sparkFeeJob?.join()
-        if (sparkRepo.state.value.balanceSats == 0uL) return
+        if (sparkRepo.state.value.spendingSats == 0uL) return
         val address = sparkWithdrawAddress()
         val confirmedFeeSats = confirmedSparkFeeSats
         if (address == null || confirmedFeeSats == null) {

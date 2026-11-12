@@ -77,6 +77,7 @@ import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.SparkExitBackupV1
+import to.bitkit.models.SparkExitEarlierAddressBackupV1
 import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -92,6 +93,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
+import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -523,6 +525,7 @@ class BackupRepo @Inject constructor(
         // Hardware tags are carried by the metadata backup. Observe the narrower tag signal so ordinary
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
+        dataListenerJobs.add(observeBackupChanges(SparkExitEarlierAddressStore.writes, BackupCategory.METADATA))
 
         // Replay unrecorded Spark changes when wallet admission or the restore gate reopens.
         dataListenerJobs.add(
@@ -1030,9 +1033,35 @@ class BackupRepo @Inject constructor(
             pubkySession = pubkySession,
             pubkyContactProfileOverrides = pubkyContactProfileOverrides,
             hwWalletNames = hwWalletNames,
+            sparkExitEarlierAddresses = sparkExitEarlierAddressesBackup(),
         )
 
         json.encodeToString(payload).toByteArray()
+    }
+
+    /**
+     * The backed-up wallet's earlier Spark exit addresses, null with none. A list that can't be read is left out with a
+     * warning rather than block the rest of the metadata.
+     */
+    private suspend fun sparkExitEarlierAddressesBackup(): Map<String, List<SparkExitEarlierAddressBackupV1>>? {
+        val walletIndex = backupWalletIndex()
+        val entries = runCatching {
+            SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(walletIndex))).load()
+        }
+            .onFailure { Logger.warn("Failed to read the earlier Spark exit addresses to back up", it, context = TAG) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+            ?: return null
+        return mapOf(SparkExitMath.walletKey(Env.network, walletIndex) to entries.map { it.toBackup() })
+    }
+
+    /** Lists each backed-up earlier Spark exit address of this network next to the device's own, which stay as is. */
+    private fun restoreSparkExitEarlierAddresses(backedUp: Map<String, List<SparkExitEarlierAddressBackupV1>>?) {
+        for ((key, entries) in backedUp.orEmpty()) {
+            val walletIndex = SparkExitMath.walletIndexOf(key, Env.network) ?: continue
+            val store = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(walletIndex)))
+            entries.mapNotNull(SparkExitEarlierAddress::fromBackup).forEach { store.add(it) }
+        }
     }
 
     private suspend fun getWalletBackupDataBytes(): ByteArray {
@@ -1334,6 +1363,7 @@ class BackupRepo @Inject constructor(
         )
         val parsed = decodeBackup<MetadataBackupV1>(migration.json)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
+        val restoredIndexKeys = cleanCache.sparkExitNextFundingIndexes.keys
         // The backed-up send hashes can predate either rail's latest sends, so each rail's own list seeds them again.
         val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
         cacheStore.update {
@@ -1342,8 +1372,18 @@ class BackupRepo @Inject constructor(
                 sparkHistoryUnseededSince = restoredAt,
                 ldkHistoryUnseededSince = restoredAt,
                 sparkRestoredAt = restoredAt,
+                // The higher index of each wallet, so an exit never funds from an address an earlier one used.
+                sparkExitNextFundingIndexes = SparkExitMath.mergeFundingIndexes(
+                    it.sparkExitNextFundingIndexes,
+                    cleanCache.sparkExitNextFundingIndexes,
+                ),
+                // The exit then looks once for funding addresses that still hold coins and nothing watches: each one
+                // below the index, and those a scan forward from it finds used, which also moves the index past them.
+                sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
             )
         }
+        runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
+            .onFailure { Logger.warn("Failed to restore the earlier Spark exit addresses", it, context = TAG) }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)

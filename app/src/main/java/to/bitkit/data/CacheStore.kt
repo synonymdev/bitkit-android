@@ -336,6 +336,22 @@ data class AppCacheData(
     val quickPayLedger: QuickPayLedger? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /**
+     * When a Spark leaf optimization last ran or was cut short, in epoch milliseconds; cleared once it completed or
+     * an exit quote waited out the counter-swap grace. Kept across processes, since a swap the app's close cut short
+     * leaves value in flight.
+     */
+    val sparkOptimizationActivityAt: Long? = null,
+    /**
+     * The funding key index the next Spark emergency exit takes, per `{network}/wallet{n}`, so each exit pays its fees
+     * from an address of its own.
+     */
+    val sparkExitNextFundingIndexes: Map<String, Int> = mapOf(),
+    /**
+     * The `{network}/wallet{n}` keys whose funding index a restore brought back, so the exit looks once for funding
+     * addresses that still hold coins and nothing watches.
+     */
+    val sparkExitFundingRecoveryPending: Set<String> = emptySet(),
     /** A Spark withdrawal to a Paykit contact that started, kept until Spark's payment list settles it. */
     val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
     /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */

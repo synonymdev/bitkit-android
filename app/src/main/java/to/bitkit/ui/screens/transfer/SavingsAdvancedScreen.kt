@@ -63,7 +63,7 @@ fun SavingsAdvancedScreen(
     val openChannels = lightningState.channels.filterOpen()
 
     val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
-    val sparkSats = sparkState.balanceSats
+    val sparkSats = sparkState.spendingSats
 
     var selectedChannelIds by remember { mutableStateOf(setOf<String>()) }
     var isSparkSelected by remember { mutableStateOf(true) }
