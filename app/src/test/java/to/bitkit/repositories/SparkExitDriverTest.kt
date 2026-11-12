@@ -1835,6 +1835,56 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a redo hold after a funded top-up runs at the rebuild pace`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(3) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1"))) }
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        record = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(
+            SparkExitFixtures.utxo("f0", 1u, 20_000uL),
+            SparkExitFixtures.utxo("topup", value = 3_000uL),
+        )
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(listOf("f0", "topup"), record.funding.map { it.txid })
+        assertEquals(1, record.generation, "a rebuild left out leaf-2's steps the diverged generation recovers")
+        assertEquals(Phase.Running, record.phase, "a funded hold still asks for fees")
+        assertEquals(1_000u, record.redoHeldSince)
+        val requests = sdk.recoverRequests.size
+
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(requests, sdk.recoverRequests.size, "built again before the rebuild interval")
+    }
+
+    @Test
+    fun `an empty prepare during a redo hold leaves the retry clock alone`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        record = driver(tip = 1_000u).tick(record)
+
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = emptyList())
+            .copy(skipped = leaf2Unread.skipped)
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+
+        assertNull(record.retrySince, "the hold started the waiting leaf's retry clock")
+        assertEquals(1_000u, record.redoHeldSince)
+        assertEquals(1, record.generation)
+        assertTrue(record.isRebuilding)
+
+        now += interval
+        val end = 1_000u + SparkExitDriver.REDO_HOLD_BLOCKS
+        record = driver(tip = end).tick(record)
+        assertEquals(end, record.retrySince, "the waiting leaf's retry clock starts once the hold ends")
+    }
+
+    @Test
     fun `a rebuild from the chain keeps its note until one of its steps confirms`() = test {
         val built = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
         val record = SparkExitFixtures.record(Phase.Running)
