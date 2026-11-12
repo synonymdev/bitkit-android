@@ -918,6 +918,85 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `disabled quickpay falls back to confirm and does not pay`() = test {
+        val (bolt11, _) = testInvoice()
+        stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
+        settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger?.records.orEmpty().isEmpty())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `disabled quickpay does not pay after a failed record reconciles away`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        markSubmitted(hash, "pid")
+        val reloaded = repo()
+        settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
+        // the open record is what routes a disabled QuickPay to the observing screen
+        assertTrue(reloaded.hasOpen(hash))
+        paymentRows = listOf(failedRow(hash))
+        reloaded.reconcileAgainstLdk()
+        assertFalse(reloaded.hasOpen(hash))
+        stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
+        val session = QuickPaySession()
+
+        reloaded.attach(session).test {
+            reloaded.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `disabled quickpay still observes a recovered pending payment without paying`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        markSubmitted(hash, "pid")
+        val reloaded = repo()
+        paymentRows = listOf(pendingRow(hash))
+        settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
+        val session = QuickPaySession()
+
+        reloaded.attach(session).test {
+            reloaded.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val pending = assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+            assertEquals(hash, pending.paymentHash)
+        }
+        assertEquals(250L, spentCents())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(pendingPaymentRepo).track(hash)
+    }
+
+    @Test
+    fun `disabled quickpay still settles a recovered payment ldk already succeeded`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        markSubmitted(hash, "pid")
+        val reloaded = repo()
+        paymentRows = listOf(succeededRow(hash))
+        settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
+        val session = QuickPaySession()
+
+        reloaded.attach(session).test {
+            reloaded.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Success>(awaitItem())
+        }
+        assertEquals(250L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+    }
+
+    @Test
     fun `reserve persists before dispatch`() = test {
         val (bolt11, _) = testInvoice()
         whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->

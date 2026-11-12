@@ -634,7 +634,7 @@ class QuickPayRepo @Inject constructor(
 
     private fun rejectCapLocked(session: QuickPaySession, invoice: ResolvedInvoice) {
         Logger.info(
-            "Skipping QuickPay pay: daily spend reserve failed for '${invoice.amountSats}'",
+            "Skipping QuickPay pay: policy or daily spend reserve rejected '${invoice.amountSats}'",
             context = TAG,
         )
         emitToSession(session.id, QuickPaySessionEvent.FallBackToConfirm)
@@ -715,6 +715,7 @@ class QuickPayRepo @Inject constructor(
 
     private suspend fun prepareReserve(amountSats: ULong): PreparedReserve? {
         val settings = settingsStore.data.first()
+        if (!settings.isQuickPayEnabled || amountSats == 0uL) return null
         val thresholdSats = currencyRepo.convertFiatToSats(
             settings.quickPayAmount.toDouble(),
             USD,
