@@ -249,7 +249,7 @@ fun UsdtWalletScreen(
                         PaymentAuthentication(
                             useBiometrics = settings.isBiometricEnabled,
                             onCancel = viewModel::cancelAuthentication,
-                            onVerified = viewModel::authenticationVerified,
+                            onVerify = viewModel::authenticationVerified,
                         )
                     }
 

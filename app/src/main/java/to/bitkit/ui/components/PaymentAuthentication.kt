@@ -14,14 +14,14 @@ import to.bitkit.ui.utils.rememberBiometricAuthSupported
 internal fun PaymentAuthentication(
     useBiometrics: Boolean,
     onCancel: () -> Unit,
-    onVerified: () -> Unit,
+    onVerify: () -> Unit,
     @StringRes pinDescriptionRes: Int = R.string.security__pin_send,
 ) {
     val supported = rememberBiometricAuthSupported()
     var fallbackToPin by remember { mutableStateOf(false) }
     if (useBiometrics && supported && !fallbackToPin) {
-        BiometricsView(onSuccess = onVerified, onFailure = { fallbackToPin = true })
+        BiometricsView(onSuccess = onVerify, onFailure = { fallbackToPin = true })
     } else {
-        SendPinCheckScreen(onBack = onCancel, onSuccess = onVerified, descriptionRes = pinDescriptionRes)
+        SendPinCheckScreen(onBack = onCancel, onSuccess = onVerify, descriptionRes = pinDescriptionRes)
     }
 }

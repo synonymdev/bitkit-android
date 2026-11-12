@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.quickPay
 
+import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,12 +15,15 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.models.Toast
 import to.bitkit.repositories.QuickPayAuthorization
 import to.bitkit.repositories.QuickPayChange
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -27,6 +31,7 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class QuickPaySettingsViewModelTest : BaseUnitTest() {
+    private val context: Context = mock()
     private val settingsStore: SettingsStore = mock()
     private val quickPayRepo: QuickPayRepo = mock()
     private val settings = MutableStateFlow(
@@ -37,6 +42,8 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(context.getString(R.string.common__error_body)).thenReturn("Unknown error")
         whenever(settingsStore.data).thenReturn(settings)
         listOf(
             QuickPayChange.Enabled(true),
@@ -47,7 +54,7 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
             whenever { quickPayRepo.requestSettingsChange(it) }.thenReturn(Result.success(authorization(it)))
         }
         whenever { quickPayRepo.applyAuthorizedSettingsChange(any()) }.thenReturn(Result.success(Unit))
-        sut = QuickPaySettingsViewModel(settingsStore, quickPayRepo)
+        sut = QuickPaySettingsViewModel(context, settingsStore, quickPayRepo)
     }
 
     @Test
@@ -130,23 +137,39 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a failed request opens no check`() = test {
-        whenever(quickPayRepo.requestSettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
+    fun `a change saved at once closes and drops the open check`() = test {
+        val raise = authorization(QuickPayChange.Amount(50))
+        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(1))).thenReturn(Result.success(null))
+        sut.setQuickPayAmount(50)
 
-        sut.setQuickPayEnabled(true)
+        sut.setQuickPayAmount(1)
 
         assertNull(loadedState().authorization)
+        verify(quickPayRepo).cancelSettingsChange(raise)
+        sut.onAuthorized()
+        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
     }
 
     @Test
-    fun `a failed save after the check closes the check`() = test {
+    fun `a failed request opens no check and shows an error`() = test {
+        whenever(quickPayRepo.requestSettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
+
+        val toast = collectToast { sut.setQuickPayEnabled(true) }
+
+        assertNull(loadedState().authorization)
+        assertErrorToast(toast)
+    }
+
+    @Test
+    fun `a failed save after the check closes the check and shows an error`() = test {
         whenever(quickPayRepo.applyAuthorizedSettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
         sut.setQuickPayEnabled(true)
 
-        sut.onAuthorized()
+        val toast = collectToast { sut.onAuthorized() }
 
         verify(quickPayRepo).applyAuthorizedSettingsChange(authorization(QuickPayChange.Enabled(true)))
         assertNull(loadedState().authorization)
+        assertErrorToast(toast)
     }
 
     @Test
@@ -161,6 +184,22 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
     }
 
     private fun authorization(change: QuickPayChange) = QuickPayAuthorization(change, useBiometrics = true)
+
+    private fun TestScope.collectToast(action: () -> Unit): Toast {
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        runCurrent()
+        action()
+        runCurrent()
+        collectJob.cancel()
+        return toasts.single()
+    }
+
+    private fun assertErrorToast(toast: Toast) {
+        assertEquals(Toast.ToastType.ERROR, toast.type)
+        assertEquals("Error", toast.title)
+        assertEquals("Unknown error", toast.description)
+    }
 
     private fun TestScope.loadedState(): QuickPaySettingsUiState {
         backgroundScope.launch { sut.uiState.collect {} }

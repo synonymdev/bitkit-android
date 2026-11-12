@@ -31,7 +31,7 @@ fun BoxScope.PaymentAuthorizationOverlay(
         PaymentAuthentication(
             useBiometrics = useBiometrics,
             onCancel = onCancel,
-            onVerified = onVerify,
+            onVerify = onVerify,
             pinDescriptionRes = pinDescriptionRes,
         )
     }

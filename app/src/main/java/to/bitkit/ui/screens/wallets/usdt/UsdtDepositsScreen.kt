@@ -105,7 +105,7 @@ internal fun UsdtDepositsScreen(
                 authentication = false
                 approval = null
             },
-            onVerified = {
+            onVerify = {
                 authentication = false
                 refund()
             },

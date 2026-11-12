@@ -52,6 +52,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -255,6 +256,48 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertEquals(gated, settingsData.value)
 
         sut.cancelSettingsChange(replaced)
+        sut.applyAuthorizedSettingsChange(pending).getOrThrow()
+        assertEquals(20, settingsData.value.quickPayAmount)
+    }
+
+    @Test
+    fun `requestSettingsChange returns the pending check again for an equal change`() = test {
+        stubSettingsUpdate()
+        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
+
+        val first = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
+        val second = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
+
+        assertSame(first, second)
+        sut.applyAuthorizedSettingsChange(first).getOrThrow()
+        assertEquals(50, settingsData.value.quickPayAmount)
+    }
+
+    @Test
+    fun `requestSettingsChange drops the pending check when a later change saves at once`() = test {
+        stubSettingsUpdate()
+        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 5)
+        val raise = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
+
+        assertNull(sut.requestSettingsChange(QuickPayChange.Amount(1)).getOrThrow())
+
+        assertIs<QuickPayChangeNotPendingError>(sut.applyAuthorizedSettingsChange(raise).exceptionOrNull())
+        assertEquals(1, settingsData.value.quickPayAmount)
+    }
+
+    @Test
+    fun `requestSettingsChange keeps the pending check when its write fails`() = test {
+        stubSettingsUpdate()
+        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
+        val pending = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(20)).getOrThrow())
+        whenever(settingsStore.update(any())).thenAnswer {
+            it.getArgument<(SettingsData) -> SettingsData>(0)(settingsData.value)
+            throw AppError("write failed")
+        }
+
+        assertTrue(sut.requestSettingsChange(QuickPayChange.Amount(50)).isFailure)
+
+        stubSettingsUpdate()
         sut.applyAuthorizedSettingsChange(pending).getOrThrow()
         assertEquals(20, settingsData.value.quickPayAmount)
     }

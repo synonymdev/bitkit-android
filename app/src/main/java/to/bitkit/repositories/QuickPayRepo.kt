@@ -74,6 +74,7 @@ class QuickPayRepo @Inject constructor(
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
     private val unackedFailures = ConcurrentHashMap<String, Throwable>()
     private val pendingSettingsChange = AtomicReference<QuickPayAuthorization?>(null)
+    private val settingsChangeMutex = Mutex()
 
     private val _unhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
 
@@ -152,23 +153,27 @@ class QuickPayRepo @Inject constructor(
      * Saves [change] at once, or returns the PIN or biometric check it must pass first when payments need a PIN and
      * [change] enables QuickPay or raises one of its limits. Disabling and lowering always save at once. The decision
      * reads the settings inside the write, so a concurrent change cannot turn a raise into a free one. A returned check
-     * replaces any earlier pending one and is the only way to save its change, via [applyAuthorizedSettingsChange].
+     * replaces any earlier pending one and is the only way to save its change, via [applyAuthorizedSettingsChange]. An
+     * equal pending check is returned as is, and a change saved at once drops any pending check.
      */
     suspend fun requestSettingsChange(change: QuickPayChange): Result<QuickPayAuthorization?> =
         withContext(ioDispatcher) {
             runSuspendCatching {
-                var authorization: QuickPayAuthorization? = null
-                settingsStore.update { settings ->
-                    if (settings.requiresPaymentAuth && change.isRaise(settings)) {
-                        authorization = QuickPayAuthorization(change, settings.isBiometricEnabled)
-                            .also { pendingSettingsChange.set(it) }
-                        settings
-                    } else {
-                        authorization = null
-                        change.applyTo(settings)
+                settingsChangeMutex.withLock {
+                    var authorization: QuickPayAuthorization? = null
+                    settingsStore.update { settings ->
+                        if (settings.requiresPaymentAuth && change.isRaise(settings)) {
+                            authorization = QuickPayAuthorization(change, settings.isBiometricEnabled)
+                            settings
+                        } else {
+                            authorization = null
+                            change.applyTo(settings)
+                        }
                     }
+                    val pending = pendingSettingsChange.get()?.takeIf { it == authorization } ?: authorization
+                    pendingSettingsChange.set(pending)
+                    pending
                 }
-                authorization
             }
         }
 
@@ -176,8 +181,10 @@ class QuickPayRepo @Inject constructor(
     suspend fun applyAuthorizedSettingsChange(authorization: QuickPayAuthorization): Result<Unit> =
         withContext(ioDispatcher) {
             runSuspendCatching {
-                if (!pendingSettingsChange.compareAndSet(authorization, null)) throw QuickPayChangeNotPendingError()
-                settingsStore.update(authorization.change::applyTo)
+                settingsChangeMutex.withLock {
+                    if (!pendingSettingsChange.compareAndSet(authorization, null)) throw QuickPayChangeNotPendingError()
+                    settingsStore.update(authorization.change::applyTo)
+                }
             }
         }
 
