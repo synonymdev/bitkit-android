@@ -73,6 +73,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.MAX_SPARK_SEND_HASHES
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.SparkPayoutChain
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
@@ -118,6 +119,7 @@ class SparkRepoTest : BaseUnitTest() {
     private val pendingPaymentRepo = PendingPaymentRepo()
     private val onchainService = mock<OnchainService>()
     private val coreService = mock<CoreService> { on { onchain } doReturn onchainService }
+    private val payoutChain = mock<SparkPayoutChain>()
     private val settingsStore = mock<SettingsStore> { on { data } doReturn flowOf(SettingsData()) }
     private var now = Instant.fromEpochSeconds(1_800_000_000)
     private val clock = object : Clock {
@@ -134,6 +136,7 @@ class SparkRepoTest : BaseUnitTest() {
         clock = clock,
         coreService = { coreService },
         settingsStore = settingsStore,
+        payoutChain = payoutChain,
     )
 
     @get:Rule
@@ -1170,6 +1173,39 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a contact withdrawal is confirmed from its transaction once the contact spent the payout`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
+            .thenReturn(Result.success(sentContactActivity(confirmed = false)))
+        whenever { onchainService.unspentOutputs(eq("bcrt1qcontact"), any(), anyOrNull()) }.thenReturn(emptyList())
+        whenever { payoutChain.isMined("withdrawal") }.thenReturn(true)
+
+        readySpark(balanceSats = 50_000uL)
+        advanceUntilIdle()
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, atLeastOnce()).upsertActivity(activities.capture())
+        assertTrue(
+            activities.allValues.any { assertIs<Activity.Onchain>(it).v1.confirmed },
+            "A payout spent before Bitkit saw it mined no longer lists as unspent, so its transaction is asked",
+        )
+    }
+
+    @Test
+    fun `a payout listed unspent in the mempool is not asked about by its transaction`() = test {
+        whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
+        whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
+            .thenReturn(Result.success(sentContactActivity(confirmed = false)))
+        whenever { onchainService.unspentOutputs(eq("bcrt1qcontact"), any(), anyOrNull()) }
+            .thenReturn(listOf(payoutOutput(txid = "withdrawal", confirmations = 0u)))
+
+        readySpark(balanceSats = 50_000uL)
+        advanceUntilIdle()
+
+        verify(payoutChain, never()).isMined(any())
+    }
+
+    @Test
     fun `a confirmed contact withdrawal is not looked up on chain again`() = test {
         whenever { sparkService.listPayments() }.thenReturn(listOf(contactWithdrawal()))
         whenever { activityRepo.getActivity(eq("withdrawal"), any()) }
@@ -1179,6 +1215,7 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(onchainService, never()).unspentOutputs(any(), any(), anyOrNull())
+        verify(payoutChain, never()).isMined(any())
     }
 
     private fun sentContactActivity(confirmed: Boolean) = Activity.Onchain(

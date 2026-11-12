@@ -46,6 +46,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.SparkPayoutChain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
@@ -91,6 +92,7 @@ class SparkRepo @Inject constructor(
     private val clock: Clock,
     private val coreService: Provider<CoreService>,
     private val settingsStore: SettingsStore,
+    private val payoutChain: SparkPayoutChain,
 ) {
     companion object {
         private const val TAG = "SparkRepo"
@@ -1013,9 +1015,9 @@ class SparkRepo @Inject constructor(
 
     /**
      * Spark lists a withdrawal completed once its provider took the payout on, which can be before the payout
-     * transaction is broadcast or mined, so a contact withdrawal's sent activity is confirmed only once the chain lists
-     * its payout output in a block. An output the contact already spent drops out of that list, so its activity then
-     * stays unconfirmed.
+     * transaction is broadcast or mined, so a contact withdrawal's sent activity is confirmed only once its payout is
+     * in a block. The payout address's unspent outputs show that first; an output missing there, such as one the
+     * contact spent before Bitkit saw it mined, is looked up by its transaction instead.
      */
     private suspend fun confirmMinedPayouts(payments: List<Payment>) {
         payments.filter { it.status == PaymentStatus.COMPLETED && it.paymentType == SparkPaymentType.SEND }
@@ -1033,9 +1035,8 @@ class SparkRepo @Inject constructor(
                     Logger.warn("Failed to look up Spark withdrawal payout '${withdraw.txId}'", it, context = TAG)
                     return@forEach
                 }
-                val isMined = outputs.any {
-                    it.txid == withdraw.txId && it.vout == withdraw.vout && it.confirmations > 0u
-                }
+                val payout = outputs.firstOrNull { it.txid == withdraw.txId && it.vout == withdraw.vout }
+                val isMined = payout?.let { it.confirmations > 0u } ?: (payoutChain.isMined(withdraw.txId) == true)
                 if (isMined) activityRepo.get().upsertActivity(Activity.Onchain(sent.copy(confirmed = true)))
             }
     }
