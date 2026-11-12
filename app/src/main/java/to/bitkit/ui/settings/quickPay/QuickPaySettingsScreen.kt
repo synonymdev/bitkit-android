@@ -1,10 +1,14 @@
 package to.bitkit.ui.settings.quickPay
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -25,28 +29,63 @@ import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.SettingsViewModel
 
 @Composable
 fun QuickPaySettingsScreen(
     onBack: () -> Unit,
-    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    viewModel: QuickPaySettingsViewModel = hiltViewModel(),
 ) {
-    val isQuickPayEnabled by settingsViewModel.isQuickpayEnabled.collectAsStateWithLifecycle()
-    val quickPayAmount by settingsViewModel.quickPayAmount.collectAsStateWithLifecycle()
-    val quickPayDailyLimitMultiplier by settingsViewModel.quickPayDailyLimitMultiplier.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    QuickPaySettingsScreenContent(
-        isQuickPayEnabled = isQuickPayEnabled,
-        quickPayAmount = quickPayAmount,
-        quickPayDailyLimitMultiplier = quickPayDailyLimitMultiplier,
-        onToggleQuickPay = settingsViewModel::setIsQuickPayEnabled,
-        onQuickPayAmountChange = settingsViewModel::setQuickPayAmount,
-        onQuickPayDailyLimitMultiplierChange = settingsViewModel::setQuickPayDailyLimitMultiplier,
-        onBack = onBack,
-    )
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.onAuthorizationCancelled() }
+    }
+
+    Box {
+        QuickPaySettingsScreenContent(
+            isQuickPayEnabled = uiState.isQuickPayEnabled,
+            quickPayAmount = uiState.quickPayAmount,
+            quickPayDailyLimitMultiplier = uiState.quickPayDailyLimitMultiplier,
+            onToggleQuickPay = viewModel::setQuickPayEnabled,
+            onQuickPayAmountChange = viewModel::setQuickPayAmount,
+            onQuickPayDailyLimitMultiplierChange = viewModel::setQuickPayDailyLimitMultiplier,
+            onBack = onBack,
+        )
+        uiState.authorization?.let {
+            QuickPayAuthorizationOverlay(
+                useBiometrics = it.useBiometrics,
+                onCancel = viewModel::onAuthorizationCancelled,
+                onVerified = viewModel::onAuthorized,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.QuickPayAuthorizationOverlay(
+    useBiometrics: Boolean,
+    onCancel: () -> Unit,
+    onVerified: () -> Unit,
+) {
+    BackHandler(onBack = onCancel)
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
+            .blockPointerInputPassthrough()
+    ) {
+        UsdtAuthentication(
+            useBiometrics = useBiometrics,
+            onCancel = onCancel,
+            onVerified = onVerified,
+            pinDescriptionRes = R.string.security__pin_enter,
+        )
+    }
 }
 
 @Composable
