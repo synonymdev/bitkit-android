@@ -2,6 +2,7 @@ package to.bitkit.ui
 
 import android.content.Context
 import app.cash.turbine.test
+import com.synonym.bitkitcore.BoltzSwapEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -141,6 +142,27 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(boltzService).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `swap balance observation survives a retired wallet refresh`() = test {
+        val events = MutableSharedFlow<BoltzSwapEvent>()
+        whenever(boltzService.events).thenReturn(events)
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        var refreshes = 0
+        whenever(walletRepo.syncBalances()).doSuspendableAnswer {
+            if (++refreshes == 1) throw CancellationException("Wallet retired")
+        }
+        sut.ensureSwapUpdatesRunning()
+        runCurrent()
+
+        events.emit(BoltzSwapEvent.Claimed(swapId = "first", txid = "first-transaction"))
+        runCurrent()
+        events.emit(BoltzSwapEvent.Claimed(swapId = "second", txid = "second-transaction"))
+        runCurrent()
+
+        assertEquals(2, refreshes)
     }
 
     @Test
