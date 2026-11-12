@@ -4,6 +4,7 @@ import breez_sdk_spark.CpfpFundingKind
 import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitLeafSelection
+import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.singleKeyCpfpSigner
@@ -384,9 +385,12 @@ class SparkExitRepo @Inject constructor(
         }
         val transferId = record.transferId ?: return
         if (transferRepo.isSettled(transferId).getOrDefault(true)) return
-        // Leaves the operators could not co-sign are still on their way to savings, before and while they are retried:
-        // the transfer keeps counting them, less what already confirmed.
-        if (!record.isActive || (sweepActivity != null && !record.hasLeavesOutstanding)) {
+        // Leaves the operators could not co-sign are still on their way to savings, before and while they are retried,
+        // as are cooperative steps not yet in a block: the transfer keeps counting them, less what already confirmed.
+        val isCooperativePending = record.recovery?.transactions.orEmpty().any {
+            it.kind == RecoveryTxKind.COOPERATIVE && it.status !is ExitTransactionStatus.Confirmed
+        }
+        if (!record.isActive || (sweepActivity != null && !record.hasLeavesOutstanding && !isCooperativePending)) {
             transferRepo.markSettled(transferId)
         }
     }
