@@ -132,7 +132,15 @@ class PubkyProfileTagsNotSavedError(val base: ProfileEditBase, cause: Throwable?
 
 private class PubkyProfileNotFoundError : AppError("Profile not found")
 
-private class SavedProfile(val profile: PubkyProfile, val revision: String, val tagError: Throwable?)
+private class LoadedProfile(val profile: PubkyProfile, val revision: String?, val tagsUnread: Boolean)
+
+private class SavedProfile(
+    val profile: PubkyProfile,
+    val revision: String,
+    val tagsUnread: Boolean?,
+    val tagsReadEpoch: Long?,
+    val tagError: Throwable?,
+)
 
 private class StoredCopy(val tags: List<String>?, val image: String?)
 
@@ -231,6 +239,7 @@ class PubkyRepo @Inject constructor(
     private val adoptedSourceCheckMutex = Mutex()
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
+    private val profileStateLock = Any()
 
     // Held by each own-profile write and by profile deletion, so a deletion waits for the writes under way. The
     // deletion moves the generation on, so a load or save that started before or during it writes nothing after.
@@ -250,7 +259,7 @@ class PubkyRepo @Inject constructor(
     @Volatile
     private var ownProfileRevision: String? = null
 
-    /** Whether the last profile load could not read the Paykit copy, so the shown tags are not the stored ones. */
+    /** Whether the shown tags may omit tags from the Paykit copy. */
     @Volatile
     private var tagsUnavailable = false
 
@@ -883,26 +892,34 @@ class PubkyRepo @Inject constructor(
                     withContext(ioDispatcher) {
                         loadOwnProfile(signIn.publicKey) ?: throw PubkyProfileNotFoundError()
                     }
-                }.onSuccess { (loadedProfile, revision) ->
-                    var isCurrent = false
-                    _profile.update {
-                        isCurrent = isCurrentLoad()
-                        if (isCurrent) loadedProfile else it
+                }.onSuccess { loaded ->
+                    val installed = synchronized(profileStateLock) {
+                        if (!isCurrentLoad()) return@synchronized false
+                        ownProfileRevision = loaded.revision
+                        tagsReadEpoch.incrementAndGet()
+                        tagsUnavailable = loaded.tagsUnread
+                        _profile.value = loaded.profile
+                        true
                     }
-                    if (!isCurrent) {
+                    if (!installed) {
                         Logger.debug("Skipped stale profile load for '${redacted(signIn.publicKey)}'", context = TAG)
                         return@onSuccess
                     }
-                    ownProfileRevision = revision
                     invalidateReadOnlyProfile()
-                    cacheMetadata(loadedProfile, isCurrentLoad)
+                    cacheMetadata(loaded.profile, isCurrentLoad)
                 }.onFailure {
                     Logger.error("Failed to load profile", it, context = TAG)
                     // A profile deleted on pubky.app is set up again rather than left unreachable.
-                    if (it is PubkyProfileNotFoundError && isCurrentLoad()) {
-                        _profile.update { null }
-                        ownProfileRevision = null
-                        settingsStore.setPubkyProfileSetupPending(true)
+                    if (it is PubkyProfileNotFoundError) {
+                        val cleared = synchronized(profileStateLock) {
+                            if (!isCurrentLoad()) return@synchronized false
+                            ownProfileRevision = null
+                            tagsUnavailable = false
+                            tagsReadEpoch.incrementAndGet()
+                            _profile.value = null
+                            true
+                        }
+                        if (cleared) settingsStore.setPubkyProfileSetupPending(true)
                     }
                 }
                 completedProfileSignInGeneration = signIn.generation
@@ -956,8 +973,6 @@ class PubkyRepo @Inject constructor(
                     restoreBase = RestoreBase(prefixedKey, it, revision = null)
                 }
             }
-            tagsReadEpoch.incrementAndGet()
-            tagsUnavailable = paykitRead.isFailure
             PubkyProfile.fromPubkyProfile(prefixedKey, snapshot.profile).copy(tags = paykitData?.tags.orEmpty()).also {
                 restoreBase = RestoreBase(prefixedKey, it, snapshot.revision, tagsUnread = paykitRead.isFailure)
             }
@@ -1001,7 +1016,7 @@ class PubkyRepo @Inject constructor(
                     withContext(ioDispatcher) {
                         val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
                         val saved = publishIdentityProfile(publicKey, name, bio, links, tags, avatarBytes)
-                        finishIdentityCreation(publicKey, saved)
+                        finishIdentityCreation(publicKey, saved) to saved.tagError
                     }
                 }
             }
@@ -1016,7 +1031,7 @@ class PubkyRepo @Inject constructor(
 
                         val saved = publishIdentityProfile(publicKeyZ32, name, bio, links, tags, avatarBytes)
                         shouldRevokeSessionOnFailure = false
-                        finishIdentityCreation(publicKeyZ32, saved)
+                        finishIdentityCreation(publicKeyZ32, saved) to saved.tagError
                     }
                 }
                 if (creationResult.isFailure) revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
@@ -1027,14 +1042,14 @@ class PubkyRepo @Inject constructor(
             }
         }
 
-        val publicKey = result.getOrElse { return Result.failure(it) }
+        val (publicKey, tagError) = result.getOrElse { return Result.failure(it) }
         val signIn = currentSignIn()?.takeIf { it.publicKey == publicKey }
         if (signIn != null) {
             scope.launch {
                 if (isCurrent(signIn)) loadContacts()
             }
         }
-        return Result.success(Unit)
+        return tagError?.let { Result.failure(it) } ?: Result.success(Unit)
     }
 
     private suspend fun createLocalIdentitySession(markSessionCreated: () -> Unit): String {
@@ -1082,15 +1097,13 @@ class PubkyRepo @Inject constructor(
             throw PubkyProfileChangedError(it)
         }
         restoreBase = null
-        saved.tagError?.let { Logger.warn("Created profile without its tag change", it, context = TAG) }
         return saved
     }
 
     private suspend fun finishIdentityCreation(publicKey: String, saved: SavedProfile): String {
         val createdProfile = saved.profile
         startSignIn(publicKey)
-        ownProfileRevision = saved.revision
-        setProfile(createdProfile)
+        installSavedProfile(saved)
         cacheMetadata(createdProfile)
         settingsStore.setPubkyProfileSetupPending(false)
         notifyBackupStateChanged()
@@ -1138,7 +1151,9 @@ class PubkyRepo @Inject constructor(
     }
 
     /** The profile and pubky.app revision an edit starts from; its save is checked against that revision. */
-    fun profileEditBase() = ProfileEditBase(_profile.value, ownProfileRevision, tagsUnavailable)
+    fun profileEditBase() = synchronized(profileStateLock) {
+        ProfileEditBase(_profile.value, ownProfileRevision, tagsUnavailable)
+    }
 
     suspend fun saveProfile(
         name: String,
@@ -1181,9 +1196,7 @@ class PubkyRepo @Inject constructor(
                 throw PubkyProfileChangedError(it)
             }
             // A session change while the save ran leaves the new session's profile alone.
-            if (!isCurrent(signIn)) return@withContext
-            setProfile(saved.profile)
-            ownProfileRevision = saved.revision
+            if (!installSavedProfile(saved, signIn)) return@withContext
             cacheMetadata(saved.profile)
             notifyBackupStateChanged()
             saved.tagError?.let { throw it }
@@ -1353,32 +1366,51 @@ class PubkyRepo @Inject constructor(
         }
         // Tags live only in the Paykit copy, so a changed tag that it does not take is reported.
         val copyData = profile.toProfileData().toPaykitProfile()
-        val writeCopy = suspend {
+        val copyError = writeProfileCopy(keptTags, baseTags) {
             runSuspendCatching { profileWrite(generation) { pubkyService.publishPaykitProfile(copyData, publicKey) } }
                 .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
+                .exceptionOrNull()
         }
-        val copyError = keptTags?.let {
-            copyWriteOrder.withLock {
-                // A copy write left running by an earlier save lands first, so it never overwrites this one.
-                pendingCopyWrite?.join()
-                if (it == baseTags) {
-                    // With no tag change to report, the save does not wait for the copy; a deletion refuses or waits
-                    // for it. Its outcome leaves the unread flag alone, which a load may have set since.
-                    pendingCopyWrite = scope.launch { writeCopy() }
-                    markTagsRead(stored, readEpoch)
-                    null
-                } else {
-                    writeCopy().onSuccess { tagsUnavailable = false }.exceptionOrNull()
-                }
-            }
-        }
-        val saved = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
-        val tagsLost = (keptTags == null || copyError != null) && tags != baseTags
+        val copySaved = keptTags != null && copyError == null
+        val saved = if (copySaved) profile else profile.copy(tags = baseTags)
+        val wroteTags = copySaved && keptTags != baseTags
+        val tagsUnreadAfterSave = unreadTagsAfterCopy(copyUnread, copySaved, stored?.tags != null, wroteTags)
         val tagError = PubkyProfileTagsNotSavedError(
             ProfileEditBase(saved, snapshot.revision, tagsUnread = copyUnread),
             copyError
-        ).takeIf { tagsLost }
-        return SavedProfile(saved, snapshot.revision, tagError)
+        ).takeIf { !copySaved && tags != baseTags }
+        return SavedProfile(saved, snapshot.revision, tagsUnreadAfterSave, readEpoch.takeUnless { wroteTags }, tagError)
+    }
+
+    private fun unreadTagsAfterCopy(
+        copyUnread: Boolean,
+        copySaved: Boolean,
+        readTags: Boolean,
+        wroteTags: Boolean,
+    ): Boolean? = when {
+        !copySaved -> true.takeIf { copyUnread }
+        readTags || wroteTags -> false
+        else -> null
+    }
+
+    private suspend fun writeProfileCopy(
+        tags: List<String>?,
+        baseTags: List<String>,
+        writeCopy: suspend () -> Throwable?,
+    ): Throwable? {
+        if (tags == null) return null
+        return copyWriteOrder.withLock {
+            // A copy write left running by an earlier save lands first, so it never overwrites this one.
+            pendingCopyWrite?.join()
+            if (tags == baseTags) {
+                // With no tag change to report, the save does not wait for the copy; a deletion refuses or waits
+                // for it. Its outcome leaves the unread flag alone, which a load may have set since.
+                pendingCopyWrite = scope.launch { writeCopy() }
+                null
+            } else {
+                writeCopy()
+            }
+        }
     }
 
     /**
@@ -1390,15 +1422,6 @@ class PubkyRepo @Inject constructor(
         val record = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrElse { return null }
         val data = record?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
-    }
-
-    /**
-     * Clears the unread flag after a save read the copy itself and kept its tags in the profile it stores, unless a
-     * load found the copy unreadable since [readEpoch]. A save that writes the copy at once clears it only once that
-     * write succeeds, since a failed one stores the profile without the copy's tags.
-     */
-    private fun markTagsRead(stored: StoredCopy?, readEpoch: Long) {
-        if (stored?.tags != null && tagsReadEpoch.get() == readEpoch) tagsUnavailable = false
     }
 
     /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five valid links. */
@@ -1414,13 +1437,11 @@ class PubkyRepo @Inject constructor(
             .take(PUBKY_APP_LINKS_MAX_COUNT),
     )
 
-    private suspend fun loadOwnProfile(publicKey: String): Pair<PubkyProfile, String?>? {
+    private suspend fun loadOwnProfile(publicKey: String): LoadedProfile? {
         val generation = profileDeletionGeneration.get()
         val saveEpoch = profileSaveEpoch.get()
         val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
             .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
-        tagsReadEpoch.incrementAndGet()
-        tagsUnavailable = paykitRead.isFailure
         val paykitData = paykitRead.getOrNull()?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
         val fetched = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
         if (fetched == null) paykitRead.getOrThrow()
@@ -1429,7 +1450,9 @@ class PubkyRepo @Inject constructor(
         val migrating = fetched == null && !hadPubkyAppProfile
         var snapshot = fetched ?: paykitData?.takeIf { migrating }?.let { migrateToPubkyApp(publicKey, it, generation) }
         // While the move cannot finish, the Bitkit profile is shown and the next save creates the pubky.app profile.
-        snapshot ?: return paykitData?.takeIf { migrating }?.let { it.toPubkyProfile(publicKey) to null }
+        snapshot ?: return paykitData?.takeIf { migrating }?.let {
+            LoadedProfile(it.toPubkyProfile(publicKey), revision = null, tagsUnread = false)
+        }
         val pendingAvatar = paykitData?.image?.takeIf { it.isPaykitStorage() }
         var retryingAvatar = fetched != null && publicKey in stored.pubkyAppAvatarPending
         val avatarMoveSettled = fetched?.profile?.image != null || (paykitRead.isSuccess && pendingAvatar == null)
@@ -1453,7 +1476,7 @@ class PubkyRepo @Inject constructor(
         if (!avatarPending && paykitData != null && paykitData != profile.toProfileData()) {
             publishPaykitProfileCopy(publicKey, profile, generation, saveEpoch)
         }
-        return profile to snapshot.revision
+        return LoadedProfile(profile, snapshot.revision, tagsUnread = paykitRead.isFailure)
     }
 
     private suspend fun migrateToPubkyApp(
@@ -2593,10 +2616,28 @@ class PubkyRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
-    private fun setProfile(profile: PubkyProfile?) {
+    private fun setProfile(profile: PubkyProfile?) = synchronized(profileStateLock) {
         profileWriteGeneration.incrementAndGet()
-        if (profile == null) ownProfileRevision = null
-        _profile.update { profile }
+        if (profile == null) {
+            ownProfileRevision = null
+            tagsUnavailable = false
+        }
+        _profile.value = profile
+    }
+
+    private fun installSavedProfile(
+        saved: SavedProfile,
+        signIn: PubkySignIn? = null,
+    ): Boolean = synchronized(profileStateLock) {
+        if (signIn != null && !isCurrent(signIn)) return@synchronized false
+        ownProfileRevision = saved.revision
+        saved.tagsUnread?.let { unread ->
+            // A completed copy write has the installed tags. A read alone must respect any newer load.
+            val currentRead = saved.tagsReadEpoch == null || tagsReadEpoch.get() == saved.tagsReadEpoch
+            if (unread || currentRead) tagsUnavailable = unread
+        }
+        setProfile(saved.profile)
+        true
     }
 
     private fun startSignIn(publicKey: String, restoringStoredIdentity: Boolean = false) {

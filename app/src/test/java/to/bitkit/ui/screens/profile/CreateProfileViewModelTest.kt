@@ -15,6 +15,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ProfileEditBase
+import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -63,6 +65,29 @@ class CreateProfileViewModelTest : BaseUnitTest() {
         assertEquals(1, effects.size)
         assertEquals(CreateProfileEffect.CreateSuccess, effects.single())
         assertTrue(toasts.isEmpty())
+
+        effectsJob.cancel()
+        toastJob.cancel()
+    }
+
+    @Test
+    fun `save finishes setup and warns when tags could not be saved`() = test {
+        val warning = "Your profile was saved. Try saving the tags again."
+        whenever(context.getString(R.string.profile__edit_tags_error)).thenReturn(warning)
+        whenever(pubkyRepo.createIdentity(any(), any(), any(), any(), anyOrNull()))
+            .thenReturn(Result.failure(PubkyProfileTagsNotSavedError(ProfileEditBase(null, "revision"))))
+        val effects = mutableListOf<CreateProfileEffect>()
+        val toasts = mutableListOf<Toast>()
+        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.onNameChange("Alice")
+        advanceUntilIdle()
+        sut.save()
+        advanceUntilIdle()
+
+        assertEquals(CreateProfileEffect.CreateSuccess, effects.single())
+        assertEquals(warning, toasts.single().title)
 
         effectsJob.cancel()
         toastJob.cancel()
