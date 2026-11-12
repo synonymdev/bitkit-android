@@ -10,6 +10,7 @@ import to.bitkit.models.safe
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.days
 
 /**
@@ -83,9 +84,13 @@ class SparkExitEarlierAddressStore(private val file: File) {
     companion object {
         /** Counts the writes of every wallet's list, so the metadata backup that carries them runs again. */
         val writes = MutableStateFlow(0L)
+
+        /** One lock per file, shared by every store over it, so no writer saves a list read before another's write. */
+        private val locks = ConcurrentHashMap<String, Any>()
     }
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val lock = locks.getOrPut(file.canonicalPath) { Any() }
 
     fun load(): List<SparkExitEarlierAddress> {
         if (!file.exists()) return emptyList()
@@ -97,38 +102,44 @@ class SparkExitEarlierAddressStore(private val file: File) {
      * change at a cancelled exit's address, which a later exit reused, replaces that entry, so it is read for good.
      */
     fun add(entry: SparkExitEarlierAddress): List<SparkExitEarlierAddress> {
-        val known = runCatching { load() }.getOrDefault(emptyList())
-        val existing = known.firstOrNull { it.address == entry.address }
-        val updated = when {
-            existing == null -> known + entry
-            entry.kind == SparkExitEarlierAddress.Kind.KEPT_CHANGE && existing.kind != entry.kind ->
-                known.map { if (it.address == entry.address) entry.copy(sats = entry.sats ?: it.sats) else it }
-            entry.sats == null || entry.sats == existing.sats -> return known
-            else -> known.map { if (it.address == entry.address) it.copy(sats = entry.sats) else it }
+        synchronized(lock) {
+            val known = runCatching { load() }.getOrDefault(emptyList())
+            val existing = known.firstOrNull { it.address == entry.address }
+            val updated = when {
+                existing == null -> known + entry
+                entry.kind == SparkExitEarlierAddress.Kind.KEPT_CHANGE && existing.kind != entry.kind ->
+                    known.map { if (it.address == entry.address) entry.copy(sats = entry.sats ?: it.sats) else it }
+                entry.sats == null || entry.sats == existing.sats -> return known
+                else -> known.map { if (it.address == entry.address) it.copy(sats = entry.sats) else it }
+            }
+            save(updated)
+            return updated
         }
-        save(updated)
-        return updated
     }
 
     /** Sets what [address] holds, writing only when it changed. */
     fun updateSats(address: String, sats: ULong): List<SparkExitEarlierAddress> {
-        val known = runCatching { load() }.getOrDefault(emptyList())
-        if (known.none { it.address == address && it.sats != sats }) return known
-        val updated = known.map { if (it.address == address) it.copy(sats = sats) else it }
-        save(updated)
-        return updated
+        synchronized(lock) {
+            val known = runCatching { load() }.getOrDefault(emptyList())
+            if (known.none { it.address == address && it.sats != sats }) return known
+            val updated = known.map { if (it.address == address) it.copy(sats = sats) else it }
+            save(updated)
+            return updated
+        }
     }
 
     /** Drops [address], such as one a new exit funds again. */
     fun remove(address: String): List<SparkExitEarlierAddress> {
-        val known = runCatching { load() }.getOrDefault(emptyList())
-        if (known.none { it.address == address }) return known
-        val updated = known.filter { it.address != address }
-        save(updated)
-        return updated
+        synchronized(lock) {
+            val known = runCatching { load() }.getOrDefault(emptyList())
+            if (known.none { it.address == address }) return known
+            val updated = known.filter { it.address != address }
+            save(updated)
+            return updated
+        }
     }
 
-    fun delete() {
+    fun delete() = synchronized(lock) {
         check(!file.exists() || file.delete()) { "Failed to delete '${file.name}'" }
     }
 
