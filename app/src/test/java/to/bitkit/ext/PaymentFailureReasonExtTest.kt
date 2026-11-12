@@ -50,6 +50,17 @@ class PaymentFailureReasonExtTest {
     }
 
     @Test
+    fun `a refused pre-restore invoice asks for a new invoice`() {
+        val message = "Please request a new invoice."
+        whenever(context.getString(R.string.wallet__payment_failed_description)).thenReturn("Generic payment failed")
+        whenever(context.getString(R.string.wallet__payment_restored_invoice)).thenReturn(message)
+
+        assertEquals(message, SparkError.RestoredInvoiceUnverified().toSendFailureMessage(context))
+        val wrapped = IllegalStateException(SparkError.RestoredInvoiceUnverified())
+        assertEquals(message, wrapped.toSendFailureMessage(context))
+    }
+
+    @Test
     fun `spark failures show the existing payment failure copy`() {
         val message = "Generic payment failed"
         whenever(context.getString(R.string.wallet__payment_failed_description)).thenReturn(message)

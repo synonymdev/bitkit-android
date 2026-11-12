@@ -131,6 +131,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -2632,6 +2633,60 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a metadata restore keeps spark's backed-up send hashes but holds older invoices until spark lists them`() =
+        test {
+            val publicAddress = "bcrt1qpublic"
+            stubPublicAddressRestore(publicAddress)
+            stubMetadataRestore(
+                envelope = metadataEnvelope(
+                    metadata = listOf(preActivityMetadata()),
+                    cache = AppCacheData(onchainAddress = publicAddress, sparkSendHashes = listOf("hash")),
+                ),
+            )
+
+            sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+            assertEquals(listOf("hash"), cacheData.value.sparkSendHashes)
+            assertNotNull(cacheData.value.sparkHistoryUnseededSince)
+            assertNotNull(cacheData.value.sparkRestoredAt)
+        }
+
+    @Test
+    fun `a restore without a metadata backup still holds older invoices on both rails`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertNotNull(cacheData.value.sparkHistoryUnseededSince)
+        assertNotNull(cacheData.value.ldkHistoryUnseededSince)
+        assertNotNull(cacheData.value.sparkRestoredAt)
+    }
+
+    @Test
+    fun `a metadata restore holds older invoices until the node lists its own sends`() = test {
+        val publicAddress = "bcrt1qpublic"
+        stubPublicAddressRestore(publicAddress)
+        stubMetadataRestore(
+            envelope = metadataEnvelope(
+                metadata = listOf(preActivityMetadata()),
+                cache = AppCacheData(
+                    onchainAddress = publicAddress,
+                    ldkSendHashes = listOf("hash"),
+                    ldkSendHashesSeeded = true,
+                ),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(listOf("hash"), cacheData.value.ldkSendHashes)
+        assertTrue(cacheData.value.ldkSendHashesSeeded)
+        assertNotNull(cacheData.value.ldkHistoryUnseededSince)
+    }
+
+    @Test
     fun `metadata cache failure remains optional after public address quarantine succeeds`() = test {
         val publicAddress = "bcrt1qpublic"
         val reservationStore = stubPublicAddressRestore(publicAddress)
@@ -2639,7 +2694,9 @@ class BackupRepoTest : BaseUnitTest() {
         doAnswer {
             val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
             val updated = transform(cacheData.value)
-            if (failCacheWrite && updated.backupStatuses == cacheData.value.backupStatuses) {
+            // The metadata cache write follows the restore's own write of its holds.
+            val isMetadataWrite = cacheData.value.sparkHistoryUnseededSince != null
+            if (failCacheWrite && isMetadataWrite && updated.backupStatuses == cacheData.value.backupStatuses) {
                 failCacheWrite = false
                 throw BackupRepoTestError("cache store unavailable")
             }
@@ -2655,6 +2712,7 @@ class BackupRepoTest : BaseUnitTest() {
         verify(privatePaykitRepo).restoreBackup(null)
         assertTrue(createReservationRepo(reservationStore).isUnavailableForReusableReceive(publicAddress))
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+        assertFalse(failCacheWrite, "the metadata cache write never failed")
     }
 
     @Test
