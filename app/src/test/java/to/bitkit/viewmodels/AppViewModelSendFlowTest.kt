@@ -18984,6 +18984,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
         )
     }
 
