@@ -168,6 +168,7 @@ import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
+import to.bitkit.ui.navigateToTransferProgress
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -406,6 +407,9 @@ fun HomeScreen(
         },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
+        onTransferBannerClick = sparkState.inProgressDepositTxid?.let { txid ->
+            { rootNavController.navigateToTransferProgress(txid) }
+        },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
         onClickUsdt = { walletNavController.navigateTo(Routes.UsdtWallet) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
@@ -446,6 +450,7 @@ private fun Content(
     onNavigateToActivityItem: (Activity) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
+    onTransferBannerClick: (() -> Unit)? = null,
     onClickHardwareWallet: (String) -> Unit = {},
     onClickUsdt: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
@@ -583,6 +588,7 @@ private fun Content(
                     onNavigateToActivityItem = onNavigateToActivityItem,
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSpending = onNavigateToSpending,
+                    onTransferBannerClick = onTransferBannerClick,
                     onClickHardwareWallet = onClickHardwareWallet,
                     onClickUsdt = onClickUsdt,
                 )
@@ -634,6 +640,7 @@ private fun WalletPage(
     onNavigateToActivityItem: (Activity) -> Unit,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
+    onTransferBannerClick: (() -> Unit)?,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
 ) {
@@ -708,11 +715,15 @@ private fun WalletPage(
                                 .padding(bottom = 16.dp)
                         ) {
                             homeUiState.banners.forEach { banner ->
+                                val isSpending = banner.type == ActivityBannerType.SPENDING
                                 ActivityBanner(
                                     gradientColor = banner.type.color,
                                     title = banner.title,
                                     icon = banner.type.icon,
-                                    modifier = Modifier.fillMaxWidth()
+                                    onClick = onTransferBannerClick.takeIf { isSpending },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag(if (isSpending) "ActivityBanner" else "ActivityBannerSavings")
                                 )
                             }
                         }

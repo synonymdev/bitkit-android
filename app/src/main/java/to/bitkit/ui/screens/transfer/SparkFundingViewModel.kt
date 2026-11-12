@@ -112,6 +112,16 @@ class SparkFundingViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Shows the progress of the deposit in [txid], as when the transfer banner opens it. A deposit no claim is followed
+     * for, as after a relaunch, is added by Spark at 3 confirmations.
+     */
+    fun showDeposit(txid: String) {
+        _uiState.update {
+            it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: SparkDepositClaim.Later)
+        }
+    }
+
     /** Sends from the hardware wallet [walletId] instead of Savings. */
     fun useHardwareWallet(walletId: String) {
         if (_uiState.value.hwWalletId == walletId) return
