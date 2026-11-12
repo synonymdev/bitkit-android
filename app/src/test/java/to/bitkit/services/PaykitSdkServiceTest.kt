@@ -15,6 +15,7 @@ import com.synonym.paykit.PaykitAppCapabilities
 import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
+import com.synonym.paykit.PaykitNoiseKeyAuthorization
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentPayload
@@ -43,6 +44,7 @@ import com.synonym.paykit.PublicContactPaymentResolution
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.PublicPaymentResolutionStatus
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
+import com.synonym.paykit.pubkyAppProfileSessionCapabilities
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -225,7 +227,13 @@ class PaykitSdkServiceTest {
                 }
                 "revision"
             }
-            val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+            val report = PrivatePaymentListDeliveryReport(
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                emptyList(),
+            )
             whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
             val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -393,7 +401,7 @@ class PaykitSdkServiceTest {
         service.setPaymentSubmissionActive(true)
         val caller = launch { wrapper.importShopContacts(listOf(RING_PUBKY), RING_PUBKY) { true } }
         runCurrent()
-        ServiceQueue.CORE.background { }
+        ServiceQueue.PUBKY.background { }
         caller.cancel()
         service.setPaymentSubmissionActive(false)
         caller.join()
@@ -1805,6 +1813,29 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `rejected allowance admission preserves cached backup and version`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.observedBackupStateRevision()).thenReturn(ObservedBackupStateRevision("state", "backup"))
+        whenever { sdk.backupStateRevision() }.thenReturn("backup")
+        whenever { sdk.processPendingPrivateMessages() }.thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        service.processPendingPrivateMessages()
+        val originalVersion = service.backupStateVersion.value
+        val failure = AppError("Admission revoked")
+
+        val thrown = assertFailsWith<AppError> {
+            service.acceptAllowance(RING_PUBKY, "allowance", 1uL) { throw failure }
+        }
+
+        assertSame(failure, thrown)
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        assertEquals(originalVersion, service.backupStateVersion.value)
+        service.processPendingPrivateMessages()
+        verify(sdk, times(1)).backupStateRevision()
+    }
+
+    @Test
     fun `cancelling active acceptance waits for its durable call and preserves backup notification`() = runTest {
         val sdk = mock<PaykitSdk>()
         val releaseAcceptance = CompletableDeferred<Unit>()
@@ -1931,6 +1962,7 @@ class PaykitSdkServiceTest {
         }
         mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
             native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+            native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
             val restoration = async { service.initializeAndImportSession("saved-session") }
             val read = async { service.resolveContactProfile(RING_PUBKY, true) }
             runCurrent()
@@ -1986,6 +2018,7 @@ class PaykitSdkServiceTest {
 
             mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
                 native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
                 if (failure is CancellationException) {
                     assertFailsWith<CancellationException> { service.initializeAndImportSession("saved-session") }
                     assertFailsWith<CancellationException> { service.contactRecords() }
@@ -2039,6 +2072,7 @@ class PaykitSdkServiceTest {
 
             mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
                 native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
                 assertSame(failure, service.initializeAndImportSession("saved-session").exceptionOrNull())
                 verify(sdk, times(1)).initialize()
                 verify(sdk, never()).publishPaykitApp(any(), any())
@@ -2495,7 +2529,7 @@ class PaykitSdkServiceTest {
                 withdrawal.thenThrow(IllegalStateException("network unavailable"))
             } else {
                 withdrawal.thenReturn(
-                    PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList()),
+                    PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
                 )
             }
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -2647,6 +2681,24 @@ class PaykitSdkServiceTest {
             }
             assertTrue(service.resolvePublicContactPayment(RING_PUBKY).payableEndpoints.isEmpty())
         }
+    }
+
+    @Test
+    fun `noise key authorization lookup reports only a missing record as absent`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var failure: Throwable? = null
+        whenever(sdk.paykitNoiseKeyAuthorization(RING_PUBKY)).doSuspendableAnswer {
+            failure?.let { throw it }
+            mock<PaykitNoiseKeyAuthorization>()
+        }
+        assertTrue(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.NotFound("not_found", "No Noise key authorization")
+        assertFalse(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.Transport("transport", "Connection unavailable")
+        assertFailsWith<PaykitException.Transport> { service.hasPaykitNoiseKeyAuthorization(RING_PUBKY) }
     }
 
     @Test
@@ -3313,7 +3365,7 @@ class PaykitSdkServiceTest {
         val sdk = mock<PaykitSdk>()
         val started = CompletableDeferred<Unit>()
         val resume = CompletableDeferred<Unit>()
-        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
         whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(LinkedPeerState.LINKED)))
         whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).doSuspendableAnswer {
             started.complete(Unit)
@@ -3373,7 +3425,7 @@ class PaykitSdkServiceTest {
         whenever(sdk.paykitAppRegistry(RING_PUBKY)).thenReturn(
             PaykitAppRegistry(1u, null, listOf(PaykitApp("bitkit", "Bitkit", capabilities)), null, emptyMap()),
         )
-        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
         val updates = listOf(RING_PUBKY, other).map { PrivatePaymentListReservationUpdateInput(it, emptyList()) }
         whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)).thenReturn(report)
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -3414,6 +3466,7 @@ class PaykitSdkServiceTest {
                 cleared = (if (failRecovery) listOf(other) else keys).map {
                     PrivatePaymentListSyncChange(it, 1uL, null)
                 },
+                acknowledged = emptyList(),
                 failedToQueue = if (failRecovery) {
                     listOf(PrivatePaymentListSyncChange(RING_PUBKY, null, null))
                 } else {

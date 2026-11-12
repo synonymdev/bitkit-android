@@ -304,7 +304,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         )
         whenever(lightningRepo.canReceive()).thenReturn(true)
         PublicPaykitRepo.lightningRouteHintsValidator = { true }
-        whenever(lightningRepo.createInvoice(null, "", 86_400u)).thenReturn(Result.success("ln-new"))
+        whenever(lightningRepo.createInvoice(null, "", 86_400u, true)).thenReturn(Result.success("ln-new"))
         whenever(coreService.decode("ln-new")).thenReturn(Scanner.Lightning(invoice("ln-new")))
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
 
@@ -327,7 +327,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(endpoints.capture(), any()) }
         assertEquals(listOf("ln-new"), endpoints.firstValue.map { it.value })
         assertEquals(listOf("ln-new", usdt.value), endpoints.secondValue.map { it.value })
-        verifyBlocking(lightningRepo, times(1)) { createInvoice(null, "", 86_400u) }
+        verifyBlocking(lightningRepo, times(1)) { createInvoice(null, "", 86_400u, true) }
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
     }
 
@@ -347,7 +347,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                 publicPaykitBolt11PaymentHash = "01",
                 publicPaykitBolt11ExpiresAtMillis = Long.MAX_VALUE,
             )
-            whenever(lightningRepo.createInvoice(null, "", 86_400u))
+            whenever(lightningRepo.createInvoice(null, "", 86_400u, true))
                 .thenReturn(Result.success("ln-first"), Result.success("ln-second"))
             for (bolt11 in listOf("ln-first", "ln-second")) {
                 whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(invoice(bolt11)))
@@ -376,7 +376,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             sut.syncCurrentPublishedEndpoints().getOrThrow()
             assertEquals(listOf(expectedInvoice), published.last(), outcome)
             verifyBlocking(lightningRepo, times(if (outcome == "superseded") 2 else 1)) {
-                createInvoice(null, "", 86_400u)
+                createInvoice(null, "", 86_400u, true)
             }
         }
     }
@@ -401,7 +401,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                 publicPaykitBolt11PaymentHash = "01",
                 publicPaykitBolt11ExpiresAtMillis = Long.MAX_VALUE,
             )
-            whenever(lightningRepo.createInvoice(null, "", 86_400u)).thenReturn(Result.success("ln-refreshed"))
+            whenever(lightningRepo.createInvoice(null, "", 86_400u, true)).thenReturn(Result.success("ln-refreshed"))
             whenever(coreService.decode("ln-refreshed")).thenReturn(Scanner.Lightning(invoice("ln-refreshed")))
             sut.requestLightningRefresh(null) { ownsIdentity }
             repeat(2) {
@@ -450,7 +450,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         val preparing = CompletableDeferred<Unit>()
         val resume = CompletableDeferred<Unit>()
         var invoiceCount = 0
-        whenever(lightningRepo.createInvoice(null, "", 86_400u)).doSuspendableAnswer {
+        whenever(lightningRepo.createInvoice(null, "", 86_400u, true)).doSuspendableAnswer {
             invoiceCount += 1
             if (invoiceCount == 1) {
                 preparing.complete(Unit)
@@ -509,7 +509,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         generation += 1
         assertFalse(sut.hasPendingLightningRefresh)
         sut.syncCurrentPublishedEndpoints().getOrThrow()
-        verifyBlocking(lightningRepo, never()) { createInvoice(any(), any(), any()) }
+        verifyBlocking(lightningRepo, never()) { createInvoice(any(), any(), any(), any()) }
         assertEquals("ln-replacement-session", settingsFlow.value.publicPaykitBolt11)
     }
 

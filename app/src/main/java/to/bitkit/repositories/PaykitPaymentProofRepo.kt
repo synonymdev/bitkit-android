@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.UsdtPaymentProof
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentRequestLifecycleState
@@ -41,10 +42,12 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitRequestPayment
+import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.SparkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
@@ -55,6 +58,7 @@ import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 /** New proof kinds must be readable on both platforms before either platform writes them to a wallet backup. */
 @Serializable
@@ -203,6 +207,15 @@ class PaykitPaymentProofRepo @Inject constructor(
                 ) {
                     throw PaykitPaymentRequestError.RequestUnavailable
                 }
+                paykitSdkService.requirePaymentProofFits(
+                    paymentReference = request.paymentReference,
+                    paymentAppId = paymentAppId,
+                    paymentEndpointIdentifier = paymentEndpointIdentifier,
+                    kind = kind,
+                    billingPeriod = request.billingPeriod,
+                    conversionQuoteId = paymentTerms?.quoteId,
+                    allowanceId = allowanceId,
+                )
                 val read = paykitSdkService.readPaymentRequests(request.counterparty)
                 val identityStatus = read.identityStatus
                 val identity = identityStatus?.publicKey?.let(PubkyPublicKeyFormat::normalized)
@@ -759,9 +772,10 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     suspend fun failLightningPayment(paymentHash: String, submissionError: Throwable): Boolean {
         val error = generateSequence(submissionError) { it.cause }
-            .firstOrNull { it is ServiceError.PaymentDeadlineExpired }
+            .firstOrNull { it is ServiceError.PaymentDeadlineExpired || it is SparkError.SendRefused }
             ?: submissionError.asNodeException() ?: submissionError
         when (error) {
+            is SparkError.SendRefused,
             is NodeNotRunningError,
             is NodeRunTimeoutError,
             is ServiceError.NodeNotSetup,
@@ -1294,25 +1308,52 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (paymentHash == null) return
         val payment = payments.firstOrNull {
             it.direction == PaymentDirection.OUTBOUND && it.id.equals(paymentHash, ignoreCase = true)
-        } ?: return
+        }
+        if (payment == null) {
+            reconcileSparkLightningProof(proof, paymentHash)
+            return
+        }
         when (payment.status) {
             PaymentStatus.PENDING -> Unit
-            PaymentStatus.FAILED -> removeProofsLocked {
-                it.kind == PaykitPaymentProofKind.Lightning &&
-                    it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
+            // A Spark retry of an invoice the node failed shares its hash and decides the payment.
+            PaymentStatus.FAILED -> when (lightningRepo.sparkLightningSend(paymentHash)) {
+                is SparkLightningSend.Found -> reconcileSparkLightningProof(proof, paymentHash)
+                SparkLightningSend.Unavailable -> Unit
+                SparkLightningSend.NotFound -> removeLightningProofsLocked(paymentHash)
             }
-            PaymentStatus.SUCCEEDED -> {
-                val preimage = (payment.kind as? PaymentKind.Bolt11)?.preimage
-                if (preimage != null && preimage.matchesPaymentHash(paymentHash)) {
-                    val completed = proof.copy(proofData = preimage.lowercase())
-                    val proofs = loadProofs().toMutableList()
-                    val index = proofs.indexOf(proof)
-                    if (index >= 0) {
-                        proofs[index] = completed
-                        persistAndSubmit(listOf(completed), proofs)
-                    }
-                }
-            }
+            PaymentStatus.SUCCEEDED -> completeLightningProofLocked(
+                proof,
+                paymentHash,
+                (payment.kind as? PaymentKind.Bolt11)?.preimage,
+            )
+        }
+    }
+
+    private suspend fun reconcileSparkLightningProof(proof: PendingPaykitPaymentProof, paymentHash: String) {
+        val send = lightningRepo.sparkLightningSend(paymentHash) as? SparkLightningSend.Found ?: return
+        when (send.status) {
+            SparkPaymentStatus.PENDING -> Unit
+            SparkPaymentStatus.FAILED -> removeLightningProofsLocked(paymentHash)
+            SparkPaymentStatus.COMPLETED -> completeLightningProofLocked(proof, paymentHash, send.preimage)
+        }
+    }
+
+    private suspend fun removeLightningProofsLocked(paymentHash: String) = removeProofsLocked {
+        it.kind == PaykitPaymentProofKind.Lightning && it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
+    }
+
+    private suspend fun completeLightningProofLocked(
+        proof: PendingPaykitPaymentProof,
+        paymentHash: String,
+        preimage: String?,
+    ) {
+        if (preimage == null || !preimage.matchesPaymentHash(paymentHash)) return
+        val completed = proof.copy(proofData = preimage.lowercase())
+        val proofs = loadProofs().toMutableList()
+        val index = proofs.indexOf(proof)
+        if (index >= 0) {
+            proofs[index] = completed
+            persistAndSubmit(listOf(completed), proofs)
         }
     }
 
@@ -1682,6 +1723,70 @@ private fun proofJson(kind: PaykitPaymentProofKind, data: String): String {
         put("data", JsonPrimitive(data))
         put("type", JsonPrimitive(kind.type))
     }.toString()
+}
+
+/** Hex length of the 32-byte preimage or transaction id a Bitcoin proof carries. */
+private const val BITCOIN_PROOF_DATA_LENGTH = 64
+
+/** Hex digits of a 32-byte ERC-20 transaction hash after its `0x` prefix. */
+private const val USDT_TRANSACTION_HASH_DIGITS = 64
+
+/** Hex digits of a 65-byte EIP-712 signature after its `0x` prefix. */
+private const val USDT_SIGNATURE_DIGITS = 130
+
+/** The largest uint256 receipt log index, the longest one the SDK accepts in an ERC-20 proof. */
+internal const val USDT_MAX_RECEIPT_LOG_INDEX =
+    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+
+/** The longest proof Bitkit submits for this kind, so a measured proof is never shorter than the one sent. */
+internal fun PaykitPaymentProofKind.longestProofJson(): String = when (this) {
+    PaykitPaymentProofKind.Usdt -> Json.encodeToString(
+        PaykitUsdtProof.serializer(),
+        PaykitUsdtProof(
+            UsdtPaymentProof(
+                chainId = PaykitUsdt.CHAIN_ID,
+                transactionHash = "0x" + "0".repeat(USDT_TRANSACTION_HASH_DIGITS),
+                receiptLogIndex = USDT_MAX_RECEIPT_LOG_INDEX,
+                signature = "0x" + "0".repeat(USDT_SIGNATURE_DIGITS),
+            ),
+        ),
+    )
+    PaykitPaymentProofKind.Lightning, PaykitPaymentProofKind.Onchain ->
+        proofJson(this, "0".repeat(BITCOIN_PROOF_DATA_LENGTH))
+}
+
+/** Log context for measuring a Payment Proof before payment. */
+private const val PROOF_SIZE_TAG = "PaykitProofSize"
+
+/**
+ * Fails with [PaykitPaymentRequestError.RequestUnavailable] when the longest proof of [kind] for these values would
+ * not fit one Private Application Message, or cannot be measured, so nothing is paid for a proof that could never be
+ * delivered.
+ */
+internal fun PaykitSdkService.requirePaymentProofFits(
+    paymentReference: String,
+    paymentAppId: String,
+    paymentEndpointIdentifier: String,
+    kind: PaykitPaymentProofKind,
+    billingPeriod: PaykitBillingPeriod?,
+    conversionQuoteId: String?,
+    allowanceId: String?,
+) {
+    val length = runCatching {
+        paymentProofEventLength(
+            paymentReference = paymentReference,
+            paymentAppId = paymentAppId,
+            paymentEndpointIdentifier = paymentEndpointIdentifier,
+            proofJson = kind.longestProofJson(),
+            billingPeriod = billingPeriod,
+            conversionQuoteId = conversionQuoteId,
+            allowanceId = allowanceId,
+        )
+    }.getOrElse {
+        Logger.warn("Failed to measure a Paykit payment proof", it, context = PROOF_SIZE_TAG)
+        throw PaykitPaymentRequestError.RequestUnavailable
+    }
+    if (length > PaykitSdkService.MAX_MESSAGE_BYTES.toUInt()) throw PaykitPaymentRequestError.RequestUnavailable
 }
 
 private fun String.proofValues(): JsonObject? = runCatching { Json.parseToJsonElement(this).jsonObject }.getOrNull()

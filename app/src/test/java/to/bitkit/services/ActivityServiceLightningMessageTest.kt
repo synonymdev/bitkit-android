@@ -108,6 +108,37 @@ class ActivityServiceLightningMessageTest : BaseUnitTest() {
         assertEquals(PaymentState.SUCCEEDED, stored.status)
     }
 
+    @Test
+    fun `payment sync keeps a pending spark retry over the channel's earlier failure`() = coreTest {
+        val retry = sent(status = PaymentState.PENDING, message = "").copy(timestamp = 300uL, updatedAt = 300uL)
+        row = Activity.Lightning(retry)
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkSendHashes = listOf(HASH))))
+
+        sut().syncLdkNodePaymentsToActivities(listOf(payment().copy(status = PaymentStatus.FAILED)))
+
+        assertEquals(PaymentState.PENDING, (row as Activity.Lightning).v1.status)
+    }
+
+    @Test
+    fun `payment sync fails a node send whose row was written after the node failed it`() = coreTest {
+        row = Activity.Lightning(sent(status = PaymentState.PENDING, message = "").copy(updatedAt = 300uL))
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+
+        sut().syncLdkNodePaymentsToActivities(listOf(payment().copy(status = PaymentStatus.FAILED)))
+
+        assertEquals(PaymentState.FAILED, (row as Activity.Lightning).v1.status)
+    }
+
+    @Test
+    fun `payment sync still fails the node's own earlier pending attempt`() = coreTest {
+        row = Activity.Lightning(sent(status = PaymentState.PENDING, message = ""))
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+
+        sut().syncLdkNodePaymentsToActivities(listOf(payment().copy(status = PaymentStatus.FAILED)))
+
+        assertEquals(PaymentState.FAILED, (row as Activity.Lightning).v1.status)
+    }
+
     private fun coreTest(block: suspend () -> Unit) = test {
         ServiceQueue.CORE.background {
             mockStatic(Class.forName(BITKIT_CORE_FFI_CLASS)).use { native ->

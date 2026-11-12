@@ -20,6 +20,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.OnchainSendAttemptStore
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.test.LocalRegtest
 import to.bitkit.test.annotations.CoreServiceIntegration
 import to.bitkit.test.annotations.DeviceIntegration
 import to.bitkit.test.awaitSpendableDeposits
@@ -37,9 +38,6 @@ class PreparedOnchainRecoveryFixtureTest {
 
     @Inject
     lateinit var lightningService: LightningService
-
-    @Inject
-    lateinit var coreService: CoreService
 
     @Inject
     lateinit var keychain: Keychain
@@ -110,9 +108,9 @@ class PreparedOnchainRecoveryFixtureTest {
             lightningService.start()
             lightningService.sync()
             val depositAddress = lightningService.newAddress()
-            coreService.blocktank.regtestMine(1u)
-            val fundingTxId = coreService.blocktank.regtestDeposit(depositAddress, 100_000uL)
-            coreService.blocktank.regtestMine(6u)
+            LocalRegtest.mine(1u)
+            val fundingTxId = LocalRegtest.deposit(depositAddress, 100_000uL)
+            LocalRegtest.mine(6u)
             lightningService.awaitSpendableDeposits(mapOf(fundingTxId to 100_000uL))
             val recipient = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
             val isMax = InstrumentationRegistry.getArguments().getString("recoveryMode") == "max"

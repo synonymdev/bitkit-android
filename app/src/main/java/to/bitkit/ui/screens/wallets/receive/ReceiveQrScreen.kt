@@ -11,10 +11,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -77,6 +78,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
@@ -96,7 +98,30 @@ import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.screenHeight
+import to.bitkit.ui.utils.screenWidth
 import to.bitkit.ui.utils.withAccent
+
+/** The Spending onboarding card's height against the screen's, as Figma draws it 343 pt tall on an 812 pt screen. */
+private const val CJIT_CARD_SCREEN_SHARE = 343f / 812f
+
+/** The gap from the onboarding card's bottom to the button's top, as Figma's 122 pt on an 812 pt screen. */
+private const val CJIT_CARD_BOTTOM_GAP_SHARE = 122f / 812f
+
+/** The spacing the screen already keeps above its bottom button. */
+private val BUTTON_TOP_SPACING = 24.dp
+
+/** The arrow under the onboarding card, as iOS draws it: 210 pt tall on an 874 pt screen. */
+private const val CJIT_ARROW_HEIGHT_SHARE = 210f / 874f
+
+/** The arrow's offset from the card's bottom left, as iOS's 70 pt on a 402 pt wide screen. */
+private const val CJIT_ARROW_X_SHARE = 70f / 402f
+
+/** The arrow's drop below the card's bottom, as iOS's 110 pt on an 874 pt screen. */
+private const val CJIT_ARROW_Y_SHARE = 110f / 874f
+
+/** Screens shorter than this leave out the arrow, as iOS does on its small screens. */
+private val CJIT_ARROW_MIN_SCREEN_HEIGHT = 800.dp
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -122,6 +147,7 @@ fun ReceiveQrScreen(
     onVerifyHardwareAddress: () -> Unit = {},
     showPaymentRequestContacts: Boolean = false,
     onClickPaymentRequestContacts: () -> Unit = {},
+    canReceiveWithSpark: Boolean = false,
 ) {
     SetMaxBrightness()
 
@@ -134,8 +160,9 @@ fun ReceiveQrScreen(
         hasReadyChannels,
         readyInboundLiquiditySats,
         walletState.bip21AmountSats,
+        canReceiveWithSpark,
     ) {
-        ReceiveLiquidityDecision.canCreateLightningInvoice(
+        canReceiveWithSpark || ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = hasReadyChannels,
             inboundCapacitySats = readyInboundLiquiditySats,
             invoiceAmountSats = walletState.bip21AmountSats,
@@ -294,9 +321,8 @@ fun ReceiveQrScreen(
         }
     }
 
-    val showingCjitOnboarding = remember(lightningState, canCreateLightningInvoice) {
-        !canCreateLightningInvoice && lightningState.nodeLifecycleState.isRunning()
-    }
+    // Shown while the node starts too, with its button disabled until the node runs.
+    val showingCjitOnboarding = !canCreateLightningInvoice
 
     fun selectReceiveTab(tab: ReceiveTab) {
         val wrapsToFirst = selectedTab == visibleTabs.last() && tab == visibleTabs.first()
@@ -422,9 +448,19 @@ fun ReceiveQrScreen(
                     ) {
                         when {
                             showingCjitOnboarding && tab == ReceiveTab.SPENDING -> {
-                                CjitOnBoardingView(
-                                    modifier = Modifier.weight(1f)
-                                )
+                                Box(
+                                    contentAlignment = Alignment.BottomCenter,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                ) {
+                                    CjitOnBoardingView(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(screenHeight() * CJIT_CARD_SCREEN_SHARE)
+                                    )
+                                }
+                                VerticalSpacer(screenHeight() * CJIT_CARD_BOTTOM_GAP_SHARE - BUTTON_TOP_SPACING)
                             }
 
                             tab == ReceiveTab.HARDWARE && hardwareReceiveState.address == null -> {
@@ -491,7 +527,7 @@ fun ReceiveQrScreen(
                 }
             }
 
-            VerticalSpacer(24.dp)
+            VerticalSpacer(BUTTON_TOP_SPACING)
 
             val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
             val buttonVariant = when {
@@ -517,6 +553,7 @@ fun ReceiveQrScreen(
                             onClickReceiveCjit()
                             showDetails = false
                         },
+                        enabled = lightningState.nodeLifecycleState.isRunning(),
                         fullWidth = true,
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
@@ -702,42 +739,41 @@ fun ReceiveQrView(
 
 @Composable
 fun CjitOnBoardingView(modifier: Modifier = Modifier) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .clip(AppShapes.small)
-            .background(color = Colors.Black)
-            .padding(32.dp)
-    ) {
-        Display(stringResource(R.string.wallet__receive_onboarding_title).withAccent(accentColor = Colors.Purple))
-        VerticalSpacer(8.dp)
-        BodyM(
-            stringResource(R.string.wallet__receive_onboarding_description),
-            color = Colors.White64,
-            modifier = Modifier.fillMaxWidth()
-        )
-        VerticalSpacer(32.dp)
-        Box(
+    val screenHeight = screenHeight()
+    Box(modifier = modifier) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
+                .fillMaxSize()
+                .testTag("ReceiveSpendingCard")
+                .clip(AppShapes.small)
+                .background(color = Colors.Black)
+                .padding(32.dp)
         ) {
+            Display(stringResource(R.string.wallet__receive_onboarding_title).withAccent(accentColor = Colors.Purple))
+            VerticalSpacer(8.dp)
+            BodyM(
+                stringResource(R.string.wallet__receive_onboarding_description),
+                color = Colors.White64,
+                modifier = Modifier.fillMaxWidth()
+            )
+            FillHeight()
             Icon(
                 painter = painterResource(R.drawable.ic_lightning_alt),
                 tint = Colors.Purple,
                 contentDescription = null,
-                modifier = Modifier
-                    .size(64.dp)
-                    .align(Alignment.TopCenter)
+                modifier = Modifier.size(64.dp)
             )
+        }
+        if (screenHeight >= CJIT_ARROW_MIN_SCREEN_HEIGHT) {
             Icon(
                 painter = painterResource(R.drawable.arrow),
                 tint = Colors.Purple,
                 contentDescription = null,
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 32.dp)
-                    .fillMaxHeight()
+                    .align(Alignment.BottomStart)
+                    .offset(x = screenWidth() * CJIT_ARROW_X_SHARE, y = screenHeight * CJIT_ARROW_Y_SHARE)
+                    .height(screenHeight * CJIT_ARROW_HEIGHT_SHARE)
             )
         }
     }

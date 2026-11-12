@@ -1,0 +1,29 @@
+<journey name="spark transfer to spending">
+  <description>
+    Verifies the transfer to spending flow on Spark. With Spark ready, the Spending suggestion card opens the
+    "Spending Balance" intro once, then Funding, which leads with "Transfer From Savings" (testTag "FundTransfer")
+    and "Use Other Wallet" (testTag "FundReceive") above "Manual Setup" (testTag "FundManual"). Transfer from
+    Savings opens the "Transfer to spending" intro once, then the amount screen (testTag "SpendingAmount"). The
+    confirm screen shows "Network fees", "Spending fee", "To spending" and "Total", and the Instant and Later rows:
+    Both rows show their fee as "±" in sats and fiat, and picking a row updates the Spending fee and To spending
+    tiles. Learn more explains Instant and Later. Whether the provider offers Instant needs a real deposit Spark
+    sees, so this journey stops before the swipe; the states after it are covered by SettingUpScreen previews and
+    SparkRepoTest.
+
+    Precondition: dev build with Spark connected on its regtest (no key needed), built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), a freshly onboarded wallet (so
+    neither intro has been seen) with a positive on-chain Savings balance and no channels, and the Spending
+    suggestion card on Home. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Spending suggestion card and verify the "Spending Balance" intro opens; tap "Get Started" (testTag "TransferIntro-button")</action>
+    <action>Verify "Transfer From Savings" (testTag "FundTransfer") and "Use Other Wallet" (testTag "FundReceive") are enabled above "Manual Setup" (testTag "FundManual")</action>
+    <action>Tap "Transfer From Savings" and verify the "Transfer to spending" intro opens; tap "Get Started" (testTag "SpendingIntro-button")</action>
+    <action>Verify the amount screen (testTag "SpendingAmount") opens and wait until the available amount (testTag "SpendingAmountAvailable") shows a positive value</action>
+    <action>Tap "25%" (testTag "SpendingAmountQuarter") and verify the amount is a quarter of the available amount; tap "Max" (testTag "SpendingAmountMax") and verify it equals the available amount</action>
+    <action>Tap "Continue" (testTag "SpendingAmountContinue") and verify the confirm screen shows "Network fees", "Spending fee", "To spending" and "Total", with "Instant" (testTag "SpendingConfirmInstant") selected and its fee shown as "±"</action>
+    <action>Tap "Later" (testTag "SpendingConfirmLater") and verify the Spending fee shows "±" with a lower amount and "To spending" grows by the difference</action>
+    <action>Tap "Learn More" (testTag "SpendingConfirmMore"), verify the "Transfer speed" screen with the spending balance bar, and tap "Understood" (testTag "LiquidityContinue")</action>
+    <action>Verify the confirm screen still shows Later selected; go back to the wallet home</action>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending") and verify the amount screen opens directly, with no intro</action>
+  </actions>
+</journey>

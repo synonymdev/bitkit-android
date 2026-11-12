@@ -28,8 +28,14 @@ class PubkyStore @Inject constructor(
         store.updateData(transform)
     }
 
+    /** Clears the session's data but keeps the migration history, so a profile deleted on pubky.app stays deleted. */
     suspend fun reset() {
-        store.updateData { PubkyStoreData() }
+        store.updateData {
+            PubkyStoreData(
+                pubkyAppProfileOwners = it.pubkyAppProfileOwners,
+                pubkyAppAvatarPending = it.pubkyAppAvatarPending,
+            )
+        }
     }
 }
 
@@ -41,6 +47,10 @@ data class PubkyStoreData(
     val cachedName: String? = null,
     val cachedImageUri: String? = null,
     val contactProfileOverrides: Map<String, PubkyProfileData> = emptyMap(),
+    /** Identities Bitkit has seen a pubky.app profile for, so a profile deleted there is not moved back from Bitkit. */
+    val pubkyAppProfileOwners: Set<String> = emptySet(),
+    /** Identities whose Bitkit avatar is still to be moved to pubky.app, retried on each profile load. */
+    val pubkyAppAvatarPending: Set<String> = emptySet(),
 ) {
     fun cachedProfile(): PubkyCachedProfile? = cachedProfileOwner?.let {
         PubkyCachedProfile(publicKey = it, name = cachedName.orEmpty(), imageUri = cachedImageUri)

@@ -4,7 +4,7 @@ updates:
   - package-ecosystem: npm
     directory: /tools/fcm-tester
     schedule:
-      interval: monthly
+      interval: weekly
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
@@ -21,7 +21,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
     open-pull-requests-limit: 5
     commit-message:
       prefix: ci
@@ -41,7 +41,7 @@ updates:
   - package-ecosystem: gradle
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
@@ -57,6 +57,9 @@ updates:
       - dependency-name: "com.google.devtools.ksp*"
       - dependency-name: "com.github.skydoves.compose.stability.analyzer*"
       - dependency-name: "androidx.compose:compose-bom"
+      # Navigation 2.10 breaks predictive back transitions (wrong pair, then a snap); stay on 2.9.x.
+      - dependency-name: "androidx.navigation:*"
+        versions: [">= 2.10.0"]
     groups:
       gradle:
         patterns:
