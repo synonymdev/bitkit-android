@@ -1169,6 +1169,22 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `throwing conversion on a fresh pay emits an error and does not pay`() = test {
+        val (bolt11, _) = testInvoice()
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer { throw AppError("rates unavailable") }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val error = assertIs<QuickPaySessionEvent.Error>(awaitItem())
+            assertIs<AppError>(error.error)
+            assertEquals(bolt11, error.paymentRequest)
+        }
+        assertEquals(0L, spentCents())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+    }
+
+    @Test
     fun `disabled quickpay does not fetch an lnurl invoice`() = test {
         settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
         val request = QuickPayPayRequest.LnurlPay(data = testLnurlPayData(), amountSats = 500u)
