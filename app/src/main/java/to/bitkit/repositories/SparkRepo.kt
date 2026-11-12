@@ -1469,16 +1469,16 @@ class SparkRepo @Inject constructor(
 
     /**
      * Whether the Spark operators confirm this wallet never sent [bolt11] over Lightning, and it can't have been paid
-     * by a direct Spark transfer, which they don't see: false when they show a send, completed, pending or failed, or
-     * can't be asked.
+     * by a direct Spark transfer, which they don't see: false when they show a send completed or pending, or can't be
+     * asked. A failed one counts as unsent, as they show it failed only once every attempt at the hash was returned.
      */
     private suspend fun isUnsentPerOperators(bolt11: String): Boolean {
         if (!sparkService.isConnected) return false
         val status = runSuspendCatching { sparkService.lightningSendStatus(bolt11) }
             .onFailure { Logger.warn("Failed to fetch Spark's send status", it, context = TAG) }
             .getOrElse { return false }
-        if (status != null) {
-            Logger.info("Spark's operators show a '$status' send of the pre-restore invoice", context = TAG)
+        if (status != null && status != PaymentStatus.FAILED) {
+            Logger.info("Found a '$status' Spark operator send of the pre-restore invoice", context = TAG)
             return false
         }
         // A send preferring Spark pays an invoice's Spark address as a direct transfer.
@@ -1567,8 +1567,8 @@ class SparkRepo @Inject constructor(
     }
 
     /**
-     * Seeds the restored send hashes from Spark's list once it has synced. This ends only the wait for Spark's first
-     * listing: an older invoice Spark hasn't listed stays refused until it expires.
+     * Seeds the restored send hashes from Spark's list once it has synced. An older invoice Spark hasn't listed is
+     * still refused until the Spark operators show it unsent or failed, or it expires.
      */
     private suspend fun seedRestoredSendHashes() {
         if (cacheStore.data.first().sparkHistoryUnseededSince == null || !canListPayments()) return

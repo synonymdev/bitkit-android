@@ -1903,6 +1903,28 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a redo hold built from the held funding drops the fee ask the top-up was for`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(2) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1"))) }
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        record = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        val requests = sdk.recoverRequests.size
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(requests + 1, sdk.recoverRequests.size, "the held funding did not build the rebuild")
+        assertEquals(1, record.generation, "a rebuild left out leaf-2's steps the diverged generation recovers")
+        assertEquals(Phase.Running, record.phase, "a hold the held funding paid for still asks for fees")
+        assertNull(record.fundingShortfallSats)
+        assertEquals(1_000u, record.redoHeldSince)
+    }
+
+    @Test
     fun `an empty prepare during a redo hold leaves the retry clock alone`() = test {
         var record = divergedOverTwoLeaves()
         sdk.preparedResponse = leaf2Unread
