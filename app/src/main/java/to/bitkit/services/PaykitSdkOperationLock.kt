@@ -188,10 +188,7 @@ internal class PaykitSdkOperationLock(
         val waiter = synchronized(stateLock) {
             // An ordinary caller may have suspended after admission while holding an outer repository mutex.
             // Never enqueue it behind the wipe that could now be draining that mutex.
-            admittedGeneration?.let {
-                checkAvailable()
-                if (it != generation) throw wipeError()
-            }
+            admittedGeneration?.let(::checkAdmitted)
             if (!isLocked) {
                 isLocked = true
                 return

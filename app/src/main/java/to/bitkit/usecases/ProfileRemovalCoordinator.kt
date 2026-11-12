@@ -215,8 +215,18 @@ class ProfileRemovalCoordinator @Inject constructor(
             withContext(intent.logout) {
                 pubkyRepo.validateProfileLogout(intent.logout)
                 val fresh = pubkyRepo.prepareProfileDeletion(previous.owner).getOrThrow()
-                val confirmed = checkNotNull(previous.reviewCeiling.get()).snapshot
+                val prior = checkNotNull(previous.reviewCeiling.get())
+                val confirmed = prior.snapshot
                 val remaining = fresh.snapshot
+                check(fresh.deletePubkyProfile == prior.deletePubkyProfile) { "Profile ownership changed" }
+                check(
+                    fresh.pubkyProfileRevision == null ||
+                        (
+                            !prior.pubkyProfileAcknowledged.get() &&
+                                fresh.pubkyProfileRevision == prior.pubkyProfileRevision
+                            )
+                ) { "The profile changed after confirmation. Disconnect locally to finish cleanup." }
+                fresh.pubkyProfileAcknowledged.set(prior.pubkyProfileAcknowledged.get())
                 check(remaining.publicKey == confirmed.publicKey) { "The profile identity changed" }
                 check(remaining.profileRevision == null || remaining.profileRevision == confirmed.profileRevision) {
                     "The profile changed after confirmation. Disconnect locally to finish cleanup."

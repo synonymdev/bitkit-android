@@ -29,7 +29,13 @@ internal class ProfileRemovalUiFixture(val pubky: PubkyRepo) {
     var admissionFailure: Throwable? = null
     val pause = PrivatePaykitRepo.ProfileDeletionPause()
     val deletion =
-        PubkyProfileDeletion(original, 1, PaykitProfileDeletionSnapshot("pubkyalice", "revision", emptyList()))
+        PubkyProfileDeletion(
+            original,
+            1,
+            PaykitProfileDeletionSnapshot("pubkyalice", "revision", emptyList()),
+            false,
+            null
+        )
     val coordinator = ProfileRemovalCoordinator(pubky, privateRepo, sharing, store)
 
     fun setup() {

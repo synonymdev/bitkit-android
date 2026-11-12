@@ -2,7 +2,8 @@
 
 These journeys exercise the "block numberpad input exceeding the max/available amount"
 behaviour added on `fix/block-input-over-max`. The same `AmountInputViewModel.setMaxAmount` +
-`MaxExceeded` effect path backs both amount-entry screens (Send, External node).
+`MaxExceeded` effect path backs all three amount-entry screens (Send, Transfer→Spending,
+External node).
 
 ## What the feature does
 - Typing a digit that would push the amount **over the cap is rejected** — the display stays at
@@ -19,7 +20,11 @@ behaviour added on `fix/block-input-over-max`. The same `AmountInputViewModel.se
    - Fund + mine via the `lsp` skill:
      `./lsp POST /regtest/chain/deposit '{"address":"<addr>","amountSat":100000}'`
      then `./lsp POST /regtest/chain/mine '{"count":3}'` and wait for the balance to sync.
-2. **External-node flow needs a reachable LN peer.** The staging LSP node works as the peer:
+2. **Transfer→Spending needs Spark connected** so the most Savings can send to the Spark deposit
+   address can be priced. On regtest it also needs a build with `ESPLORA_URL` on Spark's regtest chain
+   (`scripts/spark-regtest-esplora.py`); without it the Transfer Unavailable sheet opens. The number pad is disabled until that max loads — **wait for it** before
+   typing.
+3. **External-node flow needs a reachable LN peer.** The staging LSP node works as the peer:
    id `028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc`,
    host `34.65.86.104`, port `9400` (from `./lsp GET /info`).
 
@@ -40,6 +45,21 @@ behaviour added on `fix/block-input-over-max`. The same `AmountInputViewModel.se
 - Send: screen `send_amount_screen`, field `SendNumberField`, available `available_balance`,
   max `SendAmountMax`, continue `ContinueAmount`; recipient `RecipientManual` / `RecipientInput`
   / `AddressContinue`; home Send button `Send`.
+- Transfer→Spending: screen `SpendingAmount`, field `SpendingAmountNumberField`,
+  available `SpendingAmountAvailable`, 25% `SpendingAmountQuarter`, max `SpendingAmountMax`,
+  continue `SpendingAmountContinue`.
 - External: funding `FundManual`; connection `NodeIdInput`/`HostInput`/`PortInput`/`ExternalContinue`;
   amount screen `ExternalAmount`, field `ExternalAmountNumberField`, 25% `ExternalAmountQuarter`,
   max `ExternalAmountMax`, continue `ExternalAmountContinue`.
+
+## Spending immediately after a Lightning receipt
+
+`send-spending-after-receive.xml` covers the Android channel-cache regression. A usable channel can
+retain its old outbound limit after a receipt even though the displayed Spending balance is fresh.
+Opening an amountless invoice must refresh that channel snapshot before deriving the input limit.
+The existing `@send_2` fixture in `synonymdev/bitkit-e2e-tests` prepares a fresh local LND channel,
+receives 10 000 sats, checks rejection of 10 001, then exercises normal payments and reentry. Keep
+its toast and retained-field assertions; an additional rejected digit can hide the original failure.
+
+This fixes Android repository state publication; no feature is being ported and iOS source is
+unchanged. The shared Send2 case already asserts the same over-limit behavior on iOS.

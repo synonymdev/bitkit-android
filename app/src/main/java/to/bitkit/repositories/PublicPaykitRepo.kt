@@ -591,6 +591,7 @@ class PublicPaykitRepo @Inject constructor(
             amountSats = null,
             description = "",
             expirySeconds = publicBolt11Expiry.inWholeSeconds.toUInt(),
+            isContactEndpoint = true,
         ).getOrThrow()
         val invoice = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
             ?: throw PublicPaykitError.InvalidPayload

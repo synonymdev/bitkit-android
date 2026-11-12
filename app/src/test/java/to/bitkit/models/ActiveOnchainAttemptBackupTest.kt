@@ -1,5 +1,6 @@
 package to.bitkit.models
 
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Test
@@ -10,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private val lenientJson = Json { ignoreUnknownKeys = true }
 
@@ -139,6 +141,20 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
         assertEquals(1000uL, restored.amountSats)
         assertEquals(restored.amountSats, restored.transferContext?.originalOrderFeeSats)
         assertEquals(wire.copy(amountSats = "1000"), ActiveOnchainAttemptBackup.from(restored, "regtest", binding))
+    }
+
+    @Test
+    fun `a spark funding keeps its transfer flag through a backup`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
+            .copy(requestId = null, payerIdentity = null, status = "pending")
+        val funding = wire.restored("regtest", binding, "wallet0", 0).copy(isTransfer = true)
+        assertTrue(funding.isSparkFunding)
+
+        val backup = json.decodeFromString<ActiveOnchainAttemptBackup>(
+            json.encodeToString(ActiveOnchainAttemptBackup.from(funding, "regtest", binding))
+        )
+
+        assertTrue(backup.restored("regtest", binding, "wallet0", 0).isSparkFunding, "a restored funding lost its flag")
     }
 
     @Test

@@ -19,6 +19,7 @@ import com.synonym.paykit.PaykitAppCapabilities
 import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
+import com.synonym.paykit.PaykitNoiseKeyAuthorization
 import com.synonym.paykit.PaykitProfileRecord
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
@@ -52,6 +53,7 @@ import com.synonym.paykit.PublicContactPaymentResolution
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.PublicPaymentResolutionStatus
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
+import com.synonym.paykit.pubkyAppProfileSessionCapabilities
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -680,6 +682,34 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `pubky profile acknowledgement survives cancellation during native deletion`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.paymentRequests()).thenReturn(emptyList())
+        whenever(sdk.identityStatus()).thenReturn(
+            IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
+        )
+        val release = CompletableDeferred<Unit>()
+        whenever(sdk.deletePubkyProfile("confirmed")).doSuspendableAnswer { release.await() }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var acknowledged = false
+        val removal = launch {
+            service.withProfileRemoval({ true }) {
+                service.deletePubkyProfile("confirmed", RING_PUBKY) { acknowledged = true }
+            }
+        }
+        runCurrent()
+        removal.cancel()
+        assertFalse(removal.isCompleted)
+        assertFalse(acknowledged)
+        release.complete(Unit)
+        removal.join()
+        assertTrue(acknowledged)
+        assertTrue(removal.isCancelled)
+        verify(sdk).deletePubkyProfile("confirmed")
+        verify(sdk, never()).fetchPubkyProfileWithRevision(any())
+    }
+
+    @Test
     fun `profile deletion uses the confirmed revision without fetching a newer profile`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.paymentRequests()).thenReturn(emptyList())
@@ -1017,7 +1047,7 @@ class PaykitSdkServiceTest {
                 emptyList(),
                 emptyList(),
                 emptyList(),
-                emptyList()
+                emptyList(),
             )
             whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
             val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
@@ -1186,7 +1216,7 @@ class PaykitSdkServiceTest {
         service.setPaymentSubmissionActive(true)
         val caller = launch { wrapper.importShopContacts(listOf(RING_PUBKY), RING_PUBKY) { true } }
         runCurrent()
-        ServiceQueue.CORE.background { }
+        ServiceQueue.PUBKY.background { }
         caller.cancel()
         service.setPaymentSubmissionActive(false)
         caller.join()
@@ -2751,6 +2781,7 @@ class PaykitSdkServiceTest {
         }
         mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
             native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+            native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
             val restoration = async { service.initializeAndImportSession("saved-session") }
             val read = async { service.resolveContactProfile(RING_PUBKY, true) }
             runCurrent()
@@ -2806,6 +2837,7 @@ class PaykitSdkServiceTest {
 
             mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
                 native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
                 if (failure is CancellationException) {
                     assertFailsWith<CancellationException> { service.initializeAndImportSession("saved-session") }
                     assertFailsWith<CancellationException> { service.contactRecords() }
@@ -2859,6 +2891,7 @@ class PaykitSdkServiceTest {
 
             mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
                 native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                native.`when`<String> { pubkyAppProfileSessionCapabilities() }.thenReturn("profile")
                 assertSame(failure, service.initializeAndImportSession("saved-session").exceptionOrNull())
                 verify(sdk, times(1)).initialize()
                 verify(sdk, never()).publishPaykitApp(any(), any())
@@ -3352,44 +3385,55 @@ class PaykitSdkServiceTest {
 
     @Test
     fun `profile deletion rejects a subscription received after preflight`() = runTest {
-        for (role in listOf(PaymentRequestLocalRole.PAYER, PaymentRequestLocalRole.PAYEE)) {
-            val sdk = mock<PaykitSdk>()
-            val request = mock<PaymentRequestRecord> {
-                on { localRole } doReturn role
-                on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
-            }
-            val profile = mock<PaykitProfileRecord> { on { revision } doReturn "original" }
-            whenever(sdk.identityStatus())
-                .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
-            whenever(sdk.fetchPaykitProfile(RING_PUBKY)).thenReturn(profile)
-            val checking = CompletableDeferred<Unit>()
-            val finishCheck = CompletableDeferred<Unit>()
-            var requests = emptyList<PaymentRequestRecord>()
-            whenever(sdk.paymentRequests()).doSuspendableAnswer {
-                if (!checking.isCompleted) {
-                    checking.complete(Unit)
-                    finishCheck.await()
+        for (pubkyApp in listOf(false, true)) {
+            for (role in listOf(PaymentRequestLocalRole.PAYER, PaymentRequestLocalRole.PAYEE)) {
+                val sdk = mock<PaykitSdk>()
+                val request = mock<PaymentRequestRecord> {
+                    on { localRole } doReturn role
+                    on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
                 }
-                requests
-            }
-            whenever(sdk.receivePrivateMessagesFromLinkedPeers()).thenAnswer {
-                requests = listOf(request)
-                emptyList<PrivateStreamCounterpartyIntakeReport>()
-            }
-            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-            val preflight = async { service.checkProfileDeletionAllowed() }
-            checking.await()
-            val receive = async { service.receivePrivateMessagesFromLinkedPeers(Priority.Background) }
-            runCurrent()
-            val deletion = async { runSuspendCatching { service.deletePaykitProfile() } }
-            runCurrent()
-            finishCheck.complete(Unit)
-            preflight.await()
-            receive.await()
+                val profile = mock<PaykitProfileRecord> { on { revision } doReturn "original" }
+                whenever(sdk.identityStatus())
+                    .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+                whenever(sdk.fetchPaykitProfile(RING_PUBKY)).thenReturn(profile)
+                val checking = CompletableDeferred<Unit>()
+                val finishCheck = CompletableDeferred<Unit>()
+                var requests = emptyList<PaymentRequestRecord>()
+                whenever(sdk.paymentRequests()).doSuspendableAnswer {
+                    if (!checking.isCompleted) {
+                        checking.complete(Unit)
+                        finishCheck.await()
+                    }
+                    requests
+                }
+                whenever(sdk.receivePrivateMessagesFromLinkedPeers()).thenAnswer {
+                    requests = listOf(request)
+                    emptyList<PrivateStreamCounterpartyIntakeReport>()
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val preflight = async { service.checkProfileDeletionAllowed() }
+                checking.await()
+                val receive = async { service.receivePrivateMessagesFromLinkedPeers(Priority.Background) }
+                runCurrent()
+                val deletion = async {
+                    runSuspendCatching {
+                        if (pubkyApp) {
+                            service.deletePubkyProfile("original", RING_PUBKY)
+                        } else {
+                            service.deletePaykitProfile()
+                        }
+                    }
+                }
+                runCurrent()
+                finishCheck.complete(Unit)
+                preflight.await()
+                receive.await()
 
-            assertIs<PubkyContactError.ActiveProfileSubscriptions>(deletion.await().exceptionOrNull())
-            verify(sdk, never()).deletePaykitProfile(any())
-            verify(sdk, never()).fetchPaykitProfile(any())
+                assertIs<PubkyContactError.ActiveProfileSubscriptions>(deletion.await().exceptionOrNull())
+                verify(sdk, never()).deletePaykitProfile(any())
+                verify(sdk, never()).deletePubkyProfile(any())
+                verify(sdk, never()).fetchPaykitProfile(any())
+            }
         }
     }
 
@@ -3411,8 +3455,10 @@ class PaykitSdkServiceTest {
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
 
             service.deletePaykitProfile()
+            service.deletePubkyProfile("original", RING_PUBKY)
 
             verify(sdk).deletePaykitProfile("original")
+            verify(sdk).deletePubkyProfile("original")
         }
     }
 
@@ -3421,10 +3467,16 @@ class PaykitSdkServiceTest {
         val sdk = mock<PaykitSdk>()
         val error = IllegalStateException("Subscription storage unavailable")
         whenever(sdk.paymentRequests()).thenAnswer { throw error }
+        whenever(sdk.identityStatus())
+            .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
 
         assertSame(error, assertFailsWith<IllegalStateException> { service.checkProfileDeletionAllowed() })
         assertSame(error, assertFailsWith<IllegalStateException> { service.deletePaykitProfile() })
+        assertSame(
+            error,
+            assertFailsWith<IllegalStateException> { service.deletePubkyProfile("original", RING_PUBKY) }
+        )
         assertSame(
             error,
             assertFailsWith<IllegalStateException> {
@@ -3433,6 +3485,7 @@ class PaykitSdkServiceTest {
         )
         verify(sdk, never()).removeContactsAndBlockPeers(any())
         verify(sdk, never()).deletePaykitProfile(any())
+        verify(sdk, never()).deletePubkyProfile(any())
         verify(sdk, never()).fetchPaykitProfile(any())
     }
 
@@ -3632,6 +3685,24 @@ class PaykitSdkServiceTest {
             }
             assertTrue(service.resolvePublicContactPayment(RING_PUBKY).payableEndpoints.isEmpty())
         }
+    }
+
+    @Test
+    fun `noise key authorization lookup reports only a missing record as absent`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var failure: Throwable? = null
+        whenever(sdk.paykitNoiseKeyAuthorization(RING_PUBKY)).doSuspendableAnswer {
+            failure?.let { throw it }
+            mock<PaykitNoiseKeyAuthorization>()
+        }
+        assertTrue(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.NotFound("not_found", "No Noise key authorization")
+        assertFalse(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.Transport("transport", "Connection unavailable")
+        assertFailsWith<PaykitException.Transport> { service.hasPaykitNoiseKeyAuthorization(RING_PUBKY) }
     }
 
     @Test

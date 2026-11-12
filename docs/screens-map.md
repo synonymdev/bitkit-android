@@ -137,6 +137,12 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure) › Transfer all funds to savings review |
 | SavingsIntroScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings |
 | SavingsProgressScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings progress 2 |
+| SettingUpScreen.kt | Funds In Transfer › Transfer to Spending Progress 1 |
+| SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
+| SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm |
+| SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Intro |
+| TransferIntroScreen.kt | Lightning Onboarding From Suggestion Card › Lightning onboarding Intro |
+| TransferLearnMoreScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Receiving Capacity |
 
 ## ui/screens/transfer/external
 
@@ -152,6 +158,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
+| SpendingHwSignScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirm HW |
+| SpendingHwSignedScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirmed HW |
 
 ## ui/screens/trezor
 
@@ -310,6 +318,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | ChannelDetailScreen.kt | Settings > Advanced › Connection details |
 | CloseConnectionScreen.kt | Settings > Advanced › Close connection |
 | LightningConnectionsScreen.kt | Settings > Advanced › Lightning Connections overview |
+| MoveToSparkScreen.kt | `todo` |
+| SparkDetailScreen.kt | `todo` |
 
 ## ui/settings/pin
 

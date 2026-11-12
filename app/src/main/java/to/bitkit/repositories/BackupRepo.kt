@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -20,11 +21,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -74,6 +77,7 @@ import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.SettingsBackupV1
+import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -89,6 +93,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
@@ -143,6 +148,7 @@ class BackupRepo @Inject constructor(
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val lightningRepo: Provider<LightningRepo>,
+    private val sparkRepo: SparkRepo,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
@@ -152,13 +158,17 @@ class BackupRepo @Inject constructor(
 ) {
     private val walletBackupMutex = Mutex()
     private val usdtBackupMutex = Mutex()
+    private val activityBackupMutex = Mutex()
     private val usdtRecoveryBackup = UsdtRecoveryBackupStore(vssBackupClient)
     private val scope = appScope(ioDispatcher, TAG)
 
     private val backupJobs = ConcurrentHashMap.newKeySet<Job>()
     private val backupJobLock = Any()
     private val pendingBackups = ConcurrentHashMap<BackupCategory, PendingBackup>()
-    private class PendingBackup(val owner: VssClientCoordinator.Owner) {
+    private class PendingBackup(
+        val owner: VssClientCoordinator.Owner,
+        @Volatile var skipUnchangedActivity: Boolean,
+    ) {
         @Volatile
         var admitted = false
     }
@@ -178,6 +188,23 @@ class BackupRepo @Inject constructor(
     private var isObserving = false
     private var lastNotificationTime = 0L
 
+    private class ActivityUploadCache {
+        var ownerGeneration: Long? = null
+        var digest: ByteArray? = null
+    }
+
+    // Uploads are serialized by activityBackupMutex. Reset swaps the cache so an old ACK cannot populate it.
+    @Volatile
+    private var activityUploadCache = ActivityUploadCache()
+
+    /** Spark's current connection was backed up once ready, so a restart of the observers doesn't upload it again. */
+    @Volatile
+    private var hasBackedUpSparkConnection = false
+
+    /** The last Spark exit-state generation marked for backup; it outlives the observers, so a gap is caught up. */
+    @Volatile
+    private var markedSparkExitGeneration = 0L
+
     private val _isRestoring = MutableStateFlow(false)
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
 
@@ -186,11 +213,31 @@ class BackupRepo @Inject constructor(
 
     private val restorePendingUntil = MutableStateFlow(0L)
 
+    /**
+     * Whether a restore is announced and its backup not applied yet, as [isRestoreInProgress], as it changes; a gate
+     * that lapses by its timeout ends it then, too.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val restoreInProgress: Flow<Boolean> = combine(_isRestoring, restorePendingUntil, ::Pair)
+        .transformLatest { (isRestoring, pendingUntil) ->
+            val remainingMillis = pendingUntil - currentTimeMillis()
+            emit(isRestoring || remainingMillis > 0)
+            if (!isRestoring && remainingMillis > 0) {
+                delay(remainingMillis)
+                emit(false)
+            }
+        }
+        .distinctUntilChanged()
+
     fun reset() {
         stopObservingBackups()
+        clearUploadedActivityDigest()
     }
 
-    fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
+    fun setWiping(isWiping: Boolean) {
+        if (isWiping) hasBackedUpSparkConnection = false
+        _isWiping.update { isWiping }
+    }
 
     /**
      * Holds ordinary uploads from the moment a restore is announced, closing the window between the
@@ -206,6 +253,9 @@ class BackupRepo @Inject constructor(
         restorePendingUntil.update { if (isPending) currentTimeMillis() + RESTORE_PENDING_TIMEOUT_MS else 0L }
         Logger.debug("Set restore pending to '$isPending'", context = TAG)
     }
+
+    /** A restore was announced and its backup is not applied yet. */
+    fun isRestoreInProgress(): Boolean = _isRestoring.value || isRestorePending()
 
     suspend fun hasPendingWalletRestore(): Boolean = withContext(ioDispatcher) {
         keychain.hasPendingWalletRestore()
@@ -325,18 +375,23 @@ class BackupRepo @Inject constructor(
         // Observe backup status changes for each category
         BackupCategory.entries.forEach { category ->
             val job = scope.launch {
-                cacheStore.backupStatuses
+                val statuses = cacheStore.backupStatuses
                     .map { statuses -> statuses[category] ?: BackupItemStatus() }
                     .distinctUntilChanged { old, new ->
                         old.synced == new.synced &&
                             old.required == new.required &&
                             old.running == new.running
                     }
-                    .collect { status ->
-                        if (status.shouldBackup(category)) {
-                            scheduleBackup(category)
-                        }
+                val resumableStatuses = if (category == BackupCategory.SPARK_EXIT) {
+                    statuses.combine(restoreInProgress) { status, _ -> status }
+                } else {
+                    statuses
+                }
+                resumableStatuses.collect { status ->
+                    if (status.shouldBackup(category)) {
+                        scheduleBackup(category)
                     }
+                }
             }
             statusObserverJobs.add(job)
         }
@@ -469,6 +524,45 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
+        // Replay unrecorded Spark changes when wallet admission or the restore gate reopens.
+        dataListenerJobs.add(
+            scope.launch {
+                vssClients.owners.collectLatest { owner ->
+                    if (owner == null) return@collectLatest
+                    vssClients.withWallet(owner) {
+                        combine(
+                            sparkRepo.state,
+                            sparkRepo.exitStateGeneration,
+                            restoreInProgress
+                        ) { state, generation, _ ->
+                            state to generation
+                        }.collect { (state, generation) ->
+                            val ready = state.isReady && state.hasSynced
+                            if (!ready) hasBackedUpSparkConnection = false
+                            val connectionNeedsBackup = ready && !hasBackedUpSparkConnection
+                            if ((!connectionNeedsBackup && generation <= markedSparkExitGeneration) ||
+                                shouldSkipBackup()
+                            ) {
+                                return@collect
+                            }
+                            runSuspendCatching { updateBackupRequired(BackupCategory.SPARK_EXIT) }
+                                .onSuccess {
+                                    hasBackedUpSparkConnection = ready
+                                    markedSparkExitGeneration = maxOf(markedSparkExitGeneration, generation)
+                                }
+                                .onFailure {
+                                    Logger.error(
+                                        "Failed to mark Spark exit backup required",
+                                        it,
+                                        context = TAG
+                                    )
+                                }
+                        }
+                    }
+                }
+            }
+        )
+
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)
         val lightningConnectionsJob = scope.launch {
@@ -512,27 +606,38 @@ class BackupRepo @Inject constructor(
     }
 
     private fun markBackupRequired(category: BackupCategory) {
-        launchForWallet {
-            failedBackupRequired -= category
-            cacheStore.updateBackupStatus(category) {
-                it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
-            }
-            Logger.verbose("Marked backup required for: '$category'", context = TAG)
+        launchForWallet { updateBackupRequired(category) }
+    }
+
+    private suspend fun updateBackupRequired(category: BackupCategory) {
+        failedBackupRequired -= category
+        cacheStore.updateBackupStatus(category) {
+            it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
         }
+        Logger.verbose("Marked backup required for: '$category'", context = TAG)
     }
 
     private fun scheduleBackup(
         category: BackupCategory,
         expectedOwner: VssClientCoordinator.Owner? = null,
         requireObservation: Boolean = true,
+        skipUnchangedActivity: Boolean = true,
     ) {
         val owner = expectedOwner ?: runCatching { vssClients.captureOwner() }.getOrNull() ?: return
         val job = synchronized(backupJobLock) {
             if (requireObservation && !isObserving) return
-            val pending = PendingBackup(owner)
+            val pending = PendingBackup(owner, skipUnchangedActivity)
             var reserved = false
             pendingBackups.compute(category) { _, previous ->
-                previous?.takeIf { it.owner.generation >= owner.generation } ?: pending.also { reserved = true }
+                if (previous == null || previous.owner.generation < owner.generation) {
+                    reserved = true
+                    pending
+                } else {
+                    if (previous.owner.generation == owner.generation && !skipUnchangedActivity) {
+                        previous.skipUnchangedActivity = false
+                    }
+                    previous
+                }
             }
             if (!reserved) return
             Logger.debug("Scheduling backup for: '$category'", context = TAG)
@@ -542,15 +647,16 @@ class BackupRepo @Inject constructor(
                         pending.admitted = true
                         try {
                             cacheStore.updateBackupStatus(category) { it.copy(running = true) }
-                            delay(BACKUP_DEBOUNCE)
+                            val debounce = if (category == BackupCategory.SPARK_EXIT) {
+                                SPARK_EXIT_BACKUP_DEBOUNCE
+                            } else {
+                                BACKUP_DEBOUNCE
+                            }
+                            delay(debounce)
                             if (category == BackupCategory.WALLET) {
                                 paykitSdkService.isPaymentSubmissionActive.first { !it }
                             }
-                            pendingBackups.remove(category, pending)
-                            val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
-                            if (status.copy(running = category in runningBackups).shouldBackup(category)) {
-                                triggerBackup(category)
-                            }
+                            runPendingBackup(category, pending)
                         } finally {
                             withContext(NonCancellable) {
                                 pendingBackups.remove(category, pending)
@@ -572,6 +678,24 @@ class BackupRepo @Inject constructor(
             }
         }
         job.start()
+    }
+
+    private suspend fun runPendingBackup(category: BackupCategory, pending: PendingBackup) {
+        // A full backup can still upgrade an observed ACTIVITY request while its payload is being read.
+        if (category != BackupCategory.ACTIVITY) pendingBackups.remove(category, pending)
+        val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
+        if (!status.copy(running = category in runningBackups).shouldBackup(category)) return
+
+        val uploaded = triggerBackup(category, pending.skipUnchangedActivity)
+        if (category == BackupCategory.ACTIVITY && pendingBackups.remove(category, pending)) {
+            if (uploaded.getOrNull() == false && !pending.skipUnchangedActivity && !shouldSkipBackup(category)) {
+                triggerBackup(category, skipUnchangedActivity = false)
+            }
+            // An observer may have joined this reservation after the upload captured its revision.
+            if (cacheStore.backupStatuses.first()[category]?.shouldBackup(category) == true) {
+                scheduleBackup(category, expectedOwner = pending.owner)
+            }
+        }
     }
 
     private fun checkForFailedBackups() {
@@ -612,17 +736,23 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun triggerBackup(category: BackupCategory): Result<Unit> =
+        triggerBackup(category, skipUnchangedActivity = false).map {}
+
+    private suspend fun triggerBackup(
+        category: BackupCategory,
+        skipUnchangedActivity: Boolean,
+    ): Result<Boolean> = withContext(ioDispatcher) {
         vssClients.withWallet {
             if (category == BackupCategory.WALLET || category == BackupCategory.METADATA) {
-                walletBackupMutex.withLock { performBackup(category) }
+                walletBackupMutex.withLock { performBackup(category, skipUnchangedActivity) }
             } else {
-                performBackup(category)
+                performBackup(category, skipUnchangedActivity)
             }
         }
     }
 
-    private suspend fun performBackup(category: BackupCategory): Result<Unit> {
+    private suspend fun performBackup(category: BackupCategory, skipUnchangedActivity: Boolean): Result<Boolean> {
         Logger.debug("Backup starting for: '$category'", context = TAG)
         var backupRequired = currentTimeMillis()
         runningBackups += category
@@ -634,14 +764,17 @@ class BackupRepo @Inject constructor(
             }
 
             val upload = when (category) {
-                BackupCategory.WALLET -> uploadWalletBackup()
-                BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup()
+                BackupCategory.WALLET -> uploadWalletBackup().map { true }
+                BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup().map { true }
+                BackupCategory.SPARK_EXIT -> uploadSparkExitBackup().map { true }
+                BackupCategory.ACTIVITY -> uploadActivityBackup(skipUnchangedActivity)
                 else -> runSuspendCatching {
                     vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
+                    true
                 }
             }
             return upload
-                .onSuccess {
+                .onSuccess { uploaded ->
                     withContext(NonCancellable) {
                         cacheStore.updateBackupStatus(category) {
                             it.copy(running = false, synced = backupRequired)
@@ -661,10 +794,13 @@ class BackupRepo @Inject constructor(
                         temporaryFailureRetries -= category
                         temporaryFailureSince -= category
                     }
-                    Logger.info("Backup succeeded for: '$category'", context = TAG)
+                    if (uploaded) {
+                        Logger.info("Backup succeeded for: '$category'", context = TAG)
+                    } else {
+                        Logger.debug("Skipped backup for: '$category', payload unchanged", context = TAG)
+                    }
                 }
                 .onFailure { markBackupFailed(category, backupRequired, it) }
-                .map {}
         } finally {
             if (runningBackups.remove(category)) {
                 withContext(NonCancellable) {
@@ -672,6 +808,25 @@ class BackupRepo @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Defers until Spark has connected and synced, which marks [BackupCategory.SPARK_EXIT] required again. The first
+     * upload merges the stored backup into Spark before replacing it, and fails rather than replace one it could not
+     * read, so a failed or skipped restore never loses the stored exit data.
+     */
+    private suspend fun uploadSparkExitBackup(): Result<Unit> = runSuspendCatching {
+        if (!sparkRepo.hasMergedRemoteExitState) {
+            sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
+            val remote = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+                ?.let { json.decodeFromString<SparkExitBackupV1>(String(it)) }
+            sparkRepo.mergeRemoteExitBackup(remote).getOrThrow()
+        }
+        val backup = sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
+        vssBackupClient.putObject(
+            key = BackupCategory.SPARK_EXIT.name,
+            data = json.encodeToString(backup).toByteArray(),
+        ).getOrThrow()
     }
 
     suspend fun persistWalletBackup(): Result<Unit> =
@@ -740,6 +895,8 @@ class BackupRepo @Inject constructor(
         when {
             e is WalletBackupSnapshotChanged ->
                 Logger.debug("Deferred changing backup snapshot for: '$category'", context = TAG)
+            e is SparkExitBackupDeferred ->
+                Logger.debug("Deferred backup until Spark syncs for: '$category'", context = TAG)
             e.isTemporaryBackupFailure() -> retryAfterTemporaryFailure(category, backupRequired, e)
             else -> Logger.error("Backup failed for: '$category'", e, context = TAG)
         }
@@ -795,23 +952,51 @@ class BackupRepo @Inject constructor(
             json.encodeToString(payload).toByteArray()
         }
 
-        BackupCategory.ACTIVITY -> {
-            val activities = activityRepo.getActivities().getOrDefault(emptyList())
-            val closedChannels = activityRepo.getClosedChannels().getOrDefault(emptyList())
-            val activityTags = activityRepo.getAllActivitiesTags().getOrDefault(emptyList())
-
-            val payload = ActivityBackupV1(
-                createdAt = currentTimeMillis(),
-                activities = activities,
-                activityTags = activityTags,
-                closedChannels = closedChannels,
-            )
-
-            json.encodeToString(payload).toByteArray()
-        }
+        BackupCategory.ACTIVITY -> json.encodeToString(getActivityBackupPayload()).toByteArray()
 
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
         BackupCategory.USDT_RECOVERY -> throw UsdtException.BackupUnavailable()
+        BackupCategory.SPARK_EXIT -> {
+            val backup = checkNotNull(sparkRepo.exitBackup().getOrThrow()) { "Spark is not connected" }
+            json.encodeToString(backup).toByteArray()
+        }
+    }
+
+    private suspend fun getActivityBackupPayload(): ActivityBackupV1 = ActivityBackupV1(
+        createdAt = currentTimeMillis(),
+        activities = activityRepo.getActivities().getOrDefault(emptyList()),
+        activityTags = activityRepo.getAllActivitiesTags().getOrDefault(emptyList()),
+        closedChannels = activityRepo.getClosedChannels().getOrDefault(emptyList()),
+    )
+
+    private suspend fun uploadActivityBackup(skipIfUnchanged: Boolean): Result<Boolean> = runSuspendCatching {
+        activityBackupMutex.withLock { uploadActivityBackupLocked(skipIfUnchanged) }
+    }
+
+    private suspend fun uploadActivityBackupLocked(skipIfUnchanged: Boolean): Boolean {
+        val cache = activityUploadCache
+        val ownerGeneration = vssClients.captureOwner().generation
+        val payload = getActivityBackupPayload()
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(json.encodeToString(payload.copy(createdAt = 0)).toByteArray())
+        if (skipIfUnchanged && cache === activityUploadCache &&
+            cache.ownerGeneration == ownerGeneration && digest.contentEquals(cache.digest)
+        ) {
+            return false
+        }
+
+        cache.digest = null
+        vssBackupClient.putObject(
+            key = BackupCategory.ACTIVITY.name,
+            data = json.encodeToString(payload).toByteArray(),
+        ).getOrThrow()
+        cache.ownerGeneration = ownerGeneration
+        cache.digest = digest
+        return true
+    }
+
+    private fun clearUploadedActivityDigest() {
+        activityUploadCache = ActivityUploadCache()
     }
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
@@ -963,6 +1148,7 @@ class BackupRepo @Inject constructor(
         Logger.debug("Full restore starting", context = TAG)
 
         _isRestoring.update { true }
+        clearUploadedActivityDigest()
 
         // Mutated only by the sequential restore steps below, inside this single coroutine.
         val categoriesNeedingRewrite = mutableSetOf<BackupCategory>()
@@ -1018,6 +1204,12 @@ class BackupRepo @Inject constructor(
                 }
                 // SETTINGS is optional; preserving explicit local corrections is required.
                 connectionSession.replay()
+                // Before the slower categories, so the exit data is staged before Spark connects and syncs.
+                performRestore(BackupCategory.SPARK_EXIT, failedCategories) { dataBytes ->
+                    val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
+                    sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
+                    parsed.createdAt
+                }
                 val retainedWalletBackup = keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
                 if (retainedWalletBackup.isNullOrEmpty()) {
                     var didRestoreWalletBackup = false
@@ -1089,7 +1281,7 @@ class BackupRepo @Inject constructor(
         val recoveryKey = Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name
         if (!isUsdtRestorePending()) keychain.upsertString(recoveryKey, "")
         paykitUsdtPaymentRepo.get().pauseForRecoveryRestore()
-        usdtRepo.get().waitForRecoveryIdle()
+        usdtRepo.get().prepareForRecoveryRestore()
         usdtBackupMutex.withLock { }
         walletBackupMutex.withLock { }
         vssBackupClient.setup().getOrThrow()
@@ -1179,6 +1371,8 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
+        // Automatic allowance payments wait for the user to resume them before any restored state is written.
+        paykitAllowanceStore.pauseAfterRestore()
         keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, String(dataBytes))
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         var restoredAttempt: OnchainSendAttempt? = null
@@ -1277,8 +1471,7 @@ class BackupRepo @Inject constructor(
                 withTimeout(VSS_TIMESTAMP_TIMEOUT) {
                     vssBackupClient.setup().getOrThrow()
                     coroutineScope {
-                        BackupCategory.entries
-                            .filter { it != BackupCategory.LIGHTNING_CONNECTIONS && it != BackupCategory.USDT_RECOVERY }
+                        LATEST_BACKUP_TIME_CATEGORIES
                             .map { category -> async { getRemoteBackupTimestamp(category) } }
                             .mapNotNull { it.await() }
                             .filter { it > 0uL }
@@ -1310,7 +1503,7 @@ class BackupRepo @Inject constructor(
         BackupCategory.entries
             .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
             .forEach {
-                scheduleBackup(it, expectedOwner = owner, requireObservation = false)
+                scheduleBackup(it, expectedOwner = owner, requireObservation = false, skipUnchangedActivity = false)
             }
     }
 
@@ -1406,8 +1599,21 @@ class BackupRepo @Inject constructor(
     companion object {
         private const val TAG = "BackupRepo"
 
+        /**
+         * The categories whose remote timestamp tells when the wallet was last backed up. The Spark exit data is left
+         * out: reading its timestamp downloads data that can reach several MB.
+         */
+        internal val LATEST_BACKUP_TIME_CATEGORIES = BackupCategory.entries.filter {
+            it != BackupCategory.LIGHTNING_CONNECTIONS &&
+                it != BackupCategory.USDT_RECOVERY &&
+                it != BackupCategory.SPARK_EXIT
+        }
+
         private const val MINUTE_IN_MS = 60_000
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds
+
+        /** Spark's exit data can reach several MB and changes with every payment, so its uploads are spaced out. */
+        private const val SPARK_EXIT_BACKUP_DEBOUNCE = 60_000L
 
         /** Maximum captures before deferring a changing wallet to the next scheduled backup. */
         private const val WALLET_SNAPSHOT_ATTEMPTS = 3
@@ -1436,6 +1642,8 @@ class BackupRepo @Inject constructor(
 }
 
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
+
+internal class SparkExitBackupDeferred : AppError("Spark has not connected and synced yet")
 
 private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
     "Failed to retain public address exclusion during restore",

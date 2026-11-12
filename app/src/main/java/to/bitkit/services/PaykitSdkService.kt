@@ -70,6 +70,8 @@ import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkyProfile
+import com.synonym.paykit.PubkyProfileSnapshot
+import com.synonym.paykit.PubkyProfileUpdate
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
@@ -83,6 +85,8 @@ import com.synonym.paykit.defaultConfig
 import com.synonym.paykit.defaultPubkyClientConfig
 import com.synonym.paykit.parsePubkyAuthUrl
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
+import com.synonym.paykit.paymentProofEventLen
+import com.synonym.paykit.pubkyAppProfileSessionCapabilities
 import com.synonym.paykit.pubkyPublicKeyFromSecret
 import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -798,11 +802,12 @@ class PaykitSdkService @Inject constructor(
         publicRead(PaykitReadLane.Bulk, 5.seconds) { it.fetchPubkyFileBounded(uri, maxBytes) }
             ?: throw PubkyFileNotFoundError()
 
-    suspend fun publishPaykitProfile(profile: PaykitProfile): PaykitProfileRecord {
+    suspend fun publishPaykitProfile(profile: PaykitProfile, expectedIdentity: String): PaykitProfileRecord {
         isSetup.await()
         return operationLock.withLock {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
+                requireProfileIdentity(publicKey, expectedIdentity)
                 val current = completeSdkCall { handle.fetchPaykitProfile(publicKey) }
                 completeSdkCall {
                     handle.publishPaykitProfile(profile, current?.revision).also { notifyBackupStateChanged() }
@@ -903,6 +908,54 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun fetchPubkyProfile(publicKey: String): PubkyProfile? =
         publicRead { it.fetchPubkyProfile(publicKey) }?.profile
+
+    suspend fun fetchPubkyProfileWithRevision(publicKey: String): PubkyProfileSnapshot? =
+        publicRead { it.fetchPubkyProfileWithRevision(publicKey) }
+
+    suspend fun fetchPaykitProfile(publicKey: String): PaykitProfileRecord? =
+        publicRead { it.fetchPaykitProfile(publicKey) }
+
+    suspend fun publishPubkyProfile(
+        update: PubkyProfileUpdate,
+        expectedRevision: String?,
+        expectedIdentity: String,
+    ): PubkyProfileSnapshot {
+        isSetup.await()
+        return operationLock.withLock {
+            requireProfileIdentity(currentIdentity(), expectedIdentity)
+            completeSdkCall { handle().publishPubkyProfile(update, expectedRevision) }
+        }
+    }
+
+    suspend fun deletePubkyProfile(
+        expectedRevision: String,
+        expectedIdentity: String,
+        onAcknowledged: () -> Unit = {},
+    ) {
+        isSetup.await()
+        operationLock.withLock {
+            requireProfileIdentity(currentIdentity(), expectedIdentity)
+            requireNoActiveSubscriptions(handle())
+            completeSdkCall {
+                handle().deletePubkyProfile(expectedRevision)
+                onAcknowledged()
+            }
+        }
+    }
+
+    suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String, expectedIdentity: String): String {
+        isSetup.await()
+        return operationLock.withLock {
+            requireProfileIdentity(currentIdentity(), expectedIdentity)
+            completeSdkCall { handle().uploadPubkyAppAvatar(bytes, contentType) }
+        }
+    }
+
+    private suspend fun currentIdentity(): String? = completeSdkCall { handle().identityStatus() }?.publicKey
+
+    private fun requireProfileIdentity(current: String?, expectedIdentity: String) {
+        if (!PubkyPublicKeyFormat.matches(current, expectedIdentity)) throw PubkyProfileIdentityChangedError()
+    }
 
     suspend fun fetchPubkyFollows(publicKey: String): List<String> =
         publicRead { it.fetchPubkyFollows(publicKey, maxEntries = 10_000u) }
@@ -1176,7 +1229,12 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    fun requiredCapabilities(): String = paykitAuthorizerSessionCapabilities()
+    /**
+     * Scope for sessions Bitkit creates: Paykit plus the shared pubky.app profile and its avatar.
+     * Restoring a saved session still checks only the Paykit scope, so sessions from older builds keep working.
+     */
+    fun requiredCapabilities(): String =
+        "${paykitAuthorizerSessionCapabilities()},${pubkyAppProfileSessionCapabilities()}"
 
     suspend fun syncPrivatePaymentListsWithReservations(
         updates: List<PrivatePaymentListReservationUpdateInput>,
@@ -1590,6 +1648,31 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    /**
+     * Byte length of the Payment Proof Event Message [submitPaymentProof] would queue for these values. The SDK builds
+     * it with the code it queues with, so a payer can check it against [MAX_MESSAGE_BYTES] before paying.
+     */
+    fun paymentProofEventLength(
+        paymentReference: String,
+        paymentAppId: String,
+        paymentEndpointIdentifier: String,
+        proofJson: String,
+        billingPeriod: PaykitBillingPeriod? = null,
+        conversionQuoteId: String? = null,
+        allowanceId: String? = null,
+    ): UInt = PaymentReference(paymentReference).use { reference ->
+        PaymentProofSubmission(
+            billingPeriod = billingPeriod?.sdkValue,
+            paymentAppId = paymentAppId,
+            paymentEndpointIdentifier = paymentEndpointIdentifier,
+            allowanceId = allowanceId,
+            conversionQuoteId = conversionQuoteId,
+            proof = PrivateJsonObject(proofJson),
+        ).use { submission ->
+            paymentProofEventLen(localAppId = "bitkit", paymentReference = reference, submission = submission)
+        }
+    }
+
     suspend fun listAllowances(filter: AllowanceFilter): List<AllowanceRecord> {
         isSetup.await()
         return operationLock.withLock {
@@ -1870,6 +1953,18 @@ class PaykitSdkService @Inject constructor(
             result
         }
         return resolution.toPaykitPublicContactPaymentResolution()
+    }
+
+    /**
+     * Returns whether [counterparty] publishes a Paykit Noise key authorization, which a private payment path
+     * requires. Returns false only when the record is missing; any other lookup failure is thrown.
+     */
+    suspend fun hasPaykitNoiseKeyAuthorization(counterparty: String): Boolean = publicRead { handle ->
+        val hasAuthorization = runSuspendCatching { handle.paykitNoiseKeyAuthorization(counterparty) }
+            .map { true }
+            .getOrElse { if (it is PaykitException.NotFound) false else throw it }
+        check(sdk === handle) { "Paykit runtime changed while checking the Noise key authorization" }
+        hasAuthorization
     }
 
     private fun PrivateContactPaymentResolution.toPaykitPrivateContactPaymentResolution() =
@@ -2622,3 +2717,6 @@ internal data class PaykitProfileDeletionSnapshot(
     val profileRevision: String?,
     val contacts: List<ContactRecord>,
 )
+
+/** The signed-in identity changed before a profile write, so it wrote nothing. */
+class PubkyProfileIdentityChangedError : AppError("Pubky identity changed before the profile write")

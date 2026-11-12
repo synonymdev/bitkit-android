@@ -67,6 +67,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     private val executorEvents = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 8)
     private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val lightningState = MutableStateFlow(LightningState())
+    private val isSparkSynced = MutableStateFlow(false)
     private val terms = fixtures.terms()
     private val clock = object : Clock {
         override fun now(): Instant = PaykitAllowanceFixtures.now
@@ -82,6 +83,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.events).thenReturn(executorEvents)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.isLedgerBehind(any())).thenReturn(false)
+        whenever(executor.isLedgerBehindOrThrow(any())).thenReturn(false)
         whenever(executor.rememberEnding(any(), any(), any())).doSuspendableAnswer {
             it.getArgument<suspend () -> Unit>(2).invoke()
         }
@@ -101,6 +103,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.classifyAboveLimit(any(), any(), any())).thenReturn(false)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
+        whenever(lightningRepo.isSparkSynced).thenReturn(isSparkSynced)
         whenever(activityRepo.setContact(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(sdk.listAllowances(any())).thenAnswer { records }
         whenever(sdk.linkedPeers()).thenReturn(emptyList())
@@ -215,6 +218,92 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertEquals(emptyList(), sut.entries.value)
         assertTrue(sut.refresh().isSuccess)
         verify(sdk, times(2)).listAllowances(any())
+    }
+
+    @Test
+    fun `a restored wallet pauses automatic payments while it pays an allowance`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a restored wallet shows no pause without an allowance it pays`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(
+            fixtures.record(localRole = AllowanceLocalRole.ALLOWEE),
+            fixtures.record(allowanceId = "allowance-ended", state = AllowanceLifecycleState.ENDED),
+        )
+
+        sut.activate(identity)
+
+        assertEquals(2, sut.entries.value.size)
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a ledger behind this wallet explains the pause before a restore does`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehind(identity)).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.LEDGER_BEHIND, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming ends the pause after a restore`() = test {
+        var isPaused = true
+        whenever(executor.isPausedAfterRestore()).thenAnswer { isPaused }
+        whenever(executor.resumeAfterRestore()).doSuspendableAnswer { isPaused = false }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+
+        sut.resumeAutomaticPayments().getOrThrow()
+
+        verify(executor).acceptCurrentLedger(identity)
+        verify(executor).resumeAfterRestore()
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming from the restore notice keeps a ledger behind this wallet paused with its own notice`() = test {
+        var isLedgerBehind = false
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehind(identity)).thenAnswer { isLedgerBehind }
+        whenever(executor.isLedgerBehindOrThrow(identity)).thenAnswer { isLedgerBehind }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+        isLedgerBehind = true
+
+        sut.resumeAutomaticPayments().getOrThrow()
+
+        verify(executor, never()).acceptCurrentLedger(any())
+        verify(executor, never()).resumeAfterRestore()
+        assertEquals(PaykitAllowancePause.LEDGER_BEHIND, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming from the restore notice fails without accepting a ledger that cannot be read`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehindOrThrow(identity)).doSuspendableAnswer {
+            throw PaykitAllowanceError.Unavailable
+        }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+
+        val result = sut.resumeAutomaticPayments()
+
+        assertEquals(PaykitAllowanceError.Unavailable, result.exceptionOrNull())
+        verify(executor, never()).acceptCurrentLedger(any())
+        verify(executor, never()).resumeAfterRestore()
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
     }
 
     @Test
@@ -983,6 +1072,34 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `covered request Spark can pay is paid while the node is stopped`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        whenever(lightningRepo.canSendWithSpark(1_000uL)).thenReturn(true)
+        val request = fixtures.paymentRequest()
+
+        sut.processIncomingRequests(listOf(request))
+
+        verify(executor).autoPay(eq(request), any(), eq(identity))
+    }
+
+    @Test
+    fun `covered request Spark can pay is paid while no channel is usable`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        val reconnecting = mock<ChannelDetails> { on { isUsable } doReturn false }
+        lightningState.update {
+            it.copy(nodeLifecycleState = NodeLifecycleState.Running, channels = persistentListOf(reconnecting))
+        }
+        whenever(lightningRepo.canSendWithSpark(1_000uL)).thenReturn(true)
+        val request = fixtures.paymentRequest()
+
+        sut.processIncomingRequests(listOf(request))
+
+        verify(executor).autoPay(eq(request), any(), eq(identity))
+    }
+
+    @Test
     fun `nothing is processed without an identity`() = test {
         assertFalse(sut.processIncomingRequests(listOf(fixtures.paymentRequest())))
         verify(executor, never()).autoPay(any(), any(), any())
@@ -1041,6 +1158,18 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     fun `running node settles open lightning attempts`() = test {
         lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
 
+        verify(executor).settleOpenLightningAttempts()
+    }
+
+    @Test
+    fun `spark syncing settles attempts left open while it could not list payments`() = test {
+        sut.activate(identity)
+        whenever(executor.activeIdentity).thenReturn(identity)
+        clearInvocations(executor)
+
+        isSparkSynced.value = true
+
+        verify(executor).recover(identity)
         verify(executor).settleOpenLightningAttempts()
     }
 

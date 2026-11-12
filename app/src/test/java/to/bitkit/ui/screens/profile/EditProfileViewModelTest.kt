@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -25,6 +26,7 @@ import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
@@ -387,7 +389,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         sut.save()
         advanceUntilIdle()
-        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
         sut.viewModelScope.cancel()
         advanceUntilIdle()
         assertFalse(sut.uiState.value.isBusy)
@@ -454,7 +456,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
         val result = CompletableDeferred<Result<Unit>>()
-        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any())).doSuspendableAnswer { result.await() }
+        whenever(
+            pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any())
+        ).doSuspendableAnswer { result.await() }
 
         sut.save()
         advanceUntilIdle()
@@ -468,7 +472,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         sut.showDeleteConfirmation()
         advanceUntilIdle()
-        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
         verify(pubkyRepo, never()).deleteProfile(any(), any())
         verify(pubkyRepo, never()).prepareProfileDeletion(any())
         assertFalse(sut.uiState.value.showDeleteDialog)
@@ -602,6 +606,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         fixture.setup()
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
+        whenever(pubkyRepo.profileEditBase()).thenReturn(ProfileEditBase(createProfile(), "revision"))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
 
         return EditProfileViewModel(

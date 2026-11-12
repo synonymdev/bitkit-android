@@ -51,6 +51,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.takeCodePoints
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
@@ -81,6 +82,7 @@ fun ProfileEditForm(
     modifier: Modifier = Modifier,
     isSaving: Boolean = false,
     isDeleting: Boolean = false,
+    maxLinks: Int? = null,
     avatarContent: @Composable () -> Unit = {},
     publicKeyLabel: String? = null,
     bioPlaceholder: String? = null,
@@ -133,7 +135,7 @@ fun ProfileEditForm(
                     TextInput(
                         enabled = !isBusy,
                         value = bio,
-                        onValueChange = { onBioChange(it.take(BIO_MAX_LENGTH)) },
+                        onValueChange = { onBioChange(it.takeCodePoints(BIO_MAX_LENGTH)) },
                         placeholder = resolvedBioPlaceholder,
                         minLines = 3,
                         maxLines = 4,
@@ -172,25 +174,27 @@ fun ProfileEditForm(
                         )
                     }
                 }
-                PrimaryButton(
-                    text = stringResource(R.string.profile__add_link),
-                    enabled = !isBusy,
-                    onClick = {
-                        focusManager.clearFocus(force = true)
-                        keyboardController?.hide()
-                        onAddLink()
-                    },
-                    size = ButtonSize.Small,
-                    fullWidth = false,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_link),
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("ProfileEditAddLink")
-                )
+                if (maxLinks == null || links.size < maxLinks) {
+                    PrimaryButton(
+                        text = stringResource(R.string.profile__add_link),
+                        enabled = !isBusy,
+                        onClick = {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
+                            onAddLink()
+                        },
+                        size = ButtonSize.Small,
+                        fullWidth = false,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_link),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.testTag("ProfileEditAddLink")
+                    )
+                }
                 HorizontalDivider()
 
                 FieldLabel(text = stringResource(R.string.profile__edit_tags)) {

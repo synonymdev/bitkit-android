@@ -17,8 +17,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.models.takeCodePoints
+import to.bitkit.repositories.PubkyProfileChangedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -125,7 +128,7 @@ class CreateProfileViewModel @Inject constructor(
     }
 
     fun onNameChange(name: String) {
-        _uiState.update { it.copy(name = name) }
+        _uiState.update { it.copy(name = name.takeCodePoints(PROFILE_NAME_MAX_LENGTH)) }
     }
 
     fun onBioChange(bio: String) {
@@ -198,11 +201,13 @@ class CreateProfileViewModel @Inject constructor(
             }.onFailure {
                 Logger.error("Failed to create identity", it, context = TAG)
                 _uiState.update { it.copy(isSaving = false) }
+                val changed = it is PubkyProfileChangedError
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__create_error),
-                    description = it.message,
+                    description = if (changed) context.getString(R.string.profile__edit_changed_error) else it.message,
                 )
+                if (changed) deriveAndCheckRemote()
             }
         }
     }

@@ -32,6 +32,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.LightningBalance
+import org.lightningdevkit.ldknode.LogRecord
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
@@ -102,12 +103,19 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 import com.synonym.bitkitcore.AddressType as BitkitAddressType
+import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
 import org.lightningdevkit.ldknode.PreparedOnchainSend as NativePreparedOnchainSend
 
 private const val VERIFY_TIMEOUT_MS = 2_000L
 private const val RELEASE_GATE_PROBE_MS = 200L
 private const val STOP_BOUND_MS = 5_000L
 private val SHORT_GATE_TIMEOUT = 200.milliseconds
+private val detachingRecord = LogRecord(
+    LdkLogLevel.ERROR,
+    "Detaching background tasks after cancellation timed out.",
+    "ldk_node::runtime",
+    362u,
+)
 
 class LightningServiceTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
@@ -124,13 +132,18 @@ class LightningServiceTest : BaseUnitTest() {
     val tempFolder = TemporaryFolder()
 
     private lateinit var sut: LightningService
+    private var isAppInBackground = false
+    private var exitCount = 0
 
     @Before
     fun setUp() {
         sut = createService()
     }
 
-    private fun createService(ldkDispatcher: CoroutineDispatcher = testDispatcher): LightningService =
+    private fun createService(
+        ldkDispatcher: CoroutineDispatcher = testDispatcher,
+        isAppInBackground: () -> Boolean = { this.isAppInBackground },
+    ): LightningService =
         LightningService(
             bgDispatcher = testDispatcher,
             ioDispatcher = testDispatcher,
@@ -142,6 +155,8 @@ class LightningServiceTest : BaseUnitTest() {
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
             ldkQueue = ldkDispatcher,
             onchainFeeRateFactory = { sendFeeRate },
+            isAppInBackground = isAppInBackground,
+            exitProcess = { exitCount++ },
         ).also { it.node = node }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -630,6 +645,53 @@ class LightningServiceTest : BaseUnitTest() {
 
         verify(node).destroy()
         assertNull(sut.node)
+    }
+
+    // Regression #1536: releasing the node shuts down its runtime under the detached tasks, which abort the app
+    @Test
+    fun `stop exits the process instead of releasing a node with detached work in background`() = test {
+        isAppInBackground = true
+        sut.runtimeMonitor.onLog(detachingRecord)
+
+        sut.stop()
+
+        verify(node).stop()
+        verify(node, never()).destroy()
+        assertEquals(1, exitCount)
+        assertNull(sut.node)
+    }
+
+    @Test
+    fun `stop releases a node with detached work when the app returns before the exit`() = test {
+        var backgroundChecks = 0
+        sut = createService(isAppInBackground = { backgroundChecks++ == 0 })
+        sut.runtimeMonitor.onLog(detachingRecord)
+
+        sut.stop()
+
+        verify(node).destroy()
+        assertEquals(0, exitCount)
+        assertEquals(2, backgroundChecks)
+    }
+
+    @Test
+    fun `stop releases a node with detached work in foreground`() = test {
+        sut.runtimeMonitor.onLog(detachingRecord)
+
+        sut.stop()
+
+        verify(node).destroy()
+        assertEquals(0, exitCount)
+    }
+
+    @Test
+    fun `stop releases a node without detached work in background`() = test {
+        isAppInBackground = true
+
+        sut.stop()
+
+        verify(node).destroy()
+        assertEquals(0, exitCount)
     }
 
     @Test

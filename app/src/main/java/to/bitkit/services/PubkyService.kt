@@ -4,9 +4,12 @@ import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PaykitProfileRecord
 import com.synonym.paykit.PaykitPublicKeys
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkyProfileSnapshot
+import com.synonym.paykit.PubkyProfileUpdate
 import com.synonym.paykit.PubkySessionBootstrapResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -29,15 +32,15 @@ class PubkyService @Inject constructor(
         internal val AUTHORIZATION_TIMEOUT = 30.seconds
     }
 
-    internal suspend fun preparePublicProfileRecovery() = ServiceQueue.CORE.background {
+    internal suspend fun preparePublicProfileRecovery() = ServiceQueue.PUBKY.background {
         paykitSdkService.preparePublicProfileRecovery()
     }
 
-    suspend fun initialize() = ServiceQueue.CORE.background {
+    suspend fun initialize() = ServiceQueue.PUBKY.background {
         paykitSdkService.initialize()
     }
 
-    suspend fun initializeAndImportSession(secret: String): Result<String> = ServiceQueue.CORE.background {
+    suspend fun initializeAndImportSession(secret: String): Result<String> = ServiceQueue.PUBKY.background {
         paykitSdkService.initializeAndImportSession(secret).map { it.publicKey }
     }
 
@@ -46,15 +49,15 @@ class PubkyService @Inject constructor(
 
     // region Session management
 
-    suspend fun importSession(secret: String): String = ServiceQueue.CORE.background {
+    suspend fun importSession(secret: String): String = ServiceQueue.PUBKY.background {
         paykitSdkService.importSession(secret).publicKey
     }
 
-    suspend fun currentPublicKey(): String? = ServiceQueue.CORE.background {
+    suspend fun currentPublicKey(): String? = ServiceQueue.PUBKY.background {
         paykitSdkService.currentPublicKey()
     }
 
-    suspend fun signOut() = ServiceQueue.CORE.background {
+    suspend fun signOut() = ServiceQueue.PUBKY.background {
         paykitSdkService.signOut()
     }
 
@@ -62,18 +65,18 @@ class PubkyService @Inject constructor(
     internal suspend fun <T> withProfileRemoval(isOwnerCurrent: () -> Boolean, operation: suspend () -> T): T =
         paykitSdkService.withProfileRemoval(isOwnerCurrent, operation)
 
-    suspend fun forgetSessionAccess() = ServiceQueue.CORE.background {
+    suspend fun forgetSessionAccess() = ServiceQueue.PUBKY.background {
         paykitSdkService.forgetSessionAccess()
     }
 
-    internal suspend fun forgetLocalProfileAccess() = ServiceQueue.CORE.background {
+    internal suspend fun forgetLocalProfileAccess() = ServiceQueue.PUBKY.background {
         paykitSdkService.forgetLocalProfileAccess()
     }
 
     internal suspend fun captureProfileLogout(publicKey: String, isOwnerCurrent: () -> Boolean): PaykitProfileLogout {
         var captured: PaykitProfileLogout? = null
         return try {
-            ServiceQueue.CORE.background {
+            ServiceQueue.PUBKY.background {
                 paykitSdkService.captureProfileLogout(publicKey, isOwnerCurrent).also { captured = it }
             }
         } catch (error: Throwable) {
@@ -84,23 +87,23 @@ class PubkyService @Inject constructor(
     }
 
     internal suspend fun executeProfileLogout(logout: PaykitProfileLogout) =
-        ServiceQueue.CORE.background { paykitSdkService.executeProfileLogout(logout) }
+        ServiceQueue.PUBKY.background { paykitSdkService.executeProfileLogout(logout) }
 
     internal suspend fun validateProfileLogout(logout: PaykitProfileLogout) =
-        ServiceQueue.CORE.background { paykitSdkService.validateProfileLogout(logout) }
+        ServiceQueue.PUBKY.background { paykitSdkService.validateProfileLogout(logout) }
 
     internal suspend fun eraseProfileLogoutCredentials(logout: PaykitProfileLogout, localOnly: Boolean) =
-        ServiceQueue.CORE.background { paykitSdkService.eraseProfileLogoutCredentials(logout, localOnly) }
+        ServiceQueue.PUBKY.background { paykitSdkService.eraseProfileLogoutCredentials(logout, localOnly) }
 
     internal fun revokeProfileLogout() = paykitSdkService.revokeProfileLogout()
 
     internal suspend fun requireWalletWipe() = paykitSdkService.requireWalletWipe()
 
-    suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
+    suspend fun clearSessionAccess() = ServiceQueue.PUBKY.background {
         paykitSdkService.clearSessionAccess()
     }
 
-    suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.CORE.background {
+    suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.PUBKY.background {
         val endpointError = runSuspendCatching {
             val report = paykitSdkService.syncPublicEndpoints(emptyList())
             if (report.failed.isNotEmpty()) throw AppError("Failed to remove Paykit payment endpoints")
@@ -118,7 +121,7 @@ class PubkyService @Inject constructor(
         appAcknowledged: Boolean,
         onEndpointsAcknowledged: () -> Unit,
         onAppAcknowledged: () -> Unit,
-    ): Unit = ServiceQueue.CORE.background {
+    ): Unit = ServiceQueue.PUBKY.background {
         val endpointError = runSuspendCatching {
             if (!endpointsAcknowledged) {
                 val report = paykitSdkService.syncPublicEndpoints(emptyList(), onEndpointsAcknowledged) { true }
@@ -143,11 +146,11 @@ class PubkyService @Inject constructor(
 
     // region Key derivation
 
-    suspend fun deriveSecretKey(mnemonic: String): String = ServiceQueue.CORE.background {
+    suspend fun deriveSecretKey(mnemonic: String): String = ServiceQueue.PUBKY.background {
         PaykitSdkService.deriveSecretKey(mnemonic)
     }
 
-    suspend fun publicKeyFromSecret(secretKeyHex: String): String = ServiceQueue.CORE.background {
+    suspend fun publicKeyFromSecret(secretKeyHex: String): String = ServiceQueue.PUBKY.background {
         PaykitSdkService.publicKeyFromSecret(secretKeyHex)
     }
 
@@ -156,7 +159,7 @@ class PubkyService @Inject constructor(
     // region Homeserver auth
 
     suspend fun signUp(secretKeyHex: String, homeserverZ32: String, signupCode: String?): Unit =
-        ServiceQueue.CORE.background {
+        ServiceQueue.PUBKY.background {
             paykitSdkService.signUp(secretKeyHex, homeserverZ32, signupCode)
             Unit
         }
@@ -166,20 +169,20 @@ class PubkyService @Inject constructor(
         homeserverZ32: String,
         signupCode: String?,
     ): PubkySessionBootstrapResult =
-        ServiceQueue.CORE.background {
+        ServiceQueue.PUBKY.background {
             paykitSdkService.registerIdentity(secretKeyHex, homeserverZ32, signupCode)
         }
 
-    suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) = ServiceQueue.CORE.background {
+    suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) = ServiceQueue.PUBKY.background {
         paykitSdkService.activateRegisteredIdentity(result)
     }
 
-    suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.CORE.background {
+    suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.PUBKY.background {
         paykitSdkService.signIn(secretKeyHex)
         Unit
     }
 
-    suspend fun hasIdentityRecord(publicKey: String): Boolean = ServiceQueue.CORE.background {
+    suspend fun hasIdentityRecord(publicKey: String): Boolean = ServiceQueue.PUBKY.background {
         paykitSdkService.hasIdentityRecord(publicKey)
     }
 
@@ -187,12 +190,12 @@ class PubkyService @Inject constructor(
 
     // region Auth approval
 
-    suspend fun parseAuthUrl(url: String) = ServiceQueue.CORE.background {
+    suspend fun parseAuthUrl(url: String) = ServiceQueue.PUBKY.background {
         PaykitSdkService.parseAuthUrl(url)
     }
 
     suspend fun validateSignupRequest(authorizationUrl: String?, homeserverPublicKey: String): Unit =
-        ServiceQueue.CORE.background {
+        ServiceQueue.PUBKY.background {
             authorizationUrl?.let { parseLegacyPubkyAuthUrl(it) }
             PaykitPublicKeys.normalize(homeserverPublicKey)
             Unit
@@ -203,7 +206,7 @@ class PubkyService @Inject constructor(
         expectedCapabilities: String,
         approvedClientId: String,
         secretKeyHex: String,
-    ) = ServiceQueue.CORE.background {
+    ) = ServiceQueue.PUBKY.background {
         paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
     }
@@ -212,7 +215,7 @@ class PubkyService @Inject constructor(
         authUrl: String,
         secretKeyHex: String,
         timeout: Duration = AUTHORIZATION_TIMEOUT,
-    ) = ServiceQueue.CORE.background {
+    ) = ServiceQueue.PUBKY.background {
         paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         withTimeoutOrNull(timeout) {
             approvePubkyAuth(authUrl, secretKeyHex)
@@ -225,7 +228,7 @@ class PubkyService @Inject constructor(
         approvedClientId: String,
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
-    ) = ServiceQueue.CORE.background {
+    ) = ServiceQueue.PUBKY.background {
         paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuthWithCompanionClaim(
             authUrl = authUrl,
@@ -255,7 +258,7 @@ class PubkyService @Inject constructor(
         publicKeys: List<String>,
         expectedIdentity: String,
         isStillCurrent: () -> Boolean,
-    ): List<ContactRecord> = ServiceQueue.CORE.background(ServiceQueue.CORE.queueContext.minusKey(Job)) {
+    ): List<ContactRecord> = ServiceQueue.PUBKY.background(ServiceQueue.PUBKY.queueContext.minusKey(Job)) {
         paykitSdkService.importShopContacts(publicKeys, expectedIdentity, isStillCurrent)
     }
 
@@ -263,23 +266,23 @@ class PubkyService @Inject constructor(
 
     // region Profile & contacts
 
-    suspend fun publishPaykitProfile(profile: PaykitProfile) = ServiceQueue.CORE.background {
-        paykitSdkService.publishPaykitProfile(profile)
+    suspend fun publishPaykitProfile(profile: PaykitProfile, expectedIdentity: String) = ServiceQueue.PUBKY.background {
+        paykitSdkService.publishPaykitProfile(profile, expectedIdentity)
     }
 
-    suspend fun uploadProfileAvatar(bytes: ByteArray, contentType: String): String = ServiceQueue.CORE.background {
+    suspend fun uploadProfileAvatar(bytes: ByteArray, contentType: String): String = ServiceQueue.PUBKY.background {
         paykitSdkService.uploadProfileAvatar(bytes, contentType)
     }
 
     internal suspend fun captureProfileDeletion(
         publicKey: String,
         isStillCurrent: () -> Boolean,
-    ): PaykitProfileDeletionSnapshot = ServiceQueue.CORE.background {
+    ): PaykitProfileDeletionSnapshot = ServiceQueue.PUBKY.background {
         paykitSdkService.captureProfileDeletion(publicKey, isStillCurrent)
     }
 
     internal suspend fun validateProfileDeletion(snapshot: PaykitProfileDeletionSnapshot) =
-        ServiceQueue.CORE.background {
+        ServiceQueue.PUBKY.background {
             paykitSdkService.validateProfileDeletion(snapshot)
         }
 
@@ -289,23 +292,58 @@ class PubkyService @Inject constructor(
     internal suspend fun deletePaykitProfile(
         snapshot: PaykitProfileDeletionSnapshot,
         onAcknowledged: () -> Unit,
-    ) = ServiceQueue.CORE.background {
+    ) = ServiceQueue.PUBKY.background {
         paykitSdkService.deletePaykitProfile(snapshot, onAcknowledged)
     }
+    suspend fun checkProfileDeletionAllowed() = ServiceQueue.PUBKY.background {
+        paykitSdkService.checkProfileDeletionAllowed()
+    }
 
-    suspend fun deletePaykitProfile() = ServiceQueue.CORE.background {
+    suspend fun removeContactsForProfile(publicKeys: List<String>): List<ContactRecord> =
+        ServiceQueue.PUBKY.background {
+            paykitSdkService.removeContactsForProfile(publicKeys)
+        }
+
+    suspend fun deletePaykitProfile() = ServiceQueue.PUBKY.background {
         paykitSdkService.deletePaykitProfile()
     }
+
+    suspend fun fetchPubkyProfileWithRevision(publicKey: String): PubkyProfileSnapshot? = cancellablePublicRead {
+        paykitSdkService.fetchPubkyProfileWithRevision(publicKey)
+    }
+
+    suspend fun fetchPaykitProfile(publicKey: String): PaykitProfileRecord? = cancellablePublicRead {
+        paykitSdkService.fetchPaykitProfile(publicKey)
+    }
+
+    suspend fun publishPubkyProfile(
+        update: PubkyProfileUpdate,
+        expectedRevision: String?,
+        expectedIdentity: String,
+    ): PubkyProfileSnapshot = ServiceQueue.PUBKY.background {
+        paykitSdkService.publishPubkyProfile(update, expectedRevision, expectedIdentity)
+    }
+
+    suspend fun deletePubkyProfile(
+        expectedRevision: String,
+        expectedIdentity: String,
+        onAcknowledged: () -> Unit = {},
+    ) = ServiceQueue.PUBKY.background {
+        paykitSdkService.deletePubkyProfile(expectedRevision, expectedIdentity, onAcknowledged)
+    }
+
+    suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String, expectedIdentity: String): String =
+        ServiceQueue.PUBKY.background { paykitSdkService.uploadPubkyAppAvatar(bytes, contentType, expectedIdentity) }
 
     suspend fun getContacts(publicKey: String): List<String> = cancellablePublicRead {
         paykitSdkService.fetchPubkyFollows(publicKey)
     }
 
-    suspend fun contactRecords(): List<ContactRecord> = ServiceQueue.CORE.background {
+    suspend fun contactRecords(): List<ContactRecord> = ServiceQueue.PUBKY.background {
         paykitSdkService.contactRecords()
     }
 
-    suspend fun observedContactRecords(expectedIdentity: String): List<ContactRecord> = ServiceQueue.CORE.background {
+    suspend fun observedContactRecords(expectedIdentity: String): List<ContactRecord> = ServiceQueue.PUBKY.background {
         paykitSdkService.observeState(expectedIdentity).contacts
     }
 
@@ -315,7 +353,7 @@ class PubkyService @Inject constructor(
         restorePrivateConnection: Boolean = false,
         expectedIdentity: String? = null,
         isStillCurrent: (() -> Boolean)? = null,
-    ): ContactRecord = ServiceQueue.CORE.background {
+    ): ContactRecord = ServiceQueue.PUBKY.background {
         paykitSdkService.saveContact(
             publicKey,
             label,
@@ -329,20 +367,16 @@ class PubkyService @Inject constructor(
         updates: List<ContactUpdate>,
         expectedIdentity: String? = null,
         isStillCurrent: (() -> Boolean)? = null,
-    ): List<ContactRecord> = ServiceQueue.CORE.background {
+    ): List<ContactRecord> = ServiceQueue.PUBKY.background {
         paykitSdkService.saveContacts(updates, expectedIdentity, isStillCurrent)
     }
 
-    suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {
+    suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.PUBKY.background {
         paykitSdkService.removeContact(publicKey)
     }
 
-    suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
+    suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.PUBKY.background {
         paykitSdkService.removeContacts(publicKeys)
-    }
-
-    suspend fun removeContactsForProfile(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
-        paykitSdkService.removeContactsForProfile(publicKeys)
     }
 
     suspend fun resolveContactProfile(
@@ -356,7 +390,7 @@ class PubkyService @Inject constructor(
     // endregion
 
     private suspend fun <T> cancellablePublicRead(block: suspend CoroutineScope.() -> T): T =
-        ServiceQueue.CORE.background(ServiceQueue.CORE.queueContext.minusKey(Job), block)
+        ServiceQueue.PUBKY.background(ServiceQueue.PUBKY.queueContext.minusKey(Job), block)
 }
 
 class PubkyRingAuthTimeoutError : AppError("Ring authorization timed out")

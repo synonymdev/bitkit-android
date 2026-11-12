@@ -292,6 +292,15 @@ fun ActivityDetailScreen(
                                 )
                                 detailViewModel.onDismissBoostSheet()
                             },
+                            onPending = {
+                                app.toast(
+                                    type = Toast.ToastType.WARNING,
+                                    title = resources.getString(R.string.wallet__boost_pending_title),
+                                    description = resources.getString(R.string.wallet__boost_pending_msg),
+                                    testTag = "BoostPendingToast"
+                                )
+                                detailViewModel.onDismissBoostSheet()
+                            },
                             onMaxFee = {
                                 app.toast(
                                     type = Toast.ToastType.ERROR,

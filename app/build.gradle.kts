@@ -180,14 +180,14 @@ val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
 
 android {
     namespace = "to.bitkit"
-    compileSdk = 36
+    compileSdk = 37
     requestedNdkVersion?.let { ndkVersion = it }
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 195
-        versionName = "3.0.1"
+        versionCode = 196
+        versionName = "3.1.0"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         bitkitAndroidTestAnnotation?.let {
             testInstrumentationRunnerArguments["annotation"] = it
@@ -356,13 +356,15 @@ androidComponents {
             "USDT_RPC_URL",
             localProp("USDT_RPC_URL").orElse("https://bitkit.to/v1/usdt/chain-rpc").stringField(),
         )
+        buildConfigFields.put("BREEZ_API_KEY", localProp("BREEZ_API_KEY").orElse("").stringField())
+        buildConfigFields.put("ESPLORA_URL", localProp("ESPLORA_URL").orElse("").stringField())
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_OVERRIDE", e2eHomegateOverrideEnv.stringField())
-        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL")) {
+        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL", "BLOCKTANK_REGTEST_AUTH")) {
             val value = if (variant.buildType == "debug") localProp(key).orElse("") else provider { "" }
             buildConfigFields.put(key, value.stringField())
         }
@@ -415,7 +417,7 @@ androidComponents {
 }
 
 fun Provider<String>.stringField(): Provider<BuildConfigField<String>> =
-    map { BuildConfigField(type = "String", value = "\"$it\"", comment = null) }
+    map { BuildConfigField(type = "String", value = "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"", comment = null) }
 
 fun Provider<String>.booleanField(): Provider<BuildConfigField<String>> =
     map { BuildConfigField(type = "boolean", value = it, comment = null) }
@@ -508,7 +510,7 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
-val nativeDebugSymbols by configurations.creating {
+val nativeDebugSymbols = configurations.create("nativeDebugSymbols") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
@@ -525,7 +527,7 @@ fun Provider<MinimalExternalModuleDependency>.nativeDebugSymbolsArtifact(): Stri
     return "${dependency.module.group}:${dependency.module.name}:$version:native-debug-symbols@zip"
 }
 
-val syncNativeDebugSymbolArtifacts by tasks.registering(Sync::class) {
+tasks.register<Sync>("syncNativeDebugSymbolArtifacts") {
     group = "build"
     description = "Downloads native debug symbol archives for release native dependencies."
 
@@ -560,12 +562,13 @@ dependencies {
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
     if (localBitkitCoreAar != null) {
         debugImplementation(files(localBitkitCoreAar))
-        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.23.1")
+        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.33.0")
         releaseImplementation(libs.bitkit.core)
     } else {
         implementation(libs.bitkit.core)
     }
     implementation(libs.paykit)
+    implementation(libs.breez.sdk.spark) { exclude(group = "net.java.dev.jna", module = "jna") }
     implementation(libs.vss.client)
     if (localBitkitCoreAar == null) nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())

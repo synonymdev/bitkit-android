@@ -31,7 +31,19 @@ internal object Env {
         ).filter { it.first in enabled }.map { it.second }
     }
 
+    val breezApiKey: String? get() = BuildConfig.BREEZ_API_KEY.takeIf { it.isNotBlank() }
+
+    /**
+     * Esplora endpoint for the node's chain source on regtest builds, set to put the wallet on Spark's regtest chain
+     * through `scripts/spark-regtest-esplora.py`; Electrum is used when unset.
+     */
+    val regtestEsploraUrl: String?
+        get() = BuildConfig.ESPLORA_URL.takeIf { it.isNotBlank() && network == Network.REGTEST }
+
     val isDebug = BuildConfig.DEBUG
+
+    /** Basic auth (`user:password`) for Blocktank's regtest routes, set only in debug builds. */
+    val blocktankRegtestAuth: String? get() = BuildConfig.BLOCKTANK_REGTEST_AUTH.takeIf { isDebug && it.isNotBlank() }
     const val isE2eTest = BuildConfig.E2E
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
@@ -120,6 +132,22 @@ internal object Env {
             Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
         }
 
+    /**
+     * Whether the node's chain is the one Spark watches, so an on-chain funding of Spark from Savings or a hardware
+     * wallet reaches it. On regtest Spark runs on Lightspark's own chain, which the node joins only through the
+     * Spark regtest Esplora proxy.
+     */
+    fun sparkSharesNodeChain(network: Network, regtestEsploraUrl: String?): Boolean =
+        network != Network.REGTEST || regtestEsploraUrl != null
+
+    val sparkSharesNodeChain: Boolean get() = sparkSharesNodeChain(network, regtestEsploraUrl)
+
+    /** Esplora REST that Spark reads the chain from; null keeps the SDK's default, on staging and regtest. */
+    fun sparkChainServiceUrl(network: Network): String? = when (network) {
+        Network.BITCOIN -> bitkitEsploraUrl
+        else -> null
+    }
+
     val blocktankBaseUrl
         get() = when (network) {
             Network.BITCOIN -> "https://api1.blocktank.to"
@@ -143,6 +171,7 @@ internal object Env {
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"
+    const val bitkitEsploraUrl = "https://bitkit.to/electrs"
     const val pricesWidgetBaseUrl = "https://feeds.synonym.to/price-feed/api"
 
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
@@ -225,6 +254,12 @@ internal object Env {
         }
 
     fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+
+    fun sparkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "spark")
+
+    /** A restored Spark exit data backup waiting to be imported once Spark connects; outside Spark's storage. */
+    fun sparkExitRestorePath(walletIndex: Int) =
+        Path(storagePathOf(walletIndex, network.name.lowercase(), "spark-restore"), "exit-state.json").toString()
 
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")

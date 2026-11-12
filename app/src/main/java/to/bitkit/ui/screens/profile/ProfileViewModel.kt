@@ -330,7 +330,7 @@ class ProfileViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__edit_save_error),
-                        description = it.message,
+                        description = it.profileSaveErrorText(context),
                     )
                 }
             }

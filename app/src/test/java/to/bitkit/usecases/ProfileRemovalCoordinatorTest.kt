@@ -62,7 +62,13 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     private val pause = PrivatePaykitRepo.ProfileDeletionPause()
     private val events = mutableListOf<String>()
     private val deletion =
-        PubkyProfileDeletion(original, 1, PaykitProfileDeletionSnapshot("identity", "revision", emptyList()))
+        PubkyProfileDeletion(
+            original,
+            1,
+            PaykitProfileDeletionSnapshot("identity", "revision", emptyList()),
+            false,
+            null
+        )
     private val sut by lazy { ProfileRemovalCoordinator(pubky, privateRepo, sharing, store) }
     private val logouts = mutableListOf<PaykitProfileLogout>()
     private val binding = PubkyGrantLogoutReceipt("identity", "homeserver", "original-grant", "bitkit")
@@ -707,6 +713,20 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `review cannot reintroduce a pubky profile after observing its absence`() = test {
+        val first = PubkyProfileDeletion(original, 1, deletion.snapshot, true, "pubky-original")
+        val failure = failRemoval(first)
+        val absent = PubkyProfileDeletion(original, 1, deletion.snapshot, true, null)
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(absent))
+        val reviewed = sut.reviewAgain(failure).getOrThrow()
+        assertSame(absent, reviewed.deletion)
+        whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(first))
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        verify(pubky, times(1)).deleteProfile(eq(first), any())
+        verify(pubky, never()).deleteProfile(eq(absent), any())
+    }
+
+    @Test
     fun `old failure cannot expand residuals after a confirmation admission failure`() = test {
         val first = deletion.withSnapshot(deletion.snapshot.copy(contacts = listOf(contact("alice"), contact("bob"))))
         val failure = failRemoval(first)
@@ -759,7 +779,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     }
 
     private fun PubkyProfileDeletion.withSnapshot(snapshot: PaykitProfileDeletionSnapshot) =
-        PubkyProfileDeletion(owner, profileWriteRevision, snapshot)
+        PubkyProfileDeletion(owner, profileWriteRevision, snapshot, deletePubkyProfile, pubkyProfileRevision)
 
     private suspend fun failRemoval(snapshot: PubkyProfileDeletion): ProfileRemovalFailure {
         whenever(pubky.prepareProfileDeletion(original)).thenReturn(Result.success(snapshot))

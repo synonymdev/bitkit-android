@@ -60,6 +60,10 @@ Before confirmation, the app captures the original sign-in, local write generati
 revision and contact set. A confirmation can start once. Review only re-reads the original owner and
 opens a new confirmation for unchanged records remaining from the previous confirmation. Added or
 changed records stop the retry; records observed absent cannot become targets again in this attempt.
+On Android, this includes both the pubky.app profile and the Paykit copy; an adopted Ring profile
+is excluded from pubky.app deletion. Each captured revision is checked independently. An acknowledged
+pubky.app deletion is retained if the Paykit deletion fails, so a freshly confirmed retry does not
+repeat that deletion or target a recreated profile.
 The reduced target set remains in force if the new confirmation is canceled or rejected before
 cleanup starts. Absence does not establish which operation removed a record. After local credential
 teardown has started, Review is unavailable and
@@ -77,6 +81,8 @@ response. Native key-only contact batches do not establish cross-device edit/re-
 protection; that native conditional-mutation work remains separate.
 
 `create-profile.xml` records the name-only saving interval and checks the saved name after reopening and relaunching. Use a fresh unfunded identity per run and record the exact app/SDK revisions and network. With controlled network fault injection, block direct UDP while keeping the configured HTTP relays and homeserver reachable; saving should still complete. Reject the required profile write separately and verify saving reports failure instead of navigating to Pay Contacts. Fault injection is a manual check beyond journey-runner capabilities.
+
+`edit-pubky-app-profile.xml` checks that Edit Profile presents the profile as the public pubky.app profile and that a name edit is saved and survives a relaunch. Use an identity whose pubky.app profile you can open on pubky.app; checking the edit there, and an edit made in pubky.app while Bitkit is open, are manual checks beyond journey-runner capabilities.
 
 On Android, the restart check waits for the full profile (`ProfileViewName`). A matching `ProfileCachedName` during loading does not complete that check. Record an unfinished load separately from a loaded profile with a missing or incorrect name.
 

@@ -14,6 +14,7 @@ import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getTransactionDetails
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -35,8 +36,11 @@ import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
@@ -63,10 +67,10 @@ import to.bitkit.repositories.PrivatePaykitAddressReservationRepo.ReceiptAssignm
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.utils.AppError
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Provider
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -533,6 +537,9 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
 
     @Test
     fun `held incoming search uses its captured high index reservation after profile cleanup`() = coreTest {
+        whenever(lightningService.listOnchainWalletAccounts()).thenReturn(
+            listOf(OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 0u)),
+        )
         val address = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
         val ledger = MutableStateFlow(
             PrivatePaykitReservationData(
@@ -581,7 +588,10 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
             addressSearchLastUsedReceiveIndexes = mapOf("nativeSegwit" to 600),
         )
         whenever(lightningService.listOnchainWalletAccounts()).thenReturn(
-            listOf(OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 5u)),
+            listOf(
+                OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 5u),
+                OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 0u),
+            ),
         )
         whenever(lightningService.addressInfosForType(AddressType.P2WPKH, false, 200, 200, 5u))
             .thenReturn(listOf(AddressDerivationInfo("server-address", 203)))
@@ -595,6 +605,100 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
             mapOf("nativeSegwit" to 600, "nativeSegwit:account:5" to 203),
             cacheData.value.addressSearchLastUsedReceiveIndexes,
         )
+        for (type in listOf(AddressType.P2PKH, AddressType.P2SH, AddressType.P2TR)) {
+            verify(lightningService, never()).addressInfosForType(eq(type), any(), any(), any(), any())
+        }
+        inOrder(lightningService) {
+            verify(lightningService).listOnchainWalletAccounts()
+            verify(lightningService).addressInfosForType(AddressType.P2WPKH, false, 1600, 1, 0u)
+            verify(lightningService).addressInfosForType(AddressType.P2WPKH, true, 800, 200, 0u)
+            verify(lightningService).addressInfosForType(AddressType.P2WPKH, false, 200, 200, 5u)
+        }
+    }
+
+    @Test
+    fun `loaded primaries retain selected type and change priority over companion receive`() = coreTest {
+        whenever(lightningService.listOnchainWalletAccounts()).thenReturn(
+            listOf(
+                OnchainWalletAccount(LdkAddressType.LEGACY, 0u),
+                OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 5u),
+                OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 0u),
+            ),
+        )
+        whenever(lightningService.addressInfosForType(AddressType.P2WPKH, true, 0, 200, 0u))
+            .thenReturn(listOf(AddressDerivationInfo("primary-change", 3)))
+        whenever(lightningService.addressInfosForType(AddressType.P2PKH, true, 0, 200, 0u))
+            .thenReturn(listOf(AddressDerivationInfo("legacy-change", 4)))
+        whenever(lightningService.addressInfosForType(AddressType.P2WPKH, false, 0, 200, 5u))
+            .thenReturn(listOf(AddressDerivationInfo("companion-receive", 5)))
+
+        receive("companion-receive", "legacy-change", "primary-change")
+
+        assertEquals("primary-change", (updates.single() as Activity.Onchain).v1.address)
+        assertEquals(mapOf("nativeSegwit" to 3), cacheData.value.addressSearchLastUsedChangeIndexes)
+        inOrder(lightningService) {
+            verify(lightningService).addressInfosForType(AddressType.P2WPKH, false, 0, 200, 0u)
+            verify(lightningService).addressInfosForType(AddressType.P2PKH, false, 0, 200, 0u)
+            verify(lightningService).addressInfosForType(AddressType.P2WPKH, true, 0, 200, 0u)
+        }
+        verify(lightningService, times(11)).addressInfosForType(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `account listing failure preserves primary address discovery`() = coreTest {
+        whenever(lightningService.listOnchainWalletAccounts()).thenAnswer { throw AppError("Unavailable") }
+        whenever(lightningService.addressInfosForType(AddressType.P2WPKH, false, 0, 200, 0u))
+            .thenReturn(listOf(AddressDerivationInfo("primary-receive", 8)))
+
+        receive("primary-receive")
+
+        assertEquals("primary-receive", (updates.single() as Activity.Onchain).v1.address)
+        assertEquals(mapOf("nativeSegwit" to 8), cacheData.value.addressSearchLastUsedReceiveIndexes)
+    }
+
+    @Test
+    fun `account listing cancellation does not fall back to derivation or write activity`() = coreTest {
+        whenever(lightningService.listOnchainWalletAccounts()).thenThrow(CancellationException("Cancelled"))
+        whenever(lightningService.listPayments()).thenReturn(listOf(payment()))
+        val outputs = listOf(output("primary-receive"))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+
+        assertFailsWith<CancellationException> { sut.handlePaymentEvent("received") }
+
+        verify(lightningService, never()).addressInfosForType(any(), any(), any(), any(), any())
+        assertTrue(updates.isEmpty())
+        assertTrue(cacheData.value.addressSearchLastUsedReceiveIndexes.isEmpty())
+        assertTrue(cacheData.value.addressSearchLastUsedChangeIndexes.isEmpty())
+    }
+
+    @Test
+    fun `empty loaded accounts skip derivation and the next search reads newly loaded accounts`() = coreTest {
+        whenever(lightningService.listOnchainWalletAccounts()).thenReturn(
+            emptyList(),
+            listOf(OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 0u)),
+        )
+        whenever(lightningService.addressInfosForType(AddressType.P2WPKH, false, 0, 200, 0u))
+            .thenReturn(listOf(AddressDerivationInfo("primary-receive", 8)))
+
+        receive("primary-receive")
+
+        assertEquals("Loading...", (updates.single() as Activity.Onchain).v1.address)
+        verify(lightningService, never()).addressInfosForType(any(), any(), any(), any(), any())
+
+        receive("primary-receive")
+
+        assertEquals("primary-receive", (updates.last() as Activity.Onchain).v1.address)
+        verify(lightningService, times(2)).listOnchainWalletAccounts()
+        verify(lightningService).addressInfosForType(AddressType.P2WPKH, false, 0, 200, 0u)
+    }
+
+    @Test
+    fun `current receiving address resolves without listing accounts`() = coreTest {
+        receive("wallet-address")
+
+        assertEquals("wallet-address", (updates.single() as Activity.Onchain).v1.address)
+        verify(lightningService, never()).listOnchainWalletAccounts()
+        verify(lightningService, never()).addressInfosForType(any(), any(), any(), any(), any())
     }
 
     @Test

@@ -6,8 +6,11 @@ import androidx.core.graphics.scale
 import coil3.ImageLoader
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkyProfileSnapshot
+import com.synonym.paykit.PubkyProfileUpdate
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -62,12 +65,14 @@ import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyAuthRequestError
+import to.bitkit.models.PubkyModerationBot
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.models.takeCodePoints
 import to.bitkit.services.PaykitProfileDeletionSnapshot
 import to.bitkit.services.PaykitProfileLogout
 import to.bitkit.services.PaykitReadLane
@@ -76,6 +81,9 @@ import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.ByteArrayOutputStream
+import java.net.URI
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -85,6 +93,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import com.synonym.paykit.PubkyProfileLink as SdkPubkyProfileLink
 
 sealed class PubkyContactError(message: String) : AppError(message) {
     data object AlreadyExists : PubkyContactError("Contact already exists")
@@ -114,7 +123,11 @@ internal class PubkyProfileDeletion(
     val owner: PubkyProfileOwner,
     val profileWriteRevision: Long,
     val snapshot: PaykitProfileDeletionSnapshot,
-)
+    val deletePubkyProfile: Boolean,
+    val pubkyProfileRevision: String?,
+) {
+    val pubkyProfileAcknowledged = AtomicBoolean(false)
+}
 
 private fun Throwable.hasCause(error: AppError): Boolean =
     generateSequence(this) { it.cause }.any { it == error }
@@ -123,6 +136,29 @@ private fun Throwable.isPaykitReadTimeout(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitReadTimeoutError }
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
+
+/**
+ * The profile an edit starts from and the pubky.app revision it was read at; null when none exists yet. [tagsUnread] is
+ * set when the Paykit copy could not be read, so the profile's tags are not the stored ones and a save keeps those.
+ */
+data class ProfileEditBase(val profile: PubkyProfile?, val revision: String?, val tagsUnread: Boolean = false)
+
+/** The pubky.app profile changed since Bitkit loaded it, so the save was not applied. */
+class PubkyProfileChangedError(cause: Throwable) : AppError("Profile changed in pubky.app", cause = cause)
+
+/** The other fields were saved and [base] is where a retry starts from, but the tag change was not. */
+class PubkyProfileTagsNotSavedError(val base: ProfileEditBase, cause: Throwable? = null) :
+    AppError("Profile tags were not saved", cause = cause)
+
+private class PubkyProfileNotFoundError : AppError("Profile not found")
+
+private class SavedProfile(val profile: PubkyProfile, val revision: String, val tagError: Throwable?)
+
+private class StoredCopy(val tags: List<String>?, val image: String?)
+
+private class FittedProfile(val name: String, val bio: String, val links: List<PubkyProfileLink>)
+
+private class RestoreBase(val publicKey: String, val profile: PubkyProfile, val revision: String?)
 
 /** Whether a Pubky identity is ready to use once restores already under way have finished. */
 enum class PubkyIdentityReadiness {
@@ -178,6 +214,17 @@ class PubkyRepo @Inject constructor(
 
         /** Delay after a deferred restore before another attempt may begin. */
         private val DEFERRED_RESTORE_INTERVAL = 5.seconds
+
+        // pubky.app profile limits (pubky-app-specs), applied when moving a Bitkit profile there.
+        private const val PUBKY_APP_NAME_MAX_LENGTH = 50
+        private const val PUBKY_APP_BIO_MAX_LENGTH = 160
+        private const val PUBKY_APP_LINKS_MAX_COUNT = 5
+        private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
+        private val WEB_SCHEMES = setOf("http", "https", "ws", "wss", "ftp")
+        private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
+        private const val PUBKY_APP_LINK_TITLE_MAX_LENGTH = 100
+        private const val PUBKY_APP_LINK_URL_MAX_LENGTH = 300
+        private const val PUBKY_APP_AVATAR_MAX_BYTES = 5_242_880uL
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -205,6 +252,34 @@ class PubkyRepo @Inject constructor(
     private val adoptedSourceCheckMutex = Mutex()
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
+
+    // Held by each own-profile write and by profile deletion, so a deletion waits for the writes under way. The
+    // deletion moves the generation on, so a load or save that started before or during it writes nothing after.
+    private val profileWriteMutex = Mutex()
+    private val profileDeletionGeneration = AtomicLong(0L)
+
+    // Moved on when a save starts and when it ends. A load writes the Paykit copy back only when no save runs and none
+    // ran since it read the copy, so it never writes back tags a save replaced.
+    private val profileSaveEpoch = AtomicLong(0L)
+    private val profileSavesRunning = AtomicInteger(0)
+
+    // Orders each save's Paykit copy write after the one an earlier save left running.
+    private val copyWriteOrder = Mutex()
+    private var pendingCopyWrite: Job? = null
+
+    /** Revision of the loaded pubky.app profile, which a save must still match; null when none exists. */
+    @Volatile
+    private var ownProfileRevision: String? = null
+
+    /** Whether the last profile load could not read the Paykit copy, so the shown tags are not the stored ones. */
+    @Volatile
+    private var tagsUnavailable = false
+
+    // Moved on each time a load sets tagsUnavailable, so a save clears it only if no load set it since the save began.
+    private val tagsReadEpoch = AtomicLong(0L)
+
+    @Volatile
+    private var restoreBase: RestoreBase? = null
     private val signInGeneration = AtomicLong(0L)
     private val storedIdentityRevision = AtomicLong(0L)
     private val readOnlyProfileGeneration = AtomicLong(0L)
@@ -336,12 +411,16 @@ class PubkyRepo @Inject constructor(
         private val labelOnly = contacts.filter { it.showsLabelOnly }.associateBy { it.profile.publicKey }
 
         val job = SupervisorJob(scope.coroutineContext.job)
+
+        val refreshScope = CoroutineScope(scope.coroutineContext + job)
         val pendingResults = mutableMapOf<String, RefreshedContact>()
         var scheduledApply: Job? = null
         private val bulkLookups = contacts.associate {
-            it.profile.publicKey to scope.launch(job, CoroutineStart.LAZY) { lookUp(this@ContactProfileRefresh, it) }
+            it.profile.publicKey to refreshScope.launch(start = CoroutineStart.LAZY) {
+                lookUp(this@ContactProfileRefresh, it)
+            }
         }
-        private val finish = scope.launch(job, CoroutineStart.LAZY) {
+        private val finish = refreshScope.launch(start = CoroutineStart.LAZY) {
             bulkLookups.values.joinAll()
             onFinished(this@ContactProfileRefresh)
         }
@@ -1004,23 +1083,37 @@ class PubkyRepo @Inject constructor(
             try {
                 runSuspendCatching {
                     withContext(ioDispatcher) {
-                        resolveContactProfile(signIn.publicKey, retry = true).getOrThrow()
-                            ?: throw AppError("Profile not found")
+                        loadOwnProfile(signIn) ?: throw PubkyProfileNotFoundError()
                     }
-                }.onSuccess { loadedProfile ->
+                }.onSuccess { (loadedProfile, revision) ->
                     var isCurrent = false
-                    _profile.update {
-                        isCurrent = isCurrentLoad()
-                        if (isCurrent) loadedProfile else it
+                    initializeMutex.withLock {
+                        _profile.update {
+                            isCurrent = isCurrentLoad()
+                            if (isCurrent) loadedProfile else it
+                        }
+                        if (isCurrent) {
+                            ownProfileRevision = revision
+                            invalidateReadOnlyProfile()
+                        }
                     }
                     if (!isCurrent) {
                         Logger.debug("Skipped stale profile load for '${redacted(signIn.publicKey)}'", context = TAG)
                         return@onSuccess
                     }
-                    invalidateReadOnlyProfile()
                     cacheMetadata(loadedProfile, isCurrentLoad)
                 }.onFailure {
                     Logger.error("Failed to load profile", it, context = TAG)
+                    // A profile deleted on pubky.app is set up again rather than left unreachable.
+                    if (it is PubkyProfileNotFoundError) {
+                        initializeMutex.withLock {
+                            if (isCurrentLoad()) {
+                                _profile.update { null }
+                                ownProfileRevision = null
+                                settingsStore.setPubkyProfileSetupPending(true)
+                            }
+                        }
+                    }
                 }
                 completedProfileSignInGeneration = signIn.generation
                 completedProfileWriteGeneration = writeGeneration
@@ -1043,7 +1136,8 @@ class PubkyRepo @Inject constructor(
                     val secret = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
                         ?: adoptedSecretKeyHex() ?: return@runSuspendCatching null
                     val owner = pubkyService.publicKeyFromSecret(secret).ensurePubkyPrefix()
-                    resolveContactProfile(owner, retry = false).getOrThrow()
+                    pubkyService.fetchPubkyProfileWithRevision(owner)
+                        ?.let { PubkyProfile.fromPubkyProfile(owner, it.profile) }
                 }.onSuccess { loaded ->
                     synchronized(readOnlyProfileLock) {
                         if (isCurrentLoad()) _readOnlyProfile.update { loaded }
@@ -1057,8 +1151,28 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun fetchRemoteProfile(publicKey: String): Result<PubkyProfile?> =
-        resolveContactProfile(publicKey, retry = true)
+    suspend fun fetchRemoteProfile(publicKey: String): Result<PubkyProfile?> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val prefixedKey = publicKey.ensurePubkyPrefix()
+            val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(prefixedKey) }
+                .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
+            val paykitData = paykitRead.getOrNull()?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
+            // Cleared before the read, so a failed lookup never leaves an earlier visit's base to save against.
+            restoreBase = null
+            val snapshot = readRetryingOnce(prefixedKey) { pubkyService.fetchPubkyProfileWithRevision(prefixedKey) }
+            if (snapshot == null) {
+                paykitRead.getOrThrow()
+                return@withContext paykitData?.toPubkyProfile(prefixedKey)?.also {
+                    restoreBase = RestoreBase(prefixedKey, it, revision = null)
+                }
+            }
+            tagsReadEpoch.incrementAndGet()
+            tagsUnavailable = paykitRead.isFailure
+            PubkyProfile.fromPubkyProfile(prefixedKey, snapshot.profile).copy(tags = paykitData?.tags.orEmpty()).also {
+                restoreBase = RestoreBase(prefixedKey, it, snapshot.revision)
+            }
+        }
+    }
 
     /**
      * Resolves [publicKey]'s profile once, without retrying, for display only. A null or failed result is not proof
@@ -1105,8 +1219,8 @@ class PubkyRepo @Inject constructor(
                 return@withLock runSuspendCatching {
                     withContext(ioDispatcher) {
                         val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
-                        val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
-                        finishIdentityCreation(publicKey, name, bio, links, tags, imageUrl)
+                        val saved = publishIdentityProfile(publicKey, name, bio, links, tags, avatarBytes)
+                        finishIdentityCreation(publicKey, saved)
                     }
                 }
             }
@@ -1119,9 +1233,9 @@ class PubkyRepo @Inject constructor(
                         val publicKeyZ32 = _publicKey.value
                             ?: createLocalIdentitySession { shouldRevokeSessionOnFailure = true }
 
-                        val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
+                        val saved = publishIdentityProfile(publicKeyZ32, name, bio, links, tags, avatarBytes)
                         shouldRevokeSessionOnFailure = false
-                        finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
+                        finishIdentityCreation(publicKeyZ32, saved)
                     }
                 }
                 if (creationResult.isFailure) revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
@@ -1165,35 +1279,42 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun publishIdentityProfile(
-        name: String,
-        bio: String,
-        links: List<PubkyProfileLink>,
-        tags: List<String>,
-        avatarBytes: ByteArray?,
-    ): String? {
-        val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
-        writeProfile(name, bio, links, tags, imageUrl)
-        return imageUrl
-    }
-
-    private suspend fun finishIdentityCreation(
         publicKey: String,
         name: String,
         bio: String,
         links: List<PubkyProfileLink>,
         tags: List<String>,
-        imageUrl: String?,
-    ): String {
-        val createdProfile = PubkyProfile(
-            publicKey = publicKey,
-            name = name,
-            bio = bio,
-            imageUrl = imageUrl,
-            links = links,
-            tags = tags,
-            status = null,
-        )
+        avatarBytes: ByteArray?,
+    ): SavedProfile {
+        // A restore saves against the pubky.app profile its form was filled from; without one it creates the profile.
+        val restore = restoreBase?.takeIf { it.publicKey == publicKey }
+        val imageUrl = avatarBytes?.let { uploadAvatarLocked(it, publicKey).getOrNull() } ?: restore?.profile?.imageUrl
+        val base = restore?.profile?.takeIf { restore.revision != null }
+        val saved = runSuspendCatching {
+            writeProfile(
+                publicKey,
+                name,
+                bio,
+                links,
+                tags,
+                imageUrl,
+                base,
+                expectedRevision = restore?.revision,
+                signIn = null,
+            )
+        }.getOrElse {
+            if (!it.isConcurrentUpdate()) throw it
+            throw PubkyProfileChangedError(it)
+        }
+        restoreBase = null
+        saved.tagError?.let { Logger.warn("Created profile without its tag change", it, context = TAG) }
+        return saved
+    }
+
+    private suspend fun finishIdentityCreation(publicKey: String, saved: SavedProfile): String {
+        val createdProfile = saved.profile
         startSignIn(publicKey)
+        ownProfileRevision = saved.revision
         setProfile(createdProfile)
         cacheMetadata(createdProfile)
         settingsStore.setPubkyProfileSetupPending(false)
@@ -1230,15 +1351,32 @@ class PubkyRepo @Inject constructor(
         return clearedLocalState
     }
 
-    suspend fun uploadAvatar(imageBytes: ByteArray): Result<String> = runSuspendCatching {
+    suspend fun uploadAvatar(imageBytes: ByteArray, publicKey: String? = null): Result<String> = identityTransition {
+        val owner = profileOwner()
+        withContext(ioDispatcher) {
+            initializeMutex.withLock {
+                check(isProfileOwnerCurrent(owner)) { "Profile identity changed before avatar upload" }
+                uploadAvatarLocked(imageBytes, publicKey)
+            }
+        }
+    }
+
+    private suspend fun uploadAvatarLocked(
+        imageBytes: ByteArray,
+        publicKey: String?,
+    ): Result<String> = runSuspendCatching {
         withContext(ioDispatcher) {
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
+            val identity = requireNotNull(publicKey ?: _publicKey.value) { "No public key available" }
             val compressed = compressAvatar(imageBytes)
-            pubkyService.uploadProfileAvatar(compressed, contentType = "image/jpeg")
+            withPubkyAppScopeLocked(identity) { pubkyService.uploadPubkyAppAvatar(compressed, "image/jpeg", identity) }
         }
     }
+
+    /** The profile and pubky.app revision an edit starts from; its save is checked against that revision. */
+    fun profileEditBase() = ProfileEditBase(_profile.value, ownProfileRevision, tagsUnavailable)
 
     suspend fun saveProfile(
         name: String,
@@ -1246,8 +1384,16 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         imageUrl: String?,
-    ): Result<Unit> =
-        identityTransition { saveProfileAdmitted(name, bio, links, tags, imageUrl) }
+    ): Result<Unit> = saveProfile(name, bio, links, tags, imageUrl, profileEditBase())
+
+    suspend fun saveProfile(
+        name: String,
+        bio: String,
+        links: List<PubkyProfileLink>,
+        tags: List<String>,
+        imageUrl: String?,
+        editBase: ProfileEditBase,
+    ): Result<Unit> = identityTransition { saveProfileAdmitted(name, bio, links, tags, imageUrl, editBase) }
 
     private suspend fun saveProfileAdmitted(
         name: String,
@@ -1255,25 +1401,40 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         imageUrl: String?,
+        editBase: ProfileEditBase,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            writeProfile(name, bio, links, tags, imageUrl)
-            val pk = requireNotNull(_publicKey.value) { "No public key available" }
-            val profile = PubkyProfile(
-                publicKey = pk,
-                name = name,
-                bio = bio,
-                imageUrl = imageUrl ?: _profile.value?.imageUrl,
-                links = links,
-                tags = tags,
-                status = _profile.value?.status,
-            )
-            setProfile(profile)
-            cacheMetadata(profile)
+            val signIn = requireNotNull(currentSignIn()) { "No public key available" }
+            val pk = signIn.publicKey
+            val saved = runSuspendCatching {
+                writeProfile(
+                    pk,
+                    name,
+                    bio,
+                    links,
+                    tags,
+                    imageUrl,
+                    base = editBase.profile.takeIf { editBase.revision != null },
+                    expectedRevision = editBase.revision,
+                    signIn = signIn,
+                    tagsUnread = editBase.tagsUnread,
+                )
+            }.getOrElse {
+                if (!it.isConcurrentUpdate()) throw it
+                ownProfileRevision = null
+                scope.launch { loadProfile() }
+                throw PubkyProfileChangedError(it)
+            }
+            // A session change while the save ran leaves the new session's profile alone.
+            if (!isCurrent(signIn)) return@withContext
+            setProfile(saved.profile)
+            ownProfileRevision = saved.revision
+            cacheMetadata(saved.profile)
             notifyBackupStateChanged()
+            saved.tagError?.let { throw it }
         }
     }
 
@@ -1283,10 +1444,16 @@ class PubkyRepo @Inject constructor(
             val signIn = requireNotNull(owner.signIn) { "Profile identity is not available" }
             val revision = profileWriteGeneration.get()
             val snapshot = pubkyService.captureProfileDeletion(signIn.publicKey) { isProfileOwnerCurrent(owner) }
+            val deletePubkyProfile = !isRingAdoptedIdentity()
+            val pubkyRevision = if (deletePubkyProfile) {
+                pubkyService.fetchPubkyProfileWithRevision(signIn.publicKey)?.revision
+            } else {
+                null
+            }
             check(isProfileOwnerCurrent(owner) && revision == profileWriteGeneration.get()) {
                 "Profile changed; review it before removing it"
             }
-            PubkyProfileDeletion(owner, revision, snapshot)
+            PubkyProfileDeletion(owner, revision, snapshot, deletePubkyProfile, pubkyRevision)
         }.recoverCatching {
             generateSequence(it) { error -> error.cause }
                 .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
@@ -1299,6 +1466,13 @@ class PubkyRepo @Inject constructor(
         identityOperations.requireRemoval()
         check(isProfileOwnerCurrent(deletion.owner) && deletion.profileWriteRevision == profileWriteGeneration.get()) {
             "Profile changed; review it before removing it"
+        }
+        check(deletion.deletePubkyProfile == !isRingAdoptedIdentity()) { "Profile ownership changed" }
+        if (deletion.deletePubkyProfile) {
+            val revision = pubkyService.fetchPubkyProfileWithRevision(deletion.snapshot.publicKey)?.revision
+            check(revision == if (deletion.pubkyProfileAcknowledged.get()) null else deletion.pubkyProfileRevision) {
+                "Profile changed; review it before removing it"
+            }
         }
         runSuspendCatching { pubkyService.validateProfileDeletion(deletion.snapshot) }.recoverCatching {
             generateSequence(it) { error -> error.cause }
@@ -1317,7 +1491,28 @@ class PubkyRepo @Inject constructor(
         check(isProfileOwnerCurrent(deletion.owner)) { "Profile removal identity changed" }
         clearSessionContactProfiles()
         deleteContacts(deletion.snapshot.contacts)
-        pubkyService.deletePaykitProfile(deletion.snapshot, onAcknowledged)
+        profileWriteMutex.withLock {
+            profileDeletionGeneration.incrementAndGet()
+            try {
+                if (deletion.deletePubkyProfile && !deletion.pubkyProfileAcknowledged.get()) {
+                    val revision = deletion.pubkyProfileRevision
+                    if (revision == null) {
+                        check(pubkyService.fetchPubkyProfileWithRevision(deletion.snapshot.publicKey) == null) {
+                            "Profile changed; review it before removing it"
+                        }
+                        deletion.pubkyProfileAcknowledged.set(true)
+                    } else {
+                        pubkyService.deletePubkyProfile(revision, deletion.snapshot.publicKey) {
+                            deletion.pubkyProfileAcknowledged.set(true)
+                        }
+                    }
+                    ownProfileRevision = null
+                }
+                pubkyService.deletePaykitProfile(deletion.snapshot, onAcknowledged)
+            } finally {
+                profileDeletionGeneration.incrementAndGet()
+            }
+        }
         profileWriteGeneration.incrementAndGet()
     }.recoverCatching {
         generateSequence(it) { error -> error.cause }
@@ -1344,23 +1539,390 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun writeProfile(
+        publicKey: String,
         name: String,
         bio: String,
         links: List<PubkyProfileLink>,
         tags: List<String>,
         imageUrl: String?,
-    ) {
-        val data = PubkyProfile(
-            publicKey = "",
-            name = name,
-            bio = bio,
-            imageUrl = imageUrl,
-            links = links,
-            tags = tags,
-            status = null,
-        ).toProfileData()
-        pubkyService.publishPaykitProfile(data.toPaykitProfile())
+        base: PubkyProfile?,
+        expectedRevision: String?,
+        signIn: PubkySignIn?,
+        tagsUnread: Boolean = false,
+    ): SavedProfile {
+        profileSaveEpoch.incrementAndGet()
+        profileSavesRunning.incrementAndGet()
+        try {
+            return writeProfileOnce(
+                publicKey,
+                name,
+                bio,
+                links,
+                tags,
+                imageUrl,
+                base,
+                expectedRevision,
+                signIn,
+                tagsUnread,
+            )
+        } finally {
+            profileSavesRunning.decrementAndGet()
+            profileSaveEpoch.incrementAndGet()
+        }
     }
+
+    private suspend fun writeProfileOnce(
+        publicKey: String,
+        name: String,
+        bio: String,
+        links: List<PubkyProfileLink>,
+        tags: List<String>,
+        imageUrl: String?,
+        base: PubkyProfile?,
+        expectedRevision: String?,
+        signIn: PubkySignIn?,
+        tagsUnread: Boolean,
+    ): SavedProfile {
+        val generation = profileDeletionGeneration.get()
+        val readEpoch = tagsReadEpoch.get()
+        // Unread when the edit began or now: either way the form's tags are not the stored ones.
+        val copyUnread = tagsUnread || tagsUnavailable
+        // A profile written without a base is fitted to pubky.app's limits, as a move is.
+        val fitted = if (base == null) fitted(name, bio, links) else null
+        val links = fitted?.links ?: links.map {
+            PubkyProfileLink(
+                label = it.label.singleLine(),
+                url = it.url.toPubkyAppLinkUrl() ?: it.url
+            )
+        }
+        val bio = fitted?.bio ?: bio.singleLine()
+        val name = fitted?.name ?: name
+        // A Bitkit avatar still on Paykit storage is moved by a later load rather than written to pubky.app as is.
+        val paykitAvatar = imageUrl?.takeIf { it.isPaykitStorage() }
+        val update = PubkyProfileUpdate(
+            name = name.singleLine().takeIf { it != base?.name },
+            bio = bio.takeIf { base == null || it != base.bio },
+            image = when {
+                paykitAvatar != null -> null
+                base == null -> imageUrl
+                imageUrl == base.imageUrl -> null
+                else -> imageUrl.orEmpty()
+            },
+            links = links.takeIf { base == null || it != base.links }
+                ?.map { SdkPubkyProfileLink(title = it.label, url = it.url) },
+        )
+        val snapshot = publishProfileSnapshot(signIn, generation, publicKey, update, expectedRevision)
+        ownProfileRevision = snapshot.revision
+        val baseTags = base?.tags.orEmpty()
+        val stored = storedCopy(publicKey, copyUnread)
+        val wasPending = publicKey in pubkyStore.data.first().pubkyAppAvatarPending
+        // The form could not show an avatar still to move while the copy was unread, so it stays pending.
+        val keepPending = snapshot.profile.image == null && copyUnread && wasPending
+        val pendingAvatar = when {
+            snapshot.profile.image != null -> null
+            paykitAvatar != null -> paykitAvatar
+            keepPending -> stored?.image?.takeIf { it.isPaykitStorage() }
+            else -> null
+        }
+        val avatarPending = pendingAvatar != null || keepPending
+        updateProfileOwnership(signIn, publicKey, avatarPending)
+        val keptTags = stored?.let { copy -> copy.tags?.let { it + tags.filterNot { tag -> tag in it } } ?: tags }
+        val profile = PubkyProfile.fromPubkyProfile(publicKey, snapshot.profile).let {
+            it.copy(tags = keptTags ?: baseTags, imageUrl = pendingAvatar ?: it.imageUrl)
+        }
+        // Tags live only in the Paykit copy, so a changed tag that it does not take is reported.
+        val copyData = profile.toProfileData().toPaykitProfile()
+        val writeCopy = suspend {
+            runSuspendCatching { profileWrite(generation) { pubkyService.publishPaykitProfile(copyData, publicKey) } }
+                .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
+        }
+        val copyError = keptTags?.let {
+            copyWriteOrder.withLock {
+                // A copy write left running by an earlier save lands first, so it never overwrites this one.
+                pendingCopyWrite?.join()
+                if (it == baseTags) {
+                    // With no tag change to report, the save does not wait for the copy; a deletion refuses or waits
+                    // for it. Its outcome leaves the unread flag alone, which a load may have set since.
+                    pendingCopyWrite = scope.launch { writeCopy() }
+                    markTagsRead(stored, readEpoch)
+                    null
+                } else {
+                    writeCopy().onSuccess { tagsUnavailable = false }.exceptionOrNull()
+                }
+            }
+        }
+        val saved = if (keptTags != null && copyError == null) profile else profile.copy(tags = baseTags)
+        val tagsLost = (keptTags == null || copyError != null) && tags != baseTags
+        val tagError = PubkyProfileTagsNotSavedError(
+            ProfileEditBase(saved, snapshot.revision, tagsUnread = copyUnread),
+            copyError
+        ).takeIf { tagsLost }
+        return SavedProfile(saved, snapshot.revision, tagError)
+    }
+
+    private suspend fun publishProfileSnapshot(
+        signIn: PubkySignIn?,
+        generation: Long,
+        publicKey: String,
+        update: PubkyProfileUpdate,
+        expectedRevision: String?,
+    ): PubkyProfileSnapshot {
+        val publish = suspend {
+            withPubkyAppScopeLocked(publicKey) { pubkyService.publishPubkyProfile(update, expectedRevision, publicKey) }
+        }
+        return if (signIn == null) {
+            profileWrite(generation, publish)
+        } else {
+            profileWrite(signIn, generation, publish)
+        }
+    }
+
+    private suspend fun updateProfileOwnership(signIn: PubkySignIn?, publicKey: String, avatarPending: Boolean) {
+        pubkyStore.update {
+            if (signIn != null && !isCurrent(signIn)) return@update it
+            val keys = it.pubkyAppAvatarPending
+            val pending = if (avatarPending) keys + publicKey else keys - publicKey
+            it.copy(pubkyAppProfileOwners = it.pubkyAppProfileOwners + publicKey, pubkyAppAvatarPending = pending)
+        }
+    }
+
+    /**
+     * What a save keeps from the Paykit copy after the last load could not read it, as the form then lacked its tags
+     * and the avatar still to move: empty when that load read it, null while it still cannot be read.
+     */
+    private suspend fun storedCopy(publicKey: String, copyUnread: Boolean): StoredCopy? {
+        if (!copyUnread) return StoredCopy(tags = null, image = null)
+        val record = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }.getOrElse { return null }
+        val data = record?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
+        return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
+    }
+
+    /**
+     * Clears the unread flag after a save read the copy itself and kept its tags in the profile it stores, unless a
+     * load found the copy unreadable since [readEpoch]. A save that writes the copy at once clears it only once that
+     * write succeeds, since a failed one stores the profile without the copy's tags.
+     */
+    private fun markTagsRead(stored: StoredCopy?, readEpoch: Long) {
+        if (stored?.tags != null && tagsReadEpoch.get() == readEpoch) tagsUnavailable = false
+    }
+
+    /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five valid links. */
+    private fun fitted(name: String, bio: String, links: List<PubkyProfileLink>) = FittedProfile(
+        name = name.singleLine().takeCodePoints(PUBKY_APP_NAME_MAX_LENGTH),
+        bio = bio.singleLine().takeCodePoints(PUBKY_APP_BIO_MAX_LENGTH),
+        links = links
+            .mapNotNull { link ->
+                val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val url = link.url.toPubkyAppLinkUrl() ?: return@mapNotNull null
+                PubkyProfileLink(label = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
+            }
+            .take(PUBKY_APP_LINKS_MAX_COUNT),
+    )
+
+    private suspend fun loadOwnProfile(signIn: PubkySignIn): Pair<PubkyProfile, String?>? {
+        val publicKey = signIn.publicKey
+        val generation = profileDeletionGeneration.get()
+        val saveEpoch = profileSaveEpoch.get()
+        val paykitRead = runSuspendCatching { pubkyService.fetchPaykitProfile(publicKey) }
+            .onFailure { Logger.warn("Failed to read Bitkit profile copy", it, context = TAG) }
+        initializeMutex.withLock {
+            requireCurrent(signIn)
+            tagsReadEpoch.incrementAndGet()
+            tagsUnavailable = paykitRead.isFailure
+        }
+        val paykitData = paykitRead.getOrNull()?.let { PubkyProfileData.fromPaykitProfile(it.profile) }
+        val fetched = readRetryingOnce(publicKey) { pubkyService.fetchPubkyProfileWithRevision(publicKey) }
+        if (fetched == null) paykitRead.getOrThrow()
+        val stored = pubkyStore.data.first()
+        requireCurrent(signIn)
+        val hadPubkyAppProfile = publicKey in stored.pubkyAppProfileOwners
+        val migrating = fetched == null && !hadPubkyAppProfile
+        var snapshot = fetched ?: paykitData?.takeIf { migrating }?.let { migrateToPubkyApp(signIn, it, generation) }
+        // While the move cannot finish, the Bitkit profile is shown and the next save creates the pubky.app profile.
+        snapshot ?: return paykitData?.takeIf { migrating }?.let { it.toPubkyProfile(publicKey) to null }
+        val pendingAvatar = paykitData?.image?.takeIf { it.isPaykitStorage() }
+        var retryingAvatar = fetched != null && publicKey in stored.pubkyAppAvatarPending
+        val avatarMoveSettled = fetched?.profile?.image != null || (paykitRead.isSuccess && pendingAvatar == null)
+        if (retryingAvatar && avatarMoveSettled) {
+            // An avatar set on pubky.app meanwhile wins, and only an avatar on Paykit storage is moved. An unread copy
+            // settles nothing, so the move is retried on a later load.
+            pubkyStore.update {
+                if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - publicKey) else it
+            }
+        }
+        if (pendingAvatar == null || avatarMoveSettled) retryingAvatar = false
+        if (retryingAvatar) {
+            snapshot = moveAvatar(signIn, checkNotNull(pendingAvatar), snapshot, generation) ?: snapshot
+        }
+        if (!hadPubkyAppProfile) {
+            pubkyStore.update {
+                if (isCurrent(signIn)) it.copy(pubkyAppProfileOwners = it.pubkyAppProfileOwners + publicKey) else it
+            }
+        }
+        val avatarPending = pendingAvatar != null && snapshot.profile.image == null && (migrating || retryingAvatar)
+        val profile = PubkyProfile.fromPubkyProfile(publicKey, snapshot.profile).let {
+            it.copy(tags = paykitData?.tags.orEmpty(), imageUrl = if (avatarPending) pendingAvatar else it.imageUrl)
+        }
+        if (!avatarPending && paykitData != null && paykitData != profile.toProfileData()) {
+            publishPaykitProfileCopy(signIn, profile, generation, saveEpoch)
+        }
+        return profile to snapshot.revision
+    }
+
+    private suspend fun migrateToPubkyApp(
+        signIn: PubkySignIn,
+        data: PubkyProfileData,
+        generation: Long,
+    ): PubkyProfileSnapshot? =
+        runSuspendCatching {
+            val publicKey = signIn.publicKey
+            val fitted = fitted(data.name, data.bio, data.links.map { PubkyProfileLink(it.label, it.url) })
+            // An avatar already on pubky.app is kept as is; one on Paykit storage is moved below.
+            val keptImage = data.image?.takeIf { it.isPubkyAppFile() }
+            val update = PubkyProfileUpdate(
+                name = fitted.name,
+                bio = fitted.bio,
+                image = keptImage,
+                links = fitted.links.map { SdkPubkyProfileLink(title = it.label, url = it.url) },
+            )
+            val image = data.image?.takeIf { it.isPaykitStorage() }
+            // Recorded before the profile is created without it, so an app stopped before the move still retries it.
+            // A failed create keeps it too: the create may have landed, and the next load or save handles either case.
+            if (image != null) {
+                pubkyStore.update {
+                    if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending + publicKey) else it
+                }
+            }
+            val snapshot = profileWrite(signIn, generation) {
+                withPubkyAppScopeLocked(publicKey) { pubkyService.publishPubkyProfile(update, null, publicKey) }
+            }
+            Logger.info("Moved Bitkit profile to pubky.app", context = TAG)
+            image ?: return@runSuspendCatching snapshot
+            moveAvatar(signIn, image, snapshot, generation) ?: snapshot
+        }.onFailure { Logger.warn("Failed to move Bitkit profile to pubky.app", it, context = TAG) }.getOrNull()
+
+    private suspend fun moveAvatar(
+        signIn: PubkySignIn,
+        uri: String,
+        snapshot: PubkyProfileSnapshot,
+        generation: Long,
+    ): PubkyProfileSnapshot? = runSuspendCatching {
+        val publicKey = signIn.publicKey
+        val bytes = pubkyService.fetchFile(uri, PUBKY_APP_AVATAR_MAX_BYTES)
+        val contentType = when (uri.substringAfterLast('.').lowercase()) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> "image/jpeg"
+        }
+        profileWrite(signIn, generation) {
+            val image = withPubkyAppScopeLocked(
+                publicKey
+            ) { pubkyService.uploadPubkyAppAvatar(bytes, contentType, publicKey) }
+            withPubkyAppScopeLocked(publicKey) {
+                pubkyService.publishPubkyProfile(
+                    PubkyProfileUpdate(null, null, image, null),
+                    snapshot.revision,
+                    publicKey
+                )
+            }
+        }
+    }.onSuccess {
+        pubkyStore.update {
+            if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending - signIn.publicKey) else it
+        }
+    }.onFailure {
+        Logger.warn("Failed to move avatar to pubky.app", it, context = TAG)
+        pubkyStore.update {
+            if (isCurrent(signIn)) it.copy(pubkyAppAvatarPending = it.pubkyAppAvatarPending + signIn.publicKey) else it
+        }
+    }.getOrNull()
+
+    private fun Throwable.isConcurrentUpdate() =
+        generateSequence(this) { it.cause }.any { it is PaykitException.ConcurrentUpdate }
+
+    private fun String.singleLine() = map { if (it.isISOControl()) ' ' else it }.joinToString("").trim()
+
+    private fun String.toPubkyAppLinkUrl(): String? {
+        val value = trim().takeIf { it.isNotEmpty() } ?: return null
+        val isPhone = value.isPhoneNumber()
+        if (!isPhone && value.any { it.isWhitespace() }) return null
+        val url = when {
+            !isPhone && runCatching { URI(value).scheme }.getOrNull() != null -> value
+            value.isEmailAddress() -> "mailto:$value"
+            isPhone -> "tel:" + value.filterNot { it in " -()." }
+            '.' in value && !value.startsWith('.') -> "https://$value"
+            else -> return null
+        }
+        val parsed = runCatching { URI(url) }.getOrNull()
+        val valid = url.codePointCount(0, url.length) <= PUBKY_APP_LINK_URL_MAX_LENGTH &&
+            parsed?.scheme != null && parsed.hasValidHost()
+        return url.takeIf { valid }
+    }
+
+    /**
+     * Paykit's URL parser reads a web URL's host that ends in an all-digit label as an IPv4 address (one to four
+     * numbers, as in `127.1`) and rejects it when it is not one; other schemes keep such hosts as they are.
+     */
+    private fun URI.hasValidHost(): Boolean {
+        if (scheme?.lowercase() !in WEB_SCHEMES) return true
+        // java.net.URI leaves the host null when the name is not a valid hostname, so fall back to the authority.
+        val host = host ?: rawAuthority?.substringAfterLast('@')?.substringBefore(':') ?: return true
+        if (!host.substringAfterLast('.').all { it.isDigit() }) return true
+        val numbers = host.split('.').map { it.toLongOrNull() ?: return false }
+        if (numbers.size !in 1..4) return false
+        val lastLimit = (1L shl (8 * (5 - numbers.size))) - 1
+        return numbers.dropLast(1).all { it <= 255 } && numbers.last() <= lastLimit
+    }
+
+    private fun String.isEmailAddress(): Boolean {
+        val parts = split('@')
+        return parts.size == 2 && parts[0].isNotEmpty() && '.' in parts[1] && '/' !in this
+    }
+
+    private fun String.isPhoneNumber(): Boolean {
+        val digits = count { it.isDigit() }
+        return (startsWith('+') || digits >= 7) && digits >= 5 && all { it in "+0123456789 -()." } && '+' !in drop(1) &&
+            !ISO_DATE.matches(this) && !IPV4.matches(this)
+    }
+
+    private fun String.isPaykitStorage() = "/pub/paykit/" in this
+
+    private fun String.isPubkyAppFile() =
+        "/pub/pubky.app/files/" in this && codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
+
+    private suspend fun publishPaykitProfileCopy(
+        signIn: PubkySignIn,
+        profile: PubkyProfile,
+        generation: Long,
+        saveEpoch: Long,
+    ) {
+        runSuspendCatching {
+            profileWrite(signIn, generation) {
+                // Checked under the write lock, so a save that starts after it writes its copy after this one.
+                if (profileSavesRunning.get() != 0 || profileSaveEpoch.get() != saveEpoch) return@profileWrite
+                pubkyService.publishPaykitProfile(profile.toProfileData().toPaykitProfile(), signIn.publicKey)
+            }
+        }.onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
+    }
+
+    private suspend fun <T> profileWrite(signIn: PubkySignIn, generation: Long, block: suspend () -> T): T =
+        initializeMutex.withLock {
+            requireCurrent(signIn)
+            profileWrite(generation, block)
+        }
+
+    /** Runs a write of a load or save that started at [generation], refused once a profile deletion began since. */
+    private suspend fun <T> profileWrite(generation: Long, block: suspend () -> T): T = profileWriteMutex.withLock {
+        check(profileDeletionGeneration.get() == generation) { "The profile was deleted since this write began" }
+        block()
+    }
+
+    private suspend fun <T> withPubkyAppScopeLocked(publicKey: String, block: suspend () -> T): T =
+        runSuspendCatching { block() }.getOrElse {
+            if (!it.isPaykitIdentityError() || !refreshSessionIfPossibleLocked(publicKey).getOrDefault(false)) throw it
+            block()
+        }
 
     private fun compressAvatar(imageBytes: ByteArray): ByteArray {
         val original = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size) ?: return imageBytes
@@ -1691,8 +2253,9 @@ class PubkyRepo @Inject constructor(
     }
 
     /**
-     * Looks up the signed-in identity's follows for the import overview, leaving out its own key, resolving each
-     * follow's profile once and keeping a follow it cannot resolve as a placeholder. Its lookups use the interactive
+     * Looks up the signed-in identity's follows for the import overview, leaving out its own key and the pubky.app
+     * moderation account, resolving each follow's profile once and keeping a follow it cannot resolve as a
+     * placeholder. Its lookups use the interactive
      * read lane, since the user waits on the Pubky Ring choice row until it returns, and each one still running
      * [IMPORT_FOLLOW_LOOKUP_TIMEOUT] after it got its read slot is cancelled and treated as failed; waiting for a read
      * slot does not count.
@@ -1703,7 +2266,8 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val canonicalOwnKey = PubkyPublicKeyFormat.canonicalized(pk)
             val contactKeys = pubkyService.getContacts(pk).filterNot {
-                canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey
+                (canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey) ||
+                    PubkyModerationBot.matches(it)
             }
             Logger.debug("Discovered '${contactKeys.size}' contacts for import", context = TAG)
 
@@ -2036,6 +2600,28 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    private suspend fun refreshSessionIfPossibleLocked(
+        expectedPublicKey: String,
+    ): Result<Boolean> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val storedSecretKeyHex = activeSecretKeyHexLocked(profileOwner(), clearInvalidKey = true)
+                ?: return@withContext false
+            check(
+                PubkyPublicKeyFormat.matches(pubkyService.publicKeyFromSecret(storedSecretKeyHex), expectedPublicKey)
+            ) {
+                "Profile credential does not match the intended identity"
+            }
+            pubkyService.signIn(storedSecretKeyHex)
+            val publicKey = pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
+            check(PubkyPublicKeyFormat.matches(publicKey, expectedPublicKey)) {
+                "Refreshed profile identity does not match the intended identity"
+            }
+            notifyBackupStateChanged()
+            continueSignIn(publicKey)
+            true
+        }
+    }
+
     // endregion
 
     // region Sign out
@@ -2189,7 +2775,7 @@ class PubkyRepo @Inject constructor(
     private fun queueRefreshedContact(refresh: ContactProfileRefresh, refreshed: RefreshedContact) {
         refresh.pendingResults[refreshed.contact.profile.publicKey] = refreshed
         if (refresh.scheduledApply != null) return
-        refresh.scheduledApply = scope.launch(refresh.job) {
+        refresh.scheduledApply = refresh.refreshScope.launch {
             delay(CONTACT_REFRESH_BATCH_WINDOW)
             synchronized(contactsLock) { applyRefreshResults(refresh) }
         }
@@ -2254,30 +2840,23 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val prefixedKey = publicKey.ensurePubkyPrefix()
             if (!retry) return@withContext resolveProfileOnce(prefixedKey, lane)
-            var lastError: Throwable? = null
-
-            repeat(2) { attempt ->
-                val result = runSuspendCatching { resolveProfileOnce(prefixedKey, lane) }
-                if (result.isSuccess && (result.getOrNull() != null || attempt == 1)) {
-                    return@withContext result.getOrNull()
-                }
-                result.exceptionOrNull()?.let { error ->
-                    lastError = error
-                }
-
-                if (attempt == 0) {
-                    Logger.warn(
-                        "Retrying contact profile resolution for '${redacted(prefixedKey)}'",
-                        lastError,
-                        context = TAG,
-                    )
-                    delay(250)
-                }
-            }
-
-            lastError?.let { throw it }
-            null
+            readRetryingOnce(prefixedKey) { resolveProfileOnce(prefixedKey, lane) }
         }
+    }
+
+    private suspend fun <T : Any> readRetryingOnce(publicKey: String, read: suspend () -> T?): T? {
+        var lastError: Throwable? = null
+        repeat(2) { attempt ->
+            val result = runSuspendCatching { read() }
+            if (result.isSuccess && (result.getOrNull() != null || attempt == 1)) return result.getOrNull()
+            result.exceptionOrNull()?.let { lastError = it }
+            if (attempt == 0) {
+                Logger.warn("Retrying profile read for '${redacted(publicKey)}'", lastError, context = TAG)
+                delay(250)
+            }
+        }
+        lastError?.let { throw it }
+        return null
     }
 
     private suspend fun resolveProfileOnce(prefixedKey: String, lane: PaykitReadLane): PubkyProfile? =
@@ -2394,12 +2973,16 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             // Keep the read/derive/delete decision with the identity that supplied its public key.
             initializeMutex.withLock {
-                if (!isProfileOwnerCurrent(owner)) return@withLock null
-                val publicKey = owner.signIn?.publicKey
-                    ?: return@withLock keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-                managedSecretKeyFor(publicKey, clearInvalidKey)
+                activeSecretKeyHexLocked(owner, clearInvalidKey)
             }
         }
+
+    private suspend fun activeSecretKeyHexLocked(owner: PubkyProfileOwner, clearInvalidKey: Boolean): String? {
+        if (!isProfileOwnerCurrent(owner)) return null
+        val publicKey = owner.signIn?.publicKey
+            ?: return keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        return managedSecretKeyFor(publicKey, clearInvalidKey)
+    }
 
     private suspend fun deriveLocalSecretKeyFromWalletSeed(): String = withContext(ioDispatcher) {
         val mnemonic = requireNotNull(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)) {
@@ -2414,6 +2997,7 @@ class PubkyRepo @Inject constructor(
 
     private fun setProfile(profile: PubkyProfile?) {
         profileWriteGeneration.incrementAndGet()
+        if (profile == null) ownProfileRevision = null
         _profile.update { profile }
     }
 

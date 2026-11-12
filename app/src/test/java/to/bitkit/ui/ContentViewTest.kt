@@ -17,6 +17,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.models.HwWalletBalance
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.navigateIfNotCurrent
@@ -270,6 +271,44 @@ class ContentViewTest {
         assertTrue(navController.currentDestination?.hasRoute<Routes.Funding>() == true)
     }
 
+    @Test
+    fun `spending start route uses intro until seen`() {
+        assertEquals(Routes.SpendingIntro, transferSpendingStartRoute(hasSeenSpendingIntro = false))
+        assertEquals(Routes.SparkFundingNav, transferSpendingStartRoute(hasSeenSpendingIntro = true))
+    }
+
+    @Test
+    fun `hardware spending start route keeps the wallet id after intro`() {
+        val walletId = "trezor-1"
+
+        assertEquals(Routes.SpendingIntroHw(walletId), transferSpendingStartRoute(false, walletId))
+        assertEquals(Routes.SpendingAmountHw(walletId), transferSpendingStartRoute(true, walletId))
+    }
+
+    @Test
+    fun `funding hardware row opens the funded wallet transfer or pairing without a wallet`() {
+        assertNull(fundingHardwareRoute(emptyList(), hasSeenSpendingIntro = true))
+        val wallets = listOf(HwWalletBalance("empty", 0uL), HwWalletBalance("funded", 5_000uL))
+
+        assertEquals(Routes.SpendingAmountHw("funded"), fundingHardwareRoute(wallets, hasSeenSpendingIntro = true))
+        assertEquals(Routes.SpendingIntroHw("funded"), fundingHardwareRoute(wallets, hasSeenSpendingIntro = false))
+        val unfunded = wallets.take(1)
+        assertEquals(Routes.SpendingAmountHw("empty"), fundingHardwareRoute(unfunded, hasSeenSpendingIntro = true))
+    }
+
+    @Test
+    fun `setting up removes spending confirmation from the back stack`() {
+        val navController = transferNavController()
+        navController.navigateTo(Routes.SparkFundingNav)
+        navController.navigateTo(Routes.SpendingConfirm)
+
+        navController.navigateToSettingUp()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SettingUp>() == true)
+
+        navController.popBackStack()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SpendingAmount>() == true)
+    }
+
     private fun transferNavController(): NavHostController =
         NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
             navigatorProvider.addNavigator(ComposeNavigator())
@@ -281,6 +320,11 @@ class ContentViewTest {
                     composable<Routes.SavingsAvailability> {}
                     composable<Routes.SavingsProgress> {}
                     composable<Routes.Funding> {}
+                }
+                navigation<Routes.SparkFundingNav>(startDestination = Routes.SpendingAmount) {
+                    composable<Routes.SpendingAmount> {}
+                    composable<Routes.SpendingConfirm> {}
+                    composable<Routes.SettingUp> {}
                 }
             }
         }

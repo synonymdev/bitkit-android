@@ -115,6 +115,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
 import to.bitkit.ext.isHwUserCancellation
+import to.bitkit.ext.isPaykitError
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -134,6 +135,7 @@ import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.FeeRate
 import to.bitkit.models.HwFundingSignedTx
+import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -178,6 +180,7 @@ import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
@@ -237,6 +240,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
+import to.bitkit.services.SparkError
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
@@ -255,7 +259,7 @@ import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
-import to.bitkit.utils.Bip21Utils
+import to.bitkit.utils.ClipboardPromptValidator
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -263,6 +267,7 @@ import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
 import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
+import to.bitkit.utils.timedsheets.sheets.MoveToSparkTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
@@ -330,6 +335,8 @@ class AppViewModel @Inject constructor(
     private val usdtSheet: UsdtTimedSheet,
     private val usdtPreferences: UsdtPreferencesRepo,
     private val highBalanceSheet: HighBalanceTimedSheet,
+    private val moveToSparkSheet: MoveToSparkTimedSheet,
+    private val moveToSparkRepo: MoveToSparkRepo,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
     private val timeSource: TimeSource,
@@ -567,6 +574,7 @@ class AppViewModel @Inject constructor(
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
+        registerSheet(moveToSparkSheet)
         registerSheet(appUpdateSheet)
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
@@ -736,7 +744,12 @@ class AppViewModel @Inject constructor(
                 sheet == null && authenticated && !forgotPin && receipt == NewTransactionSheetDetails.EMPTY
             }.collect {
                 if (it) retryUsdtIntro()
+                if (it) retryMoveToSparkIntro()
             }
+        }
+        viewModelScope.launch {
+            // Channels and Spark load after Home first checks its sheets, so the intro is checked again once they can.
+            moveToSparkRepo.canMove.collect { if (it) retryMoveToSparkIntro() }
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationFailed.collect { failed ->
@@ -776,6 +789,7 @@ class AppViewModel @Inject constructor(
         observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
+        observeSparkReady()
         observePublicPaykitEndpoints()
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
@@ -850,6 +864,17 @@ class AppViewModel @Inject constructor(
                     }
                     hadUsableChannels = hasUsableChannels
                 }
+        }
+    }
+
+    private fun observeSparkReady() {
+        viewModelScope.launch {
+            lightningRepo.isSparkReady.filter { it }.collect {
+                refreshPaykitEndpointsAfterChannelAvailabilityChanged(
+                    reason = "spark ready",
+                    forceRefreshLightning = true,
+                )
+            }
         }
     }
 
@@ -1981,6 +2006,15 @@ class AppViewModel @Inject constructor(
                     request,
                     IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable,
                 )
+            } else if (
+                result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList &&
+                requestedPaymentRequestId.value == request.id
+            ) {
+                finishFailedRequestedPaymentRequestPresentation(
+                    request = request,
+                    reason = result?.incomingPaymentRequestFailureReason
+                        ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+                )
             } else {
                 deferPaymentRequestPresentation(
                     request = request,
@@ -2001,6 +2035,24 @@ class AppViewModel @Inject constructor(
             walletGeneration = walletGeneration,
         )
         return true
+    }
+
+    private fun finishFailedRequestedPaymentRequestPresentation(
+        request: PaykitPaymentRequest,
+        reason: IncomingPaykitPaymentRequestFailureReason,
+    ) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(request.counterparty, reason)
+        val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
+        paymentRequestPresentationGeneration++
+        clearRequestedPaymentRequest()
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.slashtags__error_pay_waiting_msg),
+            testTag = "PaymentRequestWaitingForDetailsToast",
+        )
+        if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
+        completePaymentRequestPresentation(request)
     }
 
     private fun finishPrivateLinkPendingPaymentRequestPresentation(request: PaykitPaymentRequest) {
@@ -2829,6 +2881,7 @@ class AppViewModel @Inject constructor(
             refreshPaymentActivity(paymentHash)
             // A failed automatic Allowance payment falls back to the request's manual flow without a send error.
             if (isAutomaticAllowancePayment(paymentHash)) return
+            if (moveToSparkRepo.isWatchedMovePayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
@@ -2876,6 +2929,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash.let { paymentHash ->
             closeSettledReceiveSheet(receiveSheetToClose)
             activityRepo.notifyPaymentActivityChanged()
+            if (moveToSparkRepo.isMovePayment(paymentHash)) return
             privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)?.let { publicKey ->
                 activityRepo.setContact(
                     contactPublicKey = publicKey,
@@ -2929,6 +2983,8 @@ class AppViewModel @Inject constructor(
         refreshPaymentActivity(paymentHash)
         // An automatic Allowance payment settles headlessly; the allowance repo posts its notice and contact tag.
         if (isAutomaticAllowancePayment(paymentHash)) return
+        // A move to Spark reports its outcome on its own screen.
+        if (moveToSparkRepo.isMovePayment(paymentHash)) return
         if (!pendingPaymentRepo.isPending(paymentHash)) {
             notifyPaymentSentOnLightning(event)
             return
@@ -2952,6 +3008,8 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPaymentActivity(paymentHash: String) {
+        // Spark records its own sends; the node's record of the hash is an earlier attempt that would overwrite it.
+        if (lightningRepo.isSparkSend(paymentHash)) return
         runSuspendCatching { activityRepo.handlePaymentEvent(paymentHash) }.onFailure {
             Logger.warn("Failed to refresh payment activity for '$paymentHash'", it, context = TAG)
         }
@@ -3023,6 +3081,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) {
         val isReceive = activityRepo.isReceivedTransaction(event.txid)
+        if (activityRepo.isLocalRbfBoost(event.txid)) return
         toast(
             type = Toast.ToastType.INFO,
             title = when (isReceive) {
@@ -3222,16 +3281,6 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            showAddressValidationError(
-                titleRes = R.string.other__scan_err_decoding,
-                descriptionRes = R.string.other__scan__error__generic,
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         if (activeHardwareWalletId == null && rejectUsdtSelfSend(input)) return@withContext
 
         if (isUsdtPaymentInput(input)) {
@@ -4185,7 +4234,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountChange(amount: ULong) {
-        if (_sendUiState.value.paykitUsesUsdt || _sendUiState.value.fixedLightningAmount != null) return
+        if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -4240,7 +4289,10 @@ class AppViewModel @Inject constructor(
 
                 else -> false
             }
-            val wasHardwareMax = previous.hardwareWalletId != null &&
+            // A scanned amount or a payment request's amount is the payee's, so it never follows the
+            // send-max amount, even when it equals what the wallet can spend.
+            val wasHardwareMax = activeIncomingPaymentRequest() == null &&
+                previous.hardwareWalletId != null && previous.fixedOnchainAmount == null &&
                 previous.amount > 0uL &&
                 previous.amount == previous.hardwareAvailableSats
             val hardwareAvailableSats = previous.hardwareWalletId?.let { walletId ->
@@ -4396,6 +4448,9 @@ class AppViewModel @Inject constructor(
             fixedContactLightningAmount(current)?.let {
                 return PaykitAmount(PaykitAsset.BTC, it)
             }
+        } else if (source != SendFundingSource.Usdt) {
+            // An amount typed on Spending must not replace the payee's on-chain amount.
+            current.fixedOnchainAmount?.let { return PaykitAmount(PaykitAsset.BTC, it) }
         }
         val input = activeIncomingPaymentRequest()?.amount ?: if (current.paykitUsesUsdt) {
             runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, current.paykitAmount) }.getOrNull()
@@ -4482,8 +4537,8 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): Boolean {
         val state = _sendUiState.value
-        for (wallet in hwWalletRepo.wallets.value) {
-            val available = hardwareMaxSpendable(wallet.id, state.address, state.speed, walletGeneration)
+        for (wallet in hwWalletRepo.wallets.value.sortedByDescending { it.fundingBalanceSats }) {
+            val available = hardwareAvailableForPayment(wallet, amount, state, walletGeneration)
             if (amount > available) continue
             _sendUiState.update {
                 it.copy(
@@ -4496,11 +4551,37 @@ class AppViewModel @Inject constructor(
                     confirmedWarnings = persistentListOf(),
                 )
             }
+            // The caller refreshes the confirm fee once it navigates; refreshing here too would
+            // start a refresh that the caller's then cancels.
             updateCanSwitchWallet()
-            refreshOnchainSendIfNeeded(walletGeneration)
             return true
         }
         return false
+    }
+
+    /**
+     * What [wallet] can spend toward [amount]. Composing the exact payment proves it can pay and
+     * leaves its fee in [HwWalletRepo] for the confirm screen, so the request is composed once.
+     * When that fails, the max-spendable compose says how far short the wallet is.
+     */
+    private suspend fun hardwareAvailableForPayment(
+        wallet: HwWallet,
+        amount: ULong,
+        state: SendUiState,
+        walletGeneration: Long?,
+    ): ULong {
+        val satsPerVByte = state.feeRates?.getSatsPerVByteFor(state.speed) ?: 0u
+        if (wallet.fundingBalanceSats >= amount && satsPerVByte > 0u) {
+            requireCurrentPaymentPreparation(walletGeneration)
+            val fee = hwWalletRepo.estimateFundingMiningFee(
+                walletId = wallet.id,
+                address = state.address,
+                sats = amount,
+                satsPerVByte = satsPerVByte.toULong(),
+            ).also { requireCurrentPaymentPreparation(walletGeneration) }.getOrNull()
+            if (fee != null) return wallet.fundingBalanceSats.safe() - fee.safe()
+        }
+        return hardwareMaxSpendable(wallet.id, state.address, state.speed, walletGeneration)
     }
 
     fun switchToLightning() {
@@ -4847,18 +4928,6 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            if (clearIncomingPaymentRequestTarget()) return@withContext
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                description = context.getString(R.string.other__scan__error__generic),
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         SamRockSetupRequest.parse(input)?.let {
             handleSamRockSetup(it)
             return@withContext
@@ -5031,6 +5100,15 @@ class AppViewModel @Inject constructor(
                     context = TAG,
                 )
                 if (hasIncomingPaymentRequest) return
+                if (scan == null && input.trim().startsWith("bitcoin:", ignoreCase = true)) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__generic),
+                        testTag = "InvalidAddressToast",
+                    )
+                    return
+                }
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.other__qr_error_header),
@@ -5290,6 +5368,7 @@ class AppViewModel @Inject constructor(
                 },
                 hardwareWalletId = hardwareWalletId,
                 hardwareAvailableSats = selectedMaxSendOnchain.takeIf { hardwareWalletId != null } ?: 0uL,
+                fixedOnchainAmount = invoice.amountSatoshis.takeIf { it > 0uL && incomingPaymentRequest == null },
             )
         }
         updateCanSwitchWallet()
@@ -5423,6 +5502,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (amount > 0u && routeOnchainInvoiceAmount(amount, fromMainScanner, walletGeneration)) return
+
         Logger.info(
             when (amount > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
@@ -5432,6 +5513,55 @@ class AppViewModel @Inject constructor(
         )
 
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount, walletGeneration)
+    }
+
+    /**
+     * The payee set the amount, so it opens Confirm and never Amount. Returns false only when the
+     * request is paid another way. Manual coin selection opens the picker from the swipe.
+     */
+    private suspend fun routeOnchainInvoiceAmount(
+        amount: ULong,
+        fromMainScanner: Boolean,
+        walletGeneration: Long?,
+    ): Boolean {
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN || hasActiveContactPaymentContext()) return false
+        if (amount <= Defaults.dustLimit.toULong()) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
+                description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
+                    .replace("{amount}", formatMoneyValue(Defaults.dustLimit.toULong().safe() + 1uL.safe())),
+                testTag = "AmountTooLowToast",
+            )
+            return true
+        }
+        // Savings cannot cover it but a hardware wallet can, so pay from that instead of opening Amount.
+        // The balance check above counts raw hardware balances, so no wallet may cover it once fees are taken.
+        if (
+            !validateAmount(amount) &&
+            _sendUiState.value.hardwareWalletId == null &&
+            !selectHardwareFundingSourceForAmount(amount, walletGeneration)
+        ) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+                description = context.getString(R.string.other__pay_insufficient_savings_description),
+                testTag = "InsufficientSavingsToast",
+            )
+            clearActiveContactPaymentContext()
+            return true
+        }
+        if (!validateAmount(amount)) return false
+        requireCurrentPaymentPreparation(walletGeneration)
+        // A failed estimate has shown its error; the user stays where the scan started.
+        if (!prepareHardwareSendFee()) return true
+        requireCurrentPaymentPreparation(walletGeneration)
+
+        Logger.info("Found payable amount in invoice, proceeding to confirm", context = TAG)
+        _sendUiState.update { it.copy(isAmountInputValid = true) }
+        navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm, walletGeneration)
+        refreshOnchainSendIfNeeded(walletGeneration)
+        return true
     }
 
     private suspend fun hardwareMaxSpendable(
@@ -6551,12 +6681,42 @@ class AppViewModel @Inject constructor(
                 val current = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (current != original || !current.isTransfer || current.requestId != null) return@runSuspendCatching
                 if (!current.hasPositiveEvidence || !current.localFollowupComplete) return@runSuspendCatching
-                if (current.txid == null || current.transferContext == null) return@runSuspendCatching
+                if (current.txid == null) return@runSuspendCatching
+                if (current.isSparkFunding && lightningRepo.isFundingFollowedOnScreen(current.attemptId)) {
+                    // The open funding screen settles it at the speed the user chose and moves on to Setting Up.
+                    hideSheet()
+                    return@runSuspendCatching
+                }
+                if (current.isSparkFunding) {
+                    lightningRepo.followRecoveredSparkFunding(current)
+                    hideSheet()
+                    // Leave the funding flow, whose confirm screen would offer the sent transfer again.
+                    mainScreenEffect(MainScreenEffect.Navigate(Routes.Home, clearStack = true))
+                    return@runSuspendCatching
+                }
+                if (current.transferContext == null) return@runSuspendCatching
                 val orderId = current.orderId ?: return@runSuspendCatching
                 hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
             }.onFailure { Logger.warn("Failed to open recovered transfer", it, context = TAG) }
         }
+    }
+
+    /** Opens Payment Pending for a transfer whose signed funding was not accepted, so it can be retried. */
+    fun showPendingTransfer(attempt: OnchainSendAttempt) {
+        if (!attempt.isTransfer || !attempt.blocksNextSend) return
+        showSheet(
+            Sheet.Send(
+                SendRoute.Pending(
+                    paymentHash = attempt.txid.orEmpty(),
+                    amount = attempt.amountSats.toLong(),
+                    observeResolution = false,
+                    isOnchain = true,
+                    walletId = attempt.walletId,
+                    refusalReason = attempt.refusalReason,
+                )
+            )
+        )
     }
 
     private fun showUnresolvedOnchainSend(
@@ -6656,7 +6816,7 @@ class AppViewModel @Inject constructor(
                 Logger.info("Lightning payment pending", context = TAG)
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
-                refreshIncomingPaykitPaymentRequests()
+                if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
@@ -6669,6 +6829,9 @@ class AppViewModel @Inject constructor(
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
+                is SparkError.InvoiceExpired ->
+                    PaymentFailureReason.PAYMENT_EXPIRED.toSendFailureDetails(context, decodedInvoice.bolt11)
+                        .copy(message = context.getString(R.string.other__scan__error__expired))
                 else -> error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
             }
             setSendEffect(SendEffect.NavigateToError(failure))
@@ -6689,11 +6852,8 @@ class AppViewModel @Inject constructor(
         isPaymentRequest: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
+        else if !isPaymentRequest -> true
         is LightningPaymentFailedError -> {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
-            true
-        }
-        else if !isPaymentRequest -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }
@@ -7061,18 +7221,22 @@ class AppViewModel @Inject constructor(
             paymentDeadlineAt = paymentDeadlineAt,
             onBeforeSend = onBeforeSend,
         ).onSuccess { hash ->
-            // Wait until matching payment event is received (with timeout for hold invoices)
-            val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
-                when (it) {
-                    is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
-                    is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                        Result.failure(
-                            LightningPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
-                        )
-                    )
+            fun outcome(event: Event): Result<PaymentId>? = when (event) {
+                is Event.PaymentSuccessful if event.paymentHash == hash -> Result.success(hash)
+                is Event.PaymentFailed if event.paymentHash == hash -> Result.failure(
+                    LightningPaymentFailedError(reason = event.reason, paymentRequest = bolt11)
+                )
 
-                    else -> WatchResult.Continue()
+                else -> null
+            }
+            // Wait until matching payment event is received (with timeout for hold invoices)
+            val result = coroutineScope {
+                val watch = async(start = CoroutineStart.UNDISPATCHED) {
+                    lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+                        outcome(it)?.let { result -> WatchResult.Complete(result) } ?: WatchResult.Continue()
+                    }
                 }
+                lightningRepo.settledSparkSendEvent(hash)?.let(::outcome)?.also { watch.cancel() } ?: watch.await()
             }
             return result ?: Result.failure(PaymentPendingException(hash))
         }
@@ -7175,7 +7339,9 @@ class AppViewModel @Inject constructor(
             }
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
-            refreshOnchainFeeUi(walletGeneration)
+            // Each hardware fee is a compose of several seconds on the single core queue; signing
+            // would wait behind the other speeds, so they are estimated when the picker opens.
+            refreshOnchainFeeUi(walletGeneration, selectedSpeedOnly = currentState.hardwareWalletId != null)
         }
     }
 
@@ -7216,14 +7382,37 @@ class AppViewModel @Inject constructor(
         return job
     }
 
+    /**
+     * With [selectedSpeedOnly], only the selected speed's fee is estimated and `estimates` is left
+     * empty, so opening the speed picker estimates the rest ([SendEvent.SpeedAndFee]).
+     */
     private suspend fun refreshOnchainFeeUi(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        selectedSpeedOnly: Boolean = false,
     ) = withContext(bgDispatcher) {
         requireCurrentPaymentPreparation(walletGeneration)
         val generation = sendStateGeneration
         val currentState = _sendUiState.value
         if (currentState.isRetainedHardwarePayment) return@withContext
         updateOnchainFeeUi { it.copy(isLoading = true) }
+
+        if (selectedSpeedOnly) {
+            val fee = if (currentState.feeRates?.getSatsPerVByteFor(currentState.speed) != 0u) {
+                getFeeEstimate(currentState.speed, walletGeneration)
+            } else {
+                0
+            }
+            requireCurrentPaymentPreparation(walletGeneration)
+            if (generation != sendStateGeneration) return@withContext
+            updateOnchainFeeUi {
+                OnchainFeeUi(
+                    rate = FeeRate.fromSpeed(currentState.speed),
+                    sats = fee.takeIf { sats -> sats > 0 },
+                    isLoading = false,
+                )
+            }
+            return@withContext
+        }
 
         val speeds = listOf(
             TransactionSpeed.Fast,
@@ -7308,18 +7497,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val buffer = 2uL
-        val amountToEstimate = maxSendLightning.safe() - buffer.safe()
-
-        val feeResult = lightningRepo.estimateRoutingFeesForAmount(
-            bolt11 = bolt11,
-            amountSats = amountToEstimate
-        )
-
-        feeResult.onSuccess { fee ->
-            _sendUiState.update {
-                it.copy(estimatedRoutingFee = fee + buffer)
-            }
+        lightningRepo.estimateMaxSendFee(bolt11, maxSendLightning).onSuccess { fee ->
+            _sendUiState.update { it.copy(estimatedRoutingFee = fee) }
         }.onFailure { e ->
             Logger.error("Failed to estimate routing fee for max amount", e, context = TAG)
             _sendUiState.update { it.copy(estimatedRoutingFee = 0uL) }
@@ -7699,11 +7878,16 @@ class AppViewModel @Inject constructor(
 
     fun toast(error: Throwable) {
         if (error.isHwUserCancellation()) return
+        val description = if (error.isPaykitError()) {
+            Logger.error("Paykit error shown as toast", error, context = TAG)
+            context.getString(R.string.other__try_again)
+        } else {
+            error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.common__error_body)
+        }
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.common__error_body),
+            description = description,
         )
     }
 
@@ -7845,7 +8029,8 @@ class AppViewModel @Inject constructor(
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
-            else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
+            else -> SamRockSetupRequest.isProtocolUrl(text) ||
+                ClipboardPromptValidator.isSupported(text) { coreService.decode(it) }
         }
     }
 
@@ -7911,7 +8096,6 @@ class AppViewModel @Inject constructor(
 
     override fun onCleared() {
         isSubmittingPaymentRequest = false
-        super.onCleared()
     }
 
     fun beginHardwarePaymentSubmission(): () -> Unit = beginPaymentSubmission()
@@ -8552,7 +8736,17 @@ class AppViewModel @Inject constructor(
                         )
                     }
                 }
-                .onFailure(::toast)
+                .onFailure {
+                    if (it is PaykitPaymentRequestError.RequestTooLong) {
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = context.getString(R.string.wallet__payment_request_note_too_long),
+                        )
+                    } else {
+                        toast(it)
+                    }
+                }
         }
     }
 
@@ -8833,6 +9027,10 @@ class AppViewModel @Inject constructor(
         if (!isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate()
     }
 
+    private suspend fun retryMoveToSparkIntro() {
+        if (moveToSparkSheet.shouldShow()) timedSheetManager.reevaluate()
+    }
+
     private fun canShowTimedSheet() = _isAuthenticated.value && !_showForgotPinSheet.value &&
         _currentSheet.value == null &&
         sheetTransitionJob?.isActive != true &&
@@ -9008,6 +9206,8 @@ data class SendUiState(
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
     val requiresAmountReview: Boolean = false,
+    /** The amount of a scanned on-chain request; the payee set it, so it cannot be edited. */
+    val fixedOnchainAmount: ULong? = null,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
@@ -9031,7 +9231,8 @@ data class SendUiState(
         get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
 
     val isAmountEditable: Boolean
-        get() = !isPaymentRequest && fixedLightningAmount == null
+        get() = !isPaymentRequest && fixedLightningAmount == null &&
+            !(payMethod == SendMethod.ONCHAIN && fixedOnchainAmount != null)
 
     val shouldAutomaticallyPay: Boolean
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&
