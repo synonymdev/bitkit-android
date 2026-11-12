@@ -25,15 +25,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # Signing builds start from an empty Gradle user home: nothing restored from other jobs' caches runs here.
+      # No Gradle cache is restored here: signing builds must not run state written by other jobs.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
@@ -92,6 +94,12 @@ jobs:
           ./gradlew assembleMainnetRelease bundleMainnetRelease --no-daemon --stacktrace
           ./gradlew :app:syncNativeDebugSymbolArtifacts --no-daemon --stacktrace
           scripts/create-native-debug-symbols.sh
+
+      - name: Remove decoded keystore
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_FILE:-}" ]; then rm -f -- "$KEYSTORE_FILE"; fi
 
       - name: Verify native libraries are stripped
         run: |
@@ -190,7 +198,7 @@ jobs:
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.artifacts.outputs.artifact_name }}
           path: ${{ steps.artifacts.outputs.artifact_dir }}
