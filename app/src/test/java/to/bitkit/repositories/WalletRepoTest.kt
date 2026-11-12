@@ -27,6 +27,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
@@ -51,7 +52,9 @@ import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.di.json
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
@@ -94,7 +97,8 @@ class WalletRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val backupRepo = mock<BackupRepo>()
-    private val connectionRecovery = connectionRecoveryFixture(settingsStore)
+    private val vssClients = VssClientCoordinator()
+    private val connectionRecovery = connectionRecoveryFixture(settingsStore, vssClients = vssClients)
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -180,6 +184,7 @@ class WalletRepoTest : BaseUnitTest() {
         dispatcher: CoroutineDispatcher = testDispatcher,
         reservationRepo: PrivatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
         spark: SparkRepo = sparkRepo,
+        balances: DeriveBalanceStateUseCase = deriveBalanceStateUseCase,
     ) = WalletRepo(
         bgDispatcher = dispatcher,
         keychain = keychain,
@@ -188,7 +193,7 @@ class WalletRepoTest : BaseUnitTest() {
         lightningRepo = lightningRepo,
         cacheStore = cacheStore,
         preActivityMetadataRepo = preActivityMetadataRepo,
-        deriveBalanceStateUseCase = deriveBalanceStateUseCase,
+        deriveBalanceStateUseCase = balances,
         wipeWalletUseCase = wipeWalletUseCase,
         privatePaykitAddressReservationRepo = reservationRepo,
         transferRepo = transferRepo,
@@ -197,6 +202,7 @@ class WalletRepoTest : BaseUnitTest() {
         connectionRecovery = connectionRecovery,
         sparkRepo = spark,
         backupRepo = backupRepo,
+        vssClients = vssClients,
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
@@ -274,6 +280,278 @@ class WalletRepoTest : BaseUnitTest() {
         testScheduler.runCurrent()
 
         verify(deriveBalanceStateUseCase).invoke()
+    }
+
+    @Test
+    fun `Spark balance changes update spending while the node is stopped`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(
+            Result.success(
+                BalanceDetails(
+                    totalOnchainBalanceSats = 50_000uL,
+                    spendableOnchainBalanceSats = 0uL,
+                    totalAnchorChannelsReserveSats = 0uL,
+                    totalLightningBalanceSats = 20_000uL,
+                    lightningBalances = emptyList(),
+                    pendingBalancesFromChannelClosures = emptyList(),
+                ),
+            ),
+        )
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getChannelFundableBalance()).thenReturn(0uL)
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        val sparkState =
+            MutableStateFlow(SparkState(isReady = true, balanceSats = 99_865uL, pendingDepositSats = 600uL))
+        val spark = sparkRepoWith(sparkState)
+        val balances = DeriveBalanceStateUseCase(
+            bgDispatcher = testDispatcher,
+            lightningRepo = lightningRepo,
+            transferRepo = transferRepo,
+            settingsStore = settingsStore,
+            hwWalletRepo = hwWalletRepo,
+            sparkRepo = spark,
+        )
+        sut = createSut(spark = spark, balances = balances)
+        testScheduler.runCurrent()
+        assertEquals(119_865uL, sut.balanceState.value.totalLightningSats)
+
+        nodeState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Stopped)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(
+            Result.failure(NodeNotRunningError("getBalancesAsync", NodeLifecycleState.Stopped)),
+        )
+        for (remaining in listOf(98_659uL, 97_653uL, 0uL)) {
+            sparkState.update { it.copy(balanceSats = remaining, pendingDepositSats = 100uL) }
+            testScheduler.runCurrent()
+
+            assertEquals(20_000uL + remaining, sut.balanceState.value.totalLightningSats)
+            assertEquals(50_000uL, sut.balanceState.value.totalOnchainSats)
+            assertEquals(100uL, sut.balanceState.value.balanceInTransferToSpending)
+            assertEquals(SparkFees.sendableSats(remaining), sut.balanceState.value.maxSendLightningSats)
+            verify(cacheStore).cacheBalance(sut.balanceState.value)
+        }
+        sparkState.update { it.copy(keptBalanceSats = 97_653uL) }
+        testScheduler.runCurrent()
+        assertEquals(117_653uL, sut.balanceState.value.totalLightningSats)
+        assertEquals(0uL, sut.balanceState.value.maxSendLightningSats)
+    }
+
+    @Test
+    fun `cached Spark contribution updates only after Spark is ready and never guesses a legacy split`() = test {
+        val known = BalanceState(
+            totalOnchainSats = 50_000uL,
+            totalLightningSats = 120_000uL,
+            balanceInTransferToSpending = 3_000uL,
+            sparkBalanceSats = 100_000uL,
+            sparkPendingDepositSats = 1_000uL,
+        )
+        val legacy = json.decodeFromString<BalanceState>("""{"totalLightningSats":120000}""")
+        assertEquals(null, legacy.sparkBalanceSats)
+        val restored = json.decodeFromString<BalanceState>(json.encodeToString(known))
+        assertEquals(known, restored)
+        val state = MutableStateFlow(SparkState())
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(
+            Result.failure(NodeNotRunningError("getBalancesAsync", NodeLifecycleState.Stopped)),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(balance = restored)))
+        sut = createSut(spark = sparkRepoWith(state))
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(known, sut.balanceState.value)
+
+        state.update { it.copy(isReady = true) }
+        testScheduler.runCurrent()
+        assertEquals(20_000uL, sut.balanceState.value.totalLightningSats)
+        assertEquals(2_000uL, sut.balanceState.value.balanceInTransferToSpending)
+        assertEquals(50_000uL, sut.balanceState.value.totalOnchainSats)
+
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(balance = legacy)))
+        val legacyState = MutableStateFlow(SparkState(isReady = true))
+        sut = createSut(spark = sparkRepoWith(legacyState))
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(legacy, sut.balanceState.value)
+        legacyState.update { it.copy(balanceSats = 5_000uL) }
+        testScheduler.runCurrent()
+        assertEquals(legacy.copy(maxSendLightningSats = SparkFees.sendableSats(5_000uL)), sut.balanceState.value)
+    }
+
+    @Test
+    fun `balance writes and cache hydration cannot overtake a pending update`() = test {
+        var cached = AppCacheData()
+        whenever(cacheStore.data).thenReturn(flow { emit(cached) })
+        val first = BalanceState(totalLightningSats = 120_000uL)
+        val latest = BalanceState(totalLightningSats = 20_000uL)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(first), Result.success(latest))
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(cacheStore.cacheBalance(any())).doSuspendableAnswer {
+            val balance = it.getArgument<BalanceState>(0)
+            if (balance == first) {
+                held.complete(Unit)
+                release.await()
+            }
+            cached = cached.copy(balance = balance)
+        }
+        val older = launch { sut.syncBalances() }
+        held.await()
+        val newer = launch { sut.syncBalances() }
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(null, cached.balance)
+        release.complete(Unit)
+        older.join()
+        newer.join()
+        testScheduler.runCurrent()
+
+        assertEquals(latest, cached.balance)
+        assertEquals(latest, sut.balanceState.value)
+    }
+
+    @Test
+    fun `failed cache write keeps the latest visible balance during hydration`() = test {
+        val latest = BalanceState(totalLightningSats = 20_000uL)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(latest))
+        whenever(cacheStore.cacheBalance(any())).doSuspendableAnswer { throw IOException("cache unavailable") }
+        whenever(cacheStore.data).thenReturn(
+            flowOf(AppCacheData(balance = BalanceState(totalLightningSats = 120_000uL))),
+        )
+
+        sut.syncBalances()
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+
+        assertEquals(latest, sut.balanceState.value)
+    }
+
+    @Test
+    fun `wallet retirement drains balance writes and leaves Spark observation available for the next wallet`() = test {
+        val state = MutableStateFlow(SparkState(isReady = true, balanceSats = 50_000uL))
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var cached: BalanceState? = null
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(
+            Result.success(BalanceState(totalLightningSats = 50_000uL)),
+        )
+        whenever(cacheStore.cacheBalance(any())).doSuspendableAnswer {
+            held.complete(Unit)
+            release.await()
+            cached = it.getArgument(0)
+        }
+        sut = createSut(spark = sparkRepoWith(state))
+        held.await()
+        vssClients.withSuspendedClients(shutdown = {}) {
+            sut.resetState()
+            cached = null
+        }
+        release.complete(Unit)
+        testScheduler.runCurrent()
+        assertEquals(BalanceState(), sut.balanceState.value)
+        assertEquals(null, cached)
+
+        val next = BalanceState(
+            totalLightningSats = 10_000uL,
+            maxSendLightningSats = SparkFees.sendableSats(10_000uL),
+        )
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(next))
+        state.update { it.copy(balanceSats = 10_000uL) }
+        testScheduler.runCurrent()
+        assertEquals(next, sut.balanceState.value)
+        assertEquals(next, cached)
+    }
+
+    @Test
+    fun `balance publication preserves native limits and later channel refreshes`() = test {
+        val node = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
+        whenever(lightningRepo.lightningState).thenReturn(node)
+        var cached = AppCacheData()
+        whenever(cacheStore.data).thenReturn(flow { emit(cached) })
+        whenever(cacheStore.cacheBalance(any())).doSuspendableAnswer {
+            cached = cached.copy(balance = it.getArgument(0))
+        }
+        val fresh = BalanceState(totalLightningSats = 20_000uL, maxSendLightningSats = 5_000uL)
+        val published = mock<ChannelDetails> {
+            on { isChannelReady } doReturn true
+            on { isUsable } doReturn true
+            on { nextOutboundHtlcLimitMsat } doReturn 2_000_000uL
+        }
+        whenever(deriveBalanceStateUseCase.invoke()).doSuspendableAnswer {
+            node.update { it.copy(channels = listOf(published).toImmutableList()) }
+            Result.success(fresh)
+        }
+        sut.syncBalances()
+        assertEquals(5_000uL, sut.balanceState.value.maxSendLightningSats)
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(5_000uL, sut.balanceState.value.maxSendLightningSats)
+
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(cacheStore.cacheBalance(any())).doSuspendableAnswer {
+            held.complete(Unit)
+            release.await()
+        }
+        val sync = launch { sut.syncBalances() }
+        held.await()
+        val recovered = mock<ChannelDetails> {
+            on { isChannelReady } doReturn true
+            on { isUsable } doReturn true
+            on { nextOutboundHtlcLimitMsat } doReturn 7_000_000uL
+        }
+        node.update { it.copy(channels = listOf(recovered).toImmutableList()) }
+        sut.refreshMaxSendLightning()
+        assertEquals(7_000uL, sut.balanceState.value.maxSendLightningSats)
+        release.complete(Unit)
+        sync.join()
+        assertEquals(7_000uL, sut.balanceState.value.maxSendLightningSats)
+        assertEquals(20_000uL, sut.balanceState.value.totalLightningSats)
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(7_000uL, sut.balanceState.value.maxSendLightningSats)
+    }
+
+    @Test
+    fun `Spark readiness before cache hydration preserves stored wallet totals`() = test {
+        var cached = AppCacheData(
+            balance = BalanceState(
+                totalOnchainSats = 50_000uL,
+                totalLightningSats = 120_000uL,
+                sparkBalanceSats = 100_000uL,
+                sparkPendingDepositSats = 0uL,
+            ),
+        )
+        val original = cached
+        whenever(cacheStore.data).thenReturn(flow { emit(cached) })
+        whenever(cacheStore.cacheBalance(any())).doSuspendableAnswer {
+            cached = cached.copy(balance = it.getArgument(0))
+        }
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(
+            Result.failure(NodeNotRunningError("getBalancesAsync", NodeLifecycleState.Stopped)),
+        )
+        val state = MutableStateFlow(SparkState(isReady = true, balanceSats = 5_000uL))
+        sut = createSut(spark = sparkRepoWith(state))
+        testScheduler.runCurrent()
+        assertEquals(original, cached)
+        assertEquals(SparkFees.sendableSats(5_000uL), sut.balanceState.value.maxSendLightningSats)
+
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(25_000uL, sut.balanceState.value.totalLightningSats)
+        assertEquals(50_000uL, sut.balanceState.value.totalOnchainSats)
+        assertEquals(sut.balanceState.value, cached.balance)
+    }
+
+    @Test
+    fun `balance refresh can run inside a recovery startup session`() = test {
+        val owner = connectionRecovery.captureOwner()
+        connectionRecovery.withOperation(owner) {
+            connectionRecovery.withStartup(owner) { sut.syncBalances() }
+        }
+        verify(cacheStore).cacheBalance(BalanceState())
     }
 
     private fun sparkRepoWith(state: MutableStateFlow<SparkState>): SparkRepo = mock {
