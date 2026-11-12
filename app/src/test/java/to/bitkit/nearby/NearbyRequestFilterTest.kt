@@ -3,6 +3,7 @@ package to.bitkit.nearby
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import to.bitkit.nfc.PosNfcFixtures
 
 class NearbyRequestFilterTest {
     @Test
@@ -13,6 +14,8 @@ class NearbyRequestFilterTest {
         assertTrue(isNearbyPaymentRequest("lightning:LNBCRT1P"))
         assertTrue(isNearbyPaymentRequest("lightning:lno1qgsq"))
         assertTrue(isNearbyPaymentRequest(" ethereum:0xabc@42161/transfer?address=0xdef "))
+        assertTrue(isNearbyPaymentRequest(PosNfcFixtures.SQUARE_URI))
+        assertTrue(isNearbyPaymentRequest(PosNfcFixtures.BIP321_URI))
     }
 
     @Test

@@ -27,6 +27,31 @@ class NdefCodecTest {
     }
 
     @Test
+    fun `decodes the long URI record a Square Register serves`() {
+        val message = PosNfcFixtures.squareMessage()
+
+        assertEquals(465, message.size)
+        assertArrayEquals(
+            PosNfcFixtures.hex(PosNfcFixtures.SQUARE_MESSAGE_START_HEX),
+            message.copyOf(18),
+        )
+        assertEquals(listOf(PosNfcFixtures.SQUARE_URI), NdefCodec.decodeTexts(message))
+        assertEquals(PosNfcFixtures.SQUARE_URI, NdefCodec.payableText(NdefCodec.decodeTexts(message)))
+    }
+
+    @Test
+    fun `encodes a Square-sized request exactly as Square does`() {
+        assertArrayEquals(PosNfcFixtures.squareMessage(), NdefCodec.encodeUriMessage(PosNfcFixtures.SQUARE_URI))
+    }
+
+    @Test
+    fun `decodes the BIP 321 request Numo serves`() {
+        val message = PosNfcFixtures.squareMessage(PosNfcFixtures.BIP321_URI)
+
+        assertEquals(listOf(PosNfcFixtures.BIP321_URI), NdefCodec.decodeTexts(message))
+    }
+
+    @Test
     fun `round trips a URI record`() {
         val uri = "bitcoin:BC1QTEST?amount=0.001&lightning=LNBC10U1P"
 

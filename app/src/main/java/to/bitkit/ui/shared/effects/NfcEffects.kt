@@ -29,6 +29,7 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.nfc.NdefCodec
 import to.bitkit.nfc.NfcTagEmitter
 import to.bitkit.nfc.Type4TagEmulator
+import to.bitkit.nfc.scannedPaymentRequest
 import to.bitkit.utils.Logger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -168,7 +169,7 @@ private fun readPaymentText(tag: Tag): String? {
     }.onFailure {
         Logger.warn("Failed to read NFC tag", it, context = TAG)
     }.getOrNull() ?: return null
-    return NdefCodec.payableText(NdefCodec.decodeTexts(message.toByteArray()))
+    return NdefCodec.payableText(NdefCodec.decodeTexts(message.toByteArray()))?.let(::scannedPaymentRequest)
 }
 
 /**

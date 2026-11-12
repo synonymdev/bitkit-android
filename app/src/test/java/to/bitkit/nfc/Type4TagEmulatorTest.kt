@@ -38,6 +38,19 @@ class Type4TagEmulatorTest {
     }
 
     @Test
+    fun `serves a Square-sized request to a reader looping over offsets`() {
+        message = NdefCodec.encodeUriMessage(PosNfcFixtures.SQUARE_URI)
+        sut.process(selectApp)
+        sut.process(selectNdef)
+
+        val expected = requireNotNull(message)
+        assertArrayEquals(hex("01D1") + Type4TagEmulator.SW_OK, sut.process(hex("00B0000002")))
+        assertArrayEquals(expected, readNdef(offset = 2, total = expected.size))
+        assertArrayEquals(expected, readNdef(offset = 2, total = expected.size, chunk = 0xFF))
+        assertEquals(listOf(PosNfcFixtures.SQUARE_URI), NdefCodec.decodeTexts(expected))
+    }
+
+    @Test
     fun `presents no tag when nothing is published`() {
         message = null
 
@@ -90,11 +103,11 @@ class Type4TagEmulatorTest {
         assertArrayEquals(Type4TagEmulator.SW_FILE_NOT_FOUND, sut.process(selectNdef))
     }
 
-    private fun readNdef(offset: Int, total: Int): ByteArray {
+    private fun readNdef(offset: Int, total: Int, chunk: Int = MAX_READ): ByteArray {
         var result = byteArrayOf()
         var position = offset
         while (result.size < total) {
-            val length = minOf(MAX_READ, total - result.size)
+            val length = minOf(chunk, total - result.size)
             val response = sut.process(
                 byteArrayOf(0x00, 0xB0.toByte(), (position shr 8).toByte(), position.toByte(), length.toByte())
             )

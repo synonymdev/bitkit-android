@@ -19,6 +19,7 @@ import androidx.annotation.RequiresPermission
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.connectGattDirect
 import to.bitkit.ext.nowMillis
+import to.bitkit.nfc.scannedPaymentRequest
 import to.bitkit.utils.Logger
 import java.util.UUID
 import kotlin.time.Duration
@@ -125,7 +126,7 @@ class NearbyScanner(
         if (request != null && !isPayment) Logger.warn("Ignored nearby request that is not a payment", context = TAG)
         skippedUntil[device.address] = if (isPayment) Long.MAX_VALUE else nowMillis() + RETRY_AFTER.inWholeMilliseconds
         if (!isStarted) return
-        if (isPayment) onRequest(requireNotNull(request))
+        if (isPayment) onRequest(scannedPaymentRequest(requireNotNull(request)))
         startScan()
     }
 
