@@ -242,6 +242,7 @@ fun HomeScreen(
     val resources = LocalResources.current
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
+    val isSparkExiting by appViewModel.isSparkExiting.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val profileNavigationScope = rememberCoroutineScope()
@@ -407,9 +408,10 @@ fun HomeScreen(
         },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
-        onTransferBannerClick = sparkState.inProgressDepositTxid?.let { txid ->
+        onSpendingBannerClick = sparkState.inProgressDepositTxid?.let { txid ->
             { rootNavController.navigateToTransferProgress(txid) }
         },
+        onSavingsBannerClick = appViewModel::onSparkExitBannerTapped.takeIf { isSparkExiting },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
         onClickUsdt = { walletNavController.navigateTo(Routes.UsdtWallet) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
@@ -450,7 +452,8 @@ private fun Content(
     onNavigateToActivityItem: (Activity) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
-    onTransferBannerClick: (() -> Unit)? = null,
+    onSpendingBannerClick: (() -> Unit)? = null,
+    onSavingsBannerClick: (() -> Unit)? = null,
     onClickHardwareWallet: (String) -> Unit = {},
     onClickUsdt: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
@@ -588,7 +591,8 @@ private fun Content(
                     onNavigateToActivityItem = onNavigateToActivityItem,
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSpending = onNavigateToSpending,
-                    onTransferBannerClick = onTransferBannerClick,
+                    onSpendingBannerClick = onSpendingBannerClick,
+                    onSavingsBannerClick = onSavingsBannerClick,
                     onClickHardwareWallet = onClickHardwareWallet,
                     onClickUsdt = onClickUsdt,
                 )
@@ -640,7 +644,8 @@ private fun WalletPage(
     onNavigateToActivityItem: (Activity) -> Unit,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
-    onTransferBannerClick: (() -> Unit)?,
+    onSpendingBannerClick: (() -> Unit)?,
+    onSavingsBannerClick: (() -> Unit)?,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
 ) {
@@ -720,7 +725,7 @@ private fun WalletPage(
                                     gradientColor = banner.type.color,
                                     title = banner.title,
                                     icon = banner.type.icon,
-                                    onClick = onTransferBannerClick.takeIf { isSpending },
+                                    onClick = if (isSpending) onSpendingBannerClick else onSavingsBannerClick,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag(if (isSpending) "ActivityBanner" else "ActivityBannerSavings")
