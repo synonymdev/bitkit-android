@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-11-12
+
+### Added
+- Bitkit now uses your pubky.app profile, so edits in Bitkit and on pubky.app show in both. #1801
+
+### Fixed
+- Fixed an occasional app freeze on launch while Pubky contacts start up. #1798
+- Paykit payment requests now check that a payment proof fits before paying, explain notes that are too long and refused signup codes, and no longer count a USDT transfer sent before its request as payment. #1803
+
+### Security
+- Updated the Lightning node with upstream security fixes. #1870
+
+
+
+
+
 ## [3.1.0] - 2026-11-02
 
 ### Added
@@ -431,7 +447,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.1.1...HEAD
+[3.1.1]: https://github.com/synonymdev/bitkit-android/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/synonymdev/bitkit-android/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/synonymdev/bitkit-android/compare/v3.0.0..v3.0.1
 [3.0.0]: https://github.com/synonymdev/bitkit-android/compare/v2.5.1..v3.0.0
