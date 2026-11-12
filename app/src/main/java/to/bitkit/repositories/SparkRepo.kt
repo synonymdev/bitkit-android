@@ -1415,15 +1415,15 @@ class SparkRepo @Inject constructor(
         return isSaved
     }
 
-    /**
-     * Clears [journal] only while it is still the open one, so a stale settle never drops a newer withdrawal's. Returns
-     * whether it cleared it: only then is the settlement this attempt's to announce.
-     */
     private fun endWithdrawalSend() {
         isWithdrawing = false
         withdrawalSendsEnded.incrementAndGet()
     }
 
+    /**
+     * Clears [journal] only while it is still the open one, so a stale settle never drops a newer withdrawal's. Returns
+     * whether it cleared it: only then is the settlement this attempt's to announce.
+     */
     private suspend fun clearJournal(journal: PendingSparkWithdrawal, sentTxid: String? = null): Boolean {
         var cleared = false
         cacheStore.update {
