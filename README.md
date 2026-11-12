@@ -44,6 +44,16 @@ See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
 - [vss-rust-client-ffi android bindings](https://github.com/synonymdev/vss-rust-client-ffi/tree/master/bindings/android#installation)
 
+#### 3. Breez API key
+
+Spark (Lightning without channels) needs a Breez API key on mainnet builds; regtest needs none. Gradle reads `BREEZ_API_KEY` from the environment, a Gradle property or `local.properties`, in that order. On macOS it falls back to the keychain item `BREEZ_API_KEY`, so the key needs no plain copy on disk:
+
+```bash
+security add-generic-password -U -a "$USER" -s BREEZ_API_KEY -w
+```
+
+Without the key the app builds and Spark stays off on mainnet.
+
 ### References
 
 - For LNURL dev testing see [bitkit-docker](https://github.com/synonymdev/bitkit-docker)

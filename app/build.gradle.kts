@@ -54,10 +54,22 @@ val localProperties by lazy {
     }
 }
 
+// macOS keychain item named like the key (`security add-generic-password -U -a "$USER" -s <KEY> -w`), read at
+// build time so local secrets need no plain copy in local.properties. Absent on Linux (CI) and when no item exists.
+fun keychainProp(key: String): Provider<String> {
+    val security = File("/usr/bin/security")
+    if (!security.canExecute()) return provider { null }
+    return providers.exec {
+        commandLine(security.path, "find-generic-password", "-a", System.getProperty("user.name"), "-s", key, "-w")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim() }.filter { it.isNotEmpty() }
+}
+
 fun localProp(key: String): Provider<String> {
     return providers.environmentVariable(key)
         .orElse(providers.gradleProperty(key))
         .orElse(provider { localProperties.getProperty(key) })
+        .orElse(keychainProp(key))
 }
 
 fun envFlag(key: String, default: Boolean): Provider<String> {

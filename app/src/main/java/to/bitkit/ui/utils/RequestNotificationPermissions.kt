@@ -124,7 +124,7 @@ fun rememberNotificationToggleClick(
     }
 }
 
-/** Asks for notification permission when a Paykit subscription starts, unless it is already granted. */
+/** Asks for notification permission when a Paykit subscription or a Spark emergency exit starts, unless granted. */
 @Composable
 fun rememberSubscriptionNotificationsRequest(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
