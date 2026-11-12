@@ -83,6 +83,21 @@ class SparkExitAlertsTest {
     }
 
     @Test
+    fun `a fee ask a redo came during is withdrawn once it runs on the held funding`() {
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        val asked = SparkExitFixtures.record(Phase.NeedsFunding(5_000uL)).copy(funding = listOf(held))
+        val redo = asked.copy(isRedoAsk = true)
+        val running = asked.copy(phase = Phase.Running, isRedoAsk = true)
+        val topUp = running.copy(funding = listOf(held, held.copy(txid = "topup", valueSats = 5_000uL)))
+
+        // On the Redo's own tick only the record after it carries the flag; on a later tick both do.
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(running, asked))
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(running, redo))
+        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(topUp, redo), "a top-up answered the ask")
+        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(running.copy(isRedoAsk = false), asked))
+    }
+
+    @Test
     fun `posts each lost leaf event, and a failure unless every leaf was lost`() {
         val lost = running.copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)))
         val claimed = lost.copy(phase = Phase.Failed(SparkExitDriver.LOST_REASON))
