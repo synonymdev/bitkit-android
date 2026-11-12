@@ -887,6 +887,8 @@
     <string name="wallet__receive">Recibir</string>
     <string name="wallet__details_transfer_subtitle">Transferencia Entrante: </string>
     <string name="wallet__send_bitcoin">Enviar Bitcoin</string>
+    <string name="wallet__send_paykit_no_route__description">Este contacto no tiene ningún método de pago que Bitkit pueda usar ahora.</string>
+    <string name="wallet__send_paykit_no_route__title">No se puede pagar a este contacto</string>
     <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero comprueba la red y después devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_to">Para</string>
     <string name="wallet__recipient_contact">Contactar</string>
@@ -903,6 +905,7 @@
     <string name="wallet__send_confirming_in">Confirmando en</string>
     <string name="wallet__send_contact_title">Seleccionar contacto</string>
     <string name="wallet__send_invoice_expiration">Expiración de la factura</string>
+    <string name="wallet__send_swap_route">Ruta</string>
     <string name="wallet__send_swipe">Deslizar para pagar</string>
     <string name="wallet__send_yes">Sí, enviar</string>
     <string name="wallet__send_dialog1">Parece que está enviando más de 100 dólares. ¿Desea continuar?</string>
@@ -1726,4 +1729,9 @@
     <string name="widgets__widget__size_small">Pequeño</string>
     <string name="widgets__widget__size_wide">Ancho</string>
     <string name="wallet__balance_updating">Actualizando saldo…</string>
+    <string name="settings__status__lightning_connection__spark">Usando Spark</string>
+    <string name="settings__status__spark__error">Sin conexión</string>
+    <string name="settings__status__spark__pending">Conectando...</string>
+    <string name="settings__status__spark__ready">Conectado</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>
