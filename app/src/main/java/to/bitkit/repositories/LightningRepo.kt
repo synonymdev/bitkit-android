@@ -1640,11 +1640,16 @@ class LightningRepo @Inject constructor(
         key: String,
         ldkRecordsBefore: Long,
     ): Result<PaymentId>? {
+        // Read before the row too, so a send that ends while it is read still counts as live.
+        val wasLive = isSendLive(paymentHash, key, ldkRecordsBefore)
+        val sparkRecordsBefore = sparkRepo.sendRecordMark()
         val send = sparkRepo.lightningSend(paymentHash) as? SparkLightningSend.Found ?: return null
+        val isLive = wasLive || isSendLive(paymentHash, key, ldkRecordsBefore) ||
+            sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
         return when (send.status) {
             SparkPaymentStatus.COMPLETED -> Result.success(paymentHash)
             // A failed row can be an earlier attempt's while a retry of the invoice on either rail can still pay it.
-            SparkPaymentStatus.FAILED if isSendLive(paymentHash, key, ldkRecordsBefore) -> null
+            SparkPaymentStatus.FAILED if isLive -> null
             SparkPaymentStatus.FAILED -> Result.failure(SparkError.SendRefused("Spark's earlier send of it failed"))
             SparkPaymentStatus.PENDING -> null
         }?.also { Logger.info("Settled the refused Spark send '$paymentHash' as '${send.status}'", context = TAG) }

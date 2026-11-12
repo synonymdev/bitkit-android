@@ -395,11 +395,12 @@ object SparkExitAlerts {
 
     /**
      * A fee ask the tick from [previous] withdrew: an unverified rebuild's, as the valid generation needs nothing more,
-     * or one a Redo verdict came during that runs with no new funding, on the Redo's tick or a later one, as the held
-     * funding pays for it.
+     * or one of a Redo rebuild, asked before or during it, that runs with no new funding, on the Redo's tick or a later
+     * one, as the held funding pays for it.
      */
     fun isFundingAskWithdrawn(record: SparkExitRecord, previous: SparkExitRecord): Boolean {
-        val isRedoAsk = (previous.isRedoAsk || record.isRedoAsk) && record.funding == previous.funding
+        val isRedoAsk = (previous.isRedoAsk || record.isRedoAsk || previous.isRedoRebuild) &&
+            record.funding == previous.funding
         return (previous.isUnverifiedAsk || isRedoAsk) && previous.phase is SparkExitRecord.Phase.NeedsFunding &&
             record.phase == SparkExitRecord.Phase.Running
     }

@@ -1928,6 +1928,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(Phase.Running, record.phase, "a hold the held funding paid for still asks for fees")
         assertNull(record.fundingShortfallSats)
         assertEquals(1_000u, record.redoHeldSince)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
 
         // A later build of the hold that comes up short asks again.
         sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
@@ -1978,6 +1979,35 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, redone), "the fee ask's notification stayed")
         sdk.checks += check(requireNotNull(record.recovery), RecoveryVerdict.Valid)
         assertFalse(driver(tip = 1_001u).tick(record).isRedoAsk, "the ended ask stayed marked")
+    }
+
+    @Test
+    fun `a redo hold's own short build asks, and a later build on the held funding withdraws the ask`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        record = record.copy(funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        now += interval
+        val asked = driver(tip = 1_001u).tick(record)
+        assertIs<Phase.NeedsFunding>(asked.phase, "the hold's short build did not ask")
+
+        // The next build needs less, which the held funding pays.
+        sdk.preparedResponse = leaf2Unread.copy(funding = SparkExitFixtures.prepared().funding)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        now += interval
+        record = driver(tip = 1_002u).tick(asked)
+
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(1, record.generation)
+        assertEquals(asked.funding, record.funding)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
     }
 
     @Test

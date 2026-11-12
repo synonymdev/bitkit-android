@@ -759,7 +759,11 @@ class SparkExitDriver(
         if (held == null && record.fundedSats > 0uL) return record
         val inputFee = SparkExitMath.inputFeeSats(record.feeRateSatPerVbyte)
         val needed = SparkExitMath.neededFunding(error.requiredSats, record.fundedSats, held, inputFee)
-        return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(needed))
+        // A Redo rebuild's ask ends once the funding it holds pays for a later build.
+        return record.copy(
+            phase = SparkExitRecord.Phase.NeedsFunding(needed),
+            isRedoAsk = record.isRedoAsk || record.isRedoRebuild,
+        )
     }
 
     /**

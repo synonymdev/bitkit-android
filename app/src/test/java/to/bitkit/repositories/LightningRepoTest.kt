@@ -1676,20 +1676,41 @@ class LightningRepoTest : BaseUnitTest() {
         assertFalse(isSent)
     }
 
+    private var sparkRecords = 0L
+    private var sparkSendRecordedAt = 0L
+
+    /** Spark's send records, where [recordSparkSend] records a send of the invoice after the marks read so far. */
+    private fun stubSparkSendRecords() {
+        whenever(sparkRepo.sendRecordMark()).thenAnswer { sparkRecords }
+        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenAnswer {
+            sparkSendRecordedAt > it.getArgument<Long>(0)
+        }
+    }
+
+    private fun recordSparkSend() {
+        sparkSendRecordedAt = ++sparkRecords
+    }
+
+    /** Spark's send, refused at admission as an earlier Spark send of the invoice was recorded since its checks. */
+    private suspend fun stubSparkSendRefusedForARecordedOne() {
+        stubSparkSendRecords()
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            recordSparkSend()
+            runSuspendCatching {
+                authorizeSend()
+                "h"
+            }
+        }
+    }
+
     @Test
     fun `a spark send refused for an earlier spark send that settled first returns its outcome`() = test {
         startNodeForTesting()
         whenever(lightningService.listPayments()).thenReturn(emptyList())
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
         // The earlier Spark send of the invoice was recorded after this send's checks passed, and completed first.
-        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenReturn(true)
-        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
-            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
-            runSuspendCatching {
-                authorizeSend()
-                "h"
-            }
-        }
+        stubSparkSendRefusedForARecordedOne()
         whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, "p"))
 
         assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow(), "a paid send left its caller pending")
@@ -1704,14 +1725,7 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         whenever(lightningService.listPayments()).thenReturn(emptyList())
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
-        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenReturn(true)
-        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
-            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
-            runSuspendCatching {
-                authorizeSend()
-                "h"
-            }
-        }
+        stubSparkSendRefusedForARecordedOne()
         // A retry recorded since the checks is still inside its send call, over an earlier attempt's failed row.
         whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
         whenever(sparkRepo.isSendInFlight("h")).thenReturn(true)
@@ -1720,25 +1734,47 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send refused over a failed spark row stays pending when a send ends or starts during its read`() =
+        test {
+            startNodeForTesting()
+            whenever(lightningService.listPayments()).thenReturn(emptyList())
+            whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+            stubSparkSendRefusedForARecordedOne()
+            var isInFlight = true
+            whenever(sparkRepo.isSendInFlight("h")).thenAnswer { isInFlight }
+            // The competing retry completes and is released while the older attempt's failed row is read.
+            whenever(sparkRepo.lightningSend("h")).doSuspendableAnswer {
+                isInFlight = false
+                SparkLightningSend.Found(SparkPaymentStatus.FAILED, null)
+            }
+
+            assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull(), "a send that ended")
+
+            // Another retry starts and ends while the row is read.
+            whenever(sparkRepo.lightningSend("h")).doSuspendableAnswer {
+                recordSparkSend()
+                SparkLightningSend.Found(SparkPaymentStatus.FAILED, null)
+            }
+
+            assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull(), "a send that started")
+        }
+
+    @Test
     fun `a spark send refused over a failed spark row stays pending once the node sent the invoice`() = test {
         startNodeForTesting()
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
         whenever(lightningService.listPayments()).thenReturn(emptyList())
         whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
-        var isSparkRecorded = true
-        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenAnswer { isSparkRecorded }
+        stubSparkSendRecords()
         // Refused for a failed Spark send recorded since the checks, while the node's retry of the invoice is sent.
         whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
             val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            recordSparkSend()
             runSuspendCatching {
                 authorizeSend()
                 "h"
-            }.also {
-                isSparkRecorded = false
-                sut.payInvoiceWithNode("h").getOrThrow()
-                isSparkRecorded = true
-            }
+            }.also { sut.payInvoiceWithNode("h").getOrThrow() }
         }
         whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
 
