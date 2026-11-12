@@ -143,7 +143,10 @@ class SparkExitDriver(
             }
             is SparkExitRecord.Phase.AwaitingFunding, is SparkExitRecord.Phase.NeedsFunding -> {
                 // A higher fee paid from savings: the generation out there keeps going while that payment confirms.
-                if (record.isDrivingWhileFunding) record = driveWhileFunding(record)
+                var isChecked = true
+                if (record.isDrivingWhileFunding) {
+                    record = driveWhileFunding(record) ?: broadcastWithoutSdk(record).also { isChecked = false }
+                }
                 record = lookForOwnPayment(record)
                 val sdk = recovering
                 val since = record.retrySince
@@ -154,7 +157,7 @@ class SparkExitDriver(
                     Logger.warn("Releasing Spark exit leaves '${record.waitingLeafIds}' unfunded", context = TAG)
                     record = end(record.ended(), record)
                 } else if (sdk != null && record.phase.requiredFundingSats != null) {
-                    record = buildOnceFunded(record, sdk)
+                    record = buildOnceFunded(record, sdk, stored = start.recovery, isChecked = isChecked)
                 }
             }
             SparkExitRecord.Phase.Running if record.isRebuilding -> {
@@ -178,8 +181,16 @@ class SparkExitDriver(
         return record
     }
 
-    /** Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild. */
-    private suspend fun buildOnceFunded(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+    /**
+     * Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild.
+     * [stored] is the recovery from before this tick's check, and [isChecked] says whether that check ran.
+     */
+    private suspend fun buildOnceFunded(
+        record: SparkExitRecord,
+        sdk: SparkExitRecovering,
+        stored: RecoverFundsResponse?,
+        isChecked: Boolean,
+    ): SparkExitRecord {
         val shortfall = record.fundingShortfallSats
         // Nothing to fund when every leaf is recovered cooperatively.
         val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
@@ -201,6 +212,28 @@ class SparkExitDriver(
             // Funding an unverified rebuild asked for resumes that rebuild, with its guards, once a block like the
             // check's rebuild: the valid generation's retry clock does not pace it.
             funded.isUnverifiedAsk && !funded.isRebuilding -> {
+                // A clean check while the payment came can read the unread step again, and it is then sent: a
+                // rebuild now would conflict with it at the same fee. The ask ends, and the funding it adopted stays
+                // for a later rebuild or the leftover sweep.
+                val unilateral = funded.recovery?.transactions.orEmpty()
+                    .filter { it.kind != RecoveryTxKind.COOPERATIVE }
+                if (unilateral.any { it.status == ExitTransactionStatus.Ready } ||
+                    unilateral.none { it.status == ExitTransactionStatus.Unverified }
+                ) {
+                    Logger.info("Spark exit steps read again: no funded unverified rebuild", context = TAG)
+                    return funded.copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false)
+                }
+                // A step this check just turned unverified may have been sent on an earlier clean check: the resume
+                // waits for the next check, as the check's own rebuild does. A tick whose check failed never
+                // rebuilds, as on the check path.
+                if (!isChecked) return funded
+                val unreadBefore = stored?.transactions.orEmpty()
+                    .filter { it.status == ExitTransactionStatus.Unverified }
+                    .map { it.txid }
+                    .toSet()
+                if (unilateral.any { it.status == ExitTransactionStatus.Unverified && it.txid !in unreadBefore }) {
+                    return funded
+                }
                 if (tip != null && funded.unverifiedRebuiltAtHeight == tip) return funded
                 val resumed = funded.copy(unverifiedRebuiltAtHeight = tip)
                 build(resumed, sdk, isUnverifiedRebuild = true).let {
@@ -460,13 +493,14 @@ class SparkExitDriver(
         return record.withOwnPaymentLooked(height, isKnown)
     }
 
-    private suspend fun driveWhileFunding(record: SparkExitRecord): SparkExitRecord {
-        val sdk = recovering ?: return broadcastWithoutSdk(record)
+    /** Checks and sends the generation out there while its top-up confirms; null when no check ran this tick. */
+    private suspend fun driveWhileFunding(record: SparkExitRecord): SparkExitRecord? {
+        val sdk = recovering ?: return null
         val stored = requireNotNull(record.recovery)
         val checked = runSuspendCatching { sdk.check(withConfirmations(stored)) }
             .onFailure { Logger.warn("Failed to check the Spark exit, sending without the SDK", it, context = TAG) }
             .getOrNull()
-            ?: return broadcastWithoutSdk(record)
+            ?: return null
         val updated = record.copy(recovery = checked.recovery)
         return when (checked.verdict) {
             RecoveryVerdict.Valid -> {
@@ -532,8 +566,12 @@ class SparkExitDriver(
                 if (sent.isFeeBumpPending && tip != null && sent.feeBumpBuiltAtHeight != tip) {
                     return buildFeeBump(sent, sdk)
                 }
-                if (!needsUnverifiedRebuild(sent)) return sent
-                // A check cannot settle a step the SDK could not read; a fresh build reads the chain again.
+                // A check marks a step unverified when one chain read fails and clears it on the next clean check, so
+                // only steps that were all unverified before this check are rebuilt over: one this check just turned
+                // unverified may be in flight, and holds the rebuild as a ready one does. A step that stays unread is
+                // rebuilt at the first check, at most once a block, where no other step just turned unverified.
+                if (!needsUnverifiedRebuild(sent, stored)) return sent
+                // A step that stays unread past a check is settled by a fresh build, which reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
                 val rebuilding = sent.copy(isRebuilding = true, unverifiedRebuiltAtHeight = tip, isRedoRebuild = false)
                 // Saved as the valid generation: a run killed during the rebuild goes on sending it.
@@ -794,11 +832,16 @@ class SparkExitDriver(
         isRebuilding && phase == SparkExitRecord.Phase.Running && generation == before.generation &&
             lostLeaves == before.lostLeaves
 
-    private fun needsUnverifiedRebuild(record: SparkExitRecord): Boolean {
+    private fun needsUnverifiedRebuild(record: SparkExitRecord, stored: RecoverFundsResponse): Boolean {
         val height = tip ?: return false
         if (record.unverifiedRebuiltAtHeight == height) return false
+        val unreadBefore = stored.transactions
+            .filter { it.status == ExitTransactionStatus.Unverified }
+            .map { it.txid }
+            .toSet()
         val transactions = record.recovery?.transactions.orEmpty().filter { it.kind != RecoveryTxKind.COOPERATIVE }
-        return transactions.any { it.status == ExitTransactionStatus.Unverified } &&
+        val unread = transactions.filter { it.status == ExitTransactionStatus.Unverified }
+        return unread.isNotEmpty() && unread.all { it.txid in unreadBefore } &&
             transactions.none { it.status == ExitTransactionStatus.Ready }
     }
 
@@ -1174,7 +1217,7 @@ class SparkExitDriver(
         var current = record
         val recovery = current.recovery ?: return current
         // A cooperative step the SDK could not read goes out too: nodes refuse it if its funds already moved. A
-        // unilateral one waits for a rebuild.
+        // unilateral one waits for the next clean check, or a rebuild once it stays unread.
         recovery.transactions
             .filter { it.status == ExitTransactionStatus.Ready || it.isCooperativeUnverified }
             .filter { isDue(it.txid, current) }
