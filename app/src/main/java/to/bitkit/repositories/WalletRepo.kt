@@ -502,7 +502,7 @@ class WalletRepo @Inject constructor(
         if (!spark.isReady) return null
         val included = balance.sparkBalanceSats
         val pending = balance.sparkPendingDepositSats
-        if (included == null || pending == null || spark.isExiting || sparkExitRepo.state.value.record != null) {
+        if (included == null || pending == null || spark.isExiting || sparkExitRepo.state.value.isExiting) {
             return balance.copy(
                 maxSendLightningSats = spark.sendableSats,
                 sparkBalanceSats = null,
