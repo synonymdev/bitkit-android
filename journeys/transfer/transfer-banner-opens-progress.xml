@@ -1,0 +1,22 @@
+<journey name="transfer banner opens progress">
+  <description>
+    Verifies that tapping the "TRANSFER IN PROGRESS" banner on Home reopens the "Funds in transfer" screen of the
+    pending transfer to spending at its current step, also after a relaunch. A Later transfer keeps its deposit
+    pending until 3 confirmations, so the banner stays up while the journey taps it.
+
+    Precondition: a Debug build with Spark connected on its regtest, launched against that regtest's Esplora (as
+    spark-transfer-to-spending.xml sets up), a wallet with a positive confirmed on-chain Savings balance, no pending
+    transfer, and at least one activity so Home shows its activity list. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), then "Transfer To Spending" (testTag "TransferToSpending"); tap "Get Started" (testTag "SpendingIntro-button") if the intro appears</action>
+    <action>Tap "25%" (testTag "SpendingAmountQuarter") and "Continue" (testTag "SpendingAmountContinue")</action>
+    <action>Tap "Later" (testTag "SpendingConfirmLater") and swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
+    <action>Verify the "Funds in transfer" screen (testTag "LightningSettingUp") opens, then tap "Continue Using Bitkit" (testTag "TransferSuccess-button")</action>
+    <action>Verify Home shows the "TRANSFER IN PROGRESS" banner (testTag "ActivityBanner")</action>
+    <action>Tap the banner and verify "Funds in transfer" (testTag "LightningSettingUp") opens with "Payment Successful" as the current step and the speed (testTag "SettingUpSpeed") reading Later</action>
+    <action>Go back and verify the wallet home screen shows with the banner still visible</action>
+    <action>Relaunch the app, tap the banner and verify the same screen and step open again</action>
+    <action>Mine 3 blocks on the regtest and wait until the screen shows the transfer as done (testTag "TransferSuccess"); tap its button and verify Home no longer shows the banner</action>
+  </actions>
+</journey>

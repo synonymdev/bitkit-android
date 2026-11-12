@@ -2011,6 +2011,9 @@ data class SparkState(
 
     /** The [spendingSats] shown in Spending, which [keptBalanceSats] stands in for. */
     val shownSpendingSats: ULong get() = if (isExiting) 0uL else shownBalanceSats
+
+    /** The deposit whose progress the transfer banner opens: the first one Spark has not claimed yet. */
+    val inProgressDepositTxid: String? get() = deposits.firstOrNull { !it.isClaimed }?.txid
 }
 
 object SparkFees {

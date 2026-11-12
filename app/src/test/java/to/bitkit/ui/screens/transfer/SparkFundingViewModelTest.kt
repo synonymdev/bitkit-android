@@ -320,6 +320,29 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the transfer banner opens the followed deposit at its claim step`() = test {
+        whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf("txid" to SparkDepositClaim.Adding)))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.showDeposit("txid")
+
+        assertEquals("txid", sut.uiState.value.txid)
+        assertEquals(SparkDepositClaim.Adding, sut.uiState.value.claim)
+    }
+
+    @Test
+    fun `the transfer banner opens a deposit no claim follows, as after a relaunch, as added at maturity`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.showDeposit("txid")
+
+        assertEquals("txid", sut.uiState.value.txid)
+        assertEquals(SparkDepositClaim.Later, sut.uiState.value.claim)
+    }
+
+    @Test
     fun `a funding that was signed but not accepted opens its recovery instead of an error`() = test {
         whenever {
             lightningRepo.sendOnChain(
