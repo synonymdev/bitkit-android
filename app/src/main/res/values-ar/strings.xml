@@ -1027,11 +1027,14 @@
     <string name="wallet__send_invoice_expiration">انتهاء صلاحية الفاتورة</string>
     <string name="wallet__send_max_spending__description">الحد الأقصى القابل للإنفاق أقل قليلاً بسبب الرصيد الاحتياطي المطلوب.</string>
     <string name="wallet__send_max_spending__title">الرصيد الاحتياطي</string>
+    <string name="wallet__send_paykit_no_route__description">ليس لدى جهة الاتصال هذه أي طريقة دفع يمكن لـ Bitkit استخدامها الآن.</string>
+    <string name="wallet__send_paykit_no_route__title">لا يمكن الدفع لجهة الاتصال هذه</string>
     <string name="wallet__send_pending__abandon_transfer_note">لم تعد التحويلات إلى رصيد الإنفاق متاحة. يتحقق Bitkit أولًا من الشبكة، ثم يعيد عملات هذا التحويل إلى محفظتك حتى لا يتأكد التحويل الأصلي أبدًا. يكلّف ذلك رسوم شبكة.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">جارٍ دفع\n&lt;accent&gt;الفاتورة...&lt;/accent&gt;</string>
     <string name="wallet__send_review">تأكيد</string>
     <string name="wallet__send_sent">تم إرسال Bitcoin</string>
+    <string name="wallet__send_swap_route">المسار</string>
     <string name="wallet__send_swipe">اسحب للدفع</string>
     <string name="wallet__send_to">إلى</string>
     <string name="wallet__send_yes">نعم، أرسل</string>
@@ -1728,4 +1731,9 @@
     <string name="widgets__widget__size_small">صغير</string>
     <string name="widgets__widget__size_wide">عريض</string>
     <string name="wallet__balance_updating">جارٍ تحديث الرصيد…</string>
+    <string name="settings__status__lightning_connection__spark">يستخدم Spark</string>
+    <string name="settings__status__spark__error">غير متصل</string>
+    <string name="settings__status__spark__pending">جارٍ الاتصال...</string>
+    <string name="settings__status__spark__ready">متصل</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>
