@@ -2692,7 +2692,7 @@ class SparkRepoTest : BaseUnitTest() {
         resume.complete(Unit)
         val error = result.await().exceptionOrNull()
 
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
         assertIs<SparkError.SendRefused>(error)
     }
 
@@ -2703,7 +2703,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         val sending = CompletableDeferred<Unit>()
         val sent = CompletableDeferred<Payment>()
-        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
             sending.complete(Unit)
             sent.await()
         }
@@ -2728,7 +2728,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         val sending = CompletableDeferred<Unit>()
         val sent = CompletableDeferred<Payment>()
-        whenever { sparkService.send(any()) }.doSuspendableAnswer {
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
             sending.complete(Unit)
             sent.await()
         }
@@ -2760,7 +2760,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         val error = sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).exceptionOrNull()
 
-        verify(sparkService, never()).send(any())
+        verify(sparkService, never()).send(any(), anyOrNull())
         assertIs<SparkError.SendRefused>(error)
     }
 
