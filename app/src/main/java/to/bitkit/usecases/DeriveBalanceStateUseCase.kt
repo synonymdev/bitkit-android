@@ -21,6 +21,8 @@ import to.bitkit.models.safe
 import to.bitkit.models.toBalance
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
@@ -36,6 +38,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private val settingsStore: SettingsStore,
     private val hwWalletRepo: HwWalletRepo,
     private val sparkRepo: SparkRepo,
+    private val sparkExitRepo: SparkExitRepo,
 ) {
     suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
         runSuspendCatching {
@@ -56,7 +59,12 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val afterLingeringCoopClose = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
             val maxSendOnchainSats = getMaxSendAmount(balanceDetails)
             val spark = sparkRepo.state.value
-            val totalLightningSats = afterLingeringCoopClose.safe() + spark.shownBalanceSats.safe()
+            val exit = sparkExitRepo.state.value
+            val sparkSats = spark.shownSpendingSats.safe() + (exit.outsideExitSats ?: 0uL).safe()
+            val sparkExitSats = getSparkExitSats(activeTransfers, exit)
+            val hasExit = spark.isExiting || exit.record != null ||
+                activeTransfers.any { it.type == TransferType.SPARK_EXIT }
+            val totalLightningSats = afterLingeringCoopClose.safe() + sparkSats.safe()
 
             val balanceState = BalanceState(
                 totalOnchainSats = totalOnchainSats,
@@ -68,12 +76,13 @@ class DeriveBalanceStateUseCase @Inject constructor(
                     spark.sendableSats,
                 ),
                 maxSendOnchainSats = maxSendOnchainSats,
-                balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
+                balanceInTransferToSavings = (toSavingsAmount.safe() - coopCloseSavingsSats.safe()).safe() +
+                    sparkExitSats.safe(),
                 balanceInTransferToSpending = pendingChannelsSats.safe() +
                     spark.pendingDepositSats.safe(),
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
-                sparkBalanceSats = spark.shownBalanceSats,
-                sparkPendingDepositSats = spark.pendingDepositSats,
+                sparkBalanceSats = sparkSats.takeUnless { hasExit },
+                sparkPendingDepositSats = spark.pendingDepositSats.takeUnless { hasExit },
             )
 
             val height = lightningRepo.lightningState.value.block()?.height
@@ -111,7 +120,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         balanceDetails: BalanceDetails,
     ): ULong {
         var toSavingsAmount = 0uL
-        val toSavings = transfers.filter { it.type.isToSavings() }
+        val toSavings = transfers.filter { it.type.isToSavings() && it.type != TransferType.SPARK_EXIT }
 
         for (transfer in toSavings) {
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
@@ -120,6 +129,20 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }
 
         return toSavingsAmount
+    }
+
+    /**
+     * A Spark emergency exit has no channel: what it still brings to savings is in transfer until the exit settles
+     * it. The running exit's own transfer counts only that, not funding nobody paid or value savings already has.
+     */
+    private fun getSparkExitSats(transfers: List<TransferEntity>, exit: SparkExitState): ULong {
+        return transfers
+            .filter { it.type == TransferType.SPARK_EXIT }
+            .fold(0uL) { sum, transfer ->
+                val sats = exit.inTransferSats?.takeIf { exit.record?.transferId == transfer.id }
+                    ?: transfer.amountSats.toULong()
+                sum.safe() + sats.safe()
+            }
     }
 
     private suspend fun getMaxChannelFundableAmount(fundableBalance: ULong): ULong {

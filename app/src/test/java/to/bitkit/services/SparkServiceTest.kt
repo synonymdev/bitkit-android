@@ -107,7 +107,7 @@ class SparkServiceTest {
     @Test
     fun `config turns off breez data sync, the lightning address server and default parsers on every network`() {
         Network.entries.forEach { network ->
-            val config = SparkService.configure(defaults(network), apiKey = "key")
+            val config = SparkService.configure(defaults(network), apiKey = "key", isExiting = false)
 
             assertNull(config.realTimeSyncServerUrl, "$network")
             assertNull(config.lnurlDomain, "$network")
@@ -119,7 +119,8 @@ class SparkServiceTest {
     @Test
     fun `invoices carry no spark address on any network, so every payment is a lightning payment bitkit records`() {
         Network.entries.forEach { network ->
-            assertFalse(SparkService.configure(defaults(network), apiKey = null).preferSparkOverLightning, "$network")
+            val config = SparkService.configure(defaults(network), apiKey = null, isExiting = false)
+            assertFalse(config.preferSparkOverLightning, "$network")
         }
     }
 }

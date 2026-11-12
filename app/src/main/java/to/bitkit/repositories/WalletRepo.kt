@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
@@ -87,6 +88,7 @@ class WalletRepo @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
     private val sparkRepo: SparkRepo,
+    private val sparkExitRepo: SparkExitRepo,
     private val backupRepo: BackupRepo,
     private val vssClients: VssClientCoordinator,
 ) {
@@ -145,11 +147,20 @@ class WalletRepo @Inject constructor(
             }
         }
         repoScope.launch {
-            // The read balance too, as sends use it: it can come back to the shown one while that stays the same.
-            sparkRepo.state.map { it.isReady to Triple(it.balanceSats, it.shownBalanceSats, it.pendingDepositSats) }
-                .distinctUntilChanged().collect {
-                    if (walletExists()) coroutineScope { launch { syncBalances() } }
+            // The read balance too, as sends use it: it can come back to the shown one while that stays the same. An
+            // exit's start or end changes what Spending counts with no balance change.
+            val spark = sparkRepo.state
+                .map {
+                    (it.isReady to it.isExiting) to listOf(it.balanceSats, it.shownBalanceSats, it.pendingDepositSats)
                 }
+                .distinctUntilChanged()
+            // Funding reaching the exit changes what it brings to savings with no Spark balance change.
+            val exit = sparkExitRepo.state
+                .map { Triple(it.inTransferSats, it.outsideExitSats, it.record?.transferId) }
+                .distinctUntilChanged()
+            combine(spark, exit) { _, _ -> }.collect {
+                if (walletExists()) coroutineScope { launch { syncBalances() } }
+            }
         }
     }
 
@@ -491,8 +502,12 @@ class WalletRepo @Inject constructor(
         if (!spark.isReady) return null
         val included = balance.sparkBalanceSats
         val pending = balance.sparkPendingDepositSats
-        if (included == null || pending == null) {
-            return balance.copy(maxSendLightningSats = spark.sendableSats)
+        if (included == null || pending == null || spark.isExiting || sparkExitRepo.state.value.record != null) {
+            return balance.copy(
+                maxSendLightningSats = spark.sendableSats,
+                sparkBalanceSats = null,
+                sparkPendingDepositSats = null,
+            )
         }
         return balance.copy(
             totalLightningSats = (balance.totalLightningSats.safe() - included.safe()).safe() +

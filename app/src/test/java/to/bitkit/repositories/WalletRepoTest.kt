@@ -99,6 +99,8 @@ class WalletRepoTest : BaseUnitTest() {
     private val backupRepo = mock<BackupRepo>()
     private val vssClients = VssClientCoordinator()
     private val connectionRecovery = connectionRecoveryFixture(settingsStore, vssClients = vssClients)
+    private val sparkExitState = MutableStateFlow(SparkExitState())
+    private val sparkExitRepo = mock<SparkExitRepo> { on { state } doReturn sparkExitState }
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -147,7 +149,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
         whenever(lightningRepo.nodeEventUpdates).thenReturn(MutableSharedFlow())
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
-        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull(), any()))
             .thenReturn(Result.success(SATS))
         whenever(lightningRepo.canReceive()).thenReturn(false)
         whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }
@@ -201,6 +203,7 @@ class WalletRepoTest : BaseUnitTest() {
         hwWalletRepo = hwWalletRepo,
         connectionRecovery = connectionRecovery,
         sparkRepo = spark,
+        sparkExitRepo = sparkExitRepo,
         backupRepo = backupRepo,
         vssClients = vssClients,
     )
@@ -312,6 +315,7 @@ class WalletRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
             sparkRepo = spark,
+            sparkExitRepo = sparkExitRepo,
         )
         sut = createSut(spark = spark, balances = balances)
         testScheduler.runCurrent()
@@ -367,6 +371,7 @@ class WalletRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
             sparkRepo = spark,
+            sparkExitRepo = sparkExitRepo,
         )
         sut = createSut(spark = spark, balances = balances)
         testScheduler.runCurrent()
@@ -444,6 +449,72 @@ class WalletRepoTest : BaseUnitTest() {
         legacyState.update { it.copy(balanceSats = 5_000uL) }
         testScheduler.runCurrent()
         assertEquals(legacy.copy(maxSendLightningSats = SparkFees.sendableSats(5_000uL)), sut.balanceState.value)
+    }
+
+    @Test
+    fun `exit fallback retains whole balances through cancellation and cache restoration`() = test {
+        val known = BalanceState(
+            totalLightningSats = 150_000uL,
+            sparkBalanceSats = 100_000uL,
+            sparkPendingDepositSats = 0uL,
+        )
+        var cached = AppCacheData(balance = known)
+        whenever(cacheStore.data).thenReturn(flow { emit(cached) })
+        whenever(cacheStore.cacheBalance(any())).doSuspendableAnswer {
+            cached = cached.copy(balance = it.getArgument(0))
+        }
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(
+            Result.failure(NodeRunTimeoutError("getBalancesAsync")),
+        )
+        val sparkState = MutableStateFlow(SparkState(isReady = true, balanceSats = 100_000uL))
+        val spark = sparkRepoWith(sparkState)
+        sut = createSut(spark = spark)
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+
+        sparkExitState.value = SparkExitState(record = SparkExitFixtures.record())
+        sparkState.update { it.copy(isExiting = true, balanceSats = 130_000uL) }
+        testScheduler.runCurrent()
+        assertEquals(150_000uL, sut.balanceState.value.totalLightningSats)
+        assertEquals(0uL, sut.balanceState.value.maxSendLightningSats)
+        assertEquals(null, sut.balanceState.value.sparkBalanceSats)
+
+        val exiting = BalanceState(totalLightningSats = 80_000uL, balanceInTransferToSavings = 105_000uL)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(exiting))
+        sut.syncBalances()
+        assertEquals(exiting, cached.balance)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(
+            Result.failure(NodeRunTimeoutError("getBalancesAsync")),
+        )
+        sparkExitState.value = SparkExitState()
+        sparkState.update { it.copy(isExiting = false) }
+        testScheduler.runCurrent()
+        val retained = exiting.copy(maxSendLightningSats = SparkFees.sendableSats(130_000uL))
+        assertEquals(retained, sut.balanceState.value)
+        assertEquals(exiting, cached.balance)
+
+        cached = cached.copy(balance = json.decodeFromString<BalanceState>(json.encodeToString(exiting)))
+        sut = createSut(spark = spark)
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(retained, sut.balanceState.value)
+
+        val recovered = BalanceState(
+            totalLightningSats = 180_000uL,
+            sparkBalanceSats = 130_000uL,
+            sparkPendingDepositSats = 0uL,
+        )
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(recovered))
+        sut.syncBalances()
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(
+            Result.failure(NodeRunTimeoutError("getBalancesAsync")),
+        )
+        sparkState.update { it.copy(balanceSats = 120_000uL) }
+        testScheduler.runCurrent()
+        assertEquals(170_000uL, sut.balanceState.value.totalLightningSats)
+        assertEquals(0uL, sut.balanceState.value.balanceInTransferToSavings)
+        assertEquals(sut.balanceState.value, cached.balance)
     }
 
     @Test
@@ -667,6 +738,32 @@ class WalletRepoTest : BaseUnitTest() {
             connectionRecovery.withStartup(owner) { sut.syncBalances() }
         }
         verify(cacheStore).cacheBalance(BalanceState())
+    }
+
+    @Test
+    fun `funding reaching a running exit syncs balances`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sparkExitState.value = SparkExitState(record = SparkExitFixtures.record())
+        testScheduler.runCurrent()
+        clearInvocations(deriveBalanceStateUseCase)
+
+        sparkExitState.update { it.copy(fundingSeenSats = 5_000uL) }
+        testScheduler.runCurrent()
+
+        verify(deriveBalanceStateUseCase).invoke()
+    }
+
+    @Test
+    fun `an exit write that leaves the balances alone syncs nothing`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sparkExitState.value = SparkExitState(record = SparkExitFixtures.record())
+        testScheduler.runCurrent()
+        clearInvocations(deriveBalanceStateUseCase)
+
+        sparkExitState.update { it.copy(tipHeight = 1_000u, lastError = "error") }
+        testScheduler.runCurrent()
+
+        verify(deriveBalanceStateUseCase, never()).invoke()
     }
 
     private fun sparkRepoWith(state: MutableStateFlow<SparkState>): SparkRepo = mock {
