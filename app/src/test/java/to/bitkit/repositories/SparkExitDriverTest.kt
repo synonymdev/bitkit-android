@@ -601,6 +601,47 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded unverified ask holds its rebuild over a step sent on an earlier clean check`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val ready = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.checks += check(ready, RecoveryVerdict.Valid)
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+
+        var record = driver(tip = 1_000u).tick(running(unread))
+        record = driver(tip = 1_000u).tick(record)
+        val builds = sdk.recoverRequests.size
+
+        // The payment is unconfirmed while a clean check sends n2, so the ask stays open.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("paid", value = 100_000uL, confirmed = false))
+        record = driver(tip = 1_000u).tick(record.copy(fundingPaymentTxid = "paid"))
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertTrue(record.isUnverifiedAsk)
+
+        // It confirms on the tick whose check fails to read n2.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("paid", value = 100_000uL))
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2, sent on the previous tick")
+        assertTrue(record.isUnverifiedAsk)
+        assertEquals(1, record.generation)
+    }
+
+    @Test
     fun `a funded unverified rebuild that waits for the unread leaf leaves no stale retry clock`() = test {
         val unread = SparkExitFixtures.recovery(
             listOf(

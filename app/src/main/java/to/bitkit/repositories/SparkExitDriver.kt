@@ -154,7 +154,7 @@ class SparkExitDriver(
                     Logger.warn("Releasing Spark exit leaves '${record.waitingLeafIds}' unfunded", context = TAG)
                     record = end(record.ended(), record)
                 } else if (sdk != null && record.phase.requiredFundingSats != null) {
-                    record = buildOnceFunded(record, sdk)
+                    record = buildOnceFunded(record, sdk, stored = start.recovery)
                 }
             }
             SparkExitRecord.Phase.Running if record.isRebuilding -> {
@@ -178,8 +178,15 @@ class SparkExitDriver(
         return record
     }
 
-    /** Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild. */
-    private suspend fun buildOnceFunded(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+    /**
+     * Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild.
+     * [stored] is the recovery from before this tick's check.
+     */
+    private suspend fun buildOnceFunded(
+        record: SparkExitRecord,
+        sdk: SparkExitRecovering,
+        stored: RecoverFundsResponse?,
+    ): SparkExitRecord {
         val shortfall = record.fundingShortfallSats
         // Nothing to fund when every leaf is recovered cooperatively.
         val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
@@ -211,6 +218,15 @@ class SparkExitDriver(
                 ) {
                     Logger.info("Spark exit steps read again: no funded unverified rebuild", context = TAG)
                     return funded.copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false)
+                }
+                // A step this check just turned unverified may have been sent on an earlier clean check: the resume
+                // waits for the next check, as the check's own rebuild does.
+                val unreadBefore = stored?.transactions.orEmpty()
+                    .filter { it.status == ExitTransactionStatus.Unverified }
+                    .map { it.txid }
+                    .toSet()
+                if (unilateral.any { it.status == ExitTransactionStatus.Unverified && it.txid !in unreadBefore }) {
+                    return funded
                 }
                 if (tip != null && funded.unverifiedRebuiltAtHeight == tip) return funded
                 val resumed = funded.copy(unverifiedRebuiltAtHeight = tip)
