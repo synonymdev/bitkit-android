@@ -376,7 +376,7 @@ private fun ColumnScope.OnchainDetails(
 }
 
 @Composable
-private fun Section(
+internal fun Section(
     title: String,
     modifier: Modifier = Modifier,
     value: String? = null,
