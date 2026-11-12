@@ -649,6 +649,32 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry paused before its journal writes reads as in flight over an older failed row`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.listPayments() }
+            .thenReturn(listOf(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
+        val journaling = CompletableDeferred<Unit>()
+        whenever { cacheStore.addSparkSendHash(any(), anyOrNull()) }.doSuspendableAnswer { journaling.await() }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val mark = sut.sendRecordMark()
+
+        val retry = async { sut.payInvoice("lnbc1280n1send", 128uL) }
+        runCurrent()
+
+        // Recorded, but its journal is not written yet, so Spark's list still reads the older attempt's failure.
+        assertTrue(sut.hasRecordedSendSince(mark, "hash"))
+        assertEquals(PaymentStatus.FAILED, assertIs<SparkLightningSend.Found>(sut.lightningSend("hash")).status)
+        assertTrue(sut.isSendInFlight("hash"), "a paused retry read as settled")
+        journaling.complete(Unit)
+        assertEquals("hash", retry.await().getOrThrow())
+        assertFalse(sut.isSendInFlight("hash"))
+    }
+
+    @Test
     fun `a readable history without a live attempt lets the node pay a recorded invoice`() = test {
         cacheData.value = AppCacheData(sparkSendHashes = listOf("hash"))
         whenever(sparkService.isConnected).thenReturn(true)

@@ -125,6 +125,11 @@ data class SparkExitRecord(
     /** The fee funding asked for came from a rebuild over unverified steps, while the generation out there is valid. */
     val isUnverifiedAsk: Boolean = false,
     /**
+     * A Redo verdict came while the exit asked for fee funding: the Redo rebuild may run on the funding it holds, and
+     * the ask then ends. Kept until a tick starts past that ask.
+     */
+    val isRedoAsk: Boolean = false,
+    /**
      * A higher fee rate the steps out there are not built at yet: a fee bump whose build kept the valid generation over
      * a leaf it would leave waiting. Built at that rate again until a build at it is adopted.
      */
@@ -955,6 +960,11 @@ object SparkExitJson {
         r.feeBumpBuiltAtHeight?.let { put("feeBumpBuiltAtHeight", it.toLong()) }
     }
 
+    private fun JsonObjectBuilder.putAskState(r: SparkExitRecord) {
+        if (r.isUnverifiedAsk) put("isUnverifiedAsk", true)
+        if (r.isRedoAsk) put("isRedoAsk", true)
+    }
+
     /** What the exit keeps to pace and bound its rebuilds and waits, each left out at its default. */
     private fun JsonObjectBuilder.putRebuildState(r: SparkExitRecord) {
         if (r.stallRebuilds > 0) put("stallRebuilds", r.stallRebuilds)
@@ -975,7 +985,7 @@ object SparkExitJson {
         if (r.isRebuiltFromChain) put("isRebuiltFromChain", true)
         if (r.isRedoRebuild) put("isRedoRebuild", true)
         r.redoHeldSince?.let { put("redoHeldSince", it.toLong()) }
-        if (r.isUnverifiedAsk) put("isUnverifiedAsk", true)
+        putAskState(r)
         putFeeBumpState(r)
         r.fundingStrategy?.let { put("fundingStrategy", it) }
         if (r.failedLeaves.isNotEmpty()) {
@@ -1118,6 +1128,7 @@ object SparkExitJson {
         isRedoRebuild = o.booleanOrNull("isRedoRebuild") ?: false,
         redoHeldSince = o.ulongOrNull("redoHeldSince")?.toUInt(),
         isUnverifiedAsk = o.booleanOrNull("isUnverifiedAsk") ?: false,
+        isRedoAsk = o.booleanOrNull("isRedoAsk") ?: false,
         isFeeBumpPending = o.booleanOrNull("isFeeBumpPending") ?: false,
         feeBumpBuiltAtHeight = o.ulongOrNull("feeBumpBuiltAtHeight")?.toUInt(),
         fundingStrategy = o.stringOrNull("fundingStrategy"),
