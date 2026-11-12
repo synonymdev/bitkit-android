@@ -233,12 +233,21 @@ class BoostTransactionViewModel @Inject constructor(
             if (broadcast.result.isCancelled) removeRbfBroadcast(txid, broadcast)
         }
         result.fold(
-            onSuccess = { handleBoostSuccess(activity, it, isRBF = true) },
+            onSuccess = {
+                recordRbfBoost(activity, it, broadcast.quote.feeRate)
+                handleBoostSuccess(activity, it, isRBF = true)
+            },
             onFailure = {
                 removeRbfBroadcast(txid, broadcast)
                 handleError("RBF boost failed", it, activity)
             },
         )
+    }
+
+    private suspend fun recordRbfBoost(origin: Activity.Onchain, newTxId: Txid, feeRate: ULong) {
+        activityRepo.recordRbfBoost(origin.v1, newTxId, feeRate).onFailure {
+            Logger.warn("Failed to record RBF fee rate for '$newTxId'", it, context = TAG)
+        }
     }
 
     private fun removeRbfBroadcast(txid: String, broadcast: RbfBroadcastAttempt) {
