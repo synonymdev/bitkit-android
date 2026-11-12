@@ -513,7 +513,7 @@ object SparkExitMath {
     /** Unused funding addresses a scan reads past the last used one before it stops. */
     const val FUNDING_SCAN_GAP_LIMIT = 20
 
-    /** The most funding addresses one scan reads, even when a host reports every one used. */
+    /** The most funding addresses one scan reads from where it starts, even when a host reports every one used. */
     const val FUNDING_SCAN_MAX_ADDRESSES = 1_000
 
     /**
@@ -524,7 +524,9 @@ object SparkExitMath {
     suspend fun scanNextFundingIndex(from: UInt = 0u, isUsed: suspend (UInt) -> Boolean): UInt {
         var next = from
         var index = from
-        while (index < next + FUNDING_SCAN_GAP_LIMIT.toUInt() && index < FUNDING_SCAN_MAX_ADDRESSES.toUInt()) {
+        // In 64 bits, so an index near the top of its range ends the scan instead of wrapping around.
+        val limit = (from.toULong() + FUNDING_SCAN_MAX_ADDRESSES.toULong()).coerceAtMost(UInt.MAX_VALUE.toULong())
+        while (index.toULong() < next.toULong() + FUNDING_SCAN_GAP_LIMIT.toULong() && index.toULong() < limit) {
             if (isUsed(index)) next = index + 1u
             index++
         }
