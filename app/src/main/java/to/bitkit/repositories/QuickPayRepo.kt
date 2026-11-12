@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.compose.runtime.Immutable
 import com.synonym.bitkitcore.LnurlPayData
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -26,7 +27,9 @@ import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.requiresPaymentAuth
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.runSuspendCatching
@@ -141,6 +144,28 @@ class QuickPayRepo @Inject constructor(
             )
             false
         }
+    }
+
+    /**
+     * Saves [change] at once, or returns the PIN or biometric check it must pass first when payments need a PIN and
+     * [change] enables QuickPay or raises one of its limits. Disabling and lowering always save at once.
+     */
+    suspend fun requestSettingsChange(change: QuickPayChange): Result<QuickPayAuthorization?> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val settings = settingsStore.data.first()
+                if (settings.requiresPaymentAuth && change.isRaise(settings)) {
+                    QuickPayAuthorization(change, settings.isBiometricEnabled)
+                } else {
+                    settingsStore.update(change::applyTo)
+                    null
+                }
+            }
+        }
+
+    /** Saves [change] once its PIN or biometric check passed. */
+    suspend fun applySettingsChange(change: QuickPayChange): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { settingsStore.update(change::applyTo) }
     }
 
     internal suspend fun reserveBound(
@@ -764,6 +789,34 @@ class QuickPayRepo @Inject constructor(
     private enum class PreparePayResult { LIVE, RECOVERED, FRESH, REJECTED }
 
     private enum class AmbiguousApply { UNCHANGED, SUCCEEDED, ALREADY_PAID, FAILED }
+}
+
+/** A pending PIN or biometric check before [change] is saved. */
+@Immutable
+data class QuickPayAuthorization(
+    val change: QuickPayChange,
+    val useBiometrics: Boolean,
+)
+
+/** One QuickPay setting the user asked to change, with its new value. */
+sealed interface QuickPayChange {
+    fun isRaise(settings: SettingsData): Boolean
+    fun applyTo(settings: SettingsData): SettingsData
+
+    data class Enabled(val value: Boolean) : QuickPayChange {
+        override fun isRaise(settings: SettingsData) = value && !settings.isQuickPayEnabled
+        override fun applyTo(settings: SettingsData) = settings.copy(isQuickPayEnabled = value)
+    }
+
+    data class Amount(val value: Int) : QuickPayChange {
+        override fun isRaise(settings: SettingsData) = value > settings.quickPayAmount
+        override fun applyTo(settings: SettingsData) = settings.copy(quickPayAmount = value)
+    }
+
+    data class DailyLimitMultiplier(val value: Int) : QuickPayChange {
+        override fun isRaise(settings: SettingsData) = value > settings.quickPayDailyLimitMultiplier
+        override fun applyTo(settings: SettingsData) = settings.copy(quickPayDailyLimitMultiplier = value)
+    }
 }
 
 fun interface QuickPayInvoiceParser {

@@ -1,11 +1,9 @@
 package to.bitkit.ui.screens.subscriptions
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -53,14 +51,12 @@ import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PaymentAuthorizationOverlay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.modifiers.clickableAlpha
-import to.bitkit.ui.shared.util.blockPointerInputPassthrough
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -107,34 +103,13 @@ fun AllowanceAuthorizationHost(
     Box {
         content()
         uiState.authorization?.let {
-            AllowanceAuthorizationOverlay(
-                authorization = it,
+            PaymentAuthorizationOverlay(
+                useBiometrics = it.useBiometrics,
+                pinDescriptionRes = R.string.security__pin_allowance,
                 onCancel = viewModel::onAuthorizationCancelled,
-                onVerified = viewModel::onAuthorized,
+                onVerify = viewModel::onAuthorized,
             )
         }
-    }
-}
-
-@Composable
-internal fun BoxScope.AllowanceAuthorizationOverlay(
-    authorization: AllowanceAuthorization,
-    onCancel: () -> Unit,
-    onVerified: () -> Unit,
-) {
-    BackHandler(onBack = onCancel)
-    Box(
-        modifier = Modifier
-            .matchParentSize()
-            .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
-            .blockPointerInputPassthrough()
-    ) {
-        UsdtAuthentication(
-            useBiometrics = authorization.useBiometrics,
-            onCancel = onCancel,
-            onVerified = onVerified,
-            pinDescriptionRes = R.string.security__pin_allowance,
-        )
     }
 }
 

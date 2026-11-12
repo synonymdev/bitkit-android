@@ -45,6 +45,7 @@ import com.synonym.bitkitcore.UsdtDestination
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.requiresPaymentAuth
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -169,7 +170,7 @@ private suspend fun authorizeRefund(
 ) {
     wallet.readPaymentSettings {
         if (!isCurrent()) return@readPaymentSettings
-        if (it.isPinEnabled && it.isPinForPaymentsEnabled) onAuthenticate() else onRefund()
+        if (it.requiresPaymentAuth) onAuthenticate() else onRefund()
     }
 }
 

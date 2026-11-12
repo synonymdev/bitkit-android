@@ -8,20 +8,25 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.repositories.QuickPayAuthorization
+import to.bitkit.repositories.QuickPayChange
+import to.bitkit.repositories.QuickPayRepo
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
 class QuickPaySettingsViewModel @Inject constructor(
-    private val settingsStore: SettingsStore,
+    settingsStore: SettingsStore,
+    private val quickPayRepo: QuickPayRepo,
 ) : ViewModel() {
     companion object {
+        private const val TAG = "QuickPaySettingsViewModel"
+
         /** Keeps the state alive across short configuration changes. */
         private const val STOP_TIMEOUT_MS = 5_000L
     }
@@ -49,24 +54,19 @@ class QuickPaySettingsViewModel @Inject constructor(
 
     fun onAuthorized() {
         val change = authorization.getAndUpdate { null }?.change ?: return
-        viewModelScope.launch { settingsStore.update(change::applyTo) }
+        viewModelScope.launch {
+            quickPayRepo.applySettingsChange(change)
+                .onFailure { Logger.error("Failed to save QuickPay change '$change'", it, context = TAG) }
+        }
     }
 
     fun onAuthorizationCancelled() = authorization.update { null }
 
-    /**
-     * Applies [change] after the same PIN or biometric check as Send when the user requires a PIN for payments and
-     * the change enables QuickPay or raises one of its limits. Disabling and lowering always apply at once.
-     */
     private fun requestChange(change: QuickPayChange) {
         viewModelScope.launch {
-            val settings = settingsStore.data.first()
-            val isGated = settings.isPinEnabled && settings.isPinForPaymentsEnabled
-            if (!isGated || !change.isRaise(settings)) {
-                settingsStore.update(change::applyTo)
-                return@launch
-            }
-            authorization.compareAndSet(null, QuickPayAuthorization(change, settings.isBiometricEnabled))
+            quickPayRepo.requestSettingsChange(change)
+                .onSuccess { pending -> pending?.let { authorization.compareAndSet(null, it) } }
+                .onFailure { Logger.error("Failed to request QuickPay change '$change'", it, context = TAG) }
         }
     }
 }
@@ -78,31 +78,3 @@ data class QuickPaySettingsUiState(
     val quickPayDailyLimitMultiplier: Int = 5,
     val authorization: QuickPayAuthorization? = null,
 )
-
-/** A pending PIN or biometric check before [change] is saved. */
-@Immutable
-data class QuickPayAuthorization(
-    val change: QuickPayChange,
-    val useBiometrics: Boolean,
-)
-
-/** One QuickPay setting the user asked to change, with its new value. */
-sealed interface QuickPayChange {
-    fun isRaise(settings: SettingsData): Boolean
-    fun applyTo(settings: SettingsData): SettingsData
-
-    data class Enabled(val value: Boolean) : QuickPayChange {
-        override fun isRaise(settings: SettingsData) = value && !settings.isQuickPayEnabled
-        override fun applyTo(settings: SettingsData) = settings.copy(isQuickPayEnabled = value)
-    }
-
-    data class Amount(val value: Int) : QuickPayChange {
-        override fun isRaise(settings: SettingsData) = value > settings.quickPayAmount
-        override fun applyTo(settings: SettingsData) = settings.copy(quickPayAmount = value)
-    }
-
-    data class DailyLimitMultiplier(val value: Int) : QuickPayChange {
-        override fun isRaise(settings: SettingsData) = value > settings.quickPayDailyLimitMultiplier
-        override fun applyTo(settings: SettingsData) = settings.copy(quickPayDailyLimitMultiplier = value)
-    }
-}

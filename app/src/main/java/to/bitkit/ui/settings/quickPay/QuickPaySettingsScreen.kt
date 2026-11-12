@@ -1,8 +1,6 @@
 package to.bitkit.ui.settings.quickPay
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -23,15 +21,13 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.PaymentAuthorizationOverlay
 import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
-import to.bitkit.ui.shared.util.blockPointerInputPassthrough
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -57,34 +53,13 @@ fun QuickPaySettingsScreen(
             onBack = onBack,
         )
         uiState.authorization?.let {
-            QuickPayAuthorizationOverlay(
+            PaymentAuthorizationOverlay(
                 useBiometrics = it.useBiometrics,
+                pinDescriptionRes = R.string.security__pin_enter,
                 onCancel = viewModel::onAuthorizationCancelled,
-                onVerified = viewModel::onAuthorized,
+                onVerify = viewModel::onAuthorized,
             )
         }
-    }
-}
-
-@Composable
-private fun BoxScope.QuickPayAuthorizationOverlay(
-    useBiometrics: Boolean,
-    onCancel: () -> Unit,
-    onVerified: () -> Unit,
-) {
-    BackHandler(onBack = onCancel)
-    Box(
-        modifier = Modifier
-            .matchParentSize()
-            .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
-            .blockPointerInputPassthrough()
-    ) {
-        UsdtAuthentication(
-            useBiometrics = useBiometrics,
-            onCancel = onCancel,
-            onVerified = onVerified,
-            pinDescriptionRes = R.string.security__pin_enter,
-        )
     }
 }
 

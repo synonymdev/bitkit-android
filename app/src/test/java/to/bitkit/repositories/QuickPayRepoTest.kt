@@ -145,6 +145,92 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `requestSettingsChange returns the check for an enable or raise and saves nothing`() = test {
+        stubSettingsUpdate()
+        val gated = SettingsData(
+            isPinEnabled = true,
+            isPinForPaymentsEnabled = true,
+            isBiometricEnabled = true,
+            isQuickPayEnabled = false,
+            quickPayAmount = 5,
+            quickPayDailyLimitMultiplier = 5,
+        )
+        settingsData.value = gated
+
+        listOf(
+            QuickPayChange.Enabled(true),
+            QuickPayChange.Amount(20),
+            QuickPayChange.DailyLimitMultiplier(10),
+        ).forEach {
+            assertEquals(QuickPayAuthorization(it, useBiometrics = true), sut.requestSettingsChange(it).getOrThrow())
+        }
+
+        assertEquals(gated, settingsData.value)
+        verify(settingsStore, never()).update(any())
+    }
+
+    @Test
+    fun `requestSettingsChange saves disabling and lowering at once`() = test {
+        stubSettingsUpdate()
+        val gated = SettingsData(
+            isPinEnabled = true,
+            isPinForPaymentsEnabled = true,
+            isQuickPayEnabled = true,
+            quickPayAmount = 20,
+            quickPayDailyLimitMultiplier = 5,
+        )
+        settingsData.value = gated
+
+        assertNull(sut.requestSettingsChange(QuickPayChange.Enabled(false)).getOrThrow())
+        assertNull(sut.requestSettingsChange(QuickPayChange.Amount(10)).getOrThrow())
+        assertNull(sut.requestSettingsChange(QuickPayChange.DailyLimitMultiplier(3)).getOrThrow())
+
+        assertEquals(
+            gated.copy(isQuickPayEnabled = false, quickPayAmount = 10, quickPayDailyLimitMultiplier = 3),
+            settingsData.value,
+        )
+    }
+
+    @Test
+    fun `requestSettingsChange saves raises at once when payments need no pin`() = test {
+        stubSettingsUpdate()
+        listOf(
+            SettingsData(isPinEnabled = false, isPinForPaymentsEnabled = true),
+            SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = false),
+        ).forEach { start ->
+            settingsData.value = start
+
+            assertNull(sut.requestSettingsChange(QuickPayChange.Enabled(true)).getOrThrow())
+            assertNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
+            assertNull(sut.requestSettingsChange(QuickPayChange.DailyLimitMultiplier(10)).getOrThrow())
+
+            assertTrue(settingsData.value.isQuickPayEnabled)
+            assertEquals(50, settingsData.value.quickPayAmount)
+            assertEquals(10, settingsData.value.quickPayDailyLimitMultiplier)
+        }
+    }
+
+    @Test
+    fun `applySettingsChange saves only its own setting`() = test {
+        stubSettingsUpdate()
+        settingsData.value = settingsData.value.copy(quickPayAmount = 1)
+
+        sut.applySettingsChange(QuickPayChange.DailyLimitMultiplier(50)).getOrThrow()
+
+        assertEquals(1, settingsData.value.quickPayAmount)
+        assertEquals(50, settingsData.value.quickPayDailyLimitMultiplier)
+    }
+
+    @Test
+    fun `settings changes return a failed write instead of throwing`() = test {
+        whenever(settingsStore.update(any())).thenAnswer { throw AppError("write failed") }
+        settingsData.value = SettingsData(isPinEnabled = false)
+
+        assertTrue(sut.requestSettingsChange(QuickPayChange.Amount(50)).isFailure)
+        assertTrue(sut.applySettingsChange(QuickPayChange.Amount(50)).isFailure)
+    }
+
+    @Test
     fun `reserveBound on clock rollback keeps existing spend`() = test {
         assertNotNull(sut.reserveBound("a", 500u).getOrThrow())
         clock.instant = Instant.parse("2026-08-14T12:00:00Z")
@@ -1097,6 +1183,13 @@ class QuickPayRepoTest : BaseUnitTest() {
     )
 
     private fun testInvoice(): Pair<String, String> = TEST_BOLT11 to TEST_HASH
+
+    private fun stubSettingsUpdate() {
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            settingsData.value = it.getArgument<(SettingsData) -> SettingsData>(0)(settingsData.value)
+            Unit
+        }
+    }
 
     private fun repo(): QuickPayRepo {
         return QuickPayRepo(

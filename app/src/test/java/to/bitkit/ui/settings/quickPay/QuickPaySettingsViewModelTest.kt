@@ -14,100 +14,88 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.repositories.QuickPayAuthorization
+import to.bitkit.repositories.QuickPayChange
+import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class QuickPaySettingsViewModelTest : BaseUnitTest() {
     private val settingsStore: SettingsStore = mock()
-    private val gatedSettings = SettingsData(
-        isPinEnabled = true,
-        isPinForPaymentsEnabled = true,
-        isQuickPayEnabled = false,
-        quickPayAmount = 5,
-        quickPayDailyLimitMultiplier = 5,
+    private val quickPayRepo: QuickPayRepo = mock()
+    private val settings = MutableStateFlow(
+        SettingsData(isQuickPayEnabled = false, quickPayAmount = 5, quickPayDailyLimitMultiplier = 5),
     )
-    private val settings = MutableStateFlow(gatedSettings)
 
     private lateinit var sut: QuickPaySettingsViewModel
 
     @Before
     fun setUp() {
         whenever(settingsStore.data).thenReturn(settings)
-        whenever { settingsStore.update(any()) }.thenAnswer {
-            settings.value = it.getArgument<(SettingsData) -> SettingsData>(0)(settings.value)
-            Unit
+        listOf(
+            QuickPayChange.Enabled(true),
+            QuickPayChange.Amount(10),
+            QuickPayChange.Amount(50),
+            QuickPayChange.DailyLimitMultiplier(50),
+        ).forEach {
+            whenever { quickPayRepo.requestSettingsChange(it) }
+                .thenReturn(Result.success(QuickPayAuthorization(it, useBiometrics = true)))
         }
-        sut = QuickPaySettingsViewModel(settingsStore)
+        whenever { quickPayRepo.applySettingsChange(any()) }.thenReturn(Result.success(Unit))
+        sut = QuickPaySettingsViewModel(settingsStore, quickPayRepo)
     }
 
     @Test
-    fun `enabling asks for the pin first and saves nothing before it`() = test {
-        settings.value = gatedSettings.copy(isBiometricEnabled = true)
-
+    fun `a gated change waits for the check and saves once it passes`() = test {
         sut.setQuickPayEnabled(true)
 
         assertEquals(
             QuickPayAuthorization(QuickPayChange.Enabled(true), useBiometrics = true),
             loadedState().authorization,
         )
-        assertFalse(settings.value.isQuickPayEnabled)
-        verify(settingsStore, never()).update(any())
+        verify(quickPayRepo, never()).applySettingsChange(any())
 
         sut.onAuthorized()
 
-        assertTrue(settings.value.isQuickPayEnabled)
+        verify(quickPayRepo).applySettingsChange(QuickPayChange.Enabled(true))
         assertNull(loadedState().authorization)
     }
 
     @Test
-    fun `raising the per-payment amount asks for the pin first`() = test {
-        sut.setQuickPayAmount(20)
+    fun `a change saved at once opens no check`() = test {
+        whenever(quickPayRepo.requestSettingsChange(any())).thenReturn(Result.success(null))
 
-        assertEquals(QuickPayChange.Amount(20), loadedState().authorization?.change)
-        assertEquals(5, settings.value.quickPayAmount)
+        sut.setQuickPayAmount(1)
 
-        sut.onAuthorized()
-
-        assertEquals(20, settings.value.quickPayAmount)
+        verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(1))
+        assertNull(loadedState().authorization)
+        verify(quickPayRepo, never()).applySettingsChange(any())
     }
 
     @Test
-    fun `raising the daily limit multiplier asks for the pin first`() = test {
-        sut.setQuickPayDailyLimitMultiplier(10)
-
-        assertEquals(QuickPayChange.DailyLimitMultiplier(10), loadedState().authorization?.change)
-        assertEquals(5, settings.value.quickPayDailyLimitMultiplier)
-
-        sut.onAuthorized()
-
-        assertEquals(10, settings.value.quickPayDailyLimitMultiplier)
-    }
-
-    @Test
-    fun `a cancelled check leaves every value unchanged`() = test {
+    fun `a cancelled check saves nothing`() = test {
         sut.setQuickPayAmount(50)
         sut.onAuthorizationCancelled()
 
-        assertEquals(gatedSettings, settings.value)
         assertNull(loadedState().authorization)
-        verify(settingsStore, never()).update(any())
+        sut.onAuthorized()
+        verify(quickPayRepo, never()).applySettingsChange(any())
     }
 
     @Test
     fun `a late or repeated verification saves nothing`() = test {
         sut.onAuthorized()
-        verify(settingsStore, never()).update(any())
+        verify(quickPayRepo, never()).applySettingsChange(any())
 
         sut.setQuickPayAmount(10)
         sut.onAuthorized()
         sut.onAuthorized()
 
-        assertEquals(gatedSettings.copy(quickPayAmount = 10), settings.value)
-        verify(settingsStore).update(any())
+        verify(quickPayRepo).applySettingsChange(QuickPayChange.Amount(10))
     }
 
     @Test
@@ -119,75 +107,39 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
 
         sut.onAuthorized()
 
-        assertEquals(gatedSettings.copy(quickPayAmount = 10), settings.value)
+        verify(quickPayRepo).applySettingsChange(QuickPayChange.Amount(10))
+        verify(quickPayRepo, never()).applySettingsChange(QuickPayChange.DailyLimitMultiplier(50))
     }
 
     @Test
-    fun `an authorized change saves only its own setting`() = test {
-        sut.setQuickPayDailyLimitMultiplier(50)
-        settings.value = settings.value.copy(quickPayAmount = 1)
+    fun `a failed request opens no check`() = test {
+        whenever(quickPayRepo.requestSettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
+
+        sut.setQuickPayEnabled(true)
+
+        assertNull(loadedState().authorization)
+    }
+
+    @Test
+    fun `a failed save after the check closes the check`() = test {
+        whenever(quickPayRepo.applySettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
+        sut.setQuickPayEnabled(true)
 
         sut.onAuthorized()
 
-        assertEquals(gatedSettings.copy(quickPayAmount = 1, quickPayDailyLimitMultiplier = 50), settings.value)
-    }
-
-    @Test
-    fun `disabling and lowering apply without a check`() = test {
-        settings.value = gatedSettings.copy(isQuickPayEnabled = true, quickPayAmount = 20)
-
-        sut.setQuickPayEnabled(false)
-        sut.setQuickPayAmount(10)
-        sut.setQuickPayDailyLimitMultiplier(3)
-
+        verify(quickPayRepo).applySettingsChange(QuickPayChange.Enabled(true))
         assertNull(loadedState().authorization)
-        assertEquals(
-            gatedSettings.copy(isQuickPayEnabled = false, quickPayAmount = 10, quickPayDailyLimitMultiplier = 3),
-            settings.value,
-        )
-    }
-
-    @Test
-    fun `raises apply without a check when the pin is off`() = test {
-        settings.value = gatedSettings.copy(isPinEnabled = false)
-
-        raiseAll()
-
-        assertNull(loadedState().authorization)
-        assertRaised()
-    }
-
-    @Test
-    fun `raises apply without a check when payments need no pin`() = test {
-        settings.value = gatedSettings.copy(isPinForPaymentsEnabled = false)
-
-        raiseAll()
-
-        assertNull(loadedState().authorization)
-        assertRaised()
     }
 
     @Test
     fun `ui state mirrors the stored settings`() = test {
-        settings.value = gatedSettings.copy(isQuickPayEnabled = true, quickPayAmount = 10)
+        settings.value = settings.value.copy(isQuickPayEnabled = true, quickPayAmount = 10)
 
         val state = loadedState()
 
         assertTrue(state.isQuickPayEnabled)
         assertEquals(10, state.quickPayAmount)
         assertEquals(5, state.quickPayDailyLimitMultiplier)
-    }
-
-    private fun raiseAll() {
-        sut.setQuickPayEnabled(true)
-        sut.setQuickPayAmount(50)
-        sut.setQuickPayDailyLimitMultiplier(10)
-    }
-
-    private fun assertRaised() {
-        assertTrue(settings.value.isQuickPayEnabled)
-        assertEquals(50, settings.value.quickPayAmount)
-        assertEquals(10, settings.value.quickPayDailyLimitMultiplier)
     }
 
     private fun TestScope.loadedState(): QuickPaySettingsUiState {
