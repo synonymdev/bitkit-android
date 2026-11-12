@@ -19,13 +19,17 @@ Regenerate the file when you change any of these:
 
 To regenerate:
 
-1. Run `just deps`. It runs `scripts/update-verification-metadata.sh`, which needs GitHub Packages credentials (see [GitHub Packages setup](../README.md#2-github-packages-setup)). It takes a long time, because it runs the CI and release build tasks so that Gradle records every artifact they resolve.
-2. Review the diff of `gradle/verification-metadata.xml`. New entries should match only the coordinates you changed. The diff should only add components or versions for those coordinates; if it changes a checksum or adds an `also-trust` value on an existing entry, investigate the cause instead of committing it. The script fails and prints the line numbers when the file contains an `also-trust` value.
+1. Run `just deps`. It runs `scripts/update-verification-metadata.sh`, which needs GitHub Packages credentials (see [GitHub Packages setup](../README.md#2-github-packages-setup)). It takes a long time, because it runs the CI and release build tasks so that Gradle records every artifact they resolve. If `keystore.properties` exists, the release tasks sign with it instead of the debug keystore, so the `storeFile` it names must exist.
+2. Review the diff of `gradle/verification-metadata.xml`. New components and versions are expected, including new transitive dependencies of what you changed. What needs investigating is a changed checksum or an `also-trust` value on an existing entry: find the cause instead of committing it. The script fails and prints the line numbers when the file contains an `also-trust` value.
 3. Commit the file in the same PR as the dependency change.
 
 The script keeps existing entries and the `<configuration>` block. It fails if a host-specific artifact lacks its variants for other platforms. It passes `-PuseMavenLocal=false` and stops if `bitkitCoreAar` is set, so local artifacts are never recorded. If a Gradle task fails, the script still finishes the other steps but exits with an error; do not commit the file until `just deps` passes.
 
-The recorded checksums come from the artifacts in your local Gradle cache, so a new entry is only as trustworthy as that cache. To record checksums from fresh downloads instead, run `GRADLE_USER_HOME=$(mktemp -d) just deps`, which is slower because it downloads every artifact again.
+The recorded checksums come from the artifacts in your local Gradle cache, so a new entry is only as trustworthy as that cache. To record checksums from fresh downloads instead, run the script with an empty Gradle home, which is slower because it downloads every artifact again:
+
+1. Run `fresh_home=$(mktemp -d)`.
+2. Run `GRADLE_USER_HOME="$fresh_home" just deps`. The new home has no `gradle.properties`, so the GitHub Packages credentials must come from `local.properties` or the `GITHUB_ACTOR` and `GITHUB_TOKEN` environment variables, or you copy `gradle.properties` into `$fresh_home` first.
+3. Run `rm -rf "$fresh_home"`, because the downloads take several GB.
 
 The script records release dependencies with the tnet flavor, because a mainnet build needs secret config. This works only while no dependency or plugin differs per flavor. If you add a mainnet-only or other flavor-specific dependency or plugin, extend the task list in the script to cover it. PR CI never builds mainnet, so a missing entry would only show up when the mainnet release build fails verification.
 

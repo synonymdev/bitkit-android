@@ -32,10 +32,14 @@ esac
 
 # Release tasks use tnet as the mainnet stand-in, because mainnet needs secret config. This holds
 # only while no dependency or plugin differs per flavor: a flavor-specific one needs its tasks here.
-# Without keystore.properties they are signed with the tracked debug keystore, which is
-# enough here because signing does not change what is resolved.
+# They are signed with the tracked debug keystore, which is enough here because signing does not
+# change what is resolved. If keystore.properties exists, it takes precedence over the KEYSTORE_*
+# variables below, so its storeFile must exist.
 # useMavenLocal=false keeps locally published artifacts out of the recorded checksums.
 # --continue lets every task resolve its dependencies even when another task fails.
+if [ -f keystore.properties ]; then
+    echo "Note: keystore.properties takes precedence over the debug keystore, so its storeFile must exist." >&2
+fi
 if KEYSTORE_FILE=app/debug.keystore KEYSTORE_PASSWORD=android \
     KEY_ALIAS=androiddebugkey KEY_PASSWORD=android \
     ./gradlew --write-verification-metadata sha256 --no-daemon --no-configuration-cache --no-build-cache \
@@ -50,8 +54,19 @@ fi
 
 # Gradle only records the aapt2 binary for the current host, so add the other platforms
 # from Google Maven to keep the file valid on every OS.
+# The new content goes to a file next to the metadata, so mv replaces it in one step.
+metadata_tmp="$metadata.tmp"
 tmp_dir=$(mktemp -d)
-trap 'rm -rf "$tmp_dir"' EXIT
+on_exit() {
+    status=$?
+    rm -rf "$tmp_dir"
+    rm -f "$metadata_tmp"
+    if [ "$status" -ne 0 ] && [ "$gradle_status" -ne 0 ]; then
+        echo "The Gradle build failed, so $metadata may be incomplete. Do not commit it until just deps passes." >&2
+    fi
+    exit "$status"
+}
+trap on_exit EXIT
 trap 'exit 1' HUP INT TERM
 
 sha256_of() {
@@ -73,7 +88,7 @@ for version in $aapt2_versions; do
         fi
 
         echo "Adding $artifact from Google Maven"
-        curl -fsSL -o "$tmp_dir/$artifact" "$aapt2_repo/$version/$artifact"
+        curl -fsSL --retry 3 --connect-timeout 30 --max-time 300 -o "$tmp_dir/$artifact" "$aapt2_repo/$version/$artifact"
         checksum=$(sha256_of "$tmp_dir/$artifact")
         case $checksum in
             *[!0-9a-f]*) checksum="" ;;
@@ -82,20 +97,32 @@ for version in $aapt2_versions; do
             echo "Could not compute the sha256 checksum of $artifact" >&2
             exit 1
         fi
-        awk -v component="<component group=\"com.android.tools.build\" name=\"aapt2\" version=\"$version\">" \
+        # Insert the entry where Gradle would put it: artifacts sorted by name, compared bytewise.
+        LC_ALL=C awk -v component="<component group=\"com.android.tools.build\" name=\"aapt2\" version=\"$version\">" \
             -v artifact="$artifact" -v checksum="$checksum" '
-            index($0, component) { in_component = 1 }
-            in_component && /<\/component>/ {
-                match($0, /^ */)
-                indent = substr($0, 1, RLENGTH)
-                print indent "   <artifact name=\"" artifact "\">"
-                print indent "      <sha256 value=\"" checksum "\" origin=\"Google Maven\"/>"
-                print indent "   </artifact>"
+            function insert(indent) {
+                print indent "<artifact name=\"" artifact "\">"
+                print indent "   <sha256 value=\"" checksum "\" origin=\"Google Maven\"/>"
+                print indent "</artifact>"
                 in_component = 0
             }
+            index($0, component) { in_component = 1 }
+            in_component && /<artifact name="/ {
+                name = $0
+                sub(/.*<artifact name="/, "", name)
+                sub(/".*/, "", name)
+                if ((name "") > (artifact "")) {
+                    match($0, /^ */)
+                    insert(substr($0, 1, RLENGTH))
+                }
+            }
+            in_component && /<\/component>/ {
+                match($0, /^ */)
+                insert(substr($0, 1, RLENGTH) "   ")
+            }
             { print }
-        ' "$metadata" > "$tmp_dir/metadata.xml"
-        cat "$tmp_dir/metadata.xml" > "$metadata"
+        ' "$metadata" > "$metadata_tmp"
+        mv "$metadata_tmp" "$metadata"
     done
 done
 
@@ -126,8 +153,8 @@ if [ -n "$missing" ]; then
     exit 1
 fi
 
+# on_exit reports the Gradle failure, here and on every earlier error exit.
 if [ "$gradle_status" -ne 0 ]; then
-    echo "The Gradle build failed, so $metadata may be incomplete. Do not commit it until just deps passes." >&2
     exit "$gradle_status"
 fi
 
