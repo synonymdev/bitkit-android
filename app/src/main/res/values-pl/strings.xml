@@ -1726,4 +1726,9 @@
     <string name="widgets__widget__size_small">Mały</string>
     <string name="widgets__widget__size_wide">Szeroki</string>
     <string name="wallet__balance_updating">Aktualizowanie salda…</string>
+    <string name="settings__status__lightning_connection__spark">Przez Spark</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Łączenie...</string>
+    <string name="settings__status__spark__ready">Połączono</string>
+    <string name="settings__status__spark__title">Spark</string>
 </resources>
