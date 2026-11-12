@@ -12736,6 +12736,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a request paid by a spark leg keeps the leg's fee over the invoice's estimate`() = test {
+        val bolt11 = "lnbcrt1requestspark"
+        val leg = sparkRouteLeg(REGTEST_ADDRESS).copy(deliveredSat = 2_000uL, debitSat = 2_300uL)
+        val endpoints = listOf(
+            Endpoint(MethodId.Bolt11, bolt11, rawPayload = ""),
+            Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+        )
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.BTC, 2_000uL),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        stubLightningScan(bolt11, amountSats = 2_000u)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
+        whenever(lightningRepo.estimateRoutingFees(any())).thenReturn(Result.success(7uL))
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.success(PaykitRoute.Service(leg)))
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        usdtEnabled.value = false
+
+        sut.openContactPayment(bolt11, testPublicKey, incomingPaymentRequest = request, endpoints = endpoints)
+        advanceUntilIdle()
+
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        assertEquals(
+            300L,
+            sut.sendUiState.value.lightningFeeSats,
+            "Confirm shows the withdrawal's fee, not the fee of the invoice the leg doesn't pay",
+        )
+    }
+
+    @Test
     fun `a request above a routed lnurl's maximum does not open a swipeable confirm`() = test {
         val lnurl = LnurlPayData(
             uri = "lnurl1requestpastmax",

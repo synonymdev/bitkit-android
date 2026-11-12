@@ -7964,6 +7964,8 @@ class AppViewModel @Inject constructor(
         val generation = sendStateGeneration
         val currentState = _sendUiState.value
         if (currentState.payMethod != SendMethod.LIGHTNING) return
+        // A Spark leg pays the contact's other endpoint, so its fee is the leg's, never the retained invoice's.
+        if (currentState.routedPaykitRoute?.serviceLeg != null) return
         val decodedInvoice = currentState.decodedInvoice ?: return
 
         val feeResult = if (decodedInvoice.amountSatoshis > 0uL) {
@@ -7975,7 +7977,7 @@ class AppViewModel @Inject constructor(
         requireCurrentPaymentPreparation(walletGeneration)
         feeResult.onSuccess { fee ->
             _sendUiState.update {
-                if (generation != sendStateGeneration) return@update it
+                if (generation != sendStateGeneration || it.routedPaykitRoute?.serviceLeg != null) return@update it
                 it.copy(
                     lightningFeeSats = fee.toLong(),
                     lastLightningFee = fee.toLong(),

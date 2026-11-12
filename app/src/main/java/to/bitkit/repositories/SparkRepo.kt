@@ -46,6 +46,8 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsStore
+import to.bitkit.data.SparkPayoutChain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
@@ -55,11 +57,13 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
+import to.bitkit.services.CoreService
 import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -87,6 +91,9 @@ class SparkRepo @Inject constructor(
     private val contactResolver: Provider<PrivatePaykitContactResolver>,
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val clock: Clock,
+    private val coreService: Provider<CoreService>,
+    private val settingsStore: SettingsStore,
+    private val payoutChain: SparkPayoutChain,
 ) {
     companion object {
         private const val TAG = "SparkRepo"
@@ -178,9 +185,15 @@ class SparkRepo @Inject constructor(
     @Volatile
     private var hasSyncedActivities = false
 
-    /** A withdrawal's send call is running, so its journal entry must not be settled before Spark lists it. */
+    /**
+     * A withdrawal's send call is running or its returned payment is being recorded, so its journal entry must not be
+     * settled before Spark lists it.
+     */
     @Volatile
     private var isWithdrawing = false
+
+    /** Counts withdrawal sends that ended, so a list read before one ended never settles its journal. */
+    private val withdrawalSendsEnded = AtomicLong(0)
 
     /** A withdrawal to a contact holds the one journal slot, from before it prepares until its send call returns. */
     private val isClaimingWithdrawal = AtomicBoolean(false)
@@ -953,6 +966,7 @@ class SparkRepo @Inject constructor(
                 // instead of overwriting its journal.
                 if (!isClaimingWithdrawal.compareAndSet(false, true)) throw SparkError.WithdrawalPending()
                 var journal: PendingSparkWithdrawal? = null
+                var sendReturned = false
                 val sent = try {
                     if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
                     val prepared = sparkService.prepareSend(address, amountSats)
@@ -975,6 +989,7 @@ class SparkRepo @Inject constructor(
                         earlierTxids,
                         tags,
                         startedAt = clock.now().epochSeconds,
+                        paymentId = UUID.randomUUID().toString(),
                     )
                     journal = opened
                     cacheStore.update { it.copy(pendingSparkWithdrawal = opened) }
@@ -988,13 +1003,15 @@ class SparkRepo @Inject constructor(
                             clearJournal(opened)
                             throw it
                         }
-                        runSuspendCatching { sparkService.send(prepared) }
+                        runSuspendCatching { sparkService.send(prepared, opened.paymentId) }
+                            .also { sendReturned = true }
                     }
                 } finally {
-                    isWithdrawing = false
+                    if (!sendReturned) endWithdrawalSend()
                     isClaimingWithdrawal.set(false)
                 }
                 val payment = sent.getOrElse {
+                    endWithdrawalSend()
                     // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                     // nothing and the journal closes at once, as on the Lightning rail.
                     if (it is SdkException.InsufficientFunds) {
@@ -1015,7 +1032,12 @@ class SparkRepo @Inject constructor(
                     throw it
                 }
                 Logger.info("Sent Spark withdrawal '${payment.id}' with status '${payment.status}'", context = TAG)
-                recordActivity(payment)
+                // The withdrawal stays in flight until it is recorded, so a sync with an older list can't drop it.
+                try {
+                    recordActivity(payment)
+                } finally {
+                    endWithdrawalSend()
+                }
                 runSuspendCatching { refresh() }.onFailure {
                     Logger.warn("Failed to refresh Spark after withdrawal '${payment.id}'", it, context = TAG)
                 }
@@ -1183,7 +1205,37 @@ class SparkRepo @Inject constructor(
         payments
             .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
             .forEach { recordActivity(it) }
+        // Off the refresh, so a slow Electrum server never holds a send that waits for it.
+        scope.launch { confirmMinedPayouts(payments) }
         markTransfers(payments)
+    }
+
+    /**
+     * Spark lists a withdrawal completed once its provider took the payout on, which can be before the payout
+     * transaction is broadcast or mined, so a contact withdrawal's sent activity is confirmed only once its payout is
+     * in a block. The payout address's unspent outputs show that first; an output missing there, such as one the
+     * contact spent before Bitkit saw it mined, is looked up by its transaction instead.
+     */
+    private suspend fun confirmMinedPayouts(payments: List<Payment>) {
+        payments.filter { it.status == PaymentStatus.COMPLETED && it.paymentType == SparkPaymentType.SEND }
+            .forEach { payment ->
+                val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@forEach
+                val sent = (activityRepo.get().getActivity(withdraw.txId).getOrNull() as? Activity.Onchain)?.v1
+                    ?.takeIf { it.txType == PaymentType.SENT && !it.confirmed } ?: return@forEach
+                val outputs = runSuspendCatching {
+                    coreService.get().onchain.unspentOutputs(
+                        address = withdraw.destinationAddress,
+                        electrumUrl = settingsStore.data.first().electrumServer,
+                        network = Env.network,
+                    )
+                }.getOrElse {
+                    Logger.warn("Failed to look up Spark withdrawal payout '${withdraw.txId}'", it, context = TAG)
+                    return@forEach
+                }
+                val payout = outputs.firstOrNull { it.txid == withdraw.txId && it.vout == withdraw.vout }
+                val isMined = payout?.let { it.confirmations > 0u } ?: (payoutChain.isMined(withdraw.txId) == true)
+                if (isMined) activityRepo.get().upsertActivity(Activity.Onchain(sent.copy(confirmed = true)))
+            }
     }
 
     private fun markClaimedDeposits(claimed: List<SparkDeposit>) {
@@ -1532,16 +1584,25 @@ class SparkRepo @Inject constructor(
         // Read after the records, as a send counts as in flight before it is recorded, so one of the two shows it.
         val recordsBefore = sendRecords.get()
         val inFlightBefore = sendsInFlight.keys.toSet()
+        // A list read while a withdrawal was in flight, or before one ended, may lack it, so it settles no journal.
+        val sendsEndedBefore = withdrawalSendsEnded.get()
+        val wasWithdrawing = isWithdrawing
         // Read before the list, as one read before Spark's first sync can lack its restored sends.
         val isSynced = canListPayments()
         val payments = sparkService.listPayments()
         if (isSynced) seedSendHashes(payments)
         val isSaved = payments.map { recordActivity(it) }.all { it }
         releaseFailedSends(payments, recordsBefore, inFlightBefore)
-        if (!settleJournal || isWithdrawing) return isSaved
+        if (!settleJournal || wasWithdrawing || isWithdrawing || withdrawalSendsEnded.get() != sendsEndedBefore) {
+            return isSaved
+        }
         val journal = cacheStore.data.first().pendingSparkWithdrawal ?: return isSaved
-        // A listed withdrawal whose activity failed to save keeps its journal for the next sync to retry.
-        if (payments.any { journal.matches(it) }) return isSaved
+        // A listed withdrawal whose activity failed to save keeps its journal for the next sync to retry; one Spark
+        // failed before it had withdrawal details never pays out.
+        val isListed = payments.any {
+            journal.matches(it) && (it.details is PaymentDetails.Withdraw || it.status != PaymentStatus.FAILED)
+        }
+        if (isListed) return isSaved
         // Spark may list a withdrawal it just sent only on a later sync, so an unlisted one stays open for a while.
         if (clock.now().epochSeconds < journal.startedAt + UNLISTED_WITHDRAWAL_GRACE.inWholeSeconds) return isSaved
         Logger.warn("Dropped Spark withdrawal to '${journal.address}' that Spark never sent", context = TAG)
@@ -1549,6 +1610,11 @@ class SparkRepo @Inject constructor(
             _withdrawalSettlements.emit(SparkWithdrawalSettlement(journal.address, journal.amountSats, null))
         }
         return isSaved
+    }
+
+    private fun endWithdrawalSend() {
+        isWithdrawing = false
+        withdrawalSendsEnded.incrementAndGet()
     }
 
     /**
@@ -1764,7 +1830,8 @@ class SparkRepo @Inject constructor(
             fee = payment.fees.toLong().toULong(),
             address = withdraw.destinationAddress,
             timestamp = payment.timestamp,
-            confirmed = payment.status == PaymentStatus.COMPLETED,
+            // Spark completes a withdrawal before its payout is mined, so only the chain confirms it.
+            confirmed = existing?.confirmed == true,
             doesExist = payment.status != PaymentStatus.FAILED,
             contact = existing?.contact ?: journal?.contact,
             seenAt = existing?.seenAt,
@@ -1841,8 +1908,15 @@ data class PendingSparkWithdrawal(
     val tags: List<String> = emptyList(),
     /** Epoch seconds the attempt started, which keeps it open while Spark may still list it. */
     val startedAt: Long = 0,
+    /** The idempotency key the send passed, which Spark keeps as the payment's id. */
+    val paymentId: String? = null,
 ) {
+    /**
+     * Whether Spark lists [payment] for this attempt: by [paymentId], also while Spark lists it without withdrawal
+     * details, or by address and amount.
+     */
     fun matches(payment: Payment): Boolean {
+        if (paymentId != null && payment.id == paymentId) return true
         val withdraw = payment.details as? PaymentDetails.Withdraw ?: return false
         return address == withdraw.destinationAddress && amountSats == payment.amount.toLong().toULong() &&
             withdraw.txId !in earlierTxids
