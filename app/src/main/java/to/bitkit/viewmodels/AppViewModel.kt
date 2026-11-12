@@ -1499,6 +1499,13 @@ class AppViewModel @Inject constructor(
 
     fun onSparkExitNotificationTapped() = _isSparkExitRequested.update { true }
 
+    /** A Spark emergency exit is under way, so the Savings transfer banner on Home opens its progress. */
+    val isSparkExiting: StateFlow<Boolean> = sparkExitRepo.state.map { it.isExiting }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Opens the running emergency exit's progress, the way its notification does. */
+    fun onSparkExitBannerTapped() = _isSparkExitRequested.update { true }
+
     /**
      * Says whether the exit opens on its progress rather than a new exit, then clears the tapped notification: cleared
      * once nothing more suspends, as the screen that waits on it restarts and would cut the open short.
