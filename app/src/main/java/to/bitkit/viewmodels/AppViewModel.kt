@@ -4523,9 +4523,16 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): Boolean {
         val state = _sendUiState.value
-        for (wallet in hwWalletRepo.wallets.value.sortedByDescending { it.fundingBalanceSats }) {
-            val available = hardwareAvailableForPayment(wallet, amount, state, walletGeneration)
-            if (amount > available) continue
+        val wallets = hwWalletRepo.wallets.value.sortedByDescending { it.fundingBalanceSats }
+        // A retained send was fundable when signed, so its retry goes out at the original fee, not today's.
+        val retainedWallet = wallets.firstOrNull { retainedRetry(it.id, state.address)?.amountSats == amount }
+        for (wallet in listOfNotNull(retainedWallet) + wallets) {
+            val available = if (wallet == retainedWallet) {
+                hardwareMaxSpendable(wallet.id, state.address, state.speed, walletGeneration)
+            } else {
+                hardwareAvailableForPayment(wallet, amount, state, walletGeneration)
+            }
+            if (wallet != retainedWallet && amount > available) continue
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.ONCHAIN,

@@ -7704,6 +7704,71 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a home scan of a near-max retained payment picks its wallet and retries at the original fee`() = test {
+        val input = stubHomeNearMaxRetainedScan(scanSats = NEAR_MAX_RETAINED.amountSats)
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(input)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        val state = sut.sendUiState.value
+        assertEquals(HARDWARE_WALLET_ID, state.hardwareWalletId)
+        assertEquals(NEAR_MAX_RETAINED.amountSats, state.amount)
+        assertTrue(state.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(NEAR_MAX_RETAINED.feeRate.toUInt()), state.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, NEAR_MAX_RETAINED.miningFeeSats.toLong()), state.onchainFeeUi)
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `a home scan of a new near-max payment is still held to today's fee`() = test {
+        val cases = listOf(
+            NEAR_MAX_RETAINED.amountSats - 1uL to NEAR_MAX_RETAINED,
+            NEAR_MAX_RETAINED.amountSats to NEAR_MAX_RETAINED.copy(observed = true),
+            NEAR_MAX_RETAINED.amountSats to NEAR_MAX_RETAINED.copy(retryWasRefused = true),
+        )
+        for ((scanSats, record) in cases) {
+            sut.hideSheet()
+            advanceUntilIdle()
+            clearInvocations(toastManager)
+            val input = stubHomeNearMaxRetainedScan(scanSats = scanSats, record = record)
+
+            sut.showScannerSheet()
+            sut.onScannerSheetResult(input)
+            advanceUntilIdle()
+
+            assertFalse(sut.currentSheet.value is Sheet.Send)
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+            val toasts = argumentCaptor<Toast>()
+            verify(toastManager, atLeast(1)).enqueue(toasts.capture())
+            assertTrue(toasts.allValues.any { it.testTag == "InsufficientSavingsToast" })
+        }
+    }
+
+    /** The retained send spent the whole wallet at 1 sat/vB; today's Fast rate is 3 sat/vB. */
+    private suspend fun stubHomeNearMaxRetainedScan(
+        scanSats: ULong,
+        record: HwRetainedSend = NEAR_MAX_RETAINED,
+    ): String {
+        val input = stubOnchainAmountScan(amountSats = scanSats)
+        val onchainInfo = mock<IBtInfoOnchain>()
+        val btInfo = mock<IBtInfo>()
+        whenever(onchainInfo.feeRates).thenReturn(FeeRates(fast = 3u, mid = 2u, slow = 1u))
+        whenever(btInfo.onchain).thenReturn(onchainInfo)
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(info = btInfo)))
+        settingsData.value = SettingsData(defaultTransactionSpeed = TransactionSpeed.Fast)
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = record.totalSpent))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any()))
+            .thenReturn(Result.success(record.totalSpent - 1_350uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(Exception("insufficient funds for amount and fee")))
+        whenever(hwRetainedSendRepo.record(any())).thenReturn(Result.success(record))
+        return input
+    }
+
+    @Test
     fun `going back to amount releases the ordinary fee lock and the review locks it again`() = test {
         stubRetainedRecord()
         settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Fast)
@@ -19244,6 +19309,17 @@ private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private val RETAINED_RETRY = HwRetainedSendStatus.Retry(feeRate = 7uL, miningFeeSats = 300uL)
 private const val RETAINED_AMOUNT_SATS = 50_000uL
+private val NEAR_MAX_RETAINED = HwRetainedSend(
+    walletId = HARDWARE_WALLET_ID,
+    address = REGTEST_ADDRESS,
+    amountSats = 13_085_910uL,
+    serializedTx = "00",
+    miningFeeSats = 450uL,
+    feeRate = 1uL,
+    totalSpent = 13_086_360uL,
+    retryWasRefused = false,
+    observed = false,
+)
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
 private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
