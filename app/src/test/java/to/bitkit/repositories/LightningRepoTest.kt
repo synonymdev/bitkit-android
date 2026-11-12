@@ -317,9 +317,10 @@ class LightningRepoTest : BaseUnitTest() {
             transferRepo = mock(),
             activityRepo = mock(),
             hwWalletRepo = hardware,
-            connectionRecovery = connectionRecoveryFixture(settingsStore),
+            connectionRecovery = connectionRecoveryFixture(settingsStore, vssClients = vssClients),
             sparkRepo = sparkRepo,
             backupRepo = mock { on { restoreInProgress } doReturn MutableStateFlow(false) },
+            vssClients = vssClients,
         )
     }
 

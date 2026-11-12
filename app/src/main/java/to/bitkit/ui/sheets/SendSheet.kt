@@ -134,7 +134,14 @@ internal fun waitsForNode(
     hasAnyChannels: Boolean,
     hasUsableChannels: Boolean,
     sparkCanPay: Boolean,
+    destination: NavDestination? = null,
 ): Boolean {
+    if (destination?.hasRoute<SendRoute.Pending>() == true ||
+        destination?.hasRoute<SendRoute.Success>() == true ||
+        destination?.hasRoute<SendRoute.Error>() == true
+    ) {
+        return false
+    }
     if (sparkCanPay) return false
     if (!isNodeRunning) return true
     return hasAnyChannels && !hasUsableChannels
@@ -174,6 +181,8 @@ fun SendSheet(
     preparingRequest: PaykitPaymentRequest? = null,
 ) {
     val context = LocalContext.current
+    val navController = rememberNavController()
+    val entry by navController.currentBackStackEntryAsState()
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
     val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
@@ -193,6 +202,7 @@ fun SendSheet(
             hasAnyChannels = hasAnyChannels,
             hasUsableChannels = lightningState.channels.any { it.isUsable },
             sparkCanPay = sparkCanPay,
+            destination = entry?.destination,
         )
     }
 
@@ -230,8 +240,6 @@ fun SendSheet(
                 .imePadding()
                 .testTag("SendSheet"),
         ) {
-            val navController = rememberNavController()
-            val entry by navController.currentBackStackEntryAsState()
             val reviewing = entry?.destination?.isPaymentReview() == true
             LaunchedEffect(reviewing, lifecycle, appViewModel) {
                 if (!reviewing) return@LaunchedEffect
