@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.AutoOptimizationEvent
 import breez_sdk_spark.BitcoinAddressDetails
 import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.ClaimDeferredReason
@@ -149,11 +150,15 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.listUnclaimedDeposits() }.thenReturn(emptyList())
         whenever { sparkService.listPayments() }.thenReturn(emptyList())
         whenever(sparkService.events).thenReturn(sparkEvents)
-        whenever { sparkService.connect(any()) }.thenReturn(true)
+        whenever { sparkService.connect(any(), any()) }.thenReturn(true)
         whenever { activityRepo.getActivity(any(), any()) }.thenReturn(Result.success(null))
         whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.networkName).thenReturn("regtest")
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.update(transform)
+        }
     }
 
     @Test
@@ -170,6 +175,29 @@ class SparkRepoTest : BaseUnitTest() {
 
         verify(sparkService).importExitState("state")
         assertFalse(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `an exit quote waits for a leaf optimization and the counter-swap of one cut short`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        clearInvocations(sparkService)
+        sparkEvents.emit(SdkEvent.AutoOptimization(AutoOptimizationEvent.Started(3u)))
+
+        val settled = async { sut.settleForExit() }
+        runCurrent()
+        verify(sparkService, never()).syncWallet()
+
+        // Cut short: the SDK claims its counter-swap on a sync only after a 300 s grace.
+        sparkEvents.emit(SdkEvent.AutoOptimization(AutoOptimizationEvent.Cancelled))
+        advanceTimeBy(5.minutes)
+        runCurrent()
+        verify(sparkService, never()).syncWallet()
+
+        advanceTimeBy(1.minutes)
+        settled.await().getOrThrow()
+        verify(sparkService).syncWallet()
     }
 
     @Test
@@ -1070,6 +1098,19 @@ class SparkRepoTest : BaseUnitTest() {
         verify(activityRepo).updateActivity(eq("arrival"), updated.capture(), any())
         assertTrue((updated.firstValue as Activity.Onchain).v1.isTransfer)
         assertEquals(listOf(SparkWithdrawal("withdrawal", 128uL, 1_470uL)), sut.state.value.withdrawals)
+    }
+
+    @Test
+    fun `keeps the exit data backup from before an exit while it runs`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.exportExitState() }.thenReturn("state")
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        assertEquals("state", sut.exitBackup().getOrThrow()?.exitState)
+
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(SparkExitFixtures.record())
+
+        assertNull(sut.exitBackup().getOrThrow())
     }
 
     @Test
@@ -2483,6 +2524,91 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an emergency exit drops the kept balance so spending does not count it again after the exit`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        val syncFailed = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        whenever { sparkService.getInfo() }.thenReturn(syncFailed)
+        sut.refreshState().getOrThrow()
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats)
+
+        sut.setExiting(true).getOrThrow()
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the exit kept the balance it moves to savings")
+        sut.refreshState().getOrThrow()
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "a zero read during the exit kept a balance")
+
+        sut.setExiting(false).getOrThrow()
+        assertEquals(0uL, sut.state.value.shownSpendingSats, "spending counted the exited balance again")
+    }
+
+    private suspend fun keptAfterFailedSync(): SparkRepo {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        val syncFailed = info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        whenever { sparkService.getInfo() }.thenReturn(syncFailed)
+        sut.refreshState().getOrThrow()
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats)
+        return sut
+    }
+
+    @Test
+    fun `an exit's tick connects spark again after its reconnect failed`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        sut.holdForExit()
+        // The exit's reconnect disconnected Spark, then failed to connect it.
+        whenever(sparkService.isConnected).thenReturn(false)
+        whenever { sparkService.connect(any(), any()) }.thenReturn(true)
+
+        sut.reconnectForExit()
+
+        verify(sparkService).connect(0, true)
+    }
+
+    @Test
+    fun `an exit start that failed before saving keeps the kept balance`() = test {
+        val sut = keptAfterFailedSync()
+
+        sut.holdForExit()
+        sut.releaseExitHold()
+        sut.refreshState().getOrThrow()
+
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the failed start dropped the kept balance")
+    }
+
+    @Test
+    fun `a cancelled exit keeps the kept balance`() = test {
+        val sut = keptAfterFailedSync()
+
+        sut.holdForExit()
+        sut.setExiting(true, reconnect = true).getOrThrow()
+        sut.releaseExitHold()
+        sut.setExiting(false, reconnect = true).getOrThrow()
+
+        assertEquals(10_000uL, sut.state.value.shownBalanceSats, "the cancel dropped the kept balance")
+        assertEquals(10_000uL, sut.state.value.shownSpendingSats)
+    }
+
+    @Test
+    fun `an exit that ended and a wipe forget the kept balance from before the exit`() = test {
+        val sut = keptAfterFailedSync()
+        sut.holdForExit()
+        sut.setExiting(false).getOrThrow()
+        sut.wipe(0).getOrThrow()
+
+        // A restored wallet's exit cancelled while Spark reads 0 shows none of the previous wallet's kept balance.
+        sut.releaseExitHold()
+
+        assertEquals(0uL, sut.state.value.shownBalanceSats, "the previous wallet's kept balance came back")
+    }
+
+    @Test
     fun `a deposit claimed early is listed only as claimed`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         listDeposit()
@@ -2609,6 +2735,99 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<PaymentAbortedBeforeSend>(result.exceptionOrNull())
         verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
+    fun `an exit starting while a send prepares sends nothing`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sut = createSut()
+        val paused = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+
+        val result = async {
+            sut.payInvoice("lnbc1", 100uL, onBeforeSend = {
+                paused.complete(Unit)
+                resume.await()
+                true
+            })
+        }
+        paused.await()
+        sut.holdForExit()
+        resume.complete(Unit)
+        val error = result.await().exceptionOrNull()
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertIs<SparkError.SendRefused>(error)
+    }
+
+    @Test
+    fun `an exit start waits for a send already past its exit check`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sending = CompletableDeferred<Unit>()
+        val sent = CompletableDeferred<Payment>()
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            sending.complete(Unit)
+            sent.await()
+        }
+        val sut = createSut()
+        val send = async { sut.payInvoice("lnbc1", 100uL) }
+        sending.await()
+        sut.holdForExit()
+
+        val idle = async { sut.awaitSpendsIdle() }
+        runCurrent()
+
+        assertFalse(idle.isCompleted)
+        sent.complete(sentPayment(fees = 0))
+        idle.await()
+        send.await()
+    }
+
+    @Test
+    fun `an exit start is refused while a send stays active past the wait`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sending = CompletableDeferred<Unit>()
+        val sent = CompletableDeferred<Payment>()
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            sending.complete(Unit)
+            sent.await()
+        }
+        val sut = createSut()
+        val send = async { sut.payInvoice("lnbc1", 100uL) }
+        sending.await()
+        sut.holdForExit()
+
+        val idle = async { runCatching { sut.awaitSpendsIdle() } }
+        advanceTimeBy(2.minutes + 1.seconds)
+        runCurrent()
+
+        assertTrue(idle.isCompleted)
+        assertIs<SparkExitError>(idle.await().exceptionOrNull())
+        sent.complete(sentPayment(fees = 0))
+        send.await()
+    }
+
+    @Test
+    fun `an exit starting while a withdrawal prepares withdraws nothing`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        whenever { sparkService.getInfo() }.thenAnswer {
+            sut.holdForExit()
+            info(10_000uL)
+        }
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+
+        val error = sut.withdrawAll(ADDRESS, confirmedFeeSats = 500uL).exceptionOrNull()
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertIs<SparkError.SendRefused>(error)
     }
 
     @Test
@@ -2843,6 +3062,19 @@ class SparkRepoTest : BaseUnitTest() {
 
         sparkEvents.emit(SdkEvent.Synced)
         assertEquals("state", sut.exitBackup().getOrThrow()?.exitState)
+    }
+
+    @Test
+    fun `a wipe deletes the exit record and the copies set aside for support`() = test {
+        val file = File(Env.sparkExitRecordPath(0))
+        SparkExitStore(file).save(SparkExitFixtures.record())
+        SparkExitStore(file).setAside(42L)
+
+        createSut().wipe(0).getOrThrow()
+
+        assertFalse(file.exists())
+        val copies = file.parentFile?.listFiles().orEmpty().filter { "unreadable" in it.name }
+        assertTrue(copies.isEmpty(), "the wiped wallet's addresses and signed steps outlive the wipe")
     }
 
     @Test
