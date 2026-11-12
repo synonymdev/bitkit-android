@@ -55,7 +55,7 @@ val localProperties by lazy {
     }
 }
 
-// macOS keychain item named like the key (`security add-generic-password -U -a "$USER" -s <KEY> -w "$(pbpaste)"`), read at
+// macOS keychain item named like the key (stored through stdin, as the README shows), read at
 // build time so local secrets need no plain copy in local.properties. Absent on Linux (CI) and when no item exists.
 fun keychainProp(key: String): Provider<String> {
     val security = File("/usr/bin/security")
@@ -75,7 +75,8 @@ fun breezApiKey(): Provider<String> {
         throw GradleException(
             "BREEZ_API_KEY has ${key.length} characters and decodes to $bytes bytes; Breez expects a 384-byte " +
                 "certificate (512 base64 characters). Copy the key, then run: " +
-                "security add-generic-password -U -a \"\$USER\" -s BREEZ_API_KEY -w \"\$(pbpaste)\""
+                "printf 'add-generic-password -U -a %s -s BREEZ_API_KEY -w %s\\n' \"\$USER\" \"\$(pbpaste)\" " +
+                "| security -i && pbcopy </dev/null"
         )
     }
     return provider { key }
