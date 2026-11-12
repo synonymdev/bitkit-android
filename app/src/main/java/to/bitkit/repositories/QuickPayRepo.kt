@@ -365,10 +365,10 @@ class QuickPayRepo @Inject constructor(
     }
 
     private suspend fun sendRejectionLocked(op: InFlightOp, settings: SettingsData?): QuickPayRejection? {
-        settingsRejection(settings, op.displaySats)?.let { return it }
-        checkNotNull(settings) { "QuickPay settings missing after policy check" }
-        if (op.reservedCents > quickPayThresholdCents(settings.quickPayAmount)) return QuickPayRejection.OVER_THRESHOLD
-        val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
+        val current = settings ?: return QuickPayRejection.SETTINGS_UNREADABLE
+        settingsRejection(current, op.displaySats)?.let { return it }
+        if (op.reservedCents > quickPayThresholdCents(current.quickPayAmount)) return QuickPayRejection.OVER_THRESHOLD
+        val capCents = quickPayCapCents(current.quickPayAmount, current.quickPayDailyLimitMultiplier)
         if (spend.snapshot().spentCents > capCents) return QuickPayRejection.DAILY_CAP
         return null
     }
