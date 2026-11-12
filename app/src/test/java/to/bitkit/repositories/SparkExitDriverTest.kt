@@ -376,6 +376,33 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a step one failed read turns unverified holds the rebuild over another leaf's unread step`() = test {
+        val stored = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+                SparkExitFixtures.tx("m1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("m2", dependsOn = listOf("m1")),
+            ),
+        )
+        val checked = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+                SparkExitFixtures.tx("m1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("m2", dependsOn = listOf("m1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        sdk.checks += check(checked, RecoveryVerdict.Valid)
+
+        val record = driver(tip = 1_000u).tick(running(stored))
+
+        assertTrue(sdk.recoverRequests.isEmpty(), "rebuilt over m2, which one failed read turned unverified")
+        assertNull(record.unverifiedRebuiltAtHeight)
+        assertEquals(1, record.generation)
+    }
+
+    @Test
     fun `an unverified rebuild that adopts nothing keeps checking and sending the valid generation`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(

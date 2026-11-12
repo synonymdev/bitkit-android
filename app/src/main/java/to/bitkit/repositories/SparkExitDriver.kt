@@ -532,6 +532,9 @@ class SparkExitDriver(
                 if (sent.isFeeBumpPending && tip != null && sent.feeBumpBuiltAtHeight != tip) {
                     return buildFeeBump(sent, sdk)
                 }
+                // A check marks a step unverified when one chain read fails and clears it on the next clean check, so
+                // only steps that were all unverified before this check are rebuilt over: one this check just turned
+                // unverified may be in flight, and holds the rebuild until the next check, as a ready one does.
                 if (!needsUnverifiedRebuild(sent, stored)) return sent
                 // A step that stays unread past a check is settled by a fresh build, which reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
@@ -794,11 +797,6 @@ class SparkExitDriver(
         isRebuilding && phase == SparkExitRecord.Phase.Running && generation == before.generation &&
             lostLeaves == before.lostLeaves
 
-    /**
-     * A check marks a step unverified when one chain read fails and clears it on the next clean check, so only a
-     * unilateral step that was already unverified in [stored], before this check, is rebuilt over. One this check just
-     * turned unverified may already be in flight, and waits for the next check.
-     */
     private fun needsUnverifiedRebuild(record: SparkExitRecord, stored: RecoverFundsResponse): Boolean {
         val height = tip ?: return false
         if (record.unverifiedRebuiltAtHeight == height) return false
@@ -807,7 +805,8 @@ class SparkExitDriver(
             .map { it.txid }
             .toSet()
         val transactions = record.recovery?.transactions.orEmpty().filter { it.kind != RecoveryTxKind.COOPERATIVE }
-        return transactions.any { it.status == ExitTransactionStatus.Unverified && it.txid in unreadBefore } &&
+        val unread = transactions.filter { it.status == ExitTransactionStatus.Unverified }
+        return unread.isNotEmpty() && unread.all { it.txid in unreadBefore } &&
             transactions.none { it.status == ExitTransactionStatus.Ready }
     }
 
