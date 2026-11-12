@@ -1095,11 +1095,16 @@
     <string name="settings__status__lightning_connection__error">No open connections</string>
     <string name="settings__status__lightning_connection__pending">Opening...</string>
     <string name="settings__status__lightning_connection__ready">Open</string>
+    <string name="settings__status__lightning_connection__spark">Using Spark</string>
     <string name="settings__status__lightning_connection__title">Lightning Connection</string>
     <string name="settings__status__lightning_node__error">Could not initiate</string>
     <string name="settings__status__lightning_node__pending">Syncing...</string>
     <string name="settings__status__lightning_node__ready">Synced</string>
     <string name="settings__status__lightning_node__title">Lightning Node</string>
+    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__pending">Connecting...</string>
+    <string name="settings__status__spark__ready">Connected</string>
+    <string name="settings__status__spark__title">Spark</string>
     <string name="settings__status__title">App Status</string>
     <string name="settings__support__help">Help Center</string>
     <string name="settings__support__label_address">Email address</string>
@@ -1649,6 +1654,9 @@
     <string name="wallet__send_invoice_expiration">Invoice expiration</string>
     <string name="wallet__send_max_spending__description">The maximum spendable amount is a bit lower due to a required reserve balance.</string>
     <string name="wallet__send_max_spending__title">Reserve Balance</string>
+    <string name="wallet__send_paykit_no_route__description">This contact has no payment method Bitkit can use right now.</string>
+    <string name="wallet__send_paykit_no_route__title">Can\'t pay this contact</string>
+    <string name="wallet__send_paykit_withdrawal_settling__description">An earlier withdrawal from your spending balance is still settling. Try again once it completes.</string>
     <string name="wallet__send_pending__abandon">Cancel expired payment</string>
     <string name="wallet__send_pending__abandon_checking">Checking the network. This can take up to 30 seconds.</string>
     <string name="wallet__send_pending__abandon_done">Payment cancelled. Its coins are back in your wallet.</string>
@@ -1675,6 +1683,8 @@
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Confirm</string>
     <string name="wallet__send_sent">Bitcoin Sent</string>
+    <string name="wallet__send_swap_route">Route</string>
+    <string name="wallet__send_swap_route_spark" translatable="false">Spark</string>
     <string name="wallet__send_swipe">Swipe To Pay</string>
     <string name="wallet__send_to">To</string>
     <string name="wallet__send_yes">Yes, Send</string>

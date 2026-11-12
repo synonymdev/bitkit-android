@@ -1889,7 +1889,7 @@ class LightningRepoTest : BaseUnitTest() {
         )
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
         val sending = CompletableDeferred<Payment>()
-        whenever(sparkService.send(any())).doSuspendableAnswer { sending.await() }
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { sending.await() }
         val spark = SparkRepo(
             bgDispatcher = testDispatcher,
             sparkService = sparkService,
@@ -1898,6 +1898,9 @@ class LightningRepoTest : BaseUnitTest() {
             contactResolver = { mock() },
             pendingPaymentRepo = PendingPaymentRepo(),
             clock = Clock.System,
+            coreService = { coreService },
+            settingsStore = settingsStore,
+            payoutChain = mock(),
         )
         sut = LightningRepo(
             bgDispatcher = testDispatcher,

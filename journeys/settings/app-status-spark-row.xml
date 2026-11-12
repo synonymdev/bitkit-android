@@ -1,0 +1,18 @@
+<journey name="app status spark row">
+  <description>
+    App Status shows a Spark row under Lightning Connection on builds where Spark is supported. A dev build
+    on regtest connects Spark to its hosted regtest with no key (journeys/README.md capabilities), so with
+    no channel the row reads Connected and Lightning Connection reads "Using Spark". Once Connected, the
+    row opens Spark's detail screen. Connecting and Offline are covered by unit tests and the PR's
+    screenshots. If the row never reads Connected within 2 minutes, the run is blocked on the hosted
+    regtest, not failed.
+
+    Precondition: onboarded dev build wallet with no channel, start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the menu button (testTag "HeaderMenu") and tap App Status (testTag "DrawerAppStatus")</action>
+    <action>Verify a row titled "Spark" (testTag "Status-spark") sits directly under Lightning Connection (testTag "Status-lightning_connection") and reads "Connected" within 2 minutes</action>
+    <action>Verify Lightning Connection reads "Using Spark"</action>
+    <action>Tap the Spark row and verify Spark's detail screen opens</action>
+  </actions>
+</journey>

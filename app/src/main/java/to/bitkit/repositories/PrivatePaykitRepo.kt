@@ -1324,6 +1324,10 @@ class PrivatePaykitRepo @Inject constructor(
                     if (!isCurrentPublication(generation, identity, requireImmediatePublication)) return@withLock
                     if (lightningRefresh?.isStillCurrent?.invoke() == false) return@withLock
                     if (publication.updates.isEmpty()) {
+                        Logger.debug(
+                            "Skipped private payment list publication during '$reason': no list changed",
+                            context = TAG,
+                        )
                         schedulePendingPrivateMessageDrainRetries(reason, links.linkRetryKeys, identity = identity)
                         if (requireImmediatePublication) publication.firstError?.let { throw it }
                         return@withLock
@@ -1333,6 +1337,10 @@ class PrivatePaykitRepo @Inject constructor(
                         updates = publication.updates,
                         clearUnlistedLinkedPeers = false,
                         deferDuringPayment = publicationPriority == Priority.Background,
+                    )
+                    Logger.debug(
+                        "Published private payment lists to '${publication.updates.size}' contacts during '$reason'",
+                        context = TAG,
                     )
                     val deliveryError = applyPrivatePaymentListDeliveryReport(report, reason, publicationWindow)
                     val firstError = publication.firstError ?: deliveryError

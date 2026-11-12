@@ -358,6 +358,74 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Spark balance changes update spending while the node start times out`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(
+            Result.success(
+                BalanceDetails(
+                    totalOnchainBalanceSats = 50_000uL,
+                    spendableOnchainBalanceSats = 0uL,
+                    totalAnchorChannelsReserveSats = 0uL,
+                    totalLightningBalanceSats = 20_000uL,
+                    lightningBalances = emptyList(),
+                    pendingBalancesFromChannelClosures = emptyList(),
+                ),
+            ),
+        )
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getChannelFundableBalance()).thenReturn(0uL)
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        val sparkState =
+            MutableStateFlow(SparkState(isReady = true, balanceSats = 99_865uL, pendingDepositSats = 600uL))
+        val spark = sparkRepoWith(sparkState)
+        val balances = DeriveBalanceStateUseCase(
+            bgDispatcher = testDispatcher,
+            lightningRepo = lightningRepo,
+            transferRepo = transferRepo,
+            settingsStore = settingsStore,
+            hwWalletRepo = hwWalletRepo,
+            sparkRepo = spark,
+        )
+        sut = createSut(spark = spark, balances = balances)
+        testScheduler.runCurrent()
+        assertEquals(119_865uL, sut.balanceState.value.totalLightningSats)
+
+        nodeState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Starting)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(
+            Result.failure(NodeRunTimeoutError("getBalancesAsync")),
+        )
+        sparkState.update { it.copy(balanceSats = 50_000uL, pendingDepositSats = 100uL) }
+        testScheduler.runCurrent()
+
+        assertEquals(70_000uL, sut.balanceState.value.totalLightningSats)
+        assertEquals(50_000uL, sut.balanceState.value.totalOnchainSats)
+        assertEquals(100uL, sut.balanceState.value.balanceInTransferToSpending)
+        assertEquals(SparkFees.sendableSats(50_000uL), sut.balanceState.value.maxSendLightningSats)
+        verify(cacheStore).cacheBalance(sut.balanceState.value)
+
+        val recovered = mock<ChannelDetails> {
+            on { isChannelReady } doReturn true
+            on { isUsable } doReturn true
+            on { nextOutboundHtlcLimitMsat } doReturn 55_000_000uL
+        }
+        whenever(lightningRepo.getBalancesAsync()).doSuspendableAnswer {
+            nodeState.value = LightningState(
+                nodeLifecycleState = NodeLifecycleState.Running,
+                channels = listOf(recovered).toImmutableList(),
+            )
+            sut.refreshMaxSendLightning()
+            Result.failure(NodeRunTimeoutError("getBalancesAsync"))
+        }
+        sparkState.update { it.copy(balanceSats = 40_000uL) }
+        testScheduler.runCurrent()
+
+        assertEquals(60_000uL, sut.balanceState.value.totalLightningSats)
+        assertEquals(55_000uL, sut.balanceState.value.maxSendLightningSats)
+    }
+
+    @Test
     fun `cached Spark contribution updates only after Spark is ready and never guesses a legacy split`() = test {
         val known = BalanceState(
             totalOnchainSats = 50_000uL,

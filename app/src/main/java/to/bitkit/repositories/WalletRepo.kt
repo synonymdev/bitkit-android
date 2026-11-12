@@ -490,7 +490,7 @@ class WalletRepo @Inject constructor(
                 balanceMutex.withLock publish@{
                     val balance = result.getOrElse {
                         if (it is CancellationException) throw it
-                        if (it is NodeNotRunningError) {
+                        if (it is NodeNotRunningError || it is NodeRunTimeoutError) {
                             updateSparkBalance(_balanceState.value)?.let { updated -> return@getOrElse updated }
                         }
                         Logger.warn("Could not sync balances", it, context = TAG)
@@ -499,7 +499,7 @@ class WalletRepo @Inject constructor(
                     val hasAggregate = result.isSuccess ||
                         (balance.sparkBalanceSats != null && balance.sparkPendingDepositSats != null)
                     if (hasAggregate) cacheBalance(balance)
-                    publishBalance(balance, channels)
+                    publishBalance(balance, channels.takeIf { result.isSuccess })
                     hasLiveBalance = hasLiveBalance || hasAggregate
                 }
             }
