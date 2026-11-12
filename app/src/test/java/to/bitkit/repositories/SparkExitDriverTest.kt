@@ -1835,6 +1835,47 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a redo hold goes on uncounted while the tip cannot be read`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(4) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1"))) }
+
+        record = driver(tip = null).tick(record)
+        assertEquals(1, record.generation, "adopted on a tick whose tip could not be read")
+        assertNull(record.redoHeldSince)
+
+        now += interval
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1, record.generation)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        now += interval
+        record = driver(tip = null).tick(record)
+        assertEquals(1, record.generation, "adopted on a tick whose tip could not be read")
+        assertEquals(1_000u, record.redoHeldSince)
+        assertTrue(chain.broadcasts.isEmpty())
+    }
+
+    @Test
+    fun `a redo rebuild of only failed cooperative leaves beside a waiting leaf holds too`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        val failed = CooperativeRecoveryFailure(
+            "leaf-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed))
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, record.generation, "a failed-only rebuild left out leaf-2's steps")
+        assertTrue(record.isRebuilding)
+        assertEquals(1_000u, record.redoHeldSince)
+    }
+
+    @Test
     fun `a redo hold after a funded top-up runs at the rebuild pace`() = test {
         var record = divergedOverTwoLeaves()
         sdk.preparedResponse = leaf2Unread
