@@ -1,0 +1,32 @@
+<journey name="spark transfer status">
+  <description>
+    Verifies the transfer status screen after a transfer to spending through Spark, against the Figma section
+    "Funds In Transfer (spark)". Every in-progress frame shows "Transfer Funds" with the menu and no back
+    button, three steps, the active step's label under them, and one bottom-pinned button. A fast (Instant)
+    transfer moves through:
+    "Processing Payment" (step 1, Spark has not seen the deposit), "Payment Successful" (step 1 done, step 2,
+    Spark lists it), "Adding To Spending Balance" (steps 1 and 2 done, step 3), all under "FUNDS IN TRANSFER"
+    with "This should take a few minutes.", and ends on "Transfer Successful": "FUNDS MOVED TO SPENDING", the
+    check, and the OK button. A normal speed (Later) transfer shows the same frames with "This should take about
+    30 minutes.".
+
+    Whether Spark reprices the fast transfer or offers none is the provider's call, so the run can't stage the
+    "FAST TRANSFER FEE CHANGED" frame (coins, "Wait" and "Approve", testTags "SettingUpWait" and "SettingUpPay")
+    or "FAST TRANSFER UNAVAILABLE" (coins, "Using Normal Transfer Speed"); TransferStatusTest.kt and
+    SettingUpScreenTest.kt cover them. Spark lists a deposit about a minute after its broadcast, so each step
+    shows for a few seconds at least.
+
+    Precondition: as in spark-transfer-to-spending.xml, a dev build with Spark connected on its regtest, built
+    with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py`, and Savings funded
+    on that chain with `scripts/spark-regtest-fund.py` (at least 20 000 sats, confirmed). Start on the wallet
+    home screen.
+  </description>
+  <actions>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending"), tap "25%" (testTag "SpendingAmountQuarter") and tap "Continue" (testTag "SpendingAmountContinue")</action>
+    <action>Verify "Instant" (testTag "SpendingConfirmInstant") is selected and swipe to confirm</action>
+    <action>Verify the status screen (testTag "LightningSettingUp") shows "Transfer Funds", "FUNDS IN TRANSFER", "Please wait, your funds transfer is in progress. This should take a few minutes." (testTag "SettingUpText"), step 1 active with "Processing Payment", and "Continue Using Bitkit" (testTag "TransferSuccess-button")</action>
+    <action>Wait up to 3 minutes for "Payment Successful" with step 1 checked, then for "Adding To Spending Balance" with steps 1 and 2 checked; each keeps the same headline, text and button</action>
+    <action>Wait up to 3 minutes for "Transfer Successful" (testTag "TransferSuccess"): "FUNDS MOVED TO SPENDING", "Your funds have been transferred and your spending balance is ready to use.", the check (testTag "TransferSuccessCheck") and the OK button (testTag "TransferSuccess-button")</action>
+    <action>Tap the OK button and verify the wallet home screen shows the higher Spending balance</action>
+  </actions>
+</journey>

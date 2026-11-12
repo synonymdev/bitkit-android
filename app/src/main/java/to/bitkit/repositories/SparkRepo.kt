@@ -1072,7 +1072,9 @@ class SparkRepo @Inject constructor(
     private fun SparkState.withBroadcastDeposits(): SparkState {
         val known = deposits.map { it.txid }.toSet()
         val local = broadcastDeposits.filterKeys { it !in known }
-            .map { (txid, amount) -> SparkDeposit(txid = txid, amountSats = amount, isClaimed = false) }
+            .map { (txid, amount) ->
+                SparkDeposit(txid = txid, amountSats = amount, isClaimed = false, isListed = false)
+            }
         if (local.isEmpty()) return this
         val all = local + deposits
         return copy(
@@ -2059,6 +2061,8 @@ data class SparkDeposit(
     val isClaimed: Boolean,
     val feeSats: ULong = 0uL,
     val claimedAt: ULong? = null,
+    /** Whether Spark lists it, rather than only the app that just broadcast it. */
+    val isListed: Boolean = true,
 )
 
 /**

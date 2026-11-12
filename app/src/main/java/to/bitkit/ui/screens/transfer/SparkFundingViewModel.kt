@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -109,6 +110,11 @@ class SparkFundingViewModel @Inject constructor(
             sparkRepo.depositClaims.collect { claims ->
                 _uiState.update { state -> state.copy(claim = state.txid?.let { claims[it] } ?: state.claim) }
             }
+        }
+        viewModelScope.launch {
+            combine(_uiState.map { it.txid }, sparkRepo.state.map { it.deposits }) { txid, deposits ->
+                txid != null && deposits.any { it.isListed && it.txid.equals(txid, ignoreCase = true) }
+            }.distinctUntilChanged().collect { isSeen -> _uiState.update { it.copy(isDepositSeen = isSeen) } }
         }
     }
 
@@ -324,7 +330,14 @@ class SparkFundingViewModel @Inject constructor(
                 sparkRepo.followDepositClaim(txid, state.speed, quote.instantFeeSats.toULong())
             }
             Logger.info("Funded Spark from a hardware wallet with '$amountSats' sats in '$txid'", context = TAG)
-            _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
+            _uiState.update {
+                it.copy(
+                    txid = txid,
+                    claim = sparkRepo.depositClaims.value[txid] ?: it.claim,
+                    isFeeApproved = false,
+                    hasWaited = false,
+                )
+            }
             _effects.emit(SideEffect.Sent)
         }
     }
@@ -391,7 +404,14 @@ class SparkFundingViewModel @Inject constructor(
             sparkRepo.followDepositClaim(txid, speed, ceilingSats)
         }
         Logger.info("Funded Spark with '$amountSats' sats in '$txid'", context = TAG)
-        _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
+        _uiState.update {
+            it.copy(
+                txid = txid,
+                claim = sparkRepo.depositClaims.value[txid] ?: it.claim,
+                isFeeApproved = false,
+                hasWaited = false,
+            )
+        }
         _effects.emit(SideEffect.Sent)
     }
 
@@ -434,11 +454,13 @@ class SparkFundingViewModel @Inject constructor(
 
     fun onPayRepriced() {
         val txid = _uiState.value.txid ?: return
+        _uiState.update { it.copy(isFeeApproved = true) }
         sparkRepo.payRepricedClaim(txid)
     }
 
     fun onWait() {
         val txid = _uiState.value.txid ?: return
+        _uiState.update { it.copy(hasWaited = true) }
         sparkRepo.waitForMatureClaim(txid)
     }
 
@@ -555,6 +577,12 @@ interface SparkFundingContract {
         val isSending: Boolean = false,
         val txid: String? = null,
         val claim: SparkDepositClaim = SparkDepositClaim.Looking,
+        /** Whether Spark lists the deposit in [txid]. */
+        val isDepositSeen: Boolean = false,
+        /** Whether the user approved the changed fast transfer fee of the deposit in [txid]. */
+        val isFeeApproved: Boolean = false,
+        /** Whether the user chose Wait over the changed fast transfer fee of the deposit in [txid]. */
+        val hasWaited: Boolean = false,
     )
 
     /** What the transfer costs, priced together so the confirm screen's tiles always agree. */

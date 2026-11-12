@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.synonym.bitkitcore.FeeRates
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,13 +44,16 @@ import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
 import to.bitkit.repositories.SparkClaimSpeed
+import to.bitkit.repositories.SparkDeposit
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.SparkFundingContract.SideEffect
 import to.bitkit.ui.shared.toast.ToastEventBus
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -62,6 +66,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
     private val attemptUpdates = MutableStateFlow(0L)
+    private val sparkState = MutableStateFlow(SparkState())
 
     private fun createSut() =
         SparkFundingViewModel(context, walletRepo, lightningRepo, sparkRepo, currencyRepo, hwWalletRepo)
@@ -77,6 +82,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         whenever(currencyRepo.currencyState).thenReturn(MutableStateFlow(CurrencyState()))
         whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(emptyMap()))
+        whenever(sparkRepo.state).thenReturn(sparkState)
         whenever { sparkRepo.depositAddress() }.thenReturn(Result.success("bcrt1qspark"))
         whenever { sparkRepo.estimateDepositClaimFeeSats(any()) }.thenReturn(Result.success(1_350uL))
         whenever { sparkRepo.estimateMatureClaimFeeSats() }.thenReturn(Result.success(198uL))
@@ -340,6 +346,41 @@ class SparkFundingViewModelTest : BaseUnitTest() {
 
         assertEquals("txid", sut.uiState.value.txid)
         assertEquals(SparkDepositClaim.Later, sut.uiState.value.claim)
+    }
+
+    @Test
+    fun `the deposit counts as seen once spark lists it and the choice on a changed fee is kept`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Accepted("TXID", 50_000uL)))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        sparkState.value = SparkState(
+            deposits = persistentListOf(SparkDeposit("TXID", 50_000uL, isClaimed = false, isListed = false)),
+        )
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isDepositSeen)
+
+        sparkState.value = SparkState(deposits = persistentListOf(SparkDeposit("txid", 50_000uL, isClaimed = false)))
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isDepositSeen)
+
+        sut.onPayRepriced()
+        assertTrue(sut.uiState.value.isFeeApproved)
+        sut.onWait()
+        assertTrue(sut.uiState.value.hasWaited)
     }
 
     @Test
