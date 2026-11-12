@@ -333,6 +333,49 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a step one failed read turns unverified waits for the next check instead of rebuilding`() = test {
+        val ready = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", cpfp = "03c2", dependsOn = listOf("n1")),
+            ),
+        )
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx(
+                    "n2",
+                    cpfp = "03c2",
+                    dependsOn = listOf("n1"),
+                    status = ExitTransactionStatus.Unverified,
+                ),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unverified, RecoveryVerdict.Valid) }
+        sdk.builds += SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2b", cpfp = "03c3", dependsOn = listOf("n1")),
+            ),
+        )
+
+        var record = driver(tip = 1_000u).tick(running(ready))
+
+        assertTrue(sdk.recoverRequests.isEmpty(), "rebuilt over a step one failed read turned unverified")
+        assertNull(record.unverifiedRebuiltAtHeight)
+        assertFalse(record.isUnverifiedAsk)
+        assertEquals(1, record.generation)
+        assertTrue(chain.broadcasts.none { it.txid == "n2" })
+
+        // Still unread at the next check: now it rebuilds.
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, sdk.recoverRequests.size)
+        assertEquals(1_000u, record.unverifiedRebuiltAtHeight)
+        assertEquals(2, record.generation)
+    }
+
+    @Test
     fun `an unverified rebuild that adopts nothing keeps checking and sending the valid generation`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(
