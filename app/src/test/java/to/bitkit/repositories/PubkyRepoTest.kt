@@ -1149,6 +1149,29 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createIdentity keeps stored tags when the restore form could not read them`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
+        val restored = checkNotNull(sut.fetchRemoteProfile(VALID_SELF_KEY).getOrThrow())
+        assertTrue(restored.tags.isEmpty())
+
+        val storedTags = listOf("friend", "work")
+        doReturn(
+            paykitRecord(PubkyProfileData(name = "Test", bio = "", tags = storedTags).toPaykitProfile())
+        ).whenever(pubkyService).fetchPaykitProfile(VALID_SELF_KEY)
+        whenever(pubkyService.publishPaykitProfile(any(), any())).thenAnswer { paykitRecord(it.getArgument(0)) }
+        sut.loadProfile()
+        clearInvocations(pubkyService)
+
+        sut.createIdentity("Renamed", restored.bio, restored.links, restored.tags, null).getOrThrow()
+
+        assertEquals(storedTags, sut.profile.value?.tags)
+        val copy = argumentCaptor<PaykitProfile>()
+        verifyBlocking(pubkyService) { publishPaykitProfile(copy.capture(), any()) }
+        assertEquals(storedTags, PubkyProfileData.fromPaykitProfile(copy.firstValue).tags)
+    }
+
+    @Test
     fun `saveProfile reports a tag change it could not store while the tags cannot be read`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }

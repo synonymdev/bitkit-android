@@ -138,7 +138,12 @@ private class StoredCopy(val tags: List<String>?, val image: String?)
 
 private class FittedProfile(val name: String, val bio: String, val links: List<PubkyProfileLink>)
 
-private class RestoreBase(val publicKey: String, val profile: PubkyProfile, val revision: String?)
+private class RestoreBase(
+    val publicKey: String,
+    val profile: PubkyProfile,
+    val revision: String?,
+    val tagsUnread: Boolean = false,
+)
 
 /** Whether a Pubky identity is ready to use once restores already under way have finished. */
 enum class PubkyIdentityReadiness {
@@ -954,7 +959,7 @@ class PubkyRepo @Inject constructor(
             tagsReadEpoch.incrementAndGet()
             tagsUnavailable = paykitRead.isFailure
             PubkyProfile.fromPubkyProfile(prefixedKey, snapshot.profile).copy(tags = paykitData?.tags.orEmpty()).also {
-                restoreBase = RestoreBase(prefixedKey, it, snapshot.revision)
+                restoreBase = RestoreBase(prefixedKey, it, snapshot.revision, tagsUnread = paykitRead.isFailure)
             }
         }
     }
@@ -1067,7 +1072,11 @@ class PubkyRepo @Inject constructor(
         val imageUrl = avatarBytes?.let { uploadAvatar(it, publicKey).getOrNull() } ?: restore?.profile?.imageUrl
         val base = restore?.profile?.takeIf { restore.revision != null }
         val saved = runSuspendCatching {
-            writeProfile(publicKey, name, bio, links, tags, imageUrl, base, expectedRevision = restore?.revision)
+            writeProfile(
+                publicKey, name, bio, links, tags, imageUrl, base,
+                expectedRevision = restore?.revision,
+                tagsUnread = restore?.tagsUnread == true,
+            )
         }.getOrElse {
             if (!it.isConcurrentUpdate()) throw it
             throw PubkyProfileChangedError(it)
