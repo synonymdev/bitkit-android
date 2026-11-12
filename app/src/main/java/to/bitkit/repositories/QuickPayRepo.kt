@@ -285,7 +285,7 @@ class QuickPayRepo @Inject constructor(
         }
         val keepHashes = opsByKey.values.map { it.invoiceHash }.toSet()
         if (spend.reserve(invoiceHash, prepared.amountCents, prepared.capCents, keepHashes) == null) {
-            reject(session.id, invoice.amountSats, QuickPayRejection.DAILY_CAP)
+            reject(session.id, invoice.amountSats, QuickPayRejection.RESERVE_FAILED)
             return PreparePayResult.REJECTED
         }
         if (sessionFlows[session.id] == null) {
@@ -833,6 +833,7 @@ class QuickPayRepo @Inject constructor(
         NO_THRESHOLD,
         OVER_THRESHOLD,
         DAILY_CAP,
+        RESERVE_FAILED,
         SETTINGS_UNREADABLE,
     }
 

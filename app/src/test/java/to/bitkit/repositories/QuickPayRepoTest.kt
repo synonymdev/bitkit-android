@@ -970,7 +970,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
         }
         assertEquals(0L, spentCents())
-        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
     }
 
@@ -1009,7 +1009,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertIs<QuickPaySessionEvent.Success>(awaitItem())
         }
         assertEquals(250L, spentCents())
-        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
     }
 
@@ -1032,7 +1032,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
         }
         assertEquals(250L, spentCents())
-        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
     }
 
@@ -1078,7 +1078,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertFalse(proceeded.await())
         assertEquals(0L, spentCents())
-        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
         assertFalse(sut.hasOpen(hash))
         verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
     }
@@ -1118,7 +1118,8 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertFalse(proceeded.await())
         assertEquals(500L, spentCents())
         assertFalse(sut.hasOpen(hash))
-        assertEquals(listOf("other"), cacheStore.data.first().quickPayLedger!!.records.map { it.invoicePaymentHash })
+        val ledger = checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }
+        assertEquals(listOf("other"), ledger.records.map { it.invoicePaymentHash })
     }
 
     @Test
@@ -1360,7 +1361,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         val proceeded = CompletableDeferred<Boolean>()
         whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
             val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
-            val records = cacheStore.data.first().quickPayLedger!!.records
+            val records = checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records
             assertEquals(1, records.count { it.invoicePaymentHash == TEST_HASH })
             change()
             val ok = onBeforeSend()
