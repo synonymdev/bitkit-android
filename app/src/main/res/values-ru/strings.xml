@@ -1833,4 +1833,7 @@
     <string name="widgets__widget__size_small">Маленький</string>
     <string name="widgets__widget__size_wide">Широкий</string>
     <string name="wallet__balance_updating">Обновление баланса…</string>
+    <string name="settings__status__exit__funding">Нужны средства на комиссии</string>
+    <string name="settings__status__exit__pending">Выполняется</string>
+    <string name="settings__status__exit__title">Экстренный Выход</string>
 </resources>

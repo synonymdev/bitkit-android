@@ -1818,4 +1818,7 @@
     <string name="widgets__widget__size_small">Pequeño</string>
     <string name="widgets__widget__size_wide">Ancho</string>
     <string name="wallet__balance_updating">Actualizando saldo…</string>
+    <string name="settings__status__exit__funding">Financiación de comisiones necesaria</string>
+    <string name="settings__status__exit__pending">En curso</string>
+    <string name="settings__status__exit__title">Salida de emergencia</string>
 </resources>

@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -64,6 +66,7 @@ fun AppStatusScreen(
         onNodeClick = { navController.navigateTo(Routes.NodeInfo) },
         onChannelsClick = { navController.navigateTo(Routes.LightningConnections) },
         onBackupClick = { navController.navigateTo(Routes.BackupSettings) },
+        onExitClick = { navController.navigateTo(Routes.SparkExitProgress) },
     )
 }
 
@@ -76,6 +79,7 @@ private fun Content(
     onNodeClick: () -> Unit = {},
     onChannelsClick: () -> Unit = {},
     onBackupClick: () -> Unit = {},
+    onExitClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -87,6 +91,7 @@ private fun Content(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
             VerticalSpacer(16.dp)
@@ -152,6 +157,22 @@ private fun Content(
                 ),
                 onClick = onChannelsClick,
             )
+
+            uiState.exitStep?.let { exitStep ->
+                StatusItem(
+                    statusUi = StatusUi(
+                        id = "spark_exit",
+                        title = stringResource(R.string.settings__status__exit__title),
+                        subtitle = when (exitStep) {
+                            ExitStep.FUNDING -> stringResource(R.string.settings__status__exit__funding)
+                            ExitStep.RUNNING -> stringResource(R.string.settings__status__exit__pending)
+                        },
+                        iconRes = R.drawable.ic_warning,
+                        state = HealthState.PENDING,
+                    ),
+                    onClick = onExitClick,
+                )
+            }
 
             StatusItem(
                 statusUi = StatusUi(
@@ -262,6 +283,7 @@ private fun Preview() {
                 ),
                 backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
                 nodeSubtitle = "Running",
+                exitStep = ExitStep.RUNNING,
             ),
         )
     }

@@ -1175,6 +1175,9 @@
     <string name="settings__status__electrum__pending">Connecting...</string>
     <string name="settings__status__electrum__ready">Connected</string>
     <string name="settings__status__electrum__title">Bitcoin Node</string>
+    <string name="settings__status__exit__funding">Fee funding needed</string>
+    <string name="settings__status__exit__pending">In progress</string>
+    <string name="settings__status__exit__title">Emergency Exit</string>
     <string name="settings__status__internet__error">Disconnected</string>
     <string name="settings__status__internet__pending">Reconnecting...</string>
     <string name="settings__status__internet__ready">Connected</string>

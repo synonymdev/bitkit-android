@@ -1818,4 +1818,7 @@
     <string name="widgets__widget__size_small">Petit</string>
     <string name="widgets__widget__size_wide">Large</string>
     <string name="wallet__balance_updating">Mise à jour du solde…</string>
+    <string name="settings__status__exit__funding">Financement des frais requis</string>
+    <string name="settings__status__exit__pending">En cours</string>
+    <string name="settings__status__exit__title">Sortie d\'urgence</string>
 </resources>
