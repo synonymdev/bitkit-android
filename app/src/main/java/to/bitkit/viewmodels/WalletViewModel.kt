@@ -887,7 +887,7 @@ class WalletViewModel @Inject constructor(
             boltzService.events.collect { event ->
                 if (event is BoltzSwapEvent.Claimed) {
                     Logger.info("Savings swap claimed: ${event.swapId}", context = TAG)
-                    walletRepo.syncBalances()
+                    coroutineScope { launch { walletRepo.syncBalances() } }
                 }
             }
         }
