@@ -524,10 +524,9 @@ object SparkExitMath {
     suspend fun scanNextFundingIndex(from: UInt = 0u, isUsed: suspend (UInt) -> Boolean): UInt {
         var next = from
         var index = from
-        val limit = (from.toULong() + FUNDING_SCAN_MAX_ADDRESSES.toULong())
-            .coerceAtMost(UInt.MAX_VALUE.toULong())
-            .toUInt()
-        while (index < next + FUNDING_SCAN_GAP_LIMIT.toUInt() && index < limit) {
+        // In 64 bits, so an index near the top of its range ends the scan instead of wrapping around.
+        val limit = (from.toULong() + FUNDING_SCAN_MAX_ADDRESSES.toULong()).coerceAtMost(UInt.MAX_VALUE.toULong())
+        while (index.toULong() < next.toULong() + FUNDING_SCAN_GAP_LIMIT.toULong() && index.toULong() < limit) {
             if (isUsed(index)) next = index + 1u
             index++
         }
