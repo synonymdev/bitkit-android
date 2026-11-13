@@ -47,6 +47,6 @@ class FcmService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         Logger.debug("Received new FCM token", context = TAG)
         if (Env.wakeGatewayUrl == null) return
-        wakeRepo.get().syncRegistrationAsync(token)
+        wakeRepo.get().onNewPushToken(token)
     }
 }

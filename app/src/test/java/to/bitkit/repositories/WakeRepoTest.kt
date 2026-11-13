@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
@@ -87,6 +88,7 @@ class WakeRepoTest : BaseUnitTest() {
     private val keychainValues = mutableMapOf<String, String>()
     private val preparedTimestamps = mutableListOf<Long>()
     private val preparedIdentities = mutableListOf<List<String>>()
+    private val preparedTokens = mutableListOf<String>()
     private val sentProofs = mutableListOf<List<WakeIdentityProof>>()
     private val clock = object : Clock {
         override fun now(): Instant = Instant.fromEpochSeconds(NOW_SECS)
@@ -112,6 +114,7 @@ class WakeRepoTest : BaseUnitTest() {
             val identities = it.getArgument<List<String>>(3)
             val timestampSecs = it.getArgument<Long>(5)
             preparedIdentities += identities
+            preparedTokens += it.getArgument<String>(2)
             preparedTimestamps += timestampSecs
             WakeRegistrationRequest(
                 audience = it.getArgument(0),
@@ -439,6 +442,22 @@ class WakeRepoTest : BaseUnitTest() {
         runCurrent()
 
         verify(wakeService).clearPresence(GATEWAY_URL, CREDENTIALS.deviceSecret)
+    }
+
+    @Test
+    fun `a new push token is retried until a newer one replaces it`() = test {
+        whenever(wakeService.register(any(), any(), any())).thenAnswer { throw lost() }
+
+        sut.onNewPushToken("token-1")
+        advanceTimeBy(WakeRepo.SYNC_RETRY_FIRST + 1.seconds)
+        assertEquals(listOf("token-1", "token-1"), preparedTokens)
+
+        whenever(wakeService.register(any(), any(), any())).thenReturn(ACCEPTED)
+        sut.onNewPushToken("token-2")
+        advanceUntilIdle()
+
+        assertEquals(listOf("token-1", "token-1", "token-2"), preparedTokens)
+        assertEquals(WakeSync.UpToDate, sut.syncRegistration(pushToken = "token-2").getOrThrow())
     }
 
     @Test

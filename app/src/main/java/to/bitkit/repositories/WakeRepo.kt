@@ -31,6 +31,7 @@ import to.bitkit.services.WakeService
 import to.bitkit.services.wakeRejection
 import to.bitkit.utils.Logger
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -89,6 +90,8 @@ class WakeRepo @Inject constructor(
     @Volatile
     private var presenceJob: Job? = null
 
+    private val pushTokenJob = AtomicReference<Job?>()
+
     /** Asks the running presence loop to renew the lease now, after a registration changed what it covers. */
     private val presenceRenewal = Channel<Unit>(Channel.CONFLATED)
 
@@ -110,7 +113,10 @@ class WakeRepo @Inject constructor(
         scope.launch { clearPresence() }
     }
 
-    fun syncRegistrationAsync(pushToken: String) = scope.launch { syncRegistration(pushToken) }
+    /** Registers a new push token, retrying as [syncUntilSettled] does until a newer token replaces it. */
+    fun onNewPushToken(pushToken: String) {
+        pushTokenJob.getAndSet(scope.launch { syncUntilSettled(pushToken) })?.cancel()
+    }
 
     /**
      * Registers this install, updates its registration or, after an opt-out, unregisters it. Skips the gateway when
@@ -249,12 +255,12 @@ class WakeRepo @Inject constructor(
     /**
      * Syncs, and after a transient failure syncs again, waiting [SYNC_RETRY_FIRST] and then twice as long each time up
      * to [SYNC_RETRY_MAX], or longer when the gateway asks for it. A failure that would repeat is left to the next
-     * change. The observer cancels it when the inputs change.
+     * change. The observer cancels it when the inputs change, and [onNewPushToken] when the token does.
      */
-    internal suspend fun syncUntilSettled() {
+    internal suspend fun syncUntilSettled(pushToken: String? = null) {
         var wait = SYNC_RETRY_FIRST
         while (true) {
-            val failure = syncRegistration().exceptionOrNull() ?: return
+            val failure = syncRegistration(pushToken).exceptionOrNull() ?: return
             if (!failure.isTransientWakeFailure()) return
             val retryAfter = failure.wakeRejection()?.retryAfterSecs?.toLong()?.seconds ?: Duration.ZERO
             delay(maxOf(wait, retryAfter))
