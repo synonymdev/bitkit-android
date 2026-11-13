@@ -521,9 +521,8 @@ private fun ContentRunning(
                 }
             ),
             color = accentColor,
-            enabled = !isPreparing && uiState.isAmountInputValid &&
-                !uiState.isFundingSourceLoading &&
-                uiState.isHardwareFeeReady,
+            // an onchain refresh can lower a max amount, so the amount is not final until it settles
+            enabled = !isPreparing && uiState.canSwipeToPay(),
             loading = isPreparing || isLoading,
             confirmed = !isPreparing && isLoading,
             progress = swipeProgress,
@@ -537,6 +536,11 @@ private fun ContentRunning(
         VerticalSpacer(16.dp)
     }
 }
+
+private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
+    !isFundingSourceLoading &&
+    isHardwareFeeReady &&
+    !(payMethod == SendMethod.ONCHAIN && onchainFeeUi.isLoading)
 
 @Composable
 private fun LnurlCommentSection(
