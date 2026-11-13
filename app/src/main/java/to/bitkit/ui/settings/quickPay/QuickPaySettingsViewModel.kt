@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +39,7 @@ class QuickPaySettingsViewModel @Inject constructor(
     }
 
     private val authorization = MutableStateFlow<QuickPayAuthorization?>(null)
+    private val requests = Channel<QueuedChange>(Channel.UNLIMITED)
     private var requestGeneration = 0
 
     val uiState: StateFlow<QuickPaySettingsUiState> = combine(
@@ -51,6 +53,12 @@ class QuickPaySettingsViewModel @Inject constructor(
             authorization = authorization,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), QuickPaySettingsUiState())
+
+    init {
+        viewModelScope.launch {
+            for (request in requests) handleRequest(request)
+        }
+    }
 
     fun setQuickPayEnabled(enabled: Boolean) = requestChange(QuickPayChange.Enabled(enabled))
 
@@ -77,25 +85,26 @@ class QuickPaySettingsViewModel @Inject constructor(
     }
 
     private fun requestChange(change: QuickPayChange) {
-        val generation = requestGeneration
-        viewModelScope.launch {
-            quickPayRepo.requestSettingsChange(change)
-                .onSuccess { pending ->
-                    if (pending == null) {
-                        authorization.getAndUpdate { null }?.let(quickPayRepo::cancelSettingsChange)
-                        return@onSuccess
-                    }
-                    if (generation != requestGeneration) {
-                        quickPayRepo.cancelSettingsChange(pending)
-                        return@onSuccess
-                    }
-                    authorization.update { pending }
+        requests.trySend(QueuedChange(change, requestGeneration))
+    }
+
+    private suspend fun handleRequest(request: QueuedChange) {
+        quickPayRepo.requestSettingsChange(request.change)
+            .onSuccess { pending ->
+                if (pending == null) {
+                    authorization.update { null }
+                    return@onSuccess
                 }
-                .onFailure {
-                    Logger.error("Failed to request QuickPay change '$change'", it, context = TAG)
-                    toastError()
+                if (request.generation != requestGeneration) {
+                    quickPayRepo.cancelSettingsChange(pending)
+                    return@onSuccess
                 }
-        }
+                authorization.update { pending }
+            }
+            .onFailure {
+                Logger.error("Failed to request QuickPay change '${request.change}'", it, context = TAG)
+                toastError()
+            }
     }
 
     private suspend fun toastError() = ToastEventBus.send(
@@ -111,4 +120,9 @@ data class QuickPaySettingsUiState(
     val quickPayAmount: Int = 5,
     val quickPayDailyLimitMultiplier: Int = 5,
     val authorization: QuickPayAuthorization? = null,
+)
+
+private data class QueuedChange(
+    val change: QuickPayChange,
+    val generation: Int,
 )

@@ -122,13 +122,12 @@ fun PaykitUsdtReview(
                     .padding(bottom = 16.dp)
             ) {
                 if (state.authenticationRequired) {
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        PaymentAuthentication(
-                            settings.isBiometricEnabled,
-                            viewModel::cancelAuthentication,
-                            viewModel::authenticationVerified
-                        )
-                    }
+                    PaymentAuthentication(
+                        settings.isBiometricEnabled,
+                        viewModel::cancelAuthentication,
+                        viewModel::authenticationVerified,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
                 } else {
                     UsdtPaymentContent(
                         wallet, state, UsdtPage.AMOUNT,

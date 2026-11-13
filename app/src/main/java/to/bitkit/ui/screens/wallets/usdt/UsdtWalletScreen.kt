@@ -245,13 +245,12 @@ fun UsdtWalletScreen(
                     .padding(bottom = 16.dp)
             ) {
                 when {
-                    state.authenticationRequired -> Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        PaymentAuthentication(
-                            useBiometrics = settings.isBiometricEnabled,
-                            onCancel = viewModel::cancelAuthentication,
-                            onVerify = viewModel::authenticationVerified,
-                        )
-                    }
+                    state.authenticationRequired -> PaymentAuthentication(
+                        useBiometrics = settings.isBiometricEnabled,
+                        onCancel = viewModel::cancelAuthentication,
+                        onVerify = viewModel::authenticationVerified,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
 
                     else -> UsdtPaymentContent(
                         wallet = wallet, state = state, page = page, recipient = recipient, amount = amount,

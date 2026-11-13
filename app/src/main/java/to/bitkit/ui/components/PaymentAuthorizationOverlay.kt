@@ -20,10 +20,11 @@ fun BoxScope.PaymentAuthorizationOverlay(
     @StringRes pinDescriptionRes: Int,
     onCancel: () -> Unit,
     onVerify: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onCancel)
     Box(
-        modifier = Modifier
+        modifier = modifier
             .matchParentSize()
             .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
             .blockPointerInputPassthrough()

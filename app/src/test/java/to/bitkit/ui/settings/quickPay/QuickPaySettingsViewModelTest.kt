@@ -10,7 +10,9 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -137,15 +139,40 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a change saved at once closes and drops the open check`() = test {
-        val raise = authorization(QuickPayChange.Amount(50))
+    fun `a change saved at once closes the open check, which the repo already dropped`() = test {
         whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(1))).thenReturn(Result.success(null))
         sut.setQuickPayAmount(50)
 
         sut.setQuickPayAmount(1)
 
         assertNull(loadedState().authorization)
-        verify(quickPayRepo).cancelSettingsChange(raise)
+        verify(quickPayRepo, never()).cancelSettingsChange(anyOrNull())
+        sut.onAuthorized()
+        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
+    }
+
+    @Test
+    fun `quick changes reach the repo in tap order, so the last free change closes the earlier raise`() = test {
+        val raise = authorization(QuickPayChange.Amount(50))
+        val raiseResult = CompletableDeferred<Result<QuickPayAuthorization?>>()
+        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(50))).doSuspendableAnswer {
+            raiseResult.await()
+        }
+        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(1))).thenReturn(Result.success(null))
+
+        sut.setQuickPayAmount(50)
+        sut.setQuickPayAmount(1)
+
+        verify(quickPayRepo, never()).requestSettingsChange(QuickPayChange.Amount(1))
+
+        raiseResult.complete(Result.success(raise))
+        runCurrent()
+
+        inOrder(quickPayRepo) {
+            verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(50))
+            verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(1))
+        }
+        assertNull(loadedState().authorization)
         sut.onAuthorized()
         verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
     }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -51,6 +52,7 @@ fun QuickPaySettingsScreen(
             onQuickPayAmountChange = viewModel::setQuickPayAmount,
             onQuickPayDailyLimitMultiplierChange = viewModel::setQuickPayDailyLimitMultiplier,
             onBack = onBack,
+            modifier = if (uiState.authorization == null) Modifier else Modifier.clearAndSetSemantics {}
         )
         uiState.authorization?.let {
             PaymentAuthorizationOverlay(
@@ -68,6 +70,7 @@ fun QuickPaySettingsScreenContent(
     isQuickPayEnabled: Boolean,
     quickPayAmount: Int,
     quickPayDailyLimitMultiplier: Int,
+    modifier: Modifier = Modifier,
     onToggleQuickPay: (Boolean) -> Unit = {},
     onQuickPayAmountChange: (Int) -> Unit = {},
     onQuickPayDailyLimitMultiplierChange: (Int) -> Unit = {},
@@ -78,7 +81,7 @@ fun QuickPaySettingsScreenContent(
     val dailyLimitUsd = quickPayAmount * quickPayDailyLimitMultiplier
     val multiplierFormat = stringResource(R.string.settings__quickpay__settings__multiplier_format)
 
-    ScreenColumn {
+    ScreenColumn(modifier = modifier) {
         AppTopBar(
             titleText = stringResource(R.string.settings__quickpay__nav_title),
             onBackClick = onBack,
