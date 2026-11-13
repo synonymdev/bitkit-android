@@ -2629,16 +2629,24 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         val unavailable = cached.copy(isUsable = false)
         whenever(lightningService.channels).thenReturn(listOf(unavailable))
+        clearInvocations(lightningService)
 
         val wait = async { sut.waitForUsableChannels() }
         runCurrent()
 
         assertFalse(wait.isCompleted)
         assertEquals(listOf(unavailable), sut.lightningState.value.channels)
+        verify(lightningService, times(1)).channels
+        verify(lightningService, times(1)).peers
         whenever(lightningService.channels).thenReturn(listOf(cached))
-        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY)
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY - 1.milliseconds)
+        assertFalse(wait.isCompleted)
+        verify(lightningService, times(1)).channels
+        testScheduler.advanceTimeBy(1.milliseconds)
         runCurrent()
         assertTrue(wait.isCompleted)
+        verify(lightningService, times(2)).channels
+        verify(lightningService, never()).balances
     }
 
     @Test
@@ -2662,28 +2670,34 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `waitForUsableChannels rechecks lifecycle when the node stops during refresh`() = test {
+    fun `waitForUsableChannels rejects cached usable channels when a failed refresh races with stop`() = test {
         val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
         whenever(lightningService.channels).thenReturn(listOf(cached))
         startNodeForTesting()
-        var stopped = false
+        val finishStop = CompletableDeferred<Unit>()
+        whenever(lightningService.stop()).doSuspendableAnswer { finishStop.await() }
         whenever(lightningService.channels).thenAnswer {
-            if (!stopped) {
-                stopped = true
-                launch(start = CoroutineStart.UNDISPATCHED) { sut.stop() }
-            }
-            listOf(cached)
+            launch(start = CoroutineStart.UNDISPATCHED) { sut.stop() }
+            error("Channel read interrupted by node stop")
         }
 
-        val wait = async { sut.waitForUsableChannels() }
-        runCurrent()
+        try {
+            val wait = async { sut.waitForUsableChannels() }
+            runCurrent()
 
-        assertTrue(stopped)
-        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
-        assertFalse(wait.isCompleted)
-        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS)
+            assertEquals(NodeLifecycleState.Stopping, sut.lightningState.value.nodeLifecycleState)
+            assertEquals(listOf(cached), sut.lightningState.value.channels)
+            assertFalse(wait.isCompleted)
+            testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS - 1)
+            assertFalse(wait.isCompleted)
+            testScheduler.advanceTimeBy(1)
+            runCurrent()
+            assertTrue(wait.isCompleted)
+        } finally {
+            finishStop.complete(Unit)
+        }
         runCurrent()
-        assertTrue(wait.isCompleted)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
     }
 
     @Test
