@@ -16,8 +16,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.ui.components.BodyMSB
@@ -46,9 +49,6 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.launch
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText

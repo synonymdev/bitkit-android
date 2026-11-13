@@ -115,9 +115,12 @@ class RbfBoostRepo @Inject constructor(
         } catch (error: CancellationException) {
             finishFailure(key, attempt, expectedGeneration, cancelled = true)
             throw error
+        } catch (error: RbfOriginalConfirmed) {
+            Logger.warn("RBF attempt failed", error, context = TAG)
+            finishFailure(key, attempt, expectedGeneration, cancelled = false, originalConfirmed = true)
         } catch (error: Exception) {
             Logger.warn("RBF attempt failed", error, context = TAG)
-            val originalConfirmed = error is RbfOriginalConfirmed || error.cause is RbfOriginalConfirmed
+            val originalConfirmed = error.cause is RbfOriginalConfirmed
             finishFailure(key, attempt, expectedGeneration, cancelled = false, originalConfirmed = originalConfirmed)
         }
     }
@@ -176,7 +179,8 @@ class RbfBoostRepo @Inject constructor(
             }
             notifyChanged()
         }
-        if (!cancelled && !originalConfirmed && attempt.replacementTxId != null && isCurrentWallet(expectedGeneration)) {
+        val canSync = attempt.replacementTxId != null && isCurrentWallet(expectedGeneration)
+        if (!cancelled && !originalConfirmed && canSync) {
             lightningRepo.syncAsync()
         }
     }
