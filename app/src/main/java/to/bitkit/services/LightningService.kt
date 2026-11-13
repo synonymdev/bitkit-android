@@ -693,6 +693,11 @@ class LightningService internal constructor(
         return true
     }
 
+    fun hasPublicChannels(nodeId: String): Boolean {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        return node.networkGraph().node(nodeId)?.channels?.isNotEmpty() == true
+    }
+
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 

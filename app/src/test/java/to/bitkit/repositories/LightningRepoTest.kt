@@ -2312,6 +2312,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hasPublicChannels should fail when node is not running`() = test {
+        val result = sut.hasPublicChannels("payee")
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `hasPublicChannels should report the graph lookup when node is running`() = test {
+        startNodeForTesting()
+        whenever(lightningService.hasPublicChannels("payee")).thenReturn(true)
+
+        val result = sut.hasPublicChannels("payee")
+        assertEquals(true, result.getOrNull())
+    }
+
+    @Test
     fun `openChannel should fail when node is not running`() = test {
         val testPeer = PeerDetails.of("nodeId", "host", "9735")
         val result = sut.openChannel(testPeer, 100000uL)

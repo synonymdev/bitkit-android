@@ -104,6 +104,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         private const val SERVER_PRIVATE_BOLT11 = "lnbcrt1serverprivate"
         private const val PRIVATE_BOLT11_EXPIRY_SECONDS = 86_400u
         private const val NOW_SECONDS = 1_700_000_000L
+        private val PAYEE_NODE_ID = ByteArray(33) { 2 }
+        private val PAYEE_NODE_ID_HEX = "02".repeat(33)
     }
 
     private val paykitSdkService = mock<PaykitSdkService>()
@@ -4691,6 +4693,69 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `bound request opens an invoice without route hints when the payee has public channels`() = test {
+        PublicPaykitRepo.lightningRouteHintsValidator = { false }
+        whenever {
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(CONTACT_KEY, "request-id", null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
+        whenever(coreService.decode(PRIVATE_BOLT11)).thenReturn(
+            Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9), PAYEE_NODE_ID)),
+        )
+        whenever(lightningRepo.hasPublicChannels(PAYEE_NODE_ID_HEX)).thenReturn(Result.success(true))
+
+        val result = sut.beginPaymentRequest(paymentRequest()).getOrThrow()
+
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 7uL),
+                endpoints = listOf(
+                    Endpoint(
+                        MethodId.Bolt11,
+                        PRIVATE_BOLT11,
+                        rawPayload = PublicPaykitRepo.serializePayload(PRIVATE_BOLT11),
+                        appId = "bitkit",
+                    ),
+                ),
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun `bound request ignores an invoice without route hints when the payee has no public channels`() = test {
+        PublicPaykitRepo.lightningRouteHintsValidator = { false }
+        whenever {
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(CONTACT_KEY, "request-id", null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
+        whenever(coreService.decode(PRIVATE_BOLT11)).thenReturn(
+            Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9), PAYEE_NODE_ID)),
+        )
+        whenever(lightningRepo.hasPublicChannels(PAYEE_NODE_ID_HEX)).thenReturn(Result.success(false))
+
+        val result = sut.beginPaymentRequest(paymentRequest()).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.NotOpened, result)
+        verifyBlocking(lightningRepo) { hasPublicChannels(PAYEE_NODE_ID_HEX) }
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `bound request opens an invoice with route hints without a network graph lookup`() = test {
+        whenever {
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(CONTACT_KEY, "request-id", null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
+        whenever(coreService.decode(PRIVATE_BOLT11)).thenReturn(
+            Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9), PAYEE_NODE_ID)),
+        )
+
+        val result = sut.beginPaymentRequest(paymentRequest()).getOrThrow()
+
+        assertEquals(PRIVATE_BOLT11, assertIs<PublicPaykitPaymentResult.Opened>(result).paymentRequest)
+        verifyBlocking(lightningRepo, never()) { hasPublicChannels(any()) }
+    }
+
+    @Test
     fun `private endpoint candidates use one batch and reject failed address checks`() = test {
         whenever {
             paykitSdkService.prepareAndResolvePrivatePaymentRequest(CONTACT_KEY, "request-id", null)
@@ -5006,7 +5071,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         remoteRecoveryMarkerObservedAt = null,
     )
 
-    private fun lightningInvoice(bolt11: String, paymentHash: ByteArray) = LightningInvoice(
+    private fun lightningInvoice(
+        bolt11: String,
+        paymentHash: ByteArray,
+        payeeNodeId: ByteArray? = null,
+    ) = LightningInvoice(
         bolt11 = bolt11,
         paymentHash = paymentHash,
         amountSatoshis = 0uL,
@@ -5015,7 +5084,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         isExpired = false,
         description = "",
         networkType = NetworkType.REGTEST,
-        payeeNodeId = null,
+        payeeNodeId = payeeNodeId,
     )
 }
 
