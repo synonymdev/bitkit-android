@@ -9,20 +9,27 @@ import com.synonym.bitkitcore.WakePlatform
 import com.synonym.bitkitcore.WakeRegistration
 import com.synonym.bitkitcore.WakeRegistrationRequest
 import com.synonym.bitkitcore.WakeServerInfo
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.WakeCredentialStore
 import to.bitkit.data.WakeRegistrationState
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.WakeCredentials
 import to.bitkit.services.WakeService
 import to.bitkit.test.BaseUnitTest
@@ -143,11 +150,11 @@ class WakeRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut() = WakeRepo(
-        ioDispatcher = testDispatcher,
+    private fun createSut(dispatcher: CoroutineDispatcher = testDispatcher) = WakeRepo(
+        ioDispatcher = dispatcher,
         wakeService = wakeService,
         wakeConfig = wakeConfig,
-        credentialStore = WakeCredentialStore(testDispatcher, keychain, wakeService),
+        credentialStore = WakeCredentialStore(dispatcher, keychain, wakeService),
         lightningRepo = lightningRepo,
         pubkyRepo = pubkyRepo,
         firebaseMessaging = firebaseMessaging,
@@ -375,6 +382,36 @@ class WakeRepoTest : BaseUnitTest() {
             listOf(listOf(LN_IDENTITY), listOf(LN_IDENTITY, PK_IDENTITY), listOf(LN_IDENTITY)),
             preparedIdentities,
         )
+    }
+
+    @Test
+    fun `a registration renews presence while the app is open, and not once it left`() = test {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        whenever(wakeConfig.optedIn).thenReturn(MutableStateFlow(true))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow<String?>(null))
+        whenever { wakeService.setPresence(any(), any(), any()) }.thenReturn(NOW_SECS + 90)
+        whenever { wakeService.clearPresence(any(), any()) }.thenReturn(Unit)
+        val sut = createSut(dispatcher)
+        sut.syncRegistration().getOrThrow()
+
+        sut.onAppForeground()
+        runCurrent()
+        verify(wakeService, times(1)).setPresence(GATEWAY_URL, CREDENTIALS.deviceSecret, 90)
+        sut.syncRegistration(force = true).getOrThrow()
+        runCurrent()
+        verify(wakeService, times(2)).setPresence(GATEWAY_URL, CREDENTIALS.deviceSecret, 90)
+
+        // A registration asks for a renewal, and the app leaves before the presence loop gets to it.
+        launch(dispatcher) {
+            sut.syncRegistration(force = true).getOrThrow()
+            sut.onAppBackground()
+        }
+        runCurrent()
+
+        verify(wakeService, times(2)).setPresence(GATEWAY_URL, CREDENTIALS.deviceSecret, 90)
+        verify(wakeService).clearPresence(GATEWAY_URL, CREDENTIALS.deviceSecret)
     }
 
     @Test

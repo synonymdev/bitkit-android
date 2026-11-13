@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.WakeIdentityProof
 import com.synonym.bitkitcore.WakeRegistration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -19,6 +20,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.appScope
 import to.bitkit.data.WakeCredentialStore
 import to.bitkit.di.IoDispatcher
@@ -86,6 +88,9 @@ class WakeRepo @Inject constructor(
 
     @Volatile
     private var presenceJob: Job? = null
+
+    /** Asks the running presence loop to renew the lease now, after a registration changed what it covers. */
+    private val presenceRenewal = Channel<Unit>(Channel.CONFLATED)
 
     /**
      * Keeps the registration in step with the node, the opt-in and the Pubky identity from now on, and holds a
@@ -168,7 +173,7 @@ class WakeRepo @Inject constructor(
 
         val accepted = register(registration)
         credentialStore.updateRegistrationState { it.copy(fingerprint = fingerprint) }
-        if (presenceJob?.isActive == true) scope.launch { setPresence() }
+        if (presenceJob?.isActive == true) presenceRenewal.trySend(Unit)
         return WakeSync.Registered(deviceId = accepted.deviceId, unknownTopics = accepted.unknownTopics)
     }
 
@@ -257,10 +262,12 @@ class WakeRepo @Inject constructor(
         }
     }
 
+    /** Renews the lease every [PRESENCE_RENEW_INTERVAL], or at once when a registration asks for it. */
     private suspend fun holdPresence() {
+        presenceRenewal.tryReceive()
         while (currentCoroutineContext().isActive) {
             setPresence()
-            delay(PRESENCE_RENEW_INTERVAL)
+            withTimeoutOrNull(PRESENCE_RENEW_INTERVAL) { presenceRenewal.receive() }
         }
     }
 
