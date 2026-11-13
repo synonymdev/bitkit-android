@@ -3241,6 +3241,7 @@ class AppViewModel @Inject constructor(
                         is SendEvent.AddressContinue -> onAddressContinue(it.data)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
+                        is SendEvent.AmountMax -> onAmountMax(it.amount)
                         SendEvent.AmountReset -> resetAmountInput()
                         SendEvent.AmountContinue -> try {
                             onAmountContinue()
@@ -4353,10 +4354,19 @@ class AppViewModel @Inject constructor(
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
+                isMaxAmount = it.isMaxAmount && amount == it.amount,
                 confirmedWarnings = persistentListOf(),
             )
         }
         updateCanSwitchWallet()
+    }
+
+    private suspend fun onAmountMax(amount: ULong) {
+        onAmountChange(amount)
+        _sendUiState.update {
+            val isWalletOnchain = it.payMethod == SendMethod.ONCHAIN && it.hardwareWalletId == null
+            it.copy(isMaxAmount = isWalletOnchain && it.amount == amount)
+        }
     }
 
     private fun onCommentChange(comment: String) {
@@ -4482,11 +4492,13 @@ class AppViewModel @Inject constructor(
         val generation = ++sendStateGeneration
         cancelOnchainSendRefresh()
         _sendUiState.update {
+            val nextAmount = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else it.amount
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,
                 paykitUsesUsdt = target == PaykitAsset.USDT,
                 paykitRateUnavailable = false,
-                amount = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else it.amount,
+                amount = nextAmount,
+                isMaxAmount = it.isMaxAmount && nextAmount == it.amount,
                 paykitAmount = if (target == PaykitAsset.USDT) {
                     converted?.takeIf { amount -> amount.atomic > 0uL }?.inputValue.orEmpty()
                 } else {
@@ -4498,12 +4510,11 @@ class AppViewModel @Inject constructor(
         if (sendStateGeneration != generation) return
         _sendUiState.update {
             it.copy(
-                isAmountInputValid = if (it.paykitUsesUsdt) {
-                    validUsdtAmount(
-                        it.paykitAmount
-                    )
-                } else {
-                    validateAmount(it.amount)
+                isAmountInputValid = when {
+                    it.paykitUsesUsdt -> validUsdtAmount(it.paykitAmount)
+                    // the Savings refresh checked it against the max for this recipient and speed
+                    nextSource == SendFundingSource.Savings -> it.isAmountInputValid
+                    else -> validateAmount(it.amount)
                 },
             )
         }
@@ -4631,6 +4642,8 @@ class AppViewModel @Inject constructor(
                         confirmedWarnings = persistentListOf(),
                     )
                 }
+                // the cached max stands in until the refresh prices this recipient and speed, or when it can't
+                _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
                 refreshOnchainSendIfNeeded()?.join()
             }
 
@@ -4726,6 +4739,7 @@ class AppViewModel @Inject constructor(
                     hardwareAvailableSats = 0uL,
                     lightningFeeSats = 0,
                     amount = amount,
+                    isMaxAmount = it.isMaxAmount && amount == it.amount,
                     isAmountInputValid = validateAmount(amount, SendMethod.LIGHTNING),
                     confirmedWarnings = persistentListOf(),
                 )
@@ -5059,6 +5073,7 @@ class AppViewModel @Inject constructor(
             it.copy(selectedUtxos = utxos.toImmutableList())
         }
         launchOnchainFeeRefresh(generation, walletGeneration) {
+            refreshMaxSendOnchain()
             refreshOnchainFeeUi(walletGeneration)
             val refreshJob = currentCoroutineContext().job
             setSendEffect(SendEffect.NavigateToConfirm) {
@@ -6428,6 +6443,7 @@ class AppViewModel @Inject constructor(
             state.copy(
                 amount = 0u,
                 isAmountInputValid = false,
+                isMaxAmount = false,
             )
         }
     }
@@ -7699,7 +7715,7 @@ class AppViewModel @Inject constructor(
         utxosToSpend = _sendUiState.value.selectedUtxos,
         feeRates = _sendUiState.value.feeRates,
         isMaxAmount = activeIncomingPaymentRequest() == null && _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-            amount == walletRepo.balanceState.value.maxSendOnchainSats,
+            _sendUiState.value.isMaxAmount,
         tags = tags,
         requestId = requestId,
         payerIdentity = payerIdentity,
@@ -7787,7 +7803,7 @@ class AppViewModel @Inject constructor(
         job?.cancel()
     }
 
-    /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
+    /** Recheck the max sendable, reselect utxos for current amount & speed, then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
         prepare: (suspend () -> Unit)? = null,
@@ -7804,6 +7820,9 @@ class AppViewModel @Inject constructor(
 
         return launchOnchainFeeRefresh(generation, walletGeneration) {
             prepare?.invoke()
+            requireCurrentPaymentPreparation(walletGeneration)
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
+            refreshMaxSendOnchain()
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
             val currentState = _sendUiState.value
@@ -7881,6 +7900,69 @@ class AppViewModel @Inject constructor(
         job.start()
         return job
     }
+
+    /**
+     * Moves a Max send to the max sendable to this recipient at the selected speed, so the confirmed figure matches
+     * what the drain delivers. Any other amount is kept as entered and marked invalid when it no longer fits.
+     */
+    private suspend fun refreshMaxSendOnchain() {
+        val generation = sendStateGeneration
+        val state = _sendUiState.value
+        if (state.payMethod != SendMethod.ONCHAIN || state.hardwareWalletId != null) return
+        // a payment request fixes the amount, so it is never lowered to the max or sent as a drain
+        if (activeIncomingPaymentRequest() != null) return
+        if (state.amount == 0uL || state.address.isEmpty()) return
+
+        val max = lightningRepo.estimateMaxSendOnchain(
+            address = state.address,
+            speed = state.speed,
+            feeRates = state.feeRates,
+        ).getOrNull()?.takeIf { it > 0uL }
+
+        if (max == null) {
+            // the cached max is priced at the default speed, so draining on it can deliver another amount
+            _sendUiState.update {
+                if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
+                it.copy(isMaxAmount = false)
+            }
+            return
+        }
+
+        if (state.isMaxAmount) {
+            if (state.amount != max) {
+                Logger.info(
+                    "Updating max amount '${state.amount}' to '$max' at speed '${state.speed.serialized()}'",
+                    context = TAG,
+                )
+            }
+            _sendUiState.update {
+                if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
+                // validateAmount caps at the cached max, which a max at a cheaper speed can exceed
+                it.copy(amount = max, isAmountInputValid = max > Defaults.dustLimit.toULong())
+            }
+            return
+        }
+
+        val isAmountInputValid = state.amount <= max && validateAmount(state.amount, state.payMethod)
+        _sendUiState.update {
+            if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
+            it.copy(isAmountInputValid = isAmountInputValid)
+        }
+        if (state.amount <= max || generation != sendStateGeneration || _sendUiState.value.divergedFrom(state)) return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_insufficient_savings),
+            description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
+                .replace("{amount}", formatMoneyValue(state.amount.safe() - max.safe())),
+            testTag = "InsufficientSavingsToast",
+        )
+    }
+
+    private fun SendUiState.divergedFrom(snapshot: SendUiState) = amount != snapshot.amount ||
+        payMethod != snapshot.payMethod ||
+        address != snapshot.address ||
+        speed != snapshot.speed ||
+        hardwareWalletId != snapshot.hardwareWalletId
 
     /**
      * With [selectedSpeedOnly], only the selected speed's fee is estimated and `estimates` is left
@@ -9621,6 +9703,7 @@ data class SendUiState(
     val isAddressInputValid: Boolean = false,
     val amount: ULong = 0u,
     val isAmountInputValid: Boolean = false,
+    val isMaxAmount: Boolean = false,
     val isUnified: Boolean = false,
     val canSwitchWallet: Boolean = false,
     val canSwitchFundingSource: Boolean = false,
@@ -9860,6 +9943,7 @@ sealed interface SendEvent {
     data object AmountReset : SendEvent
     data object AmountContinue : SendEvent
     data class AmountChange(val amount: ULong) : SendEvent
+    data class AmountMax(val amount: ULong) : SendEvent
 
     data class CoinSelectionContinue(val utxos: List<SpendableUtxo>) : SendEvent
 
