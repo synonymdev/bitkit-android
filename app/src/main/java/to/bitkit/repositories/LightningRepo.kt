@@ -1871,7 +1871,6 @@ class LightningRepo @Inject constructor(
     private suspend fun awaitUsableChannels(): LightningState? = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
         while (!_lightningState.value.shouldStopWaitingForUsableChannels()) {
             delay(CHANNELS_USABLE_POLL_DELAY)
-            if (_lightningState.value.shouldStopWaitingForUsableChannels()) break
             refreshChannelsAndPeers()
         }
         _lightningState.value
