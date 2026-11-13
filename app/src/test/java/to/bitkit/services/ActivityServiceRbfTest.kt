@@ -30,6 +30,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.RbfOriginalConfirmed
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -134,6 +135,30 @@ class ActivityServiceRbfTest : BaseUnitTest() {
             assertEquals(listOf("a"), result.boostTxIds)
             assertEquals(setOf("original-tag", "replacement-tag"), tags.getValue("payment-b"))
             verify(lightning, never()).sync()
+        }
+    }
+
+    @Test
+    fun `publication cannot retire an original that confirms during the wait`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(cache.data).thenReturn(
+            flow {
+                entered.complete(Unit)
+                resume.await()
+                emit(AppCacheData())
+            }
+        )
+        withActivities { saved, _ ->
+            val publishing = async { runCatching { sut.publishRbfBoost("a", "b") } }
+            entered.await()
+            val original = saved.getValue("a").copy(confirmed = true)
+            saved["a"] = original
+            resume.complete(Unit)
+            val error = publishing.await().exceptionOrNull()
+            assertTrue(error is RbfOriginalConfirmed || error?.cause is RbfOriginalConfirmed)
+            assertEquals(original, saved.getValue("a"))
+            assertFalse(saved.getValue("b").isBoosted)
         }
     }
 

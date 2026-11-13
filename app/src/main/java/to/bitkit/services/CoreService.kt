@@ -103,6 +103,7 @@ import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.RbfOriginalConfirmed
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Provider
@@ -432,6 +433,8 @@ class ActivityService(
         feeRate: ULong,
         walletId: String = defaultWalletId,
     ) = ServiceQueue.CORE.background {
+        val original = getActivityById(walletId, originalActivityId) as? Activity.Onchain
+        if (original?.v1?.confirmed == true) throw RbfOriginalConfirmed()
         invalidatePaykitContactBackfill()
         coreRecordRbfBoost(walletId, originalActivityId, replacementTxId, feeRate)
     }
@@ -1709,7 +1712,10 @@ class ActivityService(
             require(originalTxId.isNotBlank() && replacementTxId.isNotBlank() && originalTxId != replacementTxId) {
                 "RBF must replace the original transaction"
             }
-            checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) { "RBF original is not available" }
+            val initialOriginal = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) {
+                "RBF original is not available"
+            }
+            if (initialOriginal.confirmed) throw RbfOriginalConfirmed()
             if (getOrCreateReplacementActivity(replacementTxId) == null) {
                 // RBF returns after broadcast, before wallet sync discovers the new payment.
                 lightningService.sync()
@@ -1717,6 +1723,7 @@ class ActivityService(
             }
             val cache = cacheStore.data.first()
             val original = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId))
+            if (original.confirmed) throw RbfOriginalConfirmed()
             val replacement = checkNotNull(getActivityByTxId(defaultWalletId, replacementTxId))
             check(original.txType == PaymentType.SENT && replacement.txType == PaymentType.SENT)
             check(!cache.isActivityDeleted(original.id, defaultWalletId))
