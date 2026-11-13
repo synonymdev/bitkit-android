@@ -4492,11 +4492,13 @@ class AppViewModel @Inject constructor(
         val generation = ++sendStateGeneration
         cancelOnchainSendRefresh()
         _sendUiState.update {
+            val nextAmount = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else it.amount
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,
                 paykitUsesUsdt = target == PaykitAsset.USDT,
                 paykitRateUnavailable = false,
-                amount = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else it.amount,
+                amount = nextAmount,
+                isMaxAmount = it.isMaxAmount && nextAmount == it.amount,
                 paykitAmount = if (target == PaykitAsset.USDT) {
                     converted?.takeIf { amount -> amount.atomic > 0uL }?.inputValue.orEmpty()
                 } else {
@@ -4508,12 +4510,11 @@ class AppViewModel @Inject constructor(
         if (sendStateGeneration != generation) return
         _sendUiState.update {
             it.copy(
-                isAmountInputValid = if (it.paykitUsesUsdt) {
-                    validUsdtAmount(
-                        it.paykitAmount
-                    )
-                } else {
-                    validateAmount(it.amount)
+                isAmountInputValid = when {
+                    it.paykitUsesUsdt -> validUsdtAmount(it.paykitAmount)
+                    // the Savings refresh checked it against the max for this recipient and speed
+                    nextSource == SendFundingSource.Savings -> it.isAmountInputValid
+                    else -> validateAmount(it.amount)
                 },
             )
         }
@@ -4641,6 +4642,8 @@ class AppViewModel @Inject constructor(
                         confirmedWarnings = persistentListOf(),
                     )
                 }
+                // the cached max stands in until the refresh prices this recipient and speed, or when it can't
+                _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
                 refreshOnchainSendIfNeeded()?.join()
             }
 

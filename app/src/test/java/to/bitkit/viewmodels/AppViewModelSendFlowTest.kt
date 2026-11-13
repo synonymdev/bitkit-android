@@ -16927,6 +16927,132 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `returning to savings keeps the invoice amount that replaced max on spending`() = test {
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 99_000uL, maxSendLightningSats = 100_000uL)
+        whenever(lightningRepo.estimateMaxSendOnchain(anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(99_000uL))
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                decodedInvoice = lightningInvoice("lnbcrt1maxfixed", amountSats = 10_000u),
+                amount = 99_000uL,
+                isAmountInputValid = true,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `selecting savings keeps a max the selected speed affords above the cached max`() = test {
+        val address = "bcrt1qmaxsavings"
+        val maxAtSlow = 100_100uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL, maxSendLightningSats = 200_000uL)
+        whenever(
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Slow, feeRates = feeRates)
+        ).thenReturn(Result.success(maxAtSlow))
+        setSendState(
+            SendUiState(
+                address = address,
+                isUnified = true,
+                amount = maxAtSlow,
+                isAmountInputValid = true,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Slow,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(maxAtSlow, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isMaxAmount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `selecting savings marks an exact amount above the selected speed max invalid`() = test {
+        val address = "bcrt1qexactsavings"
+        val requested = 99_800uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL, maxSendLightningSats = 200_000uL)
+        whenever(
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Fast, feeRates = feeRates)
+        ).thenReturn(Result.success(99_500uL))
+        whenever(formatMoneyValue(any())).thenReturn("300 sats")
+        setSendState(
+            SendUiState(
+                address = address,
+                isUnified = true,
+                amount = requested,
+                payMethod = SendMethod.LIGHTNING,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(requested, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `selecting savings checks the cached max when the selected speed max cannot be estimated`() = test {
+        val address = "bcrt1qsavingsnoestimate"
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever(
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            )
+        ).thenReturn(Result.failure(AppError("no estimate")))
+        setSendState(
+            SendUiState(
+                address = address,
+                isUnified = true,
+                amount = 50_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
     fun `max refresh does not restore the amount after it was edited`() = test {
         val address = "bcrt1qmaxsendedited"
         val cachedMax = 100_000uL
