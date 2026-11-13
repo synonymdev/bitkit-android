@@ -228,6 +228,7 @@ import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
+import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkWithdrawalOutcome
 import to.bitkit.repositories.SparkWithdrawalSettlement
 import to.bitkit.repositories.TransferRepo
@@ -347,6 +348,7 @@ class AppViewModel @Inject constructor(
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
     private val timeSource: TimeSource,
+    private val sparkExitRepo: SparkExitRepo,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -1489,6 +1491,28 @@ class AppViewModel @Inject constructor(
 
     private fun isAutomaticPaykitWorkPaused(): Boolean =
         isPaymentRequestPollingStopped.value || privatePaykitRepo.isProfileDeletionInProgress.value
+
+    private val _isSparkExitRequested = MutableStateFlow(false)
+
+    /** An emergency exit notification was tapped; kept until the UI opens the exit, so a cold start keeps it. */
+    val isSparkExitRequested = _isSparkExitRequested.asStateFlow()
+
+    fun onSparkExitNotificationTapped() = _isSparkExitRequested.update { true }
+
+    /**
+     * Says whether the exit opens on its progress rather than a new exit, then clears the tapped notification: cleared
+     * once nothing more suspends, as the screen that waits on it restarts and would cut the open short.
+     */
+    suspend fun onSparkExitOpened(): Boolean {
+        sparkExitRepo.load()
+        _isSparkExitRequested.update { false }
+        return sparkExitRepo.state.value.showsResult
+    }
+
+    /** Drives a Spark emergency exit every minute while Bitkit is in the foreground. */
+    fun startSparkExitDriving() = sparkExitRepo.onAppForegrounded()
+
+    fun stopSparkExitDriving() = sparkExitRepo.onAppBackgrounded()
 
     fun startPaykitPaymentRequestPolling() {
         privatePaykitRepo.setContactPreparationActive(true)

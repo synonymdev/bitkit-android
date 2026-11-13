@@ -317,7 +317,7 @@ fun HomeScreen(
                 }
 
                 Suggestion.LIGHTNING -> when {
-                    !sparkState.isReady -> appViewModel.showSheet(Sheet.TransferUnavailable)
+                    !sparkState.isUsable -> appViewModel.showSheet(Sheet.TransferUnavailable)
                     !hasSeenTransferIntro -> rootNavController.navigateToTransferIntro()
                     else -> rootNavController.navigateToTransferFunding()
                 }

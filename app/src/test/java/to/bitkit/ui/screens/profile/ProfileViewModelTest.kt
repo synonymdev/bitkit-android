@@ -23,6 +23,7 @@ import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
@@ -66,7 +67,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             sut.addTag("Bitcoin")
             sut.removeTag("Founder")
             advanceUntilIdle()
-            verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+            verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any(), any())
 
             restore.complete(false)
             advanceUntilIdle()
@@ -331,7 +332,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertNull(sut.uiState.value.profile)
-        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any(), any())
     }
 
     @Test
@@ -382,7 +383,10 @@ class ProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `addTag saves the updated profile and closes the sheet`() = test {
-        val sut = createSut(createProfile())
+        val profile = createProfile()
+        val sut = createSut(profile)
+        val editBase = ProfileEditBase(profile, "revision", tagsUnread = true)
+        whenever(pubkyRepo.profileEditBase()).thenReturn(editBase)
         advanceUntilIdle()
 
         sut.uiState.test {
@@ -401,6 +405,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             links = listOf(PubkyProfileLink("Website", "https://example.com")),
             tags = listOf("Founder", "Bitcoin"),
             imageUrl = "https://example.com/avatar.png",
+            editBase = editBase,
         )
     }
 
@@ -418,7 +423,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             sut.addTag("Founder")
             assertFalse(awaitItem().showAddTagSheet)
         }
-        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any(), any())
     }
 
     @Test
@@ -435,6 +440,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             links = any(),
             tags = eq(listOf("Bitcoin")),
             imageUrl = eq("https://example.com/avatar.png"),
+            editBase = any(),
         )
     }
 
@@ -444,7 +450,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             createProfile(tags = listOf("Founder", "Bitcoin")),
         )
         val sut = createSut(profileFlow = profileFlow)
-        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any())).doSuspendableAnswer {
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any(), any())).doSuspendableAnswer {
             val tags = it.getArgument<List<String>>(3)
             profileFlow.value = requireNotNull(profileFlow.value).copy(tags = tags)
             Result.success(Unit)
@@ -456,8 +462,8 @@ class ProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         inOrder(pubkyRepo).apply {
-            verify(pubkyRepo).saveProfile(any(), any(), any(), eq(listOf("Bitcoin")), any())
-            verify(pubkyRepo).saveProfile(any(), any(), any(), eq(emptyList()), any())
+            verify(pubkyRepo).saveProfile(any(), any(), any(), eq(listOf("Bitcoin")), any(), any())
+            verify(pubkyRepo).saveProfile(any(), any(), any(), eq(emptyList()), any(), any())
         }
         assertEquals(emptyList(), profileFlow.value?.tags)
     }
@@ -468,7 +474,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             createProfile(tags = listOf("Founder", "Bitcoin")),
         )
         val sut = createSut(profileFlow = profileFlow)
-        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any())).doSuspendableAnswer {
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any(), any())).doSuspendableAnswer {
             val tags = it.getArgument<List<String>>(3)
             profileFlow.value = requireNotNull(profileFlow.value).copy(tags = tags)
             Result.success(Unit)
@@ -479,14 +485,14 @@ class ProfileViewModelTest : BaseUnitTest() {
         sut.removeTag("Founder")
         advanceUntilIdle()
 
-        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), eq(listOf("Bitcoin")), any())
+        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), eq(listOf("Bitcoin")), any(), any())
         assertEquals(listOf("Bitcoin"), profileFlow.value?.tags)
     }
 
     @Test
     fun `failed tag save keeps the add sheet open for retry`() = test {
         val sut = createSut(createProfile())
-        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any()))
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any(), any()))
             .thenReturn(Result.failure(ProfileTestAppError("save failed")))
         advanceUntilIdle()
 
@@ -519,6 +525,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
+        whenever(pubkyRepo.profileEditBase()).thenAnswer { ProfileEditBase(profileFlow.value, "revision") }
         whenever(pubkyRepo.readOnlyProfile).thenReturn(readOnlyProfileFlow)
         whenever(pubkyRepo.publicKey).thenReturn(publicKeyFlow)
         whenever(pubkyRepo.isLoadingProfile).thenReturn(isLoadingFlow)
@@ -527,7 +534,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever { pubkyRepo.restoreSessionIfNeeded() }.doSuspendableAnswer { onRestore() }
         whenever { pubkyRepo.loadProfile() }.thenAnswer { onLoadProfile() }
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
-        whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))

@@ -39,6 +39,23 @@ data class MetadataBackupV1(
     val pubkyContactProfileOverrides: Map<String, PubkyProfileData>? = null,
     /** User-set hardware wallet names, keyed by wallet id. Null in envelopes written before this field. */
     val hwWalletNames: Map<String, String>? = null,
+    /**
+     * The earlier Spark exit addresses each wallet watches, keyed `{network}/wallet{n}` like the cache's
+     * `sparkExitNextFundingIndexes`. Null in envelopes written before this field.
+     */
+    val sparkExitEarlierAddresses: Map<String, List<SparkExitEarlierAddressBackupV1>>? = null,
+)
+
+/**
+ * An earlier Spark exit address as both apps back it up. [kind] is `keptChange` or `cancelledFunding`; a reader skips
+ * one it does not know. What the address holds is read again from the chain.
+ */
+@Serializable
+data class SparkExitEarlierAddressBackupV1(
+    val address: String,
+    val path: String,
+    val kind: String,
+    val atMillis: Long,
 )
 
 @Serializable

@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.FileInputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -54,11 +55,65 @@ val localProperties by lazy {
     }
 }
 
-fun localProp(key: String): Provider<String> {
-    return providers.environmentVariable(key)
-        .orElse(providers.gradleProperty(key))
-        .orElse(provider { localProperties.getProperty(key) })
+// macOS keychain item named like the key (stored through stdin, as the README shows), read at
+// build time so local secrets need no plain copy in local.properties. Absent on Linux (CI) and when no item exists.
+fun keychainProp(key: String): Provider<String> {
+    val security = File("/usr/bin/security")
+    if (!security.canExecute()) return provider { null }
+    return providers.exec {
+        commandLine(security.path, "find-generic-password", "-a", System.getProperty("user.name"), "-s", key, "-w")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim() }.filter { it.isNotEmpty() }
 }
+
+// Breez's API key is a base64 DER certificate. A cut-short key (the bare `security … -w` prompt keeps only 128
+// characters) turns Spark off at start, so a set key whose decoded size differs from the size its own DER header
+// declares stops the build. The error names the source that supplied the key. Only lengths are reported.
+fun breezApiKey(): Provider<String> {
+    val name = "BREEZ_API_KEY"
+    val (source, raw) = localPropSources(name).firstNotNullOfOrNull { (src, prop) -> prop.orNull?.let { src to it } }
+        ?: return provider { "" }
+    val key = raw.trim()
+    if (key.isEmpty()) return provider { key }
+    val der = runCatching { Base64.getDecoder().decode(key) }.getOrNull()
+    val declared = der?.let { derSize(it) }
+    if (der != null && declared == der.size) return provider { key }
+    val problem = when {
+        der == null -> "is not valid base64"
+        declared == null -> "decodes to ${der.size} bytes that are not a certificate"
+        else -> "decodes to ${der.size} bytes, but its certificate header declares $declared, so it was cut short"
+    }
+    val fix = if (source == KEYCHAIN_SOURCE) {
+        "Copy the key, then run: printf 'add-generic-password -U -a %s -s $name -w %s\\n' \"\$USER\" " +
+            "\"\$(pbpaste)\" | security -i && pbcopy </dev/null"
+    } else {
+        "Fix or remove it there; it wins over the sources read after it."
+    }
+    throw GradleException("$name from $source has ${key.length} characters and $problem. $fix")
+}
+
+// Total size a DER element declares in its header (tag, length bytes and content), or null when it is not a SEQUENCE.
+fun derSize(der: ByteArray): Int? {
+    if (der.size < 2 || der[0] != 0x30.toByte()) return null
+    val first = der[1].toInt() and 0xff
+    if (first < 0x80) return 2 + first
+    val n = first and 0x7f
+    if (n !in 1..3 || der.size < 2 + n) return null
+    return 2 + n + (0 until n).fold(0) { acc, i -> acc shl 8 or (der[2 + i].toInt() and 0xff) }
+}
+
+val KEYCHAIN_SOURCE = "the keychain item"
+
+// Where localProp reads a key from, in the order it checks them.
+fun localPropSources(key: String): List<Pair<String, Provider<String>>> = listOf(
+    "the environment variable" to providers.environmentVariable(key),
+    "the Gradle property" to providers.gradleProperty(key),
+    "local.properties" to provider { localProperties.getProperty(key) },
+    KEYCHAIN_SOURCE to keychainProp(key),
+)
+
+fun localProp(key: String): Provider<String> =
+    localPropSources(key).map { it.second }.reduce { acc, prop -> acc.orElse(prop) }
 
 fun envFlag(key: String, default: Boolean): Provider<String> {
     return providers.environmentVariable(key)
@@ -356,7 +411,7 @@ androidComponents {
             "USDT_RPC_URL",
             localProp("USDT_RPC_URL").orElse("https://bitkit.to/v1/usdt/chain-rpc").stringField(),
         )
-        buildConfigFields.put("BREEZ_API_KEY", localProp("BREEZ_API_KEY").orElse("").stringField())
+        buildConfigFields.put("BREEZ_API_KEY", breezApiKey().stringField())
         buildConfigFields.put("ESPLORA_URL", localProp("ESPLORA_URL").orElse("").stringField())
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
