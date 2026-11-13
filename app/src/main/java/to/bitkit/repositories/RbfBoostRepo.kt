@@ -78,8 +78,7 @@ class RbfBoostRepo @Inject constructor(
 
     private fun findAttempt(activity: OnchainActivity): Attempt? = attempts[key(activity)]
         ?: attempts.values.firstOrNull {
-            it.original.walletId == activity.walletId && it.replacementTxId == activity.txId &&
-                it.state.value != Status.Published
+            it.original.walletId == activity.walletId && it.replacementTxId == activity.txId
         }
 
     private fun admit(original: OnchainActivity, expectedGeneration: Long?): Boolean {
@@ -100,10 +99,7 @@ class RbfBoostRepo @Inject constructor(
             connectionRecovery.withOperation(owner) { session ->
                 requireCurrent(expectedGeneration)
                 val original = attempt.original
-                val replacement = attempt.replacementTxId ?: lightningRepo.bumpFeeByRbf(
-                    originalTxId = original.txId,
-                    satsPerVByte = attempt.quote.feeRate,
-                ).getOrThrow().also {
+                val replacement = attempt.replacementTxId ?: broadcast(attempt, expectedGeneration).also {
                     synchronized(lock) {
                         attempt.replacementTxId = it
                         notifyChanged()
@@ -125,6 +121,18 @@ class RbfBoostRepo @Inject constructor(
             val originalConfirmed = error is RbfOriginalConfirmed || error.cause is RbfOriginalConfirmed
             finishFailure(key, attempt, expectedGeneration, cancelled = false, originalConfirmed = originalConfirmed)
         }
+    }
+
+    private suspend fun broadcast(attempt: Attempt, expectedGeneration: Long): String {
+        val original = attempt.original
+        val current = checkNotNull(activityRepo.getOnchainActivityByTxId(original.txId, original.walletId))
+        requireCurrent(expectedGeneration)
+        check(current.id == original.id && current.txType == PaymentType.SENT && !current.confirmed)
+        check(canStartBoost(current, attempt.quote)) { "Activity is no longer eligible for Boost" }
+        return lightningRepo.bumpFeeByRbf(
+            originalTxId = original.txId,
+            satsPerVByte = attempt.quote.feeRate,
+        ).getOrThrow()
     }
 
     private suspend fun publish(attempt: Attempt, replacement: String, expectedGeneration: Long) = coroutineScope {

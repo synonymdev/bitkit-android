@@ -493,6 +493,15 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
                 reopened.onConfirmBoost()
                 assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
             }
+            // A pending click can race with publication before the list renders the linked row.
+            val staleRow = replacement.copy(v1 = replacement.v1.copy(confirmed = false, isBoosted = false))
+            val staleDetail = createViewModel()
+            staleDetail.boostTransactionEffect.map { it.effect }.test {
+                staleDetail.setupActivity(staleRow)
+                assertTrue(staleDetail.uiState.value.feeLocked)
+                staleDetail.onConfirmBoost()
+                assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+            }
         }
         verify(lightningRepo, times(1)).bumpFeeByRbf(any(), any())
         verify(activityRepo).publishRbfBoost(mockTxId, newTxId)
@@ -545,6 +554,18 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         }
         verify(activityRepo, never()).recordRbfBoost(any(), any(), any())
         verify(activityRepo, never()).publishRbfBoost(any(), any())
+    }
+
+    @Test
+    fun `stale activity cannot authorize a fresh boost after it confirms`() = runTest {
+        prepareRbf()
+        whenever(activityRepo.getOnchainActivityByTxId(mockTxId, onchainActivity.walletId))
+            .thenReturn(onchainActivity.copy(confirmed = true))
+        sut.boostTransactionEffect.map { it.effect }.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostFailed, awaitItem())
+        }
+        verify(lightningRepo, never()).bumpFeeByRbf(any(), any())
     }
 
     @Test
@@ -651,6 +672,8 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     }
 
     private suspend fun prepareRbf() {
+        whenever(activityRepo.getOnchainActivityByTxId(mockTxId, onchainActivity.walletId))
+            .thenReturn(onchainActivity)
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(feeRate))
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.success(totalFee))
