@@ -366,7 +366,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `the deposit counts as seen once spark lists it and the choice on a changed fee is kept`() = test {
+    fun `the deposit stays seen once spark lists it and the choice on a changed fee is kept`() = test {
         whenever {
             lightningRepo.sendOnChain(
                 any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
@@ -391,6 +391,12 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isDepositSeen)
 
         sparkState.value = SparkState(deposits = persistentListOf(SparkDeposit("txid", 50_000uL, isClaimed = false)))
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isDepositSeen)
+
+        sparkState.value = SparkState(
+            deposits = persistentListOf(SparkDeposit("TXID", 50_000uL, isClaimed = false, isListed = false)),
+        )
         advanceUntilIdle()
         assertTrue(sut.uiState.value.isDepositSeen)
 

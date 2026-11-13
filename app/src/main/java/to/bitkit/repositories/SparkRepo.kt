@@ -2173,10 +2173,10 @@ enum class SparkClaimSpeed {
     Later,
 }
 
-/** Where the claim of a deposit the user sent stands. */
 /** What the user chose over a changed fast transfer fee. */
 enum class SparkClaimChoice { Approved, Waited }
 
+/** Where the claim of a deposit the user sent stands. */
 sealed interface SparkDepositClaim {
     /** Spark has not listed the deposit yet, or offers no early claim at this depth. */
     data object Looking : SparkDepositClaim

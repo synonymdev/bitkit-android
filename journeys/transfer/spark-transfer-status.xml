@@ -9,8 +9,9 @@
     "Awesome!". A normal speed (Later) transfer shows the same steps with "This should take about 30 minutes.".
 
     Whether Spark reprices the fast transfer or offers none is the provider's call, so those two frames (coins in
-    place of the arrows) are conditional steps here; TransferStatusTest.kt and SettingUpScreenTest.kt cover every frame. Spark lists a deposit about a
-    minute after its broadcast, so each step shows for a few seconds at least.
+    place of the arrows) are conditional steps here; TransferStatusTest.kt and SettingUpScreenTest.kt cover every frame. On Spark's regtest a fast
+    transfer can finish within seconds, so "Processing Payment" may show only briefly and Spark may claim the
+    deposit before "Adding To Spending Balance" shows; a step once passed never comes back.
 
     Precondition: as in spark-transfer-to-spending.xml: a dev build with Spark connected on its regtest and
     reading Bitkit's chain, Savings funded on that chain (at least 20 000 sats, confirmed) and no channels. Start
@@ -20,7 +21,7 @@
     <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending"), tap "25%" (testTag "SpendingAmountQuarter") and tap "Continue" (testTag "SpendingAmountContinue")</action>
     <action>Verify "Instant" (testTag "SpendingConfirmInstant") is selected and swipe to confirm</action>
     <action>Verify the status screen (testTag "LightningSettingUp") shows "Transfer Funds", the headline "Funds in transfer", the text (testTag "SettingUpText") "Please wait, your funds transfer is in progress. This should take a few minutes.", step 1 active with "Processing Payment", and "Continue Using Bitkit" (testTag "TransferSuccess-button")</action>
-    <action>Wait up to 3 minutes for "Payment Successful" with step 1 checked, then for "Adding To Spending Balance" with steps 1 and 2 checked; each keeps the same headline, text and button</action>
+    <action>Wait up to 3 minutes for "Payment Successful" with step 1 checked, then, if it shows before the transfer ends, "Adding To Spending Balance" with steps 1 and 2 checked; each keeps the same headline, text and button, and the label never goes back to an earlier step</action>
     <action>If the fast transfer fee rose, verify the headline "Fast transfer fee changed", the text "The fast transfer fee is now ₿ …. Approve to access your funds quickly, or wait ±30 min.", the coins, the label "Fast Transfer Fee Changed" and "Wait" (testTag "SettingUpWait") and "Approve" (testTag "SettingUpPay") side by side; tap "Wait" and verify the headline "Funds in transfer", the text ending "about 30 minutes." and the label "Using Normal Transfer Speed" on step 3</action>
     <action>If the fast transfer is unavailable, verify the headline "Fast transfer unavailable", the text ending "about 30 minutes.", the coins and the label "Using Normal Transfer Speed"</action>
     <action>Wait for "Transfer Successful" (testTag "TransferSuccess"), up to 3 minutes for a fast transfer; after Wait or an unavailable fast transfer, up to 10 minutes for the deposit's 3 confirmations (Spark's regtest mines about once a minute): the headline "Funds moved to spending", "Your funds have been transferred and your spending balance is ready to use.", the check and "Awesome!" (testTag "TransferSuccess-button")</action>

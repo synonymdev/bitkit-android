@@ -121,8 +121,13 @@ class SparkFundingViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            // Spark drops a deposit from its list while claiming it, so a deposit once listed stays seen.
+            var seenTxid: String? = null
             combine(_uiState.map { it.txid }, sparkRepo.state.map { it.deposits }) { txid, deposits ->
-                txid != null && deposits.any { it.isListed && it.txid.equals(txid, ignoreCase = true) }
+                if (txid != null && deposits.any { it.isListed && it.txid.equals(txid, ignoreCase = true) }) {
+                    seenTxid = txid
+                }
+                txid != null && txid == seenTxid
             }.distinctUntilChanged().collect { isSeen -> _uiState.update { it.copy(isDepositSeen = isSeen) } }
         }
     }
