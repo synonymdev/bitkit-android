@@ -85,6 +85,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileDataLink
@@ -92,7 +93,6 @@ import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitSdkService
-import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
@@ -319,45 +319,6 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `Ring signup registers and authorizes before activating the local session`() = test {
-        val events = mutableListOf<String>()
-        val registeredSession = mock<PubkySessionBootstrapResult>()
-        val request = ringSignupRequest()
-        stubSignupKeys()
-        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenAnswer {
-            events += "register"
-            registeredSession
-        }
-        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret")).thenAnswer {
-            events += "authorize"
-        }
-        whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer { events += "activate" }
-
-        val result = sut.approveSignupAuth(request)
-
-        assertTrue(result.isSuccess)
-        assertEquals(listOf("register", "authorize", "activate"), events)
-        verifyBlocking(pubkyService, never()) { signIn(any()) }
-        assertTrue(profileSetupPending.value)
-        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
-    }
-
-    @Test
-    fun `Ring signup does not activate the registered session when authorization fails`() = test {
-        val registeredSession = mock<PubkySessionBootstrapResult>()
-        val request = ringSignupRequest()
-        stubSignupKeys()
-        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
-        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret"))
-            .thenThrow(IllegalStateException("authorization failed"))
-
-        assertTrue(sut.approveSignupAuth(request).isFailure)
-        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
-        assertFalse(profileSetupPending.value)
-        assertNull(sut.publicKey.value)
-    }
-
-    @Test
     fun `grant signup retries app authorization before activating profile setup`() = test {
         val url = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
         val request = PubkyAuthRequest.parseGrantSignup(
@@ -381,9 +342,22 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(sut.approveSignupAuth(request).isSuccess)
         verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
-        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertTrue(profileSetupPending.value)
+    }
+
+    @Test
+    fun `parseAuthUrl rejects legacy Ring signup links without contacting Pubky`() = test {
+        listOf(
+            "pubkyring://signup?hs=homeserver&relay=https%3A%2F%2Frelay.example" +
+                "&secret=request&caps=%2Fpub%2Fexample%2F%3Arw&st=invite",
+            "pubkyauth://signup?hs=homeserver&relay=https%3A%2F%2Frelay.example" +
+                "&secret=request&caps=%2Fpub%2Fexample%2F%3Arw",
+        ).forEach { url ->
+            assertIs<PubkyAuthRequestError.InvalidUrl>(sut.parseAuthUrl(url).exceptionOrNull(), url)
+        }
+        verifyBlocking(pubkyService, never()) { validateSignupRequest(any()) }
+        verifyBlocking(pubkyService, never()) { parseAuthUrl(any()) }
     }
 
     @Test
@@ -401,36 +375,14 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals("pubky_homeserver", request.homeserverPublicKey)
         assertEquals("invite", request.signupToken)
         assertEquals("shop.pubky.app", request.clientId)
-        assertEquals(url, request.authorizationUrl)
         verifyBlocking(pubkyService) { parseAuthUrl(url) }
         verifyBlocking(pubkyService, never()) { registerIdentity(any(), any(), anyOrNull()) }
     }
 
     @Test
-    fun `Ring signup can retry after relay timeout without activating the timed out session`() = test {
+    fun `signup clears profile setup state when local activation fails`() = test {
         val registeredSession = mock<PubkySessionBootstrapResult>()
-        val request = ringSignupRequest()
-        stubSignupKeys()
-        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
-        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret"))
-            .thenAnswer { throw AppError(PubkyRingAuthTimeoutError()) }
-            .thenReturn(Unit)
-
-        assertTrue(sut.approveSignupAuth(request).isFailure)
-        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
-        assertNull(sut.publicKey.value)
-        assertFalse(profileSetupPending.value)
-
-        assertTrue(sut.approveSignupAuth(request).isSuccess)
-        verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
-        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
-        assertTrue(profileSetupPending.value)
-    }
-
-    @Test
-    fun `Ring signup clears profile setup state when local activation fails`() = test {
-        val registeredSession = mock<PubkySessionBootstrapResult>()
-        val request = ringSignupRequest()
+        val request = directSignupRequest()
         profileSetupPending.value = true
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
@@ -451,7 +403,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
 
         assertTrue(sut.approveSignupAuth(request).isSuccess)
-        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { approveAuth(any(), any(), any(), any()) }
         verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
         assertTrue(profileSetupPending.value)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
@@ -485,20 +437,19 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `Ring signup stops when registration fails`() = test {
-        val request = ringSignupRequest()
+    fun `signup stops when registration fails`() = test {
+        val request = directSignupRequest()
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite"))
             .thenThrow(IllegalStateException("registration failed"))
 
         assertTrue(sut.approveSignupAuth(request).isFailure)
-        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
         verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
         assertFalse(profileSetupPending.value)
     }
 
     @Test
-    fun `Ring signup clears credentials when pending setup persistence and rollback fail`() = test {
+    fun `signup clears credentials when pending setup persistence and rollback fail`() = test {
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite"))
             .thenReturn(mock<PubkySessionBootstrapResult>())
@@ -509,7 +460,7 @@ class PubkyRepoTest : BaseUnitTest() {
             throw TestAppError("cleanup failed")
         }
 
-        assertTrue(sut.approveSignupAuth(ringSignupRequest()).isFailure)
+        assertTrue(sut.approveSignupAuth(directSignupRequest()).isFailure)
 
         verify(keychain).delete(Keychain.Key.PAYKIT_SESSION.name)
         verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
@@ -799,7 +750,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val registeredSession = mock<PubkySessionBootstrapResult>()
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
-        assertTrue(sut.approveSignupAuth(ringSignupRequest()).isSuccess)
+        assertTrue(sut.approveSignupAuth(directSignupRequest()).isSuccess)
         clearInvocations(pubkyService)
         whenever(
             pubkyService.publishPubkyProfile(any(), anyOrNull(), any())
@@ -5924,11 +5875,6 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.deriveSecretKey("seed words")).thenReturn("secret")
         whenever(pubkyService.publicKeyFromSecret("secret")).thenReturn(VALID_SELF_KEY)
     }
-
-    private fun ringSignupRequest() = PubkyAuthRequest.parseSignup(
-        "pubkyring://signup?hs=homeserver&relay=https%3A%2F%2Frelay.example" +
-            "&secret=request&caps=%2Fpub%2Fexample%2F%3Arw&st=invite",
-    ).getOrThrow()
 
     private fun directSignupRequest() = PubkyAuthRequest.parseSignup(
         "pubkyauth://direct_signup?hs=homeserver&st=invite",
