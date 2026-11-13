@@ -190,7 +190,7 @@ class RbfBoostRepo @Inject constructor(
         changes.value += 1
     }
 
-    data class Quote(val feeRate: ULong, val totalFeeSats: ULong)
+    data class Quote(val feeRate: ULong, val totalFeeSats: ULong, val isCustom: Boolean)
 
     class Attempt internal constructor(internal val original: OnchainActivity, val quote: Quote) {
         private val _state = MutableStateFlow<Status>(Status.Broadcasting)

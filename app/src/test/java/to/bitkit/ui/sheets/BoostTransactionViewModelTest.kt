@@ -371,6 +371,9 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     @Test
     fun `publication retry retains the quote across detail ViewModels and shares in flight work`() = runTest {
         prepareRbf()
+        sut.onClickEdit()
+        sut.onChangeAmount(increase = true)
+        assertFalse(sut.uiState.value.isDefaultMode)
         val approvedRate = sut.uiState.value.feeRate
         val approvedFee = sut.uiState.value.totalFeeSats
         val retryPublication = CompletableDeferred<Unit>()
@@ -397,6 +400,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
             assertEquals(approvedRate, reopened.uiState.value.feeRate)
             assertEquals(approvedFee, reopened.uiState.value.totalFeeSats)
             assertEquals(normalFeeTime, reopened.uiState.value.estimateTime)
+            assertFalse(reopened.uiState.value.isDefaultMode)
             assertTrue(reopened.uiState.value.feeLocked)
             reopened.onConfirmBoost()
             reopened.clearActivity()

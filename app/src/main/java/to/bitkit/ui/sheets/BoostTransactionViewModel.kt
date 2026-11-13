@@ -113,6 +113,7 @@ class BoostTransactionViewModel @Inject constructor(
             it.copy(
                 feeRate = attempt.quote.feeRate,
                 totalFeeSats = attempt.quote.totalFeeSats,
+                isDefaultMode = !attempt.quote.isCustom,
                 loading = false,
                 feeLocked = true,
                 estimateTime = estimateTime,
@@ -285,7 +286,11 @@ class BoostTransactionViewModel @Inject constructor(
 
         if (currentActivity.v1.txType == PaymentType.SENT) {
             val state = _uiState.value
-            val quote = RbfBoostRepo.Quote(feeRate = state.feeRate, totalFeeSats = state.totalFeeSats)
+            val quote = RbfBoostRepo.Quote(
+                feeRate = state.feeRate,
+                totalFeeSats = state.totalFeeSats,
+                isCustom = !state.isDefaultMode,
+            )
             val attempt = rbfBoostRepo.confirm(currentActivity.v1, walletGeneration, quote) ?: return
             observeAttempt(attempt, currentActivity, reportFailure = true)
             return
