@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.coroutineScope
@@ -9,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import to.bitkit.async.appScope
 import to.bitkit.data.WalletConnectionRecovery
@@ -33,29 +35,49 @@ class RbfBoostRepo @Inject constructor(
     private val lock = Any()
     private var generation: Long? = null
     private val attempts = mutableMapOf<String, Attempt>()
+    private val changes = MutableStateFlow(0L)
 
     fun walletGeneration(): Long? = connectionRecovery.currentGeneration()
 
     fun isCurrentWallet(expected: Long?): Boolean = connectionRecovery.isCurrentGeneration(expected)
 
-    fun find(original: OnchainActivity, expectedGeneration: Long?): Attempt? = synchronized(lock) {
-        if (!admit(original, expectedGeneration)) return@synchronized null
-        attempts[scopedActivityId(original.walletId, original.txId)]
+    fun find(activity: OnchainActivity, expectedGeneration: Long?): Attempt? = synchronized(lock) {
+        if (!admit(activity, expectedGeneration)) return@synchronized null
+        findAttempt(activity)
     }
 
-    fun confirm(original: OnchainActivity, expectedGeneration: Long?, quote: Quote): Attempt? {
-        val key = scopedActivityId(original.walletId, original.txId)
+    fun observePending(activity: OnchainActivity) = changes.map {
+        val attempt = find(activity, walletGeneration())
+        !activity.confirmed && attempt != null && attempt.state.value != Status.Published
+    }
+
+    fun confirm(activity: OnchainActivity, expectedGeneration: Long?, quote: Quote): Attempt? {
         val attempt = synchronized(lock) {
-            if (!admit(original, expectedGeneration)) return null
-            val existing = attempts[key]
+            if (!admit(activity, expectedGeneration) || activity.confirmed) return null
+            val existing = findAttempt(activity)
             if (existing != null && existing.state.value !is Status.Pending) return existing
-            (existing ?: Attempt(original, quote).also { attempts[key] = it }).also {
+            if (existing == null && !canStartBoost(activity, quote)) {
+                return null
+            }
+            (existing ?: Attempt(activity, quote).also { attempts[key(activity)] = it }).also {
                 it.update(if (it.replacementTxId == null) Status.Broadcasting else Status.Publishing())
+                notifyChanged()
             }
         }
-        scope.launch { runAttempt(key, attempt, checkNotNull(expectedGeneration)) }
+        scope.launch { runAttempt(key(attempt.original), attempt, checkNotNull(expectedGeneration)) }
         return attempt
     }
+
+    private fun key(activity: OnchainActivity) = scopedActivityId(activity.walletId, activity.txId)
+
+    private fun canStartBoost(activity: OnchainActivity, quote: Quote) =
+        activity.doesExist && !activity.isBoosted && !activity.isTransfer && quote.feeRate > 0uL
+
+    private fun findAttempt(activity: OnchainActivity): Attempt? = attempts[key(activity)]
+        ?: attempts.values.firstOrNull {
+            it.original.walletId == activity.walletId && it.replacementTxId == activity.txId &&
+                it.state.value != Status.Published
+        }
 
     private fun admit(original: OnchainActivity, expectedGeneration: Long?): Boolean {
         val current = walletGeneration()
@@ -63,7 +85,8 @@ class RbfBoostRepo @Inject constructor(
             generation = current
             attempts.clear()
         }
-        return current != null && current == expectedGeneration && original.walletId == WalletScope.default
+        return current != null && current == expectedGeneration && original.walletId == WalletScope.default &&
+            original.txType == PaymentType.SENT
     }
 
     private suspend fun runAttempt(key: String, attempt: Attempt, expectedGeneration: Long) {
@@ -77,13 +100,19 @@ class RbfBoostRepo @Inject constructor(
                 val replacement = attempt.replacementTxId ?: lightningRepo.bumpFeeByRbf(
                     originalTxId = original.txId,
                     satsPerVByte = attempt.quote.feeRate,
-                ).getOrThrow().also { attempt.replacementTxId = it }
+                ).getOrThrow().also {
+                    synchronized(lock) {
+                        attempt.replacementTxId = it
+                        notifyChanged()
+                    }
+                }
                 requireCurrent(expectedGeneration)
                 publish(attempt, replacement, expectedGeneration)
                 session.commitCurrentState {
                     lightningRepo.syncAsync()
                     attempt.update(Status.Published)
                 }
+                synchronized(lock) { notifyChanged() }
             }
         } catch (error: CancellationException) {
             finishFailure(key, attempt, expectedGeneration, cancelled = true)
@@ -104,9 +133,7 @@ class RbfBoostRepo @Inject constructor(
             Logger.debug("RBF replacement publication still pending after ${started.elapsedNow()}", context = TAG)
         }
         try {
-            activityRepo.recordRbfBoost(attempt.original, replacement, attempt.quote.feeRate).onFailure {
-                Logger.warn("Failed to record RBF fee rate for '$replacement'", it, context = TAG)
-            }
+            activityRepo.recordRbfBoost(attempt.original, replacement, attempt.quote.feeRate).getOrThrow()
             requireCurrent(expectedGeneration)
             activityRepo.publishRbfBoost(attempt.original.txId, replacement).getOrThrow()
             requireCurrent(expectedGeneration)
@@ -130,10 +157,16 @@ class RbfBoostRepo @Inject constructor(
             } else {
                 attempt.update(Status.Pending(cancelled))
             }
+            notifyChanged()
         }
         if (!cancelled && attempt.replacementTxId != null && isCurrentWallet(expectedGeneration)) {
             lightningRepo.syncAsync()
         }
+    }
+
+    // Call under lock so observers can see the matching attempt and replacement identity.
+    private fun notifyChanged() {
+        changes.value += 1
     }
 
     data class Quote(val feeRate: ULong, val totalFeeSats: ULong)

@@ -15,8 +15,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +46,9 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
@@ -71,43 +74,46 @@ fun BoostTransactionSheet(
 ) {
     val haptic = LocalHapticFeedback.current
 
-    // Setup activity when component is first created
-    LaunchedEffect(Unit) {
-        viewModel.setupActivity(item)
-    }
-    DisposableEffect(viewModel) {
-        onDispose { viewModel.clearActivity() }
-    }
-
-    // Handle effects
-    LaunchedEffect(Unit) {
-        viewModel.boostTransactionEffect.collect { event ->
-            when (event) {
-                BoostTransactionEffects.OnBoostFailed -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onFailure()
-                }
-
-                BoostTransactionEffects.OnBoostPending -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onPending()
-                }
-
-                BoostTransactionEffects.OnBoostSuccess -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onSuccess()
-                }
-
-                BoostTransactionEffects.OnMaxFee -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onMaxFee()
-                }
-
-                BoostTransactionEffects.OnMinFee -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onMinFee()
-                }
+    val dispatchEffect by rememberUpdatedState<(BoostTransactionEffects) -> Unit> { event ->
+        when (event) {
+            BoostTransactionEffects.OnBoostFailed -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onFailure()
             }
+
+            BoostTransactionEffects.OnBoostPending -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onPending()
+            }
+
+            BoostTransactionEffects.OnBoostSuccess -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onSuccess()
+            }
+
+            BoostTransactionEffects.OnMaxFee -> {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onMaxFee()
+            }
+
+            BoostTransactionEffects.OnMinFee -> {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onMinFee()
+            }
+        }
+    }
+
+    LaunchedEffect(viewModel, item.v1.walletId, item.v1.txId) {
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            viewModel.boostTransactionEffect.collect { event ->
+                if (viewModel.canDeliver(event, item)) dispatchEffect(event.effect)
+            }
+        }
+        val origin = viewModel.setupActivity(item)
+        try {
+            awaitCancellation()
+        } finally {
+            viewModel.clearActivity(origin)
         }
     }
 

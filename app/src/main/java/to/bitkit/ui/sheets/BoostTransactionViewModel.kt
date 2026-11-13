@@ -46,7 +46,7 @@ class BoostTransactionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _boostTransactionEffect = MutableSharedFlow<BoostTransactionEffects>(extraBufferCapacity = 1)
+    private val _boostTransactionEffect = MutableSharedFlow<SheetEffect>(extraBufferCapacity = 1)
     val boostTransactionEffect = _boostTransactionEffect.asSharedFlow()
 
     companion object {
@@ -65,11 +65,12 @@ class BoostTransactionViewModel @Inject constructor(
     private var walletGeneration: Long? = null
     private var attemptObserver: Job? = null
 
-    fun setupActivity(activity: Activity.Onchain) {
+    fun setupActivity(activity: Activity.Onchain): Activity.Onchain {
         clearActivity()
         walletGeneration = rbfBoostRepo.walletGeneration()
         Logger.debug("Setup activity $activity", context = TAG)
-        this.activity = Activity.Onchain(activity.v1)
+        val origin = Activity.Onchain(activity.v1)
+        this.activity = origin
 
         _uiState.update {
             it.copy(
@@ -83,17 +84,24 @@ class BoostTransactionViewModel @Inject constructor(
 
         val attempt = rbfBoostRepo.find(activity.v1, walletGeneration)
         if (attempt != null && activity.boostType() == BoostType.RBF) {
-            observeAttempt(attempt, checkNotNull(this.activity), reportFailure = false)
+            observeAttempt(attempt, origin, reportFailure = false)
         } else {
             initializeFeeEstimates()
         }
+        return origin
     }
 
-    fun clearActivity() {
+    fun clearActivity(origin: Activity.Onchain? = activity) {
+        if (activity !== origin) return
         activity = null
         attemptObserver?.cancel()
         attemptObserver = null
     }
+
+    fun canDeliver(event: SheetEffect, item: Activity.Onchain): Boolean =
+        event.origin != null && activity === event.origin &&
+            event.origin.v1.walletId == item.v1.walletId && event.origin.v1.txId == item.v1.txId &&
+            rbfBoostRepo.isCurrentWallet(event.walletGeneration)
 
     private fun restoreQuote(attempt: RbfBoostRepo.Attempt) {
         _uiState.update {
@@ -404,11 +412,18 @@ class BoostTransactionViewModel @Inject constructor(
 
     private fun setBoostTransactionEffect(effect: BoostTransactionEffects, origin: Activity.Onchain? = null) {
         val generation = walletGeneration
+        val owner = origin ?: activity
         viewModelScope.launch {
-            if (origin != null && (activity !== origin || !rbfBoostRepo.isCurrentWallet(generation))) return@launch
-            _boostTransactionEffect.emit(effect)
+            if (owner != null && (activity !== owner || !rbfBoostRepo.isCurrentWallet(generation))) return@launch
+            _boostTransactionEffect.emit(SheetEffect(effect, owner, generation))
         }
     }
+
+    data class SheetEffect(
+        val effect: BoostTransactionEffects,
+        internal val origin: Activity.Onchain?,
+        internal val walletGeneration: Long?,
+    )
 }
 
 sealed interface BoostTransactionEffects {
