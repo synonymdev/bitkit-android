@@ -73,9 +73,14 @@ funds Savings, opens a private channel from LND, pays Bitkit 10 000 sats, and cr
 invoice on LND. To drive the XML journey separately, enter the pinned fixture's `docker/` directory.
 Run `./bitcoin-cli fund` to mine spendable regtest funds, then fund the app's Savings address with
 `./bitcoin-cli send 0.001 <bitkit-savings-address> -m 1`.
-Connect to the local LND peer and run `./bitcoin-cli openchannel <bitkit-node-id> 100000`.
-The helper funds LND if needed and mines the channel funding transaction. Wait for an active
-channel with zero Spending. Create the outgoing amountless invoice with
+Get the LND node ID from `identity_pubkey` in `./bitcoin-cli getinfo`. In Bitkit, open
+Settings → Advanced → Lightning Connections → Add
+Connection → Manual Setup. Enter the LND node ID, host `10.0.2.2`, and port `9735`, then tap
+Continue to connect. The emulator reaches the fixture's published host port through `10.0.2.2`.
+Return to Home without funding a channel from Bitkit. Run
+`./bitcoin-cli openchannel <bitkit-node-id> 100000` from `docker/`. The helper funds LND if needed,
+opens a private channel from LND, and mines the channel funding transaction. Wait for an
+active channel with zero Spending. Create the outgoing amountless invoice with
 `./bitcoin-cli getlninvoice`. For the receipt step, use
 `./bitcoin-cli payinvoice <bitkit-lightning-invoice> 10000`. Then follow the XML's send
 and dismissal steps. Keep the app and channel running between receipt and send.
