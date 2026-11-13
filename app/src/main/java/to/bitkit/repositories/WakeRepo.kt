@@ -292,9 +292,11 @@ class WakeRepo @Inject constructor(
         }
     }
 
+    /** The device while the gateway may hold it, even when the answer to its last registration was lost. */
     private suspend fun registeredDevice(): RegisteredDevice? {
         val gatewayUrl = wakeConfig.gatewayUrl ?: return null
-        if (credentialStore.registrationState().fingerprint == null) return null
+        val state = credentialStore.registrationState()
+        if (state.fingerprint == null && !state.mayBeRegistered) return null
         val credentials = credentialStore.load() ?: return null
         return RegisteredDevice(gatewayUrl, credentials)
     }

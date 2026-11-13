@@ -14,6 +14,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
@@ -39,6 +40,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -411,6 +413,31 @@ class WakeRepoTest : BaseUnitTest() {
         runCurrent()
 
         verify(wakeService, times(2)).setPresence(GATEWAY_URL, CREDENTIALS.deviceSecret, 90)
+        verify(wakeService).clearPresence(GATEWAY_URL, CREDENTIALS.deviceSecret)
+    }
+
+    @Test
+    fun `presence is renewed and cleared while the answer to an update is lost`() = test {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        whenever(wakeConfig.optedIn).thenReturn(MutableStateFlow(true))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow<String?>(null))
+        whenever { wakeService.setPresence(any(), any(), any()) }.thenReturn(NOW_SECS + 90)
+        whenever { wakeService.clearPresence(any(), any()) }.thenReturn(Unit)
+        val sut = createSut(dispatcher)
+        sut.syncRegistration().getOrThrow()
+        sut.onAppForeground()
+        runCurrent()
+        whenever(pubkyRepo.wakeIdentity()).thenReturn(Result.success(PK_IDENTITY))
+        whenever(wakeService.register(any(), any(), any())).thenAnswer { throw lost() }
+        assertTrue(sut.syncRegistration().isFailure)
+
+        advanceTimeBy(WakeRepo.PRESENCE_RENEW_INTERVAL + 1.seconds)
+        verify(wakeService, times(2)).setPresence(GATEWAY_URL, CREDENTIALS.deviceSecret, 90)
+        sut.onAppBackground()
+        runCurrent()
+
         verify(wakeService).clearPresence(GATEWAY_URL, CREDENTIALS.deviceSecret)
     }
 
