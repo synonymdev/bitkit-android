@@ -59,6 +59,7 @@ fun DevSettingsScreen(
     val disableAllToasts by settings.disableAllToasts.collectAsStateWithLifecycle()
     val isSavingsSwapEnabled by settings.isSavingsSwapEnabled.collectAsStateWithLifecycle()
     val subscriptionClockOffsetDays by settings.subscriptionClockOffsetDays.collectAsStateWithLifecycle()
+    val wakeState by viewModel.wakeState.collectAsStateWithLifecycle()
     var showPaykitWarning by remember { mutableStateOf(false) }
 
     ScreenColumn {
@@ -128,6 +129,27 @@ fun DevSettingsScreen(
                         onSelect = settings::setSubscriptionClockOffsetDays,
                     )
                 }
+            }
+
+            if (Env.isDebug) {
+                SectionHeader("WAKE")
+                SettingsTextButtonRow(
+                    title = "Gateway",
+                    description = wakeState.gatewayUrl ?: "Off, set WAKE_GATEWAY_URL to test against a local gateway",
+                )
+                SettingsTextButtonRow(
+                    title = "Device",
+                    description = wakeState.deviceStatus ?: "Tap to load from the gateway",
+                    onClick = { viewModel.refreshWakeDevice() },
+                )
+                SettingsTextButtonRow(
+                    title = "Register Now",
+                    onClick = { viewModel.registerWakeNow() },
+                )
+                SettingsTextButtonRow(
+                    title = "Send Test Wake",
+                    onClick = { viewModel.sendTestWake() },
+                )
             }
 
             SectionHeader("HARDWARE WALLET")

@@ -19,6 +19,7 @@ import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -52,6 +53,7 @@ class WipeWalletUseCase @Inject constructor(
     private val usdtRepo: UsdtRepo,
     private val paykitUsdtPaymentRepo: PaykitUsdtPaymentRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val wakeRepo: WakeRepo,
 ) {
     private val wipeMutex = Mutex()
 
@@ -96,6 +98,7 @@ class WipeWalletUseCase @Inject constructor(
         step("remove Paykit published endpoints") { privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG) }
         step("remove Bitkit payment endpoints") { pubkyRepo.removeBitkitPaymentEndpoints() }
         step("close Paykit SDK") { privatePaykitRepo.get().closeAndClear() }
+        step("unregister wake device") { wakeRepo.unregister() }
     }
 
     private suspend fun wipeLocal(walletIndex: Int, resetWalletState: () -> Unit): Result<Unit> {

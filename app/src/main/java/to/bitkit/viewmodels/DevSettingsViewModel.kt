@@ -2,10 +2,12 @@ package to.bitkit.viewmodels
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.LegacyRnCloseRecoveryScanResult
 import com.synonym.bitkitcore.LegacyRnCloseRecoverySweepPreview
+import com.synonym.bitkitcore.WakeDevice
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +18,7 @@ import to.bitkit.R
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.env.Env
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -25,6 +28,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -52,9 +56,13 @@ class DevSettingsViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val blocktankRepo: BlocktankRepo,
     private val appDb: AppDb,
+    private val wakeRepo: WakeRepo,
 ) : ViewModel() {
     private val _legacyRnRecoveryState = MutableStateFlow(LegacyRnRecoveryUiState())
     val legacyRnRecoveryState = _legacyRnRecoveryState.asStateFlow()
+
+    private val _wakeState = MutableStateFlow(WakeDevUiState(gatewayUrl = Env.wakeGatewayUrl))
+    val wakeState = _wakeState.asStateFlow()
 
     fun setLegacyRnRecoveryIndexLimit(value: String) {
         val filtered = value.filter { it.isDigit() }
@@ -214,4 +222,38 @@ class DevSettingsViewModel @Inject constructor(
     }
 
     fun wipeLogs() = Logger.reset()
+
+    fun refreshWakeDevice() = viewModelScope.launch { loadWakeDevice() }
+
+    fun registerWakeNow() = viewModelScope.launch {
+        wakeRepo.syncRegistration(force = true)
+            .onSuccess { ToastEventBus.send(type = Toast.ToastType.INFO, title = "Wake registration: $it") }
+            .onFailure { ToastEventBus.send(it) }
+        loadWakeDevice()
+    }
+
+    fun sendTestWake() = viewModelScope.launch {
+        wakeRepo.sendTest()
+            .onSuccess { ToastEventBus.send(type = Toast.ToastType.INFO, title = "Test wake sent", description = it) }
+            .onFailure { ToastEventBus.send(it) }
+    }
+
+    private suspend fun loadWakeDevice() {
+        val status = wakeRepo.getDevice().fold(
+            onSuccess = { it.statusText() },
+            onFailure = { it.message ?: "Unknown error" },
+        )
+        _wakeState.update { it.copy(deviceStatus = status) }
+    }
+
+    private fun WakeDevice.statusText(): String {
+        val presence = presenceExpiresAt?.let { "until $it" } ?: "none"
+        return "Identities: ${identities.joinToString()}\nTopics: ${topics.joinToString()}\nPresence: $presence"
+    }
 }
+
+@Immutable
+data class WakeDevUiState(
+    val gatewayUrl: String? = null,
+    val deviceStatus: String? = null,
+)

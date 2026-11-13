@@ -2655,6 +2655,43 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wakeIdentity proves pk only with a key for the signed-in pubky on this device`() = test {
+        val bareKey = VALID_SELF_KEY.removePrefix("pubky")
+        sut.awaitInitialization()
+        assertNull(sut.wakeIdentity().getOrThrow(), "No profile")
+
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        assertNull(sut.wakeIdentity().getOrThrow(), "Session without a local key")
+
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("other_secret")
+        whenever(pubkyService.publicKeyFromSecret("other_secret")).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        assertNull(sut.wakeIdentity().getOrThrow(), "Key of another identity")
+
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(bareKey)
+        whenever(pubkyService.signWakeRegistration("local_secret", "message")).thenReturn("local_signature")
+        assertEquals("pk:$bareKey", sut.wakeIdentity().getOrThrow(), "Local identity")
+        assertEquals("local_signature", sut.signWakeRegistration("pk:$bareKey", "message").getOrThrow())
+        assertTrue(sut.signWakeRegistration("pk:other", "message").isFailure, "Identity changed since preparing")
+    }
+
+    @Test
+    fun `wakeIdentity decides a Ring-adopted identity without Ring, and signing reads its key just in time`() = test {
+        val bareKey = VALID_SELF_KEY.removePrefix("pubky")
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.ringCredential(bareKey)).thenReturn(Result.success("ring_secret"))
+        whenever(pubkyService.signWakeRegistration("ring_secret", "message")).thenReturn("ring_signature")
+
+        assertEquals("pk:$bareKey", sut.wakeIdentity().getOrThrow())
+        verify(sharedPubkyClient, never()).ringCredential(any())
+        assertEquals("ring_signature", sut.signWakeRegistration("pk:$bareKey", "message").getOrThrow())
+
+        whenever(sharedPubkyClient.ringCredential(bareKey)).thenReturn(Result.failure(TestAppError("Unavailable")))
+        assertTrue(sut.signWakeRegistration("pk:$bareKey", "message").isFailure, "A Ring read failure fails signing")
+    }
+
+    @Test
     fun `localIdentityPublicKey needs a saved session and a stored key without a Ring source`() = test {
         whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")

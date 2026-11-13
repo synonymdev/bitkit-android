@@ -1321,6 +1321,11 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Signs [message] with the node key as a Lightning signed message, zbase32 encoded. */
+    suspend fun signMessage(message: String): Result<String> = executeWhenNodeRunning("signMessage") {
+        runSuspendCatching { lightningService.sign(message) }
+    }
+
     suspend fun newAddress(): Result<String> = executeWhenNodeRunning("newAddress") {
         requireWalletRestoreComplete()
         runCatching { lightningService.newAddress() }

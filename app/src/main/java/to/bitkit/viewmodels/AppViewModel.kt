@@ -234,6 +234,7 @@ import to.bitkit.repositories.SparkWithdrawalSettlement
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.repositories.incomingPaymentRequestFailureReason
@@ -347,6 +348,7 @@ class AppViewModel @Inject constructor(
     private val moveToSparkRepo: MoveToSparkRepo,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
+    private val wakeRepo: WakeRepo,
     private val timeSource: TimeSource,
     private val sparkExitRepo: SparkExitRepo,
 ) : ViewModel() {
@@ -1520,6 +1522,11 @@ class AppViewModel @Inject constructor(
     fun startSparkExitDriving() = sparkExitRepo.onAppForegrounded()
 
     fun stopSparkExitDriving() = sparkExitRepo.onAppBackgrounded()
+
+    /** Keeps the wake registration in step and tells the gateway the app is open, so it holds back fallback alerts. */
+    fun startWakePresence() = wakeRepo.onAppForeground()
+
+    fun stopWakePresence() = wakeRepo.onAppBackground()
 
     fun startPaykitPaymentRequestPolling() {
         privatePaykitRepo.setContactPreparationActive(true)
