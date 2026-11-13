@@ -375,9 +375,8 @@ data class AppCacheData(
      */
     val ldkSendHashesSeeded: Boolean = false,
     /**
-     * When a metadata restore brought back [sparkSendHashes], in epoch seconds, until Spark's synced list fills them:
-     * the backup can predate a send Spark made, so meanwhile a Spark that can't list its payments holds the node off
-     * invoices created before it. Null on an install that was never restored, whose kept hashes are complete.
+     * When a metadata restore brought back [sparkSendHashes], in epoch seconds, until Spark's synced list fills them,
+     * as the backup can predate a send Spark made. Null on an install that was never restored.
      */
     val sparkHistoryUnseededSince: Long? = null,
     /**
@@ -388,7 +387,7 @@ data class AppCacheData(
     /**
      * When the wallet was restored, in epoch seconds. Spark's list can lack a send it made before then even after a
      * sync, so both rails refuse a still-valid invoice created before it that Spark hasn't listed as pending or paid,
-     * until that invoice expires.
+     * unless the Spark operators show it unsent.
      */
     val sparkRestoredAt: Long? = null,
 ) {
