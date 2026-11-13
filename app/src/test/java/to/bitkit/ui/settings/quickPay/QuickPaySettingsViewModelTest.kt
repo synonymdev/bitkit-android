@@ -10,11 +10,8 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
-import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -29,6 +26,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -39,6 +37,7 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
     private val settings = MutableStateFlow(
         SettingsData(isQuickPayEnabled = false, quickPayAmount = 5, quickPayDailyLimitMultiplier = 5),
     )
+    private val pendingCheck = MutableStateFlow<QuickPayAuthorization?>(null)
 
     private lateinit var sut: QuickPaySettingsViewModel
 
@@ -47,170 +46,76 @@ class QuickPaySettingsViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.common__error_body)).thenReturn("Unknown error")
         whenever(settingsStore.data).thenReturn(settings)
-        listOf(
-            QuickPayChange.Enabled(true),
-            QuickPayChange.Amount(10),
-            QuickPayChange.Amount(50),
-            QuickPayChange.DailyLimitMultiplier(50),
-        ).forEach {
-            whenever { quickPayRepo.requestSettingsChange(it) }.thenReturn(Result.success(authorization(it)))
-        }
+        whenever(quickPayRepo.pendingSettingsChange).thenReturn(pendingCheck)
+        whenever(quickPayRepo.requestSettingsChange(any())).thenReturn(CompletableDeferred(Result.success(Unit)))
         whenever { quickPayRepo.applyAuthorizedSettingsChange(any()) }.thenReturn(Result.success(Unit))
         sut = QuickPaySettingsViewModel(context, settingsStore, quickPayRepo)
     }
 
     @Test
-    fun `a gated change waits for the check and saves once it passes`() = test {
-        sut.setQuickPayEnabled(true)
-
-        assertEquals(authorization(QuickPayChange.Enabled(true)), loadedState().authorization)
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
-
-        sut.onAuthorized()
-
-        verify(quickPayRepo).applyAuthorizedSettingsChange(authorization(QuickPayChange.Enabled(true)))
-        assertNull(loadedState().authorization)
-    }
-
-    @Test
-    fun `a change saved at once opens no check`() = test {
-        whenever(quickPayRepo.requestSettingsChange(any())).thenReturn(Result.success(null))
-
-        sut.setQuickPayAmount(1)
-
-        verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(1))
-        assertNull(loadedState().authorization)
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
-    }
-
-    @Test
-    fun `a cancelled check saves nothing`() = test {
-        sut.setQuickPayAmount(50)
-        sut.onAuthorizationCancelled()
-
-        assertNull(loadedState().authorization)
-        verify(quickPayRepo).cancelSettingsChange()
-        sut.onAuthorized()
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
-    }
-
-    @Test
-    fun `a check that arrives after cancelling opens nothing and is dropped`() = test {
-        val pending = authorization(QuickPayChange.Enabled(true))
-        val result = CompletableDeferred<Result<QuickPayAuthorization?>>()
-        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Enabled(true))).doSuspendableAnswer {
-            result.await()
-        }
-
-        sut.setQuickPayEnabled(true)
-        sut.onAuthorizationCancelled()
-        result.complete(Result.success(pending))
-        runCurrent()
-
-        assertNull(loadedState().authorization)
-        verify(quickPayRepo).cancelSettingsChange(pending)
-        sut.onAuthorized()
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
-    }
-
-    @Test
-    fun `a late or repeated verification saves nothing`() = test {
-        sut.onAuthorized()
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
-
-        sut.setQuickPayAmount(10)
-        sut.onAuthorized()
-        sut.onAuthorized()
-
-        verify(quickPayRepo).applyAuthorizedSettingsChange(authorization(QuickPayChange.Amount(10)))
-    }
-
-    @Test
-    fun `a later raise replaces the open check, as it does in the repo`() = test {
-        sut.setQuickPayAmount(10)
-        sut.setQuickPayDailyLimitMultiplier(50)
-
-        assertEquals(QuickPayChange.DailyLimitMultiplier(50), loadedState().authorization?.change)
-
-        sut.onAuthorized()
-
-        verify(quickPayRepo).applyAuthorizedSettingsChange(authorization(QuickPayChange.DailyLimitMultiplier(50)))
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(authorization(QuickPayChange.Amount(10)))
-    }
-
-    @Test
-    fun `a change saved at once closes the open check, which the repo already dropped`() = test {
-        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(1))).thenReturn(Result.success(null))
-        sut.setQuickPayAmount(50)
-
-        sut.setQuickPayAmount(1)
-
-        assertNull(loadedState().authorization)
-        verify(quickPayRepo, never()).cancelSettingsChange(anyOrNull())
-        sut.onAuthorized()
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
-    }
-
-    @Test
-    fun `quick changes reach the repo in tap order, so the last free change closes the earlier raise`() = test {
-        val raise = authorization(QuickPayChange.Amount(50))
-        val raiseResult = CompletableDeferred<Result<QuickPayAuthorization?>>()
-        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(50))).doSuspendableAnswer {
-            raiseResult.await()
-        }
-        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(1))).thenReturn(Result.success(null))
-
-        sut.setQuickPayAmount(50)
-        sut.setQuickPayAmount(1)
-
-        verify(quickPayRepo, never()).requestSettingsChange(QuickPayChange.Amount(1))
-
-        raiseResult.complete(Result.success(raise))
-        runCurrent()
-
-        inOrder(quickPayRepo) {
-            verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(50))
-            verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(1))
-        }
-        assertNull(loadedState().authorization)
-        sut.onAuthorized()
-        verify(quickPayRepo, never()).applyAuthorizedSettingsChange(any())
-    }
-
-    @Test
-    fun `a failed request opens no check and shows an error`() = test {
-        whenever(quickPayRepo.requestSettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
-
-        val toast = collectToast { sut.setQuickPayEnabled(true) }
-
-        assertNull(loadedState().authorization)
-        assertErrorToast(toast)
-    }
-
-    @Test
-    fun `a failed save after the check closes the check and shows an error`() = test {
-        whenever(quickPayRepo.applyAuthorizedSettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
-        sut.setQuickPayEnabled(true)
-
-        val toast = collectToast { sut.onAuthorized() }
-
-        verify(quickPayRepo).applyAuthorizedSettingsChange(authorization(QuickPayChange.Enabled(true)))
-        assertNull(loadedState().authorization)
-        assertErrorToast(toast)
-    }
-
-    @Test
-    fun `ui state mirrors the stored settings`() = test {
+    fun `ui state mirrors the stored settings and the repo's open check`() = test {
+        val check = QuickPayAuthorization(QuickPayChange.Amount(50), useBiometrics = true)
         settings.value = settings.value.copy(isQuickPayEnabled = true, quickPayAmount = 10)
+        pendingCheck.value = check
 
         val state = loadedState()
 
         assertTrue(state.isQuickPayEnabled)
         assertEquals(10, state.quickPayAmount)
         assertEquals(5, state.quickPayDailyLimitMultiplier)
+        assertSame(check, state.authorization)
+
+        pendingCheck.value = null
+        assertNull(loadedState().authorization)
     }
 
-    private fun authorization(change: QuickPayChange) = QuickPayAuthorization(change, useBiometrics = true)
+    @Test
+    fun `changes reach the repo in tap order without waiting for earlier ones`() = test {
+        whenever(quickPayRepo.requestSettingsChange(QuickPayChange.Amount(20))).thenReturn(CompletableDeferred())
+
+        sut.setQuickPayAmount(20)
+        sut.setQuickPayAmount(1)
+        sut.setQuickPayEnabled(true)
+        sut.setQuickPayDailyLimitMultiplier(50)
+
+        inOrder(quickPayRepo) {
+            verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(20))
+            verify(quickPayRepo).requestSettingsChange(QuickPayChange.Amount(1))
+            verify(quickPayRepo).requestSettingsChange(QuickPayChange.Enabled(true))
+            verify(quickPayRepo).requestSettingsChange(QuickPayChange.DailyLimitMultiplier(50))
+        }
+    }
+
+    @Test
+    fun `verifying saves the shown check and cancelling closes it in the repo`() = test {
+        val check = QuickPayAuthorization(QuickPayChange.Enabled(true), useBiometrics = false)
+
+        sut.onAuthorized(check)
+        sut.onAuthorizationCancelled()
+
+        verify(quickPayRepo).applyAuthorizedSettingsChange(check)
+        verify(quickPayRepo).cancelSettingsChange()
+    }
+
+    @Test
+    fun `a failed request shows an error`() = test {
+        whenever(quickPayRepo.requestSettingsChange(any()))
+            .thenReturn(CompletableDeferred(Result.failure(AppError("write failed"))))
+
+        val toast = collectToast { sut.setQuickPayEnabled(true) }
+
+        assertErrorToast(toast)
+    }
+
+    @Test
+    fun `a failed save after the check shows an error`() = test {
+        whenever(quickPayRepo.applyAuthorizedSettingsChange(any())).thenReturn(Result.failure(AppError("write failed")))
+        val check = QuickPayAuthorization(QuickPayChange.Enabled(true), useBiometrics = false)
+
+        val toast = collectToast { sut.onAuthorized(check) }
+
+        assertErrorToast(toast)
+    }
 
     private fun TestScope.collectToast(action: () -> Unit): Toast {
         val toasts = mutableListOf<Toast>()

@@ -6,14 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
@@ -38,13 +34,9 @@ class QuickPaySettingsViewModel @Inject constructor(
         private const val STOP_TIMEOUT_MS = 5_000L
     }
 
-    private val authorization = MutableStateFlow<QuickPayAuthorization?>(null)
-    private val requests = Channel<QueuedChange>(Channel.UNLIMITED)
-    private var requestGeneration = 0
-
     val uiState: StateFlow<QuickPaySettingsUiState> = combine(
         settingsStore.data,
-        authorization,
+        quickPayRepo.pendingSettingsChange,
     ) { settings, authorization ->
         QuickPaySettingsUiState(
             isQuickPayEnabled = settings.isQuickPayEnabled,
@@ -54,12 +46,6 @@ class QuickPaySettingsViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), QuickPaySettingsUiState())
 
-    init {
-        viewModelScope.launch {
-            for (request in requests) handleRequest(request)
-        }
-    }
-
     fun setQuickPayEnabled(enabled: Boolean) = requestChange(QuickPayChange.Enabled(enabled))
 
     fun setQuickPayAmount(amount: Int) = requestChange(QuickPayChange.Amount(amount))
@@ -67,44 +53,27 @@ class QuickPaySettingsViewModel @Inject constructor(
     fun setQuickPayDailyLimitMultiplier(multiplier: Int) =
         requestChange(QuickPayChange.DailyLimitMultiplier(multiplier))
 
-    fun onAuthorized() {
-        val authorized = authorization.getAndUpdate { null } ?: return
+    fun onAuthorized(authorization: QuickPayAuthorization) {
         viewModelScope.launch {
-            quickPayRepo.applyAuthorizedSettingsChange(authorized)
+            quickPayRepo.applyAuthorizedSettingsChange(authorization)
                 .onFailure {
-                    Logger.error("Failed to save QuickPay change '${authorized.change}'", it, context = TAG)
+                    Logger.error("Failed to save QuickPay change '${authorization.change}'", it, context = TAG)
                     toastError()
                 }
         }
     }
 
-    fun onAuthorizationCancelled() {
-        requestGeneration++
-        authorization.update { null }
-        quickPayRepo.cancelSettingsChange()
-    }
+    fun onAuthorizationCancelled() = quickPayRepo.cancelSettingsChange()
 
     private fun requestChange(change: QuickPayChange) {
-        requests.trySend(QueuedChange(change, requestGeneration))
-    }
-
-    private suspend fun handleRequest(request: QueuedChange) {
-        quickPayRepo.requestSettingsChange(request.change)
-            .onSuccess { pending ->
-                if (pending == null) {
-                    authorization.update { null }
-                    return@onSuccess
+        val result = quickPayRepo.requestSettingsChange(change)
+        viewModelScope.launch {
+            result.await()
+                .onFailure {
+                    Logger.error("Failed to request QuickPay change '$change'", it, context = TAG)
+                    toastError()
                 }
-                if (request.generation != requestGeneration) {
-                    quickPayRepo.cancelSettingsChange(pending)
-                    return@onSuccess
-                }
-                authorization.update { pending }
-            }
-            .onFailure {
-                Logger.error("Failed to request QuickPay change '${request.change}'", it, context = TAG)
-                toastError()
-            }
+        }
     }
 
     private suspend fun toastError() = ToastEventBus.send(
@@ -120,9 +89,4 @@ data class QuickPaySettingsUiState(
     val quickPayAmount: Int = 5,
     val quickPayDailyLimitMultiplier: Int = 5,
     val authorization: QuickPayAuthorization? = null,
-)
-
-private data class QueuedChange(
-    val change: QuickPayChange,
-    val generation: Int,
 )

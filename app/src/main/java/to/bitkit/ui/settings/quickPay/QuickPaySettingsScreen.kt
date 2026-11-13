@@ -54,12 +54,12 @@ fun QuickPaySettingsScreen(
             onBack = onBack,
             modifier = if (uiState.authorization == null) Modifier else Modifier.clearAndSetSemantics {}
         )
-        uiState.authorization?.let {
+        uiState.authorization?.let { authorization ->
             PaymentAuthorizationOverlay(
-                useBiometrics = it.useBiometrics,
+                useBiometrics = authorization.useBiometrics,
                 pinDescriptionRes = R.string.security__pin_quickpay,
                 onCancel = viewModel::onAuthorizationCancelled,
-                onVerify = viewModel::onAuthorized,
+                onVerify = { viewModel.onAuthorized(authorization) },
             )
         }
     }

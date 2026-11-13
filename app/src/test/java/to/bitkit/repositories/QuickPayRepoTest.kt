@@ -146,16 +146,9 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `requestSettingsChange returns the check for an enable or raise and saves nothing`() = test {
+    fun `requestSettingsChange opens a check for an enable or raise and saves nothing`() = test {
         stubSettingsUpdate()
-        val gated = SettingsData(
-            isPinEnabled = true,
-            isPinForPaymentsEnabled = true,
-            isBiometricEnabled = true,
-            isQuickPayEnabled = false,
-            quickPayAmount = 5,
-            quickPayDailyLimitMultiplier = 5,
-        )
+        val gated = pinSettings(isBiometricEnabled = true, isQuickPayEnabled = false)
         settingsData.value = gated
 
         listOf(
@@ -163,7 +156,11 @@ class QuickPayRepoTest : BaseUnitTest() {
             QuickPayChange.Amount(20),
             QuickPayChange.DailyLimitMultiplier(10),
         ).forEach {
-            assertEquals(QuickPayAuthorization(it, useBiometrics = true), sut.requestSettingsChange(it).getOrThrow())
+            sut.requestSettingsChange(it).await().getOrThrow()
+            val check = assertNotNull(sut.pendingSettingsChange.value)
+            assertEquals(it, check.change)
+            assertTrue(check.useBiometrics)
+            sut.cancelSettingsChange()
         }
 
         assertEquals(gated, settingsData.value)
@@ -172,33 +169,27 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `requestSettingsChange decides against the settings current at write time`() = test {
         stubSettingsUpdate()
-        val current = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
+        val current = pinSettings(quickPayAmount = 1)
         settingsData.value = current
         whenever(settingsStore.data).thenReturn(MutableStateFlow(current.copy(quickPayAmount = 20)))
 
-        val change = QuickPayChange.Amount(20)
-        val authorization = sut.requestSettingsChange(change).getOrThrow()
+        sut.requestSettingsChange(QuickPayChange.Amount(20)).await().getOrThrow()
 
-        assertEquals(QuickPayAuthorization(change, useBiometrics = false), authorization)
+        assertEquals(QuickPayChange.Amount(20), sut.pendingSettingsChange.value?.change)
         assertEquals(current, settingsData.value)
     }
 
     @Test
     fun `requestSettingsChange saves disabling and lowering at once`() = test {
         stubSettingsUpdate()
-        val gated = SettingsData(
-            isPinEnabled = true,
-            isPinForPaymentsEnabled = true,
-            isQuickPayEnabled = true,
-            quickPayAmount = 20,
-            quickPayDailyLimitMultiplier = 5,
-        )
+        val gated = pinSettings(quickPayAmount = 20)
         settingsData.value = gated
 
-        assertNull(sut.requestSettingsChange(QuickPayChange.Enabled(false)).getOrThrow())
-        assertNull(sut.requestSettingsChange(QuickPayChange.Amount(10)).getOrThrow())
-        assertNull(sut.requestSettingsChange(QuickPayChange.DailyLimitMultiplier(3)).getOrThrow())
+        sut.requestSettingsChange(QuickPayChange.Enabled(false)).await().getOrThrow()
+        sut.requestSettingsChange(QuickPayChange.Amount(10)).await().getOrThrow()
+        sut.requestSettingsChange(QuickPayChange.DailyLimitMultiplier(3)).await().getOrThrow()
 
+        assertNull(sut.pendingSettingsChange.value)
         assertEquals(
             gated.copy(isQuickPayEnabled = false, quickPayAmount = 10, quickPayDailyLimitMultiplier = 3),
             settingsData.value,
@@ -214,10 +205,11 @@ class QuickPayRepoTest : BaseUnitTest() {
         ).forEach { start ->
             settingsData.value = start
 
-            assertNull(sut.requestSettingsChange(QuickPayChange.Enabled(true)).getOrThrow())
-            assertNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
-            assertNull(sut.requestSettingsChange(QuickPayChange.DailyLimitMultiplier(10)).getOrThrow())
+            sut.requestSettingsChange(QuickPayChange.Enabled(true)).await().getOrThrow()
+            sut.requestSettingsChange(QuickPayChange.Amount(50)).await().getOrThrow()
+            sut.requestSettingsChange(QuickPayChange.DailyLimitMultiplier(10)).await().getOrThrow()
 
+            assertNull(sut.pendingSettingsChange.value)
             assertTrue(settingsData.value.isQuickPayEnabled)
             assertEquals(50, settingsData.value.quickPayAmount)
             assertEquals(10, settingsData.value.quickPayDailyLimitMultiplier)
@@ -225,92 +217,114 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `applyAuthorizedSettingsChange saves only the pending change, once`() = test {
-        stubSettingsUpdate()
-        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
-        val authorization = assertNotNull(
-            sut.requestSettingsChange(QuickPayChange.DailyLimitMultiplier(50)).getOrThrow(),
-        )
+    fun `requestSettingsChange ignores a further raise while a check is open`() = test {
+        val release = holdSettingsUpdates()
+        settingsData.value = pinSettings(isQuickPayEnabled = false, quickPayAmount = 5)
 
-        sut.applyAuthorizedSettingsChange(authorization).getOrThrow()
+        sut.requestSettingsChange(QuickPayChange.Enabled(true))
+        sut.requestSettingsChange(QuickPayChange.Amount(20))
+        release.complete(Unit)
+        runCurrent()
 
-        assertEquals(1, settingsData.value.quickPayAmount)
-        assertEquals(50, settingsData.value.quickPayDailyLimitMultiplier)
-        assertIs<QuickPayChangeNotPendingError>(sut.applyAuthorizedSettingsChange(authorization).exceptionOrNull())
+        val check = assertNotNull(sut.pendingSettingsChange.value)
+        assertEquals(QuickPayChange.Enabled(true), check.change)
+        sut.requestSettingsChange(QuickPayChange.Enabled(true)).await().getOrThrow()
+        assertSame(check, sut.pendingSettingsChange.value)
+
+        sut.applyAuthorizedSettingsChange(check).getOrThrow()
+        assertTrue(settingsData.value.isQuickPayEnabled)
+        assertEquals(5, settingsData.value.quickPayAmount)
     }
 
     @Test
-    fun `applyAuthorizedSettingsChange refuses a check the repo is not waiting on`() = test {
+    fun `requestSettingsChange saves a free change at once and closes the open check`() = test {
         stubSettingsUpdate()
-        val gated = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
-        settingsData.value = gated
-        val forged = QuickPayAuthorization(QuickPayChange.Amount(50), useBiometrics = false)
-        val cancelled = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
-        sut.cancelSettingsChange()
-        val replaced = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
-        val pending = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(20)).getOrThrow())
+        settingsData.value = pinSettings(quickPayAmount = 5)
+        sut.requestSettingsChange(QuickPayChange.Amount(50)).await().getOrThrow()
+        val raise = assertNotNull(sut.pendingSettingsChange.value)
 
-        listOf(forged, cancelled, replaced).forEach {
-            assertIs<QuickPayChangeNotPendingError>(sut.applyAuthorizedSettingsChange(it).exceptionOrNull())
-        }
-        assertEquals(gated, settingsData.value)
+        sut.requestSettingsChange(QuickPayChange.Amount(1)).await().getOrThrow()
 
-        sut.cancelSettingsChange(replaced)
-        sut.applyAuthorizedSettingsChange(pending).getOrThrow()
-        assertEquals(20, settingsData.value.quickPayAmount)
-    }
-
-    @Test
-    fun `requestSettingsChange returns the pending check again for an equal change`() = test {
-        stubSettingsUpdate()
-        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
-
-        val first = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
-        val second = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
-
-        assertSame(first, second)
-        sut.applyAuthorizedSettingsChange(first).getOrThrow()
-        assertEquals(50, settingsData.value.quickPayAmount)
-    }
-
-    @Test
-    fun `requestSettingsChange drops the pending check when a later change saves at once`() = test {
-        stubSettingsUpdate()
-        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 5)
-        val raise = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
-
-        assertNull(sut.requestSettingsChange(QuickPayChange.Amount(1)).getOrThrow())
-
+        assertNull(sut.pendingSettingsChange.value)
         assertIs<QuickPayChangeNotPendingError>(sut.applyAuthorizedSettingsChange(raise).exceptionOrNull())
         assertEquals(1, settingsData.value.quickPayAmount)
     }
 
     @Test
-    fun `requestSettingsChange keeps the pending check when its write fails`() = test {
+    fun `applyAuthorizedSettingsChange saves only the open check, once`() = test {
         stubSettingsUpdate()
-        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
-        val pending = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(20)).getOrThrow())
-        whenever(settingsStore.update(any())).thenAnswer {
-            it.getArgument<(SettingsData) -> SettingsData>(0)(settingsData.value)
-            throw AppError("write failed")
-        }
+        val gated = pinSettings(quickPayAmount = 1)
+        settingsData.value = gated
+        sut.requestSettingsChange(QuickPayChange.Amount(50)).await().getOrThrow()
+        val check = assertNotNull(sut.pendingSettingsChange.value)
+        val forged = QuickPayAuthorization(check.change, check.useBiometrics)
 
-        assertTrue(sut.requestSettingsChange(QuickPayChange.Amount(50)).isFailure)
+        assertIs<QuickPayChangeNotPendingError>(sut.applyAuthorizedSettingsChange(forged).exceptionOrNull())
+        assertEquals(gated, settingsData.value)
 
+        sut.applyAuthorizedSettingsChange(check).getOrThrow()
+        assertEquals(50, settingsData.value.quickPayAmount)
+        assertNull(sut.pendingSettingsChange.value)
+        assertIs<QuickPayChangeNotPendingError>(sut.applyAuthorizedSettingsChange(check).exceptionOrNull())
+    }
+
+    @Test
+    fun `cancelSettingsChange closes the open check and saves nothing`() = test {
         stubSettingsUpdate()
-        sut.applyAuthorizedSettingsChange(pending).getOrThrow()
-        assertEquals(20, settingsData.value.quickPayAmount)
+        val gated = pinSettings(quickPayAmount = 1)
+        settingsData.value = gated
+        sut.requestSettingsChange(QuickPayChange.Amount(50)).await().getOrThrow()
+        val check = assertNotNull(sut.pendingSettingsChange.value)
+
+        sut.cancelSettingsChange()
+
+        assertNull(sut.pendingSettingsChange.value)
+        assertIs<QuickPayChangeNotPendingError>(sut.applyAuthorizedSettingsChange(check).exceptionOrNull())
+        assertEquals(gated, settingsData.value)
+    }
+
+    @Test
+    fun `cancelSettingsChange leaves no check from a change requested before it`() = test {
+        val release = holdSettingsUpdates()
+        val gated = pinSettings(isQuickPayEnabled = false)
+        settingsData.value = gated
+
+        val request = sut.requestSettingsChange(QuickPayChange.Enabled(true))
+        sut.cancelSettingsChange()
+        release.complete(Unit)
+        runCurrent()
+
+        request.await().getOrThrow()
+        assertNull(sut.pendingSettingsChange.value)
+        assertEquals(gated, settingsData.value)
+    }
+
+    @Test
+    fun `requestSettingsChange decides quick changes in call order`() = test {
+        val release = holdSettingsUpdates()
+        settingsData.value = pinSettings(quickPayAmount = 5)
+
+        sut.requestSettingsChange(QuickPayChange.Amount(20))
+        sut.requestSettingsChange(QuickPayChange.Amount(1))
+        release.complete(Unit)
+        runCurrent()
+
+        assertEquals(1, settingsData.value.quickPayAmount)
+        assertNull(sut.pendingSettingsChange.value)
     }
 
     @Test
     fun `settings changes return a failed write instead of throwing`() = test {
         stubSettingsUpdate()
-        settingsData.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, quickPayAmount = 1)
-        val authorization = assertNotNull(sut.requestSettingsChange(QuickPayChange.Amount(50)).getOrThrow())
+        settingsData.value = pinSettings(quickPayAmount = 1)
+        sut.requestSettingsChange(QuickPayChange.Amount(50)).await().getOrThrow()
+        val check = assertNotNull(sut.pendingSettingsChange.value)
         whenever(settingsStore.update(any())).thenAnswer { throw AppError("write failed") }
 
-        assertTrue(sut.requestSettingsChange(QuickPayChange.Amount(1)).isFailure)
-        assertTrue(sut.applyAuthorizedSettingsChange(authorization).isFailure)
+        assertTrue(sut.requestSettingsChange(QuickPayChange.Amount(1)).await().isFailure)
+        assertSame(check, sut.pendingSettingsChange.value)
+        assertTrue(sut.applyAuthorizedSettingsChange(check).isFailure)
+        assertNull(sut.pendingSettingsChange.value)
     }
 
     @Test
@@ -1273,6 +1287,29 @@ class QuickPayRepoTest : BaseUnitTest() {
             Unit
         }
     }
+
+    private fun holdSettingsUpdates(): CompletableDeferred<Unit> {
+        val release = CompletableDeferred<Unit>()
+        whenever { settingsStore.update(any()) }.doSuspendableAnswer {
+            release.await()
+            settingsData.value = it.getArgument<(SettingsData) -> SettingsData>(0)(settingsData.value)
+            Unit
+        }
+        return release
+    }
+
+    private fun pinSettings(
+        isBiometricEnabled: Boolean = false,
+        isQuickPayEnabled: Boolean = true,
+        quickPayAmount: Int = 5,
+    ) = SettingsData(
+        isPinEnabled = true,
+        isPinForPaymentsEnabled = true,
+        isBiometricEnabled = isBiometricEnabled,
+        isQuickPayEnabled = isQuickPayEnabled,
+        quickPayAmount = quickPayAmount,
+        quickPayDailyLimitMultiplier = 5,
+    )
 
     private fun repo(): QuickPayRepo {
         return QuickPayRepo(
