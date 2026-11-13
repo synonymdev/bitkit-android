@@ -10,6 +10,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Test
+import org.lightningdevkit.ldknode.ConfirmationStatus
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
@@ -35,6 +40,70 @@ class ActivityServiceRbfTest : BaseUnitTest() {
     private val cache = mock<CacheStore>()
     private val lightning = mock<LightningService>()
     private val sut by lazy { ActivityService(mock(), cache, lightning, mock(), mock()) }
+    private val genericWrites = mutableListOf<String>()
+
+    @Test
+    fun `recordRbfBoost calls the atomic core API with the requested wallet and rate`() = test {
+        val record = binding.methods.single { it.name.startsWith("recordRbfBoost") }
+        ServiceQueue.CORE.background {
+            mockStatic(binding).use { native ->
+                sut.recordRbfBoost("payment-a", "b", 25uL, "trezor:test")
+                native.verify { record.invoke(null, "trezor:test", "payment-a", "b", 25L) }
+            }
+        }
+    }
+
+    @Test
+    fun `publication keeps the recorded replacement fee rate`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        withActivities { saved, _ ->
+            saved["b"] = saved.getValue("b").copy(feeRate = 25uL)
+            val result = sut.publishRbfBoost("a", "b").v1
+            assertEquals(25uL, result.feeRate)
+            assertEquals(25uL, saved.getValue("b").feeRate)
+            assertEquals(1uL, saved.getValue("a").feeRate)
+            assertEquals(emptyList(), genericWrites)
+        }
+    }
+
+    @Test
+    fun `external replacement keeps the recorded replacement fee rate`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        withActivities { saved, _ ->
+            saved["b"] = saved.getValue("b").copy(feeRate = 25uL)
+            sut.handleOnchainTransactionReplaced("a", listOf("b"))
+            assertEquals(25uL, saved.getValue("b").feeRate)
+            assertTrue(saved.getValue("b").isBoosted)
+            assertFalse(saved.getValue("a").doesExist)
+            assertEquals(emptyList(), genericWrites)
+        }
+    }
+
+    @Test
+    fun `payment sync merges an existing transaction without overwriting its fee rate`() = test {
+        whenever(cache.data).thenReturn(flowOf(AppCacheData()))
+        withActivities { saved, _ ->
+            saved["b"] = saved.getValue("b").copy(feeRate = 25uL)
+            sut.syncLdkNodePaymentsToActivities(listOf(payment("b")))
+            assertTrue(saved.getValue("b").confirmed)
+            assertEquals(25uL, saved.getValue("b").feeRate)
+            assertEquals(422uL, saved.getValue("b").fee)
+            assertEquals(emptyList(), genericWrites)
+        }
+    }
+
+    @Test
+    fun `reorg and eviction keep the recorded fee rate`() = test {
+        withActivities { saved, _ ->
+            saved["b"] = saved.getValue("b").copy(feeRate = 25uL, confirmed = true)
+            sut.handleOnchainTransactionReorged("b")
+            assertFalse(saved.getValue("b").confirmed)
+            sut.handleOnchainTransactionEvicted("b")
+            assertFalse(saved.getValue("b").doesExist)
+            assertEquals(25uL, saved.getValue("b").feeRate)
+            assertEquals(emptyList(), genericWrites)
+        }
+    }
 
     @Test
     fun `publication rereads fresh metadata after suspension and preserves real transaction fees`() = test {
@@ -277,6 +346,25 @@ class ActivityServiceRbfTest : BaseUnitTest() {
         }
     }
 
+    private fun payment(txid: String) = PaymentDetails(
+        id = "payment-$txid",
+        kind = PaymentKind.Onchain(
+            txid = txid,
+            status = ConfirmationStatus.Confirmed(blockHash = "block", height = 100u, timestamp = 200uL),
+        ),
+        amountMsat = 10_000_000uL,
+        feePaidMsat = 422_000uL,
+        direction = PaymentDirection.OUTBOUND,
+        status = PaymentStatus.SUCCEEDED,
+        latestUpdateTimestamp = 200uL,
+    )
+
+    private fun recordGenericWrite(saved: MutableMap<String, OnchainActivity>, activity: Activity) {
+        val onchain = (activity as? Activity.Onchain)?.v1 ?: return
+        genericWrites += onchain.txId
+        saved[onchain.txId] = onchain
+    }
+
     private suspend fun withActivities(
         failFirstTagWrite: Boolean = false,
         failFirstTagRead: Boolean = false,
@@ -295,6 +383,11 @@ class ActivityServiceRbfTest : BaseUnitTest() {
         var failTagRead = failFirstTagRead
         val getByTx = binding.getMethod("getActivityByTxId", String::class.java, String::class.java)
         val update = binding.getMethod("updateActivity", String::class.java, Activity::class.java)
+        val upsert = binding.getMethod("upsertActivity", Activity::class.java)
+        val upsertList = binding.getMethod("upsertActivities", List::class.java)
+        val insert = binding.getMethod("insertActivity", Activity::class.java)
+        val preserve = binding.getMethod("upsertOnchainActivityPreservingFeeRate", OnchainActivity::class.java)
+        val getById = binding.getMethod("getActivityById", String::class.java, String::class.java)
         val getTags = binding.getMethod("getTags", String::class.java, String::class.java)
         val addTags = binding.getMethod("addTags", String::class.java, String::class.java, List::class.java)
         mockStatic(binding).use { native ->
@@ -302,9 +395,26 @@ class ActivityServiceRbfTest : BaseUnitTest() {
                 saved[it.getArgument<String>(1)].takeIf { activity -> activity?.walletId == it.getArgument<String>(0) }
             }
             native.`when`<Any?> { update.invoke(null, anyString(), any<Activity>()) }.thenAnswer {
-                val activity = it.getArgument<Activity.Onchain>(1).v1
-                saved[activity.txId] = activity
+                recordGenericWrite(saved, it.getArgument(1))
+            }
+            native.`when`<Any?> { upsert.invoke(null, any<Activity>()) }.thenAnswer {
+                recordGenericWrite(saved, it.getArgument(0))
+            }
+            native.`when`<Any?> { insert.invoke(null, any<Activity>()) }.thenAnswer {
+                recordGenericWrite(saved, it.getArgument(0))
+            }
+            native.`when`<Any?> { upsertList.invoke(null, any<List<Activity>>()) }.thenAnswer {
+                it.getArgument<List<Activity>>(0).forEach { activity -> recordGenericWrite(saved, activity) }
+            }
+            native.`when`<Any?> { preserve.invoke(null, any<OnchainActivity>()) }.thenAnswer {
+                val activity = it.getArgument<OnchainActivity>(0)
+                val storedRate = saved[activity.txId]?.feeRate ?: 0uL
+                saved[activity.txId] = if (storedRate > 0uL) activity.copy(feeRate = storedRate) else activity
                 Unit
+            }
+            native.`when`<Any?> { getById.invoke(null, anyString(), anyString()) }.thenAnswer { call ->
+                saved.values.firstOrNull { it.walletId == call.getArgument(0) && it.id == call.getArgument(1) }
+                    ?.let { Activity.Onchain(it) }
             }
             native.`when`<Any?> { getTags.invoke(null, anyString(), anyString()) }.thenAnswer {
                 if (failTagRead) {

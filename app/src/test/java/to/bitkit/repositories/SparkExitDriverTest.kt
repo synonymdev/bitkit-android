@@ -333,6 +333,76 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a step one failed read turns unverified waits for the next check instead of rebuilding`() = test {
+        val ready = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", cpfp = "03c2", dependsOn = listOf("n1")),
+            ),
+        )
+        val unverified = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx(
+                    "n2",
+                    cpfp = "03c2",
+                    dependsOn = listOf("n1"),
+                    status = ExitTransactionStatus.Unverified,
+                ),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unverified, RecoveryVerdict.Valid) }
+        sdk.builds += SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2b", cpfp = "03c3", dependsOn = listOf("n1")),
+            ),
+        )
+
+        var record = driver(tip = 1_000u).tick(running(ready))
+
+        assertTrue(sdk.recoverRequests.isEmpty(), "rebuilt over a step one failed read turned unverified")
+        assertNull(record.unverifiedRebuiltAtHeight)
+        assertFalse(record.isUnverifiedAsk)
+        assertEquals(1, record.generation)
+        assertTrue(chain.broadcasts.none { it.txid == "n2" })
+
+        // Still unread at the next check: now it rebuilds.
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, sdk.recoverRequests.size)
+        assertEquals(1_000u, record.unverifiedRebuiltAtHeight)
+        assertEquals(2, record.generation)
+    }
+
+    @Test
+    fun `a step one failed read turns unverified holds the rebuild over another leaf's unread step`() = test {
+        val stored = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+                SparkExitFixtures.tx("m1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("m2", dependsOn = listOf("m1")),
+            ),
+        )
+        val checked = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+                SparkExitFixtures.tx("m1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("m2", dependsOn = listOf("m1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        sdk.checks += check(checked, RecoveryVerdict.Valid)
+
+        val record = driver(tip = 1_000u).tick(running(stored))
+
+        assertTrue(sdk.recoverRequests.isEmpty(), "rebuilt over m2, which one failed read turned unverified")
+        assertNull(record.unverifiedRebuiltAtHeight)
+        assertEquals(1, record.generation)
+    }
+
+    @Test
     fun `an unverified rebuild that adopts nothing keeps checking and sending the valid generation`() = test {
         val unverified = SparkExitFixtures.recovery(
             listOf(
@@ -491,6 +561,91 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertTrue(saved.none { it.generation != 1 }, "a killed run would resume the recovery without leaf-1")
         assertEquals(Phase.Running, record.phase)
         assertEquals(unverified.transactions.map { it.txid }, record.recovery?.transactions?.map { it.txid })
+    }
+
+    @Test
+    fun `a funded unverified ask whose step reads again ends without a rebuild`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val ready = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.checks += check(ready, RecoveryVerdict.Valid)
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+
+        var record = driver(tip = 1_000u).tick(running(unread))
+        record = driver(tip = 1_000u).tick(record)
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertTrue(record.isUnverifiedAsk)
+        val builds = sdk.recoverRequests.size
+
+        // A savings payment keeps the ask open; it confirms on the tick whose check reads n2 again.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("paid", value = 100_000uL))
+        record = driver(tip = 1_001u).tick(record.copy(fundingPaymentTxid = "paid"))
+
+        assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2, which the clean check made ready and sent")
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertEquals(Phase.Running, record.phase)
+        assertFalse(record.isUnverifiedAsk)
+        assertEquals(1, record.generation)
+    }
+
+    @Test
+    fun `a funded unverified ask holds its rebuild over a step sent on an earlier clean check`() = test {
+        val unread = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1"), status = ExitTransactionStatus.Unverified),
+            ),
+        )
+        val ready = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("n1", status = ExitTransactionStatus.Confirmed(900u)),
+                SparkExitFixtures.tx("n2", dependsOn = listOf("n1")),
+            ),
+        )
+        repeat(2) { sdk.checks += check(unread, RecoveryVerdict.Valid) }
+        sdk.checks += check(ready, RecoveryVerdict.Valid)
+        sdk.checks += check(unread, RecoveryVerdict.Valid)
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        sdk.preparedResponses += SparkExitFixtures.prepared()
+
+        var record = driver(tip = 1_000u).tick(running(unread))
+        record = driver(tip = 1_000u).tick(record)
+        val builds = sdk.recoverRequests.size
+
+        // The payment is unconfirmed while a clean check sends n2, so the ask stays open.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("paid", value = 100_000uL, confirmed = false))
+        record = driver(tip = 1_000u).tick(record.copy(fundingPaymentTxid = "paid"))
+        assertEquals(listOf("n2"), chain.broadcasts.map { it.txid })
+        assertTrue(record.isUnverifiedAsk)
+
+        // It confirms on the tick whose check fails to read n2.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo("paid", value = 100_000uL))
+        record = driver(tip = 1_001u).tick(record)
+
+        assertTrue(record.funding.any { it.txid == "paid" }, "the payment was not adopted, so the hold never ran")
+        assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2, sent on the previous tick")
+        assertTrue(record.isUnverifiedAsk)
+        assertEquals(1, record.generation)
+
+        // A next tick whose check fails reads nothing, so it does not rebuild either.
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(builds, sdk.recoverRequests.size, "rebuilt over n2 with no second check")
+        assertTrue(record.isUnverifiedAsk)
     }
 
     @Test
@@ -1606,6 +1761,304 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertEquals(Race.rebuiltSecond, chain.broadcasts.last().cpfpTxHex)
     }
 
+    private val redoLeaves = listOf(
+        RecoverFundsLeaf("leaf-1", 100_000uL, RecoveryMethod.UNILATERAL),
+        RecoverFundsLeaf("leaf-2", 100_000uL, RecoveryMethod.UNILATERAL),
+    )
+
+    /** A generation recovering leaf-1 and leaf-2 whose check returned Redo, its rebuild due. */
+    private fun divergedOverTwoLeaves(): SparkExitRecord {
+        val old = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))).copy(leaves = redoLeaves)
+        sdk.checks += check(old, redo)
+        return running(old, builtAt = now - interval).copy(leafIds = listOf("leaf-1", "leaf-2"))
+    }
+
+    private val leaf2Unread = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1")).copy(
+        skipped = listOf(SkippedLeaf("leaf-2", 100_000uL, SkippedLeafReason.Unverified)),
+    )
+
+    @Test
+    fun `a redo rebuild beside a waiting leaf holds until the leaf reads`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, record.generation, "a rebuild left out leaf-2's steps the diverged generation recovers")
+        assertTrue(record.isRebuilding)
+        assertEquals(1_000u, record.redoHeldSince)
+        assertEquals(1, sdk.recoverRequests.size)
+        assertTrue(chain.broadcasts.isEmpty(), "the diverged generation was sent again")
+
+        // leaf-2 reads on the next build: both leaves are rebuilt together.
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = listOf("leaf-1", "leaf-2"))
+            .copy(skipped = emptyList())
+        sdk.builds += SparkExitFixtures.recovery(
+            listOf(SparkExitFixtures.tx("a1"), SparkExitFixtures.tx("b1")),
+        ).copy(leaves = redoLeaves)
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(2, record.generation)
+        assertFalse(record.isRebuilding)
+        assertEquals(listOf("leaf-1", "leaf-2"), record.recovery?.leaves?.map { it.leafId })
+        assertNull(record.redoHeldSince)
+        assertTrue(record.waitingLeafIds.isEmpty())
+        assertEquals(listOf("a1", "b1"), chain.broadcasts.map { it.txid })
+    }
+
+    @Test
+    fun `a redo rebuild beside a leaf that stays unread adopts after the hold`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(SparkExitDriver.REDO_HOLD_BLOCKS.toInt() + 1) {
+            sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        }
+
+        record = driver(tip = 1_000u).tick(record)
+        for (height in 1_001u until 1_000u + SparkExitDriver.REDO_HOLD_BLOCKS) {
+            now += interval
+            record = driver(tip = height).tick(record)
+            assertEquals(1, record.generation, "adopted at '$height' before the hold ended")
+            assertEquals(1_000u, record.redoHeldSince, "the hold restarted at '$height'")
+        }
+        assertTrue(chain.broadcasts.isEmpty())
+
+        now += interval
+        record = driver(tip = 1_000u + SparkExitDriver.REDO_HOLD_BLOCKS).tick(record)
+
+        assertEquals(2, record.generation, "the rebuild waited past the hold")
+        assertEquals(listOf("leaf-2"), record.waitingLeafIds)
+        assertNull(record.redoHeldSince)
+        assertEquals(listOf("a1"), chain.broadcasts.map { it.txid })
+    }
+
+    @Test
+    fun `a redo hold goes on uncounted while the tip cannot be read`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(4) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1"))) }
+
+        record = driver(tip = null).tick(record)
+        assertEquals(1, record.generation, "adopted on a tick whose tip could not be read")
+        assertNull(record.redoHeldSince)
+
+        now += interval
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1, record.generation)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        now += interval
+        record = driver(tip = null).tick(record)
+        assertEquals(1, record.generation, "adopted on a tick whose tip could not be read")
+        assertEquals(1_000u, record.redoHeldSince)
+        assertTrue(chain.broadcasts.isEmpty())
+    }
+
+    @Test
+    fun `a redo rebuild of only failed cooperative leaves beside a waiting leaf holds too`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        val failed = CooperativeRecoveryFailure(
+            "leaf-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed))
+
+        record = driver(tip = 1_000u).tick(record)
+
+        assertEquals(1, record.generation, "a failed-only rebuild left out leaf-2's steps")
+        assertTrue(record.isRebuilding)
+        assertEquals(1_000u, record.redoHeldSince)
+    }
+
+    @Test
+    fun `a redo hold after a funded top-up runs at the rebuild pace`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(3) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1"))) }
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        record = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(
+            SparkExitFixtures.utxo("f0", 1u, 20_000uL),
+            SparkExitFixtures.utxo("topup", value = 3_000uL),
+        )
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+
+        assertEquals(listOf("f0", "topup"), record.funding.map { it.txid })
+        assertEquals(1, record.generation, "a rebuild left out leaf-2's steps the diverged generation recovers")
+        assertEquals(Phase.Running, record.phase, "a funded hold still asks for fees")
+        assertEquals(1_000u, record.redoHeldSince)
+        val requests = sdk.recoverRequests.size
+
+        record = driver(tip = 1_001u).tick(record)
+        assertEquals(requests, sdk.recoverRequests.size, "built again before the rebuild interval")
+    }
+
+    @Test
+    fun `a redo hold built from the held funding drops the fee ask the top-up was for`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        repeat(2) { sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1"))) }
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        val asked = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        // The rebuild needs fee funding, which the held input pays.
+        sdk.preparedResponse = leaf2Unread.copy(funding = SparkExitFixtures.prepared().funding)
+        val requests = sdk.recoverRequests.size
+        now += interval
+        record = driver(tip = 1_001u).tick(asked)
+
+        assertEquals(requests + 1, sdk.recoverRequests.size, "the held funding did not build the rebuild")
+        assertEquals(
+            listOf<CpfpInput>(CpfpInput.P2wpkh("f0", 1u, 20_000uL, "02ab")),
+            sdk.recoverRequests.last().fundingInputs,
+        )
+        assertEquals(1, record.generation, "a rebuild left out leaf-2's steps the diverged generation recovers")
+        assertEquals(Phase.Running, record.phase, "a hold the held funding paid for still asks for fees")
+        assertNull(record.fundingShortfallSats)
+        assertEquals(1_000u, record.redoHeldSince)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
+
+        // A later build of the hold that comes up short asks again.
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        now += interval
+        record = driver(tip = 1_002u).tick(record)
+
+        assertIs<Phase.NeedsFunding>(record.phase)
+        assertEquals(1, record.generation)
+    }
+
+    /** A generation asking for fee funding while it keeps going, holding 20,000 sats, whose next check returns Redo. */
+    private fun askingWhenRedoCame(builtAt: Long): SparkExitRecord {
+        val old = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old")))
+        sdk.checks += check(old, redo)
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        val asked = running(old, builtAt).copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        assertTrue(asked.isDrivingWhileFunding)
+        return asked
+    }
+
+    @Test
+    fun `a redo on a fee ask built from the held funding that tick withdraws the ask`() = test {
+        val asked = askingWhenRedoCame(builtAt = now - interval)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+
+        val record = driver(tip = 1_000u).tick(asked)
+
+        assertEquals(2, record.generation, "the held funding did not build the Redo rebuild")
+        assertEquals(Phase.Running, record.phase)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
+    }
+
+    @Test
+    fun `a redo on a fee ask built from the held funding a later tick withdraws the ask`() = test {
+        val asked = askingWhenRedoCame(builtAt = now)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+
+        val redone = driver(tip = 1_000u).tick(asked)
+        assertIs<Phase.NeedsFunding>(redone.phase, "built before the rebuild interval")
+        assertFalse(SparkExitAlerts.isFundingAskWithdrawn(redone, asked))
+
+        now += interval
+        val record = driver(tip = 1_001u).tick(redone)
+
+        assertEquals(2, record.generation)
+        assertEquals(Phase.Running, record.phase)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, redone), "the fee ask's notification stayed")
+        sdk.checks += check(requireNotNull(record.recovery), RecoveryVerdict.Valid)
+        assertFalse(driver(tip = 1_001u).tick(record).isRedoAsk, "the ended ask stayed marked")
+    }
+
+    @Test
+    fun `a redo hold's own short build asks, and a later build on the held funding withdraws the ask`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        record = record.copy(funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        sdk.recoverErrors += SdkException.InsufficientCpfpFunds(30_000uL, "")
+        now += interval
+        val asked = driver(tip = 1_001u).tick(record)
+        assertIs<Phase.NeedsFunding>(asked.phase, "the hold's short build did not ask")
+
+        // The next build needs less, which the held funding pays.
+        sdk.preparedResponse = leaf2Unread.copy(funding = SparkExitFixtures.prepared().funding)
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        now += interval
+        record = driver(tip = 1_002u).tick(asked)
+
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(1, record.generation)
+        assertEquals(asked.funding, record.funding)
+        assertTrue(SparkExitAlerts.isFundingAskWithdrawn(record, asked), "the fee ask's notification stayed")
+    }
+
+    @Test
+    fun `a redo hold of only failed cooperative leaves drops the fee ask the held funding pays`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        record = driver(tip = 1_000u).tick(record)
+        assertEquals(1_000u, record.redoHeldSince)
+
+        val held = SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+        val asked = record.copy(phase = Phase.NeedsFunding(23_000uL), funding = listOf(held))
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 20_000uL))
+        val failed = CooperativeRecoveryFailure(
+            "leaf-1",
+            "o",
+            0u,
+            CooperativeRecoveryError.OperatorsUnavailable("down"),
+        )
+        sdk.builds += SparkExitFixtures.recovery(emptyList(), failed = listOf(failed))
+        now += interval
+        record = driver(tip = 1_001u).tick(asked)
+
+        assertEquals(1, record.generation, "a failed-only rebuild left out leaf-2's steps")
+        assertEquals(Phase.Running, record.phase, "a failed-only hold the held funding paid for still asks for fees")
+        assertEquals(1_000u, record.redoHeldSince)
+    }
+
+    @Test
+    fun `an empty prepare during a redo hold leaves the retry clock alone`() = test {
+        var record = divergedOverTwoLeaves()
+        sdk.preparedResponse = leaf2Unread
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("a1")))
+        record = driver(tip = 1_000u).tick(record)
+
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null, leaves = emptyList())
+            .copy(skipped = leaf2Unread.skipped)
+        now += interval
+        record = driver(tip = 1_001u).tick(record)
+
+        assertNull(record.retrySince, "the hold started the waiting leaf's retry clock")
+        assertEquals(1_000u, record.redoHeldSince)
+        assertEquals(1, record.generation)
+        assertTrue(record.isRebuilding)
+
+        now += interval
+        val end = 1_000u + SparkExitDriver.REDO_HOLD_BLOCKS
+        record = driver(tip = end).tick(record)
+        assertEquals(end, record.retrySince, "the waiting leaf's retry clock starts once the hold ends")
+    }
+
     @Test
     fun `a rebuild from the chain keeps its note until one of its steps confirms`() = test {
         val built = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
@@ -2287,6 +2740,52 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertEquals(3, record.generation)
         assertEquals(mapOf("refund" to 2), record.spentStepStrikes)
+        assertTrue(record.lostLeaves.isEmpty())
+        assertEquals(Phase.Running, record.phase)
+    }
+
+    @Test
+    fun `a redo after a refund sent spent strikes it once and not again once its rebuild is accepted`() = test {
+        // A lost CPFP race comes back as Redo: the refund was refused as spent because its child's funding was.
+        val recovery = lostLeafRecovery()
+        var record = running(recovery, builtAt = 0L).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL),
+            ),
+            broadcastLog = listOf(
+                SparkExitRecord.BroadcastAttempt(1, "refund", 1, 0, now, "inputs missing", false, isInputSpent = true),
+            ),
+        )
+        sdk.preparedResponse = SparkExitFixtures.prepared()
+        // The rebuild reproduces the refund with a new child on the funding that is left.
+        val rebuilt = SparkExitFixtures.recovery(
+            recovery.transactions.map { if (it.txid == "refund") it.copy(cpfpTxHex = "03c2") else it },
+        )
+        sdk.checks += check(recovery, redo)
+        sdk.builds += rebuilt
+
+        record = driver().tick(record)
+
+        assertEquals(2, record.generation)
+        assertEquals(mapOf("refund" to 1), record.spentStepStrikes)
+        assertTrue(record.lostLeaves.isEmpty())
+        assertEquals(
+            listOf<CpfpInput>(CpfpInput.P2wpkh("f0", 1u, 20_000uL, "02ab")),
+            sdk.recoverRequests.single().fundingInputs,
+        )
+        assertEquals(listOf("03c2"), chain.broadcasts.map { it.cpfpTxHex })
+        val sent = record.broadcastLog.single { it.txid == "refund" }
+        assertTrue(sent.isAccepted)
+        assertFalse(sent.isInputSpent)
+
+        // Diverged again: the refund was accepted this generation, so its strike drops out instead of reaching two.
+        sdk.checks += check(rebuilt, redo)
+        sdk.builds += rebuilt
+        now += interval
+        record = driver().tick(record)
+
+        assertEquals(3, record.generation)
+        assertTrue(record.spentStepStrikes.isEmpty(), "the refund was struck a second time in a row")
         assertTrue(record.lostLeaves.isEmpty())
         assertEquals(Phase.Running, record.phase)
     }

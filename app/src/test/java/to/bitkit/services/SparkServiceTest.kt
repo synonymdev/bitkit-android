@@ -18,6 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SparkServiceTest {
     @get:Rule
@@ -54,6 +55,13 @@ class SparkServiceTest {
 
         assertNull(options.completionTimeoutSecs)
         assertEquals(true, options.preferSpark)
+    }
+
+    @Test
+    fun `only spark's own route hint marks an invoice as carrying a spark address`() {
+        assertTrue(SparkService.hasSparkAddressHint(listOf(1uL, 17_592_187_092_992_000_001uL)))
+        assertFalse(SparkService.hasSparkAddressHint(listOf(1uL, 17_592_187_092_992_000_000uL)))
+        assertFalse(SparkService.hasSparkAddressHint(emptyList()))
     }
 
     @Test
