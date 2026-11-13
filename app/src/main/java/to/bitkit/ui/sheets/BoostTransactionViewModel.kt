@@ -108,12 +108,14 @@ class BoostTransactionViewModel @Inject constructor(
             rbfBoostRepo.isCurrentWallet(event.walletGeneration)
 
     private fun restoreQuote(attempt: RbfBoostRepo.Attempt) {
+        val estimateTime = estimateTimeForFeeRate(attempt.quote.feeRate)
         _uiState.update {
             it.copy(
                 feeRate = attempt.quote.feeRate,
                 totalFeeSats = attempt.quote.totalFeeSats,
                 loading = false,
                 feeLocked = true,
+                estimateTime = estimateTime,
             )
         }
     }
@@ -239,11 +241,7 @@ class BoostTransactionViewModel @Inject constructor(
         val currentFee = activity?.v1?.fee ?: 0u
         val isIncreaseEnabled = totalFee < maxTotalFee && feeRate < MAX_FEE_RATE
         val isDecreaseEnabled = totalFee > currentFee && feeRate > minFeeRate
-        val feeRates = blocktankRepo.blocktankState.value.info?.onchain?.feeRates
-        val estimateTime = feeRates
-            ?.let { FeeRate.fromSatsPerVByte(feeRate, it) }
-            ?.let { context.getString(it.duration) }
-            ?: context.getString(FeeRate.NORMAL.duration)
+        val estimateTime = estimateTimeForFeeRate(feeRate)
 
         _uiState.update {
             it.copy(
@@ -255,6 +253,12 @@ class BoostTransactionViewModel @Inject constructor(
                 estimateTime = estimateTime,
             )
         }
+    }
+
+    private fun estimateTimeForFeeRate(feeRate: ULong): String {
+        val feeRates = blocktankRepo.blocktankState.value.info?.onchain?.feeRates
+        val tier = feeRates?.let { FeeRate.fromSatsPerVByte(feeRate, it) } ?: FeeRate.NORMAL
+        return context.getString(tier.duration)
     }
 
     fun onClickEdit() {

@@ -396,6 +396,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
             reopened.onClickUseSuggestedFee()
             assertEquals(approvedRate, reopened.uiState.value.feeRate)
             assertEquals(approvedFee, reopened.uiState.value.totalFeeSats)
+            assertEquals(normalFeeTime, reopened.uiState.value.estimateTime)
             assertTrue(reopened.uiState.value.feeLocked)
             reopened.onConfirmBoost()
             reopened.clearActivity()
