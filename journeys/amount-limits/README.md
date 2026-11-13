@@ -60,16 +60,25 @@ Opening an amountless invoice must refresh that channel snapshot before deriving
 
 Use the [pinned Send2 fixture and local setup](https://github.com/synonymdev/bitkit-e2e-tests/tree/e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3)
 at `e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3`. Its `docker/docker-compose.yml` pins Bitcoin 26.0,
-electrs 0.10.2 and LND 0.18.0-beta. Start the checkout's local stack, boot a fresh Android emulator
-wallet and build the Android checkout with `E2E=true E2E_BACKEND=local ./gradlew assembleDevDebug`.
+electrs 0.10.2 and LND 0.18.0-beta. Follow the
+[fixture startup steps](https://github.com/synonymdev/bitkit-android/actions/runs/42573552198/job/129017856857)
+to make the LND bind mount writable, wait for Bitcoin and Electrum, and make the generated LND TLS
+certificate and admin macaroon readable by the host test process. Boot an Android emulator with a
+fresh dev wallet and build the Android checkout with `E2E=true E2E_BACKEND=local ./gradlew assembleDevDebug`.
 Copy its universal APK to the E2E checkout's `aut/bitkit_e2e.apk`, install the locked dependencies
 with Node 22, and run `BACKEND=local ./ci_run_android.sh --mochaOpts.grep '@send_2 '`.
 
 [Send2](https://github.com/synonymdev/bitkit-e2e-tests/blob/e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3/test/specs/send.e2e.ts)
 funds Savings, opens a private channel from LND, pays Bitkit 10 000 sats, and creates an amountless
-invoice on LND. For the XML journey, use that setup with zero Spending before the receipt, then
-follow the XML's send and dismissal steps. Keep the app and channel running between receipt and
-send. The first over-limit key must show the warning and leave the accepted prefix intact.
+invoice on LND. To drive the XML journey separately, fund and mine to the app's Savings address
+with the pinned fixture's `docker/bitcoin-cli`. Connect to the local LND peer and use its
+`lncli --network=regtest openchannel --node_key=<bitkit-node-id> --local_amt=100000 --private`.
+Mine six blocks and wait for the channel to be active with zero Spending. Create the outgoing
+amountless invoice with `lncli --network=regtest addinvoice`. For the receipt step, use
+`lncli --network=regtest payinvoice --amt=10000 <bitkit-lightning-invoice>`, using the fixture's
+LND container for these commands. Then follow the XML's send and dismissal steps. Keep the app
+and channel running between receipt and send. The first over-limit key must show the warning and
+leave the accepted prefix intact.
 
 The [pinned Android Send2 run](https://github.com/synonymdev/bitkit-android/actions/runs/42573552198)
 and [Android device journey review](https://github.com/synonymdev/bitkit-android/pull/1808#pullrequestreview-5824877373)
