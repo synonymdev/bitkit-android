@@ -201,11 +201,22 @@ class BackupRepo @Inject constructor(
 
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
     private val failedBackupRequired = ConcurrentHashMap<BackupCategory, Long>()
+    private val pendingRequiredMarks = mutableMapOf<RequiredBackupKey, Long>()
+    private var requiredMarkVersion = 0L
     private val temporaryFailureRetries = ConcurrentHashMap<BackupCategory, Int>()
     private val temporaryFailureSince = ConcurrentHashMap<BackupCategory, Long>()
     private var lastNotificationTime = 0L
 
     private class BackupOwner(val generation: Long, val native: VssClientCoordinator.Owner)
+
+    private data class RequiredBackupKey(
+        val generation: Long,
+        val nativeGeneration: Long,
+        val category: BackupCategory,
+    ) {
+        fun belongsTo(owner: BackupOwner) =
+            generation == owner.generation && nativeGeneration == owner.native.generation
+    }
 
     private class PendingBackup(val owner: BackupOwner, val job: Job) {
         var admitted = false
@@ -263,7 +274,15 @@ class BackupRepo @Inject constructor(
                 try {
                     pending?.cancel()
                     pending?.join()
-                    synchronized(lifecycleLock) { generation += 1 }
+                    synchronized(lifecycleLock) {
+                        if (pendingRequiredMarks.keys.any {
+                                it.generation == generation && it.nativeGeneration == nativeGeneration
+                            }
+                        ) {
+                            throw BackupStatusWritePending()
+                        }
+                        generation += 1
+                    }
                     synchronized(lifecycleLock) {
                         backupJobs.clear()
                         explicitBackups.clear()
@@ -356,6 +375,8 @@ class BackupRepo @Inject constructor(
                                         // Record consumed changes during ordinary stop cleanup, before uploads resume.
                                         startDataStoreListeners(owner)
                                         previous.joinAll()
+                                        currentCoroutineContext().ensureActive()
+                                        flushRequiredMarks(original)
                                         currentCoroutineContext().ensureActive()
                                         owner.ready.complete(Unit)
                                         startObservation(owner)
@@ -597,6 +618,7 @@ class BackupRepo @Inject constructor(
                 }
                 runSuspendCatching { updateBackupRequired(BackupCategory.SPARK_EXIT, owner.generation) }
                     .onSuccess {
+                        if (!it) return@onSuccess
                         hasBackedUpSparkConnection = ready
                         markedSparkExitGeneration = maxOf(markedSparkExitGeneration, generation)
                     }
@@ -633,13 +655,43 @@ class BackupRepo @Inject constructor(
         owner.scope.launch {
             while (currentCoroutineContext().isActive) {
                 delay(BACKUP_CHECK_INTERVAL)
+                flushRequiredMarks(owner.generation)
                 checkForFailedBackups(owner)
             }
         }
     }
 
-    private suspend fun markBackupRequired(owner: Observation, category: BackupCategory) =
-        markBackupRequired(category, owner.generation)
+    private suspend fun markBackupRequired(owner: Observation, category: BackupCategory) {
+        val original = owner.generation
+        val key = RequiredBackupKey(original.generation, original.native.generation, category)
+        val version = synchronized(lifecycleLock) {
+            if (!ownsState(original)) return
+            requiredMarkVersion += 1
+            requiredMarkVersion.also { pendingRequiredMarks[key] = it }
+        }
+        writeRequiredMark(key, version, original)
+    }
+
+    private suspend fun flushRequiredMarks(owner: BackupOwner) {
+        val pending = synchronized(lifecycleLock) {
+            pendingRequiredMarks.filterKeys { it.belongsTo(owner) }
+        }
+        pending.forEach { (key, version) ->
+            currentCoroutineContext().ensureActive()
+            writeRequiredMark(key, version, owner)
+        }
+    }
+
+    private suspend fun writeRequiredMark(key: RequiredBackupKey, version: Long, owner: BackupOwner) =
+        withContext(NonCancellable) {
+            runSuspendCatching {
+                if (updateBackupRequired(key.category, owner)) {
+                    synchronized(lifecycleLock) {
+                        if (pendingRequiredMarks[key] == version) pendingRequiredMarks.remove(key)
+                    }
+                }
+            }.onFailure { Logger.error("Failed to retain backup required for '${key.category}'", it, context = TAG) }
+        }
 
     private suspend fun markBackupRequired(category: BackupCategory, expectedGeneration: BackupOwner) =
         withContext(NonCancellable) {
@@ -647,27 +699,31 @@ class BackupRepo @Inject constructor(
             updateBackupRequired(category, expectedGeneration)
         }
 
-    private suspend fun updateBackupRequired(category: BackupCategory, expectedGeneration: BackupOwner) {
-        updateBackupStatus(category, expectedGeneration) {
+    private suspend fun updateBackupRequired(category: BackupCategory, expectedGeneration: BackupOwner): Boolean {
+        val updated = updateBackupStatus(category, expectedGeneration) {
             failedBackupRequired -= category
             it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
         }
-        Logger.verbose("Marked backup required for: '$category'", context = TAG)
+        if (updated) Logger.verbose("Marked backup required for: '$category'", context = TAG)
+        return updated
     }
 
     private suspend fun updateBackupStatus(
         category: BackupCategory,
         expectedGeneration: BackupOwner,
         transform: (BackupItemStatus) -> BackupItemStatus,
-    ) {
+    ): Boolean {
+        var updated = false
         cacheStore.update { data ->
             synchronized(lifecycleLock) {
                 // Reset drains admitted writers before advancing the generation or clearing clients.
-                if (!ownsState(expectedGeneration)) return@update data
+                updated = ownsState(expectedGeneration)
+                if (!updated) return@update data
                 val status = data.backupStatuses[category] ?: BackupItemStatus()
                 data.copy(backupStatuses = data.backupStatuses + (category to transform(status)))
             }
         }
+        return updated
     }
 
     private fun scheduleBackup(
@@ -1931,6 +1987,8 @@ class BackupRepo @Inject constructor(
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
 
 internal class SparkExitBackupDeferred : AppError("Spark has not connected and synced yet")
+
+internal class BackupStatusWritePending : AppError("Backup changes could not be recorded")
 
 private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
     "Failed to retain public address exclusion during restore",

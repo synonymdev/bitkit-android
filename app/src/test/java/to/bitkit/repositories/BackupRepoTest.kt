@@ -138,6 +138,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
@@ -345,6 +346,168 @@ class BackupRepoTest : BaseUnitTest() {
             runCurrent()
             verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
         } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `failed required mark retries without another change and keeps observing`() = test {
+        assertFailedRequiredMarkRecovers(restart = false)
+    }
+
+    @Test
+    fun `failed required mark survives observation restart without another change`() = test {
+        assertFailedRequiredMarkRecovers(restart = true)
+    }
+
+    private suspend fun TestScope.assertFailedRequiredMarkRecovers(restart: Boolean) {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        sut.startObservingBackups()
+        runCurrent()
+        var failedWrites = 0
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            val current = AppCacheData(backupStatuses = statuses.value)
+            val updated = transform(current)
+            if (failedWrites == 0 && updated.backupStatuses.getValue(category).required >
+                current.backupStatuses.getValue(category).required
+            ) {
+                failedWrites++
+                throw IOException("required mark could not be stored")
+            }
+            statuses.update { updated.backupStatuses }
+        }
+        try {
+            settingsData.update { it.copy(selectedCurrency = "EUR") }
+            runCurrent()
+            assertEquals(1, failedWrites)
+            assertFalse(statuses.value.getValue(category).isRequired)
+            if (restart) {
+                sut.stopObservingBackups()
+                runCurrent()
+                sut.startObservingBackups()
+            }
+            advanceTimeBy(65_000)
+            runCurrent()
+            val payload = argumentCaptor<ByteArray>()
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), payload.capture())
+            assertTrue(payload.lastValue.decodeToString().contains("EUR"))
+            assertFalse(statuses.value.getValue(category).isRequired)
+
+            settingsData.update { it.copy(selectedCurrency = "GBP") }
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), payload.capture())
+            assertTrue(payload.lastValue.decodeToString().contains("GBP"))
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `failed required mark refuses reset until storage recovers`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        sut.startObservingBackups()
+        runCurrent()
+        val original = vssClients.owners.value
+        var failRequiredWrite = true
+        var failedWrites = 0
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            val current = AppCacheData(backupStatuses = statuses.value)
+            val updated = transform(current)
+            if (failRequiredWrite && updated.backupStatuses.getValue(category).required >
+                current.backupStatuses.getValue(category).required
+            ) {
+                failedWrites++
+                throw IOException("required mark could not be stored")
+            }
+            statuses.update { updated.backupStatuses }
+        }
+        try {
+            settingsData.update { it.copy(selectedCurrency = "EUR") }
+            advanceTimeBy(65_000)
+            runCurrent()
+            assertEquals(2, failedWrites)
+            assertFailsWith<BackupStatusWritePending> { sut.reset() }
+            assertSame(original, vssClients.owners.value)
+            verify(vssBackupClient, never()).putObject(eq(category.name), any())
+
+            failRequiredWrite = false
+            sut.startObservingBackups()
+            advanceTimeBy(5_000)
+            runCurrent()
+            val payload = argumentCaptor<ByteArray>()
+            verify(vssBackupClient).putObject(eq(category.name), payload.capture())
+            assertTrue(payload.lastValue.decodeToString().contains("EUR"))
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            failRequiredWrite = false
+            sut.startObservingBackups()
+            advanceTimeBy(65_000)
+            runCurrent()
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `older required mark completion retains a newer failed write`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        sut.startObservingBackups()
+        runCurrent()
+        val oldWriteCommitted = CompletableDeferred<Unit>()
+        val releaseOldWrite = CompletableDeferred<Unit>()
+        var requiredWrites = 0
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            val current = AppCacheData(backupStatuses = statuses.value)
+            val updated = transform(current)
+            val isRequiredWrite = updated.backupStatuses.getValue(category).required >
+                current.backupStatuses.getValue(category).required
+            if (isRequiredWrite) requiredWrites++
+            if (isRequiredWrite && requiredWrites == 2) {
+                throw IOException("newer required mark could not be stored")
+            }
+            statuses.update { updated.backupStatuses }
+            if (isRequiredWrite && requiredWrites == 1) {
+                oldWriteCommitted.complete(Unit)
+                releaseOldWrite.await()
+            }
+        }
+        try {
+            settingsData.update { it.copy(selectedCurrency = "EUR") }
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertTrue(oldWriteCommitted.isCompleted)
+            val payload = argumentCaptor<ByteArray>()
+            verify(vssBackupClient).putObject(eq(category.name), payload.capture())
+            assertFalse(statuses.value.getValue(category).isRequired)
+
+            sut.stopObservingBackups()
+            sut.startObservingBackups()
+            runCurrent()
+            settingsData.update { it.copy(selectedCurrency = "GBP") }
+            runCurrent()
+            assertEquals(2, requiredWrites)
+            assertFalse(statuses.value.getValue(category).isRequired)
+            releaseOldWrite.complete(Unit)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), payload.capture())
+            assertTrue(payload.lastValue.decodeToString().contains("GBP"))
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            releaseOldWrite.complete(Unit)
             sut.reset()
         }
     }
