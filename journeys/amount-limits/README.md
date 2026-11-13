@@ -57,9 +57,37 @@ External node).
 `send-spending-after-receive.xml` covers the Android channel-cache regression. A usable channel can
 retain its old outbound limit after a receipt even though the displayed Spending balance is fresh.
 Opening an amountless invoice must refresh that channel snapshot before deriving the input limit.
-The existing `@send_2` fixture in `synonymdev/bitkit-e2e-tests` prepares a fresh local LND channel,
-receives 10 000 sats, checks rejection of 10 001, then exercises normal payments and reentry. Keep
-its toast and retained-field assertions; an additional rejected digit can hide the original failure.
 
-This fixes Android repository state publication; no feature is being ported and iOS source is
-unchanged. The shared Send2 case already asserts the same over-limit behavior on iOS.
+Use the [pinned Send2 fixture and local setup](https://github.com/synonymdev/bitkit-e2e-tests/tree/e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3)
+at `e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3`. Its `docker/docker-compose.yml` pins Bitcoin 26.0,
+electrs 0.10.2 and LND 0.18.0-beta. Follow the
+[fixture startup steps](https://github.com/synonymdev/bitkit-android/actions/runs/42573552198/job/129017856857)
+to make the LND bind mount writable, wait for Bitcoin and Electrum, and make the generated LND TLS
+certificate and admin macaroon readable by the host test process. Boot an Android emulator with a
+fresh dev wallet and build the Android checkout with `E2E=true E2E_BACKEND=local ./gradlew assembleDevDebug`.
+Copy its universal APK to the E2E checkout's `aut/bitkit_e2e.apk`, install the locked dependencies
+with Node 22, and run `BACKEND=local ./ci_run_android.sh --mochaOpts.grep '@send_2 '`.
+
+[Send2](https://github.com/synonymdev/bitkit-e2e-tests/blob/e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3/test/specs/send.e2e.ts)
+funds Savings, opens a private channel from LND, pays Bitkit 10 000 sats, and creates an amountless
+invoice on LND. To drive the XML journey separately, enter the pinned fixture's `docker/` directory.
+Run `./bitcoin-cli fund` to mine spendable regtest funds, then fund the app's Savings address with
+`./bitcoin-cli send 0.001 <bitkit-savings-address> -m 1`.
+Get the LND node ID from `identity_pubkey` in `./bitcoin-cli getinfo`. In Bitkit, open
+Settings → Advanced → Lightning Connections → Add
+Connection → Manual Setup. Enter the LND node ID, host `10.0.2.2`, and port `9735`, then tap
+Continue to connect. The emulator reaches the fixture's published host port through `10.0.2.2`.
+Return to Home without funding a channel from Bitkit. Run
+`./bitcoin-cli openchannel <bitkit-node-id> 100000` from `docker/`. The helper funds LND if needed,
+opens a private channel from LND, and mines the channel funding transaction. Wait for an
+active channel with zero Spending. Create the outgoing amountless invoice with
+`./bitcoin-cli getlninvoice`. For the receipt step, use
+`./bitcoin-cli payinvoice <bitkit-lightning-invoice> 10000`. Then follow the XML's send
+and dismissal steps. Keep the app and channel running between receipt and send.
+The first over-limit key must show the warning and
+leave the accepted prefix intact.
+
+The [pinned Android Send2 run](https://github.com/synonymdev/bitkit-android/actions/runs/42573552198)
+and [Android device journey review](https://github.com/synonymdev/bitkit-android/pull/1808#pullrequestreview-5824877373)
+record separate executions at the original fix revision. The XML targets Android channel-cache
+behavior. The shared Send2 case checks the same over-limit behavior on iOS.
