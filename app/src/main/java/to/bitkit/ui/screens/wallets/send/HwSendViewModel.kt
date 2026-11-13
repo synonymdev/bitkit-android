@@ -9,16 +9,23 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
 import to.bitkit.ext.isBroadcastConnectivityFailure
+import to.bitkit.ext.isHardwareBroadcastNotSubmitted
 import to.bitkit.ext.isHardwareBroadcastRefusalForNavigation
 import to.bitkit.ext.isHwDeviceBusy
 import to.bitkit.ext.isHwFirmwareError
@@ -33,6 +40,11 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
+import to.bitkit.repositories.HwRestoreOutcome
+import to.bitkit.repositories.HwRetainOutcome
+import to.bitkit.repositories.HwRetainedSend
+import to.bitkit.repositories.HwRetainedSendReplacement
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentProofRepo
@@ -58,6 +70,7 @@ class HwSendViewModel @Inject constructor(
     private val coreService: CoreService,
     private val activityRepo: ActivityRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
+    private val hwRetainedSendRepo: HwRetainedSendRepo,
     private val clock: Clock = Clock.System,
 ) : ViewModel() {
     private companion object {
@@ -65,6 +78,7 @@ class HwSendViewModel @Inject constructor(
         val COMPOSE_TIMEOUT = 45.seconds
         val SIGN_TIMEOUT = 120.seconds
         val BROADCAST_TIMEOUT = 120.seconds
+        val OBSERVE_TIMEOUT = 30.seconds
     }
 
     val wallets: StateFlow<ImmutableList<HwWallet>>
@@ -81,6 +95,11 @@ class HwSendViewModel @Inject constructor(
     private var signingJob: Job? = null
     private var signingAttempt = 0
     private var passphraseJob: Job? = null
+    private var retainedSendConsent: RetainedSendConsent? = null
+    private var isRetainedSendConsentEnded = false
+
+    private val isOperationInFlight: Boolean
+        get() = pendingResult.value != null || _uiState.value.isSigning || signingJob?.isActive == true
 
     fun warmUp(walletId: String) {
         hwWalletRepo.warmUpKnownDevice(walletId)
@@ -93,7 +112,10 @@ class HwSendViewModel @Inject constructor(
         onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
         beginPaymentSubmission: () -> (() -> Unit) = { {} },
     ) {
-        if (pendingResult.value != null || _uiState.value.isSigning || signingJob?.isActive == true) return
+        if (isOperationInFlight) return
+        // A different request ends it. Otherwise it lasts until a new transaction is signed and retained.
+        val consent = retainedSendConsent?.takeIf { request.paymentRequestId == null && it.matches(request) }
+        retainedSendConsent = consent
         signingWalletId = request.walletId
         _uiState.update { it.copy(isSigning = true) }
         val attempt = ++signingAttempt
@@ -101,16 +123,13 @@ class HwSendViewModel @Inject constructor(
             val finishSubmission = beginPaymentSubmission()
             try {
                 runCatching {
-                    if (pendingBroadcast?.matches(request) == false) {
-                        ToastEventBus.send(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.common__error),
-                            description = HwErrorPresenter.userMessage(
-                                context,
-                                PaykitPaymentRequestError.OperationInProgress,
-                            ),
-                        )
+                    if (pendingBroadcast?.blocks(request) == true) {
+                        showOperationInProgress()
                         return@runCatching
+                    }
+                    val replacement = when (request.paymentRequestId) {
+                        null -> prepareRetainedSend(request, consent) ?: return@runCatching
+                        else -> HwRetainedSendReplacement.None
                     }
                     var pending = pendingBroadcast?.takeIf { it.matches(request) }
                     if (pending == null && request.paymentRequestId != null) {
@@ -154,7 +173,7 @@ class HwSendViewModel @Inject constructor(
                             amountSats = request.amountSats,
                             satsPerVByte = request.satsPerVByte,
                         )
-                        pending = PendingHwSendBroadcast(request, signedTx)
+                        pending = PendingHwSendBroadcast(request, signedTx, replacement = replacement)
                         pendingBroadcast = pending
                         _uiState.update { it.copy(hasPendingBroadcast = true) }
                     }
@@ -168,19 +187,10 @@ class HwSendViewModel @Inject constructor(
                         return@runCatching
                     }
                     val result = broadcast(payment, onPaymentDeadlineExpired) ?: return@runCatching
-                    if (signingAttempt != attempt) return@runCatching
-                    runSuspendCatching { persistResult(request, result) }
-                        .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
-                    if (signingAttempt != attempt) return@runCatching
-                    pendingResult.update {
-                        HwSendResult(
-                            request.walletId, result.txId, request.amountSats,
-                            request.paymentRequestId, request.paymentIdentity
-                        )
-                    }
+                    completeSend(request, result, attempt)
                 }.onFailure {
                     if (it is CancellationException && it !is TimeoutCancellationException) throw it
-                    handleFailure(it, request.walletId)
+                    settleFailure(it, request, attempt)
                 }
             } finally {
                 finishSubmission()
@@ -191,6 +201,105 @@ class HwSendViewModel @Inject constructor(
                     signingJob = null
                 }
             }
+        }
+    }
+
+    private suspend fun showOperationInProgress() = ToastEventBus.send(
+        type = Toast.ToastType.ERROR,
+        title = context.getString(R.string.common__error),
+        description = HwErrorPresenter.userMessage(context, PaykitPaymentRequestError.OperationInProgress),
+    )
+
+    private fun clearPendingBroadcast() {
+        pendingBroadcast = null
+        _uiState.update { it.copy(hasPendingBroadcast = false) }
+    }
+
+    private suspend fun prepareRetainedSend(
+        request: HwSendRequest,
+        consent: RetainedSendConsent?,
+    ): HwRetainedSendReplacement? {
+        // Deletes nothing, so an attempt that signs nothing leaves the original guarded by its record.
+        // Bytes already signed under that decision and held in this sheet need no new warning.
+        pendingBroadcast?.takeIf { it.matches(request) && !it.hasAttemptedBroadcast }?.replacement
+            ?.takeIf { it != HwRetainedSendReplacement.None }
+            ?.let { return it }
+        // Not read here: an entry that cannot be read is overwritten at retain time, once there are new bytes.
+        if (consent != null) return HwRetainedSendReplacement.Consented
+        val record = hwRetainedSendRepo.record(request.walletId).getOrThrow()
+        if (record?.isSamePayment(request.address, request.amountSats) == true) {
+            pendingBroadcast = PendingHwSendBroadcast(
+                request,
+                record.signedTx,
+                isPreparedForBroadcast = true,
+                hasAttemptedBroadcast = true,
+            )
+            _uiState.update { it.copy(hasPendingBroadcast = true) }
+            return HwRetainedSendReplacement.None
+        }
+        if (record?.observed == false) {
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.hardware__send_broadcast_uncertain_title),
+                description = context.getString(R.string.hardware__send_broadcast_uncertain_text),
+            )
+            return null
+        }
+        _uiState.update { it.copy(hasPendingBroadcast = pendingBroadcast != null) }
+        // An observed record for another payment is resolved, so these new bytes may replace it.
+        return if (record != null) HwRetainedSendReplacement.ObservedRecord else HwRetainedSendReplacement.None
+    }
+
+    private suspend fun releaseRetainedSend(walletId: String) {
+        hwRetainedSendRepo.release(walletId)
+            .onFailure { Logger.warn("Failed to release retained hardware send for '$walletId'", it, context = TAG) }
+    }
+
+    /** Returns what the restore did, or null when none ran or it failed. */
+    private suspend fun undoRetainBeforeDispatch(
+        payment: PendingHwSendBroadcast,
+        outcome: HwRetainOutcome?,
+    ): HwRestoreOutcome? = when (outcome) {
+        HwRetainOutcome.Stored -> {
+            releaseRetainedSend(payment.request.walletId)
+            null
+        }
+        is HwRetainOutcome.Replaced -> restoreRetainedSend(outcome.previous, payment.signedTx)
+        // A record from an earlier attempt still guards it, and an unreadable one has nothing to put back.
+        HwRetainOutcome.AlreadyHeld, HwRetainOutcome.ReplacedUnreadableEntry, null -> null
+    }
+
+    /** Returns what the restore did, or null when none ran or it failed. */
+    private suspend fun releaseOrRestoreRetainedSend(payment: PendingHwSendBroadcast): HwRestoreOutcome? {
+        val outcome = payment.retainOutcome
+        // The payment an older record guards is still unknown, so it comes back rather than leaving nothing.
+        if (outcome is HwRetainOutcome.Replaced) return restoreRetainedSend(outcome.previous, payment.signedTx)
+        releaseRetainedSend(payment.request.walletId)
+        return null
+    }
+
+    private suspend fun restoreRetainedSend(previous: HwRetainedSend, signedTx: HwFundingSignedTx): HwRestoreOutcome? =
+        // A failed restore only leaves the new bytes as the record, so the next attempt rebroadcasts or warns.
+        hwRetainedSendRepo.restore(previous, signedTx.serializedTx)
+            .onFailure {
+                Logger.warn("Failed to restore retained hardware send for '${previous.walletId}'", it, context = TAG)
+            }
+            .getOrNull()
+
+    private suspend fun completeSend(request: HwSendRequest, result: HwFundingBroadcastResult, attempt: Int) {
+        if (request.paymentRequestId == null) releaseRetainedSend(request.walletId)
+        if (signingAttempt != attempt) return
+        runSuspendCatching { persistResult(request, result) }
+            .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+        if (signingAttempt != attempt) return
+        pendingResult.update {
+            HwSendResult(
+                request.walletId,
+                result.txId,
+                request.amountSats,
+                request.paymentRequestId,
+                request.paymentIdentity,
+            )
         }
     }
 
@@ -217,8 +326,8 @@ class HwSendViewModel @Inject constructor(
         payment: PendingHwSendBroadcast,
         onPaymentDeadlineExpired: suspend (Boolean) -> Unit,
     ): HwFundingBroadcastResult? {
-        payment.request.paymentRequestId?.let { requestId ->
-            val request = payment.request
+        val request = payment.request
+        request.paymentRequestId?.let { requestId ->
             // Protect the only signed receipt while its durable lookup is being saved as well.
             _uiState.update { it.copy(isBroadcastUnresolved = true) }
             val retained = runSuspendCatching {
@@ -241,11 +350,21 @@ class HwSendViewModel @Inject constructor(
             }
         }
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
+        val retainOutcome = if (request.paymentRequestId == null) retainBeforeDispatch(payment) else null
         return withTimeout(BROADCAST_TIMEOUT) {
-            val request = payment.request
             val requestId = request.paymentRequestId
             if (requestId == null) {
-                pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
+                pendingBroadcast = payment.copy(
+                    hasAttemptedBroadcast = true,
+                    isRefusedForNavigation = false,
+                    // Signing anew can give bytes identical to the held record, and those may already be out.
+                    dispatch = if (payment.hasAttemptedBroadcast || retainOutcome == HwRetainOutcome.AlreadyHeld) {
+                        HwSendDispatch.Retry
+                    } else {
+                        HwSendDispatch.FirstAttempt
+                    },
+                    retainOutcome = retainOutcome,
+                )
                 hwWalletRepo.broadcastFunding(payment.signedTx, request.paymentDeadlineAt)
             } else {
                 hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
@@ -264,7 +383,6 @@ class HwSendViewModel @Inject constructor(
             }
         }.getOrElse { error ->
             if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
-                val request = payment.request
                 val cleared = request.paymentRequestId?.let { requestId ->
                     !payment.hasAttemptedBroadcast &&
                         paykitPaymentProofRepo.clearHardwareOnchainCandidateBeforeDispatch(
@@ -273,13 +391,42 @@ class HwSendViewModel @Inject constructor(
                         )
                 } ?: !payment.hasAttemptedBroadcast
                 val unresolved = payment.hasAttemptedBroadcast || !cleared
-                pendingBroadcast = payment.copy(hasAttemptedBroadcast = unresolved)
-                _uiState.update { it.copy(isBroadcastUnresolved = unresolved && !payment.isRefusedForNavigation) }
+                val isConsentRegranted = if (request.paymentRequestId == null && !unresolved) {
+                    regrantConsentIfRestored(payment, undoRetainBeforeDispatch(payment, retainOutcome))
+                } else {
+                    false
+                }
+                pendingBroadcast = if (isConsentRegranted) null else payment.copy(hasAttemptedBroadcast = unresolved)
+                _uiState.update {
+                    it.copy(
+                        hasPendingBroadcast = pendingBroadcast != null,
+                        isBroadcastUnresolved = unresolved && !payment.isRefusedForNavigation,
+                    )
+                }
                 onPaymentDeadlineExpired(unresolved)
                 return null
             }
             throw error
         }
+    }
+
+    private suspend fun retainBeforeDispatch(payment: PendingHwSendBroadcast): HwRetainOutcome {
+        val request = payment.request
+        val sendContext = currentCoroutineContext()
+        // Not cancellable, so a replacement that was written is known and is undone if the send stopped meanwhile.
+        val outcome = withContext(NonCancellable) {
+            hwRetainedSendRepo.retain(
+                request.walletId,
+                request.address,
+                request.amountSats,
+                payment.signedTx,
+                payment.replacement,
+            ).getOrThrow().also { if (!sendContext.isActive) undoRetainBeforeDispatch(payment, it) }
+        }
+        sendContext.ensureActive()
+        // The new bytes hold the record now, so a Retry refers to them. Only restoring the old record gives it back.
+        retainedSendConsent = null
+        return outcome
     }
 
     fun submitPassphrase(
@@ -321,12 +468,14 @@ class HwSendViewModel @Inject constructor(
     }
 
     fun dismissPassphrase() {
+        // The sign screen stays open, so consent stands: without it the next tap would rebroadcast the old bytes.
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
     }
 
     fun cancel() {
+        endRetainedSendConsent()
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
@@ -384,6 +533,105 @@ class HwSendViewModel @Inject constructor(
                 isBroadcastUnresolved = false,
             )
         }
+    }
+
+    /**
+     * What the sign sheet should offer before any device contact. [hasIncomingRequest] is required so a Shop caller
+     * cannot skip it: Shop payments keep their own durable proofs and never read this record.
+     */
+    suspend fun retainedSendStatus(
+        address: String,
+        amountSats: ULong,
+        walletId: String,
+        hasIncomingRequest: Boolean,
+    ): HwRetainedSendStatus {
+        if (hasIncomingRequest) return HwRetainedSendStatus.None
+        if (holdsRetainedSendConsent(walletId, address, amountSats)) return HwRetainedSendStatus.None
+        val record = hwRetainedSendRepo.record(walletId).getOrElse {
+            Logger.warn("Failed to read retained hardware send for '$walletId'", it, context = TAG)
+            return HwRetainedSendStatus.Blocking
+        } ?: return HwRetainedSendStatus.None
+        val isSamePayment = record.isSamePayment(address, amountSats)
+        return when {
+            // The first payment is on the network: repeating it needs consent, and another payment needs none.
+            record.observed -> if (isSamePayment) HwRetainedSendStatus.Blocking else HwRetainedSendStatus.None
+            record.retryWasRefused || !isSamePayment -> HwRetainedSendStatus.Blocking
+            else -> HwRetainedSendStatus.Retry(record.feeRate, record.miningFeeSats)
+        }
+    }
+
+    /**
+     * Signs [request] for a screen with no review of its own, such as transfer to Spending. Returns false with no
+     * device contact when a retained send needs the user's consent first: the caller shows the send review's warning,
+     * and Yes, Send calls [consentToNewSignature] then [signAndBroadcast].
+     */
+    suspend fun signUnlessRetainedSendWarns(request: HwSendRequest): Boolean {
+        val status = retainedSendStatus(
+            request.address,
+            request.amountSats,
+            request.walletId,
+            hasIncomingRequest = request.paymentRequestId != null,
+        )
+        if (status == HwRetainedSendStatus.Blocking) return false
+        signAndBroadcast(request)
+        return true
+    }
+
+    /**
+     * Whether the sign button offers a retry of [request]. Contacts no device, so a reopened sheet can ask.
+     * An observed record still offers one: the review warns before a reopened send gets here, so it is this sheet's.
+     * A payment holding consent signs anew.
+     */
+    suspend fun offersRetry(request: HwSendRequest): Boolean {
+        if (request.paymentRequestId != null) return _uiState.value.hasPendingBroadcast
+        if (holdsRetainedSendConsent(request.walletId, request.address, request.amountSats)) return false
+        if (pendingBroadcast?.matches(request) == true) return true
+        val record = hwRetainedSendRepo.record(request.walletId).getOrElse {
+            Logger.warn("Failed to read retained hardware send for '${request.walletId}'", it, context = TAG)
+            return false
+        } ?: return false
+        return record.isSamePayment(request.address, request.amountSats) && (record.observed || !record.retryWasRefused)
+    }
+
+    /**
+     * Lets exactly this payment sign anew over the wallet's retained send, until a new transaction is signed and
+     * retained. Only for a user who accepted a possible second payment. Held in memory only and ended by [cancel], so a
+     * restart or leaving the sign flow requires a new warning. Deletes nothing, so an attempt that signs nothing leaves
+     * the original guarded by its record and can ask the device again. A consented payment that settles without going
+     * out and puts the old record back gets the same consent again. Does nothing while an operation is in flight.
+     */
+    fun consentToNewSignature(walletId: String, address: String, amountSats: ULong) {
+        if (isOperationInFlight) return
+        retainedSendConsent = RetainedSendConsent(walletId, address, amountSats)
+        isRetainedSendConsentEnded = false
+        if (pendingBroadcast?.request?.paymentRequestId == null) clearPendingBroadcast()
+    }
+
+    private fun endRetainedSendConsent() {
+        retainedSendConsent = null
+        isRetainedSendConsentEnded = true
+    }
+
+    /**
+     * Follows what this attempt's restore reported rather than a further read, which can fail and lose the consent
+     * while the old record is back. New bytes the watcher saw, or a failed restore, stay as the record, and a Retry
+     * refers to them.
+     */
+    private fun regrantConsentIfRestored(payment: PendingHwSendBroadcast, restoreOutcome: HwRestoreOutcome?): Boolean {
+        if (payment.replacement != HwRetainedSendReplacement.Consented) return false
+        if (restoreOutcome != HwRestoreOutcome.WroteOldRecord) return false
+        if (isRetainedSendConsentEnded) return false
+        val request = payment.request
+        retainedSendConsent = RetainedSendConsent(request.walletId, request.address, request.amountSats)
+        return true
+    }
+
+    private fun holdsRetainedSendConsent(walletId: String, address: String, amountSats: ULong): Boolean {
+        val consent = retainedSendConsent ?: return false
+        // A different payment ends the consent, so changing back warns again.
+        if (consent.walletId == walletId && consent.address == address && consent.amountSats == amountSats) return true
+        retainedSendConsent = null
+        return false
     }
 
     private suspend fun prepareSignedTransaction(
@@ -474,7 +722,76 @@ class HwSendViewModel @Inject constructor(
         activityRepo.notifyPaymentActivityChanged()
     }
 
-    private suspend fun handleFailure(error: Throwable, walletId: String) {
+    private suspend fun settleFailure(error: Throwable, request: HwSendRequest, attempt: Int) {
+        val walletId = request.walletId
+        val payment = pendingBroadcast
+        val dispatch = payment?.dispatch ?: return handleFailure(error, walletId)
+        val settled = payment.copy(dispatch = null)
+        pendingBroadcast = settled
+        val txId = runCatching { SignedTransactionId.fromHex(settled.signedTx.serializedTx) }.getOrNull()
+        // A transaction already seen on the network is out, whatever the server replied, so this is a success.
+        val record = hwRetainedSendRepo.record(walletId).getOrNull()
+        if (txId != null && record?.observed == true &&
+            record.serializedTx.equals(settled.signedTx.serializedTx, ignoreCase = true)
+        ) {
+            return completeRetainedSend(settled, txId, attempt)
+        }
+        val isFirstAttempt = dispatch == HwSendDispatch.FirstAttempt
+        when {
+            error.isHardwareBroadcastRefusalForNavigation() && isFirstAttempt -> {
+                regrantConsentIfRestored(settled, releaseOrRestoreRetainedSend(settled))
+                clearPendingBroadcast()
+                handleFailure(error, walletId)
+            }
+            error.isHardwareBroadcastRefusalForNavigation() -> settleRetryRefusal(error, settled, txId, attempt)
+            error.isHardwareBroadcastNotSubmitted() -> {
+                if (isFirstAttempt) {
+                    // A Retry of these bytes replaces the restored record again, under the same decision.
+                    val replacement = if (releaseOrRestoreRetainedSend(settled) != null) {
+                        settled.replacement
+                    } else {
+                        HwRetainedSendReplacement.None
+                    }
+                    pendingBroadcast = settled.copy(hasAttemptedBroadcast = false, replacement = replacement)
+                }
+                handleFailure(error, walletId)
+                if (!isFirstAttempt) pendingBroadcast = null
+            }
+            else -> {
+                pendingBroadcast = null
+                handleFailure(error, walletId, mayHaveBeenSent = true)
+            }
+        }
+    }
+
+    private suspend fun settleRetryRefusal(
+        error: Throwable,
+        payment: PendingHwSendBroadcast,
+        txId: String?,
+        attempt: Int,
+    ) {
+        val walletId = payment.request.walletId
+        hwRetainedSendRepo.markRetryRefused(walletId)
+            .onFailure { Logger.warn("Failed to mark retained hardware send for '$walletId'", it, context = TAG) }
+        if (txId != null && isTransactionObserved(walletId, txId)) {
+            completeRetainedSend(payment, txId, attempt)
+        } else {
+            handleFailure(error, walletId, mayHaveBeenSent = true)
+        }
+    }
+
+    private suspend fun completeRetainedSend(payment: PendingHwSendBroadcast, txId: String, attempt: Int) {
+        val signedTx = payment.signedTx
+        val result = HwFundingBroadcastResult(txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
+        completeSend(payment.request, result, attempt)
+    }
+
+    private suspend fun isTransactionObserved(walletId: String, txId: String): Boolean =
+        withTimeoutOrNull(OBSERVE_TIMEOUT) {
+            hwWalletRepo.observeExactTransaction(walletId, txId).getOrDefault(false)
+        } == true
+
+    private suspend fun handleFailure(error: Throwable, walletId: String, mayHaveBeenSent: Boolean = false) {
         val retainedShopPayment = pendingBroadcast?.let {
             it.request.paymentRequestId != null && it.hasAttemptedBroadcast
         } == true
@@ -499,10 +816,15 @@ class HwSendViewModel @Inject constructor(
             it.copy(isBroadcastUnresolved = retainedShopPayment && pendingBroadcast?.blocksNavigation == true)
         }
         when {
+            mayHaveBeenSent -> ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.hardware__send_broadcast_uncertain_title),
+                description = context.getString(R.string.hardware__send_broadcast_uncertain_text),
+            )
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
             }
-            generateSequence(error) { it.cause }.any { it is HwPassphraseRequiredError } -> {
+            error.needsPassphrase() -> {
                 _uiState.update { it.copy(isPassphraseRequired = true) }
             }
             generateSequence(error) { it.cause }.any { it is HwWalletMismatchError } -> ToastEventBus.send(
@@ -531,10 +853,7 @@ class HwSendViewModel @Inject constructor(
                 description = context.getString(R.string.wallet__payment_timeout),
             )
             else -> {
-                if (pendingBroadcast != null && !retainedShopPayment) {
-                    pendingBroadcast = null
-                    _uiState.update { it.copy(hasPendingBroadcast = false) }
-                }
+                if (pendingBroadcast != null && !retainedShopPayment) clearPendingBroadcast()
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.common__error),
@@ -567,6 +886,12 @@ data class HwSendUiState(
         get() = (!isSigning || isConnectingDevice) && !isBroadcastUnresolved
 }
 
+sealed interface HwRetainedSendStatus {
+    data object None : HwRetainedSendStatus
+    data class Retry(val feeRate: ULong, val miningFeeSats: ULong) : HwRetainedSendStatus
+    data object Blocking : HwRetainedSendStatus
+}
+
 data class HwSendResult(
     val walletId: String,
     val txId: String,
@@ -588,14 +913,30 @@ data class HwSendRequest(
     val isTransfer: Boolean = false,
 )
 
+private enum class HwSendDispatch { FirstAttempt, Retry }
+
+private fun Throwable.needsPassphrase() = generateSequence(this) { it.cause }.any { it is HwPassphraseRequiredError }
+
+private data class RetainedSendConsent(val walletId: String, val address: String, val amountSats: ULong) {
+    fun matches(request: HwSendRequest) =
+        // Fee is not part of it: the user approved this payee and amount, at whatever fee the review shows.
+        walletId == request.walletId && address == request.address && amountSats == request.amountSats
+}
+
 private data class PendingHwSendBroadcast(
     val request: HwSendRequest,
     val signedTx: HwFundingSignedTx,
     val isPreparedForBroadcast: Boolean = false,
     val hasAttemptedBroadcast: Boolean = false,
     val isRefusedForNavigation: Boolean = false,
+    val dispatch: HwSendDispatch? = null,
+    val replacement: HwRetainedSendReplacement = HwRetainedSendReplacement.None,
+    val retainOutcome: HwRetainOutcome? = null,
 ) {
     val blocksNavigation: Boolean get() = hasAttemptedBroadcast && !isRefusedForNavigation
+
+    fun blocks(request: HwSendRequest): Boolean = !matches(request) &&
+        (this.request.paymentRequestId != null || this.request.walletId == request.walletId)
 
     fun matches(request: HwSendRequest): Boolean = this.request == request ||
         hasAttemptedBroadcast && this.request.paymentRequestId != null &&

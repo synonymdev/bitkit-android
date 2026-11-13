@@ -1372,6 +1372,8 @@
     <string name="hardware__search_error">Não foi possível procurar carteiras de hardware. Verifique sua conexão e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_text">Verifique sua conexão e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento não confirmado</string>
+    <string name="hardware__send_broadcast_uncertain_text">Sua transação pode ter sido transmitida. Verifique sua atividade antes de tentar novamente.</string>
+    <string name="hardware__send_broadcast_uncertain_title">A transação pode ter sido enviada</string>
     <string name="hardware__send_confirm_address">PARA O ENDEREÇO (CONFIRME NO DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">O Trezor só pode enviar para um endereço Bitcoin a partir desta carteira.</string>
     <string name="hardware__send_onchain_only_text_jade">O Jade só pode enviar para um endereço Bitcoin a partir desta carteira.</string>

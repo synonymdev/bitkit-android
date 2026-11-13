@@ -3409,7 +3409,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 it.getArgument<suspend () -> Unit>(2)()
                 hwWalletRepo.broadcastFunding(it.getArgument(0), it.getArgument(1))
             }
-        val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo)
+        val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo, mock())
         send.signAndBroadcast(
             HwSendRequest(
                 walletId,

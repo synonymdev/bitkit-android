@@ -24,6 +24,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.illustrationRes
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -51,6 +54,7 @@ import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.SanityWarning
 
 @Composable
 fun SpendingHwSignScreen(
@@ -68,6 +72,7 @@ fun SpendingHwSignScreen(
         wallets.firstOrNull { it.id == walletId }?.vendor ?: HwWalletVendor.TREZOR
     }
     var request by remember { mutableStateOf<HwSendRequest?>(null) }
+    var retainedSendWarning by remember { mutableStateOf<HwSendRequest?>(null) }
     val isBusy = state.isSending || hwState.isSigning
 
     BackHandler(enabled = !hwState.canLeave || state.isSending) {}
@@ -82,7 +87,7 @@ fun SpendingHwSignScreen(
             when (it) {
                 is SideEffect.SignHw -> {
                     request = it.request
-                    hwSendViewModel.signAndBroadcast(it.request)
+                    if (!hwSendViewModel.signUnlessRetainedSendWarns(it.request)) retainedSendWarning = it.request
                 }
 
                 SideEffect.Sent -> onSent()
@@ -117,6 +122,25 @@ fun SpendingHwSignScreen(
             if (pending != null) hwSendViewModel.signAndBroadcast(pending) else viewModel.onConfirm()
         },
     )
+
+    retainedSendWarning?.let { warned ->
+        val warning = SanityWarning.RETAINED_HARDWARE_SEND
+        AppAlertDialog(
+            title = stringResource(warning.title),
+            text = stringResource(warning.message),
+            confirmText = stringResource(R.string.wallet__send_yes),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = {
+                retainedSendWarning = null
+                hwSendViewModel.consentToNewSignature(warned.walletId, warned.address, warned.amountSats)
+                hwSendViewModel.signAndBroadcast(warned)
+            },
+            onDismiss = { retainedSendWarning = null },
+            modifier = Modifier
+                .semantics { testTagsAsResourceId = true }
+                .testTag(warning.testTag),
+        )
+    }
 
     if (hwState.isPassphraseRequired) {
         HwPassphrasePromptSheet(
@@ -214,10 +238,13 @@ private fun Content(
                 }
             }
 
-            val canSign = quote != null && quote.toSpendingSats(state.speed) > 0 && !state.isQuoting
+            // A Retry sends bytes that already passed the claim minimum, so today's claim fee doesn't disable it.
+            val isRetry = hasPendingBroadcast || quote?.isRetainedRetry == true
+            val canSign = quote != null && (quote.isRetainedRetry || quote.toSpendingSats(state.speed) > 0) &&
+                !state.isQuoting
             PrimaryButton(
                 text = stringResource(
-                    if (hasPendingBroadcast) R.string.common__retry else R.string.lightning__transfer_hw__open_connect
+                    if (isRetry) R.string.common__retry else R.string.lightning__transfer_hw__open_connect
                 ),
                 onClick = onOpenConnect,
                 enabled = canSign && !isSigning,

@@ -1367,6 +1367,8 @@
     <string name="hardware__search_error">Impossible de rechercher des portefeuilles matériels. Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_text">Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_title">Paiement non confirmé</string>
+    <string name="hardware__send_broadcast_uncertain_text">Votre transaction a peut-être été diffusée. Vérifiez votre activité avant de réessayer.</string>
+    <string name="hardware__send_broadcast_uncertain_title">La transaction a peut-être été envoyée</string>
     <string name="hardware__send_confirm_address">VERS L\'ADRESSE (CONFIRMER SUR L\'APPAREIL)</string>
     <string name="hardware__send_onchain_only_text">Trezor ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>

@@ -176,6 +176,8 @@ import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwRetainedSend
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
@@ -255,6 +257,7 @@ import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.pushNotification
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
+import to.bitkit.ui.screens.wallets.send.HwRetainedSendStatus
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
@@ -307,6 +310,7 @@ class AppViewModel @Inject constructor(
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val hwRetainedSendRepo: HwRetainedSendRepo,
     private val backupRepo: BackupRepo,
     private val settingsStore: SettingsStore,
     private val currencyRepo: CurrencyRepo,
@@ -2025,18 +2029,14 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 contactPaymentProfile = activeContactPaymentProfile(),
-                isRetainedHardwarePayment = true,
                 address = requireNotNull(proof.onchainAddress),
                 addressInput = requireNotNull(proof.onchainAddress),
                 isAddressInputValid = true,
                 amount = requireNotNull(proof.onchainAmountSats),
-                isAmountInputValid = true,
                 payMethod = SendMethod.ONCHAIN,
-                speed = TransactionSpeed.Custom(requireNotNull(proof.hardwareFeeRate).toUInt()),
-                onchainFeeUi = OnchainFeeUi(
-                    rate = FeeRate.CUSTOM,
-                    sats = requireNotNull(proof.hardwareMiningFeeSats).toLong(),
-                ),
+            ).withLockedRetainedFee(
+                feeRate = requireNotNull(proof.hardwareFeeRate),
+                miningFeeSats = requireNotNull(proof.hardwareMiningFeeSats),
             )
         }
         preparation?.let { paymentRequestPreparation.compareAndSet(it, null) }
@@ -3467,7 +3467,12 @@ class AppViewModel @Inject constructor(
         val selectedMaxSendOnchain = hardwareWalletId?.let {
             hardwareMaxSpendable(it, invoice.address, _sendUiState.value.speed)
         } ?: walletRepo.balanceState.value.maxSendOnchainSats
-        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        val maxSendOnchain = maxSendOnchainWithRetainedRetry(
+            maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId),
+            hardwareWalletId,
+            invoice.address,
+            invoice.amountSatoshis,
+        )
 
         if (maxSendOnchain == 0uL) {
             if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
@@ -4640,6 +4645,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun selectHardwareFundingSource(walletId: String, current: SendUiState) {
         val initialAvailable = hardwareEstimatedAvailable(walletId, current.speed)
+        val retainedAmount = retainedRetry(walletId, current.address)?.amountSats
         val walletName = hwWalletRepo.wallets.value.find { it.id == walletId }?.name
         _sendUiState.update {
             it.copy(
@@ -4647,7 +4653,8 @@ class AppViewModel @Inject constructor(
                 hardwareWalletId = walletId,
                 hardwareWalletName = walletName,
                 hardwareAvailableSats = initialAvailable,
-                isAmountInputValid = it.amount > Defaults.dustLimit.toULong() && it.amount <= initialAvailable,
+                isAmountInputValid = it.amount > Defaults.dustLimit.toULong() &&
+                    (it.amount <= initialAvailable || it.amount == retainedAmount),
                 selectedUtxos = null,
                 confirmedWarnings = persistentListOf(),
                 onchainFeeUi = it.onchainFeeUi.copy(isLoading = true),
@@ -4666,9 +4673,16 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): Boolean {
         val state = _sendUiState.value
-        for (wallet in hwWalletRepo.wallets.value.sortedByDescending { it.fundingBalanceSats }) {
-            val available = hardwareAvailableForPayment(wallet, amount, state, walletGeneration)
-            if (amount > available) continue
+        val wallets = hwWalletRepo.wallets.value.sortedByDescending { it.fundingBalanceSats }
+        // A retained send was fundable when signed, so its retry goes out at the original fee, not today's.
+        val retainedWallet = wallets.firstOrNull { retainedRetry(it.id, state.address)?.amountSats == amount }
+        for (wallet in listOfNotNull(retainedWallet) + wallets) {
+            val available = if (wallet == retainedWallet) {
+                hardwareMaxSpendable(wallet.id, state.address, state.speed, walletGeneration)
+            } else {
+                hardwareAvailableForPayment(wallet, amount, state, walletGeneration)
+            }
+            if (wallet != retainedWallet && amount > available) continue
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.ONCHAIN,
@@ -5000,8 +5014,16 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun prepareHardwareSendFee(): Boolean {
+        val payment = _sendUiState.value
+        val walletId = payment.hardwareWalletId ?: return true
+        retainedRetry(walletId, payment.address)?.takeIf { it.amountSats == payment.amount }?.let {
+            val status = HwRetainedSendStatus.Retry(it.feeRate, it.miningFeeSats)
+            applyRetainedSendStatus(walletId, payment.address, payment.amount, status)
+            return true
+        }
+        // A lock kept from an earlier review must not price a payment that has no signed bytes to go out.
+        releaseRetainedFeeLock()
         val state = _sendUiState.value
-        val walletId = state.hardwareWalletId ?: return true
         val satsPerVByte = state.feeRates
             ?.getSatsPerVByteFor(state.speed)
             ?.toULong()
@@ -5089,12 +5111,43 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.ONCHAIN -> {
-                val maxSendable = _sendUiState.value.hardwareAvailableSats
-                    .takeIf { _sendUiState.value.hardwareWalletId != null }
+                val state = _sendUiState.value
+                val maxSendable = state.hardwareAvailableSats
+                    .takeIf { state.hardwareWalletId != null }
                     ?: walletRepo.balanceState.value.maxSendOnchainSats
-                amount > Defaults.dustLimit.toULong() && amount <= maxSendable
+                amount > Defaults.dustLimit.toULong() && (
+                    amount <= maxSendable ||
+                        state.hardwareWalletId?.let { retainedRetry(it, state.address)?.amountSats } == amount
+                    )
             }
         }
+    }
+
+    private suspend fun retainedRetry(walletId: String, address: String): HwRetainedSend? {
+        if (_sendUiState.value.incomingPaymentRequestId != null || activeIncomingPaymentRequest() != null) return null
+        val record = hwRetainedSendRepo.record(walletId).getOrElse {
+            Logger.warn("Failed to read retained hardware send for '$walletId'", it, context = TAG)
+            return null
+        }
+        return record?.takeIf { it.offersRetryTo(address) }
+    }
+
+    private suspend fun maxSendOnchainWithRetainedRetry(
+        maxSendOnchain: ULong,
+        hardwareWalletId: String?,
+        address: String,
+        invoiceAmountSats: ULong,
+    ): ULong {
+        val retainedAmount = hardwareWalletId?.let { retainedRetry(it, address)?.amountSats } ?: return maxSendOnchain
+        val isRetainedPayment = invoiceAmountSats == 0uL || invoiceAmountSats == retainedAmount
+        return if (isRetainedPayment) maxOf(maxSendOnchain, retainedAmount) else maxSendOnchain
+    }
+
+    /** Lets the amount input reach a retained amount above today's maximum. Validation reads the record itself. */
+    suspend fun refreshRetainedRetryAmount() {
+        val state = _sendUiState.value
+        val amount = state.hardwareWalletId?.let { retainedRetry(it, state.address)?.amountSats }
+        _sendUiState.update { it.copy(retainedRetryAmountSats = amount) }
     }
 
     /**
@@ -5662,7 +5715,12 @@ class AppViewModel @Inject constructor(
         } else {
             walletRepo.balanceState.value.maxSendOnchainSats
         }
-        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        val maxSendOnchain = maxSendOnchainWithRetainedRetry(
+            maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId),
+            hardwareWalletId,
+            invoice.address,
+            invoice.amountSatoshis,
+        )
 
         val incomingPaymentRequest = activeIncomingPaymentRequest()
         val lnInvoice = if (hardwareWalletId == null) {
@@ -6434,7 +6492,7 @@ class AppViewModel @Inject constructor(
 
     private fun onSwipeToPay() {
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
-        if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
+        if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareReviewReady) return
         viewModelScope.launch {
             if (!prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
@@ -6486,6 +6544,11 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleSanityChecks(amountSats: ULong) {
         if (_sendUiState.value.showSanityWarningDialog != null) return
+
+        if (_sendUiState.value.needsRetainedSendWarning) {
+            _sendUiState.update { it.copy(showSanityWarningDialog = SanityWarning.RETAINED_HARDWARE_SEND) }
+            return
+        }
 
         val settings = settingsStore.data.first()
         // A Spark leg spends its debit, the amount plus Spark's fees, from Spark's balance.
@@ -8529,7 +8592,7 @@ class AppViewModel @Inject constructor(
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
         if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive ||
-            !_sendUiState.value.isHardwareFeeReady
+            !_sendUiState.value.isHardwareReviewReady
         ) {
             return
         }
@@ -8767,6 +8830,51 @@ class AppViewModel @Inject constructor(
     fun acknowledgeHardwarePaymentResolution(txId: String) {
         _sendUiState.update {
             if (it.resolvedHardwarePaymentTxId == txId) it.copy(resolvedHardwarePaymentTxId = null) else it
+        }
+    }
+
+    /** Applies the durable record's answer to the review. A Shop payment keeps its own retained state. */
+    suspend fun applyRetainedSendStatus(
+        walletId: String,
+        address: String,
+        amountSats: ULong,
+        status: HwRetainedSendStatus,
+    ) {
+        val state = _sendUiState.value
+        val releasesFeeLock = state.isRetainedHardwarePayment && state.incomingPaymentRequestId == null &&
+            status !is HwRetainedSendStatus.Retry
+        val defaultSpeed = if (releasesFeeLock) settingsStore.data.first().defaultTransactionSpeed else state.speed
+        val wasFeeLocked = _sendUiState.value.isRetainedHardwarePayment
+        _sendUiState.update { it.withRetainedSendStatus(walletId, address, amountSats, status, defaultSpeed) }
+        val isFeeLocked = _sendUiState.value.isRetainedHardwarePayment
+        if (isFeeLocked) cancelOnchainSendRefresh()
+        if (isFeeLocked == wasFeeLocked) return
+        updateCanSwitchWallet()
+        if (isFeeLocked) return
+        _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
+        refreshOnchainSendIfNeeded()
+    }
+
+    /**
+     * The original fee only holds on the review, so Amount can switch funding source and edit the payment. The review
+     * locks it again when it reads the record. A Shop payment keeps its own lock.
+     */
+    suspend fun releaseRetainedFeeLock() {
+        val state = _sendUiState.value
+        if (!state.isRetainedHardwarePayment || state.incomingPaymentRequestId != null) return
+        val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
+        _sendUiState.update { it.withoutRetainedFeeLock(defaultSpeed) }
+        _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
+        updateCanSwitchWallet()
+    }
+
+    /** One consent covers one signing attempt: the sign flow holds it from here, and the review asks again. */
+    fun consumeRetainedSendConsent() {
+        _sendUiState.update {
+            it.copy(
+                retainedSendCheck = it.retainedSendCheck?.takeUnless { check -> check.isBlocking },
+                confirmedWarnings = (it.confirmedWarnings - SanityWarning.RETAINED_HARDWARE_SEND).toImmutableList(),
+            )
         }
     }
 
@@ -9663,8 +9771,29 @@ data class SendUiState(
     val fixedOnchainAmount: ULong? = null,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
+    val retainedSendCheck: RetainedSendCheck? = null,
+    val retainedRetryAmountSats: ULong? = null,
     val paykitRoute: PaykitRouteUi? = null,
 ) {
+    private val currentRetainedSendCheck: RetainedSendCheck?
+        get() = retainedSendCheck?.takeIf {
+            it.walletId == hardwareWalletId && it.address == address && it.amountSats == amount
+        }
+
+    /** An ordinary hardware send cannot be confirmed before its durable record has been read. */
+    val isRetainedSendCheckPending: Boolean
+        get() = hardwareWalletId != null && incomingPaymentRequestId == null && currentRetainedSendCheck == null
+
+    val needsRetainedSendWarning: Boolean
+        get() = currentRetainedSendCheck?.isBlocking == true &&
+            SanityWarning.RETAINED_HARDWARE_SEND !in confirmedWarnings
+
+    /** The wallet whose retained send the user accepted replacing for the payment on review. */
+    val retainedSendToReplace: String?
+        get() = currentRetainedSendCheck
+            ?.takeIf { it.isBlocking && SanityWarning.RETAINED_HARDWARE_SEND in confirmedWarnings }
+            ?.walletId
+
     /** The Paykit route this payment takes: a Spark leg runs only while Spending is the source. */
     val routedPaykitRoute: PaykitRouteUi?
         get() = paykitRoute?.takeIf { payMethod == SendMethod.LIGHTNING }
@@ -9691,6 +9820,9 @@ data class SendUiState(
 
     val isHardwareFeeReady: Boolean
         get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
+
+    val isHardwareReviewReady: Boolean
+        get() = isHardwareFeeReady && !isRetainedSendCheckPending
 
     val isAmountEditable: Boolean
         get() = !isPaymentRequest && fixedLightningAmount == null &&
@@ -9730,12 +9862,76 @@ data class OnchainFeeUi(
     val requiresRefresh: Boolean = false,
 )
 
-enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
+/** What the durable record said about one ordinary hardware payment. */
+@Immutable
+data class RetainedSendCheck(
+    val walletId: String,
+    val address: String,
+    val amountSats: ULong,
+    val isBlocking: Boolean,
+)
+
+/** Shows the fee of the signed bytes that will go out, and stops it being edited. */
+internal fun SendUiState.withLockedRetainedFee(feeRate: ULong, miningFeeSats: ULong): SendUiState = copy(
+    isRetainedHardwarePayment = true,
+    isAmountInputValid = true,
+    speed = TransactionSpeed.Custom(feeRate.toUInt()),
+    onchainFeeUi = OnchainFeeUi(rate = FeeRate.CUSTOM, sats = miningFeeSats.toLong()),
+)
+
+/**
+ * Locks the original fee while the signed bytes can go out again, and unlocks it once the review moves to another
+ * payment. A reply for a payment no longer on review changes nothing, and each new answer needs its own consent.
+ */
+internal fun SendUiState.withRetainedSendStatus(
+    walletId: String,
+    address: String,
+    amountSats: ULong,
+    status: HwRetainedSendStatus,
+    defaultSpeed: TransactionSpeed,
+): SendUiState {
+    if (incomingPaymentRequestId != null || hardwareWalletId != walletId ||
+        this.address != address || amount != amountSats
+    ) {
+        return this
+    }
+    val check = RetainedSendCheck(walletId, address, amountSats, isBlocking = status is HwRetainedSendStatus.Blocking)
+    val checked = copy(
+        retainedSendCheck = check,
+        confirmedWarnings = if (check == retainedSendCheck) {
+            confirmedWarnings
+        } else {
+            (confirmedWarnings - SanityWarning.RETAINED_HARDWARE_SEND).toImmutableList()
+        },
+    )
+    return when (status) {
+        is HwRetainedSendStatus.Retry -> checked.withLockedRetainedFee(status.feeRate, status.miningFeeSats)
+        HwRetainedSendStatus.Blocking, HwRetainedSendStatus.None ->
+            if (isRetainedHardwarePayment) checked.withoutRetainedFeeLock(defaultSpeed) else checked
+    }
+}
+
+private fun SendUiState.withoutRetainedFeeLock(defaultSpeed: TransactionSpeed): SendUiState = copy(
+    isRetainedHardwarePayment = false,
+    speed = defaultSpeed,
+    onchainFeeUi = OnchainFeeUi(rate = FeeRate.fromSpeed(defaultSpeed)),
+)
+
+enum class SanityWarning(
+    @StringRes val message: Int,
+    val testTag: String,
+    @StringRes val title: Int = R.string.common__are_you_sure,
+) {
     VALUE_OVER_100_USD(R.string.wallet__send_dialog1, "SendDialog1"),
     OVER_HALF_BALANCE(R.string.wallet__send_dialog2, "SendDialog2"),
     OVER_HALF_USDT_BALANCE(R.string.wallet__send_dialog2_usdt, "SendDialog2"),
     FEE_OVER_HALF_VALUE(R.string.wallet__send_dialog3, "SendDialog3"),
     FEE_OVER_10_USD(R.string.wallet__send_dialog4, "SendDialog4"),
+    RETAINED_HARDWARE_SEND(
+        R.string.hardware__send_broadcast_uncertain_text,
+        "SendDialogRetainedHardwareSend",
+        R.string.hardware__send_broadcast_uncertain_title,
+    ),
     // TODO SendDialog5 https://github.com/synonymdev/bitkit/blob/master/src/screens/Wallets/Send/ReviewAndSend.tsx#L457-L466
 }
 

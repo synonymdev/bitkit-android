@@ -1371,6 +1371,8 @@
     <string name="hardware__search_error">Hardwarové peněženky se nepodařilo vyhledat. Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardware__send_broadcast_failed_text">Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardware__send_broadcast_failed_title">Platba nebyla potvrzena</string>
+    <string name="hardware__send_broadcast_uncertain_text">Vaše transakce mohla být odeslána do sítě. Před dalším pokusem zkontrolujte svou aktivitu.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transakce mohla být odeslána</string>
     <string name="hardware__send_confirm_address">NA ADRESU (POTVRĎTE NA ZAŘÍZENÍ)</string>
     <string name="hardware__send_onchain_only_text">Trezor může z této peněženky posílat pouze na bitcoinovou adresu.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade může z této peněženky posílat pouze na bitcoinovou adresu.</string>

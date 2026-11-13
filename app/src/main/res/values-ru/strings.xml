@@ -1388,6 +1388,8 @@
     <string name="hardware__search_error">Не удалось найти аппаратные кошельки. Проверьте подключение и попробуйте снова.</string>
     <string name="hardware__send_broadcast_failed_text">Проверьте подключение и попробуйте снова.</string>
     <string name="hardware__send_broadcast_failed_title">Платёж не подтверждён</string>
+    <string name="hardware__send_broadcast_uncertain_text">Ваша транзакция могла быть передана в сеть. Проверьте активность, прежде чем повторить попытку.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Транзакция могла быть отправлена</string>
     <string name="hardware__send_confirm_address">НА АДРЕС (ПОДТВЕРДИТЕ НА УСТРОЙСТВЕ)</string>
     <string name="hardware__send_onchain_only_text">Trezor может отправлять из этого кошелька только на Bitcoin-адрес.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade может отправлять из этого кошелька только на Bitcoin-адрес.</string>

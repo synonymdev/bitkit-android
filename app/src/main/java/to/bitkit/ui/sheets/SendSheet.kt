@@ -334,7 +334,15 @@ fun SendSheet(
                             }
                             navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
                         }
-                        is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
+                        is SendEffect.NavigateToHardwareSign -> {
+                            // The last step before signing: every warning and PIN check has passed by now.
+                            val state = appViewModel.sendUiState.value
+                            state.retainedSendToReplace?.let { walletId ->
+                                hwSendViewModel.consentToNewSignature(walletId, state.address, state.amount)
+                            }
+                            appViewModel.consumeRetainedSendConsent()
+                            navController.navigateTo(SendRoute.HardwareSign)
+                        }
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             val details = appViewModel.successSendUiState.value
@@ -526,6 +534,21 @@ fun SendSheet(
                     val initialSubscription = remember(initialSubscriptionId) {
                         initialSubscriptionId?.let(appViewModel::subscription)
                     }
+                    LaunchedEffect(
+                        uiState.hardwareWalletId,
+                        uiState.address,
+                        uiState.amount,
+                        uiState.incomingPaymentRequestId,
+                    ) {
+                        val walletId = uiState.hardwareWalletId ?: return@LaunchedEffect
+                        val status = hwSendViewModel.retainedSendStatus(
+                            uiState.address,
+                            uiState.amount,
+                            walletId,
+                            hasIncomingRequest = uiState.incomingPaymentRequestId != null,
+                        )
+                        appViewModel.applyRetainedSendStatus(walletId, uiState.address, uiState.amount, status)
+                    }
 
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
@@ -608,6 +631,8 @@ fun SendSheet(
                                 ?.savedStateHandle
                                 ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
                             appViewModel.onHardwareSignCancelled()
+                            // The review reads the record as soon as it recomposes, before this screen is disposed.
+                            hwSendViewModel.cancel()
                             if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
                     )

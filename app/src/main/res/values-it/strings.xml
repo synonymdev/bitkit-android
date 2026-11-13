@@ -1369,6 +1369,8 @@
     <string name="hardware__search_error">Impossibile cercare hardware wallet. Controlla la connessione e riprova.</string>
     <string name="hardware__send_broadcast_failed_text">Controlla la connessione e riprova.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento non confermato</string>
+    <string name="hardware__send_broadcast_uncertain_text">La tua transazione potrebbe essere stata trasmessa. Controlla la tua attività prima di riprovare.</string>
+    <string name="hardware__send_broadcast_uncertain_title">La transazione potrebbe essere stata inviata</string>
     <string name="hardware__send_confirm_address">ALL\'INDIRIZZO (CONFERMA SUL DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">Da questo wallet, Trezor può inviare solo a un indirizzo Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Da questo wallet, Jade può inviare solo a un indirizzo Bitcoin.</string>
