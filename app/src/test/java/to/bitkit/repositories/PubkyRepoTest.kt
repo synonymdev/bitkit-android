@@ -2676,7 +2676,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wakeIdentity reads a Ring-adopted key just in time and fails while Ring cannot give it`() = test {
+    fun `wakeIdentity decides a Ring-adopted identity without Ring, and signing reads its key just in time`() = test {
         val bareKey = VALID_SELF_KEY.removePrefix("pubky")
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         stubAdoptedRingSource()
@@ -2684,10 +2684,11 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.signWakeRegistration("ring_secret", "message")).thenReturn("ring_signature")
 
         assertEquals("pk:$bareKey", sut.wakeIdentity().getOrThrow())
+        verify(sharedPubkyClient, never()).ringCredential(any())
         assertEquals("ring_signature", sut.signWakeRegistration("pk:$bareKey", "message").getOrThrow())
 
         whenever(sharedPubkyClient.ringCredential(bareKey)).thenReturn(Result.failure(TestAppError("Unavailable")))
-        assertTrue(sut.wakeIdentity().isFailure, "A Ring read failure skips the registration")
+        assertTrue(sut.signWakeRegistration("pk:$bareKey", "message").isFailure, "A Ring read failure fails signing")
     }
 
     @Test

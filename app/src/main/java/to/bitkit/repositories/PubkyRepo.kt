@@ -2210,7 +2210,7 @@ class PubkyRepo @Inject constructor(
                 PubkyIdentityReadiness.Unavailable -> throw PubkyIdentityUnavailableError
                 PubkyIdentityReadiness.Ready -> {
                     val publicKey = _publicKey.value ?: throw PubkyIdentityUnavailableError
-                    publicKey.takeIf { wakeSecretKeyFor(it) != null }?.let(::pubkyWakeIdentity)
+                    publicKey.takeIf { hasWakeKeyFor(it) }?.let(::pubkyWakeIdentity)
                 }
             }
         }
@@ -2224,6 +2224,16 @@ class PubkyRepo @Inject constructor(
             val secretKeyHex = checkNotNull(wakeSecretKeyFor(publicKey)) { "No key for the Pubky identity" }
             pubkyService.signWakeRegistration(secretKeyHex, message)
         }
+    }
+
+    /** Whether this device holds the key of [publicKey], decided without reading a Ring-adopted key from Ring. */
+    private suspend fun hasWakeKeyFor(publicKey: String): Boolean {
+        val localKey = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        if (!localKey.isNullOrEmpty()) {
+            return pubkyService.publicKeyFromSecret(localKey).ensurePubkyPrefix() == publicKey
+        }
+        val source = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        return source == "${SharedPubkyContract.RING_SOURCE_PREFIX}${publicKey.removePrefix(PUBKY_PREFIX)}"
     }
 
     private suspend fun wakeSecretKeyFor(publicKey: String): String? {
