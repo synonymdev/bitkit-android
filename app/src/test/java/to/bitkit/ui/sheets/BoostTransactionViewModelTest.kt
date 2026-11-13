@@ -470,7 +470,13 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
             sut.clearActivity()
             val original = Activity.Onchain(onchainActivity.copy(doesExist = false))
             val replacement = Activity.Onchain(
-                onchainActivity.copy(id = "replacement", txId = newTxId, isBoosted = true, boostTxIds = listOf(mockTxId))
+                onchainActivity.copy(
+                    id = "replacement",
+                    txId = newTxId,
+                    isBoosted = true,
+                    confirmed = true,
+                    boostTxIds = listOf(mockTxId),
+                )
             )
             val otherConflict = Activity.Onchain(replacement.v1.copy(txId = "different-replacement"))
             for (item in listOf(original, replacement)) {
@@ -505,6 +511,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
             assertFalse(sut.canDeliver(event, activitySent))
             sut.setupActivity(activitySent)
             assertFalse(sut.canDeliver(event, activitySent))
+            expectNoEvents()
         }
     }
 

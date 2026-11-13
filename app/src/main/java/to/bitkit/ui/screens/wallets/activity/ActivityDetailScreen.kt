@@ -1073,7 +1073,7 @@ internal fun shouldEnableBoostButton(
     if (item !is Activity.Onchain) return false
 
     val activity = item.v1
-    if (hasPendingBoost && activity.txType == PaymentType.SENT && !activity.confirmed) return true
+    if (hasPendingBoost && activity.txType == PaymentType.SENT) return true
 
     // Check all disable conditions
     val shouldDisable = isCpfpChild || !activity.doesExist || activity.confirmed ||

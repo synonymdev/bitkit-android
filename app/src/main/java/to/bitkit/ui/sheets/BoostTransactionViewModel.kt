@@ -84,7 +84,11 @@ class BoostTransactionViewModel @Inject constructor(
 
         val attempt = rbfBoostRepo.find(activity.v1, walletGeneration)
         if (attempt != null && activity.boostType() == BoostType.RBF) {
-            observeAttempt(attempt, origin, reportFailure = false)
+            if (attempt.state.value == RbfBoostRepo.Status.Published) {
+                restoreQuote(attempt)
+            } else {
+                observeAttempt(attempt, origin, reportFailure = false)
+            }
         } else {
             initializeFeeEstimates()
         }

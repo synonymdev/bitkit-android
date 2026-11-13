@@ -18,6 +18,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
+import to.bitkit.utils.RbfOriginalConfirmed
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -48,13 +49,15 @@ class RbfBoostRepo @Inject constructor(
 
     fun observePending(activity: OnchainActivity) = changes.map {
         val attempt = find(activity, walletGeneration())
-        !activity.confirmed && attempt != null && attempt.state.value != Status.Published
+        attempt != null && attempt.state.value != Status.Published &&
+            (!activity.confirmed || activity.txId == attempt.replacementTxId)
     }
 
     fun confirm(activity: OnchainActivity, expectedGeneration: Long?, quote: Quote): Attempt? {
         val attempt = synchronized(lock) {
-            if (!admit(activity, expectedGeneration) || activity.confirmed) return null
+            if (!admit(activity, expectedGeneration)) return null
             val existing = findAttempt(activity)
+            if (activity.confirmed && activity.txId != existing?.replacementTxId) return null
             if (existing != null && existing.state.value !is Status.Pending) return existing
             if (existing == null && !canStartBoost(activity, quote)) {
                 return null
@@ -119,7 +122,8 @@ class RbfBoostRepo @Inject constructor(
             throw error
         } catch (error: Exception) {
             Logger.warn("RBF attempt failed", error, context = TAG)
-            finishFailure(key, attempt, expectedGeneration, cancelled = false)
+            val originalConfirmed = error is RbfOriginalConfirmed || error.cause is RbfOriginalConfirmed
+            finishFailure(key, attempt, expectedGeneration, cancelled = false, originalConfirmed = originalConfirmed)
         }
     }
 
@@ -148,10 +152,16 @@ class RbfBoostRepo @Inject constructor(
         if (!isCurrentWallet(expectedGeneration)) throw CancellationException("RBF wallet changed")
     }
 
-    private fun finishFailure(key: String, attempt: Attempt, expectedGeneration: Long, cancelled: Boolean) {
+    private fun finishFailure(
+        key: String,
+        attempt: Attempt,
+        expectedGeneration: Long,
+        cancelled: Boolean,
+        originalConfirmed: Boolean = false,
+    ) {
         synchronized(lock) {
             if (attempts[key] !== attempt) return
-            if (!isCurrentWallet(expectedGeneration) || attempt.replacementTxId == null) {
+            if (!isCurrentWallet(expectedGeneration) || attempt.replacementTxId == null || originalConfirmed) {
                 attempts.remove(key)
                 attempt.update(if (cancelled) Status.Cancelled else Status.Failed)
             } else {
@@ -159,7 +169,7 @@ class RbfBoostRepo @Inject constructor(
             }
             notifyChanged()
         }
-        if (!cancelled && attempt.replacementTxId != null && isCurrentWallet(expectedGeneration)) {
+        if (!cancelled && !originalConfirmed && attempt.replacementTxId != null && isCurrentWallet(expectedGeneration)) {
             lightningRepo.syncAsync()
         }
     }
