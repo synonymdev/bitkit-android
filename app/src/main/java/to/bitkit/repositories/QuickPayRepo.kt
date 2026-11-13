@@ -170,7 +170,9 @@ class QuickPayRepo @Inject constructor(
 
     /** Saves the change behind [authorization] once its check passed, only if it is the open check, and closes it. */
     suspend fun applyAuthorizedSettingsChange(authorization: QuickPayAuthorization): Result<Unit> =
-        enqueueSettingsCommand { SettingsCommand.Apply(authorization, it) }.await()
+        withContext(ioDispatcher) {
+            enqueueSettingsCommand { SettingsCommand.Apply(authorization, it) }.await()
+        }
 
     /** Closes the open check once every earlier settings call is decided, so none of them opens a check after it. */
     fun cancelSettingsChange() {

@@ -22,7 +22,7 @@ internal fun PaymentAuthentication(
 ) {
     val supported = rememberBiometricAuthSupported()
     var fallbackToPin by remember { mutableStateOf(false) }
-    Box(propagateMinConstraints = true, modifier = modifier) {
+    Box(modifier = modifier) {
         if (useBiometrics && supported && !fallbackToPin) {
             BiometricsView(onSuccess = onVerify, onFailure = { fallbackToPin = true })
         } else {

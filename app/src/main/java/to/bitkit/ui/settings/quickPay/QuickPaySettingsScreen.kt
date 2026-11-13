@@ -1,18 +1,15 @@
 package to.bitkit.ui.settings.quickPay
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -22,7 +19,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.PaymentAuthorizationOverlay
+import to.bitkit.ui.components.PaymentAuthorizationHost
 import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
@@ -38,12 +35,14 @@ fun QuickPaySettingsScreen(
     viewModel: QuickPaySettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val authorization = uiState.authorization
 
-    DisposableEffect(viewModel) {
-        onDispose { viewModel.onAuthorizationCancelled() }
-    }
-
-    Box {
+    PaymentAuthorizationHost(
+        useBiometrics = authorization?.useBiometrics,
+        pinDescriptionRes = R.string.security__pin_quickpay,
+        onCancel = viewModel::onAuthorizationCancelled,
+        onVerify = { authorization?.let(viewModel::onAuthorized) },
+    ) {
         QuickPaySettingsScreenContent(
             isQuickPayEnabled = uiState.isQuickPayEnabled,
             quickPayAmount = uiState.quickPayAmount,
@@ -52,16 +51,7 @@ fun QuickPaySettingsScreen(
             onQuickPayAmountChange = viewModel::setQuickPayAmount,
             onQuickPayDailyLimitMultiplierChange = viewModel::setQuickPayDailyLimitMultiplier,
             onBack = onBack,
-            modifier = if (uiState.authorization == null) Modifier else Modifier.clearAndSetSemantics {}
         )
-        uiState.authorization?.let { authorization ->
-            PaymentAuthorizationOverlay(
-                useBiometrics = authorization.useBiometrics,
-                pinDescriptionRes = R.string.security__pin_quickpay,
-                onCancel = viewModel::onAuthorizationCancelled,
-                onVerify = { viewModel.onAuthorized(authorization) },
-            )
-        }
     }
 }
 

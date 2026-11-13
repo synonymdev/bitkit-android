@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,7 +30,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -52,7 +50,7 @@ import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
-import to.bitkit.ui.components.PaymentAuthorizationOverlay
+import to.bitkit.ui.components.PaymentAuthorizationHost
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
@@ -98,22 +96,13 @@ fun AllowanceAuthorizationHost(
     content: @Composable () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    DisposableEffect(viewModel) {
-        onDispose { viewModel.onAuthorizationCancelled() }
-    }
-    Box {
-        Box(modifier = if (uiState.authorization == null) Modifier else Modifier.clearAndSetSemantics {}) {
-            content()
-        }
-        uiState.authorization?.let {
-            PaymentAuthorizationOverlay(
-                useBiometrics = it.useBiometrics,
-                pinDescriptionRes = R.string.security__pin_allowance,
-                onCancel = viewModel::onAuthorizationCancelled,
-                onVerify = viewModel::onAuthorized,
-            )
-        }
-    }
+    PaymentAuthorizationHost(
+        useBiometrics = uiState.authorization?.useBiometrics,
+        pinDescriptionRes = R.string.security__pin_allowance,
+        onCancel = viewModel::onAuthorizationCancelled,
+        onVerify = viewModel::onAuthorized,
+        content = content,
+    )
 }
 
 @Composable
