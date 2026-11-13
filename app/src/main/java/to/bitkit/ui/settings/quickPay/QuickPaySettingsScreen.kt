@@ -26,6 +26,7 @@ import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -42,6 +43,8 @@ fun QuickPaySettingsScreen(
         pinDescriptionRes = R.string.security__pin_quickpay,
         onCancel = viewModel::onAuthorizationCancelled,
         onVerify = { authorization?.let(viewModel::onAuthorized) },
+        // Insets the PIN check with the screen; the content's ScreenColumn then finds them consumed.
+        modifier = Modifier.screen(),
     ) {
         QuickPaySettingsScreenContent(
             isQuickPayEnabled = uiState.isQuickPayEnabled,
