@@ -63,11 +63,18 @@ class WakeAlertHandler @Inject constructor(
     private val topicTexts: WakeTopicTexts,
 ) : WakeHandler {
     override suspend fun handle(wake: WakeEnvelope) {
+        val wakeId = checkNotNull(wake.id) { "A wake without an id" }
         val text = checkNotNull(topicTexts.find(wake.topic)) { "No display text for topic '${wake.topic}'" }
-        val id = context.pushNotification(title = text.title, text = text.body)
+        val id = context.pushNotification(title = text.title, text = text.body, id = wakeNotificationId(wakeId))
         check(id != ID_NOTIFICATION_SKIPPED) { "Notification permission not granted" }
     }
 }
+
+/**
+ * The notification id of a wake's alert: the same on every delivery of the wake, so a retry replaces the alert instead
+ * of adding another, and at least 2^30, clear of the app's fixed ids and [ID_NOTIFICATION_SKIPPED].
+ */
+internal fun wakeNotificationId(wakeId: String): Int = (wakeId.hashCode() or (1 shl 30)) and Int.MAX_VALUE
 
 /** The gateway's display text of each topic, cached and refreshed now and then. */
 @OptIn(ExperimentalTime::class)

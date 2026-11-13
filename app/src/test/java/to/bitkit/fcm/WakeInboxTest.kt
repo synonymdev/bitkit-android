@@ -103,6 +103,16 @@ class WakeInboxTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a wake's alert keeps one notification id across deliveries, clear of the fixed ids`() {
+        val wakeId = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+        assertEquals(wakeNotificationId(wakeId), wakeNotificationId(wakeId.toCharArray().concatToString()))
+        listOf(wakeId, "00000000-0000-0000-0000-000000000001", "").forEach {
+            assertTrue(wakeNotificationId(it) >= 1 shl 30, "Above the fixed ids and the skipped marker: '$it'")
+        }
+    }
+
+    @Test
     fun `a wake delivered twice does its work once`() = test {
         stubPush(envelope())
 
