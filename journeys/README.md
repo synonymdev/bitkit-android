@@ -204,6 +204,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; closing the received sheet re-sizes iOS's Spending Confirm, so the lower amounts can show before the swipe |
 | `transfer/spark-emergency-exit.xml` | same file, ported in synonymdev/bitkit-ios#1217 — same steps and identifiers; only the description differs, naming the iOS unit tests and the Background App Refresh, Low Power Mode and notification notes in place of Android's battery notes |
 | `transfer/savings-select-funds.xml` | same file and steps — iOS runs it as J8 on synonymdev/bitkit-ios#1128 |
+| `transfer/spark-transfer-status.xml` | same file and steps — the Wait and Approve identifiers differ (Android `SettingUpWait` and `SettingUpPay`, iOS `SparkDepositWait` and `SparkDepositPay`), and each names its own unit tests |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS

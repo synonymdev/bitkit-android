@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
@@ -49,6 +51,7 @@ fun TransferAnimationView(
     keepAssetRatios: Boolean = false,
     innerRingShare: Float = ELLIPSE_INNER_SHARE,
     figureShare: Float = ELLIPSE_FIGURE_SHARE,
+    figureOffsetShare: Float = 0f,
     maxSize: Dp = Dp.Infinity,
 ) {
     val animationSpec: InfiniteRepeatableSpec<Float> = infiniteRepeatable(
@@ -90,6 +93,7 @@ fun TransferAnimationView(
                 rotationContent = if (rotateContent) rotationArrows else 0f,
                 innerRingShare = innerRingShare,
                 figureShare = figureShare,
+                figureOffsetShare = figureOffsetShare,
                 maxSize = maxSize,
             )
             return@Box
@@ -132,7 +136,8 @@ fun TransferAnimationView(
 
 /**
  * Draws the rings and figure as iOS's `EllipseLoader` does: the outer ring fills the largest square that fits, up to
- * [maxSize], the inner ring takes [innerRingShare] of it and the figure fits a square of [figureShare] of it.
+ * [maxSize], the inner ring takes [innerRingShare] of it and the figure fits a square of [figureShare] of it, moved
+ * down by [figureOffsetShare] of it.
  */
 @Composable
 private fun ScaledLayers(
@@ -144,6 +149,7 @@ private fun ScaledLayers(
     rotationContent: Float,
     innerRingShare: Float,
     figureShare: Float,
+    figureOffsetShare: Float,
     maxSize: Dp,
 ) {
     BoxWithConstraints(contentAlignment = Alignment.Center) {
@@ -174,7 +180,9 @@ private fun ScaledLayers(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(container * figureShare)
+                    .offset(y = container * figureOffsetShare)
+                    // Required, as a figure can be drawn larger than the outer ring, clipped to it.
+                    .requiredSize(container * figureShare)
                     .rotate(rotationContent),
             )
         }

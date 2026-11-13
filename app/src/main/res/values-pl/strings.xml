@@ -107,9 +107,6 @@
     <string name="lightning__spark_claim_fee">Opłata za odbiór</string>
     <string name="lightning__spark_confirmations">%1$d/3 potwierdzeń</string>
     <string name="lightning__spark_deposit">Wpłata</string>
-    <string name="lightning__spark_deposit__claimed">Spark dodaje je do Twojego salda wydatków.</string>
-    <string name="lightning__spark_deposit__looking">Czekamy, aż Spark zobaczy Twój przelew.</string>
-    <string name="lightning__spark_deposit__standard">Spark doda je do Twojego salda wydatków po {standard} potwierdzeniach, za około {minutes} minut.</string>
     <string name="lightning__spark_deposit__wait_button">Czekaj</string>
     <string name="lightning__spark_deposits_claimed">Odebrane wpłaty</string>
     <string name="lightning__spark_deposits_pending">Wpłaty w toku</string>
@@ -364,12 +361,6 @@
     <string name="lightning__order_state__inactive">Połączenie nieaktywne</string>
     <string name="lightning__rgs_snapshot_time">Czas snapshotu Rapid Gossip Sync</string>
     <string name="lightning__scores_sync_time">Czas synchronizacji wyników ścieżek</string>
-    <string name="lightning__setting_up__not_seen">Spark jeszcze nie widzi Twojego przelewu. Zostanie dodany po 3 potwierdzeniach; możesz opuścić ten ekran.</string>
-    <string name="lightning__setting_up__pay">Zapłać ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Natychmiast kosztuje teraz &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Zapłać albo poczekaj na 3 potwierdzenia, około 30 minut, z niższą opłatą.</string>
-    <string name="lightning__setting_up__speed">Prędkość: {speed}</string>
-    <string name="lightning__setting_up__step_adding">Dodawanie do wydatków</string>
-    <string name="lightning__setting_up__unavailable">Natychmiast nie jest dostępne dla tego przelewu. Spark doda go do Twojego salda wydatków po 3 potwierdzeniach, około 30 minut.</string>
     <string name="lightning__setting_up_button">Kontunuuj korzystanie z Bitkit\'a</string>
     <string name="lightning__setting_up_step1">Przetwarzanie płatności</string>
     <string name="lightning__setting_up_step2">Płatność powiodła się</string>
