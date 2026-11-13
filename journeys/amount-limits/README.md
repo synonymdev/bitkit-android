@@ -57,9 +57,21 @@ External node).
 `send-spending-after-receive.xml` covers the Android channel-cache regression. A usable channel can
 retain its old outbound limit after a receipt even though the displayed Spending balance is fresh.
 Opening an amountless invoice must refresh that channel snapshot before deriving the input limit.
-The existing `@send_2` fixture in `synonymdev/bitkit-e2e-tests` prepares a fresh local LND channel,
-receives 10 000 sats, checks rejection of 10 001, then exercises normal payments and reentry. Keep
-its toast and retained-field assertions; an additional rejected digit can hide the original failure.
 
-This fixes Android repository state publication; no feature is being ported and iOS source is
-unchanged. The shared Send2 case already asserts the same over-limit behavior on iOS.
+Use the [pinned Send2 fixture and local setup](https://github.com/synonymdev/bitkit-e2e-tests/tree/e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3)
+at `e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3`. Its `docker/docker-compose.yml` pins Bitcoin 26.0,
+electrs 0.10.2 and LND 0.18.0-beta. Start the checkout's local stack, boot a fresh Android emulator
+wallet and build the Android checkout with `E2E=true E2E_BACKEND=local ./gradlew assembleDevDebug`.
+Copy its universal APK to the E2E checkout's `aut/bitkit_e2e.apk`, install the locked dependencies
+with Node 22, and run `BACKEND=local ./ci_run_android.sh --mochaOpts.grep '@send_2 '`.
+
+[Send2](https://github.com/synonymdev/bitkit-e2e-tests/blob/e560ece2b7cc1fb5bbc1b72e8205abea544e7ae3/test/specs/send.e2e.ts)
+funds Savings, opens a private channel from LND, pays Bitkit 10 000 sats, and creates an amountless
+invoice on LND. For the XML journey, use that setup with zero Spending before the receipt, then
+follow the XML's send and dismissal steps. Keep the app and channel running between receipt and
+send. The first over-limit key must show the warning and leave the accepted prefix intact.
+
+The [pinned Android Send2 run](https://github.com/synonymdev/bitkit-android/actions/runs/42573552198)
+and [Android device journey review](https://github.com/synonymdev/bitkit-android/pull/1808#pullrequestreview-5824877373)
+record separate executions at the original fix revision. The XML targets Android channel-cache
+behavior. The shared Send2 case checks the same over-limit behavior on iOS.

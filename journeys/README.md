@@ -128,6 +128,7 @@ journey PR, which is what made this file conflict on every merge.
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
 | Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
 | Lightning channels | Manual Setup to the staging LSP node, which the dev flavor targets — [Backend preconditions](#backend-preconditions) |
+| A private inbound Lightning channel, receipt and amountless invoice from local LND | The pinned local-regtest [Send2 fixture](amount-limits/README.md#spending-immediately-after-a-lightning-receipt) starts Bitcoin, Electrum and LND and funds the Android wallet over that channel. |
 | A hardware wallet to pair, watch and sign with | the deterministic Trezor emulator from `bitkit-docker` over the Bridge transport, with the USB attach intent injected by `adb`; USB enumeration, permission grants, the OS picker and BLE are not simulated — [hardware-wallet](hardware-wallet/README.md) |
 | An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked as identities — [payment-requests](payment-requests/README.md) |
 | Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
@@ -163,6 +164,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `payment-requests/success-dismissal.xml` | same file, journey name and actions; both platforms dismiss successful and unpaid requests without a send error or duplicate payment. |
 | `payment-requests/minimum-onchain-amount.xml` | shared — minimum amount feedback, preparation cleanup, and manual retry use the same journey and `PaymentRequestAmountTooLowToast` identifier on both platforms. |
 | No matching intermediate return route | `amount-limits/custom-fee-wallet-switch.xml` is iOS-only: Custom returns through the fee picker before confirmation. Android's `setTransactionSpeed` returns directly to confirmation. |
+| `amount-limits/send-spending-after-receive.xml` | Android-only regression for stale outbound channel capacity immediately after a receipt. The shared Send2 E2E case already checks over-limit rejection on iOS. |
 | `node-lifecycle/connections-during-restart.xml` | not ported — iOS shows Lightning Connections without a node-running gate and has no syncing row |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
