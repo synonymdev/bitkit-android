@@ -98,7 +98,6 @@ class RbfBoostRepo @Inject constructor(
             requireCurrent(expectedGeneration)
             connectionRecovery.withOperation(owner) { session ->
                 requireCurrent(expectedGeneration)
-                val original = attempt.original
                 val replacement = attempt.replacementTxId ?: broadcast(attempt, expectedGeneration).also {
                     synchronized(lock) {
                         attempt.replacementTxId = it
