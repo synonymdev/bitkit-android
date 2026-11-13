@@ -2,12 +2,14 @@ package to.bitkit.repositories
 
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.WakeDevice
+import com.synonym.bitkitcore.WakeException
 import com.synonym.bitkitcore.WakeIdentityProof
 import com.synonym.bitkitcore.WakeRegistration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -30,6 +32,8 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -65,6 +69,12 @@ class WakeRepo @Inject constructor(
 
         /** How long one presence lease lasts, longer than [PRESENCE_RENEW_INTERVAL] so a late renewal keeps it. */
         val PRESENCE_TTL = 90.seconds
+
+        /** The wait before the first retry of a sync that failed for a transient reason. It doubles after each. */
+        val SYNC_RETRY_FIRST = 30.seconds
+
+        /** The longest wait between two retries of a failed sync, unless the gateway asks for longer. */
+        val SYNC_RETRY_MAX = 15.minutes
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -188,7 +198,6 @@ class WakeRepo @Inject constructor(
             topics = TOPICS,
             timestampSecs = timestampSecs,
         )
-        credentialStore.updateRegistrationState { it.copy(lastTimestampSecs = timestampSecs) }
         val lightningProof = WakeIdentityProof(
             identity = registration.lightningIdentity,
             signature = lightningRepo.signMessage(request.message).getOrThrow(),
@@ -199,11 +208,17 @@ class WakeRepo @Inject constructor(
                 signature = pubkyRepo.signWakeRegistration(it, request.message).getOrThrow(),
             )
         }
+        // The gateway may store this registration even when its answer is lost, so until an answer says otherwise
+        // the last accepted content is unknown and an opt-out has something to unregister.
+        credentialStore.updateRegistrationState {
+            it.copy(lastTimestampSecs = timestampSecs, fingerprint = null, mayBeRegistered = true)
+        }
         return wakeService.register(registration.gatewayUrl, request, listOfNotNull(lightningProof, pubkyProof))
     }
 
     private suspend fun optOut(gatewayUrl: String): WakeSync {
-        if (credentialStore.registrationState().fingerprint == null) return WakeSync.NotOptedIn
+        val state = credentialStore.registrationState()
+        if (!state.mayBeRegistered && state.fingerprint == null) return WakeSync.NotOptedIn
         val credentials = credentialStore.load() ?: return WakeSync.NotOptedIn
         unregisterDevice(gatewayUrl, credentials)
         return WakeSync.Unregistered
@@ -213,7 +228,7 @@ class WakeRepo @Inject constructor(
         runSuspendCatching { wakeService.unregister(gatewayUrl, credentials.deviceSecret) }
             .recoverCatching { if (it.wakeRejection()?.status?.toInt() != HTTP_UNAUTHORIZED) throw it }
             .getOrThrow()
-        credentialStore.updateRegistrationState { it.copy(fingerprint = null) }
+        credentialStore.updateRegistrationState { it.copy(fingerprint = null, mayBeRegistered = false) }
     }
 
     private suspend fun observeRegistration() {
@@ -223,7 +238,23 @@ class WakeRepo @Inject constructor(
             pubkyRepo.publicKey,
         ) { isNodeRunning, isOptedIn, publicKey -> Triple(isNodeRunning, isOptedIn, publicKey) }
             .distinctUntilChanged()
-            .collect { syncRegistration() }
+            .collectLatest { syncUntilSettled() }
+    }
+
+    /**
+     * Syncs, and after a transient failure syncs again, waiting [SYNC_RETRY_FIRST] and then twice as long each time up
+     * to [SYNC_RETRY_MAX], or longer when the gateway asks for it. A failure that would repeat is left to the next
+     * change. The observer cancels it when the inputs change.
+     */
+    internal suspend fun syncUntilSettled() {
+        var wait = SYNC_RETRY_FIRST
+        while (true) {
+            val failure = syncRegistration().exceptionOrNull() ?: return
+            if (!failure.isTransientWakeFailure()) return
+            val retryAfter = failure.wakeRejection()?.retryAfterSecs?.toLong()?.seconds ?: Duration.ZERO
+            delay(maxOf(wait, retryAfter))
+            wait = minOf(wait * 2, SYNC_RETRY_MAX)
+        }
     }
 
     private suspend fun holdPresence() {
@@ -306,6 +337,22 @@ sealed interface WakeSync {
 
     data class Registered(val deviceId: String, val unknownTopics: List<String>) : WakeSync
 }
+
+/**
+ * Whether a failed sync is worth trying again unchanged: no answer from the gateway, its 5xx or 429, or a failure
+ * before the request (such as the push token or a signature). Any other gateway 4xx, or a request core refused to
+ * build, fails the same way again.
+ */
+internal fun Throwable.isTransientWakeFailure(): Boolean =
+    when (val error = generateSequence(this) { it.cause }.filterIsInstance<WakeException>().firstOrNull()) {
+        null, is WakeException.RequestFailed -> true
+        is WakeException.GatewayRejected -> error.status.toInt()
+            .let { it >= HTTP_SERVER_ERROR || it == HTTP_TOO_MANY_REQUESTS }
+        else -> false
+    }
+
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val HTTP_SERVER_ERROR = 500
 
 /** `max(now, last + 1)`: the gateway refuses a registration older than the install's last one with a 409. */
 internal fun nextRegistrationTimestamp(nowSecs: Long, lastSecs: Long?): Long =

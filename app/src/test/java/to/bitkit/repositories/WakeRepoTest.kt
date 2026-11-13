@@ -9,6 +9,8 @@ import com.synonym.bitkitcore.WakePlatform
 import com.synonym.bitkitcore.WakeRegistration
 import com.synonym.bitkitcore.WakeRegistrationRequest
 import com.synonym.bitkitcore.WakeServerInfo
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.currentTime
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -33,7 +35,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class WakeRepoTest : BaseUnitTest() {
     companion object {
         private const val GATEWAY_URL = "http://127.0.0.1:9020"
@@ -47,6 +49,16 @@ class WakeRepoTest : BaseUnitTest() {
         private const val PK_SIGNATURE = "pk-signature"
         private const val LN_IDENTITY = "ln:$NODE_ID"
         private const val PK_IDENTITY = "pk:$PUBKY_KEY"
+
+        private val ACCEPTED = WakeRegistration(
+            deviceId = "device-1",
+            identities = listOf(LN_IDENTITY),
+            topics = WakeRepo.TOPICS,
+            unknownTopics = emptyList(),
+            serverTime = NOW_SECS.toULong(),
+        )
+
+        private fun lost() = AppError(WakeException.RequestFailed("timed out"))
 
         private val CREDENTIALS = WakeCredentials(
             installId = "AAAAAAAAAAAAAAAAAAAAAA",
@@ -302,6 +314,67 @@ class WakeRepoTest : BaseUnitTest() {
 
         assertTrue(sut.unregister().isSuccess)
         verify(wakeService).unregister(GATEWAY_URL, CREDENTIALS.deviceSecret)
+    }
+
+    @Test
+    fun `a sync that failed for a transient reason is retried until it succeeds`() = test {
+        var attempts = 0
+        whenever(wakeService.register(any(), any(), any())).thenAnswer {
+            attempts++
+            when (attempts) {
+                1 -> throw lost()
+                2 -> throw AppError(WakeException.GatewayRejected(429u, "rate_limited", "later", null, 120uL))
+                else -> ACCEPTED
+            }
+        }
+
+        sut.syncUntilSettled()
+
+        assertEquals(3, attempts)
+        assertEquals(150_000L, currentTime, "30 s, then the gateway's 120 s over the doubled 60 s")
+        assertEquals(WakeSync.UpToDate, sut.syncRegistration().getOrThrow())
+    }
+
+    @Test
+    fun `a sync the gateway refuses for good is left to the next change`() = test {
+        var attempts = 0
+        whenever(wakeService.register(any(), any(), any())).thenAnswer {
+            attempts++
+            throw AppError(WakeException.GatewayRejected(400u, "invalid_request", "bad", null, null))
+        }
+
+        sut.syncUntilSettled()
+
+        assertEquals(1, attempts)
+        assertEquals(0L, currentTime)
+    }
+
+    @Test
+    fun `opting out unregisters a registration whose answer was lost`() = test {
+        whenever(wakeService.register(any(), any(), any())).thenAnswer { throw lost() }
+        assertTrue(sut.syncRegistration().isFailure)
+        whenever(wakeConfig.isOptedIn()).thenReturn(false)
+
+        assertEquals(WakeSync.Unregistered, sut.syncRegistration().getOrThrow())
+        verify(wakeService).unregister(GATEWAY_URL, CREDENTIALS.deviceSecret)
+        assertEquals(WakeSync.NotOptedIn, sut.syncRegistration().getOrThrow(), "Nothing is left to unregister")
+    }
+
+    @Test
+    fun `a change whose answer was lost is sent again when it is undone`() = test {
+        sut.syncRegistration().getOrThrow()
+        whenever(pubkyRepo.wakeIdentity()).thenReturn(Result.success(PK_IDENTITY))
+        whenever(wakeService.register(any(), any(), any())).thenAnswer { throw lost() }
+        assertTrue(sut.syncRegistration().isFailure)
+
+        whenever(pubkyRepo.wakeIdentity()).thenReturn(Result.success(null))
+        whenever(wakeService.register(any(), any(), any())).thenReturn(ACCEPTED)
+
+        assertIs<WakeSync.Registered>(sut.syncRegistration().getOrThrow(), "The gateway may hold the pk change")
+        assertEquals(
+            listOf(listOf(LN_IDENTITY), listOf(LN_IDENTITY, PK_IDENTITY), listOf(LN_IDENTITY)),
+            preparedIdentities,
+        )
     }
 
     @Test

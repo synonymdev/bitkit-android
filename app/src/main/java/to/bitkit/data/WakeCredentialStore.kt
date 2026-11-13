@@ -64,8 +64,16 @@ class WakeCredentialStore @Inject constructor(
 /** What this install last sent to the gateway. */
 @Serializable
 data class WakeRegistrationState(
-    /** Unix seconds of the last registration prepared, sent or not, so the next one is later. */
+    /** Unix seconds of the last registration sent, answered or not, so the next one is later. */
     val lastTimestampSecs: Long? = null,
-    /** Hash of the last registration the gateway accepted; null while this install is not registered. */
+    /**
+     * Hash of the last registration the gateway accepted. Cleared before each registration is sent, so one whose answer
+     * was lost is sent again, and null while this install is not registered.
+     */
     val fingerprint: String? = null,
+    /**
+     * Set before a registration is sent and cleared once the gateway confirms the unregister: a registration whose
+     * answer was lost may still be stored there, so an opt-out has to unregister it.
+     */
+    val mayBeRegistered: Boolean = false,
 )
