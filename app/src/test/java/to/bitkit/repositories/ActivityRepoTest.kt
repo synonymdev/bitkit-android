@@ -55,6 +55,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class ActivityRepoTest : BaseUnitTest() {
@@ -451,6 +452,44 @@ class ActivityRepoTest : BaseUnitTest() {
             )
             assertFalse(sut.isSyncingLdkNodePayments.value)
         }
+    }
+
+    @Test
+    fun `recordRbfBoost passes scoped identifiers and rate to core without rewriting the original`() = test {
+        val original = createOnchainActivity(walletId = "trezor:test").v1
+        whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(200))
+
+        val result = sut.recordRbfBoost(original, "replacement-tx", 25uL)
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).recordRbfBoost(original.id, "replacement-tx", 25uL, original.walletId)
+        verify(coreService.activity, never()).update(any(), any())
+        assertEquals(200_000L, sut.activitiesChanged.value)
+        assertEquals(200_000L, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `recordRbfBoost propagates storage failure without notifying observers`() = test {
+        val original = createOnchainActivity().v1
+        val failure = AppError(message = "storage unavailable")
+        whenever(coreService.activity.recordRbfBoost(original.id, "replacement-tx", 25uL, original.walletId))
+            .thenAnswer { throw failure }
+
+        val result = sut.recordRbfBoost(original, "replacement-tx", 25uL)
+
+        assertEquals(failure, result.exceptionOrNull())
+        assertEquals(0L, sut.activitiesChanged.value)
+        assertEquals(0L, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `recordRbfBoost preserves coroutine cancellation`() = test {
+        val original = createOnchainActivity().v1
+        whenever(coreService.activity.recordRbfBoost(original.id, "replacement-tx", 25uL, original.walletId))
+            .thenThrow(CancellationException("cancelled"))
+
+        assertFailsWith<CancellationException> { sut.recordRbfBoost(original, "replacement-tx", 25uL) }
+        assertEquals(0L, sut.activitiesChanged.value)
     }
 
     @Test

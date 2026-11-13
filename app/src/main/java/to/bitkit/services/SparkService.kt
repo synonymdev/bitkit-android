@@ -2,18 +2,23 @@ package to.bitkit.services
 
 import breez_sdk_spark.BreezSdk
 import breez_sdk_spark.ChainApiType
+import breez_sdk_spark.CheckRecoverFundsRequest
+import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.ClaimDepositRequest
 import breez_sdk_spark.Config
+import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.DepositInfo
 import breez_sdk_spark.EventListener
 import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.FetchClaimDepositQuoteRequest
 import breez_sdk_spark.FetchClaimDepositQuoteResponse
+import breez_sdk_spark.FetchLightningSendStatusRequest
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateRequest
 import breez_sdk_spark.ImportUnilateralExitStateResponse
+import breez_sdk_spark.InputType
 import breez_sdk_spark.ListPaymentsRequest
 import breez_sdk_spark.ListUnclaimedDepositsRequest
 import breez_sdk_spark.MaxFee
@@ -21,10 +26,15 @@ import breez_sdk_spark.MaxOnchainFee
 import breez_sdk_spark.OnchainConfirmationSpeed
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentRequest
+import breez_sdk_spark.PaymentStatus
+import breez_sdk_spark.PrepareRecoverFundsRequest
+import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.PrepareSendPaymentRequest
 import breez_sdk_spark.PrepareSendPaymentResponse
 import breez_sdk_spark.ReceivePaymentMethod
 import breez_sdk_spark.ReceivePaymentRequest
+import breez_sdk_spark.RecoverFundsRequest
+import breez_sdk_spark.RecoverFundsResponse
 import breez_sdk_spark.SdkBuilder
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.Seed
@@ -38,11 +48,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.safe
+import to.bitkit.repositories.SparkExitRecovering
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -61,13 +73,16 @@ class SparkService @Inject constructor(
     private val keychain: Keychain,
 ) {
     companion object {
+        /** When an invoice made at [timestamp] with [expiry] seconds to live expires, in epoch seconds. */
+        internal fun invoiceExpiresAt(timestamp: ULong, expiry: ULong): ULong = timestamp.safe() + expiry.safe()
+
         private const val TAG = "SparkService"
 
         /**
          * Bitkit's settings over the SDK's [defaults]. Breez's real-time data sync server, its Lightning address
          * (LNURL) server and its default external input parsers stay off on every network.
          */
-        internal fun configure(defaults: Config, apiKey: String?): Config = defaults.apply {
+        internal fun configure(defaults: Config, apiKey: String?, isExiting: Boolean): Config = defaults.apply {
             this.apiKey = apiKey
             realTimeSyncServerUrl = null
             lnurlDomain = null
@@ -79,6 +94,7 @@ class SparkService @Inject constructor(
                 onchain = MaxOnchainFee.NetworkRecommended(DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB),
                 proportionalPpm = null,
             )
+            leafOptimizationConfig = leafOptimizationConfig.copy(autoEnabled = !isExiting)
         }
 
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
@@ -114,6 +130,13 @@ class SparkService @Inject constructor(
          */
         fun bolt11SendOptions(prefersSpark: Boolean): SendPaymentOptions =
             SendPaymentOptions.Bolt11Invoice(preferSpark = prefersSpark, completionTimeoutSecs = null)
+
+        /** The route hint short channel id under which an invoice carries its Spark address, as spark-sdk sets it. */
+        private const val SPARK_ADDRESS_HINT_SCID = 17_592_187_092_992_000_001uL
+
+        /** Whether [shortChannelIds], an invoice's route hint hops, carry a Spark address. */
+        internal fun hasSparkAddressHint(shortChannelIds: List<ULong>): Boolean =
+            SPARK_ADDRESS_HINT_SCID in shortChannelIds
     }
 
     private val mutex = Mutex()
@@ -143,14 +166,18 @@ class SparkService @Inject constructor(
      */
     val prefersSpark: Boolean get() = Env.network == Network.REGTEST
 
-    /** Connects the SDK and returns true, or false when it was already connected. */
-    suspend fun connect(walletIndex: Int): Boolean = mutex.withLock {
+    /**
+     * Connects the Spark wallet. While [isExiting], leaf optimization stays off: it swaps leaves with the operators,
+     * which would hand the leaves an emergency exit is spending to someone else, whose refunds then confirm first.
+     * Returns true, or false when it was already connected.
+     */
+    suspend fun connect(walletIndex: Int, isExiting: Boolean = false): Boolean = mutex.withLock {
         if (sdk != null) return@withLock false
         if (isWiping) throw SparkError.WipeInProgress()
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-        val config = configure(defaultConfig(network), Env.breezApiKey)
+        val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
         val chainServiceUrl = Env.sparkChainServiceUrl(Env.network)
         val connected = SdkBuilder(config, Seed.Mnemonic(mnemonic, passphrase)).use { builder ->
@@ -166,7 +193,8 @@ class SparkService @Inject constructor(
             },
         )
         sdk = connected
-        Logger.info("Connected Spark wallet on '$network' with chain '${chainServiceUrl ?: "default"}'", context = TAG)
+        val chain = chainServiceUrl ?: "default"
+        Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
         true
     }
 
@@ -234,13 +262,14 @@ class SparkService @Inject constructor(
             ),
         )
 
-    suspend fun send(prepared: PrepareSendPaymentResponse): Payment {
+    /** Sends [prepared]; Spark makes one payment per [idempotencyKey], a UUID that becomes the payment's id. */
+    suspend fun send(prepared: PrepareSendPaymentResponse, idempotencyKey: String? = null): Payment {
         val options = when (prepared.paymentMethod) {
             is SendPaymentMethod.Bolt11Invoice -> bolt11SendOptions(prefersSpark)
             is SendPaymentMethod.BitcoinAddress -> SendPaymentOptions.BitcoinAddress(OnchainConfirmationSpeed.MEDIUM)
             else -> null
         }
-        return requireSdk().sendPayment(SendPaymentRequest(prepared, options)).payment
+        return requireSdk().sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
     }
 
     /** The fastest recommended fee rate, in sat/vB, from the SDK's own fee source. */
@@ -272,12 +301,30 @@ class SparkService @Inject constructor(
 
     suspend fun listPayments(): List<Payment> = requireSdk().listPayments(ListPaymentsRequest()).payments
 
+    /** When [bolt11] expires, in epoch seconds, read by the SDK's own parser; null when it isn't a BOLT11 invoice. */
+    suspend fun invoiceExpiresAt(bolt11: String): ULong? =
+        (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1?.let { invoiceExpiresAt(it.timestamp, it.expiry) }
+
+    /**
+     * This wallet's Lightning send of [bolt11] as the Spark operators record it, without the local history: null when
+     * they know none. A direct Spark transfer to the invoice's Spark address is not covered.
+     */
+    suspend fun lightningSendStatus(bolt11: String): PaymentStatus? =
+        requireSdk().fetchLightningSendStatus(FetchLightningSendStatusRequest(bolt11)).status
+
+    /** Whether [bolt11] carries a Spark address, so a send preferring Spark pays it as a direct transfer. */
+    fun carriesSparkAddress(bolt11: String): Boolean =
+        hasSparkAddressHint(Bolt11Invoice.fromStr(bolt11).routeHints().flatten().map { it.shortChannelId })
+
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */
     suspend fun exportExitState(): String = requireSdk().exportUnilateralExitState().exitState
 
     /** Merges an exported exit state back in, without contacting the Spark operators. */
     suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse =
         requireSdk().importUnilateralExitState(ImportUnilateralExitStateRequest(exitState))
+
+    /** The SDK calls of an emergency exit, or null while Spark is not connected. */
+    fun exitRecovering(): SparkExitRecovering? = sdk?.let(::BreezSparkExitRecovering)
 
     /** The Spark network this build runs on, as exit data backups record it. */
     val networkName: String? get() = sparkNetwork()?.name?.lowercase()
@@ -289,6 +336,22 @@ class SparkService @Inject constructor(
         Network.REGTEST -> SparkNetwork.REGTEST
         else -> null
     }
+}
+
+class BreezSparkExitRecovering(private val sdk: BreezSdk) : SparkExitRecovering {
+    override suspend fun prepare(request: PrepareRecoverFundsRequest): PrepareRecoverFundsResponse =
+        sdk.prepareRecoverFunds(request)
+
+    override suspend fun recover(request: RecoverFundsRequest, signer: CpfpSigner?): RecoverFundsResponse =
+        sdk.recoverFunds(request, signer)
+
+    override suspend fun check(recovery: RecoverFundsResponse): CheckRecoverFundsResponse =
+        sdk.checkRecoverFunds(CheckRecoverFundsRequest(recovery))
+
+    override suspend fun exportExitState(): String = sdk.exportUnilateralExitState().exitState
+
+    override suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse =
+        sdk.importUnilateralExitState(ImportUnilateralExitStateRequest(exitState))
 }
 
 sealed class SparkError(message: String, cause: Throwable? = null) : AppError(message, cause) {
@@ -303,12 +366,27 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     /** The withdrawal fee rose above the fee the user confirmed. */
     class WithdrawalFeeChanged : SparkError("Spark withdrawal fee changed since it was confirmed")
 
+    class WithdrawalPending : SparkError("An earlier Spark withdrawal is still settling")
+
+    /** Spark could withdraw to the contact, but its balance can't cover the amount plus the withdrawal fee. */
+    class WithdrawalOverBalance : SparkError("Spark balance can't cover the withdrawal and its fee")
+
+    /** Spark's list shows the withdrawal never went out. */
+    class WithdrawalNotSent : SparkError("Spark never sent the withdrawal")
+
+    /** Spark returned the withdrawal as pending, which it can still fail, so its outcome is not known yet. */
+    class WithdrawalNotCompleted : SparkError("Spark has not completed the withdrawal yet")
+
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
-     * payment, or its fee was over the caller's limit. A Paykit request or allowance attempt can then end as failed.
+     * payment, or its fee was over the caller's limit; or the node refused one because Spark hadn't listed its earlier
+     * sends yet. A Paykit request or allowance attempt can then end as failed.
      */
     open class SendRefused(message: String, cause: Throwable? = null) : SparkError(message, cause)
 
     /** Spark refused to pay an expired Lightning invoice, before anything left the wallet. */
     class InvoiceExpired(cause: Throwable? = null) : SendRefused("The Lightning invoice has expired", cause)
+
+    /** Refused a still-valid invoice created before the restore, as Spark can't show it didn't pay it then. */
+    class RestoredInvoiceUnverified : SendRefused("Spark can't show it didn't pay this invoice before the restore")
 }

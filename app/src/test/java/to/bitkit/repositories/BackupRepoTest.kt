@@ -29,7 +29,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
@@ -71,6 +73,7 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.withPublicSharingDisabledForRestore
 import to.bitkit.di.json
+import to.bitkit.env.Env
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -83,6 +86,7 @@ import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.SparkExitBackupV1
+import to.bitkit.models.SparkExitEarlierAddressBackupV1
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -95,6 +99,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -105,6 +110,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -115,6 +121,9 @@ import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class BackupRepoTest : BaseUnitTest() {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
     private val vssBackupClient = mock<VssBackupClient>()
@@ -1829,6 +1838,172 @@ class BackupRepoTest : BaseUnitTest() {
         verify(vssBackupClient, never()).putObject(any(), any())
     }
 
+    private suspend fun applyCacheUpdates() = doAnswer {
+        val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+        cacheData.update(transform)
+    }.whenever(cacheStore).update(any())
+
+    @Test
+    fun `a restore keeps the higher spark exit funding index of the device and the backup`() = test {
+        applyCacheUpdates()
+        cacheData.value = AppCacheData(sparkExitNextFundingIndexes = mapOf("regtest/wallet0" to 5))
+        val backedUp = mapOf("regtest/wallet0" to 3, "regtest/wallet1" to 2)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(sparkExitNextFundingIndexes = backedUp)))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(
+            mapOf("regtest/wallet0" to 5, "regtest/wallet1" to 2),
+            cacheData.value.sparkExitNextFundingIndexes,
+            "an exit would fund from an address an earlier exit used",
+        )
+    }
+
+    @Test
+    fun `a restore brings back the backed-up spark exit funding index`() = test {
+        applyCacheUpdates()
+        val backedUp = mapOf("regtest/wallet0" to 3)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(sparkExitNextFundingIndexes = backedUp)))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(backedUp, cacheData.value.sparkExitNextFundingIndexes)
+    }
+
+    @Test
+    fun `a restore marks each restored spark exit funding index for a look at its funding addresses`() = test {
+        applyCacheUpdates()
+        val backedUp = mapOf("regtest/wallet0" to 3)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(sparkExitNextFundingIndexes = backedUp)))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(setOf("regtest/wallet0"), cacheData.value.sparkExitFundingRecoveryPending)
+    }
+
+    @Test
+    fun `a metadata backup written before the spark exit funding index restores with none kept`() = test {
+        applyCacheUpdates()
+        val cache = json.parseToJsonElement(json.encodeToString(AppCacheData())).jsonObject -
+            "sparkExitNextFundingIndexes"
+        stubMetadataRestore(envelope = envelopeWithRawField(metadataEnvelope(), "cache", JsonObject(cache).toString()))
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertFalse(BackupCategory.METADATA in failed)
+        assertTrue(cacheData.value.sparkExitNextFundingIndexes.isEmpty(), "an exit then scans for the index")
+    }
+
+    private fun earlierAddressStore(): SparkExitEarlierAddressStore {
+        Env.initAppStoragePath(tempFolder.root.absolutePath)
+        return SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+    }
+
+    private val sparkWalletKey get() = "${Env.network.name.lowercase()}/wallet0"
+
+    @Test
+    fun `a metadata backup carries the wallet's earlier spark exit addresses`() = test {
+        val store = earlierAddressStore()
+        val kept = SparkExitEarlierAddress.Kind.KEPT_CHANGE
+        val cancelled = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
+        store.add(SparkExitEarlierAddress("bcrt1qkept", "m/84'/1'/7797'/0/2", kept, sats = 600uL, atMillis = 1L))
+        store.add(SparkExitEarlierAddress("bcrt1qcancelled", "m/84'/1'/7797'/0/0", cancelled, atMillis = 2L))
+        stubMetadataBackupReads()
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        val expected = listOf(
+            SparkExitEarlierAddressBackupV1("bcrt1qkept", "m/84'/1'/7797'/0/2", "keptChange", 1L),
+            SparkExitEarlierAddressBackupV1("bcrt1qcancelled", "m/84'/1'/7797'/0/0", "cancelledFunding", 2L),
+        )
+        assertEquals(mapOf(sparkWalletKey to expected), payload.sparkExitEarlierAddresses)
+    }
+
+    @Test
+    fun `a restore lists the backed-up earlier spark exit addresses and keeps the device's`() = test {
+        val store = earlierAddressStore()
+        val kept = SparkExitEarlierAddress.Kind.KEPT_CHANGE
+        val onDevice = SparkExitEarlierAddress("bcrt1qdevice", "m/84'/1'/7797'/0/1", kept, sats = 600uL, atMillis = 5L)
+        store.add(onDevice)
+        val backedUp = listOf(
+            SparkExitEarlierAddressBackupV1("bcrt1qdevice", "m/84'/1'/7797'/0/1", "cancelledFunding", 1L),
+            SparkExitEarlierAddressBackupV1("bcrt1qrestored", "m/84'/1'/7797'/0/2", "keptChange", 2L),
+            SparkExitEarlierAddressBackupV1("bcrt1qfuture", "m/84'/1'/7797'/0/3", "someLaterKind", 3L),
+        )
+        val envelope = json.encodeToString(
+            MetadataBackupV1(
+                createdAt = 123,
+                tagMetadata = emptyList(),
+                cache = AppCacheData(),
+                sparkExitEarlierAddresses = mapOf(sparkWalletKey to backedUp),
+            )
+        )
+        stubMetadataRestore(envelope = envelope)
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertFalse(BackupCategory.METADATA in failed, "a kind this app does not know fails the whole metadata")
+        val restored = SparkExitEarlierAddress("bcrt1qrestored", "m/84'/1'/7797'/0/2", kept, atMillis = 2L)
+        assertEquals(listOf(onDevice, restored), store.load())
+    }
+
+    @Test
+    fun `a metadata restore keeps spark's backed-up send hashes but holds older invoices until spark lists them`() =
+        test {
+            val publicAddress = "bcrt1qpublic"
+            stubPublicAddressRestore(publicAddress)
+            stubMetadataRestore(
+                envelope = metadataEnvelope(
+                    metadata = listOf(preActivityMetadata()),
+                    cache = AppCacheData(onchainAddress = publicAddress, sparkSendHashes = listOf("hash")),
+                ),
+            )
+
+            sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+            assertEquals(listOf("hash"), cacheData.value.sparkSendHashes)
+            assertNotNull(cacheData.value.sparkHistoryUnseededSince)
+            assertNotNull(cacheData.value.sparkRestoredAt)
+        }
+
+    @Test
+    fun `a restore without a metadata backup still holds older invoices on both rails`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertNotNull(cacheData.value.sparkHistoryUnseededSince)
+        assertNotNull(cacheData.value.ldkHistoryUnseededSince)
+        assertNotNull(cacheData.value.sparkRestoredAt)
+    }
+
+    @Test
+    fun `a metadata restore holds older invoices until the node lists its own sends`() = test {
+        val publicAddress = "bcrt1qpublic"
+        stubPublicAddressRestore(publicAddress)
+        stubMetadataRestore(
+            envelope = metadataEnvelope(
+                metadata = listOf(preActivityMetadata()),
+                cache = AppCacheData(
+                    onchainAddress = publicAddress,
+                    ldkSendHashes = listOf("hash"),
+                    ldkSendHashesSeeded = true,
+                ),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(listOf("hash"), cacheData.value.ldkSendHashes)
+        assertTrue(cacheData.value.ldkSendHashesSeeded)
+        assertNotNull(cacheData.value.ldkHistoryUnseededSince)
+    }
+
     @Test
     fun `metadata cache failure remains optional after public address quarantine succeeds`() = test {
         val publicAddress = "bcrt1qpublic"
@@ -1837,7 +2012,9 @@ class BackupRepoTest : BaseUnitTest() {
         doAnswer {
             val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
             val updated = transform(cacheData.value)
-            if (failCacheWrite && updated.backupStatuses == cacheData.value.backupStatuses) {
+            // The metadata cache write follows the restore's own write of its holds.
+            val isMetadataWrite = cacheData.value.sparkHistoryUnseededSince != null
+            if (failCacheWrite && isMetadataWrite && updated.backupStatuses == cacheData.value.backupStatuses) {
                 failCacheWrite = false
                 throw BackupRepoTestError("cache store unavailable")
             }
@@ -1853,6 +2030,7 @@ class BackupRepoTest : BaseUnitTest() {
         verify(privatePaykitRepo).restoreBackup(null)
         assertTrue(createReservationRepo(reservationStore).isUnavailableForReusableReceive(publicAddress))
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+        assertFalse(failCacheWrite, "the metadata cache write never failed")
     }
 
     @Test

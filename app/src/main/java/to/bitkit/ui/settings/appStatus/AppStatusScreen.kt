@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -63,7 +65,9 @@ fun AppStatusScreen(
         onElectrumClick = { navController.navigateTo(Routes.ElectrumConfig) },
         onNodeClick = { navController.navigateTo(Routes.NodeInfo) },
         onChannelsClick = { navController.navigateTo(Routes.LightningConnections) },
+        onSparkClick = { navController.navigateTo(Routes.SparkDetail) },
         onBackupClick = { navController.navigateTo(Routes.BackupSettings) },
+        onExitClick = { navController.navigateTo(Routes.SparkExitProgress) },
     )
 }
 
@@ -75,7 +79,9 @@ private fun Content(
     onElectrumClick: () -> Unit = {},
     onNodeClick: () -> Unit = {},
     onChannelsClick: () -> Unit = {},
+    onSparkClick: () -> Unit = {},
     onBackupClick: () -> Unit = {},
+    onExitClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -87,6 +93,7 @@ private fun Content(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
             VerticalSpacer(16.dp)
@@ -142,16 +149,57 @@ private fun Content(
                 statusUi = StatusUi(
                     id = "lightning_connection",
                     title = stringResource(R.string.settings__status__lightning_connection__title),
-                    subtitle = when (uiState.health.channels) {
-                        HealthState.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
-                        HealthState.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
-                        HealthState.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
+                    subtitle = when {
+                        uiState.health.isLightningViaSpark ->
+                            stringResource(R.string.settings__status__lightning_connection__spark)
+
+                        uiState.health.channels == HealthState.READY ->
+                            stringResource(R.string.settings__status__lightning_connection__ready)
+
+                        uiState.health.channels == HealthState.PENDING ->
+                            stringResource(R.string.settings__status__lightning_connection__pending)
+
+                        else -> stringResource(R.string.settings__status__lightning_connection__error)
                     },
                     iconRes = R.drawable.ic_lightning,
                     state = uiState.health.channels,
                 ),
                 onClick = onChannelsClick,
             )
+
+            uiState.health.spark?.let { sparkHealth ->
+                StatusItem(
+                    statusUi = StatusUi(
+                        id = "spark",
+                        title = stringResource(R.string.settings__status__spark__title),
+                        subtitle = when (sparkHealth) {
+                            HealthState.READY -> stringResource(R.string.settings__status__spark__ready)
+                            HealthState.PENDING -> stringResource(R.string.settings__status__spark__pending)
+                            HealthState.ERROR -> stringResource(R.string.settings__status__spark__error)
+                        },
+                        iconRes = R.drawable.ic_asterisk,
+                        state = sparkHealth,
+                    ),
+                    // Spark's detail shows a zero balance until Spark has read its state.
+                    onClick = onSparkClick.takeIf { sparkHealth == HealthState.READY },
+                )
+            }
+
+            uiState.exitStep?.let { exitStep ->
+                StatusItem(
+                    statusUi = StatusUi(
+                        id = "spark_exit",
+                        title = stringResource(R.string.settings__status__exit__title),
+                        subtitle = when (exitStep) {
+                            ExitStep.FUNDING -> stringResource(R.string.settings__status__exit__funding)
+                            ExitStep.RUNNING -> stringResource(R.string.settings__status__exit__pending)
+                        },
+                        iconRes = R.drawable.ic_warning,
+                        state = HealthState.PENDING,
+                    ),
+                    onClick = onExitClick,
+                )
+            }
 
             StatusItem(
                 statusUi = StatusUi(
@@ -180,7 +228,7 @@ private fun Content(
 private fun StatusItem(
     statusUi: StatusUi,
     showDivider: Boolean = true,
-    onClick: () -> Unit = {},
+    onClick: (() -> Unit)? = {},
 ) {
     val bgColor = when (statusUi.state) {
         HealthState.READY -> Colors.Green16
@@ -199,7 +247,7 @@ private fun StatusItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                .clickableAlpha { onClick() }
+                .clickableAlpha(onClick = onClick)
                 .testTag("Status-${statusUi.id}")
         ) {
             Box(
@@ -257,11 +305,14 @@ private fun Preview() {
                     internet = HealthState.PENDING,
                     electrum = HealthState.READY,
                     node = HealthState.READY,
-                    channels = HealthState.PENDING,
+                    channels = HealthState.READY,
+                    isLightningViaSpark = true,
+                    spark = HealthState.READY,
                     backups = HealthState.READY,
                 ),
                 backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
                 nodeSubtitle = "Running",
+                exitStep = ExitStep.RUNNING,
             ),
         )
     }

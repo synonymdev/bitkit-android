@@ -133,6 +133,7 @@ journey PR, which is what made this file conflict on every merge.
 | Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
 | A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
 | LNURL pay, withdraw, channel and auth, and Lightning Addresses | the `bitkit-docker` `lnurl-server` on local regtest, with the app started by `just run docker`, which builds with `E2E=true` and forwards its ports over `adb reverse`; it issues memo invoices, so a check that needs a description-hash invoice needs another endpoint — [lnurl](lnurl) |
+| Spark connected (App Status Spark row, spending through Spark) | a dev build, which connects Spark to its hosted regtest with no key — [app status](settings/app-status-spark-row.xml), [transfer](transfer/spark-transfer-to-spending.xml) |
 | Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
 
 ## Cross-platform
@@ -199,6 +200,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
 | `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; closing the received sheet re-sizes iOS's Spending Confirm, so the lower amounts can show before the swipe |
+| `transfer/spark-emergency-exit.xml` | same file, ported in synonymdev/bitkit-ios#1217 — same steps and identifiers; only the description differs, naming the iOS unit tests and the Background App Refresh, Low Power Mode and notification notes in place of Android's battery notes |
 | `transfer/savings-select-funds.xml` | same file and steps — iOS runs it as J8 on synonymdev/bitkit-ios#1128 |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 

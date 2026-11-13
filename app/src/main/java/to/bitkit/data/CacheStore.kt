@@ -18,6 +18,8 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
+import to.bitkit.repositories.PendingSparkWithdrawal
+import to.bitkit.repositories.SentSparkWithdrawal
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -212,6 +214,35 @@ class CacheStore internal constructor(
     }
 
     /**
+     * After a restore, keeps [paymentHashes], Spark's pending and paid sends from its synced list, once, with their
+     * invoices' [expiries] in epoch seconds where known, so a still-valid one stays held and outlasts the cap.
+     */
+    suspend fun seedSparkSendHashes(paymentHashes: List<String>, expiries: Map<String, Long> = emptyMap()) {
+        if (store.data.first().sparkHistoryUnseededSince == null) return
+        store.updateData { data ->
+            if (data.sparkHistoryUnseededSince == null) return@updateData data
+            val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.sparkSendHashes.toSet()
+            // A kept hash without an expiry gets its invoice's, so the cap can't drop it while valid; a set one stays.
+            val listedExpiries = expiries.mapKeys { it.key.lowercase() }
+            data.copy(
+                sparkSendHashes = seeded + data.sparkSendHashes,
+                sparkSendExpiries = listedExpiries + data.sparkSendExpiries,
+                sparkHistoryUnseededSince = null,
+            )
+        }
+    }
+
+    /** After a restore, keeps [paymentHashes], the node's pending and paid sends from its own list, once. */
+    suspend fun seedRestoredLdkSendHashes(paymentHashes: List<String>) {
+        if (store.data.first().ldkHistoryUnseededSince == null) return
+        store.updateData { data ->
+            if (data.ldkHistoryUnseededSince == null) return@updateData data
+            val seeded = paymentHashes.map { it.lowercase() }.distinct() - data.ldkSendHashes.toSet()
+            data.copy(ldkSendHashes = seeded + data.ldkSendHashes, ldkHistoryUnseededSince = null)
+        }
+    }
+
+    /**
      * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, ones it didn't
      * show ([listed] is every hash it shows) whose invoice expired past [UNLISTED_SEND_SETTLE_SECS], and past the cap
      * the oldest paid or unlisted ones with no known expiry. A send that may be pending ([live]) always stays.
@@ -305,6 +336,26 @@ data class AppCacheData(
     val quickPayLedger: QuickPayLedger? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /**
+     * When a Spark leaf optimization last ran or was cut short, in epoch milliseconds; cleared once it completed or
+     * an exit quote waited out the counter-swap grace. Kept across processes, since a swap the app's close cut short
+     * leaves value in flight.
+     */
+    val sparkOptimizationActivityAt: Long? = null,
+    /**
+     * The funding key index the next Spark emergency exit takes, per `{network}/wallet{n}`, so each exit pays its fees
+     * from an address of its own.
+     */
+    val sparkExitNextFundingIndexes: Map<String, Int> = mapOf(),
+    /**
+     * The `{network}/wallet{n}` keys whose funding index a restore brought back, so the exit looks once for funding
+     * addresses that still hold coins and nothing watches.
+     */
+    val sparkExitFundingRecoveryPending: Set<String> = emptySet(),
+    /** A Spark withdrawal to a Paykit contact that started, kept until Spark's payment list settles it. */
+    val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
+    /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */
+    val sentSparkWithdrawals: List<SentSparkWithdrawal> = listOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */
@@ -323,6 +374,22 @@ data class AppCacheData(
      * there. Until then an unlistable node holds every Spark send.
      */
     val ldkSendHashesSeeded: Boolean = false,
+    /**
+     * When a metadata restore brought back [sparkSendHashes], in epoch seconds, until Spark's synced list fills them,
+     * as the backup can predate a send Spark made. Null on an install that was never restored.
+     */
+    val sparkHistoryUnseededSince: Long? = null,
+    /**
+     * When a metadata restore brought back [ldkSendHashes], in epoch seconds, until the node's own list fills them:
+     * while the node can't list its payments, Spark holds off invoices created before it. Null when never restored.
+     */
+    val ldkHistoryUnseededSince: Long? = null,
+    /**
+     * When the wallet was restored, in epoch seconds. Spark's list can lack a send it made before then even after a
+     * sync, so both rails refuse a still-valid invoice created before it that Spark hasn't listed as pending or paid,
+     * unless the Spark operators show it unsent.
+     */
+    val sparkRestoredAt: Long? = null,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

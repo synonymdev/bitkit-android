@@ -77,8 +77,7 @@ jobs:
           BREEZ_API_KEY: ${{ secrets.BREEZ_API_KEY }}
         run: |
           set -euo pipefail
-          ./gradlew assembleMainnetRelease --no-daemon --stacktrace
-          ./gradlew :app:syncNativeDebugSymbolArtifacts --no-daemon --stacktrace
+          ./gradlew assembleMainnetRelease :app:syncNativeDebugSymbolArtifacts --no-daemon --stacktrace
           scripts/create-native-debug-symbols.sh
 
       - name: Verify native libraries are stripped

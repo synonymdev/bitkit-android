@@ -104,6 +104,7 @@ import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -122,6 +123,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 @Singleton
 class LightningRepo @Inject constructor(
@@ -152,6 +154,9 @@ class LightningRepo @Inject constructor(
 
     /** Whether Spark synced its payments since it connected, so its payment list is complete. */
     val isSparkSynced: Flow<Boolean> get() = sparkRepo.state.map { it.hasSynced }.distinctUntilChanged()
+
+    /** How each journaled Spark contact withdrawal closed. */
+    val sparkWithdrawalSettlements: Flow<SparkWithdrawalSettlement> get() = sparkRepo.withdrawalSettlements
 
     private val scope = appScope(bgDispatcher, TAG)
 
@@ -1516,8 +1521,9 @@ class LightningRepo @Inject constructor(
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             val key = ldkSendKey(bolt11, paymentHash)
-            // Read before the checks, so a node send admitted after them refuses this one at submission.
+            // Read before the checks, so a send of either rail recorded after them refuses this one at submission.
             val ldkRecordsBefore = ldkSendRecords.get()
+            val sparkRecordsBefore = sparkRepo.sendRecordMark()
             runSuspendCatching { earlierNodeSend(bolt11, paymentHash) }
                 .getOrElse { return Result.failure(it) }
                 ?.let {
@@ -1532,7 +1538,8 @@ class LightningRepo @Inject constructor(
                 val isAuthorized = onBeforeSend().also { if (it) requireWalletRestoreComplete() }
                 if (isAuthorized) {
                     isAdmitted = admitSend(key, LightningRail.Spark) {
-                        (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore
+                        (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore ||
+                            sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
                     }
                     isRefused = !isAdmitted
                     if (isRefused) throw PaymentPendingException(paymentHash ?: key)
@@ -1558,6 +1565,12 @@ class LightningRepo @Inject constructor(
                             railBefore?.let { rail -> recordSendRail(key, rail) } ?: sendRails.remove(key)
                         }
                     }
+                    .let {
+                        // Refused for a Spark send recorded since the checks, whose completion its caller may miss.
+                        val isOverlapped = isRefused && sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
+                        if (!isOverlapped) return@let it
+                        settledSparkSendOutcome(paymentHash ?: key, key, ldkRecordsBefore) ?: it
+                    }
             } finally {
                 if (isAdmitted) releaseSend(key)
             }
@@ -1575,7 +1588,8 @@ class LightningRepo @Inject constructor(
      * The node's pending or paid send of [bolt11]. While the node can't list its payments (stopped or not started yet),
      * a send it started for the invoice may be live or paid, and its event may never come, so the node not started yet
      * is thrown rather than a Pending nothing resolves. Before the node first listed its payments, the sends it made
-     * earlier are unknown, so the same is thrown.
+     * earlier are unknown, so the same is thrown, as it is after a restore, until the node lists them, for an invoice
+     * created before the restore.
      */
     private suspend fun earlierNodeSend(bolt11: String, paymentHash: String?): EarlierSend? {
         val key = ldkSendKey(bolt11, paymentHash)
@@ -1590,6 +1604,12 @@ class LightningRepo @Inject constructor(
             }
             if (!cache.ldkSendHashesSeeded) {
                 Logger.warn("Refused a Spark send until the node lists its earlier payments once", context = TAG)
+                throw ServiceError.NodeNotStarted()
+            }
+            // Restored hashes can lack a send the node made before the restore, never one of a newer invoice.
+            val unseededSince = cache.ldkHistoryUnseededSince
+            if (unseededSince != null && (invoiceCreatedAt(bolt11) ?: 0L) < unseededSince) {
+                Logger.warn("Refused a Spark send until the node lists its payments since the restore", context = TAG)
                 throw ServiceError.NodeNotStarted()
             }
             return null
@@ -1614,6 +1634,30 @@ class LightningRepo @Inject constructor(
             PaymentStatus.FAILED -> null
         }
     }
+
+    private suspend fun settledSparkSendOutcome(
+        paymentHash: String,
+        key: String,
+        ldkRecordsBefore: Long,
+    ): Result<PaymentId>? {
+        // Read before the row too, so a send that ends while it is read still counts as live.
+        val wasLive = isSendLive(paymentHash, key, ldkRecordsBefore)
+        val sparkRecordsBefore = sparkRepo.sendRecordMark()
+        val send = sparkRepo.lightningSend(paymentHash) as? SparkLightningSend.Found ?: return null
+        val isLive = wasLive || isSendLive(paymentHash, key, ldkRecordsBefore) ||
+            sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
+        return when (send.status) {
+            SparkPaymentStatus.COMPLETED -> Result.success(paymentHash)
+            // A failed row can be an earlier attempt's while a retry of the invoice on either rail can still pay it.
+            SparkPaymentStatus.FAILED if isLive -> null
+            SparkPaymentStatus.FAILED -> Result.failure(SparkError.SendRefused("Spark's earlier send of it failed"))
+            SparkPaymentStatus.PENDING -> null
+        }?.also { Logger.info("Settled the refused Spark send '$paymentHash' as '${send.status}'", context = TAG) }
+    }
+
+    private fun isSendLive(paymentHash: String, key: String, ldkRecordsBefore: Long): Boolean =
+        sparkRepo.isSendInFlight(paymentHash) || synchronized(admittedSends) { admittedSends[key] != null } ||
+            (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore
 
     private fun EarlierSend.toResult(): Result<PaymentId> = when (this) {
         is EarlierSend.Pending -> Result.failure(PaymentPendingException(paymentHash))
@@ -1654,7 +1698,15 @@ class LightningRepo @Inject constructor(
         requireWalletRestoreComplete()
         // Read before the checks, so a Spark send admitted after them refuses this one at submission.
         val sparkRecordsBefore = sparkRepo.sendRecordMark()
-        sparkRepo.earlierLightningSend(bolt11, paymentHash)?.let { return@executeWhenNodeRunning it.toResult() }
+        // Only a restore hold needs the invoice's times.
+        val invoice = if (sparkRepo.holdsRestoredInvoices()) decodedInvoice(bolt11) else null
+        sparkRepo.earlierLightningSend(
+            bolt11,
+            paymentHash,
+            invoice?.timestampSeconds?.toEpochSeconds(),
+            invoice?.let { (it.timestampSeconds.safe() + it.expirySeconds.safe()).toEpochSeconds() },
+        )
+            ?.let { return@executeWhenNodeRunning it.toResult() }
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         requireWalletRestoreComplete()
         val key = ldkSendKey(bolt11, paymentHash)
@@ -1677,12 +1729,13 @@ class LightningRepo @Inject constructor(
 
     /**
      * The last check before a send of [key] leaves on [rail], so of two sends of one invoice only the first admitted
-     * goes out: refused while the other rail holds one, or [isSentOnOtherRail] says it recorded one since the checks.
+     * goes out: refused while the other rail holds one, or Spark does, as it doesn't refuse a repeat, or
+     * [isSentSinceChecks] says a send was recorded since the checks. The node refuses its own repeats.
      */
-    private fun admitSend(key: String, rail: LightningRail, isSentOnOtherRail: () -> Boolean): Boolean =
+    private fun admitSend(key: String, rail: LightningRail, isSentSinceChecks: () -> Boolean): Boolean =
         synchronized(admittedSends) {
             val held = admittedSends[key]
-            val isFree = (held == null || held.first == rail) && !isSentOnOtherRail()
+            val isFree = (held == null || held.first == rail && rail == LightningRail.Ldk) && !isSentSinceChecks()
             if (isFree) admittedSends[key] = rail to (held?.second ?: 0) + 1
             isFree
         }
@@ -1717,7 +1770,9 @@ class LightningRepo @Inject constructor(
     ) {
         val outbound = payments.filter { it.direction == PaymentDirection.OUTBOUND }
         val sends = outbound.filter { it.status != PaymentStatus.FAILED }.sortedBy { it.latestUpdateTimestamp }
-        cacheStore.seedLdkSendHashes(sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash })
+        val sendHashes = sends.mapNotNull { (it.kind as? PaymentKind.Bolt11)?.hash }
+        cacheStore.seedLdkSendHashes(sendHashes)
+        cacheStore.seedRestoredLdkSendHashes(sendHashes)
         val hashes = { status: PaymentStatus ->
             outbound.filter { it.status == status }
                 .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
@@ -1737,6 +1792,15 @@ class LightningRepo @Inject constructor(
         (invoice.secondsSinceEpoch().safe() + invoice.expiryTimeSeconds().safe())
             .coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
     }.getOrNull()
+
+    /** When [bolt11] was created, in epoch seconds, or null when it can't be decoded. */
+    private suspend fun invoiceCreatedAt(bolt11: String): Long? =
+        decodedInvoice(bolt11)?.timestampSeconds?.toEpochSeconds()
+
+    private suspend fun decodedInvoice(bolt11: String) =
+        runSuspendCatching { (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice }.getOrNull()
+
+    private fun ULong.toEpochSeconds(): Long = coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
     /** The payment hash a node send is kept under, or the invoice itself when it can't be parsed. */
     private fun ldkSendKey(bolt11: String, paymentHash: String?): String = (paymentHash ?: bolt11).lowercase()
@@ -2405,6 +2469,8 @@ class LightningRepo @Inject constructor(
         speed: TransactionSpeed? = null,
         utxosToSpend: List<SpendableUtxo>? = null,
         feeRates: FeeRates? = null,
+        /** False when a placeholder fee would be shown as the real one: any error then fails the call. */
+        allowFallback: Boolean = true,
     ): Result<ULong> = withContext(bgDispatcher) {
         runCatching {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
@@ -2419,7 +2485,7 @@ class LightningRepo @Inject constructor(
             )
             return@runCatching fee
         }.recoverCatching {
-            if (it is CancellationException) throw it
+            if (it is CancellationException || !allowFallback) throw it
             val fallbackFee = 1000uL
             Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", it, context = TAG)
             return@recoverCatching fallbackFee
@@ -2584,8 +2650,21 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** What became of a Spark withdrawal attempt of exactly [amountSats] to [address], from Spark's payment list. */
+    suspend fun sparkWithdrawalOutcome(
+        address: String,
+        amountSats: ULong,
+        earlierTxids: Set<String>,
+    ): SparkWithdrawalOutcome = sparkRepo.withdrawalOutcome(address, amountSats, earlierTxids)
+
+    /** Txids of the Spark withdrawals to [address] so far, which a new attempt to it never counts as its own. */
+    suspend fun sparkWithdrawalTxidsTo(address: String): Set<String> = sparkRepo.withdrawalTxidsTo(address)
+
     /** Whether Spark alone can pay [amountSats], which it does whenever the node cannot. */
     fun canSendWithSpark(amountSats: ULong): Boolean = sparkRepo.canSend(amountSats)
+
+    /** Whether Spark's whole balance covers a withdrawal debiting [debitSats], its fees included. */
+    fun canWithdrawWithSpark(debitSats: ULong): Boolean = sparkRepo.canWithdraw(debitSats)
 
     fun canSend(amountSats: ULong): Boolean {
         val state = _lightningState.value
@@ -2740,8 +2819,15 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
-        if (shouldPayWithSpark(bolt11, null)) return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, null)
+    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
+        // Spark quotes without the node, so a payment it makes never waits for the node to run.
+        if (shouldPayWithSpark(bolt11, null)) return sparkRepo.estimateFeeSats(bolt11, null)
+        return estimateNodeRoutingFees(bolt11)
+    }
+
+    private suspend fun estimateNodeRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning(
+        "estimateRoutingFees"
+    ) {
         Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
         lightningService.estimateRoutingFees(bolt11).onSuccess {
             Logger.info("Routing fees estimated: '$it'", context = TAG)
@@ -2750,11 +2836,13 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
+    suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
+        if (shouldPayWithSpark(bolt11, amountSats)) return sparkRepo.estimateFeeSats(bolt11, amountSats)
+        return estimateNodeRoutingFeesForAmount(bolt11, amountSats)
+    }
+
+    private suspend fun estimateNodeRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
-            if (shouldPayWithSpark(bolt11, amountSats)) {
-                return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, amountSats)
-            }
             Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
                 Logger.info("Routing fees estimated: '$it'", context = TAG)

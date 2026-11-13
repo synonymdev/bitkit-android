@@ -18,6 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SparkServiceTest {
     @get:Rule
@@ -54,6 +55,20 @@ class SparkServiceTest {
 
         assertNull(options.completionTimeoutSecs)
         assertEquals(true, options.preferSpark)
+    }
+
+    @Test
+    fun `only spark's own route hint marks an invoice as carrying a spark address`() {
+        assertTrue(SparkService.hasSparkAddressHint(listOf(1uL, 17_592_187_092_992_000_001uL)))
+        assertFalse(SparkService.hasSparkAddressHint(listOf(1uL, 17_592_187_092_992_000_000uL)))
+        assertFalse(SparkService.hasSparkAddressHint(emptyList()))
+    }
+
+    @Test
+    fun `an invoice expiry past the largest time stays at the largest time`() {
+        val farOff = SparkService.invoiceExpiresAt(timestamp = ULong.MAX_VALUE - 1uL, expiry = 3_600uL)
+        assertEquals(ULong.MAX_VALUE, farOff)
+        assertEquals(1_800_003_600uL, SparkService.invoiceExpiresAt(timestamp = 1_800_000_000uL, expiry = 3_600uL))
     }
 
     @Test
@@ -100,7 +115,7 @@ class SparkServiceTest {
     @Test
     fun `config turns off breez data sync, the lightning address server and default parsers on every network`() {
         Network.entries.forEach { network ->
-            val config = SparkService.configure(defaults(network), apiKey = "key")
+            val config = SparkService.configure(defaults(network), apiKey = "key", isExiting = false)
 
             assertNull(config.realTimeSyncServerUrl, "$network")
             assertNull(config.lnurlDomain, "$network")
@@ -112,7 +127,8 @@ class SparkServiceTest {
     @Test
     fun `invoices carry no spark address on any network, so every payment is a lightning payment bitkit records`() {
         Network.entries.forEach { network ->
-            assertFalse(SparkService.configure(defaults(network), apiKey = null).preferSparkOverLightning, "$network")
+            val config = SparkService.configure(defaults(network), apiKey = null, isExiting = false)
+            assertFalse(config.preferSparkOverLightning, "$network")
         }
     }
 }
