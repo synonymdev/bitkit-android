@@ -238,10 +238,13 @@ private fun Content(
                 }
             }
 
-            val canSign = quote != null && quote.toSpendingSats(state.speed) > 0 && !state.isQuoting
+            // A Retry sends bytes that already passed the claim minimum, so today's claim fee doesn't disable it.
+            val isRetry = hasPendingBroadcast || quote?.isRetainedRetry == true
+            val canSign = quote != null && (quote.isRetainedRetry || quote.toSpendingSats(state.speed) > 0) &&
+                !state.isQuoting
             PrimaryButton(
                 text = stringResource(
-                    if (hasPendingBroadcast) R.string.common__retry else R.string.lightning__transfer_hw__open_connect
+                    if (isRetry) R.string.common__retry else R.string.lightning__transfer_hw__open_connect
                 ),
                 onClick = onOpenConnect,
                 enabled = canSign && !isSigning,

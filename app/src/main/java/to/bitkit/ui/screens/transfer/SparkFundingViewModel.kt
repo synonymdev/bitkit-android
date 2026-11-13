@@ -32,6 +32,8 @@ import to.bitkit.models.formatMoney
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.HwRetainedSend
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendAttempt
@@ -64,6 +66,7 @@ class SparkFundingViewModel @Inject constructor(
     private val sparkRepo: SparkRepo,
     private val currencyRepo: CurrencyRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val hwRetainedSendRepo: HwRetainedSendRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "SparkFundingViewModel"
@@ -116,7 +119,7 @@ class SparkFundingViewModel @Inject constructor(
     fun useHardwareWallet(walletId: String) {
         if (_uiState.value.hwWalletId == walletId) return
         fixedFeeFloorSats = null
-        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true, txid = null) }
+        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true, txid = null, retainedRetrySats = null) }
         refreshMax()
     }
 
@@ -124,8 +127,12 @@ class SparkFundingViewModel @Inject constructor(
     fun refreshMax() {
         maxJob?.cancel()
         maxJob = viewModelScope.launch {
+            var retainedRetrySats: Long? = null
             val max = runSuspendCatching {
                 val address = sparkRepo.depositAddress().getOrThrow()
+                // Read before today's fee, so pricing today failing never hides the retry.
+                retainedRetrySats = _uiState.value.hwWalletId
+                    ?.let { retainedRetry(it, address)?.amountSats?.toLong() }
                 val feeRates = lightningRepo.getFeeRates().getOrThrow()
                 _uiState.value.hwWalletId?.let { walletId ->
                     return@runSuspendCatching hwWalletRepo.maxSpendableFunding(
@@ -143,7 +150,7 @@ class SparkFundingViewModel @Inject constructor(
                 Logger.warn("Failed to estimate the most Spark funding can send", it, context = TAG)
                 if (_uiState.value.hwWalletId != null) 0L else walletRepo.balanceState.value.maxSendOnchainSats.toLong()
             }
-            _uiState.update { it.copy(maxSats = max, isMaxLoading = false) }
+            _uiState.update { it.copy(maxSats = max, isMaxLoading = false, retainedRetrySats = retainedRetrySats) }
         }
     }
 
@@ -167,7 +174,7 @@ class SparkFundingViewModel @Inject constructor(
         toast(
             title = R.string.lightning__spending_amount__error_max__title,
             description = context.getString(R.string.lightning__spending_amount__error_max__description)
-                .replace("{amount}", _uiState.value.maxSats.formatToModernDisplay()),
+                .replace("{amount}", _uiState.value.inputCapSats.formatToModernDisplay()),
         )
     }
 
@@ -195,7 +202,7 @@ class SparkFundingViewModel @Inject constructor(
                     description = context.getString(R.string.lightning__spending_amount__error_balance__description),
                 )
 
-                quote.amountSats <= quote.instantFeeSats -> toastBelowClaimFee(quote)
+                quote.isBelowClaimFee -> toastBelowClaimFee(quote)
 
                 else -> {
                     showQuote(quote)
@@ -264,7 +271,7 @@ class SparkFundingViewModel @Inject constructor(
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
-            if (quote.amountSats <= quote.instantFeeSats) {
+            if (quote.isBelowClaimFee) {
                 Logger.info("Refused transfer that no longer covers its claim fee", context = TAG)
                 toastBelowClaimFee(quote)
                 _uiState.update { it.copy(isSending = false) }
@@ -295,7 +302,7 @@ class SparkFundingViewModel @Inject constructor(
                         walletId = walletId,
                         address = quote.address,
                         amountSats = quote.amountSats.toULong(),
-                        satsPerVByte = quotedFeeRates?.satsPerVByte() ?: return@launch,
+                        satsPerVByte = quote.retainedFeeRate ?: quotedFeeRates?.satsPerVByte() ?: return@launch,
                         tags = emptyList(),
                         isTransfer = true,
                     )
@@ -435,8 +442,8 @@ class SparkFundingViewModel @Inject constructor(
     private suspend fun quote(): Result<Quote> = runSuspendCatching {
         val state = _uiState.value
         val address = sparkRepo.depositAddress().getOrThrow()
+        state.hwWalletId?.let { return@runSuspendCatching hwQuote(it, address) }
         val feeRates = lightningRepo.getFeeRates().getOrThrow()
-        state.hwWalletId?.let { return@runSuspendCatching hwQuote(it, address, feeRates) }
         val spendable = spendableSats()
         val networkFee = if (state.isMax) {
             lightningRepo.estimateSendAllFee(address = address, speed = SPEED, feeRates = feeRates).getOrThrow()
@@ -462,8 +469,10 @@ class SparkFundingViewModel @Inject constructor(
         )
     }
 
-    private suspend fun hwQuote(walletId: String, address: String, feeRates: FeeRates): Quote {
+    private suspend fun hwQuote(walletId: String, address: String): Quote {
         val amount = _uiState.value.amountSats.toULong()
+        retainedRetry(walletId, address)?.takeIf { it.amountSats == amount }?.let { return retainedRetryQuote(it) }
+        val feeRates = lightningRepo.getFeeRates().getOrThrow()
         val satsPerVByte = feeRates.satsPerVByte()
         val max = hwWalletRepo.maxSpendableFunding(walletId, address, satsPerVByte).getOrThrow()
         val networkFee = hwWalletRepo.estimateFundingMiningFee(walletId, address, amount, satsPerVByte).getOrThrow()
@@ -480,6 +489,33 @@ class SparkFundingViewModel @Inject constructor(
             spendableSats = (max.safe() + networkFee.safe()).toLong(),
         )
     }
+
+    /**
+     * A Retry sends the retained bytes again, at the fee they were signed with. They were fundable then, so today's fee
+     * and maximum don't price them, and a fee rise can't take the Retry away. The claim is priced today, as it is new.
+     */
+    private suspend fun retainedRetryQuote(retained: HwRetainedSend): Quote {
+        val instantFee = sparkRepo.estimateDepositClaimFeeSats(retained.amountSats).getOrThrow()
+        val laterFee = sparkRepo.estimateMatureClaimFeeSats().getOrThrow()
+        return Quote(
+            address = retained.address,
+            amountSats = retained.amountSats.toLong(),
+            networkFeeSats = retained.miningFeeSats.toLong(),
+            instantFeeSats = instantFee.toLong(),
+            laterFeeSats = laterFee.toLong(),
+            // The signed inputs pay for it, whatever the wallet could fund today.
+            spendableSats = (retained.amountSats.safe() + retained.miningFeeSats.safe()).toLong(),
+            retainedFeeRate = retained.feeRate,
+        )
+    }
+
+    /** The wallet's retained send that a transfer to [address] may send again, or null when it signs anew. */
+    private suspend fun retainedRetry(walletId: String, address: String): HwRetainedSend? =
+        hwRetainedSendRepo.record(walletId).getOrElse {
+            // Signing reads it again and warns before any device contact, so a failed read only loses the exemption.
+            Logger.warn("Failed to read retained hardware send for '$walletId'", it, context = TAG)
+            null
+        }?.takeIf { it.offersRetryTo(address) }
 
     private fun FeeRates.satsPerVByte(): ULong = getSatsPerVByteFor(SPEED).toULong()
 
@@ -545,7 +581,15 @@ interface SparkFundingContract {
         val isSending: Boolean = false,
         val txid: String? = null,
         val claim: SparkDepositClaim = SparkDepositClaim.Looking,
-    )
+        /** The amount of the hardware wallet's retained transfer that a Retry would send again, or null. */
+        val retainedRetrySats: Long? = null,
+    ) {
+        /** The most the number pad takes: today's maximum, or a retained amount above it, fundable when signed. */
+        val inputCapSats: Long get() = maxOf(maxSats, retainedRetrySats ?: 0L)
+
+        /** Whether Continue takes [sats]: up to today's maximum, or exactly the retained amount a Retry sends again. */
+        fun acceptsAmount(sats: Long): Boolean = sats > 0 && (sats <= maxSats || sats == retainedRetrySats)
+    }
 
     /** What the transfer costs, priced together so the confirm screen's tiles always agree. */
     @Immutable
@@ -558,8 +602,18 @@ interface SparkFundingContract {
         /** What the claim at 3 confirmations costs at the current half-hour fee rate. */
         val laterFeeSats: Long,
         val spendableSats: Long,
+        /** The fee rate of the retained bytes a Retry sends again, or null for a transfer signed anew. */
+        val retainedFeeRate: ULong? = null,
     ) {
+        val isRetainedRetry: Boolean get() = retainedFeeRate != null
+
         val totalSats: Long get() = amountSats + networkFeeSats
+
+        /**
+         * Whether the transfer stays below the claim minimum. A Retry passed that check when it was signed, and sending
+         * its bytes again changes nothing on chain, so today's claim fee doesn't hold it up.
+         */
+        val isBelowClaimFee: Boolean get() = !isRetainedRetry && amountSats <= instantFeeSats
 
         /** How much more this asks than [approved]: the larger rise in the total or fall in what reaches spending. */
         fun increaseOver(approved: Quote, speed: SparkClaimSpeed): Long =

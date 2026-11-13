@@ -39,6 +39,12 @@ data class HwRetainedSend(
 
     fun isSamePayment(address: String, amountSats: ULong) = this.address == address && this.amountSats == amountSats
 
+    /**
+     * Whether a payment to [address] may send these bytes again. A refused retry or a payment already on the network
+     * is not a retry, so it gets no exemption from today's maximum or fee.
+     */
+    fun offersRetryTo(address: String) = !retryWasRefused && !observed && this.address == address
+
     override fun toString() =
         "HwRetainedSend(walletId='$walletId', retryWasRefused='$retryWasRefused', observed='$observed')"
 }

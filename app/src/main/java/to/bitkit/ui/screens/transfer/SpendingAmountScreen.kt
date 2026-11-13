@@ -72,7 +72,7 @@ fun SpendingAmountScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    val currentMaxSats by rememberUpdatedState(uiState.maxSats)
+    val currentMaxSats by rememberUpdatedState(uiState.inputCapSats)
     val currentCurrencies by rememberUpdatedState(currencies)
 
     LaunchedEffect(isOffline) {
@@ -173,8 +173,8 @@ private fun SpendingAmountNodeRunning(
     onClickMaxAmount: () -> Unit,
     onConfirmAmount: () -> Unit,
 ) {
-    LaunchedEffect(uiState.maxSats, uiState.isMaxLoading) {
-        if (!uiState.isMaxLoading) amountInputViewModel.setMaxAmount(uiState.maxSats)
+    LaunchedEffect(uiState.inputCapSats, uiState.isMaxLoading) {
+        if (!uiState.isMaxLoading) amountInputViewModel.setMaxAmount(uiState.inputCapSats)
     }
 
     Column(
@@ -187,7 +187,7 @@ private fun SpendingAmountNodeRunning(
         val isHardware = uiState.hwWalletId != null
         val tag = if (isHardware) "HardwareTransferAmount" else "SpendingAmount"
         val isReady = !uiState.isLoading && !uiState.isMaxLoading
-        val hasFunds = uiState.maxSats > 0
+        val hasFunds = uiState.inputCapSats > 0
 
         VerticalSpacer(32.dp)
 
@@ -270,7 +270,7 @@ private fun SpendingAmountNodeRunning(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onConfirmAmount,
-                enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
+                enabled = isReady && uiState.acceptsAmount(amountUiState.sats),
                 isLoading = uiState.isLoading,
                 modifier = Modifier.testTag("${tag}Continue")
             )
