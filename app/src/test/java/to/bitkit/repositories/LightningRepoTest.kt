@@ -2678,7 +2678,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.stop()).doSuspendableAnswer { finishStop.await() }
         whenever(lightningService.channels).thenAnswer {
             launch(start = CoroutineStart.UNDISPATCHED) { sut.stop() }
-            throw IllegalStateException("Channel read interrupted by node stop")
+            error("Channel read interrupted by node stop")
         }
 
         try {
