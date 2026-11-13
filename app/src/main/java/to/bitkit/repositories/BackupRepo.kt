@@ -274,6 +274,17 @@ class BackupRepo @Inject constructor(
                 try {
                     pending?.cancel()
                     pending?.join()
+                    val requiredOwner = synchronized(lifecycleLock) {
+                        pendingRequiredMarks.keys.firstOrNull {
+                            it.generation == generation && it.nativeGeneration == nativeGeneration
+                        }
+                    }
+                    if (requiredOwner != null) {
+                        val native = vssClients.captureOwner()
+                        if (native.generation == requiredOwner.nativeGeneration) {
+                            flushRequiredMarks(BackupOwner(requiredOwner.generation, native))
+                        }
+                    }
                     synchronized(lifecycleLock) {
                         if (pendingRequiredMarks.keys.any {
                                 it.generation == generation && it.nativeGeneration == nativeGeneration

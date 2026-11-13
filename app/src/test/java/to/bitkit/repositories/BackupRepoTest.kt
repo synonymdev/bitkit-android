@@ -98,6 +98,7 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.MetadataBackupV1
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitUsdtStateBackup
@@ -120,6 +121,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.AppError
 import java.io.File
 import java.io.IOException
@@ -409,7 +411,16 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed required mark refuses reset until storage recovers`() = test {
+    fun `aborted wipe retains the failed mark for the running wallet`() = test {
+        assertFailedMarkSurvivesWipe(nodeRunning = true)
+    }
+
+    @Test
+    fun `stopped wallet retries a failed mark before another wipe`() = test {
+        assertFailedMarkSurvivesWipe(nodeRunning = false)
+    }
+
+    private suspend fun TestScope.assertFailedMarkSurvivesWipe(nodeRunning: Boolean) {
         val category = BackupCategory.SETTINGS
         val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
         stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
@@ -418,7 +429,6 @@ class BackupRepoTest : BaseUnitTest() {
         runCurrent()
         val original = vssClients.owners.value
         var failRequiredWrite = true
-        var failedWrites = 0
         whenever { cacheStore.update(any()) }.doSuspendableAnswer {
             val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
             val current = AppCacheData(backupStatuses = statuses.value)
@@ -426,34 +436,76 @@ class BackupRepoTest : BaseUnitTest() {
             if (failRequiredWrite && updated.backupStatuses.getValue(category).required >
                 current.backupStatuses.getValue(category).required
             ) {
-                failedWrites++
                 throw IOException("required mark could not be stored")
             }
             statuses.update { updated.backupStatuses }
         }
+        val stopRefused = BackupRepoTestError("stop refused before local deletion")
+        whenever { lightningRepo.stop() }.thenReturn(Result.failure(stopRefused))
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(
+                LightningState(
+                    nodeLifecycleState = if (nodeRunning) NodeLifecycleState.Running else NodeLifecycleState.Stopped,
+                ),
+            ),
+        )
+        val wipe = WipeWalletUseCase(
+            backupRepo = sut,
+            keychain = keychain,
+            coreService = coreService,
+            db = db,
+            settingsStore = settingsStore,
+            cacheStore = cacheStore,
+            watchOnlyAccountRepo = watchOnlyAccountRepo,
+            widgetsStore = widgetsStore,
+            blocktankRepo = mock(),
+            activityRepo = activityRepo,
+            hwWalletRepo = mock(),
+            lightningRepo = lightningRepo,
+            pubkyRepo = pubkyRepo,
+            privatePaykitRepo = Provider { privatePaykitRepo },
+            privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+            firebaseMessaging = mock(),
+            migrationService = mock(),
+            paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() },
+            usdtRepo = usdtRepo,
+            paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
+            connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
+        )
         try {
             settingsData.update { it.copy(selectedCurrency = "EUR") }
-            advanceTimeBy(65_000)
             runCurrent()
-            assertEquals(2, failedWrites)
-            assertFailsWith<BackupStatusWritePending> { sut.reset() }
-            assertSame(original, vssClients.owners.value)
-            verify(vssBackupClient, never()).putObject(eq(category.name), any())
-
+            if (!nodeRunning) {
+                sut.stopObservingBackups()
+                runCurrent()
+            }
+            val result = wipe(resetWalletState = { error("must retain wallet") }, onSuccess = {})
+            assertIs<BackupStatusWritePending>(result.exceptionOrNull())
+            verify(lightningRepo, never()).stop()
+            verify(keychain, never()).wipe()
+            verify(settingsStore, never()).reset()
+            runCurrent()
             failRequiredWrite = false
-            sut.startObservingBackups()
-            advanceTimeBy(5_000)
-            runCurrent()
-            val payload = argumentCaptor<ByteArray>()
-            verify(vssBackupClient).putObject(eq(category.name), payload.capture())
-            assertTrue(payload.lastValue.decodeToString().contains("EUR"))
-            assertFalse(statuses.value.getValue(category).isRequired)
+            if (nodeRunning) {
+                advanceTimeBy(65_000)
+                runCurrent()
+                val payload = argumentCaptor<ByteArray>()
+                verify(vssBackupClient, times(1)).putObject(eq(category.name), payload.capture())
+                assertTrue(payload.lastValue.decodeToString().contains("EUR"))
+                assertFalse(statuses.value.getValue(category).isRequired)
+                assertSame(original, vssClients.owners.value)
+            } else {
+                val retried = wipe(resetWalletState = { error("must retain wallet") }, onSuccess = {})
+                assertSame(stopRefused, retried.exceptionOrNull())
+                assertTrue(statuses.value.getValue(category).isRequired)
+                verify(lightningRepo).stop()
+                verify(vssBackupClient, never()).putObject(eq(category.name), any())
+            }
+            verify(keychain, never()).wipe()
+            verify(settingsStore, never()).reset()
         } finally {
             failRequiredWrite = false
-            sut.startObservingBackups()
-            advanceTimeBy(65_000)
-            runCurrent()
-            sut.reset()
+            sut.stopObservingBackups()
         }
     }
 
@@ -4476,10 +4528,10 @@ class BackupRepoTest : BaseUnitTest() {
         exportQueued.await()
         val wipe = async {
             sut.setWiping(true)
-            connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange {
-                sdkLock.withWalletWipe {
-                    sut.reset()
-                }
+            connectionRecoveryFixture(settingsStore, keychain, vssClients).withIdentityChange(
+                beforeClientsSuspend = { sut.reset() },
+            ) {
+                sdkLock.withWalletWipe { }
             }
         }
         runCurrent()

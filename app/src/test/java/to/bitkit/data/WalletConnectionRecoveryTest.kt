@@ -453,6 +453,31 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancellation during local drain preserves native owner and skips identity change`() = test {
+        val original = vssClients.owners.value
+        val draining = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var replaced = false
+        val replacement = launch {
+            sut.withIdentityChange(beforeClientsSuspend = {
+                withContext(NonCancellable) {
+                    draining.complete(Unit)
+                    release.await()
+                }
+            }) { replaced = true }
+        }
+        draining.await()
+        replacement.cancel()
+        runCurrent()
+        assertFalse(replacement.isCompleted)
+        release.complete(Unit)
+        replacement.join()
+        assertFalse(replaced)
+        assertEquals(original, vssClients.owners.value)
+        vssClients.withWallet { }
+    }
+
+    @Test
     fun `rejected conditional migration preserves the current wallet admission`() = test {
         val owner = sut.captureOwner()
         assertFailsWith<CancellationException> {
