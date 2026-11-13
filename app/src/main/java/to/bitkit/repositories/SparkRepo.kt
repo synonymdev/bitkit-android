@@ -1488,6 +1488,9 @@ class SparkRepo @Inject constructor(
 
     private fun ULong.toEpochSeconds(): Long = coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
+    /** Whether a Spark send of [paymentHash] is inside its send call, before or after its records are written. */
+    fun isSendInFlight(paymentHash: String): Boolean = sendsInFlight.containsKey(paymentHash.lowercase())
+
     /** The count of sends recorded so far, read before a node send's checks for [hasRecordedSendSince]. */
     fun sendRecordMark(): Long = sendRecords.get()
 
