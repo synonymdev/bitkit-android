@@ -49,8 +49,10 @@ See also:
 Spark (Lightning without channels) needs a Breez API key on mainnet builds; regtest needs none. Gradle reads `BREEZ_API_KEY` from the environment, a Gradle property or `local.properties`, in that order. On macOS it falls back to the keychain item `BREEZ_API_KEY`, so the key needs no plain copy on disk:
 
 ```bash
-security add-generic-password -U -a "$USER" -s BREEZ_API_KEY -w
+printf 'add-generic-password -U -a %s -s BREEZ_API_KEY -w %s\n' "$USER" "$(pbpaste)" | security -i && pbcopy </dev/null
 ```
+
+Copy the key first. The command passes the key on stdin, so it never shows in a process list. It then clears the clipboard. The bare `-w` prompt keeps only 128 characters, which cuts the key short. The build stops when a set key is not a complete certificate, and its error names the source to fix.
 
 Without the key the app builds and Spark stays off on mainnet.
 
