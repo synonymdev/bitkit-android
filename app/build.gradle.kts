@@ -66,28 +66,54 @@ fun keychainProp(key: String): Provider<String> {
     }.standardOutput.asText.map { it.trim() }.filter { it.isNotEmpty() }
 }
 
-// Breez's API key is a base64 certificate of 384 bytes. A cut-short key (the bare `security … -w` prompt keeps only 128
-// characters) turns Spark off at start, so a set key of another size stops the build. Only lengths are reported.
+// Breez's API key is a base64 DER certificate. A cut-short key (the bare `security … -w` prompt keeps only 128
+// characters) turns Spark off at start, so a set key whose decoded size differs from the size its own DER header
+// declares stops the build. The error names the source that supplied the key. Only lengths are reported.
 fun breezApiKey(): Provider<String> {
-    val key = localProp("BREEZ_API_KEY").orElse("").get().trim()
-    val bytes = runCatching { Base64.getDecoder().decode(key).size }.getOrDefault(-1)
-    if (key.isNotEmpty() && bytes != 384) {
-        throw GradleException(
-            "BREEZ_API_KEY has ${key.length} characters and decodes to $bytes bytes; Breez expects a 384-byte " +
-                "certificate (512 base64 characters). Copy the key, then run: " +
-                "printf 'add-generic-password -U -a %s -s BREEZ_API_KEY -w %s\\n' \"\$USER\" \"\$(pbpaste)\" " +
-                "| security -i && pbcopy </dev/null"
-        )
+    val name = "BREEZ_API_KEY"
+    val (source, raw) = localPropSources(name).firstNotNullOfOrNull { (src, prop) -> prop.orNull?.let { src to it } }
+        ?: return provider { "" }
+    val key = raw.trim()
+    if (key.isEmpty()) return provider { key }
+    val der = runCatching { Base64.getDecoder().decode(key) }.getOrNull()
+    val declared = der?.let { derSize(it) }
+    if (der != null && declared == der.size) return provider { key }
+    val problem = when {
+        der == null -> "is not valid base64"
+        declared == null -> "decodes to ${der.size} bytes that are not a certificate"
+        else -> "decodes to ${der.size} bytes, but its certificate header declares $declared, so it was cut short"
     }
-    return provider { key }
+    val fix = if (source == KEYCHAIN_SOURCE) {
+        "Copy the key, then run: printf 'add-generic-password -U -a %s -s $name -w %s\\n' \"\$USER\" " +
+            "\"\$(pbpaste)\" | security -i && pbcopy </dev/null"
+    } else {
+        "Fix or remove it there; it wins over the sources read after it."
+    }
+    throw GradleException("$name from $source has ${key.length} characters and $problem. $fix")
 }
 
-fun localProp(key: String): Provider<String> {
-    return providers.environmentVariable(key)
-        .orElse(providers.gradleProperty(key))
-        .orElse(provider { localProperties.getProperty(key) })
-        .orElse(keychainProp(key))
+// Total size a DER element declares in its header (tag, length bytes and content), or null when it is not a SEQUENCE.
+fun derSize(der: ByteArray): Int? {
+    if (der.size < 2 || der[0] != 0x30.toByte()) return null
+    val first = der[1].toInt() and 0xff
+    if (first < 0x80) return 2 + first
+    val n = first and 0x7f
+    if (n !in 1..3 || der.size < 2 + n) return null
+    return 2 + n + (0 until n).fold(0) { acc, i -> acc shl 8 or (der[2 + i].toInt() and 0xff) }
 }
+
+val KEYCHAIN_SOURCE = "the keychain item"
+
+// Where localProp reads a key from, in the order it checks them.
+fun localPropSources(key: String): List<Pair<String, Provider<String>>> = listOf(
+    "the environment variable" to providers.environmentVariable(key),
+    "the Gradle property" to providers.gradleProperty(key),
+    "local.properties" to provider { localProperties.getProperty(key) },
+    KEYCHAIN_SOURCE to keychainProp(key),
+)
+
+fun localProp(key: String): Provider<String> =
+    localPropSources(key).map { it.second }.reduce { acc, prop -> acc.orElse(prop) }
 
 fun envFlag(key: String, default: Boolean): Provider<String> {
     return providers.environmentVariable(key)
