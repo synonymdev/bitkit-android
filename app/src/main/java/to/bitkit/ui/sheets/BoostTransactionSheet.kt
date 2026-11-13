@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -74,6 +75,9 @@ fun BoostTransactionSheet(
     LaunchedEffect(Unit) {
         viewModel.setupActivity(item)
     }
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.clearActivity() }
+    }
 
     // Handle effects
     LaunchedEffect(Unit) {
@@ -109,7 +113,10 @@ fun BoostTransactionSheet(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    BottomSheet(onDismissRequest = onDismiss) {
+    BottomSheet(onDismissRequest = {
+        viewModel.clearActivity()
+        onDismiss()
+    }) {
         BoostTransactionContent(
             uiState = uiState,
             onClickEdit = viewModel::onClickEdit,
@@ -152,7 +159,7 @@ fun BoostTransactionContent(
         }
 
         BodyS(
-            text = stringResource(bodyText),
+            text = stringResource(if (uiState.publicationSlow) R.string.wallet__boost_pending_msg else bodyText),
             color = Colors.White64,
             modifier = Modifier.testTag(BoostTransactionTestTags.DESCRIPTION_TEXT)
         )

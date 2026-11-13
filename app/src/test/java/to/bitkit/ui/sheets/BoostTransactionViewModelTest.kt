@@ -10,9 +10,12 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -27,22 +30,29 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.SettingsStore
 import to.bitkit.ext.create
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.RbfBoostRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.ui.sheets.BoostTransactionViewModel.Companion.MAX_FEE_RATE
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.TimeSource
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class BoostTransactionViewModelTest : BaseUnitTest() {
     private lateinit var sut: BoostTransactionViewModel
+    private lateinit var rbfBoostRepo: RbfBoostRepo
+    private val connectionRecovery = connectionRecoveryFixture(mock<SettingsStore>())
 
     private val context = mock<Context>()
     private val lightningRepo = mock<LightningRepo>()
@@ -94,14 +104,24 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
         whenever(lightningRepo.syncAsync()).thenReturn(Job())
 
-        sut = BoostTransactionViewModel(
-            context = context,
+        rbfBoostRepo = RbfBoostRepo(
+            dispatcher = testDispatcher,
             lightningRepo = lightningRepo,
-            walletRepo = walletRepo,
             activityRepo = activityRepo,
-            blocktankRepo = blocktankRepo,
+            connectionRecovery = connectionRecovery,
+            timeSource = TimeSource.Monotonic,
         )
+        sut = createViewModel()
     }
+
+    private fun createViewModel() = BoostTransactionViewModel(
+        context = context,
+        lightningRepo = lightningRepo,
+        walletRepo = walletRepo,
+        activityRepo = activityRepo,
+        blocktankRepo = blocktankRepo,
+        rbfBoostRepo = rbfBoostRepo,
+    )
 
     @Test
     fun `initial ui state should have default values`() = runTest {
@@ -258,6 +278,13 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
             sut.onConfirmBoost()
             assertTrue(sut.uiState.value.boosting)
             expectNoEvents()
+            advanceTimeBy(RbfBoostRepo.PENDING_FEEDBACK_DELAY.inWholeMilliseconds - 1)
+            assertFalse(sut.uiState.value.publicationSlow)
+            advanceTimeBy(1)
+            runCurrent()
+            assertTrue(sut.uiState.value.publicationSlow)
+            assertTrue(sut.uiState.value.boosting)
+            expectNoEvents()
             published.complete(Unit)
             assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
             assertFalse(sut.uiState.value.boosting)
@@ -338,30 +365,76 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `publication retry keeps the approved fee quote after reopening and ignores fee edits`() = runTest {
+    fun `publication retry retains the quote across detail ViewModels and shares in flight work`() = runTest {
         prepareRbf()
         val approvedRate = sut.uiState.value.feeRate
         val approvedFee = sut.uiState.value.totalFeeSats
-        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId))
-            .thenReturn(Result.failure(IllegalStateException("sync failed")), Result.success(Unit))
+        val retryPublication = CompletableDeferred<Unit>()
+        var publications = 0
+        whenever(activityRepo.publishRbfBoost(mockTxId, newTxId)).doSuspendableAnswer {
+            if (++publications == 1) {
+                Result.failure(IllegalStateException("sync failed"))
+            } else {
+                retryPublication.await()
+                Result.success(Unit)
+            }
+        }
+
         sut.boostTransactionEffect.test {
             sut.onConfirmBoost()
             assertEquals(BoostTransactionEffects.OnBoostPending, awaitItem())
+            sut.clearActivity()
             whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(25uL))
-            sut.setupActivity(activitySent)
-            sut.onClickEdit()
-            sut.onChangeAmount(increase = true)
-            sut.onChangeAmount(increase = true)
-            sut.onClickUseSuggestedFee()
-            assertEquals(approvedRate, sut.uiState.value.feeRate)
-            assertEquals(approvedFee, sut.uiState.value.totalFeeSats)
-            assertTrue(sut.uiState.value.feeLocked)
-            sut.onConfirmBoost()
-            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+            val reopened = createViewModel()
+            reopened.setupActivity(activitySent)
+            reopened.onClickEdit()
+            reopened.onChangeAmount(increase = true)
+            reopened.onClickUseSuggestedFee()
+            assertEquals(approvedRate, reopened.uiState.value.feeRate)
+            assertEquals(approvedFee, reopened.uiState.value.totalFeeSats)
+            assertTrue(reopened.uiState.value.feeLocked)
+            reopened.onConfirmBoost()
+            reopened.clearActivity()
+
+            val reattached = createViewModel()
+            reattached.boostTransactionEffect.test {
+                reattached.setupActivity(activitySent)
+                reattached.onConfirmBoost()
+                assertTrue(reattached.uiState.value.boosting)
+                assertEquals(2, publications)
+                retryPublication.complete(Unit)
+                assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+            }
+            expectNoEvents()
         }
         verify(lightningRepo, times(1)).bumpFeeByRbf(mockTxId, approvedRate)
         verify(activityRepo, times(2)).publishRbfBoost(mockTxId, newTxId)
         verify(activityRepo, times(2)).recordRbfBoost(onchainActivity, newTxId, approvedRate)
+    }
+
+    @Test
+    fun `wallet change drains suspended RBF and discards the old attempt`() = runTest {
+        prepareRbf()
+        val broadcast = CompletableDeferred<String>()
+        whenever(lightningRepo.bumpFeeByRbf(any(), any())).doSuspendableAnswer {
+            Result.success(broadcast.await())
+        }
+
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertTrue(sut.uiState.value.feeLocked)
+            connectionRecovery.withIdentityChange {}
+            broadcast.complete(newTxId)
+            runCurrent()
+            expectNoEvents()
+            sut.onConfirmBoost()
+            verify(lightningRepo, times(1)).bumpFeeByRbf(any(), any())
+            verify(activityRepo, never()).recordRbfBoost(any(), any(), any())
+            verify(activityRepo, never()).publishRbfBoost(any(), any())
+        }
+        val reopened = createViewModel()
+        reopened.setupActivity(activitySent)
+        assertFalse(reopened.uiState.value.feeLocked)
     }
 
     @Test

@@ -9,12 +9,12 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Txid
@@ -27,6 +27,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.RbfBoostRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
@@ -39,6 +40,7 @@ class BoostTransactionViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val activityRepo: ActivityRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val rbfBoostRepo: RbfBoostRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
@@ -60,9 +62,12 @@ class BoostTransactionViewModel @Inject constructor(
     private var feeRateRecommended: ULong = 0U
     private var minFeeRate: ULong = 2U
     private var activity: Activity.Onchain? = null
-    private val broadcastRbfReplacements = mutableMapOf<String, RbfBroadcastAttempt>()
+    private var walletGeneration: Long? = null
+    private var attemptObserver: Job? = null
 
     fun setupActivity(activity: Activity.Onchain) {
+        clearActivity()
+        walletGeneration = rbfBoostRepo.walletGeneration()
         Logger.debug("Setup activity $activity", context = TAG)
         this.activity = Activity.Onchain(activity.v1)
 
@@ -72,19 +77,79 @@ class BoostTransactionViewModel @Inject constructor(
                 boosting = false,
                 isRbf = activity.boostType() == BoostType.RBF,
                 feeLocked = false,
+                publicationSlow = false,
             )
         }
 
-        val broadcast = broadcastRbfReplacements[activity.v1.txId]
-        if (broadcast != null && activity.boostType() == BoostType.RBF) {
-            restoreBroadcastFee(broadcast)
+        val attempt = rbfBoostRepo.find(activity.v1, walletGeneration)
+        if (attempt != null && activity.boostType() == BoostType.RBF) {
+            observeAttempt(attempt, checkNotNull(this.activity), reportFailure = false)
         } else {
             initializeFeeEstimates()
         }
     }
 
-    private fun restoreBroadcastFee(broadcast: RbfBroadcastAttempt) {
-        _uiState.update { broadcast.quote.copy(boosting = it.boosting, loading = false, feeLocked = true) }
+    fun clearActivity() {
+        activity = null
+        attemptObserver?.cancel()
+        attemptObserver = null
+    }
+
+    private fun restoreQuote(attempt: RbfBoostRepo.Attempt) {
+        _uiState.update {
+            it.copy(
+                feeRate = attempt.quote.feeRate,
+                totalFeeSats = attempt.quote.totalFeeSats,
+                loading = false,
+                feeLocked = true,
+            )
+        }
+    }
+
+    private fun observeAttempt(attempt: RbfBoostRepo.Attempt, origin: Activity.Onchain, reportFailure: Boolean) {
+        attemptObserver?.cancel()
+        restoreQuote(attempt)
+        val generation = walletGeneration
+        attemptObserver = viewModelScope.launch {
+            attempt.state.first { status ->
+                if (activity !== origin || !rbfBoostRepo.isCurrentWallet(generation)) return@first true
+                when (status) {
+                    RbfBoostRepo.Status.Broadcasting -> {
+                        _uiState.update { it.copy(boosting = true, publicationSlow = false) }
+                        false
+                    }
+
+                    is RbfBoostRepo.Status.Publishing -> {
+                        _uiState.update { it.copy(boosting = true, publicationSlow = status.slow) }
+                        false
+                    }
+
+                    is RbfBoostRepo.Status.Pending -> {
+                        _uiState.update { it.copy(boosting = false, publicationSlow = true) }
+                        if (reportFailure && !status.cancelled) {
+                            setBoostTransactionEffect(BoostTransactionEffects.OnBoostPending, origin)
+                        }
+                        true
+                    }
+
+                    RbfBoostRepo.Status.Published -> {
+                        _uiState.update { it.copy(boosting = false, publicationSlow = false) }
+                        setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess, origin)
+                        true
+                    }
+
+                    RbfBoostRepo.Status.Failed, RbfBoostRepo.Status.Cancelled -> {
+                        _uiState.update { it.copy(boosting = false, feeLocked = false, publicationSlow = false) }
+                        if (reportFailure && status == RbfBoostRepo.Status.Failed) {
+                            setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed, origin)
+                        } else {
+                            initializeFeeEstimates()
+                        }
+                        true
+                    }
+                }
+            }
+        }
     }
 
     private fun initializeFeeEstimates() {
@@ -154,8 +219,9 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     private fun updateUiStateWithFeeData(totalFee: ULong, feeRate: ULong) {
-        broadcastRbfReplacements[activity?.v1?.txId]?.let {
-            restoreBroadcastFee(it)
+        val attempt = activity?.v1?.let { rbfBoostRepo.find(it, walletGeneration) }
+        if (attempt != null) {
+            restoreQuote(attempt)
             return
         }
         val currentFee = activity?.v1?.fee ?: 0u
@@ -194,67 +260,26 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     fun onConfirmBoost() {
-        if (_uiState.value.boosting) return
+        if (_uiState.value.boosting || _uiState.value.loading) return
         val currentActivity = activity
         if (currentActivity == null) {
             handleError("Cannot boost: activity is null")
             return
         }
 
-        _uiState.update { it.copy(boosting = true) }
+        if (currentActivity.v1.txType == PaymentType.SENT) {
+            val state = _uiState.value
+            val quote = RbfBoostRepo.Quote(feeRate = state.feeRate, totalFeeSats = state.totalFeeSats)
+            val attempt = rbfBoostRepo.confirm(currentActivity.v1, walletGeneration, quote) ?: return
+            observeAttempt(attempt, currentActivity, reportFailure = true)
+            return
+        }
 
+        _uiState.update { it.copy(boosting = true) }
         viewModelScope.launch {
-            runSuspendCatching {
-                when (currentActivity.v1.txType) {
-                    PaymentType.SENT -> handleRbfBoost(currentActivity)
-                    PaymentType.RECEIVED -> handleCpfpBoost(currentActivity)
-                }
-            }.onFailure {
+            runSuspendCatching { handleCpfpBoost(currentActivity) }.onFailure {
                 handleError("Unexpected error during boost", it, currentActivity)
             }
-        }
-    }
-
-    private suspend fun handleRbfBoost(activity: Activity.Onchain) {
-        val txid = activity.v1.txId
-        val broadcast = broadcastRbfReplacements.getOrPut(txid) {
-            val quote = _uiState.value
-            RbfBroadcastAttempt(
-                quote = quote,
-                result = viewModelScope.async {
-                    lightningRepo.bumpFeeByRbf(satsPerVByte = quote.feeRate, originalTxId = txid)
-                },
-            )
-        }
-        if (this.activity === activity) restoreBroadcastFee(broadcast)
-        val result = try {
-            broadcast.result.await()
-        } finally {
-            if (broadcast.result.isCancelled) removeRbfBroadcast(txid, broadcast)
-        }
-        result.fold(
-            onSuccess = {
-                recordRbfBoost(activity, it, broadcast.quote.feeRate)
-                handleBoostSuccess(activity, it, isRBF = true)
-            },
-            onFailure = {
-                removeRbfBroadcast(txid, broadcast)
-                handleError("RBF boost failed", it, activity)
-            },
-        )
-    }
-
-    private suspend fun recordRbfBoost(origin: Activity.Onchain, newTxId: Txid, feeRate: ULong) {
-        activityRepo.recordRbfBoost(origin.v1, newTxId, feeRate).onFailure {
-            Logger.warn("Failed to record RBF fee rate for '$newTxId'", it, context = TAG)
-        }
-    }
-
-    private fun removeRbfBroadcast(txid: String, broadcast: RbfBroadcastAttempt) {
-        if (broadcastRbfReplacements[txid] !== broadcast) return
-        broadcastRbfReplacements.remove(txid)
-        if (activity?.v1?.txId == txid) {
-            _uiState.update { it.copy(feeLocked = false, boosting = false) }
         }
     }
 
@@ -265,7 +290,7 @@ class BoostTransactionViewModel @Inject constructor(
             destinationAddress = walletRepo.getOnchainAddress(),
         ).fold(
             onSuccess = { newTxId ->
-                handleBoostSuccess(activity, newTxId, isRBF = false)
+                handleCpfpSuccess(activity, newTxId)
             },
             onFailure = { error ->
                 handleError("CPFP boost failed", error, activity)
@@ -273,18 +298,9 @@ class BoostTransactionViewModel @Inject constructor(
         )
     }
 
-    private suspend fun handleBoostSuccess(origin: Activity.Onchain, newTxId: Txid, isRBF: Boolean) {
+    private suspend fun handleCpfpSuccess(origin: Activity.Onchain, newTxId: Txid) {
         Logger.debug("Boost successful. newTxId: $newTxId", context = TAG)
-        val result = updateActivity(origin, newTxId = newTxId, isRBF = isRBF)
-        if (isRBF && result.isFailure) {
-            lightningRepo.syncAsync()
-            Logger.warn("Failed to publish RBF replacement", result.exceptionOrNull(), context = TAG)
-            if (activity === origin) {
-                _uiState.update { it.copy(boosting = false) }
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostPending, origin)
-            }
-            return
-        }
+        val result = handleCPFPUpdate(origin.v1, newTxId)
         result.onFailure { error ->
             Logger.warn("Boost successful but activity update failed", error, context = TAG)
         }
@@ -353,13 +369,6 @@ class BoostTransactionViewModel @Inject constructor(
         }
     }
 
-    private suspend fun updateActivity(origin: Activity.Onchain, newTxId: Txid, isRBF: Boolean): Result<Unit> =
-        if (isRBF) {
-            activityRepo.publishRbfBoost(origin.v1.txId, newTxId)
-        } else {
-            handleCPFPUpdate(origin.v1, newTxId)
-        }
-
     /**
      * Handles CPFP (Child Pays For Parent) update by updating the current activity
      * and appending the child transaction ID to the parent's boostTxIds.
@@ -387,15 +396,16 @@ class BoostTransactionViewModel @Inject constructor(
             it.copy(
                 boosting = false,
                 loading = false,
-                feeLocked = broadcastRbfReplacements[activity?.v1?.txId] != null,
+                feeLocked = activity?.v1?.let { rbfBoostRepo.find(it, walletGeneration) } != null,
             )
         }
         setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed, origin)
     }
 
     private fun setBoostTransactionEffect(effect: BoostTransactionEffects, origin: Activity.Onchain? = null) {
+        val generation = walletGeneration
         viewModelScope.launch {
-            if (origin != null && activity !== origin) return@launch
+            if (origin != null && (activity !== origin || !rbfBoostRepo.isCurrentWallet(generation))) return@launch
             _boostTransactionEffect.emit(effect)
         }
     }
@@ -409,11 +419,6 @@ sealed interface BoostTransactionEffects {
     data object OnMinFee : BoostTransactionEffects
 }
 
-private data class RbfBroadcastAttempt(
-    val quote: BoostTransactionUiState,
-    val result: Deferred<Result<Txid>>,
-)
-
 @Immutable
 data class BoostTransactionUiState(
     val totalFeeSats: ULong = 0U,
@@ -426,4 +431,5 @@ data class BoostTransactionUiState(
     val estimateTime: String = "",
     val isRbf: Boolean = false,
     val feeLocked: Boolean = false,
+    val publicationSlow: Boolean = false,
 )
