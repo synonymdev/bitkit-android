@@ -7386,7 +7386,14 @@ class AppViewModel @Inject constructor(
         // Paykit's background work go on meanwhile.
         viewModelScope.launch {
             finishSwapRoutedPayment(
-                SwapRoutedPayment(payment, holdPaymentHash, tagsSaved, contactPaymentContext, allowanceAttemptId),
+                SwapRoutedPayment(
+                    payment = payment,
+                    holdPaymentHash = holdPaymentHash,
+                    tagsSaved = tagsSaved,
+                    contactPaymentContext = contactPaymentContext,
+                    allowanceAttemptId = allowanceAttemptId,
+                    sendGeneration = sendGeneration,
+                ),
                 holdFailure,
                 isSendCurrent,
             )
@@ -7423,11 +7430,22 @@ class AppViewModel @Inject constructor(
             clearPendingContactPaymentContext(holdPaymentHash)
             releasePrivatePaymentListIfNeeded(swap.contactPaymentContext)
             if (swap.tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
-            if (it is LightningPaymentFailedError) return
+            if (it is LightningPaymentFailedError) {
+                restoreSwapContact(swap)
+                return
+            }
             // A failed swap never reveals the preimage, so its hold payment cannot settle and a retry is safe.
             Logger.error("Failed Pubky Swaps route '${payment.swapId}'", it, context = TAG)
             pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(holdPaymentHash))
             if (shouldNotifyPendingResolution(holdPaymentHash)) notifyPendingPaymentFailed()
+        }
+    }
+
+    /** Pending took the contact off the send, so a retry from Amount after a failed hold payment pays them again. */
+    private fun restoreSwapContact(swap: SwapRoutedPayment) {
+        if (swap.sendGeneration != sendStateGeneration) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext == null) activeContactPaymentContext = swap.contactPaymentContext
         }
     }
 
@@ -10431,6 +10449,7 @@ private data class SwapRoutedPayment(
     val tagsSaved: Boolean,
     val contactPaymentContext: ContactPaymentContext?,
     val allowanceAttemptId: String?,
+    val sendGeneration: Long,
 )
 
 /** A swap whose hold payment went out for the send of [sendGeneration], which may still pay the contact. */

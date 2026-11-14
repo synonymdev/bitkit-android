@@ -19642,6 +19642,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swap route retried after its hold payment fails keeps the contact`() = test {
+        val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment(privatePaymentContext = privateContext)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+
+            // Retry on the error screen goes back to Amount, which quotes afresh before confirming.
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentSuccessful()
+            advanceBeforeHoldWatchDeadline()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        verify(privatePaykitRepo, times(2)).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+    }
+
+    @Test
     fun `swap route retry after a refused commit pays from the same private payment list`() = test {
         val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
         var consumed = false
