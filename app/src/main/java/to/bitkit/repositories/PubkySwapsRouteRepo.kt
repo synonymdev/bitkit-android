@@ -11,10 +11,13 @@ import com.synonym.bitkitcore.pubkySwapsAdvance
 import com.synonym.bitkitcore.pubkySwapsCommitRoute
 import com.synonym.bitkitcore.pubkySwapsRestore
 import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -145,15 +148,35 @@ class PubkySwapsRouteRepo @Inject constructor(
     /**
      * Advance the swap until bitkit-core broadcasts the claim to the contact, returning the claim txid. The provider
      * settles the hold invoice once it sees the claim, so the payment is done; the claim is still advanced in the
-     * background so bitkit-core rebroadcasts it until it confirms.
+     * background so bitkit-core rebroadcasts it until it confirms. [holdFailure] completing normally means the hold
+     * payment failed: the provider never funds that swap, so advancing stops with [PubkySwapHoldFailedException].
      */
     // Runs on the app scope: the swap keeps advancing towards its claim when the caller, such as a cleared screen,
     // stops waiting.
-    suspend fun awaitClaim(swapId: String, timeout: Duration = CLAIM_TIMEOUT): Result<String> = scope.async {
+    suspend fun awaitClaim(
+        swapId: String,
+        timeout: Duration = CLAIM_TIMEOUT,
+        holdFailure: Job? = null,
+    ): Result<String> = scope.async {
         var lastFailure: Throwable? = null
-        withTimeoutOrNull(timeout) {
-            pollClaim(swapId, POLL_INTERVAL, untilConfirmed = false) { lastFailure = it }
-        }?.onSuccess { advanceInBackground(swapId) } ?: run {
+        val poll = async {
+            withTimeoutOrNull(timeout) {
+                pollClaim(swapId, POLL_INTERVAL, untilConfirmed = false) { lastFailure = it }
+            }
+        }
+        // A cancelled watch, as on a cleared screen, says nothing about the hold payment, so the swap keeps advancing.
+        val holdFailed = CompletableDeferred<Unit>()
+        val handle = holdFailure?.invokeOnCompletion { if (it == null) holdFailed.complete(Unit) }
+        val isHoldFailed = select {
+            poll.onJoin { false }
+            holdFailed.onJoin { true }
+        }
+        handle?.dispose()
+        if (isHoldFailed) {
+            poll.cancel()
+            return@async Result.failure(PubkySwapHoldFailedException(swapId))
+        }
+        poll.await()?.onSuccess { advanceInBackground(swapId) } ?: run {
             // The provider may still settle the hold payment, so the swap keeps advancing towards its claim.
             advanceInBackground(swapId)
             Result.failure(PubkySwapClaimTimeoutException(swapId, lastFailure))
@@ -213,6 +236,9 @@ data class RestoredPubkySwaps(
     val restored: List<String>,
     val known: List<String>,
 )
+
+/** The swap's hold payment failed, so the provider never funds its lockup and the swap is not advanced further. */
+class PubkySwapHoldFailedException(swapId: String) : AppError("Hold payment of swap '$swapId' failed")
 
 /** A claim wait that ran out with the swap still open: its hold payment may yet settle. */
 class PubkySwapClaimTimeoutException(swapId: String, cause: Throwable?) :

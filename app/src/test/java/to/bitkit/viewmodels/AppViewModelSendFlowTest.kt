@@ -46,6 +46,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -19304,7 +19305,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).thenReturn(Result.success(SWAP_CLAIM_TXID))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.success(SWAP_CLAIM_TXID))
         whenever(
             preActivityMetadataRepo.savePreActivityMetadata(
                 id = eq(SWAP_HOLD_HASH),
@@ -19431,7 +19433,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(SendRetryRoute.Amount, assertIs<SendEffect.NavigateToError>(awaitItem()).retryRoute)
             expectNoEvents()
         }
-        verify(pubkySwapsRouteRepo, never()).awaitClaim(any(), any())
+        verify(pubkySwapsRouteRepo, never()).awaitClaim(any(), any(), anyOrNull())
     }
 
     @Test
@@ -19440,7 +19442,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.failure(PaymentPendingException(SWAP_HOLD_HASH)))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
         openSwapRoutedContactPayment(privatePaymentContext = privateContext)
 
         sut.sendEffect.test {
@@ -19452,7 +19455,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
         verify(pendingPaymentRepo).track(SWAP_HOLD_HASH)
-        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any())
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any(), anyOrNull())
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(testPublicKey, privateContext)
     }
 
@@ -19462,7 +19465,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer {
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer {
             try {
                 awaitCancellation()
             } finally {
@@ -19483,6 +19486,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         assertTrue(claimCancelled)
+        // The repo stops advancing the swap only on a hold payment that failed, never on a cancelled watch.
+        verify(pubkySwapsRouteRepo).awaitClaim(
+            eq(SWAP_ID),
+            any(),
+            check<Job> {
+                assertTrue(it.isCompleted)
+                assertFalse(it.isCancelled)
+            },
+        )
         verify(pendingPaymentRepo).resolve(check { assertIs<PendingPaymentResolution.Failure>(it) })
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
     }
@@ -19494,7 +19506,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             emitSwapHoldPaymentFailed()
             Result.success(SWAP_HOLD_HASH)
         }
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
         openSwapRoutedContactPayment()
 
         sut.sendEffect.test {
@@ -19518,7 +19531,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             emitSwapHoldPaymentFailed()
             Result.success(SWAP_HOLD_HASH)
         }
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
         openSwapRoutedContactPayment()
 
         sut.sendEffect.test {
@@ -19539,7 +19553,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
         openSwapRoutedContactPayment()
 
         sut.sendEffect.test {
@@ -19580,7 +19595,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.failure(AppError("quote_expired")), Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
         openSwapRoutedContactPayment(privatePaymentContext = privateContext)
 
         sut.sendEffect.test {
@@ -19628,7 +19644,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).thenReturn(Result.failure(AppError("refunded")))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("refunded")))
         openSwapRoutedContactPayment()
 
         sut.sendEffect.test {
@@ -19651,7 +19668,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { claim.await() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
         openSwapRoutedContactPayment()
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.AmountContinue)
@@ -19681,7 +19698,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any()))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
             .thenReturn(Result.failure(PubkySwapClaimTimeoutException(SWAP_ID, AppError("awaiting lockup"))))
         openSwapRoutedContactPayment()
 
@@ -19717,7 +19734,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit("edited-quote")).doSuspendableAnswer { awaitCancellation() }
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { claim.await() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
         openSwapRoutedContactPayment()
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.AmountContinue)
@@ -19788,7 +19805,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).doSuspendableAnswer { commit.await() }
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
         openSwapRoutedContactPayment()
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.AmountContinue)
@@ -19828,7 +19846,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { claim.await() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
         openSwapRoutedContactPayment()
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.AmountContinue)
@@ -19837,7 +19855,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             confirmSwapRoutedPayment()
             cancelAndIgnoreRemainingEvents()
         }
-        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any())
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any(), anyOrNull())
         sut.hideSheet()
         advanceBeforeHoldWatchDeadline()
         openSwapRoutedContactPayment(settle = { advanceBeforeHoldWatchDeadline() })
@@ -19869,7 +19887,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
-        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any())).doSuspendableAnswer { claim.await() }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
         openSwapRoutedContactPayment()
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.AmountContinue)
@@ -19878,7 +19896,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             confirmSwapRoutedPayment()
             cancelAndIgnoreRemainingEvents()
         }
-        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any())
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any(), anyOrNull())
         sut.hideSheet()
         advanceBeforeHoldWatchDeadline()
         sut.openContactPayment(

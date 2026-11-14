@@ -7464,7 +7464,7 @@ class AppViewModel @Inject constructor(
         payment: PubkySwapRoutePayment,
         holdFailure: Deferred<PaymentFailureReason?>,
     ): Result<String> = coroutineScope {
-        val claim = async { pubkySwapsRouteRepo.awaitClaim(payment.swapId) }
+        val claim = async { pubkySwapsRouteRepo.awaitClaim(payment.swapId, holdFailure = holdFailure) }
         select {
             claim.onAwait { it }
             holdFailure.onAwait {

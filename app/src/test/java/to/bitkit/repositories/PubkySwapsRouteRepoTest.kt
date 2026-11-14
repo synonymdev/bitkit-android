@@ -3,7 +3,9 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.PubkySwapRouteStatus
 import com.synonym.bitkitcore.pubkySwapsAdvance
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -102,6 +104,43 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             advanceUntilIdle()
 
             core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, atLeast(3))
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `awaitClaim stops advancing the swap once its hold payment fails`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
+            val holdFailure = CompletableDeferred<Unit>()
+
+            val result = async { sut.awaitClaim(SWAP_ID, holdFailure = holdFailure) }
+            runCurrent()
+            holdFailure.complete(Unit)
+            advanceUntilIdle()
+
+            assertIs<PubkySwapHoldFailedException>(result.await().exceptionOrNull())
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(1))
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `awaitClaim keeps advancing the swap when its hold payment watch is cancelled`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
+                .thenReturn(status(PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID)))
+                .thenReturn(status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID)))
+            val holdFailure = CompletableDeferred<Unit>()
+
+            val result = async { sut.awaitClaim(SWAP_ID, holdFailure = holdFailure) }
+            runCurrent()
+            holdFailure.cancel()
+            advanceUntilIdle()
+
+            assertEquals(Result.success(CLAIM_TXID), result.await())
         }
     }
 
