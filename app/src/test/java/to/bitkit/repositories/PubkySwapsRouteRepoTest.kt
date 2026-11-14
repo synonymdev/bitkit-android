@@ -1,11 +1,23 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.PubkySwapException
+import com.synonym.bitkitcore.PubkySwapRestoreReport
+import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.PubkySwapRouteStatus
 import com.synonym.bitkitcore.pubkySwapsAdvance
+import com.synonym.bitkitcore.pubkySwapsCommitRoute
+import com.synonym.bitkitcore.pubkySwapsRestore
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
@@ -14,14 +26,21 @@ import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeast
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PubkyProfile
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -36,16 +55,26 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     private val keychain = mock<Keychain>()
+    private val contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+    private val pubkyRepo = mock<PubkyRepo> { on { contacts } doReturn contacts }
+    private val lightningRepo = mock<LightningRepo>()
+    private val cacheData = MutableStateFlow(AppCacheData())
+    private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
     private lateinit var sut: PubkySwapsRouteRepo
 
     @Before
     fun setUp() {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("mnemonic")
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.update(transform)
+        }
         sut = PubkySwapsRouteRepo(
             ioDispatcher = testDispatcher,
             keychain = keychain,
-            pubkyRepo = mock(),
-            lightningRepo = mock(),
+            pubkyRepo = pubkyRepo,
+            lightningRepo = lightningRepo,
+            cacheStore = cacheStore,
         )
     }
 
@@ -104,6 +133,261 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, atLeast(3))
         }
     }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `awaitClaim stops advancing the swap once its hold payment fails`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
+            val holdFailure = CompletableDeferred<Unit>()
+            cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+
+            val result = async { sut.awaitClaim(SWAP_ID, holdFailure = holdFailure) }
+            runCurrent()
+            holdFailure.complete(Unit)
+            advanceUntilIdle()
+
+            assertIs<PubkySwapHoldFailedException>(result.await().exceptionOrNull())
+            // The provider never funds a swap whose hold payment failed, so no later start resumes it.
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(1))
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `awaitClaim keeps advancing the swap when its hold payment watch is cancelled`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
+                .thenReturn(status(PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID)))
+                .thenReturn(status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID)))
+            val holdFailure = CompletableDeferred<Unit>()
+
+            val result = async { sut.awaitClaim(SWAP_ID, holdFailure = holdFailure) }
+            runCurrent()
+            holdFailure.cancel()
+            advanceUntilIdle()
+
+            assertEquals(Result.success(CLAIM_TXID), result.await())
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `commit keeps the swap to resume until its claim confirms`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsCommitRoute(any(), any(), any(), anyOrNull()) } }
+                .thenReturn(swapPayment())
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID)))
+                .thenReturn(status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID)))
+
+            sut.commit("quote")
+            assertEquals(listOf(SWAP_ID), cacheData.value.unfinishedPubkySwaps)
+
+            sut.awaitClaim(SWAP_ID)
+            advanceUntilIdle()
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps advances a stored swap past an hour until its claim confirms`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            var calls = 0
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                // At 30 s apart, 150 unconfirmed claims outlast an hour.
+                if (++calls <= 150) {
+                    status(PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID))
+                } else {
+                    status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID))
+                }
+            }
+
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            assertEquals(151, calls)
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps drops a swap that failed`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.Failed("refunded")))
+
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps drops a swap bitkit-core has no record of`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenThrow(PubkySwapException.NotFound("no swap record"))
+
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(1))
+        }
+    }
+
+    @Test
+    fun `restoredSwaps asks again only the providers it read in part`() = test {
+        contacts.value = listOf(PubkyProfile.placeholder("provider-a"), PubkyProfile.placeholder("provider-b"))
+        val asked = mutableListOf<List<String>>()
+        val swaps = restoring(
+            asked,
+            report(restored = listOf("swap-a"), incomplete = listOf("provider-a")),
+            report(restored = listOf("swap-a", "swap-a2")),
+        ) { sut.restoredSwaps().take(2).toList() }
+
+        assertEquals(listOf(listOf("swap-a"), listOf("swap-a2")), swaps.map { it.restored })
+        assertEquals(listOf("provider-a"), asked.last())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps asks the providers past bitkit-core's limit in another call`() = test {
+        val keys = (1..31).map { "provider-$it" }
+        contacts.value = keys.map(PubkyProfile::placeholder)
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report()) {
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+        }
+
+        assertEquals(keys.toSet(), asked.flatten().toSet())
+        assertTrue(asked.all { it.size <= 30 })
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps restores again for contacts that load later`() = test {
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report()) {
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+            contacts.value = listOf(PubkyProfile.placeholder("provider-late"))
+            advanceUntilIdle()
+        }
+
+        assertEquals(listOf("provider-late"), asked.last())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `dropFailedSwap stops advancing a swap after its claim wait ran out`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            var calls = 0
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                calls++
+                status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u))
+            }
+
+            sut.awaitClaim(SWAP_ID, timeout = 1.seconds)
+            sut.dropFailedSwap(SWAP_ID)
+            val callsAtDrop = calls
+            advanceTimeBy(10.minutes)
+            runCurrent()
+
+            assertEquals(callsAtDrop, calls)
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps reveals one payout address for all its restores`() = test {
+        contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report(incomplete = listOf("provider-a"))) {
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceTimeBy(5.minutes)
+            contacts.value = listOf(PubkyProfile.placeholder("provider-a"), PubkyProfile.placeholder("provider-b"))
+            advanceTimeBy(5.minutes)
+        }
+
+        assertEquals(6, asked.size)
+        verify(lightningRepo, times(1)).newAddress()
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps after a wipe asks again the providers the wiped wallet read`() = test {
+        contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report()) {
+            val first = backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+            sut.resetForWipe()
+            advanceUntilIdle()
+            assertTrue(first.isCompleted)
+
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+        }
+
+        assertEquals(listOf(listOf("provider-a"), listOf("provider-a")), asked)
+    }
+
+    private suspend fun <T> restoring(
+        asked: MutableList<List<String>>,
+        vararg reports: PubkySwapRestoreReport,
+        block: suspend () -> T,
+    ): T {
+        whenever(lightningRepo.newAddress()).thenReturn(Result.success("bcrt1qpayout"))
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        return mockStatic(CORE).use { core ->
+            var call = 0
+            core.`when`<Any> {
+                runBlocking {
+                    pubkySwapsRestore(any(), any(), any(), any(), eq(2uL), any(), any(), anyOrNull())
+                }
+            }.thenAnswer {
+                @Suppress("UNCHECKED_CAST")
+                asked += it.arguments[0] as List<String>
+                reports[minOf(call++, reports.lastIndex)]
+            }
+            block()
+        }
+    }
+
+    private fun swapPayment() = PubkySwapRoutePayment(
+        swapId = SWAP_ID,
+        invoice = "invoice",
+        debitSat = 20_100u,
+        deliveredSat = 20_000u,
+        destinationAddress = "address",
+        htlcAddress = "htlc",
+        timeoutBlockHeight = 0u,
+    )
+
+    private fun report(
+        restored: List<String> = emptyList(),
+        incomplete: List<String> = emptyList(),
+    ) = PubkySwapRestoreReport(
+        restored = restored,
+        known = emptyList(),
+        finished = emptyList(),
+        incompleteProviders = incomplete,
+    )
 
     private suspend fun <T> advancing(vararg answers: Any, block: suspend () -> T): T =
         mockStatic(CORE).use { core ->

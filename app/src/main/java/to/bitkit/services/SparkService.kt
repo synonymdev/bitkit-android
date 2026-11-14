@@ -366,7 +366,11 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     /** The withdrawal fee rose above the fee the user confirmed. */
     class WithdrawalFeeChanged : SparkError("Spark withdrawal fee changed since it was confirmed")
 
-    class WithdrawalPending : SparkError("An earlier Spark withdrawal is still settling")
+    /** An earlier contact withdrawal, to [address] for [contact] where its journal records them, is still settling. */
+    class WithdrawalPending(
+        val address: String? = null,
+        val contact: String? = null,
+    ) : SparkError("An earlier Spark withdrawal is still settling")
 
     /** Spark could withdraw to the contact, but its balance can't cover the amount plus the withdrawal fee. */
     class WithdrawalOverBalance : SparkError("Spark balance can't cover the withdrawal and its fee")

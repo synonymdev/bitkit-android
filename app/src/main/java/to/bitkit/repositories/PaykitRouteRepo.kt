@@ -68,9 +68,8 @@ class PaykitRouteRepo @Inject constructor(
             if (legs.isNotEmpty()) {
                 return@runSuspendCatching paykitRoutePayment(request.copy(serviceLegs = legs), network)
             }
-            if (quotes.any { it.exceptionOrNull() is SparkError.WithdrawalPending }) {
-                throw SparkError.WithdrawalPending()
-            }
+            // The pending withdrawal's address and contact tell the app whether it pays this contact.
+            quotes.firstNotNullOfOrNull { it.exceptionOrNull() as? SparkError.WithdrawalPending }?.let { throw it }
             if (quotes.any { it.exceptionOrNull() is SparkError.WithdrawalOverBalance }) {
                 throw SparkError.WithdrawalOverBalance()
             }

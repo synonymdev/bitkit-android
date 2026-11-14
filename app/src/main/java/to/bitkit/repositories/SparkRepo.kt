@@ -886,7 +886,9 @@ class SparkRepo @Inject constructor(
     suspend fun withdrawalRouteLeg(endpoint: PaykitEndpoint, amountSats: ULong): Result<ServiceRouteLeg?> =
         withContext(bgDispatcher) {
             runSuspendCatching {
-                if (cacheStore.data.first().pendingSparkWithdrawal != null) throw SparkError.WithdrawalPending()
+                cacheStore.data.first().pendingSparkWithdrawal?.let {
+                    throw SparkError.WithdrawalPending(address = it.address, contact = it.contact)
+                }
                 if (!canWithdraw(amountSats)) return@runSuspendCatching null
                 val method = sparkService.prepareSend(endpoint.value, amountSats).paymentMethod
                 val quote = (method as SendPaymentMethod.BitcoinAddress).feeQuote
