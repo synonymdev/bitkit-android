@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
@@ -29,6 +30,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
@@ -286,6 +288,63 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         }
 
         assertEquals(listOf("provider-late"), asked.last())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `dropFailedSwap stops advancing a swap after its claim wait ran out`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            var calls = 0
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                calls++
+                status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u))
+            }
+
+            sut.awaitClaim(SWAP_ID, timeout = 1.seconds)
+            sut.dropFailedSwap(SWAP_ID)
+            val callsAtDrop = calls
+            advanceTimeBy(10.minutes)
+            runCurrent()
+
+            assertEquals(callsAtDrop, calls)
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps reveals one payout address for all its restores`() = test {
+        contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report(incomplete = listOf("provider-a"))) {
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceTimeBy(5.minutes)
+            contacts.value = listOf(PubkyProfile.placeholder("provider-a"), PubkyProfile.placeholder("provider-b"))
+            advanceTimeBy(5.minutes)
+        }
+
+        assertEquals(6, asked.size)
+        verify(lightningRepo, times(1)).newAddress()
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps after a wipe asks again the providers the wiped wallet read`() = test {
+        contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report()) {
+            val first = backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+            sut.resetForWipe()
+            advanceUntilIdle()
+            assertTrue(first.isCompleted)
+
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+        }
+
+        assertEquals(listOf(listOf("provider-a"), listOf("provider-a")), asked)
     }
 
     private suspend fun <T> restoring(

@@ -14,16 +14,20 @@ import com.synonym.bitkitcore.pubkySwapsRestore
 import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
@@ -84,17 +88,14 @@ class PubkySwapsRouteRepo @Inject constructor(
 
     private val scope = appScope(ioDispatcher, TAG)
 
-    /** Providers whose swap list a restore read in full, so a later restore asks only the others. */
-    private val restoredProviders = ConcurrentHashMap.newKeySet<String>()
-
-    /** Swaps a restore already reported, so a provider asked again never reports one twice. */
-    private val reportedSwaps = ConcurrentHashMap.newKeySet<String>()
+    /** Bumped by each wallet wipe, which ends the wiped wallet's restore. */
+    private val wipes = MutableStateFlow(0L)
 
     /** Swaps a caller awaits the claim of, which no resume advances beside it. */
     private val claiming = ConcurrentHashMap.newKeySet<String>()
 
-    /** Swaps advanced in the background, each by one loop. */
-    private val advancing = ConcurrentHashMap.newKeySet<String>()
+    /** The loop advancing each swap in the background, one per swap. */
+    private val advancing = ConcurrentHashMap<String, Job>()
 
     val isEnabled: Boolean get() = Env.isPubkySwapsRouteEnabled
 
@@ -131,22 +132,39 @@ class PubkySwapsRouteRepo @Inject constructor(
      * Rebuilds the swaps this wallet started from each provider's listing, after a restore from the seed, emitting the
      * swaps each restore found. It restores again whenever the contacts change, as a deferred Pubky session loads them
      * late, and a few times for providers whose list it read only in part; each restore asks only the providers not
-     * yet read in full.
+     * yet read in full. It ends when the wallet is wiped.
      */
     fun restoredSwaps(): Flow<RestoredPubkySwaps> = channelFlow {
-        // A running restore finishes before the next contact list starts one, so none is cut short.
-        val contactKeys = pubkyRepo.contacts.map { contacts -> contacts.map { it.publicKey }.toSet() }
-        contactKeys.distinctUntilChanged().conflate().collect {
-            repeat(RESTORE_ATTEMPTS) { attempt ->
-                if (attempt > 0) delay(RESTORE_RETRY_INTERVAL)
-                val swaps = restoreSwaps().getOrElse {
-                    Logger.warn("Failed to restore Pubky Swaps routes", it, context = TAG)
-                    return@repeat
+        val wallet = wipes.value
+        val run = RestoreRun()
+        val restore = launch {
+            // A running restore finishes before the next contact list starts one, so none is cut short.
+            val contactKeys = pubkyRepo.contacts.map { contacts -> contacts.map { it.publicKey }.toSet() }
+            contactKeys.distinctUntilChanged().conflate().collect {
+                repeat(RESTORE_ATTEMPTS) { attempt ->
+                    if (attempt > 0) delay(RESTORE_RETRY_INTERVAL)
+                    val swaps = restoreSwaps(run).getOrElse {
+                        Logger.warn("Failed to restore Pubky Swaps routes", it, context = TAG)
+                        return@repeat
+                    }
+                    if (swaps.restored.isNotEmpty() || swaps.known.isNotEmpty()) send(swaps)
+                    if (swaps.incompleteProviders.isEmpty()) return@collect
                 }
-                if (swaps.restored.isNotEmpty() || swaps.known.isNotEmpty()) send(swaps)
-                if (swaps.incompleteProviders.isEmpty()) return@collect
             }
         }
+        val wiped = launch {
+            wipes.first { it != wallet }
+            restore.cancel()
+        }
+        restore.join()
+        wiped.cancel()
+    }
+
+    /** Stops the wiped wallet's restore and background swaps, so a wallet restored next starts from nothing. */
+    fun resetForWipe() {
+        wipes.update { it + 1 }
+        advancing.values.forEach { it.cancel() }
+        advancing.clear()
     }
 
     /**
@@ -154,10 +172,13 @@ class PubkySwapsRouteRepo @Inject constructor(
      * bitkit-core checks each listed lockup against the Lightning payment this node sent for its hash. Swaps already on
      * record keep the destination they were committed with.
      */
-    private suspend fun restoreSwaps(): Result<RestoredPubkySwaps> = withSecrets { mnemonic, passphrase ->
-        val providers = candidates().filterNot { bare(it) in restoredProviders }
+    private suspend fun restoreSwaps(
+        run: RestoreRun
+    ): Result<RestoredPubkySwaps> = withSecrets { mnemonic, passphrase ->
+        val providers = candidates().filterNot { bare(it) in run.restoredProviders }
         if (providers.isEmpty()) return@withSecrets RestoredPubkySwaps(emptyList(), emptyList())
-        val payoutAddress = lightningRepo.newAddress().getOrThrow()
+        // One address for the whole run, so restores asked again reveal no unused addresses.
+        val payoutAddress = run.payoutAddress ?: lightningRepo.newAddress().getOrThrow().also { run.payoutAddress = it }
         val sentPayments = sentPayments()
         val restored = mutableListOf<String>()
         val known = mutableListOf<String>()
@@ -182,17 +203,16 @@ class PubkySwapsRouteRepo @Inject constructor(
             readInFull += chunk.map(::bare).filterNot { it in incompleteBare }
         }
         // Only a restore that returned its swaps marks their providers read, so a failed one asks them again.
-        restoredProviders += readInFull
+        run.restoredProviders += readInFull
         if (incomplete.isNotEmpty()) Logger.warn("Swap lists incomplete from '$incomplete'", context = TAG)
         track(restored + known)
         RestoredPubkySwaps(
-            restored = restored.filter(reportedSwaps::add),
-            known = known.filter(reportedSwaps::add),
+            restored = restored.filter(run.reportedSwaps::add),
+            known = known.filter(run.reportedSwaps::add),
             incompleteProviders = incomplete,
         )
     }
 
-    /** The pubky without its scheme or prefix, as bitkit-core names a provider it reports incomplete. */
     private fun bare(pubky: String): String {
         val key = pubky.trim().removePrefix("pubky://")
         return key.removePrefix("pubky").takeIf { it.length == PUBKY_KEY_LENGTH } ?: key
@@ -287,16 +307,25 @@ class PubkySwapsRouteRepo @Inject constructor(
             }
         }
 
-    /** Advances the swap until its claim confirms or it fails, in one loop per swap. */
     private fun advanceInBackground(swapId: String) {
-        if (!advancing.add(swapId)) return
-        scope.launch {
+        if (advancing.containsKey(swapId)) return
+        val loop = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 awaitConfirmation(swapId)
             } finally {
-                advancing.remove(swapId)
+                advancing.remove(swapId, coroutineContext.job)
             }
         }
+        if (advancing.putIfAbsent(swapId, loop) == null) loop.start() else loop.cancel()
+    }
+
+    /**
+     * Stops a swap whose hold payment failed or never went out: the provider never funds it, so advancing it would
+     * only poll until bitkit-core gives up.
+     */
+    suspend fun dropFailedSwap(swapId: String) {
+        advancing.remove(swapId)?.cancel()
+        untrack(swapId)
     }
 
     private suspend fun awaitConfirmation(swapId: String) {
@@ -380,3 +409,9 @@ class PubkySwapHoldFailedException(swapId: String) : AppError("Hold payment of s
 /** A claim wait that ran out with the swap still open: its hold payment may yet settle. */
 class PubkySwapClaimTimeoutException(swapId: String, cause: Throwable?) :
     AppError("Swap '$swapId' not claimed yet", cause)
+
+private class RestoreRun {
+    val restoredProviders = mutableSetOf<String>()
+    val reportedSwaps = mutableSetOf<String>()
+    var payoutAddress: String? = null
+}

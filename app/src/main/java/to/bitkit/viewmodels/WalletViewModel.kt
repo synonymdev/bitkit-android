@@ -573,13 +573,17 @@ class WalletViewModel @Inject constructor(
         _restoreState.update { RestoreState.Settled }
     }
 
+    private var pubkySwapsRestoreJob: Job? = null
+
     /**
      * Finishes swap routes a restored wallet left in flight: each is rebuilt from its provider's listing and claimed to
      * Savings, since the contact's address did not survive the restore, so the user learns the payment came back.
      */
     private fun restorePubkySwaps() {
         if (!pubkySwapsRouteRepo.isEnabled) return
-        viewModelScope.launch(bgDispatcher) {
+        // One restore watches the contacts at a time; a wipe ends it.
+        pubkySwapsRestoreJob?.cancel()
+        pubkySwapsRestoreJob = viewModelScope.launch(bgDispatcher) {
             pubkySwapsRouteRepo.restoredSwaps().collect { swaps ->
                 Logger.info(
                     "Restored '${swaps.restored.size}' Pubky Swaps routes, '${swaps.known.size}' known",

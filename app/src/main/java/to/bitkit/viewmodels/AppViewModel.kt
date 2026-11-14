@@ -285,6 +285,7 @@ import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -419,6 +420,9 @@ class AppViewModel @Inject constructor(
     private var fundingSourceSwitchPending = false
     private var onchainSendRefreshJob: Job? = null
     private var sendStateGeneration = 0L
+
+    /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
+    private var sendSession = 0L
 
     fun setSendEvent(event: SendEvent) {
         if ((currentSheet.value as? Sheet.Send)?.preparingRequest != null) return
@@ -584,6 +588,9 @@ class AppViewModel @Inject constructor(
     /** The swap whose hold payment went out for a send, which may still pay the contact, so that send pays once. */
     @Volatile
     private var committedSwap: CommittedSwap? = null
+
+    /** The swap behind each hold payment still out, so a hold that fails stops its swap. */
+    private val swapIdsByHoldHash = ConcurrentHashMap<String, String>()
     private var isPresentingPaymentRequest = false
     private val isPaymentRequestPollingStopped = MutableStateFlow(false)
     private var isPaymentRequestOverlayVisible = false
@@ -7315,6 +7322,7 @@ class AppViewModel @Inject constructor(
         allowanceAttemptId: String?,
     ) {
         val sendGeneration = sendStateGeneration
+        val session = sendSession
         // A payment edited from Amount in the same sheet holds a fresh quote or none, so the result is no longer its.
         val isSendCurrent = {
             sendGeneration == sendStateGeneration &&
@@ -7333,6 +7341,8 @@ class AppViewModel @Inject constructor(
                 "Swap hold invoice is not a Lightning invoice"
             }.paymentHash.toHex()
         }.getOrElse {
+            // No hold payment goes out, so the provider never funds the swap.
+            pubkySwapsRouteRepo.dropFailedSwap(payment.swapId)
             failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
             return
         }
@@ -7354,12 +7364,15 @@ class AppViewModel @Inject constructor(
         contactPaymentContext?.let {
             synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
         }
-        committedSwap = CommittedSwap(sendGeneration, holdPaymentHash, payment.deliveredSat)
+        committedSwap = CommittedSwap(session, holdPaymentHash, payment.deliveredSat)
+        swapIdsByHoldHash[holdPaymentHash] = payment.swapId
         // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
         lightningRepo.payInvoice(payment.invoice).onFailure {
             // Spark may have sent it, so an unknown outcome waits on the claim like a sent hold payment.
             if (it is PaymentPendingException) return@onFailure
             holdFailure.cancel()
+            swapIdsByHoldHash.remove(holdPaymentHash)
+            pubkySwapsRouteRepo.dropFailedSwap(payment.swapId)
             clearCommittedSwap(holdPaymentHash)
             clearPendingContactPaymentContext(holdPaymentHash)
             if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
@@ -7392,7 +7405,7 @@ class AppViewModel @Inject constructor(
                     tagsSaved = tagsSaved,
                     contactPaymentContext = contactPaymentContext,
                     allowanceAttemptId = allowanceAttemptId,
-                    sendGeneration = sendGeneration,
+                    sendSession = session,
                 ),
                 holdFailure,
                 isSendCurrent,
@@ -7414,6 +7427,7 @@ class AppViewModel @Inject constructor(
             holdFailure.cancel()
         }
         claim.onSuccess {
+            swapIdsByHoldHash.remove(holdPaymentHash)
             finishManualAllowancePayment(swap.allowanceAttemptId, succeeded = true)
             Logger.info("Claimed Pubky Swaps route '${payment.swapId}' in '$it'", context = TAG)
         }.onFailure {
@@ -7426,9 +7440,10 @@ class AppViewModel @Inject constructor(
             // the error screen and finds the send by that hash.
             clearSwapRouteQuote(isSendCurrent(), keepHoldPaymentHash = it is LightningPaymentFailedError)
             clearCommittedSwap(holdPaymentHash)
+            swapIdsByHoldHash.remove(holdPaymentHash)
             finishManualAllowancePayment(swap.allowanceAttemptId, succeeded = false)
             clearPendingContactPaymentContext(holdPaymentHash)
-            releasePrivatePaymentListIfNeeded(swap.contactPaymentContext)
+            releaseSwapPrivatePaymentList(swap.contactPaymentContext)
             if (swap.tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
             if (it is LightningPaymentFailedError) {
                 restoreSwapContact(swap)
@@ -7441,9 +7456,8 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /** Pending took the contact off the send, so a retry from Amount after a failed hold payment pays them again. */
     private fun restoreSwapContact(swap: SwapRoutedPayment) {
-        if (swap.sendGeneration != sendStateGeneration) return
+        if (swap.sendSession != sendSession) return
         synchronized(contactPaymentContextLock) {
             if (activeContactPaymentContext == null) activeContactPaymentContext = swap.contactPaymentContext
         }
@@ -7457,10 +7471,7 @@ class AppViewModel @Inject constructor(
         isCurrent: Boolean,
     ) {
         clearSwapRouteQuote(isCurrent)
-        // Nothing was paid to the list's address, so a retry may pay from the same list.
-        contactPaymentContext?.privatePaymentContext?.let {
-            privatePaykitRepo.releasePrivatePaymentList(contactPaymentContext.publicKey, it)
-        }
+        releaseSwapPrivatePaymentList(contactPaymentContext)
         finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
         if (!isCurrent) {
             handlePaymentPreparationFailure(error, contactPaymentContext, isSendCurrent = false)
@@ -7479,12 +7490,8 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Shows the pending payment of a swap this send already paid a hold invoice for, instead of paying again: a quote
-     * made after backing out of Confirm mid-commit would pay the contact a second time.
-     */
     private fun showCommittedSwap(): Boolean {
-        val swap = committedSwap?.takeIf { it.sendGeneration == sendStateGeneration } ?: return false
+        val swap = committedSwap?.takeIf { it.sendSession == sendSession } ?: return false
         setSendEffect(
             SendEffect.NavigateToPending(
                 paymentHash = swap.holdPaymentHash,
@@ -7495,18 +7502,28 @@ class AppViewModel @Inject constructor(
         return true
     }
 
+    private suspend fun releaseSwapPrivatePaymentList(context: ContactPaymentContext?) {
+        val privatePaymentContext = context?.privatePaymentContext ?: return
+        privatePaykitRepo.releasePrivatePaymentList(context.publicKey, privatePaymentContext)
+    }
+
     private fun clearCommittedSwap(holdPaymentHash: String) {
         if (committedSwap?.holdPaymentHash == holdPaymentHash) committedSwap = null
     }
 
-    /**
-     * A failed hold payment paid nothing, also one that failed after the claim wait ran out, so its send may retry
-     * from Amount, for the contact Pending took off the send.
-     */
     private fun releaseFailedSwapHold(paymentHash: String) {
+        // The provider never funds a swap whose hold payment failed, so it stops advancing, and the contact's list
+        // paid nothing.
+        swapIdsByHoldHash.remove(paymentHash)?.let { swapId ->
+            val context = synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[paymentHash] }
+            viewModelScope.launch {
+                pubkySwapsRouteRepo.dropFailedSwap(swapId)
+                releaseSwapPrivatePaymentList(context)
+            }
+        }
         val swap = committedSwap?.takeIf { it.holdPaymentHash == paymentHash } ?: return
         committedSwap = null
-        if (swap.sendGeneration != sendStateGeneration) return
+        if (swap.sendSession != sendSession) return
         synchronized(contactPaymentContextLock) {
             if (activeContactPaymentContext == null) {
                 activeContactPaymentContext = pendingContactPaymentContexts[paymentHash]
@@ -8585,6 +8602,7 @@ class AppViewModel @Inject constructor(
         val hardwareAvailableSats = hardwareWalletId?.let { hardwareEstimatedAvailable(it, speed, rates) } ?: 0uL
         if (!canPrepareSend(walletGeneration)) return false
         sendStateGeneration++
+        sendSession++
         addressValidationJob?.cancel()
         paykitReviewedAmount = null
         paykitAmountConversion = PaykitAmountConversion()
@@ -10449,12 +10467,11 @@ private data class SwapRoutedPayment(
     val tagsSaved: Boolean,
     val contactPaymentContext: ContactPaymentContext?,
     val allowanceAttemptId: String?,
-    val sendGeneration: Long,
+    val sendSession: Long,
 )
 
-/** A swap whose hold payment went out for the send of [sendGeneration], which may still pay the contact. */
 private data class CommittedSwap(
-    val sendGeneration: Long,
+    val sendSession: Long,
     val holdPaymentHash: String,
     val deliveredSat: ULong,
 )

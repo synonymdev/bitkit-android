@@ -19500,6 +19500,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         verify(pubkySwapsRouteRepo, never()).awaitClaim(any(), any(), anyOrNull())
+        verify(pubkySwapsRouteRepo).dropFailedSwap(SWAP_ID)
     }
 
     @Test
@@ -19644,8 +19645,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `swap route retried after its hold payment fails keeps the contact`() = test {
         val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
-        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
-            .thenReturn(Result.success(Unit))
+        var consumed = false
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            if (consumed) {
+                Result.failure(PrivatePaykitError.PaymentListAlreadyConsumed)
+            } else {
+                consumed = true
+                Result.success(Unit)
+            }
+        }
+        whenever(privatePaykitRepo.releasePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            consumed = false
+            Result.success(Unit)
+        }
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
@@ -19872,6 +19884,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swap route send switched between sources mid-commit pays the contact once`() = test {
+        val commit = CompletableDeferred<Result<PubkySwapRoutePayment>>()
+        val claim = CompletableDeferred<Result<String>>()
+        val freshQuote = swapRouteQuote().copy(quoteId = "fresh-quote")
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).doSuspendableAnswer { commit.await() }
+        whenever(pubkySwapsRouteRepo.commit("fresh-quote")).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            // Backing out of Confirm while the provider is slow to commit, Savings then Spending quotes afresh.
+            whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any()))
+                .thenReturn(Result.success(PaykitRoute.Swap(freshQuote)))
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceBeforeHoldWatchDeadline()
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceBeforeHoldWatchDeadline()
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            commit.complete(Result.success(swapRoutePayment()))
+            advanceBeforeHoldWatchDeadline()
+
+            // The first swap's hold payment is out, so confirming the fresh quote shows it instead of paying again.
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, never()).commit("fresh-quote")
+        verify(lightningRepo, times(1)).payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())
+    }
+
+    @Test
     fun `swap route hold failing after the claim wait ran out retries for the same contact`() = test {
         whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
@@ -19901,6 +19951,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
         verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        // The failed hold's swap stops advancing; the retry's swap goes on.
+        verify(pubkySwapsRouteRepo, times(1)).dropFailedSwap(SWAP_ID)
         verify(activityRepo).setContact(
             contactPublicKey = eq(testPublicKey),
             forPaymentId = eq(SWAP_HOLD_HASH),
