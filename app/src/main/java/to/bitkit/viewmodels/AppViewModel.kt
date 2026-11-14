@@ -589,7 +589,7 @@ class AppViewModel @Inject constructor(
     @Volatile
     private var committedSwap: CommittedSwap? = null
 
-    /** The swap behind each hold payment still out, so a hold that fails stops its swap. */
+    /** The swap behind each hold payment still out, so a hold that fails gives the contact's list back. */
     private val swapIdsByHoldHash = ConcurrentHashMap<String, String>()
     private var isPresentingPaymentRequest = false
     private val isPaymentRequestPollingStopped = MutableStateFlow(false)
@@ -7353,6 +7353,8 @@ class AppViewModel @Inject constructor(
             }
         }
         val tagsSaved = saveSwapRouteTags(holdPaymentHash, tags, address)
+        // Recorded before the payment goes out, so a hold failing at any point stops the swap.
+        pubkySwapsRouteRepo.watchHold(payment.swapId, holdPaymentHash)
         val holdFailure = viewModelScope.async(start = CoroutineStart.UNDISPATCHED) {
             lightningRepo.nodeEvents.watchUntil {
                 when (it) {
@@ -7512,14 +7514,10 @@ class AppViewModel @Inject constructor(
     }
 
     private fun releaseFailedSwapHold(paymentHash: String) {
-        // The provider never funds a swap whose hold payment failed, so it stops advancing, and the contact's list
-        // paid nothing.
-        swapIdsByHoldHash.remove(paymentHash)?.let { swapId ->
+        // A failed hold payment paid the contact's list nothing; the swaps repo stops the swap itself.
+        swapIdsByHoldHash.remove(paymentHash)?.let {
             val context = synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[paymentHash] }
-            viewModelScope.launch {
-                pubkySwapsRouteRepo.dropFailedSwap(swapId)
-                releaseSwapPrivatePaymentList(context)
-            }
+            viewModelScope.launch { releaseSwapPrivatePaymentList(context) }
         }
         val swap = committedSwap?.takeIf { it.holdPaymentHash == paymentHash } ?: return
         committedSwap = null
@@ -8866,6 +8864,8 @@ class AppViewModel @Inject constructor(
         }
         if (_currentSheet.value is Sheet.Send) {
             sendStateGeneration++
+            // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
+            sendSession++
             // A payment still running for the dismissed send, like a slow swap commit, must not block the next.
             if (confirmedPaymentSubmission != null) releaseConfirmedPaymentSubmission()
             cancelHardwarePaymentRequestIfNeeded()

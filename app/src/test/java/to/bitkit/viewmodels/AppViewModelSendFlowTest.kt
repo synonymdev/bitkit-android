@@ -19951,8 +19951,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
         verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
-        // The failed hold's swap stops advancing; the retry's swap goes on.
-        verify(pubkySwapsRouteRepo, times(1)).dropFailedSwap(SWAP_ID)
+        // Each hold is recorded before it goes out, so the swaps repo stops the swap whose hold fails.
+        verify(pubkySwapsRouteRepo, times(2)).watchHold(SWAP_ID, SWAP_HOLD_HASH)
         verify(activityRepo).setContact(
             contactPublicKey = eq(testPublicKey),
             forPaymentId = eq(SWAP_HOLD_HASH),
@@ -20001,6 +20001,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sheetB is Sheet.Send)
         assertSame(sheetB, sut.currentSheet.value)
         assertSame(contactPaymentContextB, activeContactPaymentContext())
+    }
+
+    @Test
+    fun `swap route hold failing after its sheet closed leaves no contact behind`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.failure(PubkySwapClaimTimeoutException(SWAP_ID, AppError("awaiting lockup"))))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            sut.hideSheet()
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertNull(sut.currentSheet.value)
+        assertNull(activeContactPaymentContext())
     }
 
     @Test
