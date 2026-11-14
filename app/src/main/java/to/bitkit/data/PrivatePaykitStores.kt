@@ -7,7 +7,6 @@ import androidx.datastore.dataStore
 import com.synonym.paykit.OutboundPrivateSendReport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import to.bitkit.di.json
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -59,30 +58,30 @@ class PaykitOutboundDeliveryStore @Inject constructor(
         }
     }
 
-    /** True once a drain sent the message, false when its latest drain failed, null when no drain reported it. */
-    suspend fun wasSent(identity: String, messageId: ULong?): Boolean? =
-        messageId?.let { records(identity).outcomes[it.toString()] }
-
-    /** Receipts whose access was seen sent stay sent, whatever later pruning drops from the message outcomes. */
-    suspend fun markReceiptSent(identity: String, receiptId: String) {
+    /**
+     * True once the receipt or its access message was seen sent, false when the message's latest drain failed, null
+     * when no drain reported it. A sent message marks the receipt sent in the same write, so it stays sent whatever
+     * later pruning drops, and a reset that lands first leaves nothing to restore.
+     */
+    suspend fun deliveryOf(identity: String, receiptId: String, messageId: ULong?): Boolean? {
+        var delivery: Boolean? = null
         updateRecords(identity) { records ->
-            if (receiptId in records.sentReceiptIds) {
-                records
-            } else {
+            delivery = when (receiptId) {
+                in records.sentReceiptIds -> true
+                else -> messageId?.let { records.outcomes[it.toString()] }
+            }
+            if (delivery == true && receiptId !in records.sentReceiptIds) {
                 records.copy(sentReceiptIds = records.sentReceiptIds + receiptId)
+            } else {
+                records
             }
         }
+        return delivery
     }
-
-    suspend fun isReceiptSent(identity: String, receiptId: String): Boolean =
-        receiptId in records(identity).sentReceiptIds
 
     suspend fun reset() {
         store.updateData { PaykitOutboundDeliveryData() }
     }
-
-    private suspend fun records(identity: String) =
-        store.data.first().identities[key(identity)] ?: PaykitOutboundDeliveryRecords()
 
     private suspend fun updateRecords(
         identity: String,
@@ -90,8 +89,9 @@ class PaykitOutboundDeliveryStore @Inject constructor(
     ) {
         val key = key(identity)
         store.updateData { data ->
-            val records = transform(data.identities[key] ?: PaykitOutboundDeliveryRecords())
-            data.copy(identities = data.identities + (key to records))
+            val current = data.identities[key] ?: PaykitOutboundDeliveryRecords()
+            val records = transform(current)
+            if (records == current) data else data.copy(identities = data.identities + (key to records))
         }
     }
 

@@ -180,12 +180,11 @@ class PaykitReceiptRepo @Inject constructor(
         candidate: PaykitReceiptCandidate,
         views: Map<String, ReceiptIssuanceView>,
         identity: String,
-    ): Boolean? {
-        if (outboundDeliveryStore.isReceiptSent(identity, candidate.receiptId)) return true
-        val sent = outboundDeliveryStore.wasSent(identity, views[candidate.receiptId]?.outboundMessageId)
-        if (sent == true) outboundDeliveryStore.markReceiptSent(identity, candidate.receiptId)
-        return sent
-    }
+    ): Boolean? = outboundDeliveryStore.deliveryOf(
+        identity = identity,
+        receiptId = candidate.receiptId,
+        messageId = views[candidate.receiptId]?.outboundMessageId,
+    )
 
     /**
      * Drains each counterparty's queue and marks its receipts sent right after, before a later drain can prune the

@@ -87,9 +87,8 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
         }
         whenever(usdtPayments.receipts).thenReturn(MutableStateFlow(emptyList()))
         whenever(sdk.issuedReceipts(any())).doSuspendableAnswer { issued.values.toList() }
-        whenever(delivery.wasSent(eq(SELLER), anyOrNull()))
-            .doSuspendableAnswer { outcomes[it.arguments[1] as ULong?] }
-        whenever(delivery.isReceiptSent(eq(SELLER), any())).thenReturn(false)
+        whenever(delivery.deliveryOf(eq(SELLER), any(), anyOrNull()))
+            .doSuspendableAnswer { outcomes[it.arguments[2] as ULong?] }
         whenever(sdk.processOutboundPrivateMessages(eq(BUYER), eq(Priority.Background), eq(SELLER)))
             .doSuspendableAnswer {
                 drainOutcome?.let { outcomes[MESSAGE_ID] = it }
