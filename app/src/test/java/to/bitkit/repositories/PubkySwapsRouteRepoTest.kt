@@ -426,6 +426,31 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
+    fun `dropFailedSwap stops a running claim wait`() = test {
+        mockStatic(CORE).use { core ->
+            var calls = 0
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                calls++
+                status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u))
+            }
+
+            val claim = async { sut.awaitClaim(SWAP_ID) }
+            runCurrent()
+            sut.dropFailedSwap(SWAP_ID)
+            advanceTimeBy(5.seconds)
+            runCurrent()
+            val callsAfterDrop = calls
+            advanceTimeBy(20.minutes)
+            runCurrent()
+
+            assertIs<PubkySwapHoldFailedException>(claim.await().exceptionOrNull())
+            assertEquals(callsAfterDrop, calls)
+            assertIs<PubkySwapHoldFailedException>(sut.awaitClaim(SWAP_ID).exceptionOrNull())
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `resetForWipe stops a running claim wait`() = test {
         mockStatic(CORE).use { core ->
             var calls = 0

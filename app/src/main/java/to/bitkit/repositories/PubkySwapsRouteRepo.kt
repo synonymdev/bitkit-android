@@ -16,6 +16,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -100,8 +101,9 @@ class PubkySwapsRouteRepo @Inject constructor(
     /** The loop advancing each swap in the background, one per swap. */
     private val advancing = ConcurrentHashMap<String, Job>()
 
-    /** Claim waits running on the app scope, which a wipe stops. */
-    private val claimWaits = ConcurrentHashMap.newKeySet<Job>()
+    /** The parent of this wallet's claim waits, which a wipe cancels, so a wait starting meanwhile stops too. */
+    @Volatile
+    private var walletJob = SupervisorJob()
 
     /** Swaps this session committed, which the send flow drives, so a restore listing them leaves them alone. */
     private val committed = ConcurrentHashMap.newKeySet<String>()
@@ -177,7 +179,8 @@ class PubkySwapsRouteRepo @Inject constructor(
     /** Stops the wiped wallet's restore and background swaps, so a wallet restored next starts from nothing. */
     fun resetForWipe() {
         wipes.update { it + 1 }
-        claimWaits.forEach { it.cancel() }
+        walletJob.cancel()
+        walletJob = SupervisorJob()
         advancing.values.forEach { it.cancel() }
         advancing.clear()
         committed.clear()
@@ -323,16 +326,14 @@ class PubkySwapsRouteRepo @Inject constructor(
         swapId: String,
         timeout: Duration = CLAIM_TIMEOUT,
         holdFailure: Job? = null,
-    ): Result<String> = scope.async {
+    ): Result<String> = scope.async(walletJob) {
+        if (swapId in dropped) return@async Result.failure(PubkySwapHoldFailedException(swapId))
         claiming.add(swapId)
         try {
             awaitClaimOnce(swapId, timeout, holdFailure)
         } finally {
             claiming.remove(swapId)
         }
-    }.also { wait ->
-        claimWaits.add(wait)
-        wait.invokeOnCompletion { claimWaits.remove(wait) }
     }.await()
 
     private suspend fun awaitClaimOnce(swapId: String, timeout: Duration, holdFailure: Job?): Result<String> =
@@ -424,7 +425,9 @@ class PubkySwapsRouteRepo @Inject constructor(
     ): Result<String> {
         while (true) {
             // A swap whose hold failed, also while the app was closed or over Spark, is never funded.
-            if (untilConfirmed && isHoldFailed(swapId)) return Result.failure(PubkySwapHoldFailedException(swapId))
+            if (swapId in dropped || untilConfirmed && isHoldFailed(swapId)) {
+                return Result.failure(PubkySwapHoldFailedException(swapId))
+            }
             // A failed advance, such as a transient Electrum error, is retried: the swap is already funded. A swap
             // bitkit-core has no record of, as one carried over by a metadata backup, never advances, so it ends here.
             val advance = withSecrets { mnemonic, passphrase -> pubkySwapsAdvance(swapId, mnemonic, passphrase) }
