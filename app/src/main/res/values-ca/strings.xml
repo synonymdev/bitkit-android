@@ -1080,6 +1080,9 @@
     <string name="wallet__note">Nota</string>
     <string name="wallet__payment_received">Rebut Bitcoin</string>
     <string name="wallet__peer_disconnected">Parell desconnectat.</string>
+    <string name="wallet__receipt_failed">No s\'ha pogut enviar el rebut</string>
+    <string name="wallet__receipt_sending">S\'està enviant el rebut</string>
+    <string name="wallet__receipt_sent">Rebut enviat</string>
     <string name="wallet__receive">Rebre</string>
     <string name="wallet__receive__cjit">Rebre fons Lightning</string>
     <string name="wallet__receive_bitcoin">Rebre Bitcoin</string>

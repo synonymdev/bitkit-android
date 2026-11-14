@@ -970,6 +970,9 @@
     <string name="wallet__drawer__settings">Einstellungen</string>
     <string name="wallet__drawer__status">App Status</string>
     <string name="wallet__drawer__support">Support</string>
+    <string name="wallet__receipt_failed">Beleg konnte nicht gesendet werden</string>
+    <string name="wallet__receipt_sending">Beleg wird gesendet</string>
+    <string name="wallet__receipt_sent">Beleg gesendet</string>
     <string name="wallet__send">Senden</string>
     <string name="wallet__receive">Empfangen</string>
     <string name="wallet__send_bitcoin">Bitcoin senden</string>

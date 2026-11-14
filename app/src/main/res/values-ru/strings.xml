@@ -1099,6 +1099,9 @@
     <string name="wallet__note">Заметка</string>
     <string name="wallet__payment_received">Получен Биткоин</string>
     <string name="wallet__peer_disconnected">Пир отключён.</string>
+    <string name="wallet__receipt_failed">Не удалось отправить квитанцию</string>
+    <string name="wallet__receipt_sending">Отправка квитанции</string>
+    <string name="wallet__receipt_sent">Квитанция отправлена</string>
     <string name="wallet__receive">Получить</string>
     <string name="wallet__receive__cjit">Получить Lightning средства</string>
     <string name="wallet__receive_bitcoin">Получить Биткоин</string>

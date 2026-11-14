@@ -1,0 +1,18 @@
+<journey name="Paid Request Receipt">
+  <description>
+    Verifies that the requester's wallet sends the payer a Paykit receipt once a Payment Request it sent is paid, shows "Receipt sent" on the received sheet and the activity row, catches up on a payment that arrived while it was closed, and offers Retry when sending fails. Requires two linked disposable regtest wallets on the local Pubky testnet, with the payer funded for 30,000 sats on Spending and 30,000 sats on Savings plus fees. Never use real funds. Run only when regtest payments are authorized. The same journey runs on iOS; the identifiers "PaykitReceiptStatus" and "PaykitReceiptRetry" are shared.
+  </description>
+  <actions>
+    <action>On the requester, send the payer a Lightning Payment Request for 6,000 sats</action>
+    <action>On the payer, pay the request from Spending</action>
+    <action>On the requester, verify the received sheet shows 6,000 sats and its receipt line (id "PaykitReceiptStatus") reads "Receipt sent" within 30 seconds</action>
+    <action>Close the received sheet and verify the matching received row in Activity shows "Receipt sent" after its date</action>
+    <action>On the requester, send the payer an on-chain Payment Request for 10,000 sats, then force-close the requester app</action>
+    <action>On the payer, pay the request from Savings and mine one block</action>
+    <action>Reopen the requester app and verify the received on-chain row in Activity shows "Receipt sent" within 60 seconds</action>
+    <action>On the requester, send the payer a Lightning Payment Request for 5,000 sats</action>
+    <action>Make the local homeserver fail the requester's writes (homeserver-proxy rule for the requester's pubky, method PUT, status 503), then on the payer pay the request from Spending</action>
+    <action>On the requester, verify the receipt line reads "Receipt failed" and shows Retry (id "PaykitReceiptRetry")</action>
+    <action>Release the proxy rule, tap Retry and verify the receipt line reads "Receipt sent" within 30 seconds</action>
+  </actions>
+</journey>

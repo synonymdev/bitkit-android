@@ -41,6 +41,10 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 refused with "Shorten the note and try again." before anything is sent, and sends after the note is
 shortened. It uses the same two-instance setup as `request-summary.xml`.
 
+`paid-request-receipt.xml` uses the same two-instance setup as `request-summary.xml`. Its failure step installs a bitkit-docker
+`homeserver-proxy` rule that answers the requester's `PUT` requests with 503 while the payer pays, then releases it
+before Retry (bitkit-docker README, "Homeserver proxy").
+
 `success-dismissal.xml` matches iOS's journey: after paying a Lightning request, closing success
 must leave no error toast or duplicate payment; closing a later unpaid request must not send it.
 Use two linked disposable regtest wallets and observe or record dismissal to catch short-lived toasts.

@@ -1077,6 +1077,9 @@
     <string name="wallet__note">Notitie</string>
     <string name="wallet__payment_received">Bitcoin ontvangen</string>
     <string name="wallet__peer_disconnected">Peer niet verbonden.</string>
+    <string name="wallet__receipt_failed">Ontvangstbewijs verzenden mislukt</string>
+    <string name="wallet__receipt_sending">Ontvangstbewijs verzenden</string>
+    <string name="wallet__receipt_sent">Ontvangstbewijs verzonden</string>
     <string name="wallet__receive">Ontvangen</string>
     <string name="wallet__receive__cjit">Lightning-geld ontvangen</string>
     <string name="wallet__receive_bitcoin">Bitcoin ontvangen</string>

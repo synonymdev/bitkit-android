@@ -1086,6 +1086,9 @@
     <string name="wallet__note">Nota</string>
     <string name="wallet__payment_received">Bitcoin recibido</string>
     <string name="wallet__peer_disconnected">Par desconectado.</string>
+    <string name="wallet__receipt_failed">Error al enviar el recibo</string>
+    <string name="wallet__receipt_sending">Enviando recibo</string>
+    <string name="wallet__receipt_sent">Recibo enviado</string>
     <string name="wallet__receive">Recibir</string>
     <string name="wallet__receive__cjit">Recibir fondos Lightning</string>
     <string name="wallet__receive_bitcoin">Recibir Bitcoin</string>

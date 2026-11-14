@@ -98,6 +98,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             coreService = coreService,
             usdtRepo = usdtRepo,
             paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
+            paykitReceiptRepo = mock(),
             db = db,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
