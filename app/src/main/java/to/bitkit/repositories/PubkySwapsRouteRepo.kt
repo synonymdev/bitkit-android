@@ -16,6 +16,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
@@ -34,6 +39,7 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -63,9 +69,24 @@ class PubkySwapsRouteRepo @Inject constructor(
 
         /** How long a broadcast claim is advanced in the background before polling stops. */
         private val CONFIRMATION_TIMEOUT = 60.minutes
+
+        /** The most providers bitkit-core asks in one restore; it reports the others incomplete. */
+        private const val MAX_RESTORE_PROVIDERS = 30
+
+        /** How many times a restore asks the providers whose swap list it read only in part. */
+        private const val RESTORE_ATTEMPTS = 3
+
+        /** How long a restore waits before asking again the providers it read only in part. */
+        private val RESTORE_RETRY_INTERVAL = 1.minutes
     }
 
     private val scope = appScope(ioDispatcher, TAG)
+
+    /** Providers whose swap list a restore read in full, so a later restore asks only the others. */
+    private val restoredProviders = ConcurrentHashMap.newKeySet<String>()
+
+    /** Swaps a restore already reported, so a provider asked again never reports one twice. */
+    private val reportedSwaps = ConcurrentHashMap.newKeySet<String>()
 
     val isEnabled: Boolean get() = Env.isPubkySwapsRouteEnabled
 
@@ -99,27 +120,73 @@ class PubkySwapsRouteRepo @Inject constructor(
     }
 
     /**
-     * Rebuilds the swaps this wallet started from each provider's listing, after a restore from the seed. The listing
-     * does not carry the contact's address, so a restored swap claims to a fresh Savings address. bitkit-core checks
-     * each listed lockup against the Lightning payment this node sent for its hash. Swaps already on record keep the
-     * destination they were committed with.
+     * Rebuilds the swaps this wallet started from each provider's listing, after a restore from the seed, emitting the
+     * swaps each restore found. It restores again whenever the contacts change, as a deferred Pubky session loads them
+     * late, and a few times for providers whose list it read only in part; each restore asks only the providers not
+     * yet read in full.
      */
-    suspend fun restoreSwaps(): Result<RestoredPubkySwaps> = withSecrets { mnemonic, passphrase ->
-        val payoutAddress = lightningRepo.newAddress().getOrThrow()
-        val report = pubkySwapsRestore(
-            providers = candidates(),
-            sentPayments = sentPayments(),
-            electrumUrl = Env.electrumServerUrl,
-            payoutAddress = payoutAddress,
-            feeRateSatVb = CLAIM_FEE_RATE_SAT_VB,
-            network = Env.network.toCoreNetwork(),
-            mnemonic = mnemonic,
-            bip39Passphrase = passphrase,
-        )
-        if (report.incompleteProviders.isNotEmpty()) {
-            Logger.warn("Swap lists incomplete from '${report.incompleteProviders}'", context = TAG)
+    fun restoredSwaps(): Flow<RestoredPubkySwaps> = channelFlow {
+        // A running restore finishes before the next contact list starts one, so none is cut short.
+        val contactKeys = pubkyRepo.contacts.map { contacts -> contacts.map { it.publicKey }.toSet() }
+        contactKeys.distinctUntilChanged().conflate().collect {
+            repeat(RESTORE_ATTEMPTS) { attempt ->
+                if (attempt > 0) delay(RESTORE_RETRY_INTERVAL)
+                val swaps = restoreSwaps().getOrElse {
+                    Logger.warn("Failed to restore Pubky Swaps routes", it, context = TAG)
+                    return@repeat
+                }
+                if (swaps.restored.isNotEmpty() || swaps.known.isNotEmpty()) send(swaps)
+                if (swaps.incompleteProviders.isEmpty()) return@collect
+            }
         }
-        RestoredPubkySwaps(restored = report.restored, known = report.known)
+    }
+
+    /**
+     * The listing does not carry the contact's address, so a restored swap claims to a fresh Savings address.
+     * bitkit-core checks each listed lockup against the Lightning payment this node sent for its hash. Swaps already on
+     * record keep the destination they were committed with.
+     */
+    private suspend fun restoreSwaps(): Result<RestoredPubkySwaps> = withSecrets { mnemonic, passphrase ->
+        val providers = candidates().filterNot { bare(it) in restoredProviders }
+        if (providers.isEmpty()) return@withSecrets RestoredPubkySwaps(emptyList(), emptyList())
+        val payoutAddress = lightningRepo.newAddress().getOrThrow()
+        val sentPayments = sentPayments()
+        val restored = mutableListOf<String>()
+        val known = mutableListOf<String>()
+        val incomplete = mutableListOf<String>()
+        val readInFull = mutableListOf<String>()
+        // bitkit-core asks at most MAX_RESTORE_PROVIDERS providers at once, so a contact past them gets its own call.
+        providers.chunked(MAX_RESTORE_PROVIDERS).forEach { chunk ->
+            val report = pubkySwapsRestore(
+                providers = chunk,
+                sentPayments = sentPayments,
+                electrumUrl = Env.electrumServerUrl,
+                payoutAddress = payoutAddress,
+                feeRateSatVb = CLAIM_FEE_RATE_SAT_VB,
+                network = Env.network.toCoreNetwork(),
+                mnemonic = mnemonic,
+                bip39Passphrase = passphrase,
+            )
+            restored += report.restored
+            known += report.known
+            incomplete += report.incompleteProviders
+            val incompleteBare = report.incompleteProviders.map(::bare).toSet()
+            readInFull += chunk.map(::bare).filterNot { it in incompleteBare }
+        }
+        // Only a restore that returned its swaps marks their providers read, so a failed one asks them again.
+        restoredProviders += readInFull
+        if (incomplete.isNotEmpty()) Logger.warn("Swap lists incomplete from '$incomplete'", context = TAG)
+        RestoredPubkySwaps(
+            restored = restored.filter(reportedSwaps::add),
+            known = known.filter(reportedSwaps::add),
+            incompleteProviders = incomplete,
+        )
+    }
+
+    /** The pubky without its scheme or prefix, as bitkit-core names a provider it reports incomplete. */
+    private fun bare(pubky: String): String {
+        val key = pubky.trim().removePrefix("pubky://")
+        return key.removePrefix("pubky").takeIf { it.length == PUBKY_KEY_LENGTH } ?: key
     }
 
     /** The Lightning payments this node sent, pending or settled, by hash and the amount paid to the payee. */
@@ -231,10 +298,17 @@ class PubkySwapsRouteRepo @Inject constructor(
     }
 }
 
-/** The swaps a restore found: those rebuilt now claim to Savings, those already on record keep their destination. */
+/** Length of a z-base-32 encoded pubky without its prefix. */
+private const val PUBKY_KEY_LENGTH = 52
+
+/**
+ * The swaps a restore found: those rebuilt now claim to Savings, those already on record keep their destination. The
+ * providers it read only in part are asked again.
+ */
 data class RestoredPubkySwaps(
     val restored: List<String>,
     val known: List<String>,
+    val incompleteProviders: List<String> = emptyList(),
 )
 
 /** The swap's hold payment failed, so the provider never funds its lockup and the swap is not advanced further. */

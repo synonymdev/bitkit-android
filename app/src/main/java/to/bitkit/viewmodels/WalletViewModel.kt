@@ -580,27 +580,26 @@ class WalletViewModel @Inject constructor(
     private fun restorePubkySwaps() {
         if (!pubkySwapsRouteRepo.isEnabled) return
         viewModelScope.launch(bgDispatcher) {
-            val swaps = pubkySwapsRouteRepo.restoreSwaps().getOrElse {
-                Logger.warn("Failed to restore Pubky Swaps routes", it, context = TAG)
-                return@launch
-            }
-            Logger.info(
-                "Restored '${swaps.restored.size}' Pubky Swaps routes, '${swaps.known.size}' known",
-                context = TAG,
-            )
-            // A known swap keeps the destination it was committed with, such as the contact, so it is driven silently.
-            swaps.known.forEach { launch { pubkySwapsRouteRepo.awaitClaim(it) } }
-            swaps.restored.forEach { swapId ->
-                launch {
-                    pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
-                        // The claim also opens the received sheet above the toasts: stay until dismissed so the user
-                        // still sees why the money came back once that sheet closes.
-                        ToastEventBus.send(
-                            type = Toast.ToastType.INFO,
-                            title = context.getString(R.string.wallet__swap_route_restored_title),
-                            description = context.getString(R.string.wallet__swap_route_restored_text),
-                            autoHide = false,
-                        )
+            pubkySwapsRouteRepo.restoredSwaps().collect { swaps ->
+                Logger.info(
+                    "Restored '${swaps.restored.size}' Pubky Swaps routes, '${swaps.known.size}' known",
+                    context = TAG,
+                )
+                // A known swap keeps the destination it was committed with, such as the contact, so it is driven
+                // silently.
+                swaps.known.forEach { launch { pubkySwapsRouteRepo.awaitClaim(it) } }
+                swaps.restored.forEach { swapId ->
+                    launch {
+                        pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
+                            // The claim also opens the received sheet above the toasts: stay until dismissed so the
+                            // user still sees why the money came back once that sheet closes.
+                            ToastEventBus.send(
+                                type = Toast.ToastType.INFO,
+                                title = context.getString(R.string.wallet__swap_route_restored_title),
+                                description = context.getString(R.string.wallet__swap_route_restored_text),
+                                autoHide = false,
+                            )
+                        }
                     }
                 }
             }

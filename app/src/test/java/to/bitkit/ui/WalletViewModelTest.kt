@@ -357,8 +357,8 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `restores swap routes once a wallet restore completes`() = test {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
-        whenever(pubkySwapsRouteRepo.restoreSwaps())
-            .thenReturn(Result.success(RestoredPubkySwaps(listOf("swap"), emptyList())))
+        whenever(pubkySwapsRouteRepo.restoredSwaps())
+            .thenReturn(flowOf(RestoredPubkySwaps(listOf("swap"), emptyList())))
         whenever(pubkySwapsRouteRepo.awaitClaim(eq("swap"), any(), anyOrNull())).thenReturn(Result.success("txid"))
         whenever(context.getString(any())).thenReturn("text")
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
@@ -372,7 +372,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
-        verify(pubkySwapsRouteRepo).restoreSwaps()
+        verify(pubkySwapsRouteRepo).restoredSwaps()
         verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any(), anyOrNull())
         verify(context).getString(R.string.wallet__swap_route_restored_title)
     }
@@ -380,8 +380,8 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `drives known swap routes after a restore without the Savings notice`() = test {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
-        whenever(pubkySwapsRouteRepo.restoreSwaps())
-            .thenReturn(Result.success(RestoredPubkySwaps(emptyList(), listOf("swap"))))
+        whenever(pubkySwapsRouteRepo.restoredSwaps())
+            .thenReturn(flowOf(RestoredPubkySwaps(emptyList(), listOf("swap"))))
         whenever(pubkySwapsRouteRepo.awaitClaim(eq("swap"), any(), anyOrNull())).thenReturn(Result.success("txid"))
         whenever(context.getString(any())).thenReturn("text")
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
@@ -412,7 +412,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
-        verify(pubkySwapsRouteRepo, never()).restoreSwaps()
+        verify(pubkySwapsRouteRepo, never()).restoredSwaps()
     }
 
     @Test

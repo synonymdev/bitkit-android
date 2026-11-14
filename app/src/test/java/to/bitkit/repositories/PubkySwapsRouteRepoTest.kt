@@ -1,11 +1,16 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.PubkySwapRestoreReport
 import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.PubkySwapRouteStatus
 import com.synonym.bitkitcore.pubkySwapsAdvance
+import com.synonym.bitkitcore.pubkySwapsRestore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -16,14 +21,18 @@ import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeast
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PubkyProfile
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -38,6 +47,9 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     private val keychain = mock<Keychain>()
+    private val contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+    private val pubkyRepo = mock<PubkyRepo> { on { contacts } doReturn contacts }
+    private val lightningRepo = mock<LightningRepo>()
     private lateinit var sut: PubkySwapsRouteRepo
 
     @Before
@@ -46,8 +58,8 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         sut = PubkySwapsRouteRepo(
             ioDispatcher = testDispatcher,
             keychain = keychain,
-            pubkyRepo = mock(),
-            lightningRepo = mock(),
+            pubkyRepo = pubkyRepo,
+            lightningRepo = lightningRepo,
         )
     }
 
@@ -143,6 +155,81 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             assertEquals(Result.success(CLAIM_TXID), result.await())
         }
     }
+
+    @Test
+    fun `restoredSwaps asks again only the providers it read in part`() = test {
+        contacts.value = listOf(PubkyProfile.placeholder("provider-a"), PubkyProfile.placeholder("provider-b"))
+        val asked = mutableListOf<List<String>>()
+        val swaps = restoring(
+            asked,
+            report(restored = listOf("swap-a"), incomplete = listOf("provider-a")),
+            report(restored = listOf("swap-a", "swap-a2")),
+        ) { sut.restoredSwaps().take(2).toList() }
+
+        assertEquals(listOf(listOf("swap-a"), listOf("swap-a2")), swaps.map { it.restored })
+        assertEquals(listOf("provider-a"), asked.last())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps asks the providers past bitkit-core's limit in another call`() = test {
+        val keys = (1..31).map { "provider-$it" }
+        contacts.value = keys.map(PubkyProfile::placeholder)
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report()) {
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+        }
+
+        assertEquals(keys.toSet(), asked.flatten().toSet())
+        assertTrue(asked.all { it.size <= 30 })
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps restores again for contacts that load later`() = test {
+        val asked = mutableListOf<List<String>>()
+        restoring(asked, report()) {
+            backgroundScope.launch { sut.restoredSwaps().collect {} }
+            advanceUntilIdle()
+            contacts.value = listOf(PubkyProfile.placeholder("provider-late"))
+            advanceUntilIdle()
+        }
+
+        assertEquals(listOf("provider-late"), asked.last())
+    }
+
+    private suspend fun <T> restoring(
+        asked: MutableList<List<String>>,
+        vararg reports: PubkySwapRestoreReport,
+        block: suspend () -> T,
+    ): T {
+        whenever(lightningRepo.newAddress()).thenReturn(Result.success("bcrt1qpayout"))
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        return mockStatic(CORE).use { core ->
+            var call = 0
+            core.`when`<Any> {
+                runBlocking {
+                    pubkySwapsRestore(any(), any(), any(), any(), eq(2uL), any(), any(), anyOrNull())
+                }
+            }.thenAnswer {
+                @Suppress("UNCHECKED_CAST")
+                asked += it.arguments[0] as List<String>
+                reports[minOf(call++, reports.lastIndex)]
+            }
+            block()
+        }
+    }
+
+    private fun report(
+        restored: List<String> = emptyList(),
+        incomplete: List<String> = emptyList(),
+    ) = PubkySwapRestoreReport(
+        restored = restored,
+        known = emptyList(),
+        finished = emptyList(),
+        incompleteProviders = incomplete,
+    )
 
     private suspend fun <T> advancing(vararg answers: Any, block: suspend () -> T): T =
         mockStatic(CORE).use { core ->
