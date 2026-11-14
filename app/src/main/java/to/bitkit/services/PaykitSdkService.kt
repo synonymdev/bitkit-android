@@ -1138,7 +1138,9 @@ class PaykitSdkService @Inject constructor(
                     }
                     if (deferDuringPayment && isPaymentSubmissionActive.value) return@withStateRevisionTracking null
                     completeSdkCall {
-                        handle.processOutboundPrivateMessages(counterparty).also { recordDelivery(listOf(it)) }
+                        handle.processOutboundPrivateMessages(counterparty).also {
+                            recordDelivery(expectedIdentity ?: cachedPaykitKey?.publicKey, listOf(it))
+                        }
                     }
                 }
             }
@@ -1158,27 +1160,37 @@ class PaykitSdkService @Inject constructor(
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall {
                     handle.processPendingPrivateMessages().also { reports ->
-                        recordDelivery(reports.mapNotNull { it.report })
+                        recordDelivery(cachedPaykitKey?.publicKey, reports.mapNotNull { it.report })
                     }
                 }
             }
         }
     }
 
-    private suspend fun recordDelivery(reports: List<OutboundPrivateSendReport>) {
-        runSuspendCatching { reports.forEach { outboundDeliveryStore.record(it) } }.onFailure {
+    /**
+     * Records under [identity]: the drain's checked identity, or the key `withPaykitKey` refreshed for that drain.
+     */
+    private suspend fun recordDelivery(identity: String?, reports: List<OutboundPrivateSendReport>) {
+        if (identity == null) return
+        runSuspendCatching { reports.forEach { outboundDeliveryStore.record(identity, it) } }.onFailure {
             Logger.warn("Failed to record Paykit message delivery", it, context = TAG)
         }
     }
 
-    /** Prepares, stores and queues a receipt; repeating it with the same Receipt ID resumes the same issuance. */
+    /**
+     * Prepares, stores and queues a receipt; repeating it with the same Receipt ID resumes the same issuance. Fails
+     * when the SDK no longer holds [expectedIdentity], the identity whose requests and payments produced [candidate].
+     */
     internal suspend fun issueReceipt(
         candidate: PaykitReceiptCandidate,
+        expectedIdentity: String,
         priority: Priority = Priority.Background,
     ): ReceiptIssuanceView {
         isSetup.await()
         return measuredOperation("issueReceipt", priority) {
             withStateRevisionTracking { handle ->
+                val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) { "Receipt identity changed" }
                 val draft = ReceiptDraft(
                     receiptId = candidate.receiptId,
                     paymentReference = PaymentReference(candidate.paymentReference),

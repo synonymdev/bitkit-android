@@ -49,7 +49,9 @@ class PaykitReceiptRepo @Inject constructor(
     }
 
     private val mutex = Mutex()
-    private val attemptedReceiptIds = mutableSetOf<String>()
+
+    @Volatile
+    private var attemptedReceiptIds = emptySet<String>()
     private var candidates: Map<String, PaykitReceiptCandidate> = emptyMap()
     private var identity: String? = null
 
@@ -70,7 +72,7 @@ class PaykitReceiptRepo @Inject constructor(
                 val candidate = checkNotNull(candidates[statusKey.lowercase()]) { "No receipt for this payment" }
                 val expectedIdentity = checkNotNull(identity) { "No Paykit identity" }
                 _statuses.update { it + (candidate.receive.statusKey.lowercase() to PaykitReceiptStatus.Sending) }
-                issue(candidate)
+                issue(candidate, expectedIdentity)
                 publish(candidates.values, expectedIdentity)
             }
         }.onFailure {
@@ -83,13 +85,17 @@ class PaykitReceiptRepo @Inject constructor(
         }
     }
 
-    suspend fun resetForWipe() = mutex.withLock {
+    /**
+     * Runs without [mutex]: the wipe holds the SDK lock, which a reconcile may be waiting for while it holds [mutex].
+     * Once the wipe closes the SDK, a pending reconcile finds no identity and resets again.
+     */
+    suspend fun resetForWipe() {
         reset()
         outboundDeliveryStore.reset()
     }
 
     private fun reset() {
-        attemptedReceiptIds.clear()
+        attemptedReceiptIds = emptySet()
         candidates = emptyMap()
         identity = null
         _statuses.update { emptyMap() }
@@ -105,7 +111,6 @@ class PaykitReceiptRepo @Inject constructor(
         }
         if (!PubkyPublicKeyFormat.matches(identity, currentIdentity)) reset()
         identity = currentIdentity
-        outboundDeliveryStore.bind(currentIdentity)
 
         val records = paykitSdkService.allPaymentRequests(currentIdentity, Priority.Background)
             .filter { it.localRole == PaymentRequestLocalRole.PAYEE }
@@ -132,15 +137,15 @@ class PaykitReceiptRepo @Inject constructor(
             .filter { issued[it.receiptId]?.status != ReceiptIssuanceStatus.ACCESS_QUEUED }
             .filter { it.receiptId !in attemptedReceiptIds }
             .forEach {
-                issue(it)
+                issue(it, currentIdentity)
                 attemptedReceiptIds += it.receiptId
             }
         publish(found, currentIdentity)
     }
 
-    private suspend fun issue(candidate: PaykitReceiptCandidate) {
+    private suspend fun issue(candidate: PaykitReceiptCandidate, expectedIdentity: String) {
         runSuspendCatching {
-            paykitSdkService.issueReceipt(candidate)
+            paykitSdkService.issueReceipt(candidate, expectedIdentity)
         }.onSuccess {
             Logger.info("Issued Paykit receipt '${candidate.receiptId}' with status '${it.status}'", context = TAG)
         }.onFailure {
@@ -150,14 +155,14 @@ class PaykitReceiptRepo @Inject constructor(
 
     private suspend fun publish(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String) {
         var views = readIssuedViews() ?: return
-        val undelivered = found.filter { deliveryOf(it, views) != true }
+        val undelivered = found.filter { deliveryOf(it, views, expectedIdentity) != true }
         var unreachable = emptyList<String>()
         if (undelivered.isNotEmpty()) {
-            unreachable = drain(undelivered, expectedIdentity)
+            unreachable = drain(undelivered, views, expectedIdentity)
             views = readIssuedViews() ?: return
         }
         val updated = found.associate { candidate ->
-            val sent = deliveryOf(candidate, views)
+            val sent = deliveryOf(candidate, views, expectedIdentity)
             val reachable = unreachable.none { PubkyPublicKeyFormat.matches(it, candidate.counterparty) }
             val status = when {
                 sent == true -> PaykitReceiptStatus.Sent
@@ -174,24 +179,36 @@ class PaykitReceiptRepo @Inject constructor(
     private suspend fun deliveryOf(
         candidate: PaykitReceiptCandidate,
         views: Map<String, ReceiptIssuanceView>,
+        identity: String,
     ): Boolean? {
-        if (outboundDeliveryStore.isReceiptSent(candidate.receiptId)) return true
-        val sent = outboundDeliveryStore.wasSent(views[candidate.receiptId]?.outboundMessageId)
-        if (sent == true) outboundDeliveryStore.markReceiptSent(candidate.receiptId)
+        if (outboundDeliveryStore.isReceiptSent(identity, candidate.receiptId)) return true
+        val sent = outboundDeliveryStore.wasSent(identity, views[candidate.receiptId]?.outboundMessageId)
+        if (sent == true) outboundDeliveryStore.markReceiptSent(identity, candidate.receiptId)
         return sent
     }
 
-    private suspend fun drain(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String): List<String> {
+    /**
+     * Drains each counterparty's queue and marks its receipts sent right after, before a later drain can prune the
+     * evidence. Returns the counterparties that could not be reached.
+     */
+    private suspend fun drain(
+        found: Collection<PaykitReceiptCandidate>,
+        views: Map<String, ReceiptIssuanceView>,
+        expectedIdentity: String,
+    ): List<String> {
         val counterparties = found.map { it.counterparty }
-            .fold(
-                emptyList<String>()
-            ) { acc, key -> if (acc.any { PubkyPublicKeyFormat.matches(it, key) }) acc else acc + key }
+            .fold(emptyList<String>()) { acc, key ->
+                if (acc.any { PubkyPublicKeyFormat.matches(it, key) }) acc else acc + key
+            }
         return counterparties.filter { counterparty ->
-            runSuspendCatching {
+            val failed = runSuspendCatching {
                 paykitSdkService.processOutboundPrivateMessages(counterparty, Priority.Background, expectedIdentity)
             }.onFailure {
                 Logger.warn("Failed to send Paykit receipt access", it, context = TAG)
             }.isFailure
+            found.filter { PubkyPublicKeyFormat.matches(it.counterparty, counterparty) }
+                .forEach { deliveryOf(it, views, expectedIdentity) }
+            failed
         }
     }
 

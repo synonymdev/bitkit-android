@@ -145,7 +145,7 @@ class PaykitReceiptMatcherTest {
         }
         val request = payeeRequest(proofs = listOf(txidProof))
 
-        val receive = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 10_000uL)
+        val receive = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 10_000uL, contact = BUYER)
 
         val candidate = match(request, onchain = listOf(receive)).single()
 
@@ -190,15 +190,18 @@ class PaykitReceiptMatcherTest {
     fun `a payment two requests claim is left alone`() {
         val claim = proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)
         val first = payeeRequest(proofs = listOf(claim))
-        val second = payeeRequest(
-            counterparty = OTHER_BUYER,
-            requestId = "5f1c2a3b-1d2e-4f5a-8b6c-7d8e9f0a1b2c",
-            proofs = listOf(claim),
-        )
+        val second = payeeRequest(requestId = "5f1c2a3b-1d2e-4f5a-8b6c-7d8e9f0a1b2c", proofs = listOf(claim))
+        val receive = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1uL, contact = BUYER)
 
-        assertTrue(
-            match(first, second, onchain = listOf(bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1uL))).isEmpty()
-        )
+        assertTrue(match(first, second, onchain = listOf(receive)).isEmpty())
+    }
+
+    @Test
+    fun `an on-chain proof for a receive not attributed to the payer is ignored`() {
+        val request = payeeRequest(proofs = listOf(proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)))
+        val unattributed = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 50_000uL, address = ADDRESS)
+
+        assertTrue(match(request, onchain = listOf(unattributed)).isEmpty())
     }
 
     @Test
@@ -211,8 +214,10 @@ class PaykitReceiptMatcherTest {
             proofs = listOf(proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)),
             proposedAt = "yesterday",
         )
-        val earlier = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1_000uL, receivedAt = 1_763_100_000uL)
-        val later = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1_000uL, receivedAt = 1_794_657_600uL)
+        fun receivedAt(seconds: ULong) =
+            bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1_000uL, receivedAt = seconds, contact = BUYER)
+        val earlier = receivedAt(1_763_100_000uL)
+        val later = receivedAt(1_794_657_600uL)
 
         assertTrue(match(request, onchain = listOf(earlier)).isEmpty())
         assertEquals(1, match(request, onchain = listOf(later)).size)
@@ -235,31 +240,53 @@ class PaykitReceiptMatcherTest {
         assertEquals(BUYER, candidate.counterparty)
     }
 
+    private fun usdtProof(eventId: String) = mock<PaymentProofRecord> {
+        val json = mock<PrivateJsonObject> {
+            on { exportText() }.thenReturn("""{"type":"erc20-transfer-eip712","transaction_hash":"0xABC"}""")
+        }
+        on { proof }.thenReturn(json)
+        on { paymentEndpointIdentifier }.thenReturn("usdt-arbitrum")
+        on { billingPeriod }.thenReturn(null)
+        on { this.eventId }.thenReturn(eventId)
+    }
+
+    private fun usdtReceive(requestId: String, eventId: String, transferId: String) = PaykitVerifiedUsdtReceive(
+        requestId = PaykitPaymentRequestId(requestId, BUYER),
+        proofEventId = eventId,
+        transferId = transferId,
+        amount = PaykitAmount(PaykitAsset.USDT, 9_000_000uL),
+    )
+
     @Test
     fun `usdt receipt names the proof's transaction and keys status by transfer`() {
-        val usdtProof = mock<PaymentProofRecord> {
-            val json = mock<PrivateJsonObject> {
-                on { exportText() }.thenReturn("""{"type":"erc20-transfer-eip712","transaction_hash":"0xABC"}""")
-            }
-            on { proof }.thenReturn(json)
-            on { paymentEndpointIdentifier }.thenReturn("usdt-arbitrum")
-            on { billingPeriod }.thenReturn(null)
-            on { eventId }.thenReturn("usdt-event")
-        }
-        val request = payeeRequest(proofs = listOf(usdtProof))
-        val usdt = PaykitVerifiedUsdtReceive(
-            requestId = PaykitPaymentRequestId(REQUEST_ID, BUYER),
-            proofEventId = "usdt-event",
-            transferId = "transfer-1",
-            amount = PaykitAmount(PaykitAsset.USDT, 9_000_000uL),
-        )
+        val request = payeeRequest(proofs = listOf(usdtProof("usdt-event")))
+        val usdt = usdtReceive(REQUEST_ID, "usdt-event", "transfer-1")
 
         val candidate = match(request, usdt = listOf(usdt)).single()
 
-        assertEquals("0xabc", candidate.receive.paymentId)
+        assertEquals("transfer-1", candidate.receive.paymentId)
         assertEquals("transfer-1", candidate.receive.statusKey)
+        assertEquals("""{"txid":"0xabc"}""", candidate.metadataJson)
         assertEquals("9", candidate.receive.amount.value)
         assertEquals("usdt", candidate.receive.amount.asset.code)
+    }
+
+    @Test
+    fun `two usdt transfers in one transaction each get a receipt`() {
+        val second = "5f1c2a3b-1d2e-4f5a-8b6c-7d8e9f0a1b2c"
+        val first = payeeRequest(proofs = listOf(usdtProof("event-a")))
+        val other = payeeRequest(requestId = second, proofs = listOf(usdtProof("event-b")))
+
+        val candidates = match(
+            first,
+            other,
+            usdt = listOf(
+                usdtReceive(REQUEST_ID, "event-a", "transfer-a"),
+                usdtReceive(second, "event-b", "transfer-b"),
+            ),
+        )
+
+        assertEquals(listOf("transfer-a", "transfer-b"), candidates.map { it.receive.statusKey })
     }
 
     @Test

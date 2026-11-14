@@ -33,60 +33,78 @@ private val Context.paykitOutboundDeliveryDataStore: DataStore<PaykitOutboundDel
 )
 
 /**
- * What drains reported for queued Paykit private messages, kept across launches: the SDK reports a message's delivery
- * only to the call that drained it, so a receipt counts as sent only once some drain saw its message go out.
+ * What drains reported for queued Paykit private messages, kept across launches and per identity: the SDK reports a
+ * message's delivery only to the call that drained it, so a receipt counts as sent only once some drain saw its
+ * message go out. Message ids are local to one identity's Paykit state, so each identity keeps its own records.
  */
 @Singleton
 class PaykitOutboundDeliveryStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     companion object {
-        /** Most message outcomes kept; the oldest ids are dropped first. */
+        /** Most message outcomes kept per identity besides the latest report's; the oldest ids are dropped first. */
         private const val MAX_ENTRIES = 1000
     }
 
     private val store by lazy { context.paykitOutboundDeliveryDataStore }
 
-    suspend fun record(report: OutboundPrivateSendReport) {
+    suspend fun record(identity: String, report: OutboundPrivateSendReport) {
         if (report.sent.isEmpty() && report.failed.isEmpty()) return
-        store.updateData { data ->
-            val outcomes = data.outcomes +
-                report.failed.associate { it.outboundMessageId.toString() to false } +
-                report.sent.associate { it.toString() to true }
-            val kept = outcomes.keys.mapNotNull { it.toULongOrNull() }.sorted().takeLast(MAX_ENTRIES)
-                .map { it.toString() }.toSet()
-            data.copy(outcomes = outcomes.filterKeys(kept::contains))
+        val reported = report.failed.associate { it.outboundMessageId.toString() to false } +
+            report.sent.associate { it.toString() to true }
+        updateRecords(identity) { records ->
+            val older = (records.outcomes - reported.keys).keys
+                .mapNotNull { it.toULongOrNull() }.sorted().takeLast(MAX_ENTRIES).map { it.toString() }.toSet()
+            records.copy(outcomes = records.outcomes.filterKeys(older::contains) + reported)
         }
     }
 
     /** True once a drain sent the message, false when its latest drain failed, null when no drain reported it. */
-    suspend fun wasSent(messageId: ULong?): Boolean? =
-        messageId?.let { store.data.first().outcomes[it.toString()] }
+    suspend fun wasSent(identity: String, messageId: ULong?): Boolean? =
+        messageId?.let { records(identity).outcomes[it.toString()] }
 
     /** Receipts whose access was seen sent stay sent, whatever later pruning drops from the message outcomes. */
-    suspend fun markReceiptSent(receiptId: String) {
-        store.updateData { data ->
-            if (receiptId in data.sentReceiptIds) data else data.copy(sentReceiptIds = data.sentReceiptIds + receiptId)
+    suspend fun markReceiptSent(identity: String, receiptId: String) {
+        updateRecords(identity) { records ->
+            if (receiptId in records.sentReceiptIds) {
+                records
+            } else {
+                records.copy(sentReceiptIds = records.sentReceiptIds + receiptId)
+            }
         }
     }
 
-    suspend fun isReceiptSent(receiptId: String): Boolean = receiptId in store.data.first().sentReceiptIds
-
-    /** Message ids are local to one identity's Paykit state, so outcomes recorded for another or none are dropped. */
-    suspend fun bind(identity: String) {
-        store.updateData { data ->
-            if (PubkyPublicKeyFormat.matches(data.identity, identity)) data else PaykitOutboundDeliveryData(identity)
-        }
-    }
+    suspend fun isReceiptSent(identity: String, receiptId: String): Boolean =
+        receiptId in records(identity).sentReceiptIds
 
     suspend fun reset() {
         store.updateData { PaykitOutboundDeliveryData() }
     }
+
+    private suspend fun records(identity: String) =
+        store.data.first().identities[key(identity)] ?: PaykitOutboundDeliveryRecords()
+
+    private suspend fun updateRecords(
+        identity: String,
+        transform: (PaykitOutboundDeliveryRecords) -> PaykitOutboundDeliveryRecords,
+    ) {
+        val key = key(identity)
+        store.updateData { data ->
+            val records = transform(data.identities[key] ?: PaykitOutboundDeliveryRecords())
+            data.copy(identities = data.identities + (key to records))
+        }
+    }
+
+    private fun key(identity: String) = PubkyPublicKeyFormat.normalized(identity) ?: identity
 }
 
 @Serializable
 data class PaykitOutboundDeliveryData(
-    val identity: String? = null,
+    val identities: Map<String, PaykitOutboundDeliveryRecords> = emptyMap(),
+)
+
+@Serializable
+data class PaykitOutboundDeliveryRecords(
     val outcomes: Map<String, Boolean> = emptyMap(),
     val sentReceiptIds: Set<String> = emptySet(),
 )

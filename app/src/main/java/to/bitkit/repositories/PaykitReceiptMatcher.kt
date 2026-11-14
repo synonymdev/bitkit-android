@@ -23,7 +23,7 @@ import kotlin.time.Instant
 
 /** A payment this wallet recorded as received, which a receipt can name. */
 internal data class PaykitRecordedReceive(
-    /** Lowercase payment hash for Lightning, transaction id for on-chain and USDT. */
+    /** Lowercase payment hash for Lightning, transaction id for on-chain, verified transfer id for USDT. */
     val paymentId: String,
     val rail: PaykitReceiptRail,
     val amount: PaykitAmount,
@@ -35,6 +35,8 @@ internal data class PaykitRecordedReceive(
     val receivedAt: ULong? = null,
     /** The contact the wallet attributed the receive to. */
     val contact: String? = null,
+    /** The transaction that carried the payment, for the receipt's metadata. */
+    val transactionId: String = paymentId,
 )
 
 enum class PaykitReceiptRail { Lightning, Onchain, Usdt }
@@ -56,7 +58,7 @@ internal data class PaykitReceiptCandidate(
     val metadataJson: String
         get() = when (receive.rail) {
             PaykitReceiptRail.Lightning -> """{"payment_hash":"${receive.paymentId}"}"""
-            PaykitReceiptRail.Onchain, PaykitReceiptRail.Usdt -> """{"txid":"${receive.paymentId}"}"""
+            PaykitReceiptRail.Onchain, PaykitReceiptRail.Usdt -> """{"txid":"${receive.transactionId}"}"""
         }
 }
 
@@ -72,7 +74,8 @@ internal data class PaykitVerifiedUsdtReceive(
  * Pairs the requests this wallet issued with the payments it recorded for them: the payer's proof names the request
  * and the payment, or the request's own invoice or address received it. A proof alone is only the payer's claim, so
  * nothing is receipted until the money is recorded here, after the request was proposed and, when the wallet knows
- * the payer, from that counterparty; a payment two requests still claim is left alone.
+ * the payer, from that counterparty. A txid is public, so an on-chain proof counts only for a receive the wallet
+ * attributed to that counterparty. A payment two requests still claim is left alone.
  */
 internal object PaykitReceiptMatcher {
     fun candidates(
@@ -99,7 +102,11 @@ internal object PaykitReceiptMatcher {
 
             found += record.paymentProofs.mapNotNull { proof ->
                 val receive = proof.bitcoinPaymentId()?.let { (rail, id) ->
-                    if (rail == PaykitReceiptRail.Lightning) lightningReceives[id] else onchainByTxid[id]
+                    if (rail == PaykitReceiptRail.Lightning) {
+                        lightningReceives[id]
+                    } else {
+                        onchainByTxid[id]?.takeIf { PubkyPublicKeyFormat.matches(it.contact, record.counterparty) }
+                    }
                 }
                 receive?.takeIf { record.couldBePaidBy(it) }
                     ?.let { candidate(proof.paymentEndpointIdentifier, proof.billingPeriod, it) }
@@ -113,10 +120,11 @@ internal object PaykitReceiptMatcher {
                 val proof = record.paymentProofs.firstOrNull { it.eventId == usdt.proofEventId }
                 val hash = proof?.proofValue("transaction_hash")?.lowercase() ?: return@mapNotNull null
                 val receive = PaykitRecordedReceive(
-                    paymentId = hash,
+                    paymentId = usdt.transferId.lowercase(),
                     rail = PaykitReceiptRail.Usdt,
                     amount = usdt.amount,
                     statusKey = usdt.transferId,
+                    transactionId = hash,
                 )
                 candidate(proof.paymentEndpointIdentifier, proof.billingPeriod, receive)
             }

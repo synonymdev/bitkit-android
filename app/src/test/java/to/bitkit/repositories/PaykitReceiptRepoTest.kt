@@ -87,8 +87,9 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
         }
         whenever(usdtPayments.receipts).thenReturn(MutableStateFlow(emptyList()))
         whenever(sdk.issuedReceipts(any())).doSuspendableAnswer { issued.values.toList() }
-        whenever(delivery.wasSent(anyOrNull())).doSuspendableAnswer { outcomes[it.arguments[0] as ULong?] }
-        whenever(delivery.isReceiptSent(any())).thenReturn(false)
+        whenever(delivery.wasSent(eq(SELLER), anyOrNull()))
+            .doSuspendableAnswer { outcomes[it.arguments[1] as ULong?] }
+        whenever(delivery.isReceiptSent(eq(SELLER), any())).thenReturn(false)
         whenever(sdk.processOutboundPrivateMessages(eq(BUYER), eq(Priority.Background), eq(SELLER)))
             .doSuspendableAnswer {
                 drainOutcome?.let { outcomes[MESSAGE_ID] = it }
@@ -109,11 +110,11 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     @Test
     fun `payment recorded while closed gets its receipt and access on the next open`() = test {
         stubPaidRequest()
-        whenever(sdk.issueReceipt(any(), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
 
         sut.reconcile()
 
-        verify(sdk).issueReceipt(any(), any())
+        verify(sdk).issueReceipt(any(), eq(SELLER), any())
         verify(sdk).processOutboundPrivateMessages(BUYER, Priority.Background, SELLER)
         assertEquals(mapOf(HASH to PaykitReceiptStatus.Sent), sut.statuses.value)
     }
@@ -121,31 +122,31 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     @Test
     fun `failed receipt waits for retry then sends`() = test {
         stubPaidRequest()
-        whenever(sdk.issueReceipt(any(), any())).thenThrow(IllegalStateException("homeserver unavailable"))
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).thenThrow(IllegalStateException("homeserver unavailable"))
 
         sut.reconcile()
         sut.reconcile()
 
-        verify(sdk, times(1)).issueReceipt(any(), any())
+        verify(sdk, times(1)).issueReceipt(any(), eq(SELLER), any())
         assertEquals(mapOf(HASH to PaykitReceiptStatus.Failed), sut.statuses.value)
 
-        whenever(sdk.issueReceipt(any(), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
         sut.retry(HASH.uppercase())
 
-        verify(sdk, times(2)).issueReceipt(any(), any())
+        verify(sdk, times(2)).issueReceipt(any(), eq(SELLER), any())
         assertEquals(mapOf(HASH to PaykitReceiptStatus.Sent), sut.statuses.value)
     }
 
     @Test
     fun `receipt queued on an earlier launch is not issued again`() = test {
         stubPaidRequest()
-        whenever(sdk.issueReceipt(any(), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
         sut.reconcile()
 
         val restarted = PaykitReceiptRepo(testDispatcher, sdk, activityRepo, Lazy { usdtPayments }, delivery)
         restarted.reconcile()
 
-        verify(sdk, times(1)).issueReceipt(any(), any())
+        verify(sdk, times(1)).issueReceipt(any(), eq(SELLER), any())
         assertEquals(mapOf(HASH to PaykitReceiptStatus.Sent), restarted.statuses.value)
     }
 
@@ -153,7 +154,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     fun `receipt stays sending until a drain reports its message sent`() = test {
         stubPaidRequest()
         drainOutcome = null
-        whenever(sdk.issueReceipt(any(), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
 
         sut.reconcile()
 
@@ -164,7 +165,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     fun `receipt fails when its message fails to send`() = test {
         stubPaidRequest()
         drainOutcome = false
-        whenever(sdk.issueReceipt(any(), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
 
         sut.reconcile()
 
@@ -175,7 +176,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     fun `receipt fails when its counterparty cannot be reached`() = test {
         stubPaidRequest()
         drainOutcome = null
-        whenever(sdk.issueReceipt(any(), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
         whenever(sdk.processOutboundPrivateMessages(eq(BUYER), eq(Priority.Background), eq(SELLER)))
             .thenThrow(IllegalStateException("peer link needs recovery"))
 
@@ -188,7 +189,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     fun `receipt sent by another drain counts as sent`() = test {
         stubPaidRequest()
         drainOutcome = null
-        whenever(sdk.issueReceipt(any(), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
         sut.reconcile()
 
         outcomes[MESSAGE_ID] = true
@@ -203,7 +204,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
 
         sut.reconcile()
 
-        verify(sdk, never()).issueReceipt(any(), any())
+        verify(sdk, never()).issueReceipt(any(), eq(SELLER), any())
         assertTrue(sut.statuses.value.isEmpty())
     }
 }
