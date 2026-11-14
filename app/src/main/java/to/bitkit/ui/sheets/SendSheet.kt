@@ -372,11 +372,13 @@ fun SendSheet(
                                 observeResolution = it.observeResolution,
                                 isOnchain = it.isOnchain,
                                 refusalReason = it.refusalReason,
+                                retryRoute = it.retryRoute,
                             )
                         )
                         is SendEffect.NavigateToError -> navController.navigateTo(
                             SendRoute.errorFromFailure(
                                 failure = it.failure,
+                                retryRoute = it.retryRoute,
                             )
                         )
                     }
@@ -1050,6 +1052,7 @@ sealed interface SendRoute {
 
 @Serializable
 enum class SendRetryRoute(val sendRoute: SendRoute) {
+    Amount(SendRoute.Amount),
     Confirm(SendRoute.Confirm),
     QuickPay(SendRoute.QuickPay),
 }
@@ -1057,7 +1060,7 @@ enum class SendRetryRoute(val sendRoute: SendRoute) {
 private fun SendRoute.Error.failureTitle(payMethod: SendMethod): Int {
     return when (retryRoute) {
         SendRetryRoute.QuickPay -> R.string.wallet__send_instant_failed
-        SendRetryRoute.Confirm -> when (payMethod) {
+        SendRetryRoute.Amount, SendRetryRoute.Confirm -> when (payMethod) {
             SendMethod.LIGHTNING -> R.string.wallet__send_instant_failed
             SendMethod.ONCHAIN -> R.string.wallet__send_error_tx_failed
         }
@@ -1076,7 +1079,7 @@ private fun SendRoute.Error.shouldResetRoutingCaches(routingCacheResetAttempted:
 private fun SendRoute.Error.supportPaymentMethod(sendPayMethod: SendMethod): SendMethod {
     return when (retryRoute) {
         SendRetryRoute.QuickPay -> SendMethod.LIGHTNING
-        SendRetryRoute.Confirm -> sendPayMethod
+        SendRetryRoute.Amount, SendRetryRoute.Confirm -> sendPayMethod
     }
 }
 

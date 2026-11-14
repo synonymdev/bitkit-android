@@ -208,6 +208,9 @@ just lint
 # Auto-format using detekt
 just format
 
+# Regenerate Gradle dependency verification metadata
+just deps
+
 # Update the Android Lint baseline
 just lint baseline
 
@@ -446,6 +449,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS create a `*-backup` branch before performing a rebase
 - ALWAYS suggest 3 commit messages with confidence score ratings, e.g. `fix: show toast on resolution (90%)`. In plan mode, include them at the end of the plan. If the user picks one via plan update, commit after implementation. Outside plan mode, suggest after implementation completes. In both cases, run `git status` to check ALL uncommitted changes after completing code edits
 - ALWAYS check existing code patterns before implementing new features
+- ALWAYS run `just deps` and commit `gradle/verification-metadata.xml` in the same PR when changing dependencies, plugins or repositories; see `docs/dependency-verification.md`
 - USE existing extensions and utilities rather than creating new ones
 - ALWAYS use or create `Context` extension properties in `ext/Context.kt` instead of raw `context.getSystemService()` casts
 - NEVER use `System.currentTimeMillis()`, use time helpers from `ext/DateTime.kt` instead (e.g. `nowMillis()`, `Clock.nowMs()`) — they accept a `Clock` and are unit-testable

@@ -7,6 +7,7 @@ import androidx.navigation.compose.ComposeNavigator
 import androidx.navigation.compose.composable
 import androidx.navigation.createGraph
 import androidx.navigation.navigation
+import androidx.navigation.toRoute
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -307,6 +308,19 @@ class ContentViewTest {
 
         navController.popBackStack()
         assertTrue(navController.currentDestination?.hasRoute<Routes.SpendingAmount>() == true)
+    }
+
+    @Test
+    fun `transfer banner opens the deposit's progress and back returns home`() {
+        val navController = transferNavController()
+
+        navController.navigateToTransferProgress("txid")
+        val entry = navController.currentBackStackEntry!!
+        assertTrue(entry.destination.hasRoute<Routes.SettingUp>())
+        assertEquals("txid", entry.toRoute<Routes.SettingUp>().txid)
+
+        navController.popBackStack()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
     }
 
     private fun transferNavController(): NavHostController =

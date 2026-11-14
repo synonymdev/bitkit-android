@@ -168,6 +168,7 @@ import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
+import to.bitkit.ui.navigateToTransferProgress
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -241,6 +242,7 @@ fun HomeScreen(
     val resources = LocalResources.current
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
+    val isSparkExiting by appViewModel.isSparkExiting.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val profileNavigationScope = rememberCoroutineScope()
@@ -406,6 +408,12 @@ fun HomeScreen(
         },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
+        onSpendingBannerClick = sparkState.inProgressDepositTxid?.let { txid ->
+            {
+                rootNavController.navigateToTransferProgress(txid)
+            }
+        },
+        onSavingsBannerClick = appViewModel::onSparkExitBannerTapped.takeIf { isSparkExiting },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
         onClickUsdt = { walletNavController.navigateTo(Routes.UsdtWallet) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
@@ -446,6 +454,8 @@ private fun Content(
     onNavigateToActivityItem: (Activity) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
+    onSpendingBannerClick: (() -> Unit)? = null,
+    onSavingsBannerClick: (() -> Unit)? = null,
     onClickHardwareWallet: (String) -> Unit = {},
     onClickUsdt: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
@@ -583,6 +593,8 @@ private fun Content(
                     onNavigateToActivityItem = onNavigateToActivityItem,
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSpending = onNavigateToSpending,
+                    onSpendingBannerClick = onSpendingBannerClick,
+                    onSavingsBannerClick = onSavingsBannerClick,
                     onClickHardwareWallet = onClickHardwareWallet,
                     onClickUsdt = onClickUsdt,
                 )
@@ -634,6 +646,8 @@ private fun WalletPage(
     onNavigateToActivityItem: (Activity) -> Unit,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
+    onSpendingBannerClick: (() -> Unit)?,
+    onSavingsBannerClick: (() -> Unit)?,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
 ) {
@@ -708,11 +722,15 @@ private fun WalletPage(
                                 .padding(bottom = 16.dp)
                         ) {
                             homeUiState.banners.forEach { banner ->
+                                val isSpending = banner.type == ActivityBannerType.SPENDING
                                 ActivityBanner(
                                     gradientColor = banner.type.color,
                                     title = banner.title,
                                     icon = banner.type.icon,
-                                    modifier = Modifier.fillMaxWidth()
+                                    onClick = if (isSpending) onSpendingBannerClick else onSavingsBannerClick,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag(if (isSpending) "ActivityBanner" else "ActivityBannerSavings")
                                 )
                             }
                         }

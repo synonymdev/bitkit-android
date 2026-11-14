@@ -1649,9 +1649,10 @@ class LightningRepo @Inject constructor(
         key: String,
         ldkRecordsBefore: Long,
     ): Result<PaymentId>? {
-        // Read before the row too, so a send that ends while it is read still counts as live.
-        val wasLive = isSendLive(paymentHash, key, ldkRecordsBefore)
+        // Read before the row too, so a send that ends while it is read still counts as live. The mark comes first,
+        // so a send it counts as recorded is already admitted or in flight when liveness is read.
         val sparkRecordsBefore = sparkRepo.sendRecordMark()
+        val wasLive = isSendLive(paymentHash, key, ldkRecordsBefore)
         val send = sparkRepo.lightningSend(paymentHash) as? SparkLightningSend.Found ?: return null
         val isLive = wasLive || isSendLive(paymentHash, key, ldkRecordsBefore) ||
             sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
@@ -1878,7 +1879,6 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun awaitUsableChannels(): LightningState? = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
-        refreshChannelsAndPeers()
         while (!_lightningState.value.shouldStopWaitingForUsableChannels()) {
             delay(CHANNELS_USABLE_POLL_DELAY)
             refreshChannelsAndPeers()
@@ -1954,6 +1954,9 @@ class LightningRepo @Inject constructor(
             context = TAG,
         )
 
+        // a drain spends everything spendable after the sync, so a send only drains while that still equals sats
+        val isDrain = isMaxAmount && (isTransfer || sats == maxSendOnchainAt(address, satsPerVByte))
+
         // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
         val utxosForSend = when {
             isTransfer && isMaxAmount -> null
@@ -1970,7 +1973,7 @@ class LightningRepo @Inject constructor(
                 orderId = orderId,
                 address = address,
                 amountSats = sats,
-                isMaxAmount = isMaxAmount,
+                isMaxAmount = isDrain,
                 feeRateSatsPerVByte = satsPerVByte,
                 isTransfer = isTransfer,
                 channelId = channelId,
@@ -1996,18 +1999,12 @@ class LightningRepo @Inject constructor(
                     sats,
                     satsPerVByte,
                     utxosForSend,
-                    isMaxAmount,
+                    isDrain,
                     attempt.walletIndex,
                     paymentDeadlineAt,
                 )
                     .also { prepared ->
-                        if (!isMaxAmount && utxosForSend != null) {
-                            check(
-                                prepared.receipt.inputs.toSet() == utxosForSend.map {
-                                    OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
-                                }.toSet()
-                            )
-                        }
+                        checkPreparedSpend(prepared.receipt, sats, isDrain, isTransfer, utxosForSend)
                         if (approvedMiningFeeSats != null) {
                             val miningFee = prepared.receipt.miningFeeSats
                             if (prepared.receipt.amountSats != sats || miningFee == null ||
@@ -2121,6 +2118,37 @@ class LightningRepo @Inject constructor(
         runSuspendCatching { syncState() }
             .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
         Result.success(winningOutcome.copy(amountSats = recorded.amountSats.takeIf { recorded.isMaxAmount }))
+    }
+
+    private suspend fun maxSendOnchainAt(address: Address, satsPerVByte: ULong): ULong? = runSuspendCatching {
+        val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+        if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+        val fee = lightningService.estimateSendAllFee(address, satsPerVByte)
+        spendableSats.safe() - fee.safe()
+    }.getOrNull()
+
+    private fun checkPreparedSpend(
+        receipt: OnchainPreparedReceipt,
+        sats: ULong,
+        isDrain: Boolean,
+        isTransfer: Boolean,
+        utxosForSend: List<SpendableUtxo>?,
+    ) {
+        when {
+            // a drain also sweeps coins synced after the recheck, so it must still match sats
+            isDrain -> if (!isTransfer) {
+                check(receipt.amountSats == sats) {
+                    "Drain amount '${receipt.amountSats}' differs from confirmed '$sats'"
+                }
+            }
+
+            utxosForSend != null -> check(
+                receipt.inputs.toSet() == utxosForSend.map {
+                    OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
+                }.toSet()
+            )
+        }
     }
 
     private val recoveryCoordinator by lazy {
@@ -2512,6 +2540,21 @@ class LightningRepo @Inject constructor(
             val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
             val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
             lightningService.estimateSendAllFee(address = addressOrDefault, satsPerVByte = satsPerVByte)
+        }
+    }
+
+    /** Max onchain amount sendable at [speed], i.e. the spendable balance minus the send-all mining fee */
+    suspend fun estimateMaxSendOnchain(
+        address: Address? = null,
+        speed: TransactionSpeed? = null,
+        feeRates: FeeRates? = null,
+    ): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+            if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+            val fee = estimateSendAllFee(address = address, speed = speed, feeRates = feeRates).getOrThrow()
+            spendableSats.safe() - fee.safe()
         }
     }
 

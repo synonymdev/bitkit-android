@@ -1,0 +1,24 @@
+<journey name="paykit swap restore">
+  <description>
+    Proves that a swap route the wallet left in flight before its claim is finished after the wallet is wiped and
+    restored from its recovery phrase: the restore finds the swap at its provider, claims it to Savings (the contact's
+    address does not survive the restore), and tells the user the payment was returned to Savings.
+
+    Preconditions: as paykit-swap-route.xml, with the provider running against bitkit-docker (`--no-homeserver`) and
+    the build's PUBKY_SWAPS_PROVIDERS naming it. A throwaway regtest wallet restored from a recovery phrase, with a
+    spending balance from an LNURL channel, an empty savings balance, a Pubky profile, and the provider and the
+    fixture-issuer saved as contacts. Start a 20 000 sat payment to the fixture-issuer through the swap route, wait
+    until the provider logs "HTLC funded; awaiting client claim", and force-stop the app before any block is mined.
+    Then clear the app's data and enter the same recovery phrase on the restore screen.
+  </description>
+  <actions>
+    <action>Tap Restore (tag "RestoreButton") and wait for the Wallet Restored screen, then tap Get Started (tag "GetStartedButton")</action>
+    <action>Verify the savings balance (tag "ActivitySavings") shows 0</action>
+    <action>Mine one block on bitkit-docker's bitcoind, so the provider's lockup confirms</action>
+    <action>Verify the provider logs "client claimed; hold invoice settled"</action>
+    <action>Mine one more block, so the claim confirms</action>
+    <action>Verify the "Received Bitcoin" sheet shows 20 000, then close it</action>
+    <action>Verify the toast "Payment returned to Savings" is visible</action>
+    <action>Verify the savings balance (tag "ActivitySavings") shows 20 000, and bitcoind shows the claim transaction paying exactly 0.0002 BTC to the wallet's own address</action>
+  </actions>
+</journey>
