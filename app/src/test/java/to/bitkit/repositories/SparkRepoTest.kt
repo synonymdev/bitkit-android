@@ -1260,9 +1260,16 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `quotes no route leg while an earlier contact withdrawal settles`() = test {
         val sut = readySpark(balanceSats = 50_000uL)
-        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qearlier", 5_000uL, null)) }
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qearlier", 5_000uL, "earlier-contact"))
+        }
 
-        assertIs<SparkError.WithdrawalPending>(sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).exceptionOrNull())
+        val pending = assertIs<SparkError.WithdrawalPending>(
+            sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).exceptionOrNull(),
+        )
+        // The app tells a withdrawal to this endpoint from one to another contact by the journal's address and contact.
+        assertEquals("bcrt1qearlier", pending.address)
+        assertEquals("earlier-contact", pending.contact)
         verify(sparkService, never()).prepareSend(any(), anyOrNull(), anyOrNull())
     }
 

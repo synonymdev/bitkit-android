@@ -5027,7 +5027,14 @@ class AppViewModel @Inject constructor(
         // Spark could reach the contact, but not with the withdrawal fee on top, so no route pays for want of balance.
         val isLegOverBalance = result.exceptionOrNull() is SparkError.WithdrawalOverBalance
         // Only a Spark leg could pay, and Spark takes one contact withdrawal at a time.
-        val isLegSettling = result.exceptionOrNull() is SparkError.WithdrawalPending
+        val settling = result.exceptionOrNull() as? SparkError.WithdrawalPending
+        val isLegSettling = settling != null
+        // A swap pays from Spending, so only a withdrawal still settling to this contact, or to an unknown one, keeps
+        // the payment from a swap that could pay the contact a second time.
+        val isSettlingHere = settling != null && (
+            settling.address == null || settling.address in route.endpoints.map { it.value } ||
+                settling.contact == contact?.publicKey
+            )
         val picked = if (isLegOverBalance || isLegSettling) {
             PaykitRoute.None(result.exceptionOrNull()?.message.orEmpty())
         } else {
@@ -5062,7 +5069,7 @@ class AppViewModel @Inject constructor(
                 _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
                 // A Spark balance too small for the amount and fee, or no route at all, leaves the payment to a swap
                 // provider when one can carry it: its quote follows, so nothing shows here.
-                if (hasSwapFallback && !isLegSettling) return PaykitRouteOutcome.SwapFallback
+                if (hasSwapFallback && !isSettlingHere) return PaykitRouteOutcome.SwapFallback
                 // The router's reason is English for the log: the app tells a short balance from an unusable contact.
                 val isAmountShort = state.amount > lightningSpendable.safe() + onchainSpendable.safe()
                 // The router never saw an LNURL whose limits refuse the amount, so its limit says why.

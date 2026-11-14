@@ -19405,6 +19405,43 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark withdrawal settling to another contact still falls back to a swap quote`() = test {
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(
+            Result.failure(SparkError.WithdrawalPending(address = "bcrt1qothercontact", contact = "other-contact")),
+        )
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+
+        assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `spark withdrawal settling to this contact keeps the swap fallback off`() = test {
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(
+            Result.failure(SparkError.WithdrawalPending(address = REGTEST_ADDRESS, contact = testPublicKey)),
+        )
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+        verify(pubkySwapsRouteRepo, never()).route(any(), any(), any(), any(), any())
+        verify(toastManager).enqueue(check { assertEquals("PaykitRouteSettlingToast", it.testTag) })
+    }
+
+    @Test
     fun `swap route quote failure stays on the amount screen`() = test {
         openSwapRoutedContactPayment(quote = Result.failure(AppError("no provider")))
 
