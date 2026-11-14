@@ -1760,6 +1760,33 @@ class LightningRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `a spark send refused over a failed spark row stays pending when a send records as its mark is read`() =
+        test {
+            startNodeForTesting()
+            whenever(lightningService.listPayments()).thenReturn(emptyList())
+            whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+            stubSparkSendRefusedForARecordedOne()
+            var isInFlight = false
+            whenever(sparkRepo.isSendInFlight("h")).thenAnswer { isInFlight }
+            // The refused send's settling mark read is its second; a competing retry is admitted and records just then.
+            var marks = 0
+            whenever(sparkRepo.sendRecordMark()).thenAnswer {
+                if (++marks == 2) {
+                    isInFlight = true
+                    recordSparkSend()
+                }
+                sparkRecords
+            }
+            // The competing retry completes and is released while the older attempt's failed row is read.
+            whenever(sparkRepo.lightningSend("h")).doSuspendableAnswer {
+                isInFlight = false
+                SparkLightningSend.Found(SparkPaymentStatus.FAILED, null)
+            }
+
+            assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
+        }
+
+    @Test
     fun `a spark send refused over a failed spark row stays pending once the node sent the invoice`() = test {
         startNodeForTesting()
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
