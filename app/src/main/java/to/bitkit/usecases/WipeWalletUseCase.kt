@@ -77,13 +77,13 @@ class WipeWalletUseCase @Inject constructor(
         } finally {
             lightningRepo.setWiping(false)
             backupRepo.setWiping(false)
+            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+                backupRepo.startObservingBackups()
+            }
             wipeMutex.unlock()
         }
         return result.onFailure {
             Logger.error("Failed to wipe wallet", it, context = TAG)
-            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
-                backupRepo.startObservingBackups()
-            }
         }
     }
 

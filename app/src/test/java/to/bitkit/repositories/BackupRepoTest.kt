@@ -449,29 +449,7 @@ class BackupRepoTest : BaseUnitTest() {
                 ),
             ),
         )
-        val wipe = WipeWalletUseCase(
-            backupRepo = sut,
-            keychain = keychain,
-            coreService = coreService,
-            db = db,
-            settingsStore = settingsStore,
-            cacheStore = cacheStore,
-            watchOnlyAccountRepo = watchOnlyAccountRepo,
-            widgetsStore = widgetsStore,
-            blocktankRepo = mock(),
-            activityRepo = activityRepo,
-            hwWalletRepo = mock(),
-            lightningRepo = lightningRepo,
-            pubkyRepo = pubkyRepo,
-            privatePaykitRepo = Provider { privatePaykitRepo },
-            privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
-            firebaseMessaging = mock(),
-            migrationService = mock(),
-            paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() },
-            usdtRepo = usdtRepo,
-            paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
-            connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
-        )
+        val wipe = createWipeUseCase()
         try {
             settingsData.update { it.copy(selectedCurrency = "EUR") }
             runCurrent()
@@ -506,6 +484,92 @@ class BackupRepoTest : BaseUnitTest() {
         } finally {
             failRequiredWrite = false
             sut.stopObservingBackups()
+        }
+    }
+
+    private fun createWipeUseCase() = WipeWalletUseCase(
+        backupRepo = sut,
+        keychain = keychain,
+        coreService = coreService,
+        db = db,
+        settingsStore = settingsStore,
+        cacheStore = cacheStore,
+        watchOnlyAccountRepo = watchOnlyAccountRepo,
+        widgetsStore = widgetsStore,
+        blocktankRepo = mock(),
+        activityRepo = activityRepo,
+        hwWalletRepo = mock(),
+        lightningRepo = lightningRepo,
+        pubkyRepo = pubkyRepo,
+        privatePaykitRepo = Provider { privatePaykitRepo },
+        privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+        firebaseMessaging = mock(),
+        migrationService = mock(),
+        paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() },
+        usdtRepo = usdtRepo,
+        paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
+        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
+    )
+
+    @Test
+    fun `cancelled wipe drain resumes automatic backups for the retained wallet`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)),
+        )
+        sut.startObservingBackups()
+        runCurrent()
+        val original = vssClients.owners.value
+        val committed = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            val current = AppCacheData(backupStatuses = statuses.value)
+            val updated = transform(current)
+            statuses.update { updated.backupStatuses }
+            if (!committed.isCompleted && updated.backupStatuses.getValue(category).required >
+                current.backupStatuses.getValue(category).required
+            ) {
+                committed.complete(Unit)
+                release.await()
+            }
+        }
+        settingsData.update { it.copy(selectedCurrency = "EUR") }
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertTrue(committed.isCompleted)
+        assertFalse(statuses.value.getValue(category).isRequired)
+        val payload = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(category.name), payload.capture())
+        assertTrue(payload.lastValue.decodeToString().contains("EUR"))
+        val wipe = async { createWipeUseCase()(resetWalletState = { error("must retain wallet") }, onSuccess = {}) }
+        try {
+            runCurrent()
+            wipe.cancel()
+            runCurrent()
+            assertFalse(wipe.isCompleted)
+            release.complete(Unit)
+            wipe.join()
+            assertTrue(wipe.isCancelled)
+            runCurrent()
+            assertSame(original, vssClients.owners.value)
+            verify(lightningRepo, never()).stop()
+            verify(keychain, never()).wipe()
+            verify(settingsStore, never()).reset()
+            assertFalse(sut.isWiping.value)
+            settingsData.update { it.copy(selectedCurrency = "GBP") }
+            advanceTimeBy(65_000)
+            runCurrent()
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), payload.capture())
+            assertTrue(payload.lastValue.decodeToString().contains("GBP"))
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            release.complete(Unit)
+            wipe.cancelAndJoin()
+            sut.reset()
         }
     }
 
