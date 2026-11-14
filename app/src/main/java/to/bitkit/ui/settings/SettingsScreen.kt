@@ -97,6 +97,7 @@ fun SettingsScreen(
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val contactPaymentsEnabled by settings.contactPaymentsEnabled.collectAsStateWithLifecycle()
     val publicPaymentsEnabled by settings.publicPaymentsEnabled.collectAsStateWithLifecycle()
+    val isNearbyPaymentsEnabled by settings.isNearbyPaymentsEnabled.collectAsStateWithLifecycle()
     val isUpdatingContactPayments by settings.isUpdatingContactPayments.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { settings.refreshUsdtAvailability() }
     val canDisableUsdt by settings.canDisableUsdt.collectAsStateWithLifecycle()
@@ -142,6 +143,7 @@ fun SettingsScreen(
             isPaykitEnabled = isPaykitEnabled,
             contactPaymentsEnabled = contactPaymentsEnabled,
             publicPaymentsEnabled = publicPaymentsEnabled,
+            isNearbyPaymentsEnabled = isNearbyPaymentsEnabled,
             isUpdatingContactPayments = isUpdatingContactPayments,
             hardwareWalletCount = hardwareWallets.size,
             isUsdtEnabled = isUsdtEnabled,
@@ -180,6 +182,7 @@ fun SettingsScreen(
                     settings.setContactPaymentsEnabled(!contactPaymentsEnabled)
                 }
                 SettingsEvent.PublicPaymentsClick -> settings.setPublicPaymentsEnabled(!publicPaymentsEnabled)
+                SettingsEvent.NearbyPaymentsClick -> settings.setNearbyPaymentsEnabled(!isNearbyPaymentsEnabled)
                 SettingsEvent.UsdtClick -> settings.setUsdtEnabled(!isUsdtEnabled)
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
                 SettingsEvent.BgPaymentsClick -> {
@@ -391,6 +394,15 @@ private fun GeneralTabContent(
             },
             onClick = { onEvent(SettingsEvent.HardwareWalletsClick) },
             modifier = Modifier.testTag("HardwareWalletsSettings")
+        )
+        SettingsSwitchRow(
+            title = stringResource(R.string.settings__nearby__title),
+            subtitle = stringResource(R.string.settings__nearby__subtitle),
+            isChecked = state.isNearbyPaymentsEnabled,
+            icon = { SettingsIcon(R.drawable.ic_broadcast) },
+            onClick = { onEvent(SettingsEvent.NearbyPaymentsClick) },
+            switchTestTag = "NearbyPaymentsToggle",
+            modifier = Modifier.testTag("NearbyPaymentsSettings")
         )
 
         if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
@@ -714,6 +726,7 @@ sealed interface SettingsEvent {
     data object TransactionSpeedClick : SettingsEvent
     data object ContactPaymentsClick : SettingsEvent
     data object PublicPaymentsClick : SettingsEvent
+    data object NearbyPaymentsClick : SettingsEvent
     data object UsdtClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
@@ -763,6 +776,7 @@ data class GeneralTabState(
     val isPaykitEnabled: Boolean = false,
     val contactPaymentsEnabled: Boolean = false,
     val publicPaymentsEnabled: Boolean = false,
+    val isNearbyPaymentsEnabled: Boolean = true,
     val isUpdatingContactPayments: Boolean = false,
     val hardwareWalletCount: Int = 0,
     val isUsdtEnabled: Boolean = false,

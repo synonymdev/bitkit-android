@@ -1,0 +1,20 @@
+<journey name="send scanner nearby states">
+  <description>
+    The Send sheet's scanner names the sources it listens on and offers to turn on the missing ones,
+    per the Figma "Send Bitcoin" scanner frames. Emulators have no NFC, so the NFC source and button
+    never appear here; Bluetooth comes from the emulator's virtual controller. Reading a request over
+    NFC or Bluetooth needs two devices and is a manual test in the PR.
+
+    Precondition: onboarded dev build wallet on an emulator with Bluetooth on, camera and Nearby devices
+    permissions not yet granted (`adb shell pm revoke to.bitkit.dev android.permission.CAMERA`,
+    and the same for BLUETOOTH_SCAN, BLUETOOTH_ADVERTISE and BLUETOOTH_CONNECT). Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap Send and choose "Don't allow" on the camera permission dialog</action>
+    <action>Verify the scanner area reads "Scan to pay" and "Allow Camera, Bluetooth, and NFC access to scan bitcoin invoices and pay more quickly.", with a camera button (testTag "ScannerEnableCamera") and a Bluetooth button (testTag "ScannerEnableBluetooth")</action>
+    <action>Run `adb shell pm grant to.bitkit.dev android.permission.CAMERA`, close the Send sheet and tap Send again</action>
+    <action>Verify the camera preview shows the Bluetooth button (testTag "ScannerEnableBluetooth") above a pill (testTag "ScannerStatus") reading "Scanning QR"</action>
+    <action>Tap the Bluetooth button and choose "Allow" on the Nearby devices permission dialog</action>
+    <action>Verify the Bluetooth button is gone and the pill reads "Scanning QR &amp; Bluetooth"</action>
+  </actions>
+</journey>

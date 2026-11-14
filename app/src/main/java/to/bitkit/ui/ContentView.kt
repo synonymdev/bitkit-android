@@ -236,6 +236,7 @@ import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.MoveToSparkSheet
+import to.bitkit.ui.sheets.NfcIntroSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
@@ -786,6 +787,22 @@ fun ContentView(
                                             appViewModel.dismissTimedSheet()
                                             navController.navigateTo(Routes.QuickPaySettings)
                                         },
+                                    )
+                                }
+
+                                TimedSheetType.NFC -> {
+                                    val isQuickPayEnabled by settingsViewModel.isQuickpayEnabled
+                                        .collectAsStateWithLifecycle()
+                                    NfcIntroSheet(
+                                        isQuickPayEnabled = isQuickPayEnabled,
+                                        onToggleQuickPay = {
+                                            settingsViewModel.setIsQuickPayEnabled(!isQuickPayEnabled)
+                                        },
+                                        onSettings = {
+                                            appViewModel.dismissTimedSheet()
+                                            navController.navigateTo(Routes.QuickPaySettings)
+                                        },
+                                        onContinue = { appViewModel.dismissTimedSheet() },
                                     )
                                 }
 

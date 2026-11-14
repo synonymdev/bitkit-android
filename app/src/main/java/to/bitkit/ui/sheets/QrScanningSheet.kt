@@ -21,7 +21,7 @@ fun QrScanningSheet(
         } else {
             null
         },
-        onScanSuccess = { appViewModel.onScannerSheetResult(it) },
+        onScanSuccess = { data, isNearby -> appViewModel.onScannerSheetResult(data, suppressQuickPay = isNearby) },
     )
 }
 
@@ -29,7 +29,7 @@ fun QrScanningSheet(
 private fun Content(
     isPubkyScan: Boolean,
     onBack: (() -> Unit)?,
-    onScanSuccess: (String) -> Unit,
+    onScanSuccess: (String, Boolean) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -38,7 +38,8 @@ private fun Content(
     ) {
         QrScanningScreen(
             isPubkyScan = isPubkyScan,
-            onScanSuccess = { payload -> payload.text?.let(onScanSuccess) },
+            readsNearby = !isPubkyScan,
+            onScanSuccess = { payload -> payload.text?.let { onScanSuccess(it, payload.isNearby) } },
             onBack = onBack,
         )
     }

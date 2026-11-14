@@ -477,6 +477,9 @@
     <string name="other__lnurl_withdr_success_msg">Váš výběr byl úspěšně vyžádán. Čekání na platbu.</string>
     <string name="other__lnurl_withdr_success_title">Výběr vyžádán</string>
     <string name="other__logs_export_error">Nepodařilo se vytvořit soubor zip s protokoly</string>
+    <string name="other__nfc_read_error_text">Tento tag neobsahuje žádost o platbu, kterou by Bitkit mohl použít.</string>
+    <string name="other__nfc_read_error_title">Nelze přečíst NFC</string>
+    <string name="other__nfc_service_description">Žádost o platbu Bitkit</string>
     <string name="other__node_error_starting">Chyba při spouštění: %1$s</string>
     <string name="other__node_initializing">Nastavování peněženky…</string>
     <string name="other__node_running">Běží</string>
@@ -497,6 +500,12 @@
     <string name="other__scan__error__expired">Platnost lightning faktury vypršela.</string>
     <string name="other__scan__error__generic">Bitkit není schopen přečíst zadaná data.</string>
     <string name="other__scan_err_decoding">Chyba dekódování</string>
+    <string name="other__scan_to_pay_description">Povolte přístup k fotoaparátu, Bluetooth a NFC pro skenování bitcoinových faktur a rychlejší platby.</string>
+    <string name="other__scan_to_pay_title">Naskenujte\n&lt;accent&gt;a zaplaťte&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">Skenování QR</string>
+    <string name="other__scanner_status_qr_bluetooth">Skenování QR a Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">Skenování QR a NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">Skenování QR, NFC a Bluetooth</string>
     <string name="other__share_qr">Sdílet QR kód pomocí</string>
     <string name="other__shop__categories__travel">Cestování</string>
     <string name="other__shop__discover__esims__description">Žij bez hranic</string>
@@ -770,6 +779,13 @@
     <string name="settings__general_title">Obecné</string>
     <string name="settings__language_system_default">Systémové nastavení</string>
     <string name="settings__language_title">Jazyk</string>
+    <string name="settings__nearby__subtitle">Umožněte telefonům v okolí načíst vaši žádost Přijmout přes Bluetooth</string>
+    <string name="settings__nearby__title">Platby v okolí</string>
+    <string name="settings__nfc__intro__continue">Úžasné!</string>
+    <string name="settings__nfc__intro__description">Bitkit nyní podporuje platby přes NFC. Přiložte telefon ke kompatibilnímu platebnímu terminálu nebo telefonu a zaplaťte okamžitě.</string>
+    <string name="settings__nfc__intro__quickpay">Používejte QuickPay pro malé platby</string>
+    <string name="settings__nfc__intro__title">Plaťte\n&lt;accent&gt;jediným klepnutím&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay urychluje placení automatickou úhradou malých faktur.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Okamžité&lt;/accent&gt;\nplatby</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -1093,6 +1109,7 @@
     <string name="wallet__receive_note_placeholder">Nepovinná poznámka pro plátce</string>
     <string name="wallet__receive_onboarding_description">Užívejte si okamžité a levné\ntransakce s přáteli, rodinou\na obchodníky.</string>
     <string name="wallet__receive_onboarding_title">Přijímat na <accent>disponibilní zůstatek</accent></string>
+    <string name="wallet__receive_scan_or_tap">Naskenujte nebo přiložte a zaplaťte</string>
     <string name="wallet__receive_show_details">Zobrazit podrobnosti</string>
     <string name="wallet__receive_show_qr">Zobrazit QR kód</string>
     <string name="wallet__receive_specify">Upravit fakturu</string>

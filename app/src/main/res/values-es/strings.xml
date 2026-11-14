@@ -429,6 +429,9 @@
     <string name="onboarding__restore_no_backup_button">Proceder sin respaldo de la copia de seguridad</string>
     <string name="onboarding__restore_no_backup_warn">Si anteriormente tenía una copia de seguridad Lightning, ésta se sobrescribirá y se perderá. Esto podría provocar una pérdida de fondos.</string>
     <string name="onboarding__empty_wallet">Para\nempezar\n&lt;accent&gt;envíe\nBitcoin&lt;/accent&gt;\na su\nmonedero</string>
+    <string name="other__nfc_read_error_text">Esta etiqueta no contiene una solicitud de pago que Bitkit pueda usar.</string>
+    <string name="other__nfc_read_error_title">Incapaz De Leer NFC</string>
+    <string name="other__nfc_service_description">Solicitud de pago de Bitkit</string>
     <string name="other__qr_scan">Escanear código QR</string>
     <string name="other__qr_error_header">Incapaz De Leer QR</string>
     <string name="other__qr_error_text">Bitkit no es capaz de leer este código QR.</string>
@@ -444,6 +447,12 @@
     <string name="other__high_balance__text">&lt;accent&gt;El saldo de su monedero excede $500.&lt;/accent&gt;\nPor su seguridad, considere mover parte de sus ahorros a un monedero no conectado a Internet.</string>
     <string name="other__high_balance__continue">Entendido</string>
     <string name="other__high_balance__cancel">Aprender Más</string>
+    <string name="other__scan_to_pay_description">Permite el acceso a la cámara, Bluetooth y NFC para escanear facturas bitcoin y pagar más rápido.</string>
+    <string name="other__scan_to_pay_title">Escanea\n&lt;accent&gt;para pagar&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">Escaneando QR</string>
+    <string name="other__scanner_status_qr_bluetooth">Escaneando QR y Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">Escaneando QR y NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">Escaneando QR, NFC y Bluetooth</string>
     <string name="other__try_again">Por favor, intente de nuevo.</string>
     <string name="other__update_critical_nav_title">Actualización Crítica</string>
     <string name="other__update_critical_title">Actualice\n&lt;accent&gt;Bitkit ahora&lt;/accent&gt;</string>
@@ -633,6 +642,13 @@
     <string name="security__wiped_title">Datos de Monedero Borrados</string>
     <string name="security__wiped_message">Bitkit ha sido restaurado y todos los datos de monedero han sido borrados.</string>
     <string name="security__pin_enable_button">Habilitar PIN</string>
+    <string name="settings__nearby__subtitle">Permite que los teléfonos cercanos lean tu solicitud de Recibir por Bluetooth</string>
+    <string name="settings__nearby__title">Pagos cercanos</string>
+    <string name="settings__nfc__intro__continue">¡Genial!</string>
+    <string name="settings__nfc__intro__description">Bitkit ahora admite pagos NFC. Acerca tu teléfono a un terminal de pago o a un teléfono compatible para pagar al instante.</string>
+    <string name="settings__nfc__intro__quickpay">Usa QuickPay para pagos pequeños</string>
+    <string name="settings__nfc__intro__title">Paga con\n&lt;accent&gt;un solo toque&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__settings">Ajustes</string>
     <string name="settings__dev_enabled_title">Opciones de desarrollo activadas</string>
     <string name="settings__dev_disabled_message">Las opciones de desarrollo están ahora desactivadas en toda la aplicación.</string>
@@ -967,6 +983,7 @@
     <string name="wallet__drawer__status">Estado de la App</string>
     <string name="wallet__drawer__support">Soporte</string>
     <string name="wallet__drawer__wallet">Monedero</string>
+    <string name="wallet__receive_scan_or_tap">Escanea o toca para pagar</string>
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Recibir</string>
     <string name="wallet__details_transfer_subtitle">Transferencia Entrante: </string>

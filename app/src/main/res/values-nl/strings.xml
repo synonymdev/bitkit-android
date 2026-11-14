@@ -474,6 +474,9 @@
     <string name="other__lnurl_withdr_success_msg">Je opname is succesvol aangevraagd. Wachten op betaling.</string>
     <string name="other__lnurl_withdr_success_title">Opname aangevraagd</string>
     <string name="other__logs_export_error">Log-zipbestand aanmaken mislukt</string>
+    <string name="other__nfc_read_error_text">Deze tag bevat geen betaalverzoek dat Bitkit kan gebruiken.</string>
+    <string name="other__nfc_read_error_title">Kan NFC niet lezen</string>
+    <string name="other__nfc_service_description">Bitkit-betaalverzoek</string>
     <string name="other__node_error_starting">Fout bij starten: %1$s</string>
     <string name="other__node_initializing">Wallet instellen…</string>
     <string name="other__node_running">Actief</string>
@@ -494,6 +497,12 @@
     <string name="other__scan__error__expired">Deze Lightning-factuur is verlopen.</string>
     <string name="other__scan__error__generic">Bitkit kan de verstrekte gegevens niet lezen.</string>
     <string name="other__scan_err_decoding">Decoderingsfout</string>
+    <string name="other__scan_to_pay_description">Sta toegang tot camera, Bluetooth en NFC toe om bitcoin-facturen te scannen en sneller te betalen.</string>
+    <string name="other__scan_to_pay_title">Scan\n&lt;accent&gt;om te betalen&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">QR scannen</string>
+    <string name="other__scanner_status_qr_bluetooth">QR &amp; Bluetooth scannen</string>
+    <string name="other__scanner_status_qr_nfc">QR &amp; NFC scannen</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">QR, NFC &amp; Bluetooth scannen</string>
     <string name="other__share_qr">QR-code delen via</string>
     <string name="other__shop__categories__travel">Reizen</string>
     <string name="other__shop__discover__esims__description">Grenzeloos verbonden</string>
@@ -765,6 +774,13 @@
     <string name="settings__general_title">Algemeen</string>
     <string name="settings__language_system_default">Systeeminstellingen</string>
     <string name="settings__language_title">Taal</string>
+    <string name="settings__nearby__subtitle">Laat telefoons in de buurt je Ontvangen-verzoek via Bluetooth lezen</string>
+    <string name="settings__nearby__title">Betalingen in de buurt</string>
+    <string name="settings__nfc__intro__continue">Geweldig!</string>
+    <string name="settings__nfc__intro__description">Bitkit ondersteunt nu NFC-betalingen. Houd je telefoon bij een compatibele betaalterminal of telefoon om direct te betalen.</string>
+    <string name="settings__nfc__intro__quickpay">Gebruik QuickPay voor kleine betalingen</string>
+    <string name="settings__nfc__intro__title">Betaal met\n&lt;accent&gt;één tik&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay maakt afrekenen sneller door kleine facturen automatisch te betalen.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Wrijvingsloze&lt;/accent&gt;\nbetalingen</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -1086,6 +1102,7 @@
     <string name="wallet__receive_note_placeholder">Optionele notitie voor betaler</string>
     <string name="wallet__receive_onboarding_description">Geniet van directe en goedkope\ntransacties met vrienden, familie\nen winkeliers.</string>
     <string name="wallet__receive_onboarding_title">Ontvangen op &lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>
+    <string name="wallet__receive_scan_or_tap">Scan of tik om te betalen</string>
     <string name="wallet__receive_show_details">Details tonen</string>
     <string name="wallet__receive_show_qr">QR-code tonen</string>
     <string name="wallet__receive_specify">Factuur bewerken</string>

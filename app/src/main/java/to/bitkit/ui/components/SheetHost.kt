@@ -119,6 +119,7 @@ enum class TimedSheetType(val priority: Int) {
     USDT(priority = 5),
     BACKUP(priority = 4),
     NOTIFICATIONS(priority = 3),
+    NFC(priority = 2),
     QUICK_PAY(priority = 2),
     HIGH_BALANCE(priority = 1)
 }

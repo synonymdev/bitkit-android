@@ -474,6 +474,9 @@
     <string name="other__lnurl_withdr_success_msg">La teva retirada s\'ha sol·licitat correctament. Esperant el pagament.</string>
     <string name="other__lnurl_withdr_success_title">Retirada sol·licitada</string>
     <string name="other__logs_export_error">Error en crear el fitxer zip de registres</string>
+    <string name="other__nfc_read_error_text">Aquesta etiqueta no conté cap sol·licitud de pagament que Bitkit pugui utilitzar.</string>
+    <string name="other__nfc_read_error_title">No es pot llegir l\'NFC</string>
+    <string name="other__nfc_service_description">Sol·licitud de pagament de Bitkit</string>
     <string name="other__node_error_starting">Error en iniciar: %1$s</string>
     <string name="other__node_initializing">Configurant cartera...</string>
     <string name="other__node_running">Executant</string>
@@ -494,6 +497,12 @@
     <string name="other__scan__error__expired">Aquesta factura Lightning ha caducat.</string>
     <string name="other__scan__error__generic">Bitkit no pot llegir les dades proporcionades.</string>
     <string name="other__scan_err_decoding">Error de descodificació</string>
+    <string name="other__scan_to_pay_description">Permet l\'accés a la càmera, el Bluetooth i l\'NFC per escanejar factures de bitcoin i pagar més ràpidament.</string>
+    <string name="other__scan_to_pay_title">Escaneja\n&lt;accent&gt;per pagar&lt;/accent&gt;</string>
+    <string name="other__scanner_status_qr">Escanejant QR</string>
+    <string name="other__scanner_status_qr_bluetooth">Escanejant QR i Bluetooth</string>
+    <string name="other__scanner_status_qr_nfc">Escanejant QR i NFC</string>
+    <string name="other__scanner_status_qr_nfc_bluetooth">Escanejant QR, NFC i Bluetooth</string>
     <string name="other__share_qr">Compartir codi QR via</string>
     <string name="other__shop__categories__travel">Viatges</string>
     <string name="other__shop__discover__esims__description">Sense fronteres</string>
@@ -765,6 +774,13 @@
     <string name="settings__general_title">General</string>
     <string name="settings__language_system_default">Configuració del sistema</string>
     <string name="settings__language_title">Idioma</string>
+    <string name="settings__nearby__subtitle">Permet que els telèfons propers llegeixin la teva sol·licitud de Rebre per Bluetooth</string>
+    <string name="settings__nearby__title">Pagaments propers</string>
+    <string name="settings__nfc__intro__continue">Genial!</string>
+    <string name="settings__nfc__intro__description">Bitkit ara admet pagaments NFC. Apropa el telèfon a un terminal de pagament o a un telèfon compatible per pagar a l\'instant.</string>
+    <string name="settings__nfc__intro__quickpay">Utilitza QuickPay per a pagaments petits</string>
+    <string name="settings__nfc__intro__title">Paga amb\n&lt;accent&gt;només un toc&lt;/accent&gt;</string>
+    <string name="settings__nfc__nav_title">TapPay (NFC)</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay fa que pagar sigui més ràpid pagant automàticament factures petites.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Pagaments&lt;/accent&gt;\nsense friccions</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -1089,6 +1105,7 @@
     <string name="wallet__receive_note_placeholder">Nota opcional per al pagador</string>
     <string name="wallet__receive_onboarding_description">Gaudeix de transaccions instantànies i barates\namb amics, família\ni comerciants.</string>
     <string name="wallet__receive_onboarding_title">Rebre al &lt;accent&gt;saldo de despesa&lt;/accent&gt;</string>
+    <string name="wallet__receive_scan_or_tap">Escaneja o toca per pagar</string>
     <string name="wallet__receive_show_details">Mostrar detalls</string>
     <string name="wallet__receive_show_qr">Mostra el codi QR</string>
     <string name="wallet__receive_specify">Editar factura</string>

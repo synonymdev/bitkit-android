@@ -33,6 +33,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.wallets.receive.CopyAddressCard
 import to.bitkit.ui.screens.wallets.receive.CopyAddressType
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrView
+import to.bitkit.ui.shared.effects.offerPaymentNearby
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
 
@@ -47,6 +48,7 @@ internal fun ColumnScope.UsdtReceiveContent(
     amount: String = "",
 ) {
     var showDetails by rememberSaveable { mutableStateOf(false) }
+    val canTapToPay = offerPaymentNearby(uri)
     BackHandler(enabled = showDetails) { showDetails = false }
     val networkTitle = stringResource(R.string.usdt__receive_network, network)
     val copyMessage = stringResource(R.string.usdt__receive_copied)
@@ -79,6 +81,7 @@ internal fun ColumnScope.UsdtReceiveContent(
                     qrLogoPainter = painterResource(R.drawable.tether_circle),
                     onClickEditInvoice = onEdit,
                     accentColor = Colors.Usdt,
+                    showsTapToPay = canTapToPay,
                     shareContent = shareContent,
                     copyMessage = copyMessage,
                     modifier = Modifier.fillMaxWidth().height(

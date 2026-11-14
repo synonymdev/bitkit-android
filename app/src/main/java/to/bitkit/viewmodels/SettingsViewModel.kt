@@ -392,6 +392,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val isNearbyPaymentsEnabled = settingsStore.data.map { it.isNearbyPaymentsEnabled }
+        .asStateFlow(initialValue = true)
+
+    fun setNearbyPaymentsEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(isNearbyPaymentsEnabled = value) }
+        }
+    }
+
     val quickPayAmount = settingsStore.data.map { it.quickPayAmount }
         .asStateFlow(initialValue = 5)
 
