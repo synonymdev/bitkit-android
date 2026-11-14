@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.pubkySwapsRestore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -22,6 +23,11 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -29,6 +35,7 @@ import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -49,6 +56,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         private const val SWAP_ID = "swap"
         private const val CLAIM_TXID = "claim"
         private const val CONFIRMED_CLAIM_TXID = "confirmed"
+        private const val HOLD_HASH = "hold"
 
         /** The Kotlin facade holding bitkit-core's top-level functions, which Kotlin sources cannot name. */
         private val CORE: Class<*> = Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")
@@ -57,7 +65,8 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val pubkyRepo = mock<PubkyRepo> { on { contacts } doReturn contacts }
-    private val lightningRepo = mock<LightningRepo>()
+    private val nodeEvents = MutableSharedFlow<Event>()
+    private val lightningRepo = mock<LightningRepo> { on { nodeEvents } doReturn nodeEvents }
     private val cacheData = MutableStateFlow(AppCacheData())
     private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
     private lateinit var sut: PubkySwapsRouteRepo
@@ -347,6 +356,92 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         assertEquals(listOf(listOf("provider-a"), listOf("provider-a")), asked)
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps drops a swap whose hold payment failed while the app was closed`() = test {
+        cacheData.value = AppCacheData(
+            unfinishedPubkySwaps = listOf(SWAP_ID),
+            pubkySwapHoldHashes = mapOf(SWAP_ID to HOLD_HASH),
+        )
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(holdPayment(PaymentStatus.FAILED))))
+        mockStatic(CORE).use { core ->
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, never())
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+            assertEquals(emptyMap(), cacheData.value.pubkySwapHoldHashes)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `a hold payment failing stops its resumed swap`() = test {
+        cacheData.value = AppCacheData(
+            unfinishedPubkySwaps = listOf(SWAP_ID),
+            pubkySwapHoldHashes = mapOf(SWAP_ID to HOLD_HASH),
+        )
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(holdPayment(PaymentStatus.PENDING))))
+        mockStatic(CORE).use { core ->
+            var calls = 0
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                calls++
+                status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u))
+            }
+
+            sut.resumeUnfinishedSwaps()
+            runCurrent()
+            nodeEvents.emit(Event.PaymentFailed(paymentId = HOLD_HASH, paymentHash = HOLD_HASH, reason = null))
+            runCurrent()
+            val callsAtFailure = calls
+            advanceTimeBy(10.minutes)
+            runCurrent()
+
+            assertTrue(callsAtFailure > 0)
+            assertEquals(callsAtFailure, calls)
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resetForWipe stops a running claim wait`() = test {
+        mockStatic(CORE).use { core ->
+            var calls = 0
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                calls++
+                status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u))
+            }
+
+            val caller = launch { sut.awaitClaim(SWAP_ID) }
+            runCurrent()
+            sut.resetForWipe()
+            runCurrent()
+            val callsAtWipe = calls
+            advanceTimeBy(20.minutes)
+            runCurrent()
+
+            assertEquals(callsAtWipe, calls)
+            assertTrue(caller.isCompleted)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `restoredSwaps leaves a swap dropped this session alone`() = test {
+        contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
+        sut.dropFailedSwap(SWAP_ID)
+        val asked = mutableListOf<List<String>>()
+        val found = mutableListOf<RestoredPubkySwaps>()
+        restoring(asked, report(known = listOf(SWAP_ID, "other-swap"))) {
+            backgroundScope.launch { sut.restoredSwaps().collect { found += it } }
+            advanceUntilIdle()
+        }
+
+        assertEquals(listOf(listOf("other-swap")), found.map { it.known })
+        assertEquals(listOf("other-swap"), cacheData.value.unfinishedPubkySwaps)
+    }
+
     private suspend fun <T> restoring(
         asked: MutableList<List<String>>,
         vararg reports: PubkySwapRestoreReport,
@@ -382,9 +477,10 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     private fun report(
         restored: List<String> = emptyList(),
         incomplete: List<String> = emptyList(),
+        known: List<String> = emptyList(),
     ) = PubkySwapRestoreReport(
         restored = restored,
-        known = emptyList(),
+        known = known,
         finished = emptyList(),
         incompleteProviders = incomplete,
     )
@@ -407,5 +503,21 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         providerPubky = "provider",
         deliveredSat = 20_000u,
         destinationAddress = "address",
+    )
+
+    private fun holdPayment(status: PaymentStatus) = PaymentDetails(
+        id = HOLD_HASH,
+        kind = PaymentKind.Bolt11(
+            hash = HOLD_HASH,
+            preimage = null,
+            secret = null,
+            description = null,
+            bolt11 = "bolt11"
+        ),
+        amountMsat = 1_000_000uL,
+        feePaidMsat = null,
+        direction = PaymentDirection.OUTBOUND,
+        status = status,
+        latestUpdateTimestamp = 0uL,
     )
 }
