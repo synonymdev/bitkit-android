@@ -580,6 +580,10 @@ class AppViewModel @Inject constructor(
     /** The address and amount of the uncertain Spark withdrawal to a contact a pending screen waits on. */
     @Volatile
     private var uncertainSparkWithdrawal: Pair<String, ULong>? = null
+
+    /** The swap whose hold payment went out for a send, which may still pay the contact, so that send pays once. */
+    @Volatile
+    private var committedSwap: CommittedSwap? = null
     private var isPresentingPaymentRequest = false
     private val isPaymentRequestPollingStopped = MutableStateFlow(false)
     private var isPaymentRequestOverlayVisible = false
@@ -2980,6 +2984,7 @@ class AppViewModel @Inject constructor(
             if (isAutomaticAllowancePayment(paymentHash)) return
             if (moveToSparkRepo.isWatchedMovePayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
+                releaseFailedSwapHold(paymentHash)
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
                 if (shouldNotifyPendingResolution(paymentHash)) {
@@ -6769,6 +6774,7 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
+        if (showCommittedSwap()) return
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
         _sendUiState.value.activePaykitSwapRoute?.let { route ->
             if (route.quote?.deliveredSat == _sendUiState.value.amount) return@let
@@ -7348,11 +7354,13 @@ class AppViewModel @Inject constructor(
         contactPaymentContext?.let {
             synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
         }
+        committedSwap = CommittedSwap(sendGeneration, holdPaymentHash, payment.deliveredSat)
         // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
         lightningRepo.payInvoice(payment.invoice).onFailure {
             // Spark may have sent it, so an unknown outcome waits on the claim like a sent hold payment.
             if (it is PaymentPendingException) return@onFailure
             holdFailure.cancel()
+            clearCommittedSwap(holdPaymentHash)
             clearPendingContactPaymentContext(holdPaymentHash)
             if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
             failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
@@ -7410,6 +7418,7 @@ class AppViewModel @Inject constructor(
             // A failed hold payment keeps its hash on the send: its own failure handler may still be on its way to
             // the error screen and finds the send by that hash.
             clearSwapRouteQuote(isSendCurrent(), keepHoldPaymentHash = it is LightningPaymentFailedError)
+            clearCommittedSwap(holdPaymentHash)
             finishManualAllowancePayment(swap.allowanceAttemptId, succeeded = false)
             clearPendingContactPaymentContext(holdPaymentHash)
             releasePrivatePaymentListIfNeeded(swap.contactPaymentContext)
@@ -7448,6 +7457,41 @@ class AppViewModel @Inject constructor(
         if (contactPaymentContext?.incomingPaymentRequest != null) {
             viewModelScope.launch {
                 refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
+            }
+        }
+    }
+
+    /**
+     * Shows the pending payment of a swap this send already paid a hold invoice for, instead of paying again: a quote
+     * made after backing out of Confirm mid-commit would pay the contact a second time.
+     */
+    private fun showCommittedSwap(): Boolean {
+        val swap = committedSwap?.takeIf { it.sendGeneration == sendStateGeneration } ?: return false
+        setSendEffect(
+            SendEffect.NavigateToPending(
+                paymentHash = swap.holdPaymentHash,
+                amount = swap.deliveredSat.toLong(),
+                retryRoute = SendRetryRoute.Amount,
+            ),
+        )
+        return true
+    }
+
+    private fun clearCommittedSwap(holdPaymentHash: String) {
+        if (committedSwap?.holdPaymentHash == holdPaymentHash) committedSwap = null
+    }
+
+    /**
+     * A failed hold payment paid nothing, also one that failed after the claim wait ran out, so its send may retry
+     * from Amount, for the contact Pending took off the send.
+     */
+    private fun releaseFailedSwapHold(paymentHash: String) {
+        val swap = committedSwap?.takeIf { it.holdPaymentHash == paymentHash } ?: return
+        committedSwap = null
+        if (swap.sendGeneration != sendStateGeneration) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext == null) {
+                activeContactPaymentContext = pendingContactPaymentContexts[paymentHash]
             }
         }
     }
@@ -10387,6 +10431,13 @@ private data class SwapRoutedPayment(
     val tagsSaved: Boolean,
     val contactPaymentContext: ContactPaymentContext?,
     val allowanceAttemptId: String?,
+)
+
+/** A swap whose hold payment went out for the send of [sendGeneration], which may still pay the contact. */
+private data class CommittedSwap(
+    val sendGeneration: Long,
+    val holdPaymentHash: String,
+    val deliveredSat: ULong,
 )
 
 private class LightningPaymentFailedError(

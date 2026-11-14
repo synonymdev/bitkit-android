@@ -19793,11 +19793,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `swap route claim wait leaves a re-quoted send free to pay`() = test {
+    fun `swap route send backed out of mid-commit pays the contact once`() = test {
+        val commit = CompletableDeferred<Result<PubkySwapRoutePayment>>()
         val claim = CompletableDeferred<Result<String>>()
         val editedQuote = swapRouteQuote().copy(quoteId = "edited-quote", deliveredSat = SWAP_DELIVERED_SATS + 1_000u)
-        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
-        whenever(pubkySwapsRouteRepo.commit("edited-quote")).doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).doSuspendableAnswer { commit.await() }
+        whenever(pubkySwapsRouteRepo.commit("edited-quote")).thenReturn(Result.success(swapRoutePayment()))
         whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
             .thenReturn(Result.success(SWAP_HOLD_HASH))
         whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
@@ -19807,20 +19808,63 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             confirmSwapRoutedPayment()
-            // Backups and Paykit's background work do not wait for the claim.
-            assertFalse(paymentSubmissionActive.value)
+            // Backing out of Confirm while the provider is slow to commit quotes a new amount afresh.
             whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any()))
                 .thenReturn(Result.success(PaykitRoute.Swap(editedQuote)))
             sut.setSendEvent(SendEvent.AmountChange(editedQuote.deliveredSat))
             sut.setSendEvent(SendEvent.AmountContinue)
             advanceBeforeHoldWatchDeadline()
-            // The first swap's hold payment is no longer this send's.
-            assertNull(sut.sendUiState.value.paykitSwapRoute?.holdPaymentHash)
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            commit.complete(Result.success(swapRoutePayment()))
+            advanceBeforeHoldWatchDeadline()
+            // Backups and Paykit's background work do not wait for the claim.
+            assertFalse(paymentSubmissionActive.value)
+
+            // The first swap's hold payment is out, so confirming the new quote shows it instead of paying again.
             confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
-        verify(pubkySwapsRouteRepo).commit("edited-quote")
-        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+        verify(pubkySwapsRouteRepo, never()).commit("edited-quote")
+        verify(lightningRepo, times(1)).payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())
+    }
+
+    @Test
+    fun `swap route hold failing after the claim wait ran out retries for the same contact`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.failure(PubkySwapClaimTimeoutException(SWAP_ID, AppError("awaiting lockup"))))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+
+            // Retry on the error screen goes back to Amount, which quotes afresh before confirming.
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentSuccessful()
+            advanceBeforeHoldWatchDeadline()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
     }
 
     @Test
