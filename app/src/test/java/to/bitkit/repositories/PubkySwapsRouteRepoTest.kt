@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.PubkySwapException
 import com.synonym.bitkitcore.PubkySwapRestoreReport
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteState
@@ -225,6 +226,22 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps drops a swap bitkit-core has no record of`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenThrow(PubkySwapException.NotFound("no swap record"))
+
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(1))
         }
     }
 

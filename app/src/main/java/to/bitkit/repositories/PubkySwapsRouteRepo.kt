@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
 import com.synonym.bitkitcore.PaykitRouteRequest
+import com.synonym.bitkitcore.PubkySwapException
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.PubkySwapSentPayment
@@ -326,8 +327,11 @@ class PubkySwapsRouteRepo @Inject constructor(
         onPending: (Throwable) -> Unit,
     ): Result<String> {
         while (true) {
-            // A failed advance, such as a transient Electrum error, is retried: the swap is already funded.
-            val state = withSecrets { mnemonic, passphrase -> pubkySwapsAdvance(swapId, mnemonic, passphrase) }
+            // A failed advance, such as a transient Electrum error, is retried: the swap is already funded. A swap
+            // bitkit-core has no record of, as one carried over by a metadata backup, never advances, so it ends here.
+            val advance = withSecrets { mnemonic, passphrase -> pubkySwapsAdvance(swapId, mnemonic, passphrase) }
+            advance.exceptionOrNull()?.let { if (it is PubkySwapException.NotFound) return Result.failure(it) }
+            val state = advance
                 .onFailure {
                     Logger.warn("Failed to advance Pubky Swaps route '$swapId'", it, context = TAG)
                     onPending(it)
