@@ -11,7 +11,7 @@
   "author": "ovitrif@proton.me",
   "license": "MIT",
   "devDependencies": {
-    "google-auth-library": "^11.3.3"
+    "google-auth-library": "^11.3.4"
   },
   "private": true
 }
