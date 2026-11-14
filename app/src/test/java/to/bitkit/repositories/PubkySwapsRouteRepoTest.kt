@@ -50,6 +50,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 class PubkySwapsRouteRepoTest : BaseUnitTest() {
     companion object {
@@ -364,6 +365,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             pubkySwapHoldHashes = mapOf(SWAP_ID to HOLD_HASH),
         )
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(holdPayment(PaymentStatus.FAILED))))
+        whenever(lightningRepo.sparkLightningSend(HOLD_HASH)).thenReturn(SparkLightningSend.NotFound)
         mockStatic(CORE).use { core ->
             sut.resumeUnfinishedSwaps()
             advanceUntilIdle()
@@ -371,6 +373,25 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, never())
             assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
             assertEquals(emptyMap(), cacheData.value.pubkySwapHoldHashes)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps drops a swap whose hold payment failed over spark`() = test {
+        cacheData.value = AppCacheData(
+            unfinishedPubkySwaps = listOf(SWAP_ID),
+            pubkySwapHoldHashes = mapOf(SWAP_ID to HOLD_HASH),
+        )
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(lightningRepo.sparkLightningSend(HOLD_HASH))
+            .thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, preimage = null))
+        mockStatic(CORE).use { core ->
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, never())
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
         }
     }
 

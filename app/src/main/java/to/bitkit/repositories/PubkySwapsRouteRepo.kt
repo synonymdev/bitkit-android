@@ -55,6 +55,7 @@ import javax.inject.Singleton
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 /**
  * Routes a Paykit payment through a Pubky Swaps provider when no balance the wallet holds reaches an endpoint the
@@ -277,11 +278,9 @@ class PubkySwapsRouteRepo @Inject constructor(
     fun resumeUnfinishedSwaps() {
         watchHoldFailures()
         scope.launch {
-            val cache = cacheStore.data.first()
-            val failedHolds = failedHolds(cache.pubkySwapHoldHashes.filterKeys { it in cache.unfinishedPubkySwaps })
-            cache.unfinishedPubkySwaps
+            cacheStore.data.first().unfinishedPubkySwaps
                 .filterNot { it in claiming }
-                .forEach { if (it in failedHolds) dropFailedSwap(it) else advanceInBackground(it) }
+                .forEach { advanceInBackground(it) }
         }
     }
 
@@ -298,15 +297,18 @@ class PubkySwapsRouteRepo @Inject constructor(
         }
     }
 
-    // A hold payment that failed while the app was closed, so its event may have gone by.
-    private suspend fun failedHolds(holds: Map<String, String>): Set<String> {
-        if (holds.isEmpty()) return emptySet()
-        val failed = lightningRepo.getPayments().getOrElse {
-            Logger.warn("Failed to read hold payments of Pubky Swaps routes", it, context = TAG)
-            return emptySet()
-        }.filter { it.status == PaymentStatus.FAILED }
-            .mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash }
-        return holds.filterValues { it in failed }.keys
+    // The hold goes out over the node or Spark, which shares its hash and decides a send the node failed.
+    private suspend fun isHoldFailed(swapId: String): Boolean {
+        val hash = cacheStore.data.first().pubkySwapHoldHashes[swapId] ?: return false
+        val node = lightningRepo.getPayments().getOrNull()
+            ?.firstOrNull { (it.kind as? PaymentKind.Bolt11)?.hash.equals(hash, ignoreCase = true) }
+            ?.status
+        if (node != null && node != PaymentStatus.FAILED) return false
+        return when (val spark = runSuspendCatching { lightningRepo.sparkLightningSend(hash) }.getOrNull()) {
+            is SparkLightningSend.Found -> spark.status == SparkPaymentStatus.FAILED
+            SparkLightningSend.NotFound -> node == PaymentStatus.FAILED
+            SparkLightningSend.Unavailable, null -> false
+        }
     }
 
     /**
@@ -389,6 +391,7 @@ class PubkySwapsRouteRepo @Inject constructor(
 
     private suspend fun awaitConfirmation(swapId: String) {
         pollClaim(swapId, CONFIRMATION_POLL_INTERVAL, untilConfirmed = true) {}
+            .onFailure { if (it is PubkySwapHoldFailedException) dropped.add(swapId) }
             .onSuccess { Logger.info("Confirmed Pubky Swaps claim '$it' for '$swapId'", context = TAG) }
             .onFailure { Logger.warn("Failed to confirm Pubky Swaps claim for '$swapId'", it, context = TAG) }
         untrack(swapId)
@@ -420,6 +423,8 @@ class PubkySwapsRouteRepo @Inject constructor(
         onPending: (Throwable) -> Unit,
     ): Result<String> {
         while (true) {
+            // A swap whose hold failed, also while the app was closed or over Spark, is never funded.
+            if (untilConfirmed && isHoldFailed(swapId)) return Result.failure(PubkySwapHoldFailedException(swapId))
             // A failed advance, such as a transient Electrum error, is retried: the swap is already funded. A swap
             // bitkit-core has no record of, as one carried over by a metadata backup, never advances, so it ends here.
             val advance = withSecrets { mnemonic, passphrase -> pubkySwapsAdvance(swapId, mnemonic, passphrase) }
