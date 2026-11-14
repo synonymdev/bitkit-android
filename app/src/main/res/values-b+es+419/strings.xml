@@ -1157,6 +1157,8 @@
     <string name="wallet__send_yes">Sí, enviar</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Enviar\nbitcoin&lt;/accent&gt;\na su\nsaldo de gastos</string>
     <string name="wallet__spending__title">Gasto</string>
+    <string name="wallet__swap_route_restored_text">Un pago a un contacto que la restauración interrumpió volvió a tus ahorros.</string>
+    <string name="wallet__swap_route_restored_title">Pago devuelto a Ahorros</string>
     <string name="wallet__tags">Etiquetas</string>
     <string name="wallet__tags_add">Añadir etiqueta</string>
     <string name="wallet__tags_add_button">Añadir</string>

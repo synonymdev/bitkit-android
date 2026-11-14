@@ -1150,6 +1150,8 @@
     <string name="wallet__send_yes">Sí, Enviar</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Envia\nbitcoin&lt;/accent&gt;\nal teu\nsaldo de despesa</string>
     <string name="wallet__spending__title">Despesa</string>
+    <string name="wallet__swap_route_restored_text">Un pagament a un contacte que la restauració va interrompre ha tornat als teus estalvis.</string>
+    <string name="wallet__swap_route_restored_title">Pagament retornat a Estalvis</string>
     <string name="wallet__tags">Etiquetes</string>
     <string name="wallet__tags_add">Afegeix etiqueta</string>
     <string name="wallet__tags_add_button">Afegir</string>

@@ -1129,6 +1129,8 @@
     <string name="wallet__send_yes">Ναι, Στείλε</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Στείλε\nbitcoin&lt;/accent&gt;\nστο υπόλοιπο\nδαπανών</string>
     <string name="wallet__spending__title">Δαπάνες</string>
+    <string name="wallet__swap_route_restored_text">Μια πληρωμή σε επαφή που διέκοψε η επαναφορά επέστρεψε στις αποταμιεύσεις σου.</string>
+    <string name="wallet__swap_route_restored_title">Η πληρωμή επέστρεψε στις Αποταμιεύσεις</string>
     <string name="wallet__tags">Ετικέτες</string>
     <string name="wallet__tags_add">Προσθήκη ετικέτας</string>
     <string name="wallet__tags_add_button">Προσθήκη</string>

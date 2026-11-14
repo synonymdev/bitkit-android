@@ -1031,6 +1031,8 @@
     <string name="wallet__note">Notiz</string>
     <string name="wallet__lnurl_pay_confirm__comment">Kommentar</string>
     <string name="wallet__lnurl_pay_confirm__comment_placeholder">Optionaler Kommentar zum Empfänger</string>
+    <string name="wallet__swap_route_restored_text">Eine Zahlung an einen Kontakt, die die Wiederherstellung unterbrochen hat, ist in deine Ersparnisse zurückgeflossen.</string>
+    <string name="wallet__swap_route_restored_title">Zahlung an Ersparnisse zurückgegeben</string>
     <string name="wallet__tags">Tags</string>
     <string name="wallet__tags_add">Tag hinzufügen</string>
     <string name="wallet__tags_add_button">Hinzufügen</string>

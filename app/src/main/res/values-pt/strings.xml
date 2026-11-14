@@ -890,6 +890,8 @@
     <string name="wallet__note">Nota</string>
     <string name="wallet__lnurl_pay_confirm__comment">Comentário</string>
     <string name="wallet__lnurl_pay_confirm__comment_placeholder">Comentário opcional para o receptor</string>
+    <string name="wallet__swap_route_restored_text">Um pagamento a um contacto que o restauro interrompeu voltou às tuas poupanças.</string>
+    <string name="wallet__swap_route_restored_title">Pagamento devolvido às Poupanças</string>
     <string name="wallet__tags">Tags</string>
     <string name="wallet__tags_add">Adicionar Tag</string>
     <string name="wallet__tags_add_button">Adicionar</string>

@@ -1173,6 +1173,8 @@
     <string name="wallet__send_yes">Да, Отправить</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Отправьте\nбиткоин&lt;/accent&gt;\nна ваш\nБаланс Расходов</string>
     <string name="wallet__spending__title">Расходы</string>
+    <string name="wallet__swap_route_restored_text">Платёж контакту, прерванный восстановлением, вернулся в ваши сбережения.</string>
+    <string name="wallet__swap_route_restored_title">Платёж возвращён в Сбережения</string>
     <string name="wallet__tags">Теги</string>
     <string name="wallet__tags_add">Добавить Тег</string>
     <string name="wallet__tags_add_button">Добавить</string>
