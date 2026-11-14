@@ -19405,6 +19405,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `smaller amount after a swap quote takes the spark leg and clears the quote`() = test {
+        val leg = sparkRouteLeg(REGTEST_ADDRESS)
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.failure(SparkError.WithdrawalOverBalance()))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+
+            whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+                .thenReturn(Result.success(PaykitRoute.Service(leg)))
+            sut.setSendEvent(SendEvent.AmountChange(leg.deliveredSat))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+
+        verify(paykitRouteRepo).route(eq(leg.deliveredSat), any(), any(), eq(0uL), eq(true))
+        assertNull(sut.sendUiState.value.paykitSwapRoute)
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        verify(pubkySwapsRouteRepo, times(1)).route(any(), any(), any(), any(), any())
+    }
+
+    @Test
     fun `spark withdrawal settling to another contact still falls back to a swap quote`() = test {
         whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(
