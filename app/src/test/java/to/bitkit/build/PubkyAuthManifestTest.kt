@@ -56,13 +56,13 @@ class PubkyAuthManifestTest {
         val authAlias = ComponentName(application.packageName, "to.bitkit.ui.MainActivityPubkyAuth")
         val signupAlias = ComponentName(application.packageName, "to.bitkit.ui.MainActivityPubkySignup")
         val signupUrls = listOf(
-            "pubkyring://signup?hs=homeserver",
             "pubkyauth://signup?hs=homeserver&relay=relay&secret=secret&caps=rw",
             "pubkyauth://signup?hs=homeserver",
             "pubkyauth://direct_signup?hs=homeserver",
         )
         val authUrls = listOf("pubkyauth://signin_grant?caps=rw", "pubkyauth://signup_grant?caps=rw")
         val unrelatedUrls = listOf(
+            "pubkyring://signup?hs=homeserver&relay=relay&secret=secret&caps=rw",
             "pubkyring://auth",
             "pubkyring://direct_signup",
             "pubkyauth://?caps=rw",

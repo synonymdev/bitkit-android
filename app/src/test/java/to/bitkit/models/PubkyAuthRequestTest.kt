@@ -113,20 +113,17 @@ class PubkyAuthRequestTest {
     }
 
     @Test
-    fun `parse authorized signup preserves registration and authorization details`() {
-        listOf("pubkyring", "pubkyauth").forEach { scheme ->
-            val request = PubkyAuthRequest.parseSignup(ringSignupUrl("invite code", scheme)).getOrThrow()
+    fun `parse signup rejects legacy Ring app authorization`() {
+        val legacyUrls = listOf(
+            ringSignupUrl("invite code"),
+            ringSignupUrl("invite code", "pubkyauth"),
+            ringSignupUrl().replace("&secret=secret", ""),
+            "pubkyring://signup?hs=homeserver",
+            directSignupUrl("signup") + "&relay=https%3A%2F%2Frelay.example",
+        )
 
-            assertTrue(request.isSignup)
-            assertEquals("homeserver", request.homeserverPublicKey)
-            assertEquals("invite code", request.signupToken)
-            assertEquals("https://relay.example/inbox/", request.relay)
-            assertEquals("/pub/example.app/:rw", request.capabilities)
-            assertEquals(
-                "pubkyauth:///?relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
-                    "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw",
-                request.authorizationUrl,
-            )
+        legacyUrls.forEach { url ->
+            assertIs<PubkyAuthRequestError.InvalidUrl>(PubkyAuthRequest.parseSignup(url).exceptionOrNull(), url)
         }
     }
 
@@ -140,7 +137,6 @@ class PubkyAuthRequestTest {
             assertEquals("invite code", request.signupToken)
             assertEquals("", request.relay)
             assertEquals("", request.capabilities)
-            assertNull(request.authorizationUrl)
         }
     }
 
@@ -162,7 +158,6 @@ class PubkyAuthRequestTest {
         assertEquals("homeserver", request.homeserverPublicKey)
         assertEquals("invite code", request.signupToken)
         assertEquals("shop.pubky.app", request.clientId)
-        assertEquals(url, request.authorizationUrl)
         assertEquals(listOf(PubkyAuthPermission("/pub/pubky.app/", "rw")), request.permissions)
     }
 
@@ -182,11 +177,11 @@ class PubkyAuthRequestTest {
     }
 
     @Test
-    fun `parse Ring signup rejects missing and duplicate required values`() {
+    fun `parse signup rejects missing and duplicate required values`() {
         val invalidUrls = listOf(
-            ringSignupUrl().replace("&secret=secret", ""),
-            "${ringSignupUrl()}&hs=other",
-            directSignupUrl("signup") + "&relay=https%3A%2F%2Frelay.example",
+            "pubkyauth://direct_signup",
+            "${directSignupUrl("direct_signup")}&hs=other",
+            "${directSignupUrl("signup", "one")}&st=two",
         )
 
         invalidUrls.forEach { url ->

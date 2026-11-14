@@ -2069,10 +2069,7 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             if (PubkyAuthRequest.isSignupUrl(authUrl) && !PubkyAuthRequest.isGrantSignupUrl(authUrl)) {
                 val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
-                pubkyService.validateSignupRequest(
-                    authorizationUrl = request.authorizationUrl,
-                    homeserverPublicKey = requireNotNull(request.homeserverPublicKey),
-                )
+                pubkyService.validateSignupRequest(requireNotNull(request.homeserverPublicKey))
                 return@withContext request
             }
 
@@ -2112,12 +2109,8 @@ class PubkyRepo @Inject constructor(
                     homeserverZ32 = requireNotNull(request.homeserverPublicKey),
                     signupCode = request.signupToken,
                 )
-                request.authorizationUrl?.let {
-                    if (request.isGrantSignup) {
-                        pubkyService.approveAuth(it, request.capabilities, request.clientId, secretKeyHex)
-                    } else {
-                        pubkyService.approveRingAuth(it, secretKeyHex)
-                    }
+                if (request.isGrantSignup) {
+                    pubkyService.approveAuth(request.rawUrl, request.capabilities, request.clientId, secretKeyHex)
                 }
                 var activated = false
                 try {

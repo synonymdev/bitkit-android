@@ -1,6 +1,5 @@
 package to.bitkit.services
 
-import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitProfile
@@ -13,7 +12,6 @@ import com.synonym.paykit.PubkyProfileUpdate
 import com.synonym.paykit.PubkySessionBootstrapResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
@@ -21,7 +19,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
-import com.synonym.bitkitcore.parsePubkyAuthUrl as parseLegacyPubkyAuthUrl
 
 @Singleton
 class PubkyService @Inject constructor(
@@ -130,12 +127,10 @@ class PubkyService @Inject constructor(
         PaykitSdkService.parseAuthUrl(url)
     }
 
-    suspend fun validateSignupRequest(authorizationUrl: String?, homeserverPublicKey: String): Unit =
-        ServiceQueue.PUBKY.background {
-            authorizationUrl?.let { parseLegacyPubkyAuthUrl(it) }
-            PaykitPublicKeys.normalize(homeserverPublicKey)
-            Unit
-        }
+    suspend fun validateSignupRequest(homeserverPublicKey: String): Unit = ServiceQueue.PUBKY.background {
+        PaykitPublicKeys.normalize(homeserverPublicKey)
+        Unit
+    }
 
     suspend fun approveAuth(
         authUrl: String,
@@ -145,17 +140,6 @@ class PubkyService @Inject constructor(
     ) = ServiceQueue.PUBKY.background {
         paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
-    }
-
-    suspend fun approveRingAuth(
-        authUrl: String,
-        secretKeyHex: String,
-        timeout: Duration = AUTHORIZATION_TIMEOUT,
-    ) = ServiceQueue.PUBKY.background {
-        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
-        withTimeoutOrNull(timeout) {
-            approvePubkyAuth(authUrl, secretKeyHex)
-        } ?: throw PubkyRingAuthTimeoutError()
     }
 
     suspend fun approveAuthWithCompanionClaim(
@@ -294,5 +278,3 @@ class PubkyService @Inject constructor(
     private suspend fun <T> cancellablePublicRead(block: suspend CoroutineScope.() -> T): T =
         ServiceQueue.PUBKY.background(ServiceQueue.PUBKY.queueContext.minusKey(Job), block)
 }
-
-class PubkyRingAuthTimeoutError : AppError("Ring authorization timed out")
