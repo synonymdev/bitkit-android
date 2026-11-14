@@ -624,6 +624,7 @@ class AppViewModel @Inject constructor(
     private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
+    private val allowancePauseRevision = MutableStateFlow(0L)
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -999,15 +1000,20 @@ class AppViewModel @Inject constructor(
                 combine(
                     settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
                     settingsStore.areAllowancesEnabled,
-                ) { isPaykitEnabled, areAllowancesEnabled -> isPaykitEnabled to areAllowancesEnabled },
+                    allowancePauseRevision,
+                ) { isPaykitEnabled, areAllowancesEnabled, pauseRevision ->
+                    Triple(isPaykitEnabled, areAllowancesEnabled, pauseRevision)
+                },
                 privatePaykitRepo.isProfileDeletionInProgress,
-            ) { publicKey, contacts, contactsLoadVersion, (isPaykitEnabled, areAllowancesEnabled), deleting ->
+            ) { publicKey, contacts, contactsLoadVersion, allowanceSettings, deleting ->
+                val (isPaykitEnabled, areAllowancesEnabled, pauseRevision) = allowanceSettings
                 PaykitContactSyncState(
                     publicKey = publicKey,
                     contactKeys = contacts.map { it.publicKey }.toSet(),
                     contactsLoaded = contactsLoadVersion > 0L,
                     isPaykitEnabled = isPaykitEnabled,
                     areAllowancesEnabled = areAllowancesEnabled,
+                    allowancePauseRevision = pauseRevision,
                 ).takeUnless { deleting }
             }
                 .distinctUntilChanged()
@@ -1019,7 +1025,11 @@ class AppViewModel @Inject constructor(
             settingsStore.areAllowancesEnabled
                 .distinctUntilChanged()
                 .filter { !it }
-                .collect { paykitAllowanceRepo.pause() }
+                .collect {
+                    paykitAllowanceRepo.pause()
+                    // Off/on can coalesce while contact sync waits; revoked activation still needs a fresh sync.
+                    allowancePauseRevision.update { it + 1 }
+                }
         }
     }
 
@@ -1086,6 +1096,7 @@ class AppViewModel @Inject constructor(
 
     private fun isCurrentPaykitContactSync(state: PaykitContactSyncState, signIn: PubkySignIn): Boolean =
         pubkyRepo.isCurrent(signIn) && isPaykitEnabled.value && !privatePaykitRepo.isProfileDeletionInProgress.value &&
+            state.allowancePauseRevision == allowancePauseRevision.value &&
             (pubkyRepo.contactsLoadVersion.value > 0L) == state.contactsLoaded &&
             pubkyRepo.contacts.value.map { it.publicKey }.toSet() == state.contactKeys
 
@@ -10382,6 +10393,7 @@ private data class PaykitContactSyncState(
     val contactsLoaded: Boolean,
     val isPaykitEnabled: Boolean,
     val areAllowancesEnabled: Boolean,
+    val allowancePauseRevision: Long,
 )
 
 sealed class SendEffect {

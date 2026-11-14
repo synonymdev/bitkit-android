@@ -7,6 +7,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.keychain.Keychain
@@ -14,6 +15,7 @@ import to.bitkit.data.keychain.Keychain
 fun connectionRecoveryFixture(
     settings: SettingsStore,
     keychain: Keychain = mock(),
+    vssClients: VssClientCoordinator = VssClientCoordinator(),
     currentBinding: () -> String = { "test-wallet-binding" },
 ): WalletConnectionRecovery {
     val db = mock<AppDb>()
@@ -21,5 +23,5 @@ fun connectionRecoveryFixture(
     whenever(db.configDao().getAll()).thenReturn(MutableStateFlow(listOf(ConfigEntity())))
     val binding = mock<VssStoreIdProvider>()
     whenever(binding.getBackupWalletBinding(any())).thenAnswer { currentBinding() }
-    return WalletConnectionRecovery(keychain, db, binding, settings)
+    return WalletConnectionRecovery(keychain, db, binding, settings, vssClients)
 }

@@ -88,6 +88,8 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         // Spark keeps 0.25% of a send as its fee, so the most it can send leaves room for it.
         assertEquals(29_925uL, balanceState.maxSendLightningSats)
         assertEquals(20_000uL, balanceState.balanceInTransferToSpending)
+        assertEquals(30_000uL, balanceState.sparkBalanceSats)
+        assertEquals(20_000uL, balanceState.sparkPendingDepositSats)
     }
 
     @Test
@@ -115,6 +117,8 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         assertEquals(105_000uL, balanceState.balanceInTransferToSavings)
         // Lightning's 50,000 plus the 30,000 Spark holds beyond the exit's leaves.
         assertEquals(80_000uL, balanceState.totalLightningSats)
+        assertEquals(null, balanceState.sparkBalanceSats)
+        assertEquals(null, balanceState.sparkPendingDepositSats)
     }
 
     @Test
@@ -134,6 +138,8 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val balanceState = sut().getOrThrow()
 
         assertEquals(64_167uL, balanceState.totalLightningSats)
+        assertEquals(null, balanceState.sparkBalanceSats)
+        assertEquals(null, balanceState.sparkPendingDepositSats)
     }
 
     @Test

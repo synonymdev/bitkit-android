@@ -13,6 +13,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BalanceState
 import to.bitkit.models.TransferType
@@ -21,6 +22,7 @@ import to.bitkit.models.toBalance
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
@@ -39,7 +41,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private val sparkExitRepo: SparkExitRepo,
 ) {
     suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
             val channels = lightningRepo.getChannels().orEmpty()
             val activeTransfers = transferRepo.activeTransfers.first()
@@ -54,11 +56,14 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
-            // During an exit, Spark's value outside it stays on Spark.
-            val sparkSats = sparkRepo.state.value.shownSpendingSats.safe() +
-                (sparkExitRepo.state.value.outsideExitSats ?: 0uL).safe()
-            val sparkExitSats = getSparkExitSats(activeTransfers)
             val afterLingeringCoopClose = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
+            val maxSendOnchainSats = getMaxSendAmount(balanceDetails)
+            val spark = sparkRepo.state.value
+            val exit = sparkExitRepo.state.value
+            val sparkSats = spark.shownSpendingSats.safe() + (exit.outsideExitSats ?: 0uL).safe()
+            val sparkExitSats = getSparkExitSats(activeTransfers, exit)
+            val hasExit = spark.isExiting || exit.isExiting ||
+                activeTransfers.any { it.type == TransferType.SPARK_EXIT }
             val totalLightningSats = afterLingeringCoopClose.safe() + sparkSats.safe()
 
             val balanceState = BalanceState(
@@ -68,14 +73,16 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 // A payment goes over one rail, so the larger of the two balances caps it; Spark keeps its fee.
                 maxSendLightningSats = maxOf(
                     lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
-                    sparkRepo.state.value.sendableSats,
+                    spark.sendableSats,
                 ),
-                maxSendOnchainSats = getMaxSendAmount(balanceDetails),
+                maxSendOnchainSats = maxSendOnchainSats,
                 balanceInTransferToSavings = (toSavingsAmount.safe() - coopCloseSavingsSats.safe()).safe() +
                     sparkExitSats.safe(),
                 balanceInTransferToSpending = pendingChannelsSats.safe() +
-                    sparkRepo.state.value.pendingDepositSats.safe(),
+                    spark.pendingDepositSats.safe(),
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
+                sparkBalanceSats = sparkSats.takeUnless { hasExit },
+                sparkPendingDepositSats = spark.pendingDepositSats.takeUnless { hasExit },
             )
 
             val height = lightningRepo.lightningState.value.block()?.height
@@ -83,7 +90,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             Logger.verbose("Balances in ldk-node at block height=$height: ${jsonLogOf(balanceDetails)}", context = TAG)
             Logger.verbose("Balances in state at block height=$height: ${jsonLogOf(balanceState)}", context = TAG)
 
-            return@runCatching balanceState
+            return@runSuspendCatching balanceState
         }
     }
 
@@ -128,8 +135,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
      * A Spark emergency exit has no channel: what it still brings to savings is in transfer until the exit settles
      * it. The running exit's own transfer counts only that, not funding nobody paid or value savings already has.
      */
-    private fun getSparkExitSats(transfers: List<TransferEntity>): ULong {
-        val exit = sparkExitRepo.state.value
+    private fun getSparkExitSats(transfers: List<TransferEntity>, exit: SparkExitState): ULong {
         return transfers
             .filter { it.type == TransferType.SPARK_EXIT }
             .fold(0uL) { sum, transfer ->

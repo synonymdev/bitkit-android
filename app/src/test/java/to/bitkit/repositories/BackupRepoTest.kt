@@ -7,8 +7,11 @@ import com.synonym.paykit.PaykitException
 import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -20,6 +23,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
@@ -68,6 +73,7 @@ import to.bitkit.data.backup.UsdtRecoveryBackupStore
 import to.bitkit.data.backup.UsdtRecoveryBackupV1
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
@@ -100,10 +106,12 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.inject.Provider
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -127,6 +135,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
     private val vssBackupClient = mock<VssBackupClient>()
+    private val vssClients = VssClientCoordinator()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
     private val settingsStore = mock<SettingsStore>()
     private val widgetsStore = mock<WidgetsStore>()
@@ -191,6 +200,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { cacheStore.updateBackupStatus(any(), any()) }.thenReturn(Unit)
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
         whenever(cacheStore.data).thenReturn(cacheData)
+        whenever(cacheStore.backupStatuses).thenReturn(cacheData.map { it.backupStatuses })
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever(widgetsStore.data).thenReturn(widgetsData)
@@ -232,6 +242,7 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
+        whenever(pubkyRepo.hasIdentityForBackup()).thenReturn(false)
         whenever { sparkRepo.exitBackup() }.thenReturn(Result.success(null))
         whenever { sparkRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { sparkRepo.mergeRemoteExitBackup(anyOrNull()) }.thenReturn(Result.success(Unit))
@@ -240,6 +251,196 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
 
         sut = createSut()
+    }
+
+    @Test
+    fun `explicit first wallet backup does not wait for node observers`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.WALLET to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        sut.scheduleFullBackup()
+        advanceTimeBy(5_000)
+        runCurrent()
+        verify(vssBackupClient).setup()
+        verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.WALLET.name), any())
+        verify(vssBackupClient, never()).setupWithRetry(any(), any(), any())
+    }
+
+    @Test
+    fun `observer bootstrap requeues a required backup after a failed identity transition`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SETTINGS to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            verify(vssBackupClient, times(1)).setupWithRetry(any(), any(), any())
+            assertTrue(statuses.value.getValue(BackupCategory.SETTINGS).running)
+            val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
+            assertFailsWith<BackupRepoTestError> {
+                recovery.withIdentityChange {
+                    assertFalse(statuses.value.getValue(BackupCategory.SETTINGS).running)
+                    throw BackupRepoTestError("credentials unchanged")
+                }
+            }
+            runCurrent()
+            verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
+            verify(vssBackupClientLdk, times(2)).setup()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.SETTINGS.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `retired replacement reservation cannot leave a cancelled backup running`() = test {
+        for (retireBeforeCleanup in listOf(true, false)) {
+            val category = BackupCategory.SETTINGS
+            val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+            stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+            stubBackupObservers()
+            val finishCleanup = CompletableDeferred<Unit>()
+            var holdCleanup = false
+            var cleanupEntered = false
+            var holdDispatch = false
+            val queued = mutableListOf<Pair<CoroutineContext, Runnable>>()
+            val delegate = StandardTestDispatcher(testScheduler)
+
+            @OptIn(InternalCoroutinesApi::class)
+            val dispatcher = object : CoroutineDispatcher(), Delay by (delegate as Delay) {
+                override fun dispatch(context: CoroutineContext, block: Runnable) {
+                    if (holdDispatch) queued += context to block else delegate.dispatch(context, block)
+                }
+            }
+            sut = createSut(ioDispatcher = dispatcher)
+            whenever(cacheStore.updateBackupStatus(any(), any())).doSuspendableAnswer {
+                val target = it.getArgument<BackupCategory>(0)
+                val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+                if (target == category && holdCleanup && !cleanupEntered) {
+                    cleanupEntered = true
+                    finishCleanup.await()
+                }
+                statuses.update { it + (target to transform(it[target] ?: BackupItemStatus())) }
+            }
+            try {
+                sut.startObservingBackups()
+                runCurrent()
+                assertTrue(statuses.value.getValue(category).running)
+                holdCleanup = true
+                sut.stopObservingBackups()
+                runCurrent()
+                assertTrue(cleanupEntered)
+
+                holdDispatch = true
+                sut.scheduleFullBackup()
+                holdDispatch = false
+                assertTrue(queued.isNotEmpty())
+                if (retireBeforeCleanup) {
+                    val retiring = launch(start = CoroutineStart.UNDISPATCHED) {
+                        vssClients.withSuspendedClients(shutdown = {}) {
+                            assertFalse(statuses.value.getValue(category).running)
+                        }
+                    }
+                    assertNull(vssClients.owners.value)
+                    finishCleanup.complete(Unit)
+                    runCurrent()
+                    retiring.join()
+                } else {
+                    finishCleanup.complete(Unit)
+                    runCurrent()
+                    vssClients.withSuspendedClients(shutdown = {}) {
+                        assertFalse(statuses.value.getValue(category).running)
+                    }
+                }
+                queued.forEach { (context, block) -> delegate.dispatch(context, block) }
+                queued.clear()
+                runCurrent()
+
+                assertFalse(statuses.value.getValue(category).running)
+                assertTrue(statuses.value.getValue(category).isRequired)
+                verify(vssBackupClient, never()).putObject(eq(category.name), any())
+            } finally {
+                holdDispatch = false
+                finishCleanup.complete(Unit)
+                queued.forEach { (context, block) -> delegate.dispatch(context, block) }
+                sut.reset()
+            }
+        }
+    }
+
+    @Test
+    fun `backup failure status drains before replacement credentials`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var replaced = false
+        var crossed = false
+        whenever(cacheStore.updateBackupStatus(eq(BackupCategory.WALLET), any())).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            crossed = replaced
+            Unit
+        }
+        whenever(pubkyRepo.hasIdentityForBackup()).thenReturn(true)
+        assertTrue(sut.persistWalletBackup().isFailure)
+        entered.await()
+        val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
+        recovery.withIdentityChange { replaced = true }
+        release.complete(Unit)
+        runCurrent()
+        assertTrue(replaced)
+        assertFalse(crossed)
+    }
+
+    @Test
+    fun `metadata backup preserves complete data when identity records cannot be read`() = test {
+        stubMetadataBackupReads()
+        val error = AppError("keychain unavailable")
+        whenever(pubkyRepo.snapshotSessionBackupState()).thenReturn(Result.failure(error))
+        assertEquals(error, sut.triggerBackup(BackupCategory.METADATA).exceptionOrNull())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+
+        stubMetadataBackupReads()
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+        verify(vssBackupClient).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `metadata backup preserves complete data when contact overrides cannot be read`() = test {
+        stubMetadataBackupReads()
+        val error = AppError("store unavailable")
+        whenever(pubkyRepo.snapshotContactProfileOverrides()).thenReturn(Result.failure(error))
+        assertEquals(error, sut.triggerBackup(BackupCategory.METADATA).exceptionOrNull())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+
+        stubMetadataBackupReads()
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+        verify(vssBackupClient).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `wallet backup preserves complete data while stored identity is unresolved`() = test {
+        whenever(pubkyRepo.hasIdentityForBackup()).thenReturn(true)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+        whenever(privatePaykitRepo.backupSnapshot()).thenReturn(
+            Result.success(PrivatePaykitBackupSnapshot("fresh-sdk-state", 0)),
+        )
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+        val payload = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), payload.capture())
+        val backup = json.decodeFromString<WalletBackupV1>(payload.firstValue.decodeToString())
+        assertEquals("fresh-sdk-state", backup.paykitSdkBackupState)
+    }
+
+    @Test
+    fun `wallet backup cannot treat unreadable identity as absent`() = test {
+        whenever(pubkyRepo.hasIdentityForBackup()).doSuspendableAnswer {
+            throw IllegalStateException("keychain unavailable")
+        }
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
     }
 
     @Test
@@ -380,6 +581,192 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark connection backup survives a cancelled required-status write`() = test {
+        assertSparkBackupSurvivesOwnerRetirement(initiallyReady = false)
+    }
+
+    @Test
+    fun `spark exit backup resumes when the pending restore clears`() = test {
+        assertSparkBackupResumesAfterRestore(expires = false)
+    }
+
+    @Test
+    fun `spark exit backup resumes when the pending restore expires`() = test {
+        assertSparkBackupResumesAfterRestore(expires = true)
+    }
+
+    @Test
+    fun `spark exit backup resumes when another restore interrupts its debounce`() = test {
+        assertSparkBackupResumesAfterRestore(expires = false, interruptDebounce = true)
+    }
+
+    private suspend fun TestScope.assertSparkBackupResumesAfterRestore(
+        expires: Boolean,
+        interruptDebounce: Boolean = false,
+    ) {
+        val category = BackupCategory.SPARK_EXIT
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        val sparkState = MutableStateFlow(SparkState())
+        whenever(sparkRepo.state).thenReturn(sparkState)
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state"))
+        )
+        try {
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+            sparkState.update { SparkState(isSupported = true, isReady = true, hasSynced = true) }
+            exitStateGeneration.update { 1L }
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            assertFalse(statuses.value.getValue(category).isRequired)
+            verify(vssBackupClient, never()).putObject(eq(category.name), any())
+
+            if (expires) {
+                whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(RESTORE_GATE_EXPIRED_AT))
+                advanceTimeBy(RESTORE_GATE_EXPIRED_AT)
+            } else {
+                sut.setRestorePending(false)
+            }
+            runCurrent()
+            if (interruptDebounce) {
+                assertTrue(statuses.value.getValue(category).isRequired)
+                sut.setRestorePending(true)
+                runCurrent()
+                advanceTimeBy(61_000)
+                runCurrent()
+                assertTrue(statuses.value.getValue(category).isRequired)
+                assertFalse(statuses.value.getValue(category).running)
+                verify(vssBackupClient, never()).putObject(eq(category.name), any())
+                sut.setRestorePending(false)
+                runCurrent()
+            }
+            advanceTimeBy(61_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+
+            sut.setRestorePending(true)
+            runCurrent()
+            sut.setRestorePending(false)
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `spark exit generation survives a cancelled required-status write`() = test {
+        assertSparkBackupSurvivesOwnerRetirement(initiallyReady = true)
+    }
+
+    @Test
+    fun `spark exit observation continues after a required-status storage failure`() = test {
+        val category = BackupCategory.SPARK_EXIT
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isSupported = true, isReady = true, hasSynced = true))
+        )
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state"))
+        )
+        var failRequiredWrite = true
+        whenever(cacheStore.updateBackupStatus(any(), any())).doSuspendableAnswer {
+            val target = it.getArgument<BackupCategory>(0)
+            val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+            val prior = statuses.value[target] ?: BackupItemStatus()
+            val next = transform(prior)
+            if (target == category && failRequiredWrite && next.required > prior.required) {
+                failRequiredWrite = false
+                throw IOException("status storage unavailable")
+            }
+            statuses.update { it + (target to next) }
+        }
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            assertFalse(failRequiredWrite)
+            exitStateGeneration.value = 1L
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    private suspend fun TestScope.assertSparkBackupSurvivesOwnerRetirement(
+        initiallyReady: Boolean,
+    ) {
+        val category = BackupCategory.SPARK_EXIT
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        val sparkState = MutableStateFlow(
+            SparkState(isSupported = true, isReady = initiallyReady, hasSynced = initiallyReady)
+        )
+        whenever(sparkRepo.state).thenReturn(sparkState)
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state"))
+        )
+        val requiredWrite = CompletableDeferred<Unit>()
+        var holdRequiredWrite = false
+        whenever(cacheStore.updateBackupStatus(any(), any())).doSuspendableAnswer {
+            val target = it.getArgument<BackupCategory>(0)
+            val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+            val prior = statuses.value[target] ?: BackupItemStatus()
+            val next = transform(prior)
+            if (target == category && holdRequiredWrite && next.required > prior.required) {
+                requiredWrite.complete(Unit)
+                awaitCancellation()
+            }
+            statuses.update { it + (target to next) }
+        }
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            holdRequiredWrite = true
+            if (initiallyReady) {
+                exitStateGeneration.value = 1L
+            } else {
+                sparkState.value = SparkState(isSupported = true, isReady = true, hasSynced = true)
+            }
+            runCurrent()
+            assertTrue(requiredWrite.isCompleted)
+            holdRequiredWrite = false
+            val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
+            assertFailsWith<BackupRepoTestError> {
+                recovery.withIdentityChange { throw BackupRepoTestError("credentials unchanged") }
+            }
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            val expectedUploads = if (initiallyReady) 2 else 1
+            verify(vssBackupClient, times(expectedUploads)).putObject(eq(category.name), any())
+
+            sut.stopObservingBackups()
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(61_000)
+            runCurrent()
+            verify(vssBackupClient, times(expectedUploads)).putObject(eq(category.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
     fun `spark exit backup defers, without uploading, until Spark has connected and synced`() = test {
         whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
 
@@ -461,6 +848,7 @@ class BackupRepoTest : BaseUnitTest() {
             runCurrent()
 
             assertTrue(statuses.value.getValue(BackupCategory.WALLET).isRequired)
+            assertTrue(statuses.value.getValue(BackupCategory.WALLET).running)
             verify(privatePaykitRepo, never()).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
 
@@ -2322,6 +2710,83 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scheduled backup stays running until completion or observation stops`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(4_999)
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            verify(vssBackupClient, never()).putObject(eq(category.name), any())
+
+            sut.stopObservingBackups()
+            runCurrent()
+            assertFalse(statuses.value.getValue(category).running)
+            assertTrue(statuses.value.getValue(category).isRequired)
+
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).running)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `delayed startup cleanup preserves a newly scheduled backup status`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        val finishSetup = CompletableDeferred<Unit>()
+        val finishCleanup = CompletableDeferred<Unit>()
+        var cleanupEntered = false
+        whenever(vssBackupClient.setupWithRetry(any(), any(), any())).doSuspendableAnswer {
+            finishSetup.await()
+            Result.success(Unit)
+        }
+        whenever(cacheStore.backupStatuses).thenReturn(statuses)
+        whenever(cacheStore.updateBackupStatus(any(), any())).doSuspendableAnswer {
+            val updatedCategory = it.getArgument<BackupCategory>(0)
+            val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+            if (updatedCategory == category && !cleanupEntered) {
+                cleanupEntered = true
+                finishCleanup.await()
+            }
+            statuses.update { current ->
+                current + (updatedCategory to transform(current[updatedCategory] ?: BackupItemStatus()))
+            }
+        }
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(cleanupEntered)
+            assertTrue(statuses.value.getValue(category).running)
+
+            finishCleanup.complete(Unit)
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            finishCleanup.complete(Unit)
+            finishSetup.complete(Unit)
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
     fun `start observing backs up stale required status after clearing running flag`() = test {
         val backupStatuses = MutableStateFlow(
             mapOf(
@@ -2962,6 +3427,100 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a full backup upgrades a pending activity upload for the same wallet`() = test {
+        val category = BackupCategory.ACTIVITY
+        val changes = MutableStateFlow(0L)
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(changes)
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            sut.triggerBackup(category).getOrThrow()
+            changes.update { it + 1 }
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            sut.scheduleFullBackup()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `a full backup requested during unchanged activity capture still uploads`() = test {
+        val category = BackupCategory.ACTIVITY
+        val changes = MutableStateFlow(0L)
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(changes)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred(Unit)) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            sut.triggerBackup(category).getOrThrow()
+            whenever(activityRepo.getActivities()).doSuspendableAnswer {
+                entered.complete(Unit)
+                resume.await()
+                Result.success(emptyList())
+            }
+            changes.update { it + 1 }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+            assertTrue(entered.isCompleted)
+
+            sut.scheduleFullBackup()
+            advanceTimeBy(10_000)
+            runCurrent()
+            resume.complete(Unit)
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+        } finally {
+            resume.complete(Unit)
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `a new wallet owner uploads activity even if its payload matches the previous owner`() = test {
+        val category = BackupCategory.ACTIVITY
+        val changes = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(changes)
+        stubBackupStatuses(MutableStateFlow(emptyMap()), CompletableDeferred(Unit)) {}
+
+        sut.triggerBackup(category).getOrThrow()
+        vssClients.withSuspendedClients(shutdown = {}) {}
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            changes.update { it + 1 }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
     fun `scheduled activity backup uploads a reverted payload after a failed upload`() = test {
         val activitiesChanged = MutableStateFlow(0L)
         stubBackupObservers()
@@ -3527,6 +4086,7 @@ class BackupRepoTest : BaseUnitTest() {
         ioDispatcher = ioDispatcher,
         cacheStore = cacheStore,
         vssBackupClient = vssBackupClient,
+        vssClients = vssClients,
         vssBackupClientLdk = vssBackupClientLdk,
         settingsStore = settingsStore,
         widgetsStore = widgetsStore,
@@ -3556,7 +4116,7 @@ class BackupRepoTest : BaseUnitTest() {
         lightningService = lightningService,
         clock = clock,
         db = db,
-        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
+        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)

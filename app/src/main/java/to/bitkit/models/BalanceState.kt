@@ -14,6 +14,9 @@ data class BalanceState(
     val balanceInTransferToSavings: ULong = 0uL,
     val balanceInTransferToSpending: ULong = 0uL,
     val hardwareWallets: List<HwWalletBalance> = emptyList(),
+    /** Spark amounts included in the totals; null in caches whose rail split is unknown. */
+    val sparkBalanceSats: ULong? = null,
+    val sparkPendingDepositSats: ULong? = null,
 ) {
     val totalSats
         get() = totalOnchainSats

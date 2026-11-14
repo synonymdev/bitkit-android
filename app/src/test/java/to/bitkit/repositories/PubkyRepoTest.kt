@@ -51,6 +51,8 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
@@ -1303,6 +1305,42 @@ class PubkyRepoTest : BaseUnitTest() {
         val error = assertIs<PubkyProfileTagsNotSavedError>(result.exceptionOrNull())
         assertEquals("revision-", error.base.revision)
         verifyBlocking(pubkyService, never()) { publishPaykitProfile(any(), any()) }
+    }
+
+    @Test
+    fun `avatar migration from a replaced sign-in cannot write even for the same key`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(
+            paykitRecord(createPaykitProfile("Old", image = "pubky://self/pub/paykit/blobs/avatar.jpg"))
+        )
+        val readStarted = CompletableDeferred<Unit>()
+        val finishRead = CompletableDeferred<Unit>()
+        whenever(pubkyService.fetchFile(any(), any())).doSuspendableAnswer {
+            readStarted.complete(Unit)
+            finishRead.await()
+            byteArrayOf(1)
+        }
+        val load = async { sut.loadProfile() }
+        readStarted.await()
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(pubkyService.deriveSecretKey("test mnemonic")).thenReturn("restored_secret")
+        whenever(pubkyService.publicKeyFromSecret("restored_secret")).thenReturn(VALID_SELF_KEY)
+        sut.restoreSessionBackupState(PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed)).getOrThrow()
+        assertFalse(sut.isCurrent(originalSignIn))
+        clearInvocations(pubkyService)
+
+        finishRead.complete(Unit)
+        load.await()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertNull(sut.profile.value)
+        verify(pubkyService, never()).uploadPubkyAppAvatar(any(), any(), any())
+        verify(pubkyService, never()).publishPubkyProfile(any(), anyOrNull(), any())
+        verify(pubkyService, never()).publishPaykitProfile(any(), any())
+        assertEquals(PubkyStoreData(), store.data)
     }
 
     @Test
@@ -3259,6 +3297,268 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scheduled restore activation returns while authentication is held and coalesces duplicates`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        val release = CompletableDeferred<String>()
+        whenever(pubkyService.importSession("restored_session")).doSuspendableAnswer { release.await() }
+        clearInvocations(pubkyService)
+        try {
+            repeat(3) { sut.scheduleInitializationAfterRestore() }
+            runCurrent()
+            assertNull(sut.publicKey.value)
+            assertFalse(sut.isAuthenticated.value)
+            verify(pubkyService).importSession("restored_session")
+        } finally {
+            release.complete(VALID_SELF_KEY)
+        }
+        advanceUntilIdle()
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verify(pubkyService).importSession("restored_session")
+    }
+
+    @Test
+    fun `scheduled metadata refresh preserves an identity already activated by restore`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        clearInvocations(pubkyService)
+        whenever(pubkyService.importSession("restored_session")).doSuspendableAnswer {
+            throw PaykitException.Transport("transport_error", "controlled unavailable re-import")
+        }
+        val refreshed = CompletableDeferred<Unit>()
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).doSuspendableAnswer {
+            refreshed.complete(Unit)
+            createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Refreshed"))
+        }
+        sut.scheduleInitializationAfterRestore()
+        yield()
+        advanceUntilIdle()
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isCurrent(originalSignIn))
+        assertFalse(sut.sessionRestorationFailed.value)
+        verify(pubkyService, never()).importSession(any())
+        withTimeout(1.seconds) { refreshed.await() }
+        verify(pubkyService).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+    }
+
+    @Test
+    fun `wipe drains a scheduled profile refresh without restoring its identity`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val credentials = mutableMapOf(
+            Keychain.Key.PAYKIT_SESSION.name to "saved_session",
+            Keychain.Key.PUBKY_SECRET_KEY.name to "local_secret",
+        )
+        whenever(keychain.loadString(any())).thenAnswer { credentials[it.getArgument<String>(0)] }
+        whenever(keychain.delete(any())).thenAnswer {
+            credentials.remove(it.getArgument<String>(0))
+            Unit
+        }
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(paykitRecord(createPaykitProfile("Old")))
+        val retryPublished = CompletableDeferred<Unit>()
+        whenever(pubkyService.publishPubkyProfile(any(), anyOrNull(), any()))
+            .thenAnswer { throw PaykitException.Identity("identity_error", "Missing capabilities") }
+            .thenAnswer {
+                retryPublished.complete(Unit)
+                createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Old"))
+            }
+        var refreshed = false
+        whenever(pubkyService.signIn("local_secret")).thenAnswer {
+            refreshed = true
+            Unit
+        }
+        val refreshStarted = CompletableDeferred<Unit>()
+        val finishRefresh = CompletableDeferred<Unit>()
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).doSuspendableAnswer {
+            if (refreshed) {
+                refreshStarted.complete(Unit)
+                finishRefresh.await()
+            }
+            VALID_SELF_KEY
+        }
+
+        sut.scheduleInitializationAfterRestore()
+        refreshStarted.await()
+        val wipe = async { sut.wipeLocalState() }
+        runCurrent()
+        finishRefresh.complete(Unit)
+        retryPublished.await()
+        wipe.await()
+        advanceUntilIdle()
+
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.hasIdentity())
+        assertTrue(credentials.isEmpty())
+        assertEquals(PubkyStoreData(), store.data)
+    }
+
+    @Test
+    fun `reconnect skips expected missing profile until local setup completes`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        profileSetupPending.value = true
+        clearInvocations(pubkyService)
+
+        repeat(3) {
+            assertFalse(sut.restoreSessionIfNeeded())
+            yield()
+            advanceUntilIdle()
+        }
+
+        assertTrue(sut.isCurrent(originalSignIn))
+        verify(pubkyService, never()).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+        verify(pubkyService, never()).importSession(any())
+        profileSetupPending.value = false
+        doSuspendableAnswer {
+            createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Completed"))
+        }.whenever(pubkyService).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+        assertFalse(sut.restoreSessionIfNeeded())
+        yield()
+        advanceUntilIdle()
+        assertEquals("Completed", sut.profile.value?.name)
+        verify(pubkyService).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+    }
+
+    @Test
+    fun `active identity retries its missing profile on reconnect without delaying wallet maintenance`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        assertNull(sut.profile.value)
+
+        val response = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            response.await()
+            createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Restored"))
+        }.whenever(pubkyService).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+        clearInvocations(pubkyService)
+        try {
+            repeat(3) { assertFalse(sut.restoreSessionIfNeeded()) }
+            yield()
+            runCurrent()
+            assertTrue(sut.isCurrent(originalSignIn))
+            verify(pubkyService).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+            assertTrue(sut.isLoadingProfile.value)
+            verify(pubkyService, never()).importSession(any())
+        } finally {
+            response.complete(Unit)
+        }
+        yield()
+        advanceUntilIdle()
+        assertEquals("Restored", sut.profile.value?.name)
+        assertFalse(sut.restoreSessionIfNeeded())
+        advanceUntilIdle()
+        verify(pubkyService).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+    }
+
+    @Test
+    fun `reconnect profile result cannot restore an ended identity`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val response = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            response.await()
+            createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Old"))
+        }.whenever(pubkyService).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+
+        try {
+            assertFalse(sut.restoreSessionIfNeeded())
+            yield()
+            runCurrent()
+            verify(pubkyService, times(3)).fetchPubkyProfileWithRevision(VALID_SELF_KEY)
+            assertTrue(sut.isLoadingProfile.value)
+            sut.restoreSessionBackupState(null).getOrThrow()
+            assertNull(sut.currentSignIn())
+        } finally {
+            response.complete(Unit)
+        }
+        yield()
+        advanceUntilIdle()
+        assertNull(sut.profile.value)
+    }
+
+    @Test
+    fun `new restored identity proceeds while old scheduled profile loading is held`() = test {
+        sut.awaitInitialization()
+        var session: String? = "first_session"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session = null }
+        whenever(pubkyService.importSession("first_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.importSession("second_session")).thenReturn(VALID_CONTACT_KEY_B)
+        val releaseFirst = CompletableDeferred<Unit>()
+        val releaseSecond = CompletableDeferred<Unit>()
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).doSuspendableAnswer {
+            releaseFirst.await()
+            createSnapshot(VALID_SELF_KEY, createPubkyProfile(name = "Obsolete"))
+        }
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_CONTACT_KEY_B)).doSuspendableAnswer {
+            releaseSecond.await()
+            createSnapshot(VALID_CONTACT_KEY_B, createPubkyProfile(name = "Current"))
+        }
+        try {
+            sut.scheduleInitializationAfterRestore()
+            runCurrent()
+            assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+            sut.restoreSessionBackupState(null).getOrThrow()
+            assertNull(sut.publicKey.value)
+            session = "second_session"
+            sut.scheduleInitializationAfterRestore()
+            runCurrent()
+            assertEquals(VALID_CONTACT_KEY_B, sut.publicKey.value)
+            releaseFirst.complete(Unit)
+            runCurrent()
+            sut.scheduleInitializationAfterRestore()
+            runCurrent()
+            verify(pubkyService).importSession("second_session")
+        } finally {
+            releaseFirst.complete(Unit)
+            releaseSecond.complete(Unit)
+        }
+        advanceUntilIdle()
+        assertEquals(VALID_CONTACT_KEY_B, sut.publicKey.value)
+        assertEquals("Current", sut.profile.value?.name)
+    }
+
+    @Test
+    fun `backup identity includes persisted and adopted credentials and fails on unreadable storage`() = test {
+        sut.awaitInitialization()
+        assertFalse(sut.hasIdentityForBackup())
+        val identityKeys = listOf(
+            Keychain.Key.PAYKIT_SESSION,
+            Keychain.Key.PUBKY_SECRET_KEY,
+            Keychain.Key.SHARED_PUBKY_SOURCE,
+        )
+        for (key in identityKeys) {
+            whenever(keychain.loadString(key.name)).thenReturn("stored")
+            assertTrue(sut.hasIdentityForBackup())
+            whenever(keychain.loadString(key.name)).thenReturn(null)
+        }
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { throw TestAppError("unreadable") }
+        assertTrue(runSuspendCatching { sut.hasIdentityForBackup() }.isFailure)
+    }
+
+    @Test
     fun `awaitInitialization shares startup and preserves it when a waiter is cancelled`() = test {
         val imported = CompletableDeferred<String>()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
@@ -4196,6 +4496,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `wipe completes while restoration profile loading remains in flight`() = test {
+        val store = stubGatedPubkyStore()
         sut.awaitInitialization()
         val credentials = mutableMapOf(Keychain.Key.PAYKIT_SESSION.name to "saved_session")
         whenever(keychain.loadString(any())).thenAnswer { credentials[it.getArgument<String>(0)] }
@@ -4229,6 +4530,32 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.profile.value)
         assertTrue(sut.contacts.value.isEmpty())
         verify(pubkyStore).reset()
+        assertEquals(PubkyStoreData(), store.data)
+    }
+
+    @Test
+    fun `wipe drains a missing profile setup update before clearing it`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.fetchPubkyProfileWithRevision(VALID_SELF_KEY)).thenReturn(null)
+        whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenReturn(null)
+        val updateStarted = CompletableDeferred<Unit>()
+        val finishUpdate = CompletableDeferred<Unit>()
+        whenever(settingsStore.setPubkyProfileSetupPending(true)).doSuspendableAnswer {
+            updateStarted.complete(Unit)
+            finishUpdate.await()
+            profileSetupPending.value = true
+        }
+        val load = async { sut.loadProfile() }
+        updateStarted.await()
+        val wipe = async { sut.wipeLocalState() }
+        runCurrent()
+
+        finishUpdate.complete(Unit)
+        load.await()
+        wipe.await()
+
+        assertNull(sut.publicKey.value)
+        assertFalse(profileSetupPending.value)
     }
 
     @Test
