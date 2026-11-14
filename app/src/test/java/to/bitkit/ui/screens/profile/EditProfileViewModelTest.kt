@@ -62,7 +62,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.showDeleteConfirmation()
         advanceUntilIdle()
         verify(pubkyRepo, times(1)).forgetUnrestoredIdentity()
-        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).deleteProfile()
         verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
         assertFalse(sut.uiState.value.showDeleteDialog)
 
@@ -115,7 +115,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
         val result = CompletableDeferred<Result<Unit>>()
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).doSuspendableAnswer { result.await() }
+        whenever(pubkyRepo.deleteProfile()).doSuspendableAnswer { result.await() }
 
         sut.showDeleteConfirmation()
         sut.deleteProfile()
@@ -131,7 +131,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         sut.showDeleteConfirmation()
         advanceUntilIdle()
-        verify(pubkyRepo, times(1)).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, times(1)).deleteProfile()
         verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
         verify(pubkyRepo, never()).signOut()
         assertFalse(sut.uiState.value.showDeleteDialog)
@@ -165,7 +165,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.showDeleteConfirmation()
         advanceUntilIdle()
         verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
-        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).deleteProfile()
         verify(pubkyRepo, never()).forgetUnrestoredIdentity()
         assertFalse(sut.uiState.value.showDeleteDialog)
 
@@ -187,7 +187,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `deleteProfile should emit success when repository delete succeeds`() = test {
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
 
         val sut = createSut()
         advanceUntilIdle()
@@ -201,14 +201,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
             verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
-            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(pubkyRepo).deleteProfile()
             verify(privatePaykitRepo).closeAndClear()
         }
     }
 
     @Test
     fun `profile created in Bitkit keeps delete copy`() = test {
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
 
@@ -222,7 +222,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `ring identity is unlinked with the same cleanup`() = test {
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
         val sut = createSut(isRingIdentity = true)
         advanceUntilIdle()
 
@@ -238,7 +238,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         verify(context, never()).getString(R.string.profile__delete_success)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
             verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
-            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(pubkyRepo).deleteProfile()
             verify(privatePaykitRepo).closeAndClear()
         }
     }
@@ -260,7 +260,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `retryDeleteProfile should emit success when repository delete succeeds`() = test {
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
 
         val sut = createSut()
         advanceUntilIdle()
@@ -274,14 +274,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
             verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
-            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(pubkyRepo).deleteProfile()
             verify(privatePaykitRepo).closeAndClear()
         }
     }
 
     @Test
     fun `deleteProfile should show retry dialog when delete still fails`() = test {
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
+        whenever(pubkyRepo.deleteProfile()).thenReturn(
             Result.failure(TestAppError("expired session")),
         )
 
@@ -299,7 +299,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `disconnectProfile should emit disconnect success`() = test {
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
+        whenever(pubkyRepo.deleteProfile()).thenReturn(
             Result.failure(TestAppError("expired session")),
         )
         whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
@@ -358,7 +358,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)) }
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
 
         sut.effects.test {
@@ -371,14 +371,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isDeleting)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
             verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
-            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(pubkyRepo).deleteProfile()
             verify(privatePaykitRepo).closeAndClear()
         }
     }
 
     @Test
     fun `dismissDeleteFailureDialog should hide retry dialog`() = test {
-        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
+        whenever(pubkyRepo.deleteProfile()).thenReturn(
             Result.failure(TestAppError("expired session")),
         )
 

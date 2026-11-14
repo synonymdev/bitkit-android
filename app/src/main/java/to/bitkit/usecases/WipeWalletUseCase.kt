@@ -67,9 +67,9 @@ class WipeWalletUseCase @Inject constructor(
         lightningRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
-                connectionRecovery.withIdentityChange {
+                connectionRecovery.withIdentityChange(beforeClientsSuspend = { backupRepo.reset() }) {
                     paykitSdkService.withWalletWipe {
-                        stopNode().getOrThrow()
+                        lightningRepo.stop().getOrThrow()
                         cleanupRemote()
                         wipeLocal(walletIndex, resetWalletState).getOrThrow()
                         onSuccess()
@@ -79,19 +79,14 @@ class WipeWalletUseCase @Inject constructor(
         } finally {
             lightningRepo.setWiping(false)
             backupRepo.setWiping(false)
+            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+                backupRepo.startObservingBackups()
+            }
             wipeMutex.unlock()
         }
         return result.onFailure {
             Logger.error("Failed to wipe wallet", it, context = TAG)
-            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
-                backupRepo.startObservingBackups()
-            }
         }
-    }
-
-    private suspend fun stopNode(): Result<Unit> {
-        backupRepo.reset()
-        return lightningRepo.stop()
     }
 
     private suspend fun cleanupRemote() {
