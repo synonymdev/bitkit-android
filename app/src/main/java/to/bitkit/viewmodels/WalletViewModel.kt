@@ -825,6 +825,7 @@ class WalletViewModel @Inject constructor(
                     walletRepo.refreshBip21()
                 }
                 ensureSwapUpdatesRunning()
+                if (pubkySwapsRouteRepo.isEnabled) pubkySwapsRouteRepo.resumeUnfinishedSwaps()
                 // checkForOrphanedChannelMonitorRecovery()
             }
     }

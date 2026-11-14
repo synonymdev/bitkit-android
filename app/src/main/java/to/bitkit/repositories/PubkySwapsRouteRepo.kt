@@ -15,11 +15,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
@@ -29,6 +31,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.appScope
+import to.bitkit.data.CacheStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -57,6 +60,7 @@ class PubkySwapsRouteRepo @Inject constructor(
     private val keychain: Keychain,
     private val pubkyRepo: PubkyRepo,
     private val lightningRepo: LightningRepo,
+    private val cacheStore: CacheStore,
 ) {
     companion object {
         private const val TAG = "PubkySwapsRouteRepo"
@@ -64,11 +68,8 @@ class PubkySwapsRouteRepo @Inject constructor(
         private val POLL_INTERVAL = 2.seconds
         private val CLAIM_TIMEOUT = 10.minutes
 
-        /** How often a broadcast claim is advanced, so bitkit-core rebroadcasts it until it confirms. */
+        /** How often a swap is advanced in the background, so bitkit-core rebroadcasts its claim until it confirms. */
         private val CONFIRMATION_POLL_INTERVAL = 30.seconds
-
-        /** How long a broadcast claim is advanced in the background before polling stops. */
-        private val CONFIRMATION_TIMEOUT = 60.minutes
 
         /** The most providers bitkit-core asks in one restore; it reports the others incomplete. */
         private const val MAX_RESTORE_PROVIDERS = 30
@@ -87,6 +88,12 @@ class PubkySwapsRouteRepo @Inject constructor(
 
     /** Swaps a restore already reported, so a provider asked again never reports one twice. */
     private val reportedSwaps = ConcurrentHashMap.newKeySet<String>()
+
+    /** Swaps a caller awaits the claim of, which no resume advances beside it. */
+    private val claiming = ConcurrentHashMap.newKeySet<String>()
+
+    /** Swaps advanced in the background, each by one loop. */
+    private val advancing = ConcurrentHashMap.newKeySet<String>()
 
     val isEnabled: Boolean get() = Env.isPubkySwapsRouteEnabled
 
@@ -176,6 +183,7 @@ class PubkySwapsRouteRepo @Inject constructor(
         // Only a restore that returned its swaps marks their providers read, so a failed one asks them again.
         restoredProviders += readInFull
         if (incomplete.isNotEmpty()) Logger.warn("Swap lists incomplete from '$incomplete'", context = TAG)
+        track(restored + known)
         RestoredPubkySwaps(
             restored = restored.filter(reportedSwaps::add),
             known = known.filter(reportedSwaps::add),
@@ -208,8 +216,21 @@ class PubkySwapsRouteRepo @Inject constructor(
     private fun candidates(): List<String> =
         (Env.pubkySwapsProviders + pubkyRepo.contacts.value.map { it.publicKey }).distinct()
 
+    /** Commits the quote and keeps its swap until its claim confirms or it fails, so a later start resumes it. */
     suspend fun commit(quoteId: String): Result<PubkySwapRoutePayment> = withSecrets { mnemonic, passphrase ->
-        pubkySwapsCommitRoute(quoteId, Env.electrumServerUrl, mnemonic, passphrase)
+        pubkySwapsCommitRoute(quoteId, Env.electrumServerUrl, mnemonic, passphrase).also { track(listOf(it.swapId)) }
+    }
+
+    /**
+     * Advances each swap a closed app left unfinished until its claim confirms or it fails: the provider settles the
+     * hold invoice once it sees the claim, so a claim that never confirms could leave the contact unpaid.
+     */
+    fun resumeUnfinishedSwaps() {
+        scope.launch {
+            cacheStore.data.first().unfinishedPubkySwaps
+                .filterNot { it in claiming }
+                .forEach { advanceInBackground(it) }
+        }
     }
 
     /**
@@ -225,39 +246,77 @@ class PubkySwapsRouteRepo @Inject constructor(
         timeout: Duration = CLAIM_TIMEOUT,
         holdFailure: Job? = null,
     ): Result<String> = scope.async {
-        var lastFailure: Throwable? = null
-        val poll = async {
-            withTimeoutOrNull(timeout) {
-                pollClaim(swapId, POLL_INTERVAL, untilConfirmed = false) { lastFailure = it }
-            }
-        }
-        // A cancelled watch, as on a cleared screen, says nothing about the hold payment, so the swap keeps advancing.
-        val holdFailed = CompletableDeferred<Unit>()
-        val handle = holdFailure?.invokeOnCompletion { if (it == null) holdFailed.complete(Unit) }
-        val isHoldFailed = select {
-            poll.onJoin { false }
-            holdFailed.onJoin { true }
-        }
-        handle?.dispose()
-        if (isHoldFailed) {
-            poll.cancel()
-            return@async Result.failure(PubkySwapHoldFailedException(swapId))
-        }
-        poll.await()?.onSuccess { advanceInBackground(swapId) } ?: run {
-            // The provider may still settle the hold payment, so the swap keeps advancing towards its claim.
-            advanceInBackground(swapId)
-            Result.failure(PubkySwapClaimTimeoutException(swapId, lastFailure))
+        claiming.add(swapId)
+        try {
+            awaitClaimOnce(swapId, timeout, holdFailure)
+        } finally {
+            claiming.remove(swapId)
         }
     }.await()
 
+    private suspend fun awaitClaimOnce(swapId: String, timeout: Duration, holdFailure: Job?): Result<String> =
+        coroutineScope {
+            var lastFailure: Throwable? = null
+            val poll = async {
+                withTimeoutOrNull(timeout) {
+                    pollClaim(swapId, POLL_INTERVAL, untilConfirmed = false) { lastFailure = it }
+                }
+            }
+            // A cancelled watch, as on a cleared screen, says nothing about the hold payment, so the swap keeps
+            // advancing.
+            val holdFailed = CompletableDeferred<Unit>()
+            val handle = holdFailure?.invokeOnCompletion { if (it == null) holdFailed.complete(Unit) }
+            val isHoldFailed = select {
+                poll.onJoin { false }
+                holdFailed.onJoin { true }
+            }
+            handle?.dispose()
+            if (isHoldFailed) {
+                poll.cancel()
+                untrack(swapId)
+                return@coroutineScope Result.failure(PubkySwapHoldFailedException(swapId))
+            }
+            when (val claim = poll.await()) {
+                null -> {
+                    // The provider may still settle the hold payment, so the swap keeps advancing towards its claim.
+                    advanceInBackground(swapId)
+                    Result.failure(PubkySwapClaimTimeoutException(swapId, lastFailure))
+                }
+                else -> claim.onSuccess { advanceInBackground(swapId) }.onFailure { untrack(swapId) }
+            }
+        }
+
+    /** Advances the swap until its claim confirms or it fails, in one loop per swap. */
     private fun advanceInBackground(swapId: String) {
-        scope.launch { withTimeoutOrNull(CONFIRMATION_TIMEOUT) { awaitConfirmation(swapId) } }
+        if (!advancing.add(swapId)) return
+        scope.launch {
+            try {
+                awaitConfirmation(swapId)
+            } finally {
+                advancing.remove(swapId)
+            }
+        }
     }
 
     private suspend fun awaitConfirmation(swapId: String) {
         pollClaim(swapId, CONFIRMATION_POLL_INTERVAL, untilConfirmed = true) {}
             .onSuccess { Logger.info("Confirmed Pubky Swaps claim '$it' for '$swapId'", context = TAG) }
             .onFailure { Logger.warn("Failed to confirm Pubky Swaps claim for '$swapId'", it, context = TAG) }
+        untrack(swapId)
+    }
+
+    // A failed write never fails the swap it records: the commit already happened.
+    private suspend fun track(swapIds: List<String>) {
+        if (swapIds.isEmpty()) return
+        runSuspendCatching {
+            cacheStore.update { it.copy(unfinishedPubkySwaps = (it.unfinishedPubkySwaps + swapIds).distinct()) }
+        }.onFailure { Logger.warn("Failed to record unfinished Pubky Swaps routes '$swapIds'", it, context = TAG) }
+    }
+
+    private suspend fun untrack(swapId: String) {
+        runSuspendCatching {
+            cacheStore.update { it.copy(unfinishedPubkySwaps = it.unfinishedPubkySwaps - swapId) }
+        }.onFailure { Logger.warn("Failed to drop finished Pubky Swaps route '$swapId'", it, context = TAG) }
     }
 
     private suspend fun pollClaim(

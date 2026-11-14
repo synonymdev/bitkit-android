@@ -356,6 +356,8 @@ data class AppCacheData(
     val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
     /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */
     val sentSparkWithdrawals: List<SentSparkWithdrawal> = listOf(),
+    /** Pubky Swaps routes committed or restored whose claim has not confirmed yet, so each start resumes them. */
+    val unfinishedPubkySwaps: List<String> = listOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */

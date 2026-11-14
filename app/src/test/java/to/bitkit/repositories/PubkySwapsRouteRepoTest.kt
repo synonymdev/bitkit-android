@@ -1,9 +1,11 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.PubkySwapRestoreReport
+import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.PubkySwapRouteStatus
 import com.synonym.bitkitcore.pubkySwapsAdvance
+import com.synonym.bitkitcore.pubkySwapsCommitRoute
 import com.synonym.bitkitcore.pubkySwapsRestore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -11,6 +13,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -26,6 +29,8 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.PubkyProfile
 import to.bitkit.test.BaseUnitTest
@@ -50,16 +55,23 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     private val contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val pubkyRepo = mock<PubkyRepo> { on { contacts } doReturn contacts }
     private val lightningRepo = mock<LightningRepo>()
+    private val cacheData = MutableStateFlow(AppCacheData())
+    private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
     private lateinit var sut: PubkySwapsRouteRepo
 
     @Before
     fun setUp() {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("mnemonic")
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.update(transform)
+        }
         sut = PubkySwapsRouteRepo(
             ioDispatcher = testDispatcher,
             keychain = keychain,
             pubkyRepo = pubkyRepo,
             lightningRepo = lightningRepo,
+            cacheStore = cacheStore,
         )
     }
 
@@ -126,6 +138,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
                 .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
             val holdFailure = CompletableDeferred<Unit>()
+            cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
 
             val result = async { sut.awaitClaim(SWAP_ID, holdFailure = holdFailure) }
             runCurrent()
@@ -133,6 +146,8 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertIs<PubkySwapHoldFailedException>(result.await().exceptionOrNull())
+            // The provider never funds a swap whose hold payment failed, so no later start resumes it.
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
             core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(1))
         }
     }
@@ -153,6 +168,63 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertEquals(Result.success(CLAIM_TXID), result.await())
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `commit keeps the swap to resume until its claim confirms`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsCommitRoute(any(), any(), any(), anyOrNull()) } }
+                .thenReturn(swapPayment())
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID)))
+                .thenReturn(status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID)))
+
+            sut.commit("quote")
+            assertEquals(listOf(SWAP_ID), cacheData.value.unfinishedPubkySwaps)
+
+            sut.awaitClaim(SWAP_ID)
+            advanceUntilIdle()
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps advances a stored swap past an hour until its claim confirms`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            var calls = 0
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                // At 30 s apart, 150 unconfirmed claims outlast an hour.
+                if (++calls <= 150) {
+                    status(PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID))
+                } else {
+                    status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID))
+                }
+            }
+
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            assertEquals(151, calls)
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `resumeUnfinishedSwaps drops a swap that failed`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(PubkySwapRouteState.Failed("refunded")))
+
+            sut.resumeUnfinishedSwaps()
+            advanceUntilIdle()
+
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
         }
     }
 
@@ -220,6 +292,16 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             block()
         }
     }
+
+    private fun swapPayment() = PubkySwapRoutePayment(
+        swapId = SWAP_ID,
+        invoice = "invoice",
+        debitSat = 20_100u,
+        deliveredSat = 20_000u,
+        destinationAddress = "address",
+        htlcAddress = "htlc",
+        timeoutBlockHeight = 0u,
+    )
 
     private fun report(
         restored: List<String> = emptyList(),
