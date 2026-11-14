@@ -386,30 +386,6 @@ class SettingsViewModel @Inject constructor(
     val isQuickpayEnabled = settingsStore.data.map { it.isQuickPayEnabled }
         .asStateFlow(initialValue = false)
 
-    fun setIsQuickPayEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isQuickPayEnabled = value) }
-        }
-    }
-
-    val quickPayAmount = settingsStore.data.map { it.quickPayAmount }
-        .asStateFlow(initialValue = 5)
-
-    fun setQuickPayAmount(value: Int) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(quickPayAmount = value) }
-        }
-    }
-
-    val quickPayDailyLimitMultiplier = settingsStore.data.map { it.quickPayDailyLimitMultiplier }
-        .asStateFlow(initialValue = 5)
-
-    fun setQuickPayDailyLimitMultiplier(value: Int) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(quickPayDailyLimitMultiplier = value) }
-        }
-    }
-
     val enableSwipeToHideBalance = settingsStore.data.map { it.enableSwipeToHideBalance }
         .asStateFlow(initialValue = true)
 

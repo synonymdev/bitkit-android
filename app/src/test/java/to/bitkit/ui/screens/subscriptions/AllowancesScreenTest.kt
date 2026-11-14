@@ -12,10 +12,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.synonym.paykit.AllowanceLifecycleState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -188,20 +191,34 @@ class AllowancesScreenTest {
     @Config(qualifiers = "w360dp-h800dp")
     @Test
     fun `a tap on a row under the pin check does not open the allowance`() {
+        val rowCenter = composeRule.onNode(
+            SemanticsMatcher("row") {
+                it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("AllowanceRow-") == true
+            }
+        ).fetchSemanticsNode().boundsInRoot.center
         click("AllowancesResume")
         composeRule.onNodeWithTag("N1").assertExists()
 
         ShadowSystemClock.advanceBy(1.seconds.toJavaDuration())
-        composeRule.onNode(
-            SemanticsMatcher("row") {
-                it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("AllowanceRow-") == true
-            }
-        ).performClick()
+        composeRule.onRoot().performTouchInput { click(rowCenter) }
 
         composeRule.runOnIdle {
             assertEquals(0, allowanceClicks, "a tap on the PIN overlay reached the allowance row beneath it")
         }
         composeRule.onNodeWithTag("N1").assertExists()
+    }
+
+    @Test
+    fun `the controls under the pin check are hidden from accessibility until it closes`() {
+        click("AllowancesResume")
+        composeRule.onNodeWithTag("N1").assertExists()
+
+        composeRule.onNodeWithTag("AllowancesResume").assertDoesNotExist()
+
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+
+        composeRule.onNodeWithTag("N1").assertDoesNotExist()
+        composeRule.onNodeWithTag("AllowancesResume").assertExists()
     }
 
     // Buttons drop clicks closer together than their debounce, which a fresh test clock always is.

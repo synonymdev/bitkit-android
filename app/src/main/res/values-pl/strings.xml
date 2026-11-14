@@ -585,6 +585,7 @@
     <string name="security__pin_security_button">Zabezpiecz portfel</string>
     <string name="security__pin_choose_header">Wybierz 4 cyfrowy kod PIN</string>
     <string name="security__pin_choose_text">Użyj kodu PIN, który zapamiętasz. Jeśli zapomnisz kodu PIN, możesz go zresetować, ale będzie to wymagało przywrócenia portfela.</string>
+    <string name="security__pin_quickpay">Proszę podaj swój kod PIN, aby potwierdzić tę zmianę QuickPay.</string>
     <string name="security__pin_retype_header">Wpisz ponownie 4 cyfrowy kod PIN</string>
     <string name="security__pin_retype_text">Wpisz proszę ponownie 4 cyfrowy kod PIN aby zakończyć konfigurację.</string>
     <string name="security__pin_not_match">Spróbuj ponownie, kody PIN się różnią.</string>

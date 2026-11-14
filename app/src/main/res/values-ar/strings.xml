@@ -589,6 +589,7 @@
     <string name="security__pin_forgot_title">نسيت PIN؟</string>
     <string name="security__pin_last_attempt">المحاولة الأخيرة. إدخال رمز PIN خاطئ مرة أخرى سيعيد تعيين محفظتك.</string>
     <string name="security__pin_not_match">حاول مرة أخرى، هذا ليس نفس رمز PIN.</string>
+    <string name="security__pin_quickpay">يرجى إدخال رمز PIN لتأكيد هذا التغيير في QuickPay.</string>
     <string name="security__pin_retype_header">أعد كتابة رمز PIN من 4 أرقام</string>
     <string name="security__pin_retype_text">يرجى إعادة كتابة رمز PIN المكون من 4 أرقام لإكمال عملية الإعداد.</string>
     <string name="security__pin_security_button">تأمين المحفظة</string>

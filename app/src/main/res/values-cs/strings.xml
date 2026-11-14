@@ -609,6 +609,7 @@
     <string name="security__pin_forgot_title">Zapomněli jste PIN?</string>
     <string name="security__pin_last_attempt">Poslední pokus. Opětovným zadáním špatného PIN se vaše peněženka resetuje.</string>
     <string name="security__pin_not_match">Zkuste to znovu, toto není stejný PIN.</string>
+    <string name="security__pin_quickpay">Pro potvrzení této změny QuickPay prosím zadejte svůj PIN kód.</string>
     <string name="security__pin_retype_header">Znovu zadejte 4místný PIN</string>
     <string name="security__pin_retype_text">Chcete-li dokončit proces nastavení, zadejte znovu svůj 4místný kód PIN.</string>
     <string name="security__pin_security_button">Zabezpečit peněženku</string>

@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.requiresPaymentAuth
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
@@ -230,7 +231,7 @@ class UsdtViewModel @Inject constructor(
             _state.update { it.copy(warning = warning) }
             return@launch
         }
-        if (settings.isPinEnabled && settings.isPinForPaymentsEnabled) {
+        if (settings.requiresPaymentAuth) {
             _state.update { it.copy(authenticationRequired = true) }
         } else {
             send(quote)

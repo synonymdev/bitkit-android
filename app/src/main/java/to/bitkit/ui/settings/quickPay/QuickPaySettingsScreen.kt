@@ -19,34 +19,43 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.PaymentAuthorizationHost
 import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.SettingsViewModel
 
 @Composable
 fun QuickPaySettingsScreen(
     onBack: () -> Unit,
-    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    viewModel: QuickPaySettingsViewModel = hiltViewModel(),
 ) {
-    val isQuickPayEnabled by settingsViewModel.isQuickpayEnabled.collectAsStateWithLifecycle()
-    val quickPayAmount by settingsViewModel.quickPayAmount.collectAsStateWithLifecycle()
-    val quickPayDailyLimitMultiplier by settingsViewModel.quickPayDailyLimitMultiplier.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val authorization = uiState.authorization
 
-    QuickPaySettingsScreenContent(
-        isQuickPayEnabled = isQuickPayEnabled,
-        quickPayAmount = quickPayAmount,
-        quickPayDailyLimitMultiplier = quickPayDailyLimitMultiplier,
-        onToggleQuickPay = settingsViewModel::setIsQuickPayEnabled,
-        onQuickPayAmountChange = settingsViewModel::setQuickPayAmount,
-        onQuickPayDailyLimitMultiplierChange = settingsViewModel::setQuickPayDailyLimitMultiplier,
-        onBack = onBack,
-    )
+    PaymentAuthorizationHost(
+        useBiometrics = authorization?.useBiometrics,
+        pinDescriptionRes = R.string.security__pin_quickpay,
+        onCancel = viewModel::onAuthorizationCancelled,
+        onVerify = { authorization?.let(viewModel::onAuthorized) },
+        // Insets the PIN check with the screen; the content's ScreenColumn then finds them consumed.
+        modifier = Modifier.screen(),
+    ) {
+        QuickPaySettingsScreenContent(
+            isQuickPayEnabled = uiState.isQuickPayEnabled,
+            quickPayAmount = uiState.quickPayAmount,
+            quickPayDailyLimitMultiplier = uiState.quickPayDailyLimitMultiplier,
+            onToggleQuickPay = viewModel::setQuickPayEnabled,
+            onQuickPayAmountChange = viewModel::setQuickPayAmount,
+            onQuickPayDailyLimitMultiplierChange = viewModel::setQuickPayDailyLimitMultiplier,
+            onBack = onBack,
+        )
+    }
 }
 
 @Composable
@@ -54,6 +63,7 @@ fun QuickPaySettingsScreenContent(
     isQuickPayEnabled: Boolean,
     quickPayAmount: Int,
     quickPayDailyLimitMultiplier: Int,
+    modifier: Modifier = Modifier,
     onToggleQuickPay: (Boolean) -> Unit = {},
     onQuickPayAmountChange: (Int) -> Unit = {},
     onQuickPayDailyLimitMultiplierChange: (Int) -> Unit = {},
@@ -64,7 +74,7 @@ fun QuickPaySettingsScreenContent(
     val dailyLimitUsd = quickPayAmount * quickPayDailyLimitMultiplier
     val multiplierFormat = stringResource(R.string.settings__quickpay__settings__multiplier_format)
 
-    ScreenColumn {
+    ScreenColumn(modifier = modifier) {
         AppTopBar(
             titleText = stringResource(R.string.settings__quickpay__nav_title),
             onBackClick = onBack,

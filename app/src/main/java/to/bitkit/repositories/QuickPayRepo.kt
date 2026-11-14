@@ -1,18 +1,25 @@
 package to.bitkit.repositories
 
+import androidx.compose.runtime.Immutable
 import com.synonym.bitkitcore.LnurlPayData
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,7 +33,9 @@ import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.requiresPaymentAuth
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.runSuspendCatching
@@ -69,11 +78,17 @@ class QuickPayRepo @Inject constructor(
     private val opsByKey = mutableMapOf<String, InFlightOp>()
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
     private val unackedFailures = ConcurrentHashMap<String, Throwable>()
+    private val settingsCommands = Channel<SettingsCommand>(Channel.UNLIMITED)
 
     private val _unhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
 
     /** Failures delivered to a session but never handled by its UI before detach. */
     val unhandledFailures: SharedFlow<Throwable> = _unhandledFailures.asSharedFlow()
+
+    private val _pendingSettingsChange = MutableStateFlow<QuickPayAuthorization?>(null)
+
+    /** The PIN or biometric check a QuickPay settings change waits on, or null when no check is open. */
+    val pendingSettingsChange: StateFlow<QuickPayAuthorization?> = _pendingSettingsChange.asStateFlow()
 
     init {
         scope.launch {
@@ -86,6 +101,7 @@ class QuickPayRepo @Inject constructor(
         }
         // The lookup waits for Spark's history, so a first Spark sync after the node's runs the reconcile again.
         scope.launch { lightningRepo.isSparkSynced.filter { it }.collect { reconcileAgainstLdk() } }
+        scope.launch { for (command in settingsCommands) handleSettingsCommand(command) }
     }
 
     fun attach(session: QuickPaySession): Flow<QuickPaySessionEvent> {
@@ -141,6 +157,71 @@ class QuickPayRepo @Inject constructor(
             )
             false
         }
+    }
+
+    /**
+     * Queues [change] behind every earlier settings call, so changes are decided in call order. When payments need a
+     * PIN and [change] enables QuickPay or raises one of its limits against the settings current at that point, it
+     * saves nothing and opens a check in [pendingSettingsChange], or is ignored while a check is already open. Any
+     * other change saves at once and closes an open check. The result completes once the change is decided.
+     */
+    fun requestSettingsChange(change: QuickPayChange): Deferred<Result<Unit>> =
+        enqueueSettingsCommand { SettingsCommand.Request(change, it) }
+
+    /** Saves the change behind [authorization] once its check passed, only if it is the open check, and closes it. */
+    suspend fun applyAuthorizedSettingsChange(authorization: QuickPayAuthorization): Result<Unit> =
+        withContext(ioDispatcher) {
+            enqueueSettingsCommand { SettingsCommand.Apply(authorization, it) }.await()
+        }
+
+    /** Closes the open check once every earlier settings call is decided, so none of them opens a check after it. */
+    fun cancelSettingsChange() {
+        settingsCommands.trySend(SettingsCommand.Cancel)
+    }
+
+    private fun enqueueSettingsCommand(
+        command: (CompletableDeferred<Result<Unit>>) -> SettingsCommand,
+    ): Deferred<Result<Unit>> {
+        val result = CompletableDeferred<Result<Unit>>()
+        settingsCommands.trySend(command(result))
+        return result
+    }
+
+    private suspend fun handleSettingsCommand(command: SettingsCommand) {
+        when (command) {
+            is SettingsCommand.Request -> command.result.complete(
+                runSuspendCatching { decideSettingsChange(command.change) },
+            )
+            is SettingsCommand.Apply -> command.result.complete(
+                runSuspendCatching { saveAuthorizedSettingsChange(command.authorization) },
+            )
+            SettingsCommand.Cancel -> _pendingSettingsChange.update { null }
+        }
+    }
+
+    private suspend fun decideSettingsChange(change: QuickPayChange) {
+        val open = _pendingSettingsChange.value
+        var next = open
+        settingsStore.update { settings ->
+            when {
+                !settings.requiresPaymentAuth || !change.isRaise(settings) -> {
+                    next = null
+                    change.applyTo(settings)
+                }
+                open == null -> {
+                    next = QuickPayAuthorization(change, settings.isBiometricEnabled)
+                    settings
+                }
+                else -> settings
+            }
+        }
+        _pendingSettingsChange.update { next }
+    }
+
+    private suspend fun saveAuthorizedSettingsChange(authorization: QuickPayAuthorization) {
+        if (_pendingSettingsChange.value !== authorization) throw QuickPayChangeNotPendingError()
+        _pendingSettingsChange.update { null }
+        settingsStore.update(authorization.change::applyTo)
     }
 
     internal suspend fun reserveBound(
@@ -764,6 +845,46 @@ class QuickPayRepo @Inject constructor(
     private enum class PreparePayResult { LIVE, RECOVERED, FRESH, REJECTED }
 
     private enum class AmbiguousApply { UNCHANGED, SUCCEEDED, ALREADY_PAID, FAILED }
+
+    private sealed interface SettingsCommand {
+        data class Request(val change: QuickPayChange, val result: CompletableDeferred<Result<Unit>>) : SettingsCommand
+        data class Apply(
+            val authorization: QuickPayAuthorization,
+            val result: CompletableDeferred<Result<Unit>>,
+        ) : SettingsCommand
+        data object Cancel : SettingsCommand
+    }
+}
+
+/**
+ * A pending PIN or biometric check before [change] is saved. Compared by identity, so only the instance the repo
+ * issued can save its change.
+ */
+@Immutable
+class QuickPayAuthorization(
+    val change: QuickPayChange,
+    val useBiometrics: Boolean,
+)
+
+/** One QuickPay setting the user asked to change, with its new value. */
+sealed interface QuickPayChange {
+    fun isRaise(settings: SettingsData): Boolean
+    fun applyTo(settings: SettingsData): SettingsData
+
+    data class Enabled(val value: Boolean) : QuickPayChange {
+        override fun isRaise(settings: SettingsData) = value && !settings.isQuickPayEnabled
+        override fun applyTo(settings: SettingsData) = settings.copy(isQuickPayEnabled = value)
+    }
+
+    data class Amount(val value: Int) : QuickPayChange {
+        override fun isRaise(settings: SettingsData) = value > settings.quickPayAmount
+        override fun applyTo(settings: SettingsData) = settings.copy(quickPayAmount = value)
+    }
+
+    data class DailyLimitMultiplier(val value: Int) : QuickPayChange {
+        override fun isRaise(settings: SettingsData) = value > settings.quickPayDailyLimitMultiplier
+        override fun applyTo(settings: SettingsData) = settings.copy(quickPayDailyLimitMultiplier = value)
+    }
 }
 
 fun interface QuickPayInvoiceParser {
@@ -831,6 +952,8 @@ data class QuickPayCompletionOutcome(
 class QuickPayConversionError : AppError("Currency conversion failed")
 
 class QuickPayAlreadyPaidError : AppError("Invoice already paid")
+
+class QuickPayChangeNotPendingError : AppError("QuickPay change is not the pending check")
 
 class QuickPayPaymentFailedError(
     val paymentHash: String,

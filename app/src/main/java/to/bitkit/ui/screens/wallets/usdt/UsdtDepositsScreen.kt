@@ -45,12 +45,14 @@ import com.synonym.bitkitcore.UsdtDestination
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.requiresPaymentAuth
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PaymentAuthentication
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
@@ -97,13 +99,13 @@ internal fun UsdtDepositsScreen(
     DepositPolling(state.detail, lifecycle, approval != null, deposits::refreshDetail)
     BackHandler(onBack = back)
     if (authentication) {
-        UsdtAuthentication(
+        PaymentAuthentication(
             useBiometrics = settings.isBiometricEnabled,
             onCancel = {
                 authentication = false
                 approval = null
             },
-            onVerified = {
+            onVerify = {
                 authentication = false
                 refund()
             },
@@ -169,7 +171,7 @@ private suspend fun authorizeRefund(
 ) {
     wallet.readPaymentSettings {
         if (!isCurrent()) return@readPaymentSettings
-        if (it.isPinEnabled && it.isPinForPaymentsEnabled) onAuthenticate() else onRefund()
+        if (it.requiresPaymentAuth) onAuthenticate() else onRefund()
     }
 }
 
