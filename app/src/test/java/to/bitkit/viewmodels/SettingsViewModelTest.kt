@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -16,6 +17,7 @@ import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
@@ -25,6 +27,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -33,6 +36,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -252,7 +256,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(contactPaymentSettingsRepo).setEnabled(true)
-        assertFalse(sut.isUpdatingContactPayments.value)
+        assertNull(sut.pendingContactPayments.value)
     }
 
     @Test
@@ -262,7 +266,63 @@ class SettingsViewModelTest : BaseUnitTest() {
 
         verify(contactPaymentSettingsRepo).setPublicEnabled(true)
         verify(contactPaymentSettingsRepo, never()).setEnabled(any())
-        assertFalse(sut.isUpdatingContactPayments.value)
+        assertNull(sut.pendingPublicPayments.value)
+    }
+
+    @Test
+    fun `private payment change exposes its target only on its own row`() = test {
+        val gate = CompletableDeferred<Result<Unit>>()
+        whenever { contactPaymentSettingsRepo.setEnabled(any()) }.doSuspendableAnswer { gate.await() }
+
+        sut.setContactPaymentsEnabled(true)
+        runCurrent()
+
+        assertEquals(true, sut.pendingContactPayments.value)
+        assertNull(sut.pendingPublicPayments.value)
+
+        sut.setContactPaymentsEnabled(false)
+        runCurrent()
+        verify(contactPaymentSettingsRepo, times(1)).setEnabled(any())
+
+        gate.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        assertNull(sut.pendingContactPayments.value)
+    }
+
+    @Test
+    fun `public payment change can start while a private change is running`() = test {
+        val privateGate = CompletableDeferred<Result<Unit>>()
+        val publicGate = CompletableDeferred<Result<Unit>>()
+        whenever { contactPaymentSettingsRepo.setEnabled(any()) }.doSuspendableAnswer { privateGate.await() }
+        whenever { contactPaymentSettingsRepo.setPublicEnabled(any()) }.doSuspendableAnswer { publicGate.await() }
+
+        sut.setContactPaymentsEnabled(true)
+        sut.setPublicPaymentsEnabled(true)
+        runCurrent()
+
+        assertEquals(true, sut.pendingContactPayments.value)
+        assertEquals(true, sut.pendingPublicPayments.value)
+        verify(contactPaymentSettingsRepo).setPublicEnabled(true)
+
+        privateGate.complete(Result.success(Unit))
+        publicGate.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        assertNull(sut.pendingContactPayments.value)
+        assertNull(sut.pendingPublicPayments.value)
+    }
+
+    @Test
+    fun `failed public payment change clears its pending value`() = test {
+        whenever(context.getString(any())).thenReturn("error")
+        whenever { contactPaymentSettingsRepo.setPublicEnabled(any()) }
+            .thenReturn(Result.failure(PublicPaykitError.SessionNotActive))
+
+        sut.setPublicPaymentsEnabled(true)
+        advanceUntilIdle()
+
+        assertNull(sut.pendingPublicPayments.value)
     }
 
     @Test

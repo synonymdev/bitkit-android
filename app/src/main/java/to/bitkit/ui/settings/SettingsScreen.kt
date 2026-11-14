@@ -97,7 +97,8 @@ fun SettingsScreen(
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val contactPaymentsEnabled by settings.contactPaymentsEnabled.collectAsStateWithLifecycle()
     val publicPaymentsEnabled by settings.publicPaymentsEnabled.collectAsStateWithLifecycle()
-    val isUpdatingContactPayments by settings.isUpdatingContactPayments.collectAsStateWithLifecycle()
+    val pendingContactPayments by settings.pendingContactPayments.collectAsStateWithLifecycle()
+    val pendingPublicPayments by settings.pendingPublicPayments.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { settings.refreshUsdtAvailability() }
     val canDisableUsdt by settings.canDisableUsdt.collectAsStateWithLifecycle()
     val isUsdtEnabled by settings.isUsdtEnabled.collectAsStateWithLifecycle()
@@ -140,9 +141,10 @@ fun SettingsScreen(
             notificationsGranted = notificationsGranted,
             isPubkyAuthenticated = isPubkyAuthenticated,
             isPaykitEnabled = isPaykitEnabled,
-            contactPaymentsEnabled = contactPaymentsEnabled,
-            publicPaymentsEnabled = publicPaymentsEnabled,
-            isUpdatingContactPayments = isUpdatingContactPayments,
+            contactPaymentsEnabled = pendingContactPayments ?: contactPaymentsEnabled,
+            publicPaymentsEnabled = pendingPublicPayments ?: publicPaymentsEnabled,
+            isUpdatingContactPayments = pendingContactPayments != null,
+            isUpdatingPublicPayments = pendingPublicPayments != null,
             hardwareWalletCount = hardwareWallets.size,
             isUsdtEnabled = isUsdtEnabled,
             canDisableUsdt = canDisableUsdt,
@@ -399,7 +401,7 @@ private fun GeneralTabContent(
                 isChecked = state.contactPaymentsEnabled,
                 icon = { SettingsIcon(R.drawable.ic_coins) },
                 onClick = { onEvent(SettingsEvent.ContactPaymentsClick) },
-                enabled = !state.isUpdatingContactPayments,
+                isLoading = state.isUpdatingContactPayments,
                 switchTestTag = "PrivateContactPaymentsToggle",
                 modifier = Modifier.testTag("ContactPaymentsSettings")
             )
@@ -408,7 +410,7 @@ private fun GeneralTabContent(
                 isChecked = state.publicPaymentsEnabled,
                 icon = { SettingsIcon(R.drawable.ic_coins) },
                 onClick = { onEvent(SettingsEvent.PublicPaymentsClick) },
-                enabled = !state.isUpdatingContactPayments,
+                isLoading = state.isUpdatingPublicPayments,
                 switchTestTag = "PublicPaymentsToggle",
                 modifier = Modifier.testTag("PublicPaymentsSettings")
             )
@@ -764,6 +766,7 @@ data class GeneralTabState(
     val contactPaymentsEnabled: Boolean = false,
     val publicPaymentsEnabled: Boolean = false,
     val isUpdatingContactPayments: Boolean = false,
+    val isUpdatingPublicPayments: Boolean = false,
     val hardwareWalletCount: Int = 0,
     val isUsdtEnabled: Boolean = false,
     val canDisableUsdt: Boolean = false,

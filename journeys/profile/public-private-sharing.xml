@@ -13,7 +13,9 @@
     <action>Scroll to the payment sharing settings</action>
     <action>Verify Private contact payments (identifier "PrivateContactPaymentsToggle") is on and Public payments (identifier "PublicPaymentsToggle") is off</action>
     <action>Verify Public payments uses a label and switch without a permanent description, matching the neighboring settings rows.</action>
-    <action>Turn Public payments on and wait for the operation to finish</action>
+    <action>Turn Public payments on</action>
+    <action>Before the operation finishes, verify a loading indicator (identifier "PublicPaymentsToggleLoading") shows beside Public payments, the Public payments switch shows on, and Private contact payments is still enabled with no loading indicator</action>
+    <action>Wait for the operation to finish and verify the loading indicator is gone</action>
     <action>Verify both sharing switches are on</action>
     <action>Turn Private contact payments off and wait for the operation to finish</action>
     <action>Verify Private contact payments is off and Public payments remains on</action>
