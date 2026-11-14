@@ -25,6 +25,8 @@ sealed class ServiceError(message: String) : AppError(message) {
 
 class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)
 
+class RbfOriginalConfirmed : AppError("The original transaction confirmed before its replacement")
+
 // region ldk
 class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
     constructor(inner: BuildException) : this(LdkException.Build(inner))

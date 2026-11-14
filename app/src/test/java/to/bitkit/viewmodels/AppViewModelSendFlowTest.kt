@@ -24,6 +24,8 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
+import com.synonym.bitkitcore.PubkySwapRoutePayment
+import com.synonym.bitkitcore.PubkySwapRouteQuote
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.UsdtDestination
@@ -45,6 +47,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -210,11 +213,14 @@ import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
+import to.bitkit.repositories.PrivatePaykitError
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.repositories.PubkySwapClaimTimeoutException
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayCompletionKind
@@ -252,6 +258,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -273,8 +280,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -325,6 +334,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitPaymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val paykitPaymentRequestDiagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val usdtRepo = mock<UsdtRepo>()
+    private val pubkySwapsRouteRepo = mock<PubkySwapsRouteRepo>()
     private val paykitRouteRepo = mock<PaykitRouteRepo>()
     private val usdtState = MutableStateFlow(UsdtWalletState(balance = 1_000_000u))
     private val paykitUsdtPayments = mock<PaykitUsdtPaymentRepo>()
@@ -1014,6 +1024,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         paykitPaymentRequestDiagnostics = paykitPaymentRequestDiagnostics,
         refreshContactPaykitLink = refreshContactPaykitLink,
         usdtRepo = usdtRepo,
+        pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         paykitRouteRepo = paykitRouteRepo,
         paykitUsdtPayments = paykitUsdtPayments,
         samRockRepo = samRockRepo,
@@ -12161,8 +12172,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.hideSheet()
             runCurrent()
             assertTrue(paymentSubmissionActive.value)
-            sut.setSendEvent(SendEvent.PayConfirmed)
-            runCurrent()
             release.complete(Unit)
             runCurrent()
             assertFalse(paymentSubmissionActive.value)
@@ -16652,6 +16661,533 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `max onchain send drains at the max for the newly selected speed`() = test {
+        val address = "bcrt1qmaxsend"
+        val cachedMax = 100_000uL
+        val maxAtFast = 99_500uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = cachedMax)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            )
+        }.thenReturn(Result.success(maxAtFast))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        stubSuccessfulOnchainSend(address, maxAtFast)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = cachedMax,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(maxAtFast, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isMaxAmount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        // same rates must back the max refresh and the send
+        verify(lightningRepo).estimateMaxSendOnchain(
+            address = address,
+            speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
+        )
+        verifyOnchainSend(
+            address = address,
+            sats = maxAtFast,
+            speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
+            isMaxAmount = true,
+        )
+    }
+
+    @Test
+    fun `max refresh marks a max at the dust limit invalid`() = test {
+        val address = "bcrt1qmaxdust"
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Fast, feeRates = feeRates)
+        }.thenReturn(Result.success(Defaults.dustLimit.toULong()))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 100_000uL,
+                isAmountInputValid = true,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(Defaults.dustLimit.toULong(), sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `onchain send below the max is not a drain`() = test {
+        val address = "bcrt1qbelowmax"
+        val amount = 50_000uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            )
+        }.thenReturn(Result.success(99_500uL))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        stubSuccessfulOnchainSend(address, amount)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = amount,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(amount, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verifyOnchainSend(
+            address = address,
+            sats = amount,
+            speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
+            isMaxAmount = false,
+        )
+    }
+
+    @Test
+    fun `exact onchain amount above the max at the selected speed is not lowered into a drain`() = test {
+        val address = "bcrt1qexactamount"
+        val requested = 99_800uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Fast, feeRates = feeRates)
+        }.thenReturn(Result.success(99_500uL))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        whenever(formatMoneyValue(any())).thenReturn("300 sats")
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = requested,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(requested, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, atLeastOnce()).enqueue(toastCaptor.capture())
+        assertTrue(toastCaptor.allValues.any { it.testTag == "InsufficientSavingsToast" })
+    }
+
+    @Test
+    fun `max tap marks an onchain send as max until the amount is edited`() = test {
+        val amount = 100_000uL
+        balanceState.value = BalanceState(maxSendOnchainSats = amount)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qmaxtap",
+                payMethod = SendMethod.ONCHAIN,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountMax(amount))
+        sut.setSendEvent(SendEvent.AmountChange(amount))
+        advanceUntilIdle()
+
+        assertEquals(amount, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isMaxAmount)
+
+        sut.setSendEvent(SendEvent.AmountChange(1_000uL))
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+    }
+
+    @Test
+    fun `max onchain send pays the exact amount when the max cannot be estimated`() = test {
+        val address = "bcrt1qmaxsendfailure"
+        val cachedMax = 100_000uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = cachedMax)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            )
+        }.thenReturn(Result.failure(AppError("no estimate")))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        stubSuccessfulOnchainSend(address, cachedMax)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = cachedMax,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(cachedMax, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verifyOnchainSend(
+            address = address,
+            sats = cachedMax,
+            speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
+            isMaxAmount = false,
+        )
+    }
+
+    @Test
+    fun `onchain send confirmed during a max refresh keeps the confirmed amount`() = test {
+        val address = "bcrt1qmaxsendrace"
+        val cachedMax = 100_000uL
+        val maxAtFast = 99_500uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        val finishEstimate = CompletableDeferred<Unit>()
+        balanceState.value = BalanceState(maxSendOnchainSats = cachedMax)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            )
+        }.doSuspendableAnswer {
+            finishEstimate.await()
+            Result.success(maxAtFast)
+        }
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        stubSuccessfulOnchainSend(address, cachedMax)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = cachedMax,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        finishEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        // the repo rechecks the max after its sync, so the flag alone does not drain
+        verifyOnchainSend(
+            address = address,
+            sats = cachedMax,
+            speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
+            isMaxAmount = true,
+        )
+    }
+
+    @Test
+    fun `max refresh does not change the amount after switching to lightning`() = test {
+        val address = "bcrt1qmaxsendswitch"
+        val amount = 100_000uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        val finishEstimate = CompletableDeferred<Unit>()
+        balanceState.value = BalanceState(maxSendOnchainSats = amount)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            )
+        }.doSuspendableAnswer {
+            finishEstimate.await()
+            Result.success(99_500uL)
+        }
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = amount,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+        sut.switchToLightning()
+        advanceUntilIdle()
+        finishEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(amount, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+    }
+
+    @Test
+    fun `switching to lightning clears max when the invoice amount replaces it`() = test {
+        val bolt11 = "lnbcrt1maxswitch"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 10_000u),
+                amount = 100_000uL,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+            ),
+        )
+
+        sut.switchToLightning()
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+    }
+
+    @Test
+    fun `returning to savings keeps the invoice amount that replaced max on spending`() = test {
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 99_000uL, maxSendLightningSats = 100_000uL)
+        whenever(lightningRepo.estimateMaxSendOnchain(anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(99_000uL))
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                decodedInvoice = lightningInvoice("lnbcrt1maxfixed", amountSats = 10_000u),
+                amount = 99_000uL,
+                isAmountInputValid = true,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `selecting savings keeps a max the selected speed affords above the cached max`() = test {
+        val address = "bcrt1qmaxsavings"
+        val maxAtSlow = 100_100uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL, maxSendLightningSats = 200_000uL)
+        whenever(
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Slow, feeRates = feeRates)
+        ).thenReturn(Result.success(maxAtSlow))
+        setSendState(
+            SendUiState(
+                address = address,
+                isUnified = true,
+                amount = maxAtSlow,
+                isAmountInputValid = true,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Slow,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(maxAtSlow, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isMaxAmount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `selecting savings marks an exact amount above the selected speed max invalid`() = test {
+        val address = "bcrt1qexactsavings"
+        val requested = 99_800uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL, maxSendLightningSats = 200_000uL)
+        whenever(
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Fast, feeRates = feeRates)
+        ).thenReturn(Result.success(99_500uL))
+        whenever(formatMoneyValue(any())).thenReturn("300 sats")
+        setSendState(
+            SendUiState(
+                address = address,
+                isUnified = true,
+                amount = requested,
+                payMethod = SendMethod.LIGHTNING,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(requested, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `selecting savings checks the cached max when the selected speed max cannot be estimated`() = test {
+        val address = "bcrt1qsavingsnoestimate"
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever(
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            )
+        ).thenReturn(Result.failure(AppError("no estimate")))
+        setSendState(
+            SendUiState(
+                address = address,
+                isUnified = true,
+                amount = 50_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `max refresh does not restore the amount after it was edited`() = test {
+        val address = "bcrt1qmaxsendedited"
+        val cachedMax = 100_000uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        val finishEstimate = CompletableDeferred<Unit>()
+        balanceState.value = BalanceState(maxSendOnchainSats = cachedMax)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            )
+        }.doSuspendableAnswer {
+            finishEstimate.await()
+            Result.success(99_500uL)
+        }
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = cachedMax,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        sut.setSendEvent(SendEvent.AmountChange(1_000uL))
+        advanceUntilIdle()
+        finishEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1_000uL, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+    }
+
+    @Test
+    fun `hardware max send keeps its available amount and skips the onchain max estimate`() = test {
+        val available = 50_000uL
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = available))
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }.thenReturn(Result.success(available))
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = available,
+                isAmountInputValid = true,
+                isMaxAmount = true,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareWalletName = "Trezor",
+                hardwareAvailableSats = available,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(available, sut.sendUiState.value.amount)
+        assertEquals(available, sut.sendUiState.value.hardwareAvailableSats)
+        assertTrue(sut.sendUiState.value.isMaxAmount)
+        verify(lightningRepo, never()).estimateMaxSendOnchain(anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `rejected onchain send opens unresolved state without a success transaction`() = test {
         val address = "bcrt1qrejected"
         val txid = "ab".repeat(32)
@@ -18615,6 +19151,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         stubOnchainSend(address, sats, Result.success(OnchainSendOutcome.Accepted(txId)), broadcastTxId = txId)
     }
 
+    private suspend fun verifyOnchainSend(
+        address: String,
+        sats: ULong,
+        speed: TransactionSpeed,
+        feeRates: FeeRates,
+        isMaxAmount: Boolean,
+    ) {
+        verify(lightningRepo).sendOnChain(
+            address = eq(address),
+            sats = eq(sats),
+            speed = eq(speed),
+            utxosToSpend = isNull(),
+            feeRates = eq(feeRates),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(isMaxAmount),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+        )
+    }
+
     private suspend fun stubOnchainSend(
         address: String,
         sats: ULong,
@@ -18784,6 +19349,1031 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         return privateContext
     }
+
+    @Test
+    fun `swap routed contact payment waits on its hold payment and tags it`() = test {
+        val activityV1 = mock<LightningActivity> {
+            on { value } doReturn SWAP_DEBIT_SATS
+            on { fee } doReturn 0u
+        }
+        val activity = mock<BitkitActivity.Lightning> { on { v1 } doReturn activityV1 }
+        whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
+            .thenReturn(Result.success(activity))
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.success(SWAP_CLAIM_TXID))
+        whenever(
+            preActivityMetadataRepo.savePreActivityMetadata(
+                id = eq(SWAP_HOLD_HASH),
+                paymentHash = eq(SWAP_HOLD_HASH),
+                txId = anyOrNull(),
+                address = eq(REGTEST_ADDRESS),
+                isReceive = eq(false),
+                tags = eq(listOf("rent")),
+                feeRate = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                walletId = any(),
+            ),
+        ).thenReturn(Result.success(Unit))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+            sut.addTagToSelected("rent")
+            confirmCurrentPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+
+            emitNodeEvent(
+                Event.PaymentSuccessful(
+                    paymentId = SWAP_HOLD_HASH,
+                    paymentHash = SWAP_HOLD_HASH,
+                    paymentPreimage = "preimage",
+                    feePaidMsat = 0uL,
+                ),
+            )
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        // The Pending screen shows Bitcoin Sent on the hold payment's resolution.
+        verify(pendingPaymentRepo).resolve(check { assertIs<PendingPaymentResolution.Success>(it) })
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+        verify(preActivityMetadataRepo).savePreActivityMetadata(
+            id = eq(SWAP_HOLD_HASH),
+            paymentHash = eq(SWAP_HOLD_HASH),
+            txId = anyOrNull(),
+            address = eq(REGTEST_ADDRESS),
+            isReceive = eq(false),
+            tags = eq(listOf("rent")),
+            feeRate = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            walletId = any(),
+        )
+    }
+
+    @Test
+    fun `swap route pairs the address with the method of the endpoint it came from`() = test {
+        val taprootAddress = "bcrt1ptaproot"
+        whenever(coreService.decode(taprootAddress)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(taprootAddress, 0u, null, null, null)),
+        )
+        openSwapRoutedContactPayment(
+            endpoints = listOf(
+                Endpoint(MethodId.P2tr, taprootAddress, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+            ),
+        )
+
+        assertEquals(
+            PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS),
+            sut.sendUiState.value.paykitSwapRoute?.endpoint,
+        )
+    }
+
+    @Test
+    fun `spark balance short of a contact payment falls back to a swap quote`() = test {
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.failure(SparkError.WithdrawalOverBalance()))
+        openSwapRoutedContactPayment()
+        assertNull(sut.sendUiState.value.paykitSwapRoute)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+
+        verify(paykitRouteRepo).route(eq(SWAP_DELIVERED_SATS), any(), any(), eq(0uL), eq(true))
+        assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+        assertNull(sut.sendUiState.value.paykitRoute?.serviceLeg)
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `smaller amount after a swap quote takes the spark leg and clears the quote`() = test {
+        val leg = sparkRouteLeg(REGTEST_ADDRESS)
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(lightningRepo.canWithdrawWithSpark(any())).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+            .thenReturn(Result.failure(SparkError.WithdrawalOverBalance()))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+
+            whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
+                .thenReturn(Result.success(PaykitRoute.Service(leg)))
+            sut.setSendEvent(SendEvent.AmountChange(leg.deliveredSat))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+
+        verify(paykitRouteRepo).route(eq(leg.deliveredSat), any(), any(), eq(0uL), eq(true))
+        assertNull(sut.sendUiState.value.paykitSwapRoute)
+        assertEquals(leg, sut.sendUiState.value.routedPaykitRoute?.serviceLeg)
+        verify(pubkySwapsRouteRepo, times(1)).route(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `spark withdrawal settling to another contact still falls back to a swap quote`() = test {
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(
+            Result.failure(SparkError.WithdrawalPending(address = "bcrt1qothercontact", contact = "other-contact")),
+        )
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+
+        assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `spark withdrawal settling to this contact keeps the swap fallback off`() = test {
+        whenever(paykitRouteRepo.canRouteThroughSpark).thenReturn(true)
+        whenever(paykitRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(
+            Result.failure(SparkError.WithdrawalPending(address = REGTEST_ADDRESS, contact = testPublicKey)),
+        )
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+        verify(pubkySwapsRouteRepo, never()).route(any(), any(), any(), any(), any())
+        verify(toastManager).enqueue(check { assertEquals("PaykitRouteSettlingToast", it.testTag) })
+    }
+
+    @Test
+    fun `swap route quote failure stays on the amount screen`() = test {
+        openSwapRoutedContactPayment(quote = Result.failure(AppError("no provider")))
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+        assertFalse(sut.sendUiState.value.isLoading)
+        verify(pubkySwapsRouteRepo, never()).commit(any())
+    }
+
+    @Test
+    fun `swap route hold payment failure never awaits the claim`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.failure(AppError("no route")))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmCurrentPayment()
+            assertEquals(SendRetryRoute.Amount, assertIs<SendEffect.NavigateToError>(awaitItem()).retryRoute)
+            expectNoEvents()
+        }
+        verify(pubkySwapsRouteRepo, never()).awaitClaim(any(), any(), anyOrNull())
+        verify(pubkySwapsRouteRepo).dropFailedSwap(SWAP_ID)
+    }
+
+    @Test
+    fun `swap route hold payment with an unknown outcome stays pending`() = test {
+        val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.failure(PaymentPendingException(SWAP_HOLD_HASH)))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment(privatePaymentContext = privateContext)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pendingPaymentRepo).track(SWAP_HOLD_HASH)
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any(), anyOrNull())
+        verify(privatePaykitRepo, never()).releasePrivatePaymentList(testPublicKey, privateContext)
+    }
+
+    @Test
+    fun `swap route hold payment failure event stops awaiting the claim`() = test {
+        var claimCancelled = false
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer {
+            try {
+                awaitCancellation()
+            } finally {
+                claimCancelled = true
+            }
+        }
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            assertFalse(claimCancelled)
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+            expectNoEvents()
+        }
+        assertTrue(claimCancelled)
+        // The repo stops advancing the swap only on a hold payment that failed, never on a cancelled watch.
+        verify(pubkySwapsRouteRepo).awaitClaim(
+            eq(SWAP_ID),
+            any(),
+            check<Job> {
+                assertTrue(it.isCompleted)
+                assertFalse(it.isCancelled)
+            },
+        )
+        verify(pendingPaymentRepo).resolve(check { assertIs<PendingPaymentResolution.Failure>(it) })
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `swap route hold payment failing before it returns stays on its failure`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())).doSuspendableAnswer {
+            emitSwapHoldPaymentFailed()
+            Result.success(SWAP_HOLD_HASH)
+        }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            val effects = cancelAndConsumeRemainingEvents()
+            assertFalse(swapHoldPending() in effects.map { (it as? app.cash.turbine.Event.Item)?.value }, "$effects")
+        }
+        verify(pendingPaymentRepo, never()).track(SWAP_HOLD_HASH)
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+    }
+
+    @Test
+    fun `swap route hold payment failing before it returns opens the error once its handler catches up`() = test {
+        val activityRefreshed = CompletableDeferred<Unit>()
+        whenever { activityRepo.handlePaymentEvent(SWAP_HOLD_HASH) }.doSuspendableAnswer { activityRefreshed.await() }
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())).doSuspendableAnswer {
+            emitSwapHoldPaymentFailed()
+            Result.success(SWAP_HOLD_HASH)
+        }
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            activityRefreshed.complete(Unit)
+            advanceBeforeHoldWatchDeadline()
+            assertIs<SendEffect.NavigateToError>(awaitItem())
+            expectNoEvents()
+        }
+        verify(pendingPaymentRepo, never()).track(SWAP_HOLD_HASH)
+    }
+
+    @Test
+    fun `swap route hold payment failure retries from the amount without recommitting the quote`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            // The Pending screen hands its retry route to the error screen.
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+            assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            confirmSwapRoutedPayment()
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+        }
+        verify(pubkySwapsRouteRepo, times(1)).commit(SWAP_QUOTE_ID)
+    }
+
+    @Test
+    fun `swap route retried after its hold payment fails keeps the contact`() = test {
+        val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
+        var consumed = false
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            if (consumed) {
+                Result.failure(PrivatePaykitError.PaymentListAlreadyConsumed)
+            } else {
+                consumed = true
+                Result.success(Unit)
+            }
+        }
+        whenever(privatePaykitRepo.releasePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            consumed = false
+            Result.success(Unit)
+        }
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment(privatePaymentContext = privateContext)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+
+            // Retry on the error screen goes back to Amount, which quotes afresh before confirming.
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentSuccessful()
+            advanceBeforeHoldWatchDeadline()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        verify(privatePaykitRepo, times(2)).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+    }
+
+    @Test
+    fun `swap route retry after a refused commit pays from the same private payment list`() = test {
+        val privateContext = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to REGTEST_ADDRESS), 7uL)
+        var consumed = false
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            if (consumed) {
+                Result.failure(PrivatePaykitError.PaymentListAlreadyConsumed)
+            } else {
+                consumed = true
+                Result.success(Unit)
+            }
+        }
+        whenever(privatePaykitRepo.releasePrivatePaymentList(testPublicKey, privateContext)).doSuspendableAnswer {
+            consumed = false
+            Result.success(Unit)
+        }
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID))
+            .thenReturn(Result.failure(AppError("quote_expired")), Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment(privatePaymentContext = privateContext)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertIs<SendEffect.NavigateToError>(awaitItem())
+
+            // Retry from Amount quotes afresh for the same contact.
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(privatePaykitRepo, times(2)).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        verify(lightningRepo).payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())
+    }
+
+    @Test
+    fun `swap route refused commit clears the quote and retries from the amount`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.failure(AppError("quote_expired")))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(SendRetryRoute.Amount, assertIs<SendEffect.NavigateToError>(awaitItem()).retryRoute)
+            expectNoEvents()
+        }
+        assertNotNull(sut.currentSheet.value)
+        assertNotNull(activeContactPaymentContext())
+        assertNotNull(sut.sendUiState.value.paykitSwapRoute)
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+    }
+
+    @Test
+    fun `swap route claim failure fails the pending send`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("refunded")))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmCurrentPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            expectNoEvents()
+        }
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Failure(SWAP_HOLD_HASH))
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `swap route claim leaves a payment edited in the same sheet untouched`() = test {
+        val claim = CompletableDeferred<Result<String>>()
+        val editedQuote = swapRouteQuote().copy(quoteId = "edited-quote", deliveredSat = SWAP_DELIVERED_SATS + 1_000u)
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any()))
+                .thenReturn(Result.success(PaykitRoute.Swap(editedQuote)))
+            sut.setSendEvent(SendEvent.AmountChange(editedQuote.deliveredSat))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals("edited-quote", sut.sendUiState.value.paykitSwapRoute?.quote?.quoteId)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        sut.sendEffect.test {
+            claim.complete(Result.success(SWAP_CLAIM_TXID))
+            advanceBeforeHoldWatchDeadline()
+            expectNoEvents()
+        }
+        assertEquals("edited-quote", sut.sendUiState.value.paykitSwapRoute?.quote?.quoteId)
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `swap route claim wait running out keeps the send pending`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.failure(PubkySwapClaimTimeoutException(SWAP_ID, AppError("awaiting lockup"))))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmCurrentPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            expectNoEvents()
+        }
+        verify(pendingPaymentRepo).track(SWAP_HOLD_HASH)
+        verify(preActivityMetadataRepo, never()).deletePreActivityMetadata(SWAP_HOLD_HASH)
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+
+        // The hold payment settling later finishes the pending send.
+        sut.onSendSuccess(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.SENT,
+                paymentHashOrTxId = SWAP_HOLD_HASH,
+                sats = SWAP_DELIVERED_SATS.toLong(),
+            ),
+        )
+        assertEquals(SWAP_HOLD_HASH, sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `swap route send backed out of mid-commit pays the contact once`() = test {
+        val commit = CompletableDeferred<Result<PubkySwapRoutePayment>>()
+        val claim = CompletableDeferred<Result<String>>()
+        val editedQuote = swapRouteQuote().copy(quoteId = "edited-quote", deliveredSat = SWAP_DELIVERED_SATS + 1_000u)
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).doSuspendableAnswer { commit.await() }
+        whenever(pubkySwapsRouteRepo.commit("edited-quote")).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            // Backing out of Confirm while the provider is slow to commit quotes a new amount afresh.
+            whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any()))
+                .thenReturn(Result.success(PaykitRoute.Swap(editedQuote)))
+            sut.setSendEvent(SendEvent.AmountChange(editedQuote.deliveredSat))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            commit.complete(Result.success(swapRoutePayment()))
+            advanceBeforeHoldWatchDeadline()
+            // Backups and Paykit's background work do not wait for the claim.
+            assertFalse(paymentSubmissionActive.value)
+
+            // The first swap's hold payment is out, so confirming the new quote shows it instead of paying again.
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, never()).commit("edited-quote")
+        verify(lightningRepo, times(1)).payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())
+    }
+
+    @Test
+    fun `swap route send switched between sources mid-commit pays the contact once`() = test {
+        val commit = CompletableDeferred<Result<PubkySwapRoutePayment>>()
+        val claim = CompletableDeferred<Result<String>>()
+        val freshQuote = swapRouteQuote().copy(quoteId = "fresh-quote")
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).doSuspendableAnswer { commit.await() }
+        whenever(pubkySwapsRouteRepo.commit("fresh-quote")).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            // Backing out of Confirm while the provider is slow to commit, Savings then Spending quotes afresh.
+            whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any()))
+                .thenReturn(Result.success(PaykitRoute.Swap(freshQuote)))
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceBeforeHoldWatchDeadline()
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceBeforeHoldWatchDeadline()
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            commit.complete(Result.success(swapRoutePayment()))
+            advanceBeforeHoldWatchDeadline()
+
+            // The first swap's hold payment is out, so confirming the fresh quote shows it instead of paying again.
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, never()).commit("fresh-quote")
+        verify(lightningRepo, times(1)).payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull())
+    }
+
+    @Test
+    fun `swap route hold failing after the claim wait ran out retries for the same contact`() = test {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .thenReturn(Result.failure(PubkySwapClaimTimeoutException(SWAP_ID, AppError("awaiting lockup"))))
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+
+            // Retry on the error screen goes back to Amount, which quotes afresh before confirming.
+            sut.setSendEvent(SendEvent.ClearPayConfirmation)
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            assertEquals(swapHoldPending(), awaitItem())
+            emitSwapHoldPaymentSuccessful()
+            advanceBeforeHoldWatchDeadline()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        // The failed hold's swap stops advancing; the retry's swap goes on.
+        verify(pubkySwapsRouteRepo, times(1)).dropFailedSwap(SWAP_ID)
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+    }
+
+    @Test
+    fun `swap route claim after dismissal leaves the next contact send untouched`() = test {
+        val claim = CompletableDeferred<Result<String>>()
+        val contactPaymentContextB = startSwapRoutedPaymentThenOpenNextContactSend(claim)
+
+        sut.sendEffect.test {
+            claim.complete(Result.success(SWAP_CLAIM_TXID))
+            emitSwapHoldPaymentSuccessful()
+            advanceBeforeHoldWatchDeadline()
+            expectNoEvents()
+        }
+        assertSame(contactPaymentContextB, activeContactPaymentContext())
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+        verify(toastManager).enqueue(check { assertEquals("PendingPaymentSucceededToast", it.testTag) })
+        verify(activityRepo).setContact(
+            contactPublicKey = eq(testPublicKey),
+            forPaymentId = eq(SWAP_HOLD_HASH),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+        verify(activityRepo, never()).setContact(
+            contactPublicKey = eq(SWAP_NEXT_CONTACT_PUBLIC_KEY),
+            forPaymentId = any(),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
+    }
+
+    @Test
+    fun `swap route claim failure after dismissal keeps the next send open`() = test {
+        val claim = CompletableDeferred<Result<String>>()
+        val contactPaymentContextB = startSwapRoutedPaymentThenOpenNextContactSend(claim)
+        val sheetB = sut.currentSheet.value
+
+        claim.complete(Result.failure(AppError("refunded")))
+        advanceBeforeHoldWatchDeadline()
+
+        assertTrue(sheetB is Sheet.Send)
+        assertSame(sheetB, sut.currentSheet.value)
+        assertSame(contactPaymentContextB, activeContactPaymentContext())
+    }
+
+    @Test
+    fun `swap route commit after dismissal leaves its hold payment off the next send`() = test {
+        val commit = CompletableDeferred<Result<PubkySwapRoutePayment>>()
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).doSuspendableAnswer { commit.await() }
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            cancelAndIgnoreRemainingEvents()
+        }
+        sut.hideSheet()
+        advanceBeforeHoldWatchDeadline()
+        openSwapRoutedContactPayment()
+        val sheetB = sut.currentSheet.value
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            commit.complete(Result.success(swapRoutePayment()))
+            advanceBeforeHoldWatchDeadline()
+            assertNotNull(sut.sendUiState.value.paykitSwapRoute)
+            assertNull(sut.sendUiState.value.paykitSwapRoute?.holdPaymentHash)
+            emitSwapHoldPaymentFailed()
+            advanceBeforeHoldWatchDeadline()
+            expectNoEvents()
+        }
+        assertTrue(sheetB is Sheet.Send)
+        assertSame(sheetB, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `swap route claim wait after dismissal lets the next send pay`() = test {
+        val claim = CompletableDeferred<Result<String>>()
+        val commitB = CompletableDeferred<Result<PubkySwapRoutePayment>>()
+        var commits = 0
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).doSuspendableAnswer {
+            if (++commits == 1) Result.success(swapRoutePayment()) else commitB.await()
+        }
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any(), anyOrNull())
+        sut.hideSheet()
+        advanceBeforeHoldWatchDeadline()
+        openSwapRoutedContactPayment(settle = { advanceBeforeHoldWatchDeadline() })
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceBeforeHoldWatchDeadline()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+
+        // The first payment ending must not lift the guard of the second while it still pays.
+        claim.complete(Result.success(SWAP_CLAIM_TXID))
+        emitSwapHoldPaymentSuccessful()
+        advanceBeforeHoldWatchDeadline()
+        verify(toastManager).enqueue(check { assertEquals("PendingPaymentSucceededToast", it.testTag) })
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceBeforeHoldWatchDeadline()
+        verify(pubkySwapsRouteRepo, times(2)).commit(SWAP_QUOTE_ID)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    private suspend fun TestScope.startSwapRoutedPaymentThenOpenNextContactSend(
+        claim: CompletableDeferred<Result<String>>,
+    ): ContactPaymentContext? {
+        whenever(pubkySwapsRouteRepo.commit(SWAP_QUOTE_ID)).thenReturn(Result.success(swapRoutePayment()))
+        whenever(lightningRepo.payInvoice(eq(SWAP_HOLD_INVOICE), anyOrNull()))
+            .thenReturn(Result.success(SWAP_HOLD_HASH))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq(SWAP_ID), any(), anyOrNull())).doSuspendableAnswer { claim.await() }
+        openSwapRoutedContactPayment()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            confirmSwapRoutedPayment()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkySwapsRouteRepo).awaitClaim(eq(SWAP_ID), any(), anyOrNull())
+        sut.hideSheet()
+        advanceBeforeHoldWatchDeadline()
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = SWAP_NEXT_CONTACT_PUBLIC_KEY,
+            endpoints = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
+        )
+        advanceBeforeHoldWatchDeadline()
+        return activeContactPaymentContext().also {
+            assertEquals(SWAP_NEXT_CONTACT_PUBLIC_KEY, it?.publicKey)
+        }
+    }
+
+    private fun TestScope.advanceBeforeHoldWatchDeadline() {
+        advanceTimeBy(1.days)
+        runCurrent()
+    }
+
+    private fun TestScope.confirmSwapRoutedPayment() {
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceBeforeHoldWatchDeadline()
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceBeforeHoldWatchDeadline()
+    }
+
+    private fun swapHoldPending() = SendEffect.NavigateToPending(
+        paymentHash = SWAP_HOLD_HASH,
+        amount = SWAP_DELIVERED_SATS.toLong(),
+        retryRoute = SendRetryRoute.Amount,
+    )
+
+    private suspend fun emitSwapHoldPaymentSuccessful() = emitNodeEvent(
+        Event.PaymentSuccessful(
+            paymentId = SWAP_HOLD_HASH,
+            paymentHash = SWAP_HOLD_HASH,
+            paymentPreimage = "preimage",
+            feePaidMsat = 0uL,
+        ),
+    )
+
+    private suspend fun emitSwapHoldPaymentFailed() = emitNodeEvent(
+        Event.PaymentFailed(
+            paymentId = SWAP_HOLD_HASH,
+            paymentHash = SWAP_HOLD_HASH,
+            reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+        ),
+    )
+
+    @Test
+    fun `swap route answered direct switches the payment to savings`() = test {
+        openSwapRoutedContactPayment(
+            quote = Result.success(PaykitRoute.Direct(PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS))),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNull(sut.sendUiState.value.paykitSwapRoute)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+    }
+
+    @Test
+    fun `swap route quote for a replaced send is discarded`() = test {
+        val quoted = CompletableDeferred<Result<PaykitRoute>>()
+        openSwapRoutedContactPayment()
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quoted.await() }
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            runCurrent()
+            sut.resetSendState()
+            quoted.complete(Result.success(PaykitRoute.Swap(swapRouteQuote())))
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNull(sut.sendUiState.value.paykitSwapRoute)
+    }
+
+    @Test
+    fun `swap route quote after a wallet change is discarded without blocking continue`() = test {
+        val quoted = CompletableDeferred<Result<PaykitRoute>>()
+        openSwapRoutedContactPayment()
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quoted.await() }
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            runCurrent()
+            walletGeneration++
+            quoted.complete(Result.success(PaykitRoute.Swap(swapRouteQuote())))
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertFalse(sut.sendUiState.value.isLoading)
+        assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+    }
+
+    @Test
+    fun `swap routed contact returns to spending after picking savings`() = test {
+        openSwapRoutedContactPayment()
+
+        val spending = sut.sendUiState.value.fundingOptions.single { it.source == SendFundingSource.Spending }
+        assertTrue(spending.enabled)
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        advanceUntilIdle()
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        advanceUntilIdle()
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+        assertEquals(swapRouteQuote(), sut.sendUiState.value.paykitSwapRoute?.quote)
+    }
+
+    @Test
+    fun `swap route amount edited while quoting needs a new quote before paying`() = test {
+        val quoted = CompletableDeferred<Result<PaykitRoute>>()
+        openSwapRoutedContactPayment()
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).doSuspendableAnswer { quoted.await() }
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            runCurrent()
+            sut.setSendEvent(SendEvent.AmountChange(2_000uL))
+            quoted.complete(Result.success(PaykitRoute.Swap(swapRouteQuote())))
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertEquals(2_000uL, sut.sendUiState.value.amount)
+            assertNull(sut.sendUiState.value.paykitSwapRoute?.quote)
+            confirmCurrentPayment()
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+        }
+        verify(pubkySwapsRouteRepo, never()).commit(any())
+    }
+
+    @Test
+    fun `swap route fee shows again when confirm returns to spending`() = test {
+        openSwapRoutedContactPayment()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(swapRouteQuote(), sut.sendUiState.value.activePaykitSwapRoute?.quote)
+        assertEquals(swapRouteQuote().totalFeeSat.toLong(), sut.sendUiState.value.lightningFeeSats)
+    }
+
+    private suspend fun TestScope.openSwapRoutedContactPayment(
+        quote: Result<PaykitRoute> = Result.success(PaykitRoute.Swap(swapRouteQuote())),
+        endpoints: List<Endpoint> = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
+        // `advanceUntilIdle` fires the hold watch's timer, which ends a swap payment still awaiting its claim.
+        settle: TestScope.() -> Unit = { advanceUntilIdle() },
+        privatePaymentContext: PrivatePaykitPaymentContext? = null,
+    ) {
+        whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
+        whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(quote)
+        // The swap send waits on its hold payment as a pending payment.
+        doAnswer { doReturn(true).whenever(pendingPaymentRepo).isPending(SWAP_HOLD_HASH) }
+            .whenever(pendingPaymentRepo).track(SWAP_HOLD_HASH)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(coreService.decode(SWAP_HOLD_INVOICE)).thenReturn(
+            Scanner.Lightning(lightningInvoice(SWAP_HOLD_INVOICE, amountSats = SWAP_DEBIT_SATS)),
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = testPublicKey,
+            privatePaymentContext = privatePaymentContext,
+            endpoints = endpoints,
+        )
+        settle()
+        sut.setSendEvent(SendEvent.AmountChange(SWAP_DELIVERED_SATS))
+        settle()
+    }
+
+    private fun swapRouteQuote() = PubkySwapRouteQuote(
+        providerPubky = testPublicKey,
+        quoteId = SWAP_QUOTE_ID,
+        endpoint = PaykitEndpoint(MethodId.P2wpkh.rawValue, REGTEST_ADDRESS),
+        deliveredSat = SWAP_DELIVERED_SATS,
+        lockSat = SWAP_DELIVERED_SATS,
+        debitSat = SWAP_DEBIT_SATS,
+        serviceFeeSat = 100u,
+        providerOnchainFeeSat = 0u,
+        claimFeeSat = 0u,
+        totalFeeSat = 100u,
+        atomicity = "htlc",
+        validUntilUnix = 0u,
+        providersQuoted = 1u,
+    )
+
+    private fun swapRoutePayment() = PubkySwapRoutePayment(
+        swapId = SWAP_ID,
+        invoice = SWAP_HOLD_INVOICE,
+        debitSat = SWAP_DEBIT_SATS,
+        deliveredSat = SWAP_DELIVERED_SATS,
+        destinationAddress = REGTEST_ADDRESS,
+        htlcAddress = REGTEST_ADDRESS,
+        timeoutBlockHeight = 0u,
+    )
 
     private fun lightningInvoice(
         bolt11: String,
@@ -20419,5 +22009,15 @@ private const val SAMROCK_SETUP_URL =
 private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
+private const val SWAP_QUOTE_ID = "swap-quote"
+private const val SWAP_ID = "swap"
+private const val SWAP_HOLD_INVOICE = "lnbcrt1swaphold"
+
+/** The hex of [lightningInvoice]'s payment hash. */
+private const val SWAP_HOLD_HASH = "010203"
+private const val SWAP_CLAIM_TXID = "claimtxid"
+private const val SWAP_DELIVERED_SATS = 20_000uL
+private const val SWAP_DEBIT_SATS = 20_100uL
+private const val SWAP_NEXT_CONTACT_PUBLIC_KEY = "pubky8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
 private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"

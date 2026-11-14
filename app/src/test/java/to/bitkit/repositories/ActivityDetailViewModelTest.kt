@@ -66,6 +66,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
             hwWalletRepo = hwWalletRepo,
             transferRepo = transferRepo,
             sparkRepo = mock(),
+            rbfBoostRepo = mock(),
         )
     }
 

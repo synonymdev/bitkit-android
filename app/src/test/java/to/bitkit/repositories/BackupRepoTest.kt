@@ -501,6 +501,7 @@ class BackupRepoTest : BaseUnitTest() {
         hwWalletRepo = mock(),
         lightningRepo = lightningRepo,
         pubkyRepo = pubkyRepo,
+        pubkySwapsRouteRepo = mock(),
         privatePaykitRepo = Provider { privatePaykitRepo },
         privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
         firebaseMessaging = mock(),

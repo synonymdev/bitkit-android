@@ -40,6 +40,8 @@ Gradle ignores `~/.m2` by default. To test dependencies you published with `publ
 
 `-PuseMavenLocal=true` selects LDK and VSS; `false` or omitting the property disables local Maven. Unknown names fail the build. Never ship a build with local dependencies or symbolicate it with published debug symbols, because its native libraries may differ from the published AARs. For a local Bitkit Core AAR without publishing to Maven local, use [`bitkitCoreAar`](docs/usdt.md).
 
+Gradle verifies every downloaded dependency against `gradle/verification-metadata.xml`; see [dependency verification](docs/dependency-verification.md). Builds with `useMavenLocal` or `bitkitCoreAar` fail that check by design: local Maven artifacts do not match the recorded checksums, and `bitkitCoreAar` adds `atomicfu`, which has none. Pass `--dependency-verification lenient` for those local experiments only. It reports problems instead of failing for every dependency in the build, so never use it in CI or for a release build.
+
 See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
 - [vss-rust-client-ffi android bindings](https://github.com/synonymdev/vss-rust-client-ffi/tree/master/bindings/android#installation)
@@ -49,8 +51,10 @@ See also:
 Spark (Lightning without channels) needs a Breez API key on mainnet builds; regtest needs none. Gradle reads `BREEZ_API_KEY` from the environment, a Gradle property or `local.properties`, in that order. On macOS it falls back to the keychain item `BREEZ_API_KEY`, so the key needs no plain copy on disk:
 
 ```bash
-security add-generic-password -U -a "$USER" -s BREEZ_API_KEY -w
+printf 'add-generic-password -U -a %s -s BREEZ_API_KEY -w %s\n' "$USER" "$(pbpaste)" | security -i && pbcopy </dev/null
 ```
+
+Copy the key first. The command passes the key on stdin, so it never shows in a process list. It then clears the clipboard. The bare `-w` prompt keeps only 128 characters, which cuts the key short. The build stops when a set key is not a complete certificate, and its error names the source to fix.
 
 Without the key the app builds and Spark stays off on mainnet.
 

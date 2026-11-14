@@ -210,12 +210,6 @@
     <string name="lightning__savings_progress__text">يرجى الانتظار، جارٍ تحويل أموالك. يجب أن يستغرق هذا &lt;accent&gt;±10 ثوانٍ.&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__title">الأموال\n&lt;accent&gt;قيد التحويل&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">وقت مزامنة درجات تحديد المسار</string>
-    <string name="lightning__setting_up__not_seen">لم يرَ Spark تحويلك بعد. يُضاف بعد 3 تأكيدات؛ يمكنك مغادرة هذه الشاشة.</string>
-    <string name="lightning__setting_up__pay">ادفع ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">أصبح الفوري يكلّف الآن &lt;accent&gt;₿ {amount}&lt;/accent&gt;. ادفعه، أو انتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
-    <string name="lightning__setting_up__speed">السرعة: {speed}</string>
-    <string name="lightning__setting_up__step_adding">جارٍ الإضافة إلى الإنفاق</string>
-    <string name="lightning__setting_up__unavailable">الفوري غير متاح لهذا التحويل. يضيفه Spark إلى رصيد الإنفاق بعد 3 تأكيدات، نحو 30 دقيقة.</string>
     <string name="lightning__setting_up_button">متابعة استخدام Bitkit</string>
     <string name="lightning__setting_up_step1">جارٍ معالجة الدفع</string>
     <string name="lightning__setting_up_step2">الدفع ناجح</string>
@@ -223,9 +217,6 @@
     <string name="lightning__spark_claim_fee">رسوم المطالبة</string>
     <string name="lightning__spark_confirmations">%1$d/3 تأكيدات</string>
     <string name="lightning__spark_deposit">إيداع</string>
-    <string name="lightning__spark_deposit__claimed">يضيفه Spark إلى رصيد الإنفاق.</string>
-    <string name="lightning__spark_deposit__looking">بانتظار أن يرى Spark تحويلك.</string>
-    <string name="lightning__spark_deposit__standard">يضيفه Spark إلى رصيد الإنفاق بعد {standard} تأكيدات، أي بعد نحو {minutes} دقيقة.</string>
     <string name="lightning__spark_deposit__wait_button">انتظر</string>
     <string name="lightning__spark_deposits_claimed">إيداعات تمت المطالبة بها</string>
     <string name="lightning__spark_deposits_pending">إيداعات قيد التنفيذ</string>
@@ -1133,6 +1124,8 @@
     <string name="wallet__send_yes">نعم، أرسل</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;أرسل\nBitcoin&lt;/accent&gt;\nإلى\nرصيد إنفاقك</string>
     <string name="wallet__spending__title">الإنفاق</string>
+    <string name="wallet__swap_route_restored_text">دفعة لجهة اتصال قاطعتها الاستعادة عادت إلى مدخراتك.</string>
+    <string name="wallet__swap_route_restored_title">أُعيدت الدفعة إلى المدخرات</string>
     <string name="wallet__tags">العلامات</string>
     <string name="wallet__tags_add">إضافة علامة</string>
     <string name="wallet__tags_add_button">إضافة</string>

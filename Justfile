@@ -24,6 +24,7 @@ list:
         "lint" \
         "lint baseline" \
         "format" \
+        "deps" \
         "e2e [network|TASK] [TASK]" \
         "changelog [all|next|hotfix]" \
         "clean"
@@ -189,6 +190,9 @@ lint target="":
 
 format:
     {{ gradle }} detekt --auto-correct --rerun-tasks
+
+deps:
+    scripts/update-verification-metadata.sh
 
 e2e mode="" value="" task="assembleDevRelease":
     {{ if mode == "" { "E2E=true " + gradle + " " + task } else if mode == "network" { "E2E=true E2E_BACKEND=network " + gradle + " " + if value == "" { task } else { value } } else { "E2E=true " + gradle + " " + mode } }}

@@ -214,12 +214,6 @@
     <string name="lightning__savings_progress__text">Si us plau, espera, la transferència de fons està en curs. Hauria de trigar &lt;accent&gt;±10 segons.&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__title">Fons\n&lt;accent&gt;en transferència&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Temps de sincronització de puntuacions de rutes</string>
-    <string name="lightning__setting_up__not_seen">Spark encara no ha vist la teva transferència. S\'afegeix després de 3 confirmacions; pots sortir d\'aquesta pantalla.</string>
-    <string name="lightning__setting_up__pay">Paga ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instant ara costa &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Paga-ho o espera 3 confirmacions, uns 30 minuts, amb una comissió més baixa.</string>
-    <string name="lightning__setting_up__speed">Velocitat: {speed}</string>
-    <string name="lightning__setting_up__step_adding">Afegint a despesa</string>
-    <string name="lightning__setting_up__unavailable">Instant no està disponible per a aquesta transferència. Spark l\'afegeix al teu saldo de despesa després de 3 confirmacions, uns 30 minuts.</string>
     <string name="lightning__setting_up_button">Continua utilitzant Bitkit</string>
     <string name="lightning__setting_up_step1">Processant pagament</string>
     <string name="lightning__setting_up_step2">Pagament realitzat amb èxit</string>
@@ -227,9 +221,6 @@
     <string name="lightning__spark_claim_fee">Comissió de reclamació</string>
     <string name="lightning__spark_confirmations">%1$d/3 confirmacions</string>
     <string name="lightning__spark_deposit">Dipòsit</string>
-    <string name="lightning__spark_deposit__claimed">Spark ho està afegint al teu saldo de despeses.</string>
-    <string name="lightning__spark_deposit__looking">Esperant que Spark vegi la teva transferència.</string>
-    <string name="lightning__spark_deposit__standard">Spark ho afegeix al teu saldo de despeses després de {standard} confirmacions, d\'aquí a uns {minutes} minuts.</string>
     <string name="lightning__spark_deposit__wait_button">Espera</string>
     <string name="lightning__spark_deposits_claimed">Dipòsits reclamats</string>
     <string name="lightning__spark_deposits_pending">Dipòsits en curs</string>
@@ -1159,6 +1150,8 @@
     <string name="wallet__send_yes">Sí, Enviar</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Envia\nbitcoin&lt;/accent&gt;\nal teu\nsaldo de despesa</string>
     <string name="wallet__spending__title">Despesa</string>
+    <string name="wallet__swap_route_restored_text">Un pagament a un contacte que la restauració va interrompre ha tornat als teus estalvis.</string>
+    <string name="wallet__swap_route_restored_title">Pagament retornat a Estalvis</string>
     <string name="wallet__tags">Etiquetes</string>
     <string name="wallet__tags_add">Afegeix etiqueta</string>
     <string name="wallet__tags_add_button">Afegir</string>
