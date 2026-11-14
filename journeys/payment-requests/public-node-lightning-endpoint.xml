@@ -1,0 +1,14 @@
+<journey name="public node Lightning endpoint without route hints">
+  <description>
+    Requires the linked fixture issuer and a regtest Lightning node with announced channels that appear in the network graph Bitkit syncs. See README.md for setup; report this journey as blocked if that node is unavailable. The request's only endpoint is a bolt11 invoice from that node with no route hints, so Bitkit must reach the payee through the public graph. The flow stops before paying.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled, the fixture issuer saved as a contact and linked as identities, and the Lightning node running with usable spending balance</action>
+    <action>Have the issuer send a new one-time BTC request with a future expiration whose only accepted endpoint is a bolt11 invoice from the public node, carrying no route hints</action>
+    <action>Verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") appears with the requested amount and the unavailable-payment toast (id "PaymentRequestUnavailableToast") does not</action>
+    <action>Press Android back to dismiss the automatic confirmation</action>
+    <action>Tap the pending Payment Requests bell (testTag "PaymentRequestsBell"), then tap Pay for that request</action>
+    <action>Wait for preparation to finish; verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") shows the requested amount with its payment swipe control (id "GRAB") enabled</action>
+    <action>Dismiss the confirmation without paying and verify no new payment was created</action>
+  </actions>
+</journey>

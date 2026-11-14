@@ -2908,6 +2908,12 @@ class LightningRepo @Inject constructor(
         return estimateRoutingFeesForAmount(bolt11, amountSats).map { it.safe() + MAX_SEND_FEE_BUFFER_SATS.safe() }
     }
 
+    /** Whether [nodeId] has a channel in the synced network graph, so a payment can route to it without hints. */
+    suspend fun hasPublicChannels(nodeId: String): Result<Boolean> =
+        executeWhenNodeRunning("hasPublicChannels") {
+            runCatching { lightningService.hasPublicChannels(nodeId) }
+        }
+
     // region debug
     fun getNetworkGraphInfo() = lightningService.getNetworkGraphInfo()
 
