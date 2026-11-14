@@ -1684,6 +1684,9 @@
     <string name="wallet__payment_timeout">Payment timed out. Please try again.</string>
     <string name="wallet__payment_unknown_required_features">This Lightning invoice uses features Bitkit does not support yet.</string>
     <string name="wallet__peer_disconnected">Peer disconnected.</string>
+    <string name="wallet__receipt_failed">Receipt failed</string>
+    <string name="wallet__receipt_sending">Sending receipt</string>
+    <string name="wallet__receipt_sent">Receipt sent</string>
     <string name="wallet__receive">Receive</string>
     <string name="wallet__receive__cjit">Receive Lightning Funds</string>
     <string name="wallet__receive_bitcoin">Receive Bitcoin</string>

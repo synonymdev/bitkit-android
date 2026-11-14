@@ -4,10 +4,13 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
+import com.synonym.paykit.OutboundPrivateSendReport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import to.bitkit.di.json
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.utils.Logger
 import java.io.InputStream
 import java.io.OutputStream
@@ -22,6 +25,70 @@ private val Context.privatePaykitCacheDataStore: DataStore<PrivatePaykitCacheDat
 private val Context.privatePaykitReservationDataStore: DataStore<PrivatePaykitReservationData> by dataStore(
     fileName = "private_paykit_reservations.json",
     serializer = PrivatePaykitReservationSerializer,
+)
+
+private val Context.paykitOutboundDeliveryDataStore: DataStore<PaykitOutboundDeliveryData> by dataStore(
+    fileName = "paykit_outbound_delivery.json",
+    serializer = PaykitOutboundDeliverySerializer,
+)
+
+/**
+ * What drains reported for queued Paykit private messages, kept across launches: the SDK reports a message's delivery
+ * only to the call that drained it, so a receipt counts as sent only once some drain saw its message go out.
+ */
+@Singleton
+class PaykitOutboundDeliveryStore @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    companion object {
+        /** Most message outcomes kept; the oldest ids are dropped first. */
+        private const val MAX_ENTRIES = 1000
+    }
+
+    private val store by lazy { context.paykitOutboundDeliveryDataStore }
+
+    suspend fun record(report: OutboundPrivateSendReport) {
+        if (report.sent.isEmpty() && report.failed.isEmpty()) return
+        store.updateData { data ->
+            val outcomes = data.outcomes +
+                report.failed.associate { it.outboundMessageId.toString() to false } +
+                report.sent.associate { it.toString() to true }
+            val kept = outcomes.keys.mapNotNull { it.toULongOrNull() }.sorted().takeLast(MAX_ENTRIES)
+                .map { it.toString() }.toSet()
+            data.copy(outcomes = outcomes.filterKeys(kept::contains))
+        }
+    }
+
+    /** True once a drain sent the message, false when its latest drain failed, null when no drain reported it. */
+    suspend fun wasSent(messageId: ULong?): Boolean? =
+        messageId?.let { store.data.first().outcomes[it.toString()] }
+
+    /** Receipts whose access was seen sent stay sent, whatever later pruning drops from the message outcomes. */
+    suspend fun markReceiptSent(receiptId: String) {
+        store.updateData { data ->
+            if (receiptId in data.sentReceiptIds) data else data.copy(sentReceiptIds = data.sentReceiptIds + receiptId)
+        }
+    }
+
+    suspend fun isReceiptSent(receiptId: String): Boolean = receiptId in store.data.first().sentReceiptIds
+
+    /** Message ids are local to one identity's Paykit state, so outcomes recorded for another or none are dropped. */
+    suspend fun bind(identity: String) {
+        store.updateData { data ->
+            if (PubkyPublicKeyFormat.matches(data.identity, identity)) data else PaykitOutboundDeliveryData(identity)
+        }
+    }
+
+    suspend fun reset() {
+        store.updateData { PaykitOutboundDeliveryData() }
+    }
+}
+
+@Serializable
+data class PaykitOutboundDeliveryData(
+    val identity: String? = null,
+    val outcomes: Map<String, Boolean> = emptyMap(),
+    val sentReceiptIds: Set<String> = emptySet(),
 )
 
 @Singleton
@@ -138,6 +205,24 @@ private object PrivatePaykitReservationSerializer : Serializer<PrivatePaykitRese
         }
 
     override suspend fun writeTo(t: PrivatePaykitReservationData, output: OutputStream) {
+        output.write(json.encodeToString(t).encodeToByteArray())
+    }
+}
+
+private object PaykitOutboundDeliverySerializer : Serializer<PaykitOutboundDeliveryData> {
+    private const val TAG = "PaykitOutboundDeliverySerializer"
+
+    override val defaultValue: PaykitOutboundDeliveryData = PaykitOutboundDeliveryData()
+
+    override suspend fun readFrom(input: InputStream): PaykitOutboundDeliveryData =
+        runCatching {
+            json.decodeFromString<PaykitOutboundDeliveryData>(input.readBytes().decodeToString())
+        }.getOrElse {
+            Logger.error("Failed to deserialize PaykitOutboundDeliveryData", it, context = TAG)
+            defaultValue
+        }
+
+    override suspend fun writeTo(t: PaykitOutboundDeliveryData, output: OutputStream) {
         output.write(json.encodeToString(t).encodeToByteArray())
     }
 }

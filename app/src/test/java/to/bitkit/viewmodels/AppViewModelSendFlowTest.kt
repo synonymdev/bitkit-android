@@ -192,6 +192,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRefreshMode
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitReceiptRepo
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitRouteRepo
 import to.bitkit.repositories.PaykitSparkWithdrawalRelease
@@ -324,6 +325,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitRouteRepo = mock<PaykitRouteRepo>()
     private val usdtState = MutableStateFlow(UsdtWalletState(balance = 1_000_000u))
     private val paykitUsdtPayments = mock<PaykitUsdtPaymentRepo>()
+    private val paykitReceiptRepo = mock<PaykitReceiptRepo>()
     private val samRockRepo = mock<SamRockRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
@@ -1012,6 +1014,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         usdtRepo = usdtRepo,
         paykitRouteRepo = paykitRouteRepo,
         paykitUsdtPayments = paykitUsdtPayments,
+        paykitReceiptRepo = paykitReceiptRepo,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },
         backupSheet = backupSheet,
