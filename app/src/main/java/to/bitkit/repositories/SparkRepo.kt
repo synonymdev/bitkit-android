@@ -591,7 +591,11 @@ class SparkRepo @Inject constructor(
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
             paymentHash
         }.onFailure {
-            Logger.error("Failed to pay invoice with Spark", it, context = TAG)
+            if (it is PaymentAbortedBeforeSend) {
+                Logger.debug("Aborted Spark invoice pay before send", context = TAG)
+            } else {
+                Logger.error("Failed to pay invoice with Spark", it, context = TAG)
+            }
         }
     }
 
