@@ -36,6 +36,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -78,6 +79,9 @@ class WakeRepo @Inject constructor(
 
         /** The longest wait between two retries of a failed sync, unless the gateway asks for longer. */
         val SYNC_RETRY_MAX = 15.minutes
+
+        /** The longest a gateway's `Retry-After` is followed, as on iOS. */
+        val SYNC_RETRY_AFTER_MAX = 1.hours
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -254,8 +258,9 @@ class WakeRepo @Inject constructor(
 
     /**
      * Syncs, and after a transient failure syncs again, waiting [SYNC_RETRY_FIRST] and then twice as long each time up
-     * to [SYNC_RETRY_MAX], or longer when the gateway asks for it. A failure that would repeat is left to the next
-     * change. The observer cancels it when the inputs change, and [onNewPushToken] when the token does.
+     * to [SYNC_RETRY_MAX], or longer when the gateway asks for it, up to [SYNC_RETRY_AFTER_MAX]. A failure that would
+     * repeat is left to the next change. The observer cancels it when the inputs change, and [onNewPushToken] when the
+     * token does.
      */
     internal suspend fun syncUntilSettled(pushToken: String? = null) {
         var wait = SYNC_RETRY_FIRST
@@ -263,7 +268,7 @@ class WakeRepo @Inject constructor(
             val failure = syncRegistration(pushToken).exceptionOrNull() ?: return
             if (!failure.isTransientWakeFailure()) return
             val retryAfter = failure.wakeRejection()?.retryAfterSecs?.toLong()?.seconds ?: Duration.ZERO
-            delay(maxOf(wait, retryAfter))
+            delay(maxOf(wait, minOf(retryAfter, SYNC_RETRY_AFTER_MAX)))
             wait = minOf(wait * 2, SYNC_RETRY_MAX)
         }
     }

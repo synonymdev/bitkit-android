@@ -348,6 +348,23 @@ class WakeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a Retry-After longer than an hour is cut to an hour`() = test {
+        var attempts = 0
+        whenever(wakeService.register(any(), any(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                throw AppError(WakeException.GatewayRejected(503u, "unavailable", "later", null, 86_400uL))
+            }
+            ACCEPTED
+        }
+
+        sut.syncUntilSettled()
+
+        assertEquals(2, attempts)
+        assertEquals(WakeRepo.SYNC_RETRY_AFTER_MAX.inWholeMilliseconds, currentTime)
+    }
+
+    @Test
     fun `a sync the gateway refuses for good is left to the next change`() = test {
         var attempts = 0
         whenever(wakeService.register(any(), any(), any())).thenAnswer {
