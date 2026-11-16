@@ -10011,6 +10011,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lightning scan skips the channel wait when spark covers the amount`() = test {
+        val input = "lnbcrt1sparkscan"
+        stubLightningScan(bolt11 = input, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels()
+    }
+
+    @Test
+    fun `lightning scan waits for channels when spark does not cover the amount`() = test {
+        val input = "lnbcrt1ldkscan"
+        stubLightningScan(bolt11 = input, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(false)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo).waitForUsableChannels()
+    }
+
+    @Test
     fun `lightning channel wait cannot continue during required recovery`() = test {
         val input = "lnbcrt1heldscan"
         stubLightningScan(bolt11 = input, amountSats = 500u)

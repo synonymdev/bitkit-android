@@ -409,9 +409,16 @@ class AppViewModel @Inject constructor(
         if (canPresent()) _mainScreenEffect.emit(effect)
     }
 
-    private suspend fun waitForUsableChannels(walletGeneration: Long? = connectionRecovery.currentGeneration()) {
+    /**
+     * Waits for the node's channels before a Lightning send. Skipped when Spark covers [amountSats], since a Spark
+     * send needs no channel, so a payment opened right after launch does not wait for the node to start.
+     */
+    private suspend fun waitForUsableChannels(
+        walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        amountSats: ULong? = null,
+    ) {
         requireCurrentPaymentPreparation(walletGeneration)
-        lightningRepo.waitForUsableChannels()
+        if (amountSats == null || !lightningRepo.canSendWithSpark(amountSats)) lightningRepo.waitForUsableChannels()
         requireCurrentPaymentPreparation(walletGeneration)
         walletRepo.refreshMaxSendLightning()
         requireCurrentPaymentPreparation(walletGeneration)
@@ -3603,7 +3610,7 @@ class AppViewModel @Inject constructor(
                     )
                     return@takeIf false
                 }
-                waitForUsableChannels(walletGeneration)
+                waitForUsableChannels(walletGeneration, lnInv.amountSatoshis.coerceAtLeast(1u))
                 val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                 if (!canSend) {
                     val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
@@ -6316,7 +6323,7 @@ class AppViewModel @Inject constructor(
         )
         if (quickPayHandled) return
 
-        waitForUsableChannels(walletGeneration)
+        waitForUsableChannels(walletGeneration, amount)
         if (!lightningRepo.canSend(amount)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = amount.safe() - maxSendLightning.safe()
@@ -6396,7 +6403,7 @@ class AppViewModel @Inject constructor(
         }
         val paymentAmount = incomingAmount ?: displaySats
 
-        waitForUsableChannels(walletGeneration)
+        waitForUsableChannels(walletGeneration, paymentAmount.coerceAtLeast(1u))
         if (!lightningRepo.canSend(paymentAmount.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,
