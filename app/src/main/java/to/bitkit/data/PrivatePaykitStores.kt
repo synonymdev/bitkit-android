@@ -7,6 +7,11 @@ import androidx.datastore.dataStore
 import com.synonym.paykit.OutboundPrivateSendReport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import to.bitkit.di.json
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -46,6 +51,10 @@ class PaykitOutboundDeliveryStore @Inject constructor(
     }
 
     private val store by lazy { context.paykitOutboundDeliveryDataStore }
+    private val _backupStateVersion = MutableStateFlow(0L)
+
+    /** Moves when a receipt is first seen sent, the only part of these records the wallet backup keeps. */
+    val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
     suspend fun record(identity: String, report: OutboundPrivateSendReport) {
         if (report.sent.isEmpty() && report.failed.isEmpty()) return
@@ -83,16 +92,33 @@ class PaykitOutboundDeliveryStore @Inject constructor(
         store.updateData { PaykitOutboundDeliveryData() }
     }
 
+    /**
+     * Receipt ids seen sent, by identity, for the wallet backup: a restored SDK does not drain a sent message again,
+     * so only these records show the receipt as sent.
+     */
+    suspend fun backupSnapshot(): Map<String, Set<String>> =
+        store.data.first().identities.mapValues { it.value.sentReceiptIds }.filterValues { it.isNotEmpty() }
+
+    /** Adds the restored sent receipt ids to what this device already recorded. */
+    suspend fun restoreBackup(sentReceiptIds: Map<String, Set<String>>) {
+        sentReceiptIds.forEach { (identity, ids) ->
+            updateRecords(identity) { it.copy(sentReceiptIds = it.sentReceiptIds + ids) }
+        }
+    }
+
     private suspend fun updateRecords(
         identity: String,
         transform: (PaykitOutboundDeliveryRecords) -> PaykitOutboundDeliveryRecords,
     ) {
         val key = key(identity)
+        var sentChanged = false
         store.updateData { data ->
             val current = data.identities[key] ?: PaykitOutboundDeliveryRecords()
             val records = transform(current)
+            sentChanged = records.sentReceiptIds != current.sentReceiptIds
             if (records == current) data else data.copy(identities = data.identities + (key to records))
         }
+        if (sentChanged) _backupStateVersion.update { it + 1 }
     }
 
     private fun key(identity: String) = PubkyPublicKeyFormat.normalized(identity) ?: identity
