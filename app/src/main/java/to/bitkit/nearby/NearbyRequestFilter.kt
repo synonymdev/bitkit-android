@@ -1,5 +1,7 @@
 package to.bitkit.nearby
 
+import to.bitkit.nfc.scannedPaymentRequest
+
 private val LIGHTNING_INVOICE_PREFIXES = listOf("lnbc", "lntb", "lnbcrt", "lnsb", "lno1")
 
 /**
@@ -21,3 +23,11 @@ fun isNearbyPaymentRequest(request: String): Boolean {
         else -> false
     }
 }
+
+/**
+ * The payment request to hand to the scanner for [request] read over Bluetooth, or null when it is refused.
+ * The request is rewritten before the check, so a wrapped value such as `bitcoin:?lightning=<LNURL-auth>`
+ * is judged by what the scanner will actually receive.
+ */
+fun nearbyPaymentRequest(request: String): String? =
+    scannedPaymentRequest(request).takeIf(::isNearbyPaymentRequest)

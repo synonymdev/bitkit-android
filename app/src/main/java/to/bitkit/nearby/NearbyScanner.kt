@@ -19,7 +19,6 @@ import androidx.annotation.RequiresPermission
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.connectGattDirect
 import to.bitkit.ext.nowMillis
-import to.bitkit.nfc.scannedPaymentRequest
 import to.bitkit.utils.Logger
 import java.util.UUID
 import kotlin.time.Duration
@@ -31,7 +30,7 @@ import kotlin.time.Duration.Companion.seconds
  *
  * While started it scans for the nearby service. Once an advertiser at or above
  * [NearbyProtocol.MIN_RSSI] is seen, it waits [CANDIDATE_WINDOW] for others, connects to the
- * strongest one and reads the request. Only payment requests ([isNearbyPaymentRequest]) reach
+ * strongest one and reads the request. Only payment requests ([nearbyPaymentRequest]) reach
  * [onRequest], on the main thread. A device whose read failed is skipped for [RETRY_AFTER]; a device
  * whose request was delivered is skipped until [stop], so the scanner keeps listening for others.
  */
@@ -122,11 +121,17 @@ class NearbyScanner(
         if (session !== finished) return
         session?.close()
         session = null
-        val isPayment = request != null && isNearbyPaymentRequest(request)
-        if (request != null && !isPayment) Logger.warn("Ignored nearby request that is not a payment", context = TAG)
-        skippedUntil[device.address] = if (isPayment) Long.MAX_VALUE else nowMillis() + RETRY_AFTER.inWholeMilliseconds
+        val payment = request?.let(::nearbyPaymentRequest)
+        if (request != null && payment == null) {
+            Logger.warn("Ignored nearby request that is not a payment", context = TAG)
+        }
+        skippedUntil[device.address] = if (payment != null) {
+            Long.MAX_VALUE
+        } else {
+            nowMillis() + RETRY_AFTER.inWholeMilliseconds
+        }
         if (!isStarted) return
-        if (isPayment) onRequest(scannedPaymentRequest(requireNotNull(request)))
+        if (payment != null) onRequest(payment)
         startScan()
     }
 

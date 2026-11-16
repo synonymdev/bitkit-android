@@ -1,6 +1,8 @@
 package to.bitkit.nearby
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import to.bitkit.nfc.PosNfcFixtures
@@ -28,5 +30,18 @@ class NearbyRequestFilterTest {
         assertFalse(isNearbyPaymentRequest("pk:8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"))
         assertFalse(isNearbyPaymentRequest("lnbc10u1p"))
         assertFalse(isNearbyPaymentRequest(""))
+    }
+
+    @Test
+    fun `refuses a non-payment request wrapped in a bitcoin uri`() {
+        assertNull(nearbyPaymentRequest("bitcoin:?lightning=LNURL1DP68GURN8GHJ7"))
+        assertNull(nearbyPaymentRequest("BITCOIN:?LIGHTNING=lnurl1dp68gurn8ghj7"))
+    }
+
+    @Test
+    fun `hands over the rewritten payment request`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        assertEquals("lightning:$invoice", nearbyPaymentRequest(PosNfcFixtures.BIP321_URI))
+        assertEquals("bitcoin:bcrt1qtest", nearbyPaymentRequest(" bitcoin:bcrt1qtest "))
     }
 }
