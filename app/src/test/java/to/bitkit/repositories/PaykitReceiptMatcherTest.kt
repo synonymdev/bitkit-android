@@ -225,6 +225,19 @@ class PaykitReceiptMatcherTest {
     }
 
     @Test
+    fun `a lightning receive from before the request was proposed is not receipted`() {
+        val request = payeeRequest(
+            proofs = listOf(proof("bitcoin-bolt11-preimage", PREIMAGE, BOLT11_METHOD)),
+            proposedAt = "2026-11-14T12:00:00.123456789+00:00",
+        )
+        val earlier = bitcoinReceive(HASH, PaykitReceiptRail.Lightning, 1uL, receivedAt = 1_794_657_600uL - 3_600uL)
+        val later = bitcoinReceive(HASH, PaykitReceiptRail.Lightning, 1uL, receivedAt = 1_794_657_600uL + 60uL)
+
+        assertTrue(match(request, lightning = listOf(earlier)).isEmpty())
+        assertEquals(1, match(request, lightning = listOf(later)).size)
+    }
+
+    @Test
     fun `a claim on a payment the wallet attributes to another contact is ignored`() {
         val claim = proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)
         val payer = payeeRequest(proofs = listOf(claim))

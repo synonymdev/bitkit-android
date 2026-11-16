@@ -73,7 +73,7 @@ class PaykitReceiptRepo @Inject constructor(
                 val expectedIdentity = checkNotNull(identity) { "No Paykit identity" }
                 _statuses.update { it + (candidate.receive.statusKey.lowercase() to PaykitReceiptStatus.Sending) }
                 issue(candidate, expectedIdentity)
-                publish(candidates.values, expectedIdentity)
+                check(publish(candidates.values, expectedIdentity)) { "Could not read issued receipts" }
             }
         }.onFailure {
             Logger.warn("Failed to retry a Paykit receipt", it, context = TAG)
@@ -153,13 +153,14 @@ class PaykitReceiptRepo @Inject constructor(
         }
     }
 
-    private suspend fun publish(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String) {
-        var views = readIssuedViews() ?: return
+    /** Returns false when it could not read the issued receipts and left the statuses as they were. */
+    private suspend fun publish(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String): Boolean {
+        var views = readIssuedViews() ?: return false
         val undelivered = found.filter { deliveryOf(it, views, expectedIdentity) != true }
         var unreachable = emptyList<String>()
         if (undelivered.isNotEmpty()) {
             unreachable = drain(undelivered, views, expectedIdentity)
-            views = readIssuedViews() ?: return
+            views = readIssuedViews() ?: return false
         }
         val updated = found.associate { candidate ->
             val sent = deliveryOf(candidate, views, expectedIdentity)
@@ -174,6 +175,7 @@ class PaykitReceiptRepo @Inject constructor(
             candidate.receive.statusKey.lowercase() to status
         }
         _statuses.update { updated }
+        return true
     }
 
     private suspend fun deliveryOf(

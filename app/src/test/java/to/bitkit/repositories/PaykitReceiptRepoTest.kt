@@ -137,6 +137,19 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `retry that cannot read issued receipts fails`() = test {
+        stubPaidRequest()
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).thenThrow(IllegalStateException("homeserver unavailable"))
+        sut.reconcile()
+        assertEquals(mapOf(HASH to PaykitReceiptStatus.Failed), sut.statuses.value)
+
+        whenever(sdk.issuedReceipts(any())).thenThrow(IllegalStateException("homeserver unavailable"))
+        sut.retry(HASH)
+
+        assertEquals(mapOf(HASH to PaykitReceiptStatus.Failed), sut.statuses.value)
+    }
+
+    @Test
     fun `receipt queued on an earlier launch is not issued again`() = test {
         stubPaidRequest()
         whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }

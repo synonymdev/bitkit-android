@@ -18,6 +18,7 @@ import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
 import java.security.MessageDigest
 import java.util.UUID
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
@@ -148,7 +149,9 @@ internal object PaykitReceiptMatcher {
         val receivedAt = receive.receivedAt ?: return true
         val recordedAt = proposalRecordedAt ?: return true
         val proposedAt = runCatching { Instant.parse(recordedAt) }.getOrNull() ?: return false
-        return Instant.fromEpochSeconds(receivedAt.toLong()) >= proposedAt - RECEIVE_TIME_TOLERANCE
+        // Lightning receive and request times both come from this device's clock; only block time can lag.
+        val tolerance = if (receive.rail == PaykitReceiptRail.Lightning) Duration.ZERO else RECEIVE_TIME_TOLERANCE
+        return Instant.fromEpochSeconds(receivedAt.toLong()) >= proposedAt - tolerance
     }
 
     private fun isReceiptable(record: PaymentRequestRecord): Boolean =
