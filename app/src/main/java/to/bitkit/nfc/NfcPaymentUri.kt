@@ -37,12 +37,14 @@ private const val REQUIRED_PARAM_PREFIX = "req-"
 fun scannedPaymentRequest(text: String): String {
     val trimmed = text.trim()
     if (!trimmed.startsWith(BITCOIN_WITHOUT_ADDRESS, ignoreCase = true)) return trimmed
-    val params = trimmed.substring(BITCOIN_WITHOUT_ADDRESS.length).split('&').mapNotNull {
+    val pairs = trimmed.substring(BITCOIN_WITHOUT_ADDRESS.length).split('&')
+    // Checked on every key, since BIP 321 allows a required key with an empty or no value.
+    if (pairs.any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }) return trimmed
+    val params = pairs.mapNotNull {
         val key = it.substringBefore('=', missingDelimiterValue = "")
         val value = it.substringAfter('=', missingDelimiterValue = "")
         if (key.isEmpty() || value.isEmpty()) null else key.lowercase() to value
     }.toMap()
-    if (params.keys.any { it.startsWith(REQUIRED_PARAM_PREFIX) }) return trimmed
     val request = LIGHTNING_PARAMS.firstNotNullOfOrNull { params[it] } ?: return trimmed
     return "lightning:$request"
 }

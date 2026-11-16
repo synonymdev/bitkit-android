@@ -64,5 +64,8 @@ class NfcPaymentUriTest {
         assertEquals(required, scannedPaymentRequest(required))
         val uppercase = "BITCOIN:?REQ-FOO=bar&LIGHTNING=$invoice"
         assertEquals(uppercase, scannedPaymentRequest(uppercase))
+        for (empty in listOf("bitcoin:?lightning=$invoice&req-foo=", "bitcoin:?lightning=$invoice&req-foo")) {
+            assertEquals(empty, scannedPaymentRequest(empty))
+        }
     }
 }
