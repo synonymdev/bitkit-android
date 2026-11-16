@@ -19,6 +19,7 @@ import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 
 class PaykitRouteRepoTest : BaseUnitTest() {
     private val sparkRepo = mock<SparkRepo>()
@@ -103,8 +104,8 @@ class PaykitRouteRepoTest : BaseUnitTest() {
 
     @Test
     fun `a spark leg refused while an earlier withdrawal settles routes as settling`() = test {
-        whenever(sparkRepo.withdrawalRouteLeg(onchain, 9_000uL))
-            .thenReturn(Result.failure(SparkError.WithdrawalPending()))
+        val pending = SparkError.WithdrawalPending(address = "bcrt1qearlier", contact = "earlier-contact")
+        whenever(sparkRepo.withdrawalRouteLeg(onchain, 9_000uL)).thenReturn(Result.failure(pending))
 
         val route = sut.route(
             amountSats = 9_000uL,
@@ -114,6 +115,6 @@ class PaykitRouteRepoTest : BaseUnitTest() {
             quoteServiceLegs = true,
         )
 
-        assertIs<SparkError.WithdrawalPending>(route.exceptionOrNull())
+        assertSame(pending, route.exceptionOrNull())
     }
 }

@@ -1260,9 +1260,16 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `quotes no route leg while an earlier contact withdrawal settles`() = test {
         val sut = readySpark(balanceSats = 50_000uL)
-        cacheData.update { it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qearlier", 5_000uL, null)) }
+        cacheData.update {
+            it.copy(pendingSparkWithdrawal = PendingSparkWithdrawal("bcrt1qearlier", 5_000uL, "earlier-contact"))
+        }
 
-        assertIs<SparkError.WithdrawalPending>(sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).exceptionOrNull())
+        val pending = assertIs<SparkError.WithdrawalPending>(
+            sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).exceptionOrNull(),
+        )
+        // The app tells a withdrawal to this endpoint from one to another contact by the journal's address and contact.
+        assertEquals("bcrt1qearlier", pending.address)
+        assertEquals("earlier-contact", pending.contact)
         verify(sparkService, never()).prepareSend(any(), anyOrNull(), anyOrNull())
     }
 
@@ -2493,6 +2500,52 @@ class SparkRepoTest : BaseUnitTest() {
         sparkEvents.emit(SdkEvent.ClaimedDeposits(emptyList()))
 
         assertEquals(SparkDepositClaim.Claimed, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `a deposit shown with no claim followed, as after a relaunch, reads as claimed once spark claims it`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        sut.followShownDeposit("txid")
+        assertEquals(SparkDepositClaim.Later, sut.depositClaims.value["txid"])
+
+        whenever { sparkService.listPayments() }.thenReturn(listOf(depositPayment()))
+        sparkEvents.emit(SdkEvent.ClaimedDeposits(emptyList()))
+
+        assertEquals(SparkDepositClaim.Claimed, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `the choice over a changed fee is kept for a reopened status screen`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
+        val sut = createSut()
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        sut.waitForMatureClaim("txid")
+        advanceUntilIdle()
+        assertEquals(SparkClaimChoice.Waited, sut.claimChoices.value["txid"])
+
+        sut.followShownDeposit("txid")
+        assertEquals(SparkDepositClaim.Later, sut.depositClaims.value["txid"])
+        assertEquals(SparkClaimChoice.Waited, sut.claimChoices.value["txid"])
+    }
+
+    @Test
+    fun `approving a changed fee is kept for a reopened status screen`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 900uL) }.thenReturn(ClaimDepositOutcome.Submitted)
+        val sut = createSut()
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        sut.payRepricedClaim("txid")
+        advanceUntilIdle()
+
+        assertEquals(SparkClaimChoice.Approved, sut.claimChoices.value["txid"])
     }
 
     @Test

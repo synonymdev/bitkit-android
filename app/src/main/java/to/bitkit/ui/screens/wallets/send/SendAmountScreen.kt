@@ -207,6 +207,7 @@ fun SendAmountScreen(
                 )
             }
             amountInputViewModel.setSats(maxSats, currencies)
+            onEvent(SendEvent.AmountMax(maxSats.toULong()))
         },
         onClickPayMethod = { onEvent(SendEvent.PaymentMethodSelect(it)) },
         onContinue = { onEvent(SendEvent.AmountContinue) },

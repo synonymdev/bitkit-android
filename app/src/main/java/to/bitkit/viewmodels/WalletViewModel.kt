@@ -49,6 +49,7 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SyncSource
@@ -81,6 +82,7 @@ class WalletViewModel @Inject constructor(
     private val connectivityRepo: ConnectivityRepo,
     private val boltzService: BoltzService,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
     sparkRepo: SparkRepo,
 ) : ViewModel() {
     companion object {
@@ -496,6 +498,7 @@ class WalletViewModel @Inject constructor(
                 }
             }.onSuccess { failedCategories ->
                 _restoreState.update { RestoreState.Completed(failedCategories) }
+                restorePubkySwaps()
             }.onFailure {
                 Logger.error("Restore from backup failed", it, context = TAG)
                 ToastEventBus.send(it)
@@ -568,6 +571,43 @@ class WalletViewModel @Inject constructor(
             }
         }
         _restoreState.update { RestoreState.Settled }
+    }
+
+    private var pubkySwapsRestoreJob: Job? = null
+
+    /**
+     * Finishes swap routes a restored wallet left in flight: each is rebuilt from its provider's listing and claimed to
+     * Savings, since the contact's address did not survive the restore, so the user learns the payment came back.
+     */
+    private fun restorePubkySwaps() {
+        if (!pubkySwapsRouteRepo.isEnabled) return
+        // One restore watches the contacts at a time; a wipe ends it.
+        pubkySwapsRestoreJob?.cancel()
+        pubkySwapsRestoreJob = viewModelScope.launch(bgDispatcher) {
+            pubkySwapsRouteRepo.restoredSwaps().collect { swaps ->
+                Logger.info(
+                    "Restored '${swaps.restored.size}' Pubky Swaps routes, '${swaps.known.size}' known",
+                    context = TAG,
+                )
+                // A known swap keeps the destination it was committed with, such as the contact, so it is driven
+                // silently.
+                swaps.known.forEach { launch { pubkySwapsRouteRepo.awaitClaim(it) } }
+                swaps.restored.forEach { swapId ->
+                    launch {
+                        pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
+                            // The claim also opens the received sheet above the toasts: stay until dismissed so the
+                            // user still sees why the money came back once that sheet closes.
+                            ToastEventBus.send(
+                                type = Toast.ToastType.INFO,
+                                title = context.getString(R.string.wallet__swap_route_restored_title),
+                                description = context.getString(R.string.wallet__swap_route_restored_text),
+                                autoHide = false,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun onRestoreRetry() = requestRecoveryRetry(owner = null, editorId = null)
@@ -789,6 +829,7 @@ class WalletViewModel @Inject constructor(
                     walletRepo.refreshBip21()
                 }
                 ensureSwapUpdatesRunning()
+                if (pubkySwapsRouteRepo.isEnabled) pubkySwapsRouteRepo.resumeUnfinishedSwaps()
                 // checkForOrphanedChannelMonitorRecovery()
             }
     }

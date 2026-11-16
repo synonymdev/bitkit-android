@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -41,6 +42,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendChangedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
+import to.bitkit.repositories.SparkClaimChoice
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.repositories.SparkRepo
@@ -109,9 +111,44 @@ class SparkFundingViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            sparkRepo.depositClaims.collect { claims ->
-                _uiState.update { state -> state.copy(claim = state.txid?.let { claims[it] } ?: state.claim) }
-            }
+            combine(sparkRepo.depositClaims, sparkRepo.claimChoices) { claims, choices -> claims to choices }
+                .collect { (claims, choices) ->
+                    _uiState.update { state ->
+                        val choice = state.txid?.let { choices[it] }
+                        state.copy(
+                            claim = state.txid?.let { claims[it] } ?: state.claim,
+                            isFeeApproved = choice == SparkClaimChoice.Approved,
+                            hasWaited = choice == SparkClaimChoice.Waited,
+                        )
+                    }
+                }
+        }
+        viewModelScope.launch {
+            // Spark drops a deposit from its list while claiming it, so a deposit once listed stays seen.
+            var seenTxid: String? = null
+            combine(_uiState.map { it.txid }, sparkRepo.state.map { it.deposits }) { txid, deposits ->
+                if (txid != null && deposits.any { it.isListed && it.txid.equals(txid, ignoreCase = true) }) {
+                    seenTxid = txid
+                }
+                txid != null && txid == seenTxid
+            }.distinctUntilChanged().collect { isSeen -> _uiState.update { it.copy(isDepositSeen = isSeen) } }
+        }
+    }
+
+    /**
+     * Shows the progress of the deposit in [txid], as when the transfer banner opens it. A deposit no claim is followed
+     * for, as after a relaunch, is added by Spark at 3 confirmations.
+     */
+    fun showDeposit(txid: String) {
+        sparkRepo.followShownDeposit(txid)
+        val choice = sparkRepo.claimChoices.value[txid]
+        _uiState.update {
+            it.copy(
+                txid = txid,
+                claim = sparkRepo.depositClaims.value[txid] ?: SparkDepositClaim.Later,
+                isFeeApproved = choice == SparkClaimChoice.Approved,
+                hasWaited = choice == SparkClaimChoice.Waited,
+            )
         }
     }
 
@@ -321,7 +358,14 @@ class SparkFundingViewModel @Inject constructor(
                 sparkRepo.followDepositClaim(txid, state.speed, quote.instantFeeSats.toULong())
             }
             Logger.info("Funded Spark from a hardware wallet with '$amountSats' sats in '$txid'", context = TAG)
-            _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
+            _uiState.update {
+                it.copy(
+                    txid = txid,
+                    claim = sparkRepo.depositClaims.value[txid] ?: it.claim,
+                    isFeeApproved = false,
+                    hasWaited = false,
+                )
+            }
             _effects.emit(SideEffect.Sent)
         }
     }
@@ -388,7 +432,14 @@ class SparkFundingViewModel @Inject constructor(
             sparkRepo.followDepositClaim(txid, speed, ceilingSats)
         }
         Logger.info("Funded Spark with '$amountSats' sats in '$txid'", context = TAG)
-        _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
+        _uiState.update {
+            it.copy(
+                txid = txid,
+                claim = sparkRepo.depositClaims.value[txid] ?: it.claim,
+                isFeeApproved = false,
+                hasWaited = false,
+            )
+        }
         _effects.emit(SideEffect.Sent)
     }
 
@@ -581,6 +632,12 @@ interface SparkFundingContract {
         val isSending: Boolean = false,
         val txid: String? = null,
         val claim: SparkDepositClaim = SparkDepositClaim.Looking,
+        /** Whether Spark lists the deposit in [txid]. */
+        val isDepositSeen: Boolean = false,
+        /** Whether the user approved the changed fast transfer fee of the deposit in [txid]. */
+        val isFeeApproved: Boolean = false,
+        /** Whether the user chose Wait over the changed fast transfer fee of the deposit in [txid]. */
+        val hasWaited: Boolean = false,
         /** The amount of the hardware wallet's retained transfer that a Retry would send again, or null. */
         val retainedRetrySats: Long? = null,
     ) {
