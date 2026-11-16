@@ -10015,7 +10015,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `lightning scan skips the channel wait when spark covers the amount`() = test {
+    fun `lightning scan skips the channel wait when spark covers the amount and the node is stopped`() = test {
         val input = "lnbcrt1sparkscan"
         stubLightningScan(bolt11 = input, amountSats = 500u)
         whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
@@ -10025,6 +10025,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(lightningRepo, never()).waitForUsableChannels()
+    }
+
+    @Test
+    fun `lightning scan waits for a running node even when spark covers the amount`() = test {
+        val input = "lnbcrt1runningscan"
+        stubLightningScan(bolt11 = input, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo).waitForUsableChannels()
     }
 
     @Test
