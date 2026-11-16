@@ -346,8 +346,14 @@ fun ReceiveQrScreen(
         hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
     }
 
-    // USDT draws its own screen, which offers its request itself.
-    val canTapToPay = offerPaymentNearby(invoicesByTab[selectedTab].takeIf { selectedTab != ReceiveTab.USDT })
+    val canTapToPay = offerPaymentNearby(
+        nearbyReceiveRequest(
+            tab = selectedTab,
+            request = invoicesByTab[selectedTab],
+            hasInvoiceError = walletState.hasReceiveInvoiceError,
+            isUpdating = walletState.isReceiveInvoiceUpdating,
+        )
+    )
 
     if (selectedTab == ReceiveTab.USDT) {
         Column(
