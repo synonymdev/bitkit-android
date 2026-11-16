@@ -209,6 +209,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRefreshMode
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitReceiptRepo
 import to.bitkit.repositories.PaykitRouteRepo
 import to.bitkit.repositories.PaykitSparkWithdrawalRelease
 import to.bitkit.repositories.PaykitSubscription
@@ -239,6 +240,7 @@ import to.bitkit.repositories.SparkWithdrawalSettlement
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.repositories.incomingPaymentRequestFailureReason
@@ -346,6 +348,7 @@ class AppViewModel @Inject constructor(
     private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
     private val paykitRouteRepo: PaykitRouteRepo,
     val paykitUsdtPayments: PaykitUsdtPaymentRepo,
+    private val paykitReceiptRepo: PaykitReceiptRepo,
     private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
@@ -359,6 +362,7 @@ class AppViewModel @Inject constructor(
     private val moveToSparkRepo: MoveToSparkRepo,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
+    private val wakeRepo: WakeRepo,
     private val timeSource: TimeSource,
     private val sparkExitRepo: SparkExitRepo,
 ) : ViewModel() {
@@ -1373,7 +1377,10 @@ class AppViewModel @Inject constructor(
             refreshed.onSuccess {
                 activityRepo.backfillPaykitContacts()
                 clearHandledSubscriptionNotification()
-                if (mode == PaykitPaymentRequestRefreshMode.FULL) reconcilePaykitUsdt()
+                if (mode == PaykitPaymentRequestRefreshMode.FULL) {
+                    reconcilePaykitUsdt()
+                    paykitReceiptRepo.reconcile()
+                }
                 paykitAllowanceRepo.refresh()
             }
         } finally {
@@ -1558,6 +1565,11 @@ class AppViewModel @Inject constructor(
     fun startSparkExitDriving() = sparkExitRepo.onAppForegrounded()
 
     fun stopSparkExitDriving() = sparkExitRepo.onAppBackgrounded()
+
+    /** Keeps the wake registration in step and tells the gateway the app is open, so it holds back fallback alerts. */
+    fun startWakePresence() = wakeRepo.onAppForeground()
+
+    fun stopWakePresence() = wakeRepo.onAppBackground()
 
     fun startPaykitPaymentRequestPolling() {
         privatePaykitRepo.setContactPreparationActive(true)
@@ -3210,6 +3222,7 @@ class AppViewModel @Inject constructor(
         val result = notifyPaymentReceivedHandler(command).getOrNull()
         if (result !is NotifyPaymentReceived.Result.ShowSheet) return
         notifyPaymentReceivedHandler.present(command) { showTransactionSheet(result.sheet) }
+        if (isPaykitEnabled.value) viewModelScope.launch { paykitReceiptRepo.reconcile() }
     }
 
     private fun notifyTransactionUnconfirmed() = toast(
@@ -8731,6 +8744,13 @@ class AppViewModel @Inject constructor(
         if (!shouldShow()) return@launch
         timedSheetManager.cancelPendingCheck()
         _transactionSheet.update { details }
+    }
+
+    /** Receipt status by the payment's hash, txid or USDT transfer id, lowercase. */
+    val paykitReceiptStatuses get() = paykitReceiptRepo.statuses
+
+    fun retryPaykitReceipt(paymentId: String) = viewModelScope.launch(bgDispatcher) {
+        paykitReceiptRepo.retry(paymentId)
     }
 
     fun hideNewTransactionSheet() {
