@@ -49,12 +49,14 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val settingsFlow = MutableStateFlow(SettingsData())
+    private val paykitEnabled = MutableStateFlow(true)
     private val contacts = MutableStateFlow(listOf(createContact()))
 
     @Before
     fun setUp() {
         settingsFlow.value = SettingsData()
         whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever(settingsStore.isPaykitEnabled).thenReturn(paykitEnabled)
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("identity", 0L))
         whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
@@ -602,6 +604,43 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
         verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any<() -> Collection<String>>(), any())
+    }
+
+    @Test
+    fun `enabling payments is refused while Paykit is disabled`() = test {
+        paykitEnabled.value = false
+        val sut = createSut()
+
+        assertSame(PublicPaykitError.PaykitDisabled, sut.setEnabled(true).exceptionOrNull())
+        assertSame(PublicPaykitError.PaykitDisabled, sut.setPublicEnabled(true).exceptionOrNull())
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(eq(true), any(), any())
+    }
+
+    @Test
+    fun `a Paykit disable queued during private setup keeps public sharing off`() = test {
+        val publication = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+            publication.await()
+            Result.success(Unit)
+        }
+        val sut = createSut()
+        val enablePrivate = async { sut.setEnabled(true) }
+        runCurrent()
+
+        paykitEnabled.value = false
+        val disable = async { sut.disablePaykit() }
+        val enablePublic = async { sut.setPublicEnabled(true) }
+        runCurrent()
+        publication.complete(Unit)
+        enablePrivate.await()
+        disable.await()
+
+        assertSame(PublicPaykitError.PaykitDisabled, enablePublic.await().exceptionOrNull())
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(eq(true), any(), any())
     }
 
     private fun createSut() = ContactPaymentSettingsRepo(

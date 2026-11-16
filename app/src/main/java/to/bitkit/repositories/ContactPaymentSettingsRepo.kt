@@ -17,6 +17,7 @@ import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -47,9 +48,16 @@ class ContactPaymentSettingsRepo @Inject constructor(
     fun enableForNewProfile() {
         if (newProfileJob?.isActive == true) return
         newProfileJob = scope.launch {
-            sharingMutex.withLock { enableBothForNewProfile() }
+            sharingMutex.withLock { if (isPaykitUiEnabled()) enableBothForNewProfile() }
         }
     }
+
+    /**
+     * Checked under [sharingMutex] before any enable. Dev Settings stores the flag before [disablePaykit] queues on
+     * the mutex, so an enable that gets the lock after a Paykit disable leaves sharing off.
+     */
+    private suspend fun isPaykitUiEnabled(): Boolean =
+        PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first())
 
     private suspend fun enableBothForNewProfile() {
         val signIn = pubkyRepo.currentSignIn()
@@ -123,6 +131,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
     suspend fun setPublicEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
         sharingMutex.withLock {
+            if (isEnabled && !isPaykitUiEnabled()) return@withLock Result.failure(PublicPaykitError.PaykitDisabled)
             val signIn = pubkyRepo.currentSignIn()
             val previous = settingsStore.data.first()
             val canPublish = {
@@ -202,6 +211,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
     suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
         sharingMutex.withLock {
+            if (isEnabled && !isPaykitUiEnabled()) return@withLock Result.failure(PublicPaykitError.PaykitDisabled)
             val contacts = pubkyRepo.contacts.value.map { it.publicKey }
             if (isEnabled) enable(contacts) else disable(contacts)
         }
