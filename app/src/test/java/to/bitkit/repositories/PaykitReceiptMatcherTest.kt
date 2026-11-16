@@ -244,6 +244,24 @@ class PaykitReceiptMatcherTest {
     }
 
     @Test
+    fun `an on-chain proof counts only what was paid to the request's own address`() {
+        val request = payeeRequest(
+            proofs = listOf(proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)),
+            endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)),
+        )
+        val batch = onchainReceive(
+            40_000uL,
+            address = "bcrt1qother",
+            contact = BUYER,
+            outputs = mapOf("bcrt1qother" to 30_000uL, ADDRESS.lowercase() to 10_000uL),
+        )
+
+        val candidate = match(request, onchain = listOf(batch)).single()
+
+        assertEquals(10_000uL, candidate.receive.amount.atomic)
+    }
+
+    @Test
     fun `an on-chain receipt is withheld when its outputs are unknown`() {
         val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
 

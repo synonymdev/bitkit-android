@@ -42,12 +42,14 @@ internal data class PaykitRecordedReceive(
     val outputs: Map<String, ULong>? = null,
 ) {
     /**
-     * An on-chain receive narrowed to what it paid to [address], so a batch paying other addresses of this wallet does
-     * not count toward the request; null when that amount is unknown or zero. Other rails are returned as they are.
+     * An on-chain receive narrowed to what it paid to [addresses], so a batch paying other addresses of this wallet
+     * does not count toward the request; null when that amount is unknown or zero. Other rails come back unchanged.
      */
-    fun paidTo(address: String?): PaykitRecordedReceive? {
+    fun paidTo(addresses: Collection<String>): PaykitRecordedReceive? {
         if (rail != PaykitReceiptRail.Onchain) return this
-        val sats = address?.let { outputs?.get(it.lowercase()) }?.takeIf { it > 0uL } ?: return null
+        val outputs = outputs ?: return null
+        val sats = addresses.map { it.lowercase() }.toSet().sumOf { outputs[it] ?: 0uL }.takeIf { it > 0uL }
+            ?: return null
         return copy(amount = PaykitAmount(PaykitAsset.BTC, sats))
     }
 }
@@ -113,6 +115,9 @@ internal object PaykitReceiptMatcher {
                     receive
                 )
 
+            // A proof's payment counts only toward the request's own addresses when it names any, else toward the
+            // address the wallet attributed to the payer.
+            val requestAddresses = onchainAddresses(record, network)
             found += record.paymentProofs.mapNotNull { proof ->
                 val receive = proof.bitcoinPaymentId()?.let { (rail, id) ->
                     if (rail == PaykitReceiptRail.Lightning) {
@@ -120,7 +125,7 @@ internal object PaykitReceiptMatcher {
                     } else {
                         onchainByTxid[id]
                             ?.takeIf { PubkyPublicKeyFormat.matches(it.contact, record.counterparty) }
-                            ?.let { it.paidTo(it.address) }
+                            ?.let { it.paidTo(requestAddresses.ifEmpty { listOfNotNull(it.address) }) }
                     }
                 }
                 receive?.takeIf { record.couldBePaidBy(it) }
@@ -195,10 +200,19 @@ internal object PaykitReceiptMatcher {
                     endpoint.methodId.isOnchain ->
                         onchainReceives
                             .filter { it.address.equals(endpoint.value, ignoreCase = true) }
-                            .mapNotNull { it.paidTo(endpoint.value) }
+                            .mapNotNull { it.paidTo(listOf(endpoint.value)) }
                     else -> emptyList()
                 }.map { identifier to it }
             }
+    }
+
+    private fun onchainAddresses(record: PaymentRequestRecord, network: Network): List<String> {
+        val terms = record.terms ?: return emptyList()
+        return terms.paymentEndpoints.orEmpty()
+            .filterKeys(terms.acceptedPaymentEndpointIdentifiers::contains)
+            .mapNotNull { (identifier, payload) -> PublicPaykitRepo.parseEndpoint(identifier, payload, network) }
+            .filter { it.methodId.isOnchain }
+            .map { it.value }
     }
 
     private fun PaykitVerifiedUsdtReceive.matches(record: PaymentRequestRecord): Boolean =
