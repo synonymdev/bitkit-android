@@ -69,6 +69,11 @@ class Type4TagEmulator(
 
     private fun readBinary(apdu: ByteArray): ByteArray {
         val file = selectedFile ?: return SW_FILE_NOT_FOUND
+        // The selected copy keeps one tap consistent, but once Receive stops offering, nothing more is served.
+        if (ndefMessage() == null) {
+            reset()
+            return SW_FILE_NOT_FOUND
+        }
         val offset = ((apdu[2].toInt() and 0xFF) shl 8) or (apdu[3].toInt() and 0xFF)
         if (offset > file.size) return SW_WRONG_OFFSET
         val requested = if (apdu.size > HEADER_SIZE) apdu[HEADER_SIZE].toInt() and 0xFF else 0

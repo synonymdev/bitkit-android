@@ -81,6 +81,16 @@ class Type4TagEmulatorTest {
     }
 
     @Test
+    fun `stops serving once nothing is published`() {
+        sut.process(selectApp)
+        sut.process(selectNdef)
+        message = null
+
+        assertArrayEquals(Type4TagEmulator.SW_FILE_NOT_FOUND, sut.process(hex("00B0000002")))
+        assertArrayEquals(Type4TagEmulator.SW_FILE_NOT_FOUND, sut.process(selectNdef))
+    }
+
+    @Test
     fun `is read-only`() {
         sut.process(selectApp)
         sut.process(selectNdef)
