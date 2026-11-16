@@ -344,11 +344,13 @@ fun ContentView(
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()
                     appViewModel.startSparkExitDriving()
+                    appViewModel.startWakePresence()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
                     appViewModel.stopPaykitPaymentRequestPolling()
                     appViewModel.stopSparkExitDriving()
+                    appViewModel.stopWakePresence()
                     val keptAliveByService = notificationsGranted &&
                         keepActiveInBackground &&
                         appViewModel.isForegroundServiceRunning()
@@ -365,6 +367,7 @@ fun ContentView(
         onDispose {
             lifecycle.removeObserver(observer)
             appViewModel.stopPaykitPaymentRequestPolling()
+            appViewModel.stopWakePresence()
         }
     }
 
@@ -1211,7 +1214,7 @@ private fun RootNavHost(
                     SpendingHwSignedScreen(
                         viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
                         onContinue = {
-                            navController.navigateTo(Routes.SettingUp) {
+                            navController.navigateTo(Routes.SettingUp()) {
                                 popUpTo<Routes.SpendingHwSigned> { inclusive = true }
                             }
                         },
@@ -1242,9 +1245,12 @@ private fun RootNavHost(
                 }
                 composableWithDefaultTransitions<Routes.SettingUp> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
+                    val viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry)
+                    val txid = it.toRoute<Routes.SettingUp>().txid
+                    LaunchedEffect(txid) { txid?.let(viewModel::showDeposit) }
                     BackHandler { navController.navigateToHome() }
                     SettingUpScreen(
-                        viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
+                        viewModel = viewModel,
                         onContinueClick = { navController.navigateToHome() },
                     )
                 }
@@ -2460,9 +2466,12 @@ internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean, walletId:
 }
 
 /** Shows the transfer's progress in place of its confirm screen, so going back cannot swipe it again. */
-fun NavController.navigateToSettingUp() = navigateTo(Routes.SettingUp) {
+fun NavController.navigateToSettingUp() = navigateTo(Routes.SettingUp()) {
     popUpTo<Routes.SpendingConfirm> { inclusive = true }
 }
+
+/** Opens the progress of the deposit in [txid], as the transfer banner on Home does. */
+fun NavController.navigateToTransferProgress(txid: String) = navigateTo(Routes.SettingUp(txid))
 
 fun NavController.navToActivityDetail(activity: Activity) = navigateTo(
     Routes.ActivityDetail(
@@ -2727,8 +2736,9 @@ sealed interface Routes {
     @Serializable
     data object TransferLearnMore : Routes.InternalOnly
 
+    /** The transfer's progress; [txid] names the deposit to show when the screen opens outside the transfer flow. */
     @Serializable
-    data object SettingUp : Routes.InternalOnly
+    data class SettingUp(val txid: String? = null) : Routes.InternalOnly
 
     @Serializable
     data class ExternalConnection(val scannedNodeUri: String? = null) : Routes.DeepLinkable

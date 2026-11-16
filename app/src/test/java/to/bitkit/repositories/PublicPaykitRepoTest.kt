@@ -93,6 +93,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
         whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever(settingsStore.isPaykitEnabled).thenReturn(MutableStateFlow(true))
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
         whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenReturn(syncReport())
         whenever { addressReservationRepo.currentOrRotatedPublicAddress(any()) }.thenReturn(Result.success("bc1ptest"))

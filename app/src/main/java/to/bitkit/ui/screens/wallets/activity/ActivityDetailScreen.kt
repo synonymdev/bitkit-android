@@ -22,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -186,6 +185,10 @@ fun ActivityDetailScreen(
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
                 val contacts by listViewModel.contacts.collectAsStateWithLifecycle()
                 val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
+                val pendingBoost = remember(item, detailViewModel) {
+                    (item as? Activity.Onchain)?.let(detailViewModel::observePendingBoost)
+                }
+                val hasPendingBoost = pendingBoost?.collectAsStateWithLifecycle(initialValue = false)?.value == true
                 var showAddTagSheet by remember { mutableStateOf(false) }
                 var isCpfpChild by remember { mutableStateOf(false) }
                 var isSparkWithdrawal by remember { mutableStateOf(false) }
@@ -247,6 +250,7 @@ fun ActivityDetailScreen(
                         onAssignClick = { onAssignContactClick(item.rawId()) },
                         onDetachClick = { detailViewModel.detachContact() },
                         onClickBoost = detailViewModel::onClickBoost,
+                        hasPendingBoost = hasPendingBoost,
                         onExploreClick = onExploreClick,
                         onChannelClick = onChannelClick,
                         detailViewModel = detailViewModel,
@@ -352,6 +356,7 @@ private fun ActivityDetailContent(
     onCopy: (String) -> Unit,
     hideBalance: Boolean = false,
     feeRates: FeeRates? = null,
+    hasPendingBoost: Boolean = false,
 ) {
     val isLightning = item is Activity.Lightning
     val isSent = item.isSent()
@@ -685,13 +690,13 @@ private fun ActivityDetailContent(
                     }
                 }
                 val shouldEnable = !isSparkWithdrawal &&
-                    shouldEnableBoostButton(item, isCpfpChild, isHardware, boostTxDoesExist)
+                    shouldEnableBoostButton(item, isCpfpChild, isHardware, boostTxDoesExist, hasPendingBoost)
                 PrimaryButton(
                     text = stringResource(
-                        if (hasCompletedBoost) {
-                            R.string.wallet__activity_boosted
-                        } else {
-                            R.string.wallet__activity_boost
+                        when {
+                            hasPendingBoost && shouldEnable -> R.string.wallet__boost_pending_title
+                            hasCompletedBoost -> R.string.wallet__activity_boosted
+                            else -> R.string.wallet__activity_boost
                         }
                     ),
                     size = ButtonSize.Small,
@@ -709,8 +714,8 @@ private fun ActivityDetailContent(
                         .weight(1f)
                         .testTag(
                             when {
-                                hasCompletedBoost -> "BoostedButton"
                                 shouldEnable -> "BoostButton"
+                                hasCompletedBoost -> "BoostedButton"
                                 else -> "BoostDisabled"
                             }
                         )
@@ -1057,18 +1062,18 @@ private fun PreviewSheetSmallScreen() {
     }
 }
 
-@ReadOnlyComposable
-@Composable
-private fun shouldEnableBoostButton(
+internal fun shouldEnableBoostButton(
     item: Activity,
     isCpfpChild: Boolean,
     isHardware: Boolean,
     boostTxDoesExist: ImmutableMap<String, Boolean>,
+    hasPendingBoost: Boolean,
 ): Boolean {
     if (isHardware) return false
     if (item !is Activity.Onchain) return false
 
     val activity = item.v1
+    if (hasPendingBoost && activity.txType == PaymentType.SENT) return true
 
     // Check all disable conditions
     val shouldDisable = isCpfpChild || !activity.doesExist || activity.confirmed ||
@@ -1080,8 +1085,6 @@ private fun shouldEnableBoostButton(
     return !activity.isTransfer && activity.value > 0uL
 }
 
-@ReadOnlyComposable
-@Composable
 private fun isBoostCompleted(
     activity: OnchainActivity,
     boostTxDoesExist: ImmutableMap<String, Boolean>,

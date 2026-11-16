@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.wakeSignPubkyProof
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitProfile
@@ -85,6 +86,15 @@ class PubkyService @Inject constructor(
 
     suspend fun publicKeyFromSecret(secretKeyHex: String): String = ServiceQueue.PUBKY.background {
         PaykitSdkService.publicKeyFromSecret(secretKeyHex)
+    }
+
+    // endregion
+
+    // region Wake
+
+    /** Signs a wake gateway registration message for its `pk:` proof. */
+    suspend fun signWakeRegistration(secretKeyHex: String, message: String): String = ServiceQueue.CORE.background {
+        wakeSignPubkyProof(secretKeyHex = secretKeyHex, message = message)
     }
 
     // endregion

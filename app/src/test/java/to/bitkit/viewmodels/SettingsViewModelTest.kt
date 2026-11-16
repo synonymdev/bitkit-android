@@ -56,7 +56,6 @@ class SettingsViewModelTest : BaseUnitTest() {
 
     private val settingsData = MutableStateFlow(SettingsData())
     private val isPaykitEnabled = MutableStateFlow(false)
-    private val contactPaymentsEnabled = MutableStateFlow(false)
     private val contacts = MutableStateFlow(
         listOf(
             PubkyProfile(
@@ -76,10 +75,6 @@ class SettingsViewModelTest : BaseUnitTest() {
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever(settingsStore.areAllowancesEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.isPubkyProfileSetupPending).thenReturn(MutableStateFlow(false))
-        whenever(contactPaymentSettingsRepo.isEnabled).thenReturn(contactPaymentsEnabled)
-        whenever(contactPaymentSettingsRepo.isPublicEnabled).thenReturn(MutableStateFlow(false))
-        whenever { contactPaymentSettingsRepo.setPublicEnabled(any()) }.thenReturn(Result.success(Unit))
-        whenever { contactPaymentSettingsRepo.setEnabled(any()) }.thenReturn(Result.success(Unit))
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)
@@ -244,25 +239,6 @@ class SettingsViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(settingsData.value.keepBitkitActiveInBackground)
-    }
-
-    @Test
-    fun `contact payment switch delegates to shared settings repo`() = test {
-        sut.setContactPaymentsEnabled(true)
-        advanceUntilIdle()
-
-        verify(contactPaymentSettingsRepo).setEnabled(true)
-        assertFalse(sut.isUpdatingContactPayments.value)
-    }
-
-    @Test
-    fun `public payment switch delegates only to public opt in`() = test {
-        sut.setPublicPaymentsEnabled(true)
-        advanceUntilIdle()
-
-        verify(contactPaymentSettingsRepo).setPublicEnabled(true)
-        verify(contactPaymentSettingsRepo, never()).setEnabled(any())
-        assertFalse(sut.isUpdatingContactPayments.value)
     }
 
     @Test

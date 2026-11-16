@@ -66,6 +66,17 @@ internal object Env {
      */
     val isSwapSupported get() = network == Network.BITCOIN
 
+    /**
+     * Whether a Paykit payment may route through a Pubky Swaps provider when no balance reaches the contact's
+     * endpoints. Regtest debug builds with `PUBKY_SWAPS_ROUTES=true` only.
+     */
+    val isPubkySwapsRouteEnabled: Boolean
+        get() = isDebug && network == Network.REGTEST && BuildConfig.PUBKY_SWAPS_ROUTES
+
+    /** Swap providers to ask besides the user's contacts, from `PUBKY_SWAPS_PROVIDERS` (comma-separated pubkys). */
+    val pubkySwapsProviders: List<String>
+        get() = BuildConfig.PUBKY_SWAPS_PROVIDERS.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
     const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
@@ -222,6 +233,15 @@ internal object Env {
         get() = when (network) {
             Network.BITCOIN -> "https://blocktank.synonym.to/backups-ldk"
             else -> "https://bitkit.stag0.blocktank.to/backups-ldk"
+        }
+
+    /**
+     * The wake gateway this build registers with for background pushes, or null to leave wakes off. No gateway is
+     * deployed yet (synonymdev/wake#2), so only a debug build with `WAKE_GATEWAY_URL` set has one, for local testing.
+     */
+    val wakeGatewayUrl: String?
+        get() = BuildConfig.WAKE_GATEWAY_URL.takeIf { isDebug && it.isNotBlank() } ?: when (network) {
+            Network.BITCOIN, Network.TESTNET, Network.SIGNET, Network.REGTEST -> null
         }
 
     fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {

@@ -16,6 +16,7 @@ import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
@@ -27,6 +28,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactImportOverviewViewModelTest : BaseUnitTest() {
     private val pubkyRepo: PubkyRepo = mock()
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo = mock()
     private val isImportingContacts = MutableStateFlow(false)
     private val contactImportVersion = MutableStateFlow(0L)
     private val pendingImportProfile = MutableStateFlow<PubkyProfile?>(null)
@@ -70,12 +72,14 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
         assertFalse(sut.uiState.value.shouldRedirectToPayContacts)
+        verify(contactPaymentSettingsRepo, never()).enableForNewProfile()
 
         sut.importAll()
         advanceUntilIdle()
 
         verify(pubkyRepo).importContacts(contacts)
         assertTrue(sut.uiState.value.shouldRedirectToPayContacts)
+        verify(contactPaymentSettingsRepo).enableForNewProfile()
     }
 
     @Test
@@ -109,7 +113,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `back during import all keeps the pending import and never opens pay contacts`() = test {
+    fun `back during import all keeps the pending import and never opens pay contacts or enables payments`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
         listOf(
             "fails" to Result.failure(AppError("Storage unavailable")),
@@ -148,6 +152,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
 
             assertFalse(sut.uiState.value.isImporting, case)
             assertFalse(sut.uiState.value.shouldRedirectToPayContacts, case)
+            verify(contactPaymentSettingsRepo, never()).enableForNewProfile()
             effectsJob.cancel()
             sut.viewModelScope.cancel()
         }
@@ -204,6 +209,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
 
     private fun createSut() = ContactImportOverviewViewModel(
         pubkyRepo = pubkyRepo,
+        contactPaymentSettingsRepo = contactPaymentSettingsRepo,
     )
 
     private fun stubPendingImport(profile: PubkyProfile?, contacts: List<PubkyProfile>) {

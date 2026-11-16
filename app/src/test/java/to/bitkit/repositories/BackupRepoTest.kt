@@ -53,6 +53,7 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PaykitOutboundDeliveryStore
 import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
@@ -148,6 +149,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitPresentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val paykitAllowanceStore = mock<PaykitAllowanceStore>()
+    private val paykitOutboundDeliveryStore = mock<PaykitOutboundDeliveryStore>()
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
     private val sparkRepo = mock<SparkRepo>()
@@ -221,6 +223,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(paykitUsdtPaymentRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPresentationStore.backupSnapshot()).thenReturn(emptyMap())
         whenever(paykitAllowanceStore.backupSnapshot()).thenReturn(emptyMap())
+        whenever { paykitOutboundDeliveryStore.backupSnapshot() }.thenReturn(emptyMap())
         whenever(privatePaykitAddressReservationRepo.preparePublicAddressRestore()).thenReturn(false)
         whenever { privatePaykitAddressReservationRepo.restoreBackup(anyOrNull(), any()) }
             .thenReturn(Result.success(Unit))
@@ -868,6 +871,22 @@ class BackupRepoTest : BaseUnitTest() {
         } finally {
             sut.stopObservingBackups()
         }
+    }
+
+    @Test
+    fun `restore brings back each identity's sent receipts`() = test {
+        val sent = mapOf("pubky" + "y".repeat(52) to setOf("receipt-1"))
+        stubWalletBackup(
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                sentReceipts = sent,
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitOutboundDeliveryStore).restoreBackup(sent)
     }
 
     @Test
@@ -3499,6 +3518,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(paykitPaymentProofStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPresentationStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitAllowanceStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitOutboundDeliveryStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(preActivityMetadataRepo.preActivityMetadataChanged).thenReturn(MutableStateFlow(0L))
         whenever(lightningService.syncStatusChanged).thenReturn(MutableSharedFlow())
     }
@@ -3547,6 +3567,7 @@ class BackupRepoTest : BaseUnitTest() {
         paykitPaymentRequestRepo = Provider { paykitPaymentRequestRepo },
         paykitPresentationStore = paykitPresentationStore,
         paykitAllowanceStore = paykitAllowanceStore,
+        paykitOutboundDeliveryStore = paykitOutboundDeliveryStore,
         keychain = keychain,
         onchainSendAttemptStore = onchainSendAttemptStore,
         lightningRepo = Provider { lightningRepo },
