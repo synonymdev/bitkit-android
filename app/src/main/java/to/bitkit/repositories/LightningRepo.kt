@@ -104,6 +104,7 @@ import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -122,6 +123,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 @Singleton
 class LightningRepo @Inject constructor(
@@ -1519,8 +1521,9 @@ class LightningRepo @Inject constructor(
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             val key = ldkSendKey(bolt11, paymentHash)
-            // Read before the checks, so a node send admitted after them refuses this one at submission.
+            // Read before the checks, so a send of either rail recorded after them refuses this one at submission.
             val ldkRecordsBefore = ldkSendRecords.get()
+            val sparkRecordsBefore = sparkRepo.sendRecordMark()
             runSuspendCatching { earlierNodeSend(bolt11, paymentHash) }
                 .getOrElse { return Result.failure(it) }
                 ?.let {
@@ -1535,7 +1538,8 @@ class LightningRepo @Inject constructor(
                 val isAuthorized = onBeforeSend().also { if (it) requireWalletRestoreComplete() }
                 if (isAuthorized) {
                     isAdmitted = admitSend(key, LightningRail.Spark) {
-                        (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore
+                        (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore ||
+                            sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
                     }
                     isRefused = !isAdmitted
                     if (isRefused) throw PaymentPendingException(paymentHash ?: key)
@@ -1560,6 +1564,12 @@ class LightningRepo @Inject constructor(
                             // Spark sent nothing, so the node's attempt stays the latest.
                             railBefore?.let { rail -> recordSendRail(key, rail) } ?: sendRails.remove(key)
                         }
+                    }
+                    .let {
+                        // Refused for a Spark send recorded since the checks, whose completion its caller may miss.
+                        val isOverlapped = isRefused && sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
+                        if (!isOverlapped) return@let it
+                        settledSparkSendOutcome(paymentHash ?: key, key, ldkRecordsBefore) ?: it
                     }
             } finally {
                 if (isAdmitted) releaseSend(key)
@@ -1624,6 +1634,31 @@ class LightningRepo @Inject constructor(
             PaymentStatus.FAILED -> null
         }
     }
+
+    private suspend fun settledSparkSendOutcome(
+        paymentHash: String,
+        key: String,
+        ldkRecordsBefore: Long,
+    ): Result<PaymentId>? {
+        // Read before the row too, so a send that ends while it is read still counts as live. The mark comes first,
+        // so a send it counts as recorded is already admitted or in flight when liveness is read.
+        val sparkRecordsBefore = sparkRepo.sendRecordMark()
+        val wasLive = isSendLive(paymentHash, key, ldkRecordsBefore)
+        val send = sparkRepo.lightningSend(paymentHash) as? SparkLightningSend.Found ?: return null
+        val isLive = wasLive || isSendLive(paymentHash, key, ldkRecordsBefore) ||
+            sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
+        return when (send.status) {
+            SparkPaymentStatus.COMPLETED -> Result.success(paymentHash)
+            // A failed row can be an earlier attempt's while a retry of the invoice on either rail can still pay it.
+            SparkPaymentStatus.FAILED if isLive -> null
+            SparkPaymentStatus.FAILED -> Result.failure(SparkError.SendRefused("Spark's earlier send of it failed"))
+            SparkPaymentStatus.PENDING -> null
+        }?.also { Logger.info("Settled the refused Spark send '$paymentHash' as '${send.status}'", context = TAG) }
+    }
+
+    private fun isSendLive(paymentHash: String, key: String, ldkRecordsBefore: Long): Boolean =
+        sparkRepo.isSendInFlight(paymentHash) || synchronized(admittedSends) { admittedSends[key] != null } ||
+            (ldkSendRecordedAt[key] ?: 0L) > ldkRecordsBefore
 
     private fun EarlierSend.toResult(): Result<PaymentId> = when (this) {
         is EarlierSend.Pending -> Result.failure(PaymentPendingException(paymentHash))
@@ -1695,12 +1730,13 @@ class LightningRepo @Inject constructor(
 
     /**
      * The last check before a send of [key] leaves on [rail], so of two sends of one invoice only the first admitted
-     * goes out: refused while the other rail holds one, or [isSentOnOtherRail] says it recorded one since the checks.
+     * goes out: refused while the other rail holds one, or Spark does, as it doesn't refuse a repeat, or
+     * [isSentSinceChecks] says a send was recorded since the checks. The node refuses its own repeats.
      */
-    private fun admitSend(key: String, rail: LightningRail, isSentOnOtherRail: () -> Boolean): Boolean =
+    private fun admitSend(key: String, rail: LightningRail, isSentSinceChecks: () -> Boolean): Boolean =
         synchronized(admittedSends) {
             val held = admittedSends[key]
-            val isFree = (held == null || held.first == rail) && !isSentOnOtherRail()
+            val isFree = (held == null || held.first == rail && rail == LightningRail.Ldk) && !isSentSinceChecks()
             if (isFree) admittedSends[key] = rail to (held?.second ?: 0) + 1
             isFree
         }
@@ -1834,7 +1870,6 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun awaitUsableChannels(): LightningState? = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
-        refreshChannelsAndPeers()
         while (!_lightningState.value.shouldStopWaitingForUsableChannels()) {
             delay(CHANNELS_USABLE_POLL_DELAY)
             refreshChannelsAndPeers()
@@ -1910,6 +1945,9 @@ class LightningRepo @Inject constructor(
             context = TAG,
         )
 
+        // a drain spends everything spendable after the sync, so a send only drains while that still equals sats
+        val isDrain = isMaxAmount && (isTransfer || sats == maxSendOnchainAt(address, satsPerVByte))
+
         // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
         val utxosForSend = when {
             isTransfer && isMaxAmount -> null
@@ -1926,7 +1964,7 @@ class LightningRepo @Inject constructor(
                 orderId = orderId,
                 address = address,
                 amountSats = sats,
-                isMaxAmount = isMaxAmount,
+                isMaxAmount = isDrain,
                 feeRateSatsPerVByte = satsPerVByte,
                 isTransfer = isTransfer,
                 channelId = channelId,
@@ -1952,18 +1990,12 @@ class LightningRepo @Inject constructor(
                     sats,
                     satsPerVByte,
                     utxosForSend,
-                    isMaxAmount,
+                    isDrain,
                     attempt.walletIndex,
                     paymentDeadlineAt,
                 )
                     .also { prepared ->
-                        if (!isMaxAmount && utxosForSend != null) {
-                            check(
-                                prepared.receipt.inputs.toSet() == utxosForSend.map {
-                                    OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
-                                }.toSet()
-                            )
-                        }
+                        checkPreparedSpend(prepared.receipt, sats, isDrain, isTransfer, utxosForSend)
                         if (approvedMiningFeeSats != null) {
                             val miningFee = prepared.receipt.miningFeeSats
                             if (prepared.receipt.amountSats != sats || miningFee == null ||
@@ -2077,6 +2109,37 @@ class LightningRepo @Inject constructor(
         runSuspendCatching { syncState() }
             .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
         Result.success(winningOutcome.copy(amountSats = recorded.amountSats.takeIf { recorded.isMaxAmount }))
+    }
+
+    private suspend fun maxSendOnchainAt(address: Address, satsPerVByte: ULong): ULong? = runSuspendCatching {
+        val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+        if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+        val fee = lightningService.estimateSendAllFee(address, satsPerVByte)
+        spendableSats.safe() - fee.safe()
+    }.getOrNull()
+
+    private fun checkPreparedSpend(
+        receipt: OnchainPreparedReceipt,
+        sats: ULong,
+        isDrain: Boolean,
+        isTransfer: Boolean,
+        utxosForSend: List<SpendableUtxo>?,
+    ) {
+        when {
+            // a drain also sweeps coins synced after the recheck, so it must still match sats
+            isDrain -> if (!isTransfer) {
+                check(receipt.amountSats == sats) {
+                    "Drain amount '${receipt.amountSats}' differs from confirmed '$sats'"
+                }
+            }
+
+            utxosForSend != null -> check(
+                receipt.inputs.toSet() == utxosForSend.map {
+                    OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
+                }.toSet()
+            )
+        }
     }
 
     private val recoveryCoordinator by lazy {
@@ -2468,6 +2531,21 @@ class LightningRepo @Inject constructor(
             val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
             val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
             lightningService.estimateSendAllFee(address = addressOrDefault, satsPerVByte = satsPerVByte)
+        }
+    }
+
+    /** Max onchain amount sendable at [speed], i.e. the spendable balance minus the send-all mining fee */
+    suspend fun estimateMaxSendOnchain(
+        address: Address? = null,
+        speed: TransactionSpeed? = null,
+        feeRates: FeeRates? = null,
+    ): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+            if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+            val fee = estimateSendAllFee(address = address, speed = speed, feeRates = feeRates).getOrThrow()
+            spendableSats.safe() - fee.safe()
         }
     }
 

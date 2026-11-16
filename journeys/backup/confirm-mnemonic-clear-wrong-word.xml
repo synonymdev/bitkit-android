@@ -7,8 +7,9 @@
     Stopping before Continue leaves the backupVerified setting unchanged.
     The route reveals the recovery phrase. Run it only on a throwaway wallet, and never copy the words
     into logs, reports or files; refer to them by position. "Word N" below means the Nth word shown on
-    the Your Recovery Phrase screen, and "chip for word N" means the shuffled button tagged
-    "Word-(that word)". Every slot carries the testTag "SelectedWord-N" whether filled or not, but the
+    the Your Recovery Phrase screen, and "chip for word N" means the shuffled button labelled with that
+    word (testTag "ShuffledWord-k", where k is its position in the grid and changes each time the
+    screen opens). Every slot carries the testTag "SelectedWord-N" whether filled or not, but the
     row is only clickable while it shows a wrong word, so assert on the word's colour and on whether
     the row reacts to a tap, not on the tag being present.
   </description>

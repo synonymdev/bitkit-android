@@ -1024,6 +1024,30 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a start never lowers a funding index a scan moved past its quote`() = test {
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 3))))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        assertEquals(3u, sut.state.value.pending?.fundingIndex)
+
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertEquals(
+            mapOf(key to 4),
+            keptCache(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 3))).sparkExitNextFundingIndexes,
+            "the next exit funds from this exit's address",
+        )
+        // A scan that kept index 9 between the quote and the start.
+        assertEquals(
+            mapOf(key to 9),
+            keptCache(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 9))).sparkExitNextFundingIndexes,
+            "the next exit funds from an address the scan found used",
+        )
+    }
+
+    @Test
     fun `a funding scan the chain fails fails the quote and keeps no index`() = test {
         val sut = scannedSut(scanChain(used = emptySet(), reads = mutableListOf(), isDown = true))
 

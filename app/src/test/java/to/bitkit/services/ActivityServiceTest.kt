@@ -46,6 +46,10 @@ class ActivityServiceTest : BaseUnitTest() {
     private val binding = Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")
     private val getActivityById = binding.getMethod("getActivityById", String::class.java, String::class.java)
     private val updateActivity = binding.getMethod("updateActivity", String::class.java, Activity::class.java)
+    private val preserveFeeRate = binding.getMethod(
+        "upsertOnchainActivityPreservingFeeRate",
+        OnchainActivity::class.java,
+    )
     private val markActivityAsSeen = binding.methods.single { it.name.startsWith("markActivityAsSeen") }
 
     private val cacheStore = mock<CacheStore>()
@@ -307,6 +311,11 @@ class ActivityServiceTest : BaseUnitTest() {
             native.`when`<Any?> { updateActivity.invoke(null, anyString(), any(Activity::class.java)) }.thenAnswer {
                 val activity = it.getArgument<Activity>(1) as Activity.Onchain
                 saved[activity.v1.id] = activity
+                Unit
+            }
+            native.`when`<Any?> { preserveFeeRate.invoke(null, any(OnchainActivity::class.java)) }.thenAnswer {
+                val activity = it.getArgument<OnchainActivity>(0)
+                saved[activity.id] = Activity.Onchain(activity)
                 Unit
             }
             block(saved)
