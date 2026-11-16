@@ -268,6 +268,7 @@ import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.localizedPubkyAuthMessage
+import to.bitkit.usecases.EnablePaykitPaymentsByDefaultUseCase
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
@@ -334,6 +335,7 @@ class AppViewModel @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
+    private val enablePaykitPaymentsByDefault: EnablePaykitPaymentsByDefaultUseCase,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
     private val paykitAllowanceRepo: PaykitAllowanceRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
@@ -606,6 +608,7 @@ class AppViewModel @Inject constructor(
     private val activePaymentSubmissions = mutableSetOf<Any>()
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
+    private var paykitPaymentsDefaultJob: Job? = null
     private var paykitContactsRefreshJob: Job? = null
     private var shopContactImportJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
@@ -692,6 +695,7 @@ class AppViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
+        viewModelScope.launch { enablePaykitPaymentsByDefault.recordInstallState() }
         viewModelScope.launch {
             usdtPreferences.enabled.distinctUntilChanged().collect {
                 updateCanSwitchWallet()
@@ -1549,6 +1553,7 @@ class AppViewModel @Inject constructor(
 
         startPaykitSessionRestoreRetries()
         startPaykitContactsRefresh()
+        startPaykitPaymentsDefault()
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (!isAutomaticPaykitWorkPaused() && isOnline.value == ConnectivityState.CONNECTED) {
                 pubkyRepo.republishIdentityIfNeeded()
@@ -1611,6 +1616,14 @@ class AppViewModel @Inject constructor(
                     pubkyRepo.refreshContacts()
                 }
             }
+        }
+    }
+
+    private fun startPaykitPaymentsDefault() {
+        if (paykitPaymentsDefaultJob?.isActive == true) return
+        paykitPaymentsDefaultJob = viewModelScope.launch {
+            isOnline.first { it == ConnectivityState.CONNECTED }
+            enablePaykitPaymentsByDefault()
         }
     }
 

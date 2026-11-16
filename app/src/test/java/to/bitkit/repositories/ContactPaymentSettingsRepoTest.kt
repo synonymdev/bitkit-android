@@ -23,6 +23,7 @@ import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -500,6 +501,117 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(enable.await().isSuccess)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+    }
+
+    @Test
+    fun `enabling by default turns on private and public payments and settles`() = test {
+        val pending = MutableStateFlow<Boolean?>(true)
+        whenever(settingsStore.isPaykitPaymentsDefaultPending).thenReturn(pending)
+        whenever { settingsStore.settlePaykitPaymentsDefault() }.thenAnswer {
+            pending.value = false
+            Unit
+        }
+
+        val result = createSut().enablePaymentsByDefault()
+
+        assertTrue(result.isSuccess)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any(), any())
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+        assertEquals(false, pending.value)
+    }
+
+    @Test
+    fun `enabling by default turns on only public payments without private access and settles`() = test {
+        val pending = MutableStateFlow<Boolean?>(true)
+        whenever(settingsStore.isPaykitPaymentsDefaultPending).thenReturn(pending)
+        whenever { settingsStore.settlePaykitPaymentsDefault() }.thenAnswer {
+            pending.value = false
+            Unit
+        }
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(false)
+
+        val result = createSut().enablePaymentsByDefault()
+
+        assertTrue(result.isSuccess)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertEquals(false, pending.value)
+    }
+
+    @Test
+    fun `enabling by default stays pending after a public failure`() = test {
+        val pending = MutableStateFlow<Boolean?>(true)
+        whenever(settingsStore.isPaykitPaymentsDefaultPending).thenReturn(pending)
+        val error = AppError("publish failed")
+        whenever { publicPaykitRepo.syncPublishedEndpoints(eq(true), any(), any()) }.thenReturn(Result.failure(error))
+
+        val result = createSut().enablePaymentsByDefault()
+
+        assertSame(error, result.exceptionOrNull())
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(settingsStore, never()).settlePaykitPaymentsDefault()
+        assertEquals(true, pending.value)
+    }
+
+    @Test
+    fun `enabling by default keeps payments already on`() = test {
+        whenever(settingsStore.isPaykitPaymentsDefaultPending).thenReturn(MutableStateFlow(true))
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true, sharesPublicPaykitEndpoints = true)
+
+        assertTrue(createSut().enablePaymentsByDefault().isSuccess)
+
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any(), any())
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(any(), any(), anyOrNull())
+        verify(settingsStore).settlePaykitPaymentsDefault()
+    }
+
+    @Test
+    fun `enabling by default does nothing once settled`() = test {
+        whenever(settingsStore.isPaykitPaymentsDefaultPending).thenReturn(MutableStateFlow(false))
+
+        assertTrue(createSut().enablePaymentsByDefault().isSuccess)
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any(), any())
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `turning a toggle off settles enabling by default`() = test {
+        val sut = createSut()
+
+        sut.setEnabled(false)
+        sut.setPublicEnabled(false)
+
+        verify(settingsStore, times(2)).settlePaykitPaymentsDefault()
+    }
+
+    @Test
+    fun `turning a toggle on does not settle enabling by default`() = test {
+        val sut = createSut()
+
+        sut.setEnabled(true)
+        sut.setPublicEnabled(true)
+
+        verify(settingsStore, never()).settlePaykitPaymentsDefault()
+    }
+
+    @Test
+    fun `payments default settles only when public is on and private is on or unavailable`() {
+        val ok = Result.success(Unit)
+        val transient = Result.failure<Unit>(AppError("offline"))
+        val unavailable = Result.failure<Unit>(PrivatePaykitError.PrivateUnavailable)
+
+        assertTrue(isPaymentsDefaultSettled(ok, ok))
+        assertTrue(isPaymentsDefaultSettled(unavailable, ok))
+        assertFalse(isPaymentsDefaultSettled(transient, ok))
+        assertFalse(isPaymentsDefaultSettled(ok, transient))
+        assertFalse(isPaymentsDefaultSettled(unavailable, transient))
     }
 
     private fun createSut() = ContactPaymentSettingsRepo(

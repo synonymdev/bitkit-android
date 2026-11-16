@@ -260,6 +260,7 @@ import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.NumberPadInputHandler
 import to.bitkit.ui.utils.ScreenDeepLinks
+import to.bitkit.usecases.EnablePaykitPaymentsByDefaultUseCase
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
@@ -338,6 +339,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
     private val refreshContactPaykitLink = mock<RefreshContactPaykitLinkUseCase>()
+    private val enablePaykitPaymentsByDefault = mock<EnablePaykitPaymentsByDefaultUseCase>()
     private val clipboardManager = mock<ClipboardManager>()
     private val toastManager = mock<ToastQueueManager>()
     private val toastState = MutableStateFlow<Toast?>(null)
@@ -1014,6 +1016,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         privatePaykitRepo = privatePaykitRepo,
         privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
         contactPaymentSettingsRepo = contactPaymentSettingsRepo,
+        enablePaykitPaymentsByDefault = enablePaykitPaymentsByDefault,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo,
         paykitAllowanceRepo = paykitAllowanceRepo,
         paykitPaymentProofRepo = paykitPaymentProofRepo,

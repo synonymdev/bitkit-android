@@ -62,6 +62,14 @@ class SettingsStore @Inject constructor(
     }
     val subscriptionClockOffsetDays: Flow<Int> = localStore.data.map { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] ?: 0 }
 
+    /**
+     * Whether payments still have to be turned on for a profile that predates payments being on by default:
+     * `true` while pending, `false` once settled, `null` until this install was checked for a wallet.
+     */
+    val isPaykitPaymentsDefaultPending: Flow<Boolean?> = localStore.data.map {
+        it[PAYKIT_PAYMENTS_DEFAULT_PENDING_KEY]
+    }
+
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
         private set
@@ -134,6 +142,19 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
 
+    /** Records once whether this install had a wallet before payments were on by default; later calls keep it. */
+    suspend fun recordPaykitPaymentsDefaultPending(hadWallet: Boolean) {
+        localStore.edit {
+            if (it[PAYKIT_PAYMENTS_DEFAULT_PENDING_KEY] == null) it[PAYKIT_PAYMENTS_DEFAULT_PENDING_KEY] = hadWallet
+        }
+    }
+
+    suspend fun settlePaykitPaymentsDefault() {
+        localStore.edit {
+            if (it[PAYKIT_PAYMENTS_DEFAULT_PENDING_KEY] != false) it[PAYKIT_PAYMENTS_DEFAULT_PENDING_KEY] = false
+        }
+    }
+
     suspend fun setSubscriptionClockOffsetDays(days: Int) {
         localStore.edit { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] = days }
     }
@@ -164,6 +185,7 @@ class SettingsStore @Inject constructor(
         localStore.edit {
             it.clear()
             it[PaykitUiResetMigration.MIGRATED_KEY] = true
+            it[PAYKIT_PAYMENTS_DEFAULT_PENDING_KEY] = false
         }
         restoredMonitoredTypesFromBackup = false
         Logger.info("Deleted all user settings data.")
@@ -176,6 +198,7 @@ class SettingsStore @Inject constructor(
         private val ALLOWANCES_ENABLED_KEY = booleanPreferencesKey("allowances_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
         private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
+        private val PAYKIT_PAYMENTS_DEFAULT_PENDING_KEY = booleanPreferencesKey("paykit_payments_default_pending")
     }
 }
 

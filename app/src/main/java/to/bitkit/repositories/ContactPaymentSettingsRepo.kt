@@ -35,50 +35,81 @@ class ContactPaymentSettingsRepo @Inject constructor(
     val isPublicEnabled: Flow<Boolean> = settingsStore.data.map { it.sharesPublicPaykitEndpoints }
 
     suspend fun setPublicEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
+        if (!isEnabled) settingsStore.settlePaykitPaymentsDefault()
+        sharingMutex.withLock { updatePublicEnabled(isEnabled) }
+    }
+
+    /**
+     * Turns private and public payments on once for a profile that predates payments being on by default, through the
+     * same paths as the Settings toggles. Settles when both are on, or public is on and the profile can't use private
+     * payments. A toggle the user turned off before this runs settles it without changes.
+     */
+    suspend fun enablePaymentsByDefault(): Result<Unit> = withContext(ioDispatcher) {
         sharingMutex.withLock {
-            val signIn = pubkyRepo.currentSignIn()
-            val previous = settingsStore.data.first()
-            val canPublish = {
-                signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+            if (settingsStore.isPaykitPaymentsDefaultPending.first() != true) return@withLock Result.success(Unit)
+            val settings = settingsStore.data.first()
+            val privateResult = if (settings.sharesPrivatePaykitEndpoints) {
+                Result.success(Unit)
+            } else {
+                enable(pubkyRepo.contacts.value.map { it.publicKey })
             }
-            val canUpdateSettings = {
-                if (signIn == null) {
-                    !isEnabled && pubkyRepo.currentSignIn() == null &&
-                        !privatePaykitRepo.isProfileDeletionInProgress.value
+            val publicResult = if (settings.sharesPublicPaykitEndpoints) {
+                Result.success(Unit)
+            } else {
+                updatePublicEnabled(true)
+            }
+            if (isPaymentsDefaultSettled(privateResult, publicResult)) settingsStore.settlePaykitPaymentsDefault()
+            val privateError = privateResult.exceptionOrNull()
+                ?.takeUnless { it == PrivatePaykitError.PrivateUnavailable }
+            val publicError = publicResult.exceptionOrNull()
+            publicError?.let { error -> privateError?.let(error::addSuppressed) }
+            (publicError ?: privateError)?.let { Result.failure(it) } ?: Result.success(Unit)
+        }
+    }
+
+    private suspend fun updatePublicEnabled(isEnabled: Boolean): Result<Unit> {
+        val signIn = pubkyRepo.currentSignIn()
+        val previous = settingsStore.data.first()
+        val canPublish = {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
+        val canUpdateSettings = {
+            if (signIn == null) {
+                !isEnabled && pubkyRepo.currentSignIn() == null &&
+                    !privatePaykitRepo.isProfileDeletionInProgress.value
+            } else {
+                canPublish()
+            }
+        }
+        var enabledPersisted = false
+        var completed = false
+        return try {
+            runSuspendCatching {
+                currentCoroutineContext().ensureActive()
+                if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
+                withContext(NonCancellable) {
+                    settingsStore.update {
+                        if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
+                        it.copy(
+                            hasConfirmedPublicPaykitEndpoints = isEnabled,
+                            sharesPublicPaykitEndpoints = isEnabled,
+                            publicPaykitCleanupPending = true,
+                        )
+                    }
+                    enabledPersisted = isEnabled
+                }
+                currentCoroutineContext().ensureActive()
+                if (isEnabled) {
+                    publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canPublish).getOrThrow()
                 } else {
-                    canPublish()
+                    publicPaykitRepo.syncPublishedEndpoints(false, Priority.Interactive, canPublish).getOrThrow()
                 }
-            }
-            var enabledPersisted = false
-            var completed = false
-            try {
-                runSuspendCatching {
-                    currentCoroutineContext().ensureActive()
-                    if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
-                    withContext(NonCancellable) {
-                        settingsStore.update {
-                            if (!canUpdateSettings()) throw PublicPaykitError.SessionNotActive
-                            it.copy(
-                                hasConfirmedPublicPaykitEndpoints = isEnabled,
-                                sharesPublicPaykitEndpoints = isEnabled,
-                                publicPaykitCleanupPending = true,
-                            )
-                        }
-                        enabledPersisted = isEnabled
-                    }
-                    currentCoroutineContext().ensureActive()
-                    if (isEnabled) {
-                        publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canPublish).getOrThrow()
-                    } else {
-                        publicPaykitRepo.syncPublishedEndpoints(false, Priority.Interactive, canPublish).getOrThrow()
-                    }
-                }.onFailure {
-                    if (enabledPersisted) rollbackPublicEnabled(previous, canPublish, it)
-                }.also { completed = true }
-            } finally {
-                if (enabledPersisted && !completed) {
-                    withContext(NonCancellable) { restorePublicSettings(previous, canPublish) }
-                }
+            }.onFailure {
+                if (enabledPersisted) rollbackPublicEnabled(previous, canPublish, it)
+            }.also { completed = true }
+        } finally {
+            if (enabledPersisted && !completed) {
+                withContext(NonCancellable) { restorePublicSettings(previous, canPublish) }
             }
         }
     }
@@ -114,6 +145,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
     }
 
     suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
+        if (!isEnabled) settingsStore.settlePaykitPaymentsDefault()
         sharingMutex.withLock {
             val contacts = pubkyRepo.contacts.value.map { it.publicKey }
             if (isEnabled) enable(contacts) else disable(contacts)
@@ -266,3 +298,8 @@ class ContactPaymentSettingsRepo @Inject constructor(
         }.onFailure(error::addSuppressed)
     }
 }
+
+/** Private payments the profile can't use count as settled, so only public payments are turned on for it. */
+internal fun isPaymentsDefaultSettled(privateResult: Result<Unit>, publicResult: Result<Unit>): Boolean =
+    publicResult.isSuccess &&
+        (privateResult.isSuccess || privateResult.exceptionOrNull() == PrivatePaykitError.PrivateUnavailable)
