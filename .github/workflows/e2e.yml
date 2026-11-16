@@ -181,7 +181,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ hashFiles('bitkit-e2e-tests/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
