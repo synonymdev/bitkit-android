@@ -28,6 +28,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Instant
 
 /** How far the receipt for a received payment got: issued and queued, delivered to the payer, or stopped. */
 enum class PaykitReceiptStatus {
@@ -258,20 +259,31 @@ class PaykitReceiptRepo @Inject constructor(
             .associateBy { it.paymentId }
 
     /**
-     * Confirmed on-chain receives with the outputs of each one a request's proof or endpoint names, so a receipt counts
-     * only what was paid to the request.
+     * Confirmed on-chain receives with their outputs, so a receipt counts only what was paid to the request. Outputs
+     * are read for each receive a proof names, and for every receive since the earliest request with an on-chain
+     * address was proposed, since a batch can pay that address while the activity shows another one.
      */
     private suspend fun onchainReceives(records: List<PaymentRequestRecord>): List<PaykitRecordedReceive> {
-        val mentions = records.flatMap { record ->
-            record.paymentProofs.map { it.proof.exportText() } + record.terms?.paymentEndpoints?.values.orEmpty()
-        }.map { it.lowercase() }
+        val mentions = records.flatMap { record -> record.paymentProofs.map { it.proof.exportText().lowercase() } }
+        val endpointsSince = records
+            .filter { record ->
+                record.terms?.paymentEndpoints.orEmpty().any { (identifier, payload) ->
+                    PublicPaykitRepo.parseEndpoint(identifier, payload, Env.network)?.methodId?.isOnchain == true
+                }
+            }
+            .minOfOrNull { record ->
+                val proposedAt = record.proposalRecordedAt?.let { runCatching { Instant.parse(it) }.getOrNull() }
+                proposedAt?.minus(PaykitReceiptMatcher.RECEIVE_TIME_TOLERANCE)?.epochSeconds ?: 0L
+            }
         return activityRepo.getActivities(filter = ActivityFilter.ONCHAIN, txType = PaymentType.RECEIVED).getOrThrow()
             .filterIsInstance<Activity.Onchain>()
             .filter { it.v1.confirmed && it.v1.doesExist }
             .map {
                 val txid = it.v1.txId.lowercase()
                 val address = it.v1.address.lowercase()
-                val named = mentions.any { text -> txid in text || (address.isNotEmpty() && address in text) }
+                val afterEndpoint = endpointsSince?.let { since -> it.v1.timestamp.toLong() >= since } ?: false
+                val named = afterEndpoint ||
+                    mentions.any { text -> txid in text || (address.isNotEmpty() && address in text) }
                 bitcoinReceive(
                     paymentId = it.v1.txId,
                     rail = PaykitReceiptRail.Onchain,

@@ -288,6 +288,18 @@ class PaykitReceiptMatcherTest {
     }
 
     @Test
+    fun `an endpoint-only request paid in a batch shown under another address is receipted`() {
+        val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
+        val batch = onchainReceive(
+            40_000uL,
+            address = "bcrt1qother",
+            outputs = mapOf("bcrt1qother" to 30_000uL, ADDRESS.lowercase() to 10_000uL),
+        )
+
+        assertEquals(10_000uL, match(request, onchain = listOf(batch)).single().receive.amount.atomic)
+    }
+
+    @Test
     fun `an on-chain receipt is withheld when its outputs are unknown`() {
         val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
 

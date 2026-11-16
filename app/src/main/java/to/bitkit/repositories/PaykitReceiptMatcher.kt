@@ -212,10 +212,8 @@ internal object PaykitReceiptMatcher {
                         runCatching { parseInvoice(endpoint.value).paymentHash().lowercase() }.getOrNull()
                             ?.let(lightningReceives::get)
                     )
-                    endpoint.methodId.isOnchain ->
-                        onchainReceives
-                            .filter { it.address.equals(endpoint.value, ignoreCase = true) }
-                            .mapNotNull { it.paidTo(listOf(endpoint.value)) }
+                    // A batch can pay the request's address while the activity shows another one, so match the outputs.
+                    endpoint.methodId.isOnchain -> onchainReceives.mapNotNull { it.paidTo(listOf(endpoint.value)) }
                     else -> emptyList()
                 }.map { identifier to it }
             }
@@ -255,7 +253,7 @@ internal object PaykitReceiptMatcher {
     private const val HASH_BYTES = 32
 
     /** How far a receive's recorded time may precede its request's proposal, for block-time and clock skew. */
-    private val RECEIVE_TIME_TOLERANCE = 2.hours
+    internal val RECEIVE_TIME_TOLERANCE = 2.hours
 }
 
 internal fun bitcoinReceive(
