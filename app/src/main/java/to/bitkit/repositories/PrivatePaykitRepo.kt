@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerState
@@ -2308,21 +2309,23 @@ class PrivatePaykitRepo @Inject constructor(
         val reusable = payable.filter { endpoint ->
             when {
                 endpoint.methodId == MethodId.Bolt11 -> {
-                    val paymentHash = paymentHashForBolt11(endpoint.value)?.lowercase() ?: return@filter false
-                    if (!PublicPaykitRepo.hasLightningRouteHints(endpoint.value)) {
-                        staleLightningHashes += paymentHash
-                        Logger.warn(
-                            "Ignoring private Paykit invoice without route hints for '${redacted(publicKey)}'",
-                            context = TAG,
-                        )
-                        false
-                    } else if (attemptedHashes == null) {
+                    val invoice = decodeBolt11(endpoint.value) ?: return@filter false
+                    val paymentHash = invoice.paymentHash.toHex().lowercase()
+                    if (attemptedHashes == null) {
                         // Unknown while the node or Spark can't list its payments: the invoice may be paid already.
                         false
                     } else if (paymentHash in attemptedHashes) {
                         staleLightningHashes += paymentHash
                         Logger.warn(
                             "Ignoring already-attempted private Paykit invoice for '${redacted(publicKey)}'",
+                            context = TAG,
+                        )
+                        false
+                    } else if (!canRouteToPayee(endpoint.value, invoice)) {
+                        staleLightningHashes += paymentHash
+                        Logger.warn(
+                            "Ignoring private Paykit invoice without route hints or a public payee for " +
+                                "'${redacted(publicKey)}'",
                             context = TAG,
                         )
                         false
@@ -2469,10 +2472,16 @@ class PrivatePaykitRepo @Inject constructor(
             .filter(settled::contains)
     }
 
-    private suspend fun paymentHashForBolt11(bolt11: String): String? =
-        runSuspendCatching {
-            (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice?.paymentHash?.toHex()
-        }.getOrNull()
+    private suspend fun paymentHashForBolt11(bolt11: String): String? = decodeBolt11(bolt11)?.paymentHash?.toHex()
+
+    private suspend fun decodeBolt11(bolt11: String): LightningInvoice? =
+        runSuspendCatching { (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice }.getOrNull()
+
+    private suspend fun canRouteToPayee(bolt11: String, invoice: LightningInvoice): Boolean {
+        if (PublicPaykitRepo.hasLightningRouteHints(bolt11)) return true
+        val payeeNodeId = invoice.payeeNodeId?.toHex() ?: return false
+        return lightningRepo.hasPublicChannels(payeeNodeId).getOrDefault(false)
+    }
 
     /** Null while the node or Spark can't list its payments, so a payment either may have made isn't read as none. */
     private suspend fun attemptedOutboundBolt11PaymentHashes(): Set<String>? {
