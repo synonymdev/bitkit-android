@@ -1,6 +1,9 @@
 package to.bitkit.usecases
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -25,6 +28,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class KeepContactPaymentsOnUseCaseTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val contactPaymentSettingsRepo = mock<ContactPaymentSettingsRepo>()
@@ -34,6 +38,7 @@ class KeepContactPaymentsOnUseCaseTest : BaseUnitTest() {
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val backupRepo = mock<BackupRepo>()
     private val settings = MutableStateFlow(SettingsData())
+    private val publicKey = MutableStateFlow<String?>("pubky-owner")
 
     private val readyState = ContactPaymentsState(
         walletExists = true,
@@ -66,7 +71,8 @@ class KeepContactPaymentsOnUseCaseTest : BaseUnitTest() {
         whenever(walletRepo.walletExists()).thenReturn(true)
         whenever(lightningRepo.lightningState)
             .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
-        whenever(pubkyRepo.isRestoringSession).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+        whenever { pubkyRepo.hasIdentity() }.thenReturn(true)
         whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("pubky-owner", 1L))
         whenever(privatePaykitRepo.isProfileDeletionInProgress).thenReturn(MutableStateFlow(false))
         whenever(backupRepo.isWiping).thenReturn(MutableStateFlow(false))
@@ -147,6 +153,31 @@ class KeepContactPaymentsOnUseCaseTest : BaseUnitTest() {
 
         verify(contactPaymentSettingsRepo, times(1)).setEnabled(true)
         verify(contactPaymentSettingsRepo, times(2)).setPublicEnabled(true)
+    }
+
+    @Test
+    fun `does nothing without a saved identity`() = test {
+        whenever { pubkyRepo.hasIdentity() }.thenReturn(false)
+
+        createSut()()
+
+        verify(contactPaymentSettingsRepo, never()).setEnabled(any())
+        verify(contactPaymentSettingsRepo, never()).setPublicEnabled(any())
+    }
+
+    @Test
+    fun `waits for a deferred session before turning payments on`() = test {
+        publicKey.value = null
+        val run = launch { createSut()() }
+        runCurrent()
+
+        verify(contactPaymentSettingsRepo, never()).setEnabled(any())
+
+        publicKey.value = "pubky-owner"
+        run.join()
+
+        verify(contactPaymentSettingsRepo).setEnabled(true)
+        verify(contactPaymentSettingsRepo).setPublicEnabled(true)
     }
 
     @Test

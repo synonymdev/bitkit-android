@@ -40,11 +40,16 @@ class KeepContactPaymentsOnUseCase @Inject constructor(
 
     private val privateUnavailableIdentities = mutableSetOf<String>()
 
-    /** Waits for the node and the Pubky session, then turns on whichever payment mode is off. */
+    /**
+     * Waits for the node and, when an identity is saved, for its session, then turns on whichever payment mode is
+     * off. Session restoration can be deferred while Paykit is busy, so this waits for a signed-in identity rather
+     * than for the first restoration attempt to end.
+     */
     suspend operator fun invoke(): Unit = withContext(ioDispatcher) {
         lightningRepo.lightningState.first { it.nodeLifecycleState.isRunning() }
         pubkyRepo.awaitInitialization()
-        pubkyRepo.isRestoringSession.first { !it }
+        if (!pubkyRepo.hasIdentity()) return@withContext
+        pubkyRepo.publicKey.first { it != null }
 
         val signIn = pubkyRepo.currentSignIn()
         val settings = settingsStore.data.first()
