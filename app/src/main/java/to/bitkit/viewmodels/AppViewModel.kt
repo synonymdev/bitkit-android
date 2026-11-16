@@ -644,6 +644,9 @@ class AppViewModel @Inject constructor(
     private var isCompletingMigration = false
     private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
+
+    /** A request read from a nearby device on the recipient screen, cancelled when the user enters one manually. */
+    private var nearbyAddressScanJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
@@ -3386,6 +3389,9 @@ class AppViewModel @Inject constructor(
         get() = (currentSheet.value as? Sheet.Send)?.hardwareWalletId
 
     private fun onEnterManuallyClick() {
+        // A nearby request still decoding must not route over the address the user is about to type.
+        nearbyAddressScanJob?.cancel()
+        nearbyAddressScanJob = null
         clearActiveContactPaymentContext()
         resetAddressInput()
         setSendEffect(SendEffect.NavigateToAddress)
@@ -4055,12 +4061,14 @@ class AppViewModel @Inject constructor(
 
     private fun onAddressContinue(data: String, suppressQuickPay: Boolean) {
         clearActiveContactPaymentContext()
-        launchScan(
+        val job = launchScan(
             source = ScanSource.ADDRESS_CONTINUE,
             data = data,
             routePubkyKeys = true,
             suppressQuickPay = suppressQuickPay,
         )
+        // Only a nearby read suppresses QuickPay here, so cancelling it never stops a payment in progress.
+        if (suppressQuickPay) nearbyAddressScanJob = job
     }
 
     fun onUsdtAmountChange(value: String) {
