@@ -25,7 +25,7 @@ fun TosContent(modifier: Modifier = Modifier) {
         TermsServices()
         TermsWallet()
         TermsLightningServices()
-        TermsSlashtags()
+        TermsPubky()
         TermsContent()
         TermsFeedback()
         TermsThirdPartyServices()
@@ -60,7 +60,7 @@ private fun TOSPreview() {
 }
 
 private val htmlPreface = """
-<P><B>Effective date: October 20, 2026</B></P>
+<P><B>Effective date: November 27, 2026</B></P>
 <br>
 <P><B>IMPORTANT: By purchasing, accessing or using any of the Bitkit Services (as defined below), you (“you”, “your”, “User”) acknowledge that you have read, understand, and completely agree to these Terms (as updated and amended from time to time, the “Terms”). If you do not agree to be bound by these Terms or with any subsequent amendments, changes or updates, you may not purchase, access or use any of the Bitkit Services, and if you do purchase, access or use any of the Bitkit Services, you will be bound by these Terms, as updated and amended from time to time. Your only recourse in the case of your unwillingness to continue to be bound by these Terms is to stop using all of the Bitkit Services, request the closure of all Connections (as defined below) and transfer all Supported Assets. These Terms apply to all users and others who access the Bitkit Services (“Users”).</B></P>
 <br>
@@ -112,7 +112,7 @@ private val htmlDefinitions = """
 <br>
 <P>2.1.4 <B>“Base Fee”</B> means the fee set out in Table A of the Fee Schedule;</P>
 <br>
-<P>2.1.5 <B>“Bitkit Services”</B> means the Bitkit Wallet, the Lightning Connection Services or use of Slashtags through the Bitkit Wallet;</P>
+<P>2.1.5 <B>“Bitkit Services”</B> means the Bitkit Wallet, the Lightning Connection Services or use of Pubky and Paykit through the Bitkit Wallet;</P>
 <br>
 <P>2.1.6 <B>“Bitkit Wallet”</B> means the self-custodial wallet mobile application software named Bitkit;</P>
 <br>
@@ -168,47 +168,49 @@ private val htmlDefinitions = """
 <br>
 <P>2.1.32 <B>“Mining Fee”</B> means the fee incurred in processing Bitcoin transactions on the blockchain as set out in Table D of the Fee Schedule;</P>
 <br>
-<P>2.1.33 <B>“Person”</B> includes an individual, association, partnership, corporation, company, other body corporate, trust, estate, and any form of organization, group, or entity (whether or not having separate legal personality);</P>
+<P>2.1.33 <B>“Paykit”</B> means the open-source protocol the Bitkit Wallet uses to exchange payment details between Pubky identities;</P>
 <br>
-<P>2.1.34 <B>“Private Channel Fee”</B> means the fee set out in Table C of the Fee Schedule;</P>
+<P>2.1.34 <B>“Person”</B> includes an individual, association, partnership, corporation, company, other body corporate, trust, estate, and any form of organization, group, or entity (whether or not having separate legal personality);</P>
 <br>
-<P>2.1.35 <B>“Prohibited Jurisdiction”</B> means any jurisdiction subject to a comprehensive embargo by the United States, the Republic of El Salvador or the United Nations, which comprise as of the effective date, Iran, the Democratic People's Republic of Korea (“North Korea”), Cuba, Syria, Crimea (a region of Ukraine annexed by the Russian Federation), the self-proclaimed Donetsk People's Republic (a region of Ukraine) and the self-proclaimed Luhansk People's Republic (a region of Ukraine), including Governmental Authorities of those jurisdictions;</P>
+<P>2.1.35 <B>“Private Channel Fee”</B> means the fee set out in Table C of the Fee Schedule;</P>
 <br>
-<P>2.1.36 <B>“Prohibited Person”</B> means the Government of Venezuela; any resident of, Government or Government Official of, any Prohibited Jurisdiction; and any Sanctioned Person;</P>
+<P>2.1.36 <B>“Prohibited Jurisdiction”</B> means any jurisdiction subject to a comprehensive embargo by the United States, the Republic of El Salvador or the United Nations, which comprise as of the effective date, Iran, the Democratic People's Republic of Korea (“North Korea”), Cuba, Syria, Crimea (a region of Ukraine annexed by the Russian Federation), the self-proclaimed Donetsk People's Republic (a region of Ukraine) and the self-proclaimed Luhansk People's Republic (a region of Ukraine), including Governmental Authorities of those jurisdictions;</P>
 <br>
-<P>2.1.37 <B>“Prohibited Use”</B> has the meaning given to it in Section 10.2;</P>
+<P>2.1.37 <B>“Prohibited Person”</B> means the Government of Venezuela; any resident of, Government or Government Official of, any Prohibited Jurisdiction; and any Sanctioned Person;</P>
 <br>
-<P>2.1.38 <B>“Recipient”</B> means the recipient of any Wallet Asset Transfer (including any Routed Payment);</P>
+<P>2.1.38 <B>“Prohibited Use”</B> has the meaning given to it in Section 10.2;</P>
 <br>
-<P>2.1.39 <B>“Remote Balance”</B> means the LN-BTC standing to the credit of the Blocktank Node in respect of your Blocktank Connection (sometimes referred to as your ‘receiving capacity’);</P>
+<P>2.1.39 <B>“Pubky”</B> means a public-key identity under the open-source Pubky protocol, together with the profile and other data published under it on the homeserver that hosts it;</P>
 <br>
-<P>2.1.40 <B>“Routed Payment”</B> means any transfer of LN-BTC made by a User through a Connection;</P>
+<P>2.1.40 <B>“Recipient”</B> means the recipient of any Wallet Asset Transfer (including any Routed Payment);</P>
 <br>
-<P>2.1.41 <B>“Sanctions List”</B> means the “Specially Designated Nationals and Blocked Persons” (‘SDN’) List and the Non-SDN List, including the “Sectoral Sanctions Identifications List”, published by the Office of Foreign Assets Control of the U.S. Department of the Treasury; the Section 311 Special Measures for Jurisdictions, Financial Institutions, or International Transactions of Primary Money Laundering Concern published by the Financial Crimes Enforcement Network of the U.S. Department of the Treasury; and, any other foreign terrorist organization or other sanctioned, restricted, or debarred party list published by the Financial Investigation Unit of the Attorney General’s Office of the Republic of El Salvador, or under Economic Sanctions, AML, or CTF Laws of or by Governments of the United States, the Republic of El Salvador or the United Nations;</P>
+<P>2.1.41 <B>“Remote Balance”</B> means the LN-BTC standing to the credit of the Blocktank Node in respect of your Blocktank Connection (sometimes referred to as your ‘receiving capacity’);</P>
 <br>
-<P>2.1.42 <B>“Sanctioned Person”</B> refers to any Person or Digital Assets network address that is: (i) specifically listed in any Sanctions List; (ii) directly or indirectly owned 50 percent or more by any Person or group of Persons in the aggregate or Digital Assets network address associated with such Person or Persons that is included in any Sanctions List, (iii) the Government or any Government Official of any Prohibited Jurisdiction; or (v) whose dealings with Synonym, the Bitkit Wallet, and/or the User is subject to any Government Approval or otherwise sanctioned, restricted, or penalized under applicable Economic Sanctions, AML, or CTF Laws;</P>
+<P>2.1.42 <B>“Routed Payment”</B> means any transfer of LN-BTC made by a User through a Connection;</P>
 <br>
-<P>2.1.43 <B>“Slashtags”</B> means the internet protocol designed by Synonym which utilises slashtag keypairs (being tags starting with the / symbol);</P>
+<P>2.1.43 <B>“Sanctions List”</B> means the “Specially Designated Nationals and Blocked Persons” (‘SDN’) List and the Non-SDN List, including the “Sectoral Sanctions Identifications List”, published by the Office of Foreign Assets Control of the U.S. Department of the Treasury; the Section 311 Special Measures for Jurisdictions, Financial Institutions, or International Transactions of Primary Money Laundering Concern published by the Financial Crimes Enforcement Network of the U.S. Department of the Treasury; and, any other foreign terrorist organization or other sanctioned, restricted, or debarred party list published by the Financial Investigation Unit of the Attorney General’s Office of the Republic of El Salvador, or under Economic Sanctions, AML, or CTF Laws of or by Governments of the United States, the Republic of El Salvador or the United Nations;</P>
 <br>
-<P>2.1.44 <B>“Spending Balance”</B> means the LN-BTC standing to the credit of the User Node in respect of a Blocktank Connection (sometimes referred to as your ‘local balance’);</P>
+<P>2.1.44 <B>“Sanctioned Person”</B> refers to any Person or Digital Assets network address that is: (i) specifically listed in any Sanctions List; (ii) directly or indirectly owned 50 percent or more by any Person or group of Persons in the aggregate or Digital Assets network address associated with such Person or Persons that is included in any Sanctions List, (iii) the Government or any Government Official of any Prohibited Jurisdiction; or (v) whose dealings with Synonym, the Bitkit Wallet, and/or the User is subject to any Government Approval or otherwise sanctioned, restricted, or penalized under applicable Economic Sanctions, AML, or CTF Laws;</P>
 <br>
-<P>2.1.45 <B>“Supported Assets”</B> means, as of the effective date of these Terms, BTC, LN-BTC and, where shown as available in the Bitkit Wallet, USDT, including a supported version identified in the Bitkit Wallet as USDT0, on a Supported Asset Network.</P>
+<P>2.1.45 <B>“Spending Balance”</B> means the LN-BTC standing to the credit of the User Node in respect of a Blocktank Connection (sometimes referred to as your ‘local balance’);</P>
 <br>
-<P>2.1.46 <B>“Supported Asset Networks”</B> means, as of the effective date of these Terms, the Bitcoin blockchain, the Lightning Network and, where shown as available in the Bitkit Wallet for USDT, Arbitrum One. Support for a Supported Asset or Supported Asset Network may vary by jurisdiction and may be changed, suspended or discontinued in accordance with these Terms.</P>
+<P>2.1.46 <B>“Supported Assets”</B> means, as of the effective date of these Terms, BTC, LN-BTC and, where shown as available in the Bitkit Wallet, USDT, including a supported version identified in the Bitkit Wallet as USDT0, on a Supported Asset Network.</P>
 <br>
-<P>2.1.47 <B>“Tax Information Exchange Laws”</B> means Laws relating to the exchange of information relating to taxes between Governments, including United States Foreign Account Tax Compliance Act, as enacted by Title V, Subtitle A of the Hiring Incentives to Restore Employment Act, P.L 111-147 (2010), as amended; and common reporting standard or the Standard for Automatic Exchange of Financial Account Information;</P>
+<P>2.1.47 <B>“Supported Asset Networks”</B> means, as of the effective date of these Terms, the Bitcoin blockchain, the Lightning Network and, where shown as available in the Bitkit Wallet for USDT, Arbitrum One. Support for a Supported Asset or Supported Asset Network may vary by jurisdiction and may be changed, suspended or discontinued in accordance with these Terms.</P>
 <br>
-<P>2.1.48 <B>“Third Party Services”</B> means any website, node, programming interface, product, data  or service that is not controlled by Synonym or any of its Associates;</P>
+<P>2.1.48 <B>“Tax Information Exchange Laws”</B> means Laws relating to the exchange of information relating to taxes between Governments, including United States Foreign Account Tax Compliance Act, as enacted by Title V, Subtitle A of the Hiring Incentives to Restore Employment Act, P.L 111-147 (2010), as amended; and common reporting standard or the Standard for Automatic Exchange of Financial Account Information;</P>
 <br>
-<P>2.1.49 <B>“USDT”</B> means the Digital Asset known as Tether USD, in the form supported by the Bitkit Wallet from time to time, including USDT0 on Arbitrum One;</P>
+<P>2.1.49 <B>“Third Party Services”</B> means any website, node, programming interface, product, data  or service that is not controlled by Synonym or any of its Associates;</P>
 <br>
-<P>2.1.50 <B>“USDT Feature”</B> means the Bitkit Wallet functionality that enables a User to store, send, receive, view or, where made available, bridge USDT through a Supported Asset Network;</P>
+<P>2.1.50 <B>“USDT”</B> means the Digital Asset known as Tether USD, in the form supported by the Bitkit Wallet from time to time, including USDT0 on Arbitrum One;</P>
 <br>
-<P>2.1.51 <B>“USDT Transfer”</B> means a Wallet Asset Transfer of USDT through the USDT Feature, including a transfer to another address on a Supported Asset Network and, where made available, a cross-network transfer;</P>
+<P>2.1.51 <B>“USDT Feature”</B> means the Bitkit Wallet functionality that enables a User to store, send, receive, view or, where made available, bridge USDT through a Supported Asset Network;</P>
 <br>
-<P>2.1.52 <B>“User Node”</B> means the alphanumeric identifier that represents a means, on the Lightning Network, for holding, storing and transferring LN-BTC; and</P>
+<P>2.1.52 <B>“USDT Transfer”</B> means a Wallet Asset Transfer of USDT through the USDT Feature, including a transfer to another address on a Supported Asset Network and, where made available, a cross-network transfer;</P>
 <br>
-<P>2.1.53 <B>“Variable Fee”</B> means the fee set out in Table B of the Fee Schedule.</P>
+<P>2.1.53 <B>“User Node”</B> means the alphanumeric identifier that represents a means, on the Lightning Network, for holding, storing and transferring LN-BTC; and</P>
+<br>
+<P>2.1.54 <B>“Variable Fee”</B> means the fee set out in Table B of the Fee Schedule.</P>
 <br>
 <P>2.2 Unless otherwise specified in these Terms, words importing the singular include the plural and vice versa and words importing gender include all genders. The word “include”, “includes” or “including” will be interpreted on an inclusive basis and be deemed to be followed by the words “without limitation”.</P>
 """.trimIndent()
@@ -339,31 +341,31 @@ private fun TermsLightningServices() {
     Text(AnnotatedString.fromHtml(htmlLightningServices), color = Colors.White64)
 }
 
-private val htmlSlashtags = """
-<P><B>6. SLASHTAGS</B></P>
+private val htmlPubky = """
+<P><B>6. PUBKY AND CONTACT PAYMENTS</B></P>
 <br>
-<P><I>This section contains terms of use for Bitkit Services identified as Slashtags</I>.</P>
+<P><I>This section contains terms of use for Pubky profiles and contact payments in the Bitkit Services</I>.</P>
 <br>
-<P>6.1 By using the Slashtags feature of the Bitkit Services, you agree as follows:</P>
+<P>6.1 By using Pubky or Paykit through the Bitkit Services, you agree as follows:</P>
 <br>
-<P>6.1.1 Subject to your compliance with the terms and conditions hereunder, you may use the Slashtags solely in accordance with these Terms.  You agree to, and will not attempt to circumvent, such limitations.</P>
+<P>6.1.1 Subject to your compliance with the terms and conditions hereunder, you may use Pubky and Paykit solely in accordance with these Terms.  You agree to, and will not attempt to circumvent, such limitations.</P>
 <br>
-<P>6.1.2 Slashtags is offered under an open-source license. Open-source software licenses constitute separate written agreements. To the limited extent the open-source software license expressly supersedes these Terms, the open source license instead sets forth your agreement with Synonym for the applicable open source software.</P>
+<P>6.1.2 Pubky and Paykit are offered under open-source licenses. Open-source software licenses constitute separate written agreements. To the limited extent the open-source software license expressly supersedes these Terms, the open source license instead sets forth your agreement with Synonym for the applicable open source software.</P>
 <br>
 <P>6.2 Without limiting the generality of the foregoing, you will not:</P>
 <br>
-<P>6.2.1 use Slashtags in any manner that may threaten the security or functionality of the Bitkit Services or the software or services of any third party; or</P>
+<P>6.2.1 use Pubky or Paykit in any manner that may threaten the security or functionality of the Bitkit Services or the software or services of any third party; or</P>
 <br>
-<P>6.2.2 use Slashtags to circumvent the intended functionality or limitations of the software or services of any third party.</P>
+<P>6.2.2 use Pubky or Paykit to circumvent the intended functionality or limitations of the software or services of any third party.</P>
 <br>
-<P>6.3 Your use of the Slashtags requires the transmission of data and information over the Internet and public networks. Accordingly, Synonym does not, and cannot, guarantee the confidentiality, security or reliability of any communications made by you through Slashtags. The use of Slashtags to supplant traditional login and password site protection is untested and may prove insecure.  Any such use is at your own risk.</P>
+<P>6.3 Your use of Pubky and Paykit requires the transmission of data and information over the Internet and public networks. Accordingly, Synonym does not, and cannot, guarantee the confidentiality, security or reliability of any communications made by you through Pubky or Paykit. The use of Pubky to supplant traditional login and password site protection is untested and may prove insecure.  Any such use is at your own risk.</P>
 <br>
-<P>6.4 Slashtags can be used to create and to receive social profiles and dynamic content through the Bitkit Wallet.  This content is User Content as described below and is not moderated, endorsed or verified by Synonym.  Accordingly, it may contain content which is defamatory, obscene, indecent, abusive, offensive, harassing, violent, hateful, inflammatory, or otherwise objectionable.  It may also violate Law, these Terms or the rights of any Person, including the intellectual property rights of any Person.  User Content may be misleading, contain misstatements of fact or omit to state facts that a User might consider important.</P>
+<P>6.4 Pubky can be used to create and to receive social profiles and dynamic content through the Bitkit Wallet.  This content is User Content as described below and is not moderated, endorsed or verified by Synonym.  Accordingly, it may contain content which is defamatory, obscene, indecent, abusive, offensive, harassing, violent, hateful, inflammatory, or otherwise objectionable.  It may also violate Law, these Terms or the rights of any Person, including the intellectual property rights of any Person.  User Content may be misleading, contain misstatements of fact or omit to state facts that a User might consider important.</P>
 """.trimIndent()
 
 @Composable
-private fun TermsSlashtags() {
-    Text(AnnotatedString.fromHtml(htmlSlashtags), color = Colors.White64)
+private fun TermsPubky() {
+    Text(AnnotatedString.fromHtml(htmlPubky), color = Colors.White64)
 }
 
 private val htmlContent = """
@@ -373,7 +375,7 @@ private val htmlContent = """
 <br>
 <P>7.1 <U>User Content</U></P>
 <br>
-<P>7.1.1 Slashtags and other Bitkit Services allow Users to submit, post, display, provide, or otherwise make available content such as profile information, comments, questions, and other content or information (any such materials a User submits, posts, displays, provides, or otherwise makes available on the Bitkit Service is referred to as <B>“User Content”</B>).</P>
+<P>7.1.1 Pubky and other Bitkit Services allow Users to submit, post, display, provide, or otherwise make available content such as profile information, comments, questions, and other content or information (any such materials a User submits, posts, displays, provides, or otherwise makes available on the Bitkit Service is referred to as <B>“User Content”</B>).</P>
 <br>
 <P>7.1.2 WE CLAIM NO OWNERSHIP RIGHTS OVER USER CONTENT CREATED BY YOU. THE USER CONTENT YOU CREATE REMAINS YOURS.</P>
 <br>
