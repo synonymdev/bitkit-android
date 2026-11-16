@@ -364,11 +364,11 @@ private val htmlPubky = """
 <br>
 <P>6.5 The Bitkit Wallet lets you create a Pubky profile, or connect an existing Pubky, and use Paykit to receive payments from other Users. By creating or connecting a Pubky profile in the Bitkit Wallet, you agree as follows:</P>
 <br>
-<P>6.5.1 Public payments are turned on when you create or connect a Pubky profile. An update of the Bitkit Wallet may also turn them on for a Pubky profile you set up before that update. They stay on while you have a Pubky profile in the Bitkit Wallet. To stop them, delete your Pubky profile.</P>
+<P>6.5.1 Public payments are turned on when you create or connect a Pubky profile. An update of the Bitkit Wallet may also turn them on for a Pubky profile you set up before that update. They stay on while you have a Pubky profile in the Bitkit Wallet. To stop them, delete your Pubky profile or disconnect it from the Bitkit Wallet.</P>
 <br>
 <P>6.5.2 While public payments are on, the Bitkit Wallet publishes payment details, such as a Bitcoin address and a Lightning invoice, on the homeserver that hosts your Pubky. Anyone who knows your Pubky can read these details and send you payments. Because Bitcoin transactions are recorded on a public blockchain, any Person may be able to link payments made to these details to your Pubky.</P>
 <br>
-<P>6.5.3 Deleting your Pubky profile stops the Bitkit Wallet from publishing new payment details, and the Bitkit Wallet removes the details it published where the homeserver allows it. Synonym cannot recall payment details that other Persons have already read or stored.</P>
+<P>6.5.3 Deleting your Pubky profile or disconnecting it from the Bitkit Wallet stops the Bitkit Wallet from publishing new payment details, and the Bitkit Wallet removes the details it published where the homeserver allows it. Synonym cannot recall payment details that other Persons have already read or stored.</P>
 <br>
 <P>6.5.4 Your Pubky profile and the payment details described above are stored on the homeserver that hosts your Pubky, which may be operated by Synonym or by a third party. A homeserver operated by a third party is a Third-Party Service under Section 9.</P>
 <br>
