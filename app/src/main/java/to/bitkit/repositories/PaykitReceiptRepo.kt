@@ -26,6 +26,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Instant
@@ -77,8 +78,23 @@ class PaykitReceiptRepo @Inject constructor(
     /** Receipt status by the payment's hash, txid or USDT transfer id, lowercase. */
     val statuses: StateFlow<Map<String, PaykitReceiptStatus>> = _statuses.asStateFlow()
 
+    /** Set while a pass waits for the lock; calls meanwhile join it, since it reads the latest state when it runs. */
+    private val isPassQueued = AtomicBoolean(false)
+
     suspend fun reconcile(): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching { mutex.withLock { reconcileLocked() } }.onFailure {
+        if (!isPassQueued.compareAndSet(false, true)) return@withContext Result.success(Unit)
+        var started = false
+        runSuspendCatching {
+            try {
+                mutex.withLock {
+                    started = true
+                    isPassQueued.set(false)
+                    reconcileLocked()
+                }
+            } finally {
+                if (!started) isPassQueued.set(false)
+            }
+        }.onFailure {
             Logger.warn("Failed to reconcile Paykit receipts", it, context = TAG)
         }
     }

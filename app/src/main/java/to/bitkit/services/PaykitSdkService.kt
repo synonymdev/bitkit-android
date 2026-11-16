@@ -839,6 +839,7 @@ class PaykitSdkService @Inject constructor(
                 if (hasActiveSubscription) throw PubkyContactError.ActiveSubscription
                 peers.filter { it.state == LinkedPeerState.LINKED }.forEach {
                     runSuspendCatching {
+                        sendPendingMessages(handle)
                         val report = completeSdkCall { handle.clearPrivatePaymentListAndProcessOutbound(publicKey) }
                         if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
                             Logger.warn("Failed to withdraw private endpoints before contact deletion", context = TAG)
@@ -967,6 +968,7 @@ class PaykitSdkService @Inject constructor(
             val admissionPriority = if (deferDuringPayment) priority else Priority.Ordered
             checkRefreshAdmission(admissionPriority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(admissionPriority) }) { handle ->
+                sendPendingMessages(handle)
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -1027,6 +1029,7 @@ class PaykitSdkService @Inject constructor(
                     }
                 }
                 checkPaykitContactSync(isStillCurrent)
+                sendPendingMessages(handle)
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -1164,6 +1167,19 @@ class PaykitSdkService @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Sends and records what is already queued, receipts included, before a payment-list sync whose own drain would
+     * send them unreported.
+     */
+    private suspend fun sendPendingMessages(handle: PaykitSdk) {
+        runSuspendCatching {
+            val reports = completeSdkCall { handle.processPendingPrivateMessages() }
+            recordDelivery(cachedPaykitKey?.publicKey, reports.mapNotNull { it.report })
+        }.onFailure {
+            Logger.warn("Failed to send queued Paykit messages before a payment-list sync", it, context = TAG)
         }
     }
 

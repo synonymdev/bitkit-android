@@ -267,6 +267,23 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `payment-list sync sends queued messages first so their outcomes are recorded`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
+        val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        service.syncPrivatePaymentListsWithReservations(updates, false)
+
+        inOrder(sdk) {
+            verify(sdk).processPendingPrivateMessages()
+            verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
+        }
+    }
+
+    @Test
     fun `payment review defers only passive refresh until every review ends`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())

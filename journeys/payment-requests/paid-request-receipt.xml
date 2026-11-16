@@ -11,7 +11,7 @@
     <action>On the payer, pay the request from Savings and mine one block</action>
     <action>Reopen the requester app and verify the received on-chain row in Activity shows "Receipt sent" within 60 seconds</action>
     <action>On the requester, send the payer a Lightning Payment Request for 5,000 sats</action>
-    <action>Make the local homeserver fail the requester's writes (homeserver-proxy rule for the requester's pubky, method PUT, status 503), then on the payer pay the request from Spending</action>
+    <action>Make the local homeserver fail the requester's writes (homeserver-proxy rule for the requester's pubky, method PUT, path /pub/paykit/v0/private/, status 503), then on the payer pay the request from Spending</action>
     <action>On the requester, verify the receipt line reads "Receipt failed" and shows Retry (id "PaykitReceiptRetry")</action>
     <action>Release the proxy rule, tap Retry and verify the receipt line reads "Receipt sent" within 30 seconds</action>
   </actions>

@@ -10,6 +10,9 @@ import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.ReceiptIssuanceStatus
 import com.synonym.paykit.ReceiptIssuanceView
 import dagger.Lazy
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
@@ -104,6 +107,30 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
         }
         issued[candidate.receiptId] = view
         return view
+    }
+
+    @Test
+    fun `reconciles requested while one waits for the lock join it`() = test {
+        stubPaidRequest()
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        val release = CompletableDeferred<Unit>()
+        val running = CompletableDeferred<Unit>()
+        val identity = sdk.identityStatus(Priority.Background)
+        var passes = 0
+        whenever(sdk.identityStatus(Priority.Background)).doSuspendableAnswer {
+            passes++
+            running.complete(Unit)
+            release.await()
+            identity
+        }
+
+        val first = async { sut.reconcile() }
+        running.await()
+        val burst = List(5) { async { sut.reconcile() } }
+        release.complete(Unit)
+        (burst + first).awaitAll()
+
+        assertEquals(2, passes)
     }
 
     @Test
