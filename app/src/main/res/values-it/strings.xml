@@ -1082,6 +1082,9 @@
     <string name="wallet__note">Note</string>
     <string name="wallet__payment_received">Bitcoin ricevuti</string>
     <string name="wallet__peer_disconnected">Peer disconnesso.</string>
+    <string name="wallet__receipt_failed">Invio della ricevuta non riuscito</string>
+    <string name="wallet__receipt_sending">Invio della ricevuta</string>
+    <string name="wallet__receipt_sent">Ricevuta inviata</string>
     <string name="wallet__receive">Ricevi</string>
     <string name="wallet__receive__cjit">Ricevi fondi Lightning</string>
     <string name="wallet__receive_bitcoin">Ricevi Bitcoin</string>
@@ -1498,17 +1501,10 @@
     <string name="profile__intro_description">Con il tuo profilo portatile i tuoi contatti possono raggiungerti e pagarti ovunque.</string>
     <string name="profile__intro_title">PROFILO\n&lt;accent&gt;PORTATILE&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Usa Bitkit con i tuoi contatti per inviare pagamenti direttamente, in qualsiasi momento, ovunque.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Impossibile preparare i dati dell\'endpoint di pagamento.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Nessun endpoint di pagamento supportato disponibile.</string>
-    <string name="profile__pay_contacts_error_retry">Impossibile attivare i pagamenti con i contatti. I tuoi contatti salvati non sono cambiati. Riprova.</string>
-    <string name="profile__pay_contacts_error_session">Ricollega il tuo profilo Pubky per condividere i dati di pagamento.</string>
-    <string name="profile__pay_contacts_error_wallet">Il wallet si sta ancora avviando. Riprova tra un momento.</string>
     <string name="profile__pay_contacts_headline">Lascia che\ni tuoi contatti\n&lt;accent&gt;ti paghino&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Paga Contatti</string>
-    <string name="profile__private_payments_toggle">Pagamenti privati tra contatti</string>
     <string name="profile__pubky_copied">pubky copiato negli appunti</string>
     <string name="profile__public_key">Chiave Pubblica</string>
-    <string name="profile__public_payments_toggle">Pagamenti pubblici</string>
     <string name="profile__restore_nav_title">Ripristina Profilo</string>
     <string name="profile__session_expired">La sessione del tuo profilo è scaduta. Ricollegati per ripristinare il profilo.</string>
     <string name="profile__sign_out">Disconnetti</string>

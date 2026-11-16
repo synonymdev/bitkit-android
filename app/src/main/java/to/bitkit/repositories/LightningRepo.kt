@@ -1321,6 +1321,11 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Signs [message] with the node key as a Lightning signed message, zbase32 encoded. */
+    suspend fun signMessage(message: String): Result<String> = executeWhenNodeRunning("signMessage") {
+        runSuspendCatching { lightningService.sign(message) }
+    }
+
     suspend fun newAddress(): Result<String> = executeWhenNodeRunning("newAddress") {
         requireWalletRestoreComplete()
         runCatching { lightningService.newAddress() }
@@ -2907,6 +2912,12 @@ class LightningRepo @Inject constructor(
         val amountSats = maxSendSats.safe() - MAX_SEND_FEE_BUFFER_SATS.safe()
         return estimateRoutingFeesForAmount(bolt11, amountSats).map { it.safe() + MAX_SEND_FEE_BUFFER_SATS.safe() }
     }
+
+    /** Whether [nodeId] has a channel in the synced network graph, so a payment can route to it without hints. */
+    suspend fun hasPublicChannels(nodeId: String): Result<Boolean> =
+        executeWhenNodeRunning("hasPublicChannels") {
+            runCatching { lightningService.hasPublicChannels(nodeId) }
+        }
 
     // region debug
     fun getNetworkGraphInfo() = lightningService.getNetworkGraphInfo()

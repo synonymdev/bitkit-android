@@ -21,6 +21,7 @@ import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.models.takeCodePoints
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyProfileChangedError
 import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
@@ -33,6 +34,7 @@ import javax.inject.Inject
 class CreateProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "CreateProfileViewModel"
@@ -198,7 +200,7 @@ class CreateProfileViewModel @Inject constructor(
                 avatarBytes = state.avatarBytes,
             ).onSuccess {
                 _uiState.update { it.copy(isSaving = false) }
-                _effects.emit(CreateProfileEffect.CreateSuccess)
+                completeCreate()
             }.onFailure {
                 _uiState.update { it.copy(isSaving = false) }
                 if (it is PubkyProfileTagsNotSavedError) {
@@ -206,7 +208,7 @@ class CreateProfileViewModel @Inject constructor(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__edit_tags_error),
                     )
-                    _effects.emit(CreateProfileEffect.CreateSuccess)
+                    completeCreate()
                     return@onFailure
                 }
                 Logger.error("Failed to create identity", it, context = TAG)
@@ -219,6 +221,11 @@ class CreateProfileViewModel @Inject constructor(
                 if (changed) deriveAndCheckRemote()
             }
         }
+    }
+
+    private suspend fun completeCreate() {
+        contactPaymentSettingsRepo.enableForNewProfile()
+        _effects.emit(CreateProfileEffect.CreateSuccess)
     }
 }
 

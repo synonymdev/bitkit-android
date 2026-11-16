@@ -344,11 +344,13 @@ fun ContentView(
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()
                     appViewModel.startSparkExitDriving()
+                    appViewModel.startWakePresence()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
                     appViewModel.stopPaykitPaymentRequestPolling()
                     appViewModel.stopSparkExitDriving()
+                    appViewModel.stopWakePresence()
                     val keptAliveByService = notificationsGranted &&
                         keepActiveInBackground &&
                         appViewModel.isForegroundServiceRunning()
@@ -365,6 +367,7 @@ fun ContentView(
         onDispose {
             lifecycle.removeObserver(observer)
             appViewModel.stopPaykitPaymentRequestPolling()
+            appViewModel.stopWakePresence()
         }
     }
 

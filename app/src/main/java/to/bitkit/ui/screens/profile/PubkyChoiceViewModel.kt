@@ -22,6 +22,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -33,6 +34,7 @@ private const val TAG = "PubkyChoiceViewModel"
 class PubkyChoiceViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PubkyChoiceUiState())
     val uiState = _uiState.asStateFlow()
@@ -72,6 +74,9 @@ class PubkyChoiceViewModel @Inject constructor(
                         !hasProfile -> PubkyChoiceEffect.NavigateToCreateProfile
                         pubkyRepo.pendingImportContacts.value.isEmpty() -> PubkyChoiceEffect.NavigateToPayContacts
                         else -> PubkyChoiceEffect.NavigateToContactImportOverview
+                    }
+                    if (effect == PubkyChoiceEffect.NavigateToPayContacts) {
+                        contactPaymentSettingsRepo.enableForNewProfile()
                     }
                     _effects.emit(effect)
                 }

@@ -248,7 +248,6 @@ class Keychain @Inject constructor(
 
     enum class Key {
         PUSH_NOTIFICATION_TOKEN,
-        PUSH_NOTIFICATION_PRIVATE_KEY,
         BIP39_MNEMONIC,
         BIP39_PASSPHRASE,
         PIN,
@@ -269,6 +268,8 @@ class Keychain @Inject constructor(
         PUBKY_SECRET_KEY,
         SHARED_PUBKY_SOURCE,
         HW_RETAINED_SEND,
+        WAKE_CREDENTIALS,
+        WAKE_REGISTRATION,
     }
 }
 

@@ -73,6 +73,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
         whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever(settingsStore.isPaykitEnabled).thenReturn(MutableStateFlow(true))
         whenever(addressReservationRepo.currentOrRotatedPublicAddress(any())).thenReturn(Result.success("bc1ptest"))
         doSuspendableAnswer {
             it.getArgument<suspend (Boolean) -> Unit>(2)(true)

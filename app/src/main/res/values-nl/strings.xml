@@ -1077,6 +1077,9 @@
     <string name="wallet__note">Notitie</string>
     <string name="wallet__payment_received">Bitcoin ontvangen</string>
     <string name="wallet__peer_disconnected">Peer niet verbonden.</string>
+    <string name="wallet__receipt_failed">Ontvangstbewijs verzenden mislukt</string>
+    <string name="wallet__receipt_sending">Ontvangstbewijs verzenden</string>
+    <string name="wallet__receipt_sent">Ontvangstbewijs verzonden</string>
     <string name="wallet__receive">Ontvangen</string>
     <string name="wallet__receive__cjit">Lightning-geld ontvangen</string>
     <string name="wallet__receive_bitcoin">Bitcoin ontvangen</string>
@@ -1495,17 +1498,10 @@
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>
     <string name="profile__intro_title">DRAAGBAAR\n&lt;accent&gt;PROFIEL&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Gebruik Bitkit met uw contacten om direct betalingen te versturen, altijd en overal.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Gegevens van het betaaleindpunt konden niet worden voorbereid.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Er is geen ondersteund betaaleindpunt beschikbaar.</string>
-    <string name="profile__pay_contacts_error_retry">Kon betalingen met contacten niet inschakelen. Uw opgeslagen contacten zijn ongewijzigd. Probeer het opnieuw.</string>
-    <string name="profile__pay_contacts_error_session">Verbind uw Pubky-profiel opnieuw om betaalgegevens te delen.</string>
-    <string name="profile__pay_contacts_error_wallet">Wallet wordt nog gestart. Probeer het zo opnieuw.</string>
     <string name="profile__pay_contacts_headline">Laat uw\ncontacten\n&lt;accent&gt;u betalen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Contacten betalen</string>
-    <string name="profile__private_payments_toggle">Privébetalingen met contacten</string>
     <string name="profile__pubky_copied">pubky gekopieerd naar klembord</string>
     <string name="profile__public_key">Publieke sleutel</string>
-    <string name="profile__public_payments_toggle">Openbare betalingen</string>
     <string name="profile__restore_nav_title">Profiel herstellen</string>
     <string name="profile__session_expired">Uw profielsessie is verlopen. Verbind opnieuw om uw profiel te herstellen.</string>
     <string name="profile__sign_out">Ontkoppelen</string>
