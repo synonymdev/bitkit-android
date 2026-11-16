@@ -27,7 +27,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import to.bitkit.androidServices.NdefTagService
 import to.bitkit.ext.nowMillis
 import to.bitkit.nfc.NdefCodec
+import to.bitkit.nfc.NfcRepeatGuard
 import to.bitkit.nfc.NfcTagEmitter
+import to.bitkit.nfc.READER_FLAGS
+import to.bitkit.nfc.ReaderModeOwner
 import to.bitkit.nfc.Type4TagEmulator
 import to.bitkit.nfc.scannedPaymentRequest
 import to.bitkit.utils.Logger
@@ -37,15 +40,6 @@ import kotlin.time.Duration.Companion.seconds
 private const val TAG = "NfcEffects"
 private val DUPLICATE_READ_WINDOW: Duration = 3.seconds
 private val NDEF_AIDS = listOf(Type4TagEmulator.NDEF_AID_HEX)
-
-/** The reader-mode owner; reader mode is activity-wide, so only the latest effect may switch it off. */
-private object ReaderModeOwner {
-    var current: Any? = null
-}
-private const val READER_FLAGS = NfcAdapter.FLAG_READER_NFC_A or
-    NfcAdapter.FLAG_READER_NFC_B or
-    NfcAdapter.FLAG_READER_NFC_F or
-    NfcAdapter.FLAG_READER_NFC_V
 
 enum class NfcState { UNAVAILABLE, OFF, ON }
 
@@ -111,6 +105,8 @@ fun NfcReaderEffect(
         var lastRead: Pair<String, Long>? = null
         val callback = NfcAdapter.ReaderCallback { tag ->
             val text = readPaymentText(tag)
+            // The tag stays in range after the read; hold reader mode so Android does not deliver it again.
+            if (text != null) NfcRepeatGuard.engage(activity, tag)
             mainHandler.post {
                 if (text == null) {
                     currentOnUnreadable()
@@ -134,7 +130,10 @@ fun NfcReaderEffect(
             ReaderModeOwner.current = owner
         }.onFailure { Logger.warn("Failed to enable NFC reader mode", it, context = TAG) }
 
+        val resume: () -> Unit = { enable() }
+
         fun disable() {
+            if (ReaderModeOwner.resumeScanner === resume) ReaderModeOwner.resumeScanner = null
             if (ReaderModeOwner.current !== owner) return
             ReaderModeOwner.current = null
             runCatching { adapter.disableReaderMode(activity) }
@@ -143,13 +142,19 @@ fun NfcReaderEffect(
 
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> enable()
+                Lifecycle.Event.ON_RESUME -> {
+                    ReaderModeOwner.resumeScanner = resume
+                    enable()
+                }
                 Lifecycle.Event.ON_PAUSE -> disable()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) enable()
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            ReaderModeOwner.resumeScanner = resume
+            enable()
+        }
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
