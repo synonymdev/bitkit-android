@@ -18,7 +18,9 @@
     <action>Scroll until the warning ending "All such erroneously transmitted Digital Assets will be lost." is visible</action>
     <action>Verify the warning is bold through its final period</action>
     <action>Scroll until section 6 is visible</action>
-    <action>Verify its heading reads "6. PUBKY AND CONTACT PAYMENTS" and clause 6.5.1 says public payments are turned on when you create or connect a Pubky profile</action>
+    <action>Verify its heading reads "6. PUBKY AND CONTACT PAYMENTS"</action>
+    <action>Scroll until clause 6.5.1 is visible</action>
+    <action>Verify clause 6.5.1 says public payments are turned on when you create or connect a Pubky profile</action>
     <action>Scroll until section 7.2 is visible</action>
     <action>Verify the "Synonym Content" caption is bold</action>
     <action>Scroll until the final paragraph of section 10 is visible</action>
