@@ -539,6 +539,53 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `enableForNewProfile turns both settings on before either sync completes`() = test {
+        val appSync = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+            appSync.await()
+            Result.success(Unit)
+        }
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(any(), any(), any())
+
+        appSync.complete(Unit)
+        runCurrent()
+
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+    }
+
+    @Test
+    fun `enableForNewProfile rolls back only private payments when private setup fails`() = test {
+        whenever { publicPaykitRepo.syncPaykitApp(isNull(), canSync = any()) }
+            .thenReturn(Result.failure(AppError("registry failed")))
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+    }
+
+    @Test
+    fun `enableForNewProfile writes nothing after its sign in ends`() = test {
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(false)
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(any(), any(), any())
+    }
+
+    @Test
     fun `enableForNewProfile ignores a call while one is running`() = test {
         val publication = CompletableDeferred<Unit>()
         whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {

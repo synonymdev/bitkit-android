@@ -43,21 +43,87 @@ class ContactPaymentSettingsRepo @Inject constructor(
     val isPublicEnabled: Flow<Boolean> = settingsStore.data.map { it.sharesPublicPaykitEndpoints }
 
     /**
-     * Turns private and public payments on for a profile just set up in this app. Runs in the background so
-     * profile setup never waits on endpoint publishing; each setting rolls itself back if its sync fails.
+     * Turns private and public payments on for a profile just set up in this app. Both settings are written
+     * together first, so Settings shows them on right away; the syncs then run in the background so profile
+     * setup never waits on endpoint publishing. Each mode rolls only itself back if its sync fails.
      * A call while a previous one is still running is ignored.
      */
     @Synchronized
     fun enableForNewProfile() {
         if (newProfileJob?.isActive == true) return
         newProfileJob = scope.launch {
-            setEnabled(true).onFailure {
+            sharingMutex.withLock { enableBothForNewProfile() }
+        }
+    }
+
+    private suspend fun enableBothForNewProfile() {
+        val signIn = pubkyRepo.currentSignIn()
+        val canSync = {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
+        val previous = settingsStore.data.first()
+        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+        var publicCompleted = false
+        try {
+            runSuspendCatching {
+                withContext(NonCancellable) {
+                    settingsStore.update {
+                        if (!canSync()) throw PublicPaykitError.SessionNotActive
+                        it.copy(
+                            sharesPrivatePaykitEndpoints = true,
+                            hasConfirmedPublicPaykitEndpoints = true,
+                            sharesPublicPaykitEndpoints = true,
+                            publicPaykitCleanupPending = true,
+                        )
+                    }
+                }
+            }.onFailure {
+                publicCompleted = true
+                Logger.error("Failed to enable payments for new profile", it, context = TAG)
+                return
+            }
+
+            finishPrivateEnable(previous, contacts, canSync).onFailure {
                 Logger.error("Failed to enable private payments for new profile", it, context = TAG)
             }
-            setPublicEnabled(true).onFailure {
+
+            runSuspendCatching {
+                currentCoroutineContext().ensureActive()
+                publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canSync).getOrThrow()
+            }.onFailure {
+                rollbackPublicEnabled(previous, canSync, it)
                 Logger.error("Failed to enable public payments for new profile", it, context = TAG)
+            }.also { publicCompleted = true }
+        } finally {
+            if (!publicCompleted) {
+                withContext(NonCancellable) { restorePublicSettings(previous, canSync) }
             }
         }
+    }
+
+    /** Completes private sharing whose setting is already on, restoring only the private setting on failure. */
+    private suspend fun finishPrivateEnable(
+        previous: SettingsData,
+        contacts: List<String>,
+        canSync: () -> Boolean,
+    ): Result<Unit> = runSuspendCatching {
+        if (!privatePaykitRepo.hasPrivatePaymentAccess()) throw PrivatePaykitError.PrivateUnavailable
+        publicPaykitRepo.syncPaykitApp(canSync = { canSync() }).getOrThrow()
+        prepareCurrentSavedContacts(canSync).getOrThrow()
+    }.onFailure {
+        if (it is PrivatePaykitError.PrivateUnavailable) {
+            restorePrivateSetting(previous, canSync, it)
+        } else {
+            rollbackEnabled(previous, contacts, canSync, it)
+        }
+    }
+
+    private suspend fun restorePrivateSetting(previous: SettingsData, canSync: () -> Boolean, error: Throwable) {
+        runSuspendCatching {
+            settingsStore.update {
+                if (canSync()) it.copy(sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints) else it
+            }
+        }.onFailure(error::addSuppressed)
     }
 
     suspend fun setPublicEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
