@@ -2665,6 +2665,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `waitForUsableChannels without awaiting publishes unusable channels and returns`() = test {
+        val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        val unavailable = cached.copy(isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(unavailable))
+
+        val wait = async { sut.waitForUsableChannels(awaitUsable = false) }
+        runCurrent()
+
+        assertTrue(wait.isCompleted)
+        assertEquals(listOf(unavailable), sut.lightningState.value.channels)
+    }
+
+    @Test
     fun `waitForUsableChannels waits when a cached usable channel becomes unusable`() = test {
         val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
         whenever(lightningService.channels).thenReturn(listOf(cached))

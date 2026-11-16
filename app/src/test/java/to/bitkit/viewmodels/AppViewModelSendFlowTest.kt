@@ -10034,7 +10034,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `lightning scan waits for a running node even when spark covers the amount`() = test {
+    fun `lightning scan refreshes a running node's channels without waiting when spark covers the amount`() = test {
         val input = "lnbcrt1runningscan"
         stubLightningScan(bolt11 = input, amountSats = 500u)
         whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
@@ -10045,7 +10045,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScanResult(input)
         advanceUntilIdle()
 
-        verify(lightningRepo).waitForUsableChannels()
+        verify(lightningRepo).waitForUsableChannels(awaitUsable = false)
     }
 
     @Test

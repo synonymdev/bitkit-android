@@ -416,9 +416,9 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * Waits for the node's channels before a Lightning send. While the node is not running yet and Spark covers
-     * [amountSats], the wait is skipped, so a payment opened right after launch does not wait for the node to start.
-     * A running node is always waited on: the wait also publishes current channels, which the send limit reads.
+     * Waits for the node's channels before a Lightning send. When Spark covers [amountSats] there is no wait for a
+     * usable channel: a running node only publishes its current channels, which the send limit reads, and a node not
+     * running yet is skipped, so a payment opened right after launch does not wait for the node to start.
      */
     private suspend fun waitForUsableChannels(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
@@ -427,7 +427,7 @@ class AppViewModel @Inject constructor(
         requireCurrentPaymentPreparation(walletGeneration)
         val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
         val sparkCovers = amountSats != null && lightningRepo.canSendWithSpark(amountSats)
-        if (isNodeRunning || !sparkCovers) lightningRepo.waitForUsableChannels()
+        if (isNodeRunning || !sparkCovers) lightningRepo.waitForUsableChannels(awaitUsable = !sparkCovers)
         requireCurrentPaymentPreparation(walletGeneration)
         walletRepo.refreshMaxSendLightning()
         requireCurrentPaymentPreparation(walletGeneration)
