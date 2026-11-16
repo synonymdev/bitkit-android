@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.scanner
 
 import android.bluetooth.BluetoothAdapter
+import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -19,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,7 +32,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import to.bitkit.R
+import to.bitkit.ext.findActivity
+import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
 import to.bitkit.ui.LocalIsAppLocked
 import to.bitkit.ui.appViewModel
@@ -88,6 +93,7 @@ fun rememberNearbyScanSources(
     val nfcState = rememberNfcState()
     val bluetoothState = rememberBluetoothState(NearbyRole.SCAN, refreshKey)
 
+    var permissionRequested by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { refreshKey++ }
@@ -115,7 +121,13 @@ fun rememberNearbyScanSources(
         onEnableNfc = { context.openNfcSettings() },
         onEnableBluetooth = {
             when (bluetoothState) {
-                BluetoothState.NEEDS_PERMISSION -> permissionLauncher.launch(nearbyPermissions)
+                // Once the permission is denied for good, Android shows no dialog; only Settings can grant it.
+                BluetoothState.NEEDS_PERMISSION -> if (permissionRequested && !context.canAskAgain(nearbyPermissions)) {
+                    context.startActivityAppSettings()
+                } else {
+                    permissionRequested = true
+                    permissionLauncher.launch(nearbyPermissions)
+                }
                 BluetoothState.OFF -> runCatching {
                     enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
                 }
@@ -238,4 +250,10 @@ internal fun scannerStatusText(sources: NearbyScanSources): Int = when {
     sources.isNfcActive -> R.string.other__scanner_status_qr_nfc
     sources.isBluetoothActive -> R.string.other__scanner_status_qr_bluetooth
     else -> R.string.other__scanner_status_qr
+}
+
+/** Whether the system still shows the request dialog for a denied permission in [permissions]. */
+private fun Context.canAskAgain(permissions: Array<String>): Boolean {
+    val activity = findActivity() ?: return true
+    return permissions.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
 }
