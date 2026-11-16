@@ -2,8 +2,9 @@
   <description>
     Precondition: a disposable, unfunded wallet with Paykit enabled, no Pubky identity,
     PIN off, an English device and a reachable configured signup service.
-    This checks name-only profile creation. Record the build, network and time from
-    tapping Save to Pay Contacts appearing. Do not enable contact payments for this check.
+    This checks name-only profile creation and that saving turns private and public payments
+    on without a further step. Record the build, network and time from tapping Save to Pay
+    Contacts appearing.
     After relaunch, Android may show the cached name while the public profile loads;
     persistence is verified only once the full profile name appears.
   </description>
@@ -17,7 +18,10 @@
     <action>Take a screenshot and verify no profile error is shown</action>
     <action>Return Home without pressing "PayContactsContinue", then open Profile using "ProfileButton"</action>
     <action>Verify "ProfileViewName" shows "Profile Save Test"</action>
-    <action>Relaunch the app and open Profile using "ProfileButton"</action>
+    <action>Open the menu and tap Settings (id "DrawerSettings"), then open the General tab (id "Tab-general")</action>
+    <action>Scroll to the payment sharing settings and wait up to a minute for both switches to settle</action>
+    <action>Verify Private contact payments (identifier "PrivateContactPaymentsToggle") and Public payments (identifier "PublicPaymentsToggle") are both on</action>
+    <action>Return Home, then relaunch the app and open Profile using "ProfileButton"</action>
     <action>If "ProfileCachedName" appears while loading, verify it shows "Profile Save Test"; this is not yet the full profile</action>
     <action>Wait for the full profile name (id "ProfileViewName", predicate exists). If loading does not finish, report the loading state and elapsed time without claiming the saved name was lost</action>
     <action>Verify "ProfileViewName" shows "Profile Save Test" and "ProfileCachedHeader" is gone</action>

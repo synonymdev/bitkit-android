@@ -1,15 +1,18 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import to.bitkit.async.appScope
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.areContactPaymentsEnabled
@@ -18,8 +21,11 @@ import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "ContactPaymentSettingsRepo"
 
 @Singleton
 class ContactPaymentSettingsRepo @Inject constructor(
@@ -30,9 +36,29 @@ class ContactPaymentSettingsRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val sharingMutex = Mutex()
+    private val scope = appScope(ioDispatcher, TAG)
+    private var newProfileJob: Job? = null
 
     val isEnabled: Flow<Boolean> = settingsStore.data.map { it.areContactPaymentsEnabled() }
     val isPublicEnabled: Flow<Boolean> = settingsStore.data.map { it.sharesPublicPaykitEndpoints }
+
+    /**
+     * Turns private and public payments on for a profile just set up in this app. Runs in the background so
+     * profile setup never waits on endpoint publishing; each setting rolls itself back if its sync fails.
+     * A call while a previous one is still running is ignored.
+     */
+    @Synchronized
+    fun enableForNewProfile() {
+        if (newProfileJob?.isActive == true) return
+        newProfileJob = scope.launch {
+            setEnabled(true).onFailure {
+                Logger.error("Failed to enable private payments for new profile", it, context = TAG)
+            }
+            setPublicEnabled(true).onFailure {
+                Logger.error("Failed to enable public payments for new profile", it, context = TAG)
+            }
+        }
+    }
 
     suspend fun setPublicEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
         sharingMutex.withLock {

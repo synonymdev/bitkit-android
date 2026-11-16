@@ -1498,7 +1498,6 @@
     <string name="profile__pay_contacts_description">Use a Bitkit com seus contatos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>
     <string name="profile__pay_contacts_error_invalid_payload">Não foi possível preparar os dados do endpoint de pagamento.</string>
     <string name="profile__pay_contacts_error_no_endpoint">Nenhum endpoint de pagamento compatível está disponível.</string>
-    <string name="profile__pay_contacts_error_retry">Não foi possível ativar pagamentos com contatos. Seus contatos salvos não foram alterados. Tente novamente.</string>
     <string name="profile__pay_contacts_error_session">Reconecte seu perfil Pubky para compartilhar os dados de pagamento.</string>
     <string name="profile__pay_contacts_error_wallet">A carteira ainda está iniciando. Tente novamente em instantes.</string>
     <string name="profile__pay_contacts_headline">Deixe seus\ncontatos\n&lt;accent&gt;pagarem você&lt;/accent&gt;</string>

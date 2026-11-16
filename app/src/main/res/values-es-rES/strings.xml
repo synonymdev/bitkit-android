@@ -1493,7 +1493,6 @@
     <string name="profile__pay_contacts_description">Usa Bitkit con tus contactos para enviar pagos directamente, en cualquier momento y lugar.</string>
     <string name="profile__pay_contacts_error_invalid_payload">No se pudieron preparar los datos del punto de pago.</string>
     <string name="profile__pay_contacts_error_no_endpoint">No hay ningún punto de pago compatible disponible.</string>
-    <string name="profile__pay_contacts_error_retry">No se pudieron activar los pagos con contactos. Tus contactos guardados no han cambiado. Inténtalo de nuevo.</string>
     <string name="profile__pay_contacts_error_session">Vuelve a conectar tu perfil de Pubky para compartir los datos de pago.</string>
     <string name="profile__pay_contacts_error_wallet">El monedero aún se está iniciando. Inténtalo de nuevo en un momento.</string>
     <string name="profile__pay_contacts_headline">Deja que\ntus contactos\n&lt;accent&gt;te paguen&lt;/accent&gt;</string>

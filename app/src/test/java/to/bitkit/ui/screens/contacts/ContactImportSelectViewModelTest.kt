@@ -11,6 +11,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -19,6 +20,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactImportSelectViewModelTest : BaseUnitTest() {
     private val pubkyRepo: PubkyRepo = mock()
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo = mock()
     private val isImportingContacts = MutableStateFlow(false)
 
     @Test
@@ -49,6 +51,7 @@ class ContactImportSelectViewModelTest : BaseUnitTest() {
 
         verify(pubkyRepo).clearPendingImport()
         assertEquals(ContactImportSelectEffect.ImportComplete, effects.last())
+        verify(contactPaymentSettingsRepo).enableForNewProfile()
 
         effectsJob.cancel()
     }
@@ -69,6 +72,7 @@ class ContactImportSelectViewModelTest : BaseUnitTest() {
 
         verify(pubkyRepo).importContacts(contacts)
         assertEquals(ContactImportSelectEffect.ImportComplete, effects.last())
+        verify(contactPaymentSettingsRepo).enableForNewProfile()
 
         effectsJob.cancel()
     }
@@ -90,12 +94,14 @@ class ContactImportSelectViewModelTest : BaseUnitTest() {
         assertTrue(effects.isEmpty())
         verify(pubkyRepo, never()).importContacts(any())
         verify(pubkyRepo, never()).clearPendingImport()
+        verify(contactPaymentSettingsRepo, never()).enableForNewProfile()
 
         effectsJob.cancel()
     }
 
     private fun createSut() = ContactImportSelectViewModel(
         pubkyRepo = pubkyRepo,
+        contactPaymentSettingsRepo = contactPaymentSettingsRepo,
     )
 
     private fun stubPendingImport(profile: PubkyProfile?, contacts: List<PubkyProfile>) {

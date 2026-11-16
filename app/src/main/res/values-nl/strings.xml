@@ -1495,7 +1495,6 @@
     <string name="profile__pay_contacts_description">Gebruik Bitkit met uw contacten om direct betalingen te versturen, altijd en overal.</string>
     <string name="profile__pay_contacts_error_invalid_payload">Gegevens van het betaaleindpunt konden niet worden voorbereid.</string>
     <string name="profile__pay_contacts_error_no_endpoint">Er is geen ondersteund betaaleindpunt beschikbaar.</string>
-    <string name="profile__pay_contacts_error_retry">Kon betalingen met contacten niet inschakelen. Uw opgeslagen contacten zijn ongewijzigd. Probeer het opnieuw.</string>
     <string name="profile__pay_contacts_error_session">Verbind uw Pubky-profiel opnieuw om betaalgegevens te delen.</string>
     <string name="profile__pay_contacts_error_wallet">Wallet wordt nog gestart. Probeer het zo opnieuw.</string>
     <string name="profile__pay_contacts_headline">Laat uw\ncontacten\n&lt;accent&gt;u betalen&lt;/accent&gt;</string>

@@ -1496,7 +1496,6 @@
     <string name="profile__pay_contacts_description">Używaj Bitkit ze swoimi kontaktami, aby wysyłać płatności bezpośrednio, zawsze i wszędzie.</string>
     <string name="profile__pay_contacts_error_invalid_payload">Nie udało się przygotować danych punktu płatności.</string>
     <string name="profile__pay_contacts_error_no_endpoint">Brak dostępnego obsługiwanego punktu płatności.</string>
-    <string name="profile__pay_contacts_error_retry">Nie udało się włączyć płatności z kontaktami. Zapisane kontakty pozostały bez zmian. Spróbuj ponownie.</string>
     <string name="profile__pay_contacts_error_session">Połącz ponownie swój profil Pubky, aby udostępnić dane płatności.</string>
     <string name="profile__pay_contacts_error_wallet">Portfel wciąż się uruchamia. Spróbuj ponownie za chwilę.</string>
     <string name="profile__pay_contacts_headline">Pozwól\nkontaktom\n&lt;accent&gt;płacić Ci&lt;/accent&gt;</string>

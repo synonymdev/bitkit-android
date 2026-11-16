@@ -502,6 +502,61 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
     }
 
+    @Test
+    fun `enableForNewProfile turns private and public payments on`() = test {
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any<() -> Collection<String>>(), any())
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+    }
+
+    @Test
+    fun `enableForNewProfile still enables public payments when private payments are unavailable`() = test {
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(false)
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+    }
+
+    @Test
+    fun `enableForNewProfile rolls back public payments when publishing fails`() = test {
+        whenever { publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any()) }
+            .thenReturn(Result.failure(AppError("publish failed")))
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+    }
+
+    @Test
+    fun `enableForNewProfile ignores a call while one is running`() = test {
+        val publication = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+            publication.await()
+            Result.success(Unit)
+        }
+        val sut = createSut()
+
+        sut.enableForNewProfile()
+        runCurrent()
+        sut.enableForNewProfile()
+        publication.complete(Unit)
+        runCurrent()
+
+        verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any<() -> Collection<String>>(), any())
+    }
+
     private fun createSut() = ContactPaymentSettingsRepo(
         settingsStore = settingsStore,
         publicPaykitRepo = publicPaykitRepo,

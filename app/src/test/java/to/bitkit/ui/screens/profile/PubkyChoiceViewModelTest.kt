@@ -21,6 +21,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
@@ -41,6 +42,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo = mock()
     private val isAuthenticated = MutableStateFlow(false)
     private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
 
@@ -58,7 +60,11 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     }
 
     private fun createSut() {
-        sut = PubkyChoiceViewModel(context = context, pubkyRepo = pubkyRepo)
+        sut = PubkyChoiceViewModel(
+            context = context,
+            pubkyRepo = pubkyRepo,
+            contactPaymentSettingsRepo = contactPaymentSettingsRepo,
+        )
     }
 
     @Test
@@ -270,7 +276,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onIdentityClick continues to pay contacts when the adopted identity has no follows`() = test {
+    fun `onIdentityClick enables payments and continues to pay contacts without follows`() = test {
         whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).thenReturn(Result.success(true))
         createSut()
         val effects = mutableListOf<PubkyChoiceEffect>()
@@ -282,6 +288,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(PubkyChoiceEffect.NavigateToPayContacts, effects.single())
+        verify(contactPaymentSettingsRepo).enableForNewProfile()
         assertFalse(sut.uiState.value.navigateToProfile)
         assertNull(sut.uiState.value.adoptingPubky)
         assertTrue(toasts.isEmpty())
@@ -290,7 +297,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onIdentityClick toasts and continues to pay contacts when the follows lookup fails`() = test {
+    fun `onIdentityClick toasts, enables payments and continues when follows lookup fails`() = test {
         whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).thenReturn(Result.success(true))
         whenever(pubkyRepo.prepareImport()).thenReturn(Result.failure(PubkyChoiceTestAppError("follows failed")))
         createSut()
@@ -303,6 +310,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(PubkyChoiceEffect.NavigateToPayContacts, effects.single())
+        verify(contactPaymentSettingsRepo).enableForNewProfile()
         assertNull(sut.uiState.value.adoptingPubky)
         val toast = toasts.single()
         assertEquals(Toast.ToastType.ERROR, toast.type)

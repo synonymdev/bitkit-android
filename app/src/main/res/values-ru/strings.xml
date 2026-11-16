@@ -1513,7 +1513,6 @@
     <string name="profile__pay_contacts_description">Используйте Bitkit, чтобы отправлять платежи контактам напрямую — когда угодно и где угодно.</string>
     <string name="profile__pay_contacts_error_invalid_payload">Не удалось подготовить данные платёжного адреса.</string>
     <string name="profile__pay_contacts_error_no_endpoint">Нет доступного поддерживаемого платёжного адреса.</string>
-    <string name="profile__pay_contacts_error_retry">Не удалось включить платежи контактам. Ваши сохранённые контакты не изменились. Пожалуйста, попробуйте снова.</string>
     <string name="profile__pay_contacts_error_session">Переподключите ваш профиль Pubky, чтобы делиться платёжными данными.</string>
     <string name="profile__pay_contacts_error_wallet">Кошелёк ещё запускается. Попробуйте снова через мгновение.</string>
     <string name="profile__pay_contacts_headline">Пусть ваши\nконтакты\n&lt;accent&gt;платят вам&lt;/accent&gt;</string>

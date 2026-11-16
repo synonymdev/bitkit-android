@@ -1497,7 +1497,6 @@
     <string name="profile__pay_contacts_description">Používejte Bitkit se svými kontakty a posílejte platby přímo, kdykoli a kdekoli.</string>
     <string name="profile__pay_contacts_error_invalid_payload">Data platebního endpointu se nepodařilo připravit.</string>
     <string name="profile__pay_contacts_error_no_endpoint">Není k dispozici žádný podporovaný platební endpoint.</string>
-    <string name="profile__pay_contacts_error_retry">Platby s kontakty se nepodařilo povolit. Vaše uložené kontakty zůstaly beze změny. Zkuste to prosím znovu.</string>
     <string name="profile__pay_contacts_error_session">Pro sdílení platebních dat znovu připojte svůj profil Pubky.</string>
     <string name="profile__pay_contacts_error_wallet">Peněženka se stále spouští. Zkuste to za chvíli znovu.</string>
     <string name="profile__pay_contacts_headline">Nechte své\nkontakty\n&lt;accent&gt;platit vám&lt;/accent&gt;</string>
