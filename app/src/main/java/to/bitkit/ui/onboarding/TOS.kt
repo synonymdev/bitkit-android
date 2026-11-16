@@ -361,6 +361,18 @@ private val htmlPubky = """
 <P>6.3 Your use of Pubky and Paykit requires the transmission of data and information over the Internet and public networks. Accordingly, Synonym does not, and cannot, guarantee the confidentiality, security or reliability of any communications made by you through Pubky or Paykit. The use of Pubky to supplant traditional login and password site protection is untested and may prove insecure.  Any such use is at your own risk.</P>
 <br>
 <P>6.4 Pubky can be used to create and to receive social profiles and dynamic content through the Bitkit Wallet.  This content is User Content as described below and is not moderated, endorsed or verified by Synonym.  Accordingly, it may contain content which is defamatory, obscene, indecent, abusive, offensive, harassing, violent, hateful, inflammatory, or otherwise objectionable.  It may also violate Law, these Terms or the rights of any Person, including the intellectual property rights of any Person.  User Content may be misleading, contain misstatements of fact or omit to state facts that a User might consider important.</P>
+<br>
+<P>6.5 The Bitkit Wallet lets you create a Pubky profile, or connect an existing Pubky, and use Paykit to receive payments from other Users. By creating or connecting a Pubky profile in the Bitkit Wallet, you agree as follows:</P>
+<br>
+<P>6.5.1 Public payments are turned on when you create or connect a Pubky profile. An update of the Bitkit Wallet may also turn them on for a Pubky profile you set up before that update. They stay on while you have a Pubky profile in the Bitkit Wallet. To stop them, delete your Pubky profile.</P>
+<br>
+<P>6.5.2 While public payments are on, the Bitkit Wallet publishes payment details, such as a Bitcoin address and a Lightning invoice, on the homeserver that hosts your Pubky. Anyone who knows your Pubky can read these details and send you payments. Because Bitcoin transactions are recorded on a public blockchain, any Person may be able to link payments made to these details to your Pubky.</P>
+<br>
+<P>6.5.3 Deleting your Pubky profile stops the Bitkit Wallet from publishing new payment details, and the Bitkit Wallet removes the details it published where the homeserver allows it. Synonym cannot recall payment details that other Persons have already read or stored.</P>
+<br>
+<P>6.5.4 Your Pubky profile and the payment details described above are stored on the homeserver you choose, which may be operated by Synonym or by a third party. A homeserver operated by a third party is a Third-Party Service under Section 9.</P>
+<br>
+<P>6.5.5 Synonym does not verify the identity behind any Pubky or the payment details published under it, and you are responsible for checking that you pay the intended Person.</P>
 """.trimIndent()
 
 @Composable
