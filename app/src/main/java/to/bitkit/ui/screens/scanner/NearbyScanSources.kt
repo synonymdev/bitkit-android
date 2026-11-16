@@ -163,6 +163,7 @@ fun NearbyEnableButtons(
         if (sources.canEnableBluetooth) {
             EnableSourceButton(
                 icon = R.drawable.ic_bluetooth,
+                contentDescription = stringResource(R.string.other__bluetooth_enable),
                 onClick = sources.onEnableBluetooth,
                 testTag = "ScannerEnableBluetooth",
                 modifier = Modifier.weight(1f),
@@ -171,6 +172,7 @@ fun NearbyEnableButtons(
         if (sources.canEnableNfc) {
             EnableSourceButton(
                 icon = R.drawable.ic_broadcast,
+                contentDescription = stringResource(R.string.other__nfc_enable),
                 onClick = sources.onEnableNfc,
                 testTag = "ScannerEnableNfc",
                 modifier = Modifier.weight(1f),
@@ -182,6 +184,7 @@ fun NearbyEnableButtons(
 @Composable
 internal fun EnableSourceButton(
     @DrawableRes icon: Int,
+    contentDescription: String,
     onClick: () -> Unit,
     testTag: String,
     modifier: Modifier = Modifier,
@@ -193,7 +196,7 @@ internal fun EnableSourceButton(
         icon = {
             Icon(
                 painter = painterResource(icon),
-                contentDescription = null,
+                contentDescription = contentDescription,
                 tint = Colors.White,
                 modifier = Modifier.size(16.dp)
             )

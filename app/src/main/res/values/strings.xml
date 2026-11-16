@@ -642,6 +642,7 @@
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;terms of use&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Use Bitkit to pay anyone, anywhere, any time, and spend your bitcoin on the things you value in life.</string>
     <string name="onboarding__welcome_title">You can ₿ \n&lt;accent&gt;the change&lt;/accent&gt;</string>
+    <string name="other__bluetooth_enable">Enable Bluetooth</string>
     <string name="other__buy_button">Choose Exchange</string>
     <string name="other__buy_header">Buy some\n&lt;accent&gt;Bitcoin&lt;/accent&gt;</string>
     <string name="other__buy_text">Don’t have any Bitcoin or need more?</string>
@@ -689,6 +690,7 @@
     <string name="other__lnurl_withdr_success_msg">Your withdraw was successfully requested. Waiting for payment.</string>
     <string name="other__lnurl_withdr_success_title">Withdraw Requested</string>
     <string name="other__logs_export_error">Failed to create log zip file</string>
+    <string name="other__nfc_enable">Enable NFC</string>
     <string name="other__nfc_read_error_text">This tag does not hold a payment request Bitkit can use.</string>
     <string name="other__nfc_read_error_title">Unable To Read NFC</string>
     <string name="other__nfc_service_description">Bitkit payment request</string>

@@ -474,6 +474,7 @@ private fun PermissionDenied(
             leading = {
                 EnableSourceButton(
                     icon = R.drawable.ic_camera,
+                    contentDescription = stringResource(R.string.other__camera_permission_button),
                     onClick = onClickRetry,
                     testTag = "ScannerEnableCamera",
                 )
