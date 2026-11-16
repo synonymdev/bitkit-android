@@ -37,6 +37,8 @@ fun PaykitReceiptStatusView(
             ),
             color = if (status == PaykitReceiptStatus.Failed) Colors.Red else Colors.White64,
             maxLines = 1,
+            // Measured after Retry, so a long locale shortens the status instead of hiding Retry.
+            modifier = Modifier.weight(1f, fill = false),
         )
         if (status == PaykitReceiptStatus.Failed) {
             CaptionB(
@@ -72,7 +74,11 @@ fun ActivitySubtitleWithReceipt(
         )
         if (receiptStatus != null) {
             CaptionB(text = "·", color = Colors.White64, maxLines = 1)
-            PaykitReceiptStatusView(status = receiptStatus, onRetryClick = onRetryClick)
+            PaykitReceiptStatusView(
+                status = receiptStatus,
+                onRetryClick = onRetryClick,
+                modifier = Modifier.weight(1f, fill = false),
+            )
         }
     }
 }
