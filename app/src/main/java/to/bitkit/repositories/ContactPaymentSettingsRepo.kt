@@ -5,9 +5,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,7 +13,6 @@ import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.areContactPaymentsEnabled
 import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
@@ -39,13 +36,11 @@ class ContactPaymentSettingsRepo @Inject constructor(
     private val scope = appScope(ioDispatcher, TAG)
     private var newProfileJob: Job? = null
 
-    val isEnabled: Flow<Boolean> = settingsStore.data.map { it.areContactPaymentsEnabled() }
-    val isPublicEnabled: Flow<Boolean> = settingsStore.data.map { it.sharesPublicPaykitEndpoints }
-
     /**
      * Turns private and public payments on for a profile just set up in this app. Both settings are written
-     * together first, so Settings shows them on right away; the syncs then run in the background so profile
-     * setup never waits on endpoint publishing. Each mode rolls only itself back if its sync fails.
+     * together first, so both modes count as on right away; the syncs then run in the background so profile
+     * setup never waits on endpoint publishing. Each mode rolls only itself back if its sync fails, and the
+     * foreground check in [to.bitkit.usecases.KeepContactPaymentsOnUseCase] turns it on again later.
      * A call while a previous one is still running is ignored.
      */
     @Synchronized

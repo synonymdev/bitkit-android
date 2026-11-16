@@ -1478,16 +1478,10 @@
     <string name="profile__intro_description">Με το φορητό προφίλ σου, οι επαφές σου μπορούν να σε βρουν και να σε πληρώσουν οπουδήποτε.</string>
     <string name="profile__intro_title">ΦΟΡΗΤΟ\n&lt;accent&gt;ΠΡΟΦΙΛ&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Χρησιμοποίησε το Bitkit με τις επαφές σου για να στέλνεις πληρωμές απευθείας, οποτεδήποτε, οπουδήποτε.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Δεν ήταν δυνατή η προετοιμασία των δεδομένων του endpoint πληρωμής.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Δεν υπάρχει διαθέσιμο υποστηριζόμενο endpoint πληρωμής.</string>
-    <string name="profile__pay_contacts_error_session">Σύνδεσε ξανά το προφίλ Pubky σου για να κοινοποιήσεις δεδομένα πληρωμών.</string>
-    <string name="profile__pay_contacts_error_wallet">Το πορτοφόλι ξεκινά ακόμα. Δοκίμασε ξανά σε λίγο.</string>
     <string name="profile__pay_contacts_headline">Άφησε τις\nεπαφές σου\n&lt;accent&gt;να σε πληρώνουν&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Πληρωμή επαφών</string>
-    <string name="profile__private_payments_toggle">Ιδιωτικές πληρωμές επαφών</string>
     <string name="profile__pubky_copied">Το pubky αντιγράφηκε στο πρόχειρο</string>
     <string name="profile__public_key">Δημόσιο κλειδί</string>
-    <string name="profile__public_payments_toggle">Δημόσιες πληρωμές</string>
     <string name="profile__restore_nav_title">Επαναφορά προφίλ</string>
     <string name="profile__session_expired">Η συνεδρία του προφίλ σου έληξε. Σύνδεσε ξανά για να επαναφέρεις το προφίλ σου.</string>
     <string name="profile__sign_out">Αποσύνδεση</string>

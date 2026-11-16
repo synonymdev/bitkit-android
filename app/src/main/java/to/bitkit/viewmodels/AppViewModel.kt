@@ -269,6 +269,7 @@ import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.usecases.KeepContactPaymentsOnUseCase
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ClipboardPromptValidator
@@ -334,6 +335,7 @@ class AppViewModel @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
+    private val keepContactPaymentsOn: KeepContactPaymentsOnUseCase,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
     private val paykitAllowanceRepo: PaykitAllowanceRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
@@ -607,6 +609,7 @@ class AppViewModel @Inject constructor(
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
     private var paykitContactsRefreshJob: Job? = null
+    private var keepContactPaymentsOnJob: Job? = null
     private var shopContactImportJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
@@ -1549,6 +1552,7 @@ class AppViewModel @Inject constructor(
 
         startPaykitSessionRestoreRetries()
         startPaykitContactsRefresh()
+        startKeepContactPaymentsOn()
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (!isAutomaticPaykitWorkPaused() && isOnline.value == ConnectivityState.CONNECTED) {
                 pubkyRepo.republishIdentityIfNeeded()
@@ -1594,6 +1598,15 @@ class AppViewModel @Inject constructor(
             contactKeys = pubkyRepo.contacts.value.map { it.publicKey },
             reason = "payment request polling",
         )
+    }
+
+    /** Payments are always on while a profile exists; turns either mode back on once per foreground. */
+    private fun startKeepContactPaymentsOn() {
+        if (keepContactPaymentsOnJob?.isActive == true) return
+        keepContactPaymentsOnJob = viewModelScope.launch {
+            isOnline.first { it == ConnectivityState.CONNECTED }
+            keepContactPaymentsOn()
+        }
     }
 
     private fun startPaykitContactsRefresh() {
