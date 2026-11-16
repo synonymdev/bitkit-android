@@ -4394,6 +4394,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `nfc tag launch rewrites a bip 321 request without an address`() = test {
+        val bolt11 = "lnbcrt1nfctap"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.handleDeeplinkIntent(nfcTagIntent("bitcoin:?lightning=$bolt11"))
+        advanceUntilIdle()
+
+        val decoded = argumentCaptor<String>()
+        verify(coreService, atLeastOnce()).decode(decoded.capture())
+        assertTrue(decoded.allValues.none { it.startsWith("bitcoin:?") }, decoded.allValues.toString())
+    }
+
+    @Test
     fun `Bitkit SamRock deeplink opens BTCPay connection sheet without core decode`() = test {
         sut.handleDeeplinkIntent(samRockIntent(samRockDeepLink(SAMROCK_SETUP_URL)))
         advanceUntilIdle()
@@ -20500,6 +20514,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         return mock {
             on { action }.thenReturn(Intent.ACTION_VIEW)
+            on { data }.thenReturn(uri)
+        }
+    }
+
+    private fun nfcTagIntent(value: String): Intent {
+        val uri = mock<Uri> {
+            on { toString() }.thenReturn(value)
+            on { scheme }.thenReturn(value.substringBefore(':'))
+        }
+        return mock {
+            on { action }.thenReturn(NfcAdapter.ACTION_NDEF_DISCOVERED)
             on { data }.thenReturn(uri)
         }
     }

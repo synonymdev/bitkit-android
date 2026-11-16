@@ -170,6 +170,7 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
+import to.bitkit.nfc.scannedPaymentRequest
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -9865,7 +9866,11 @@ class AppViewModel @Inject constructor(
         if (intent.action !in DEEPLINK_ACTIONS) return
         intent.data?.let { uri ->
             Logger.debug("Received deeplink '${uri.toString().sanitizedDeeplinkLogValue()}'", context = TAG)
-            processDeeplink(uri)
+            // A tapped tag goes through the same rewrite as a scanner read (BIP 321 without an address).
+            val value = uri.toString().let {
+                if (intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) scannedPaymentRequest(it) else it
+            }
+            processDeeplink(uri, value)
         }
     }
 
@@ -9948,9 +9953,9 @@ class AppViewModel @Inject constructor(
 
     private fun processDeeplink(
         uri: Uri,
+        value: String = uri.toString(),
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ) = viewModelScope.launch {
-        val value = uri.toString()
         val isContactLink = PubkyContactLink.matches(uri)
         if (SamRockSetupRequest.isProtocolUrl(value)) {
             if (!walletRepo.walletExists()) return@launch
