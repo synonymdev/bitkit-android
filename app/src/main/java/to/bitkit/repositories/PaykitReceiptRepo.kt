@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.ReceiptIssuanceStatus
 import com.synonym.paykit.ReceiptIssuanceView
@@ -55,6 +56,9 @@ class PaykitReceiptRepo @Inject constructor(
     private var candidates: Map<String, PaykitReceiptCandidate> = emptyMap()
     private var identity: String? = null
 
+    /** Confirmed transactions do not change, so their outputs are read once per launch. */
+    private var outputsByTxid: Map<String, Map<String, ULong>> = emptyMap()
+
     private val _statuses = MutableStateFlow<Map<String, PaykitReceiptStatus>>(emptyMap())
 
     /** Receipt status by the payment's hash, txid or USDT transfer id, lowercase. */
@@ -96,6 +100,7 @@ class PaykitReceiptRepo @Inject constructor(
 
     private fun reset() {
         attemptedReceiptIds = emptySet()
+        outputsByTxid = emptyMap()
         candidates = emptyMap()
         identity = null
         _statuses.update { emptyMap() }
@@ -119,7 +124,7 @@ class PaykitReceiptRepo @Inject constructor(
             PaykitReceiptMatcher.candidates(
                 records = records,
                 lightningReceives = lightningReceives(),
-                onchainReceives = onchainReceives(),
+                onchainReceives = onchainReceives(records),
                 usdtReceives = usdtReceives(currentIdentity),
                 network = Env.network,
             )
@@ -237,11 +242,21 @@ class PaykitReceiptRepo @Inject constructor(
             }
             .associateBy { it.paymentId }
 
-    private suspend fun onchainReceives(): List<PaykitRecordedReceive> =
-        activityRepo.getActivities(filter = ActivityFilter.ONCHAIN, txType = PaymentType.RECEIVED).getOrThrow()
+    /**
+     * Confirmed on-chain receives with the outputs of each one a request's proof or endpoint names, so a receipt counts
+     * only what was paid to the request.
+     */
+    private suspend fun onchainReceives(records: List<PaymentRequestRecord>): List<PaykitRecordedReceive> {
+        val mentions = records.flatMap { record ->
+            record.paymentProofs.map { it.proof.exportText() } + record.terms?.paymentEndpoints?.values.orEmpty()
+        }.map { it.lowercase() }
+        return activityRepo.getActivities(filter = ActivityFilter.ONCHAIN, txType = PaymentType.RECEIVED).getOrThrow()
             .filterIsInstance<Activity.Onchain>()
             .filter { it.v1.confirmed && it.v1.doesExist }
             .map {
+                val txid = it.v1.txId.lowercase()
+                val address = it.v1.address.lowercase()
+                val named = mentions.any { text -> txid in text || (address.isNotEmpty() && address in text) }
                 bitcoinReceive(
                     paymentId = it.v1.txId,
                     rail = PaykitReceiptRail.Onchain,
@@ -249,8 +264,19 @@ class PaykitReceiptRepo @Inject constructor(
                     address = it.v1.address,
                     receivedAt = it.v1.timestamp,
                     contact = it.v1.contact,
+                    outputs = if (named) outputsOf(txid) else null,
                 )
             }
+    }
+
+    /** Sats a stored transaction paid to each address, keyed lowercase; null when its details are not stored. */
+    private suspend fun outputsOf(txid: String): Map<String, ULong>? = outputsByTxid[txid]
+        ?: activityRepo.getTransactionDetails(txid).getOrNull()?.outputs
+            ?.filter { it.value > 0 }
+            ?.mapNotNull { output -> output.scriptpubkeyAddress?.lowercase()?.let { it to output.value.toULong() } }
+            ?.groupBy({ it.first }, { it.second })
+            ?.mapValues { (_, values) -> values.fold(0uL) { sum, value -> sum + value } }
+            ?.also { outputsByTxid = outputsByTxid + (txid to it) }
 
     private fun usdtReceives(currentIdentity: String): List<PaykitVerifiedUsdtReceive> =
         usdtPayments.get().receipts.value

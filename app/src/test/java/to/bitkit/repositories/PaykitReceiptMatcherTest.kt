@@ -97,6 +97,15 @@ class PaykitReceiptMatcherTest {
         fun payload(value: String) = "{\"value\":\"$value\"}"
     }
 
+    /** An on-chain receive of [sats], all paid to [address] unless [outputs] says otherwise. */
+    private fun onchainReceive(
+        sats: ULong,
+        address: String = ADDRESS,
+        receivedAt: ULong? = null,
+        contact: String? = null,
+        outputs: Map<String, ULong>? = mapOf(address.lowercase() to sats),
+    ) = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, sats, address, receivedAt, contact, outputs)
+
     private fun match(
         vararg records: PaymentRequestRecord,
         lightning: List<PaykitRecordedReceive> = emptyList(),
@@ -145,7 +154,7 @@ class PaykitReceiptMatcherTest {
         }
         val request = payeeRequest(proofs = listOf(txidProof))
 
-        val receive = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 10_000uL, contact = BUYER)
+        val receive = onchainReceive(10_000uL, contact = BUYER)
 
         val candidate = match(request, onchain = listOf(receive)).single()
 
@@ -160,14 +169,14 @@ class PaykitReceiptMatcherTest {
         )
 
         assertTrue(
-            match(request, onchain = listOf(bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 15_000uL))).isEmpty()
+            match(request, onchain = listOf(onchainReceive(15_000uL))).isEmpty()
         )
     }
 
     @Test
     fun `market request receipts an overpayment to its own address without a proof`() {
         val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
-        val overpaid = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 20_000uL, address = ADDRESS)
+        val overpaid = onchainReceive(20_000uL, address = ADDRESS)
 
         val candidate = match(request, onchain = listOf(overpaid)).single()
 
@@ -191,7 +200,7 @@ class PaykitReceiptMatcherTest {
         val claim = proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)
         val first = payeeRequest(proofs = listOf(claim))
         val second = payeeRequest(requestId = "5f1c2a3b-1d2e-4f5a-8b6c-7d8e9f0a1b2c", proofs = listOf(claim))
-        val receive = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1uL, contact = BUYER)
+        val receive = onchainReceive(1uL, contact = BUYER)
 
         assertTrue(match(first, second, onchain = listOf(receive)).isEmpty())
     }
@@ -199,7 +208,7 @@ class PaykitReceiptMatcherTest {
     @Test
     fun `an on-chain proof for a receive not attributed to the payer is ignored`() {
         val request = payeeRequest(proofs = listOf(proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)))
-        val unattributed = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 50_000uL, address = ADDRESS)
+        val unattributed = onchainReceive(50_000uL, address = ADDRESS)
 
         assertTrue(match(request, onchain = listOf(unattributed)).isEmpty())
     }
@@ -215,13 +224,30 @@ class PaykitReceiptMatcherTest {
             proposedAt = "yesterday",
         )
         fun receivedAt(seconds: ULong) =
-            bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1_000uL, receivedAt = seconds, contact = BUYER)
+            onchainReceive(1_000uL, receivedAt = seconds, contact = BUYER)
         val earlier = receivedAt(1_763_100_000uL)
         val later = receivedAt(1_794_657_600uL)
 
         assertTrue(match(request, onchain = listOf(earlier)).isEmpty())
         assertEquals(1, match(request, onchain = listOf(later)).size)
         assertTrue(match(unreadable, onchain = listOf(later)).isEmpty())
+    }
+
+    @Test
+    fun `an on-chain receipt counts only what was paid to the request`() {
+        val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
+        val batch = onchainReceive(5_000uL, outputs = mapOf(ADDRESS.lowercase() to 3_000uL, "bcrt1qother" to 2_000uL))
+
+        val candidate = match(request, onchain = listOf(batch)).single()
+
+        assertEquals(3_000uL, candidate.receive.amount.atomic)
+    }
+
+    @Test
+    fun `an on-chain receipt is withheld when its outputs are unknown`() {
+        val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
+
+        assertTrue(match(request, onchain = listOf(onchainReceive(5_000uL, outputs = null))).isEmpty())
     }
 
     @Test
@@ -246,7 +272,7 @@ class PaykitReceiptMatcherTest {
             requestId = "5f1c2a3b-1d2e-4f5a-8b6c-7d8e9f0a1b2c",
             proofs = listOf(claim),
         )
-        val receive = bitcoinReceive(TXID, PaykitReceiptRail.Onchain, 1_000uL, contact = BUYER)
+        val receive = onchainReceive(1_000uL, contact = BUYER)
 
         val candidate = match(payer, claimant, onchain = listOf(receive)).single()
 

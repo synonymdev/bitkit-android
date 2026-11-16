@@ -38,7 +38,19 @@ internal data class PaykitRecordedReceive(
     val contact: String? = null,
     /** The transaction that carried the payment, for the receipt's metadata. */
     val transactionId: String = paymentId,
-)
+    /** Sats an on-chain receive paid to each of this wallet's addresses, keyed lowercase; null when unknown. */
+    val outputs: Map<String, ULong>? = null,
+) {
+    /**
+     * An on-chain receive narrowed to what it paid to [address], so a batch paying other addresses of this wallet does
+     * not count toward the request; null when that amount is unknown or zero. Other rails are returned as they are.
+     */
+    fun paidTo(address: String?): PaykitRecordedReceive? {
+        if (rail != PaykitReceiptRail.Onchain) return this
+        val sats = address?.let { outputs?.get(it.lowercase()) }?.takeIf { it > 0uL } ?: return null
+        return copy(amount = PaykitAmount(PaykitAsset.BTC, sats))
+    }
+}
 
 enum class PaykitReceiptRail { Lightning, Onchain, Usdt }
 
@@ -106,7 +118,9 @@ internal object PaykitReceiptMatcher {
                     if (rail == PaykitReceiptRail.Lightning) {
                         lightningReceives[id]
                     } else {
-                        onchainByTxid[id]?.takeIf { PubkyPublicKeyFormat.matches(it.contact, record.counterparty) }
+                        onchainByTxid[id]
+                            ?.takeIf { PubkyPublicKeyFormat.matches(it.contact, record.counterparty) }
+                            ?.let { it.paidTo(it.address) }
                     }
                 }
                 receive?.takeIf { record.couldBePaidBy(it) }
@@ -178,9 +192,10 @@ internal object PaykitReceiptMatcher {
                         runCatching { parseInvoice(endpoint.value).paymentHash().lowercase() }.getOrNull()
                             ?.let(lightningReceives::get)
                     )
-                    endpoint.methodId.isOnchain -> onchainReceives.filter {
-                        it.address.equals(endpoint.value, ignoreCase = true)
-                    }
+                    endpoint.methodId.isOnchain ->
+                        onchainReceives
+                            .filter { it.address.equals(endpoint.value, ignoreCase = true) }
+                            .mapNotNull { it.paidTo(endpoint.value) }
                     else -> emptyList()
                 }.map { identifier to it }
             }
@@ -221,6 +236,7 @@ internal fun bitcoinReceive(
     address: String? = null,
     receivedAt: ULong? = null,
     contact: String? = null,
+    outputs: Map<String, ULong>? = null,
 ) = PaykitRecordedReceive(
     paymentId = paymentId.lowercase(),
     rail = rail,
@@ -228,6 +244,7 @@ internal fun bitcoinReceive(
     address = address,
     receivedAt = receivedAt,
     contact = contact,
+    outputs = outputs,
 )
 
 /** A UUID v4 derived from the receipt's request and payment, as Paykit requires a v4 Receipt ID. */
