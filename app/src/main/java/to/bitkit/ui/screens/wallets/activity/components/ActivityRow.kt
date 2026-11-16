@@ -45,7 +45,9 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.ActivitySubtitleWithReceipt
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
@@ -75,6 +77,15 @@ fun ActivityRow(
         mutableStateOf(null)
     }
     val feeRates = blocktankInfo?.onchain?.feeRates
+    val appViewModel = appViewModel
+    val receiptStatuses by appViewModel?.paykitReceiptStatuses?.collectAsStateWithLifecycle() ?: remember {
+        mutableStateOf(emptyMap())
+    }
+    val paymentId = when (item) {
+        is Activity.Lightning -> item.v1.id
+        is Activity.Onchain -> item.v1.txId
+    }.lowercase()
+    val receiptStatus = receiptStatuses[paymentId].takeIf { item.txType() == PaymentType.RECEIVED }
 
     val status: PaymentState? = when (item) {
         is Activity.Lightning -> item.v1.status
@@ -163,10 +174,10 @@ fun ActivityRow(
                     }
                 }
             }
-            CaptionB(
-                text = subtitleText,
-                color = Colors.White64,
-                maxLines = 1,
+            ActivitySubtitleWithReceipt(
+                subtitle = subtitleText,
+                receiptStatus = receiptStatus,
+                onRetryClick = { appViewModel?.retryPaykitReceipt(paymentId) },
             )
         }
         HorizontalSpacer(16.dp)

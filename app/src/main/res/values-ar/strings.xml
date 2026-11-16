@@ -1056,6 +1056,9 @@
     <string name="wallet__note">ملاحظة</string>
     <string name="wallet__payment_received">تم استلام Bitcoin</string>
     <string name="wallet__peer_disconnected">انقطع اتصال النظير.</string>
+    <string name="wallet__receipt_failed">فشل إرسال الإيصال</string>
+    <string name="wallet__receipt_sending">جارٍ إرسال الإيصال</string>
+    <string name="wallet__receipt_sent">تم إرسال الإيصال</string>
     <string name="wallet__receive">استلام</string>
     <string name="wallet__receive__cjit">استلام أموال Lightning</string>
     <string name="wallet__receive_bitcoin">استلام Bitcoin</string>

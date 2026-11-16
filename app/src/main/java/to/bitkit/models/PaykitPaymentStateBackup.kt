@@ -21,6 +21,8 @@ data class PaykitPaymentStateBackup(
     val acceptedOneTimeRequests: Map<String, Set<PaykitPaymentRequestId>>? = null,
     /** Allowance state by identity; absent when no identity has any. */
     val allowances: Map<String, PaykitAllowanceStateBackup>? = null,
+    /** Paykit receipt ids seen sent, by identity; absent when none were. */
+    val sentReceipts: Map<String, Set<String>>? = null,
 ) {
     @Serializable
     data class Subscription(

@@ -1084,6 +1084,9 @@
     <string name="wallet__note">Poznámka</string>
     <string name="wallet__payment_received">bitcoin přijatý</string>
     <string name="wallet__peer_disconnected">Peer odpojen.</string>
+    <string name="wallet__receipt_failed">Odeslání potvrzení selhalo</string>
+    <string name="wallet__receipt_sending">Odesílání potvrzení</string>
+    <string name="wallet__receipt_sent">Potvrzení odesláno</string>
     <string name="wallet__receive">Přijmout</string>
     <string name="wallet__receive__cjit">Přijímat Lightning prostředky</string>
     <string name="wallet__receive_bitcoin">Přijmout bitcoin</string>

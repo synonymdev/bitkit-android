@@ -1061,6 +1061,9 @@
     <string name="wallet__note">Σημείωση</string>
     <string name="wallet__payment_received">Ελήφθησαν Bitcoin</string>
     <string name="wallet__peer_disconnected">Ο ομότιμος αποσυνδέθηκε.</string>
+    <string name="wallet__receipt_failed">Η αποστολή της απόδειξης απέτυχε</string>
+    <string name="wallet__receipt_sending">Αποστολή απόδειξης</string>
+    <string name="wallet__receipt_sent">Η απόδειξη στάλθηκε</string>
     <string name="wallet__receive">Λήψη</string>
     <string name="wallet__receive__cjit">Λήψη κεφαλαίων Lightning</string>
     <string name="wallet__receive_bitcoin">Λήψη Bitcoin</string>

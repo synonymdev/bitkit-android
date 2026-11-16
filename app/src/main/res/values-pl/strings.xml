@@ -973,6 +973,9 @@
     <string name="wallet__drawer__settings">Ustawienia</string>
     <string name="wallet__drawer__status">Status aplikacji</string>
     <string name="wallet__drawer__support">Wsparcie</string>
+    <string name="wallet__receipt_failed">Nie udało się wysłać potwierdzenia</string>
+    <string name="wallet__receipt_sending">Wysyłanie potwierdzenia</string>
+    <string name="wallet__receipt_sent">Potwierdzenie wysłane</string>
     <string name="wallet__send">Wyślij</string>
     <string name="wallet__receive">Otrzymaj</string>
     <string name="wallet__send_bitcoin">Wyślij Bitcoin</string>

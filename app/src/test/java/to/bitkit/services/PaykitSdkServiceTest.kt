@@ -267,6 +267,29 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `payment-list sync sends queued messages first so their outcomes are recorded`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
+        val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        service.syncPrivatePaymentListsWithReservations(updates, false)
+
+        inOrder(sdk) {
+            verify(sdk).processPendingPrivateMessages()
+            verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
+        }
+
+        // A withdrawal supersedes a queued list instead of sending it first.
+        val withdrawal = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, emptyList()))
+        service.syncPrivatePaymentListsWithReservations(withdrawal, false)
+        service.syncPrivatePaymentListsWithReservations(emptyList(), true)
+        verify(sdk, times(1)).processPendingPrivateMessages()
+    }
+
+    @Test
     fun `payment review defers only passive refresh until every review ends`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
@@ -1028,7 +1051,7 @@ class PaykitSdkServiceTest {
         assertFailsWith<CancellationException> { withdrawal.await() }
         assertEquals(emptyList(), next.await())
         assertEquals(listOf("registry completed", "next admitted"), events)
-        verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+        verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
     }
 
     @Test
@@ -1075,7 +1098,7 @@ class PaykitSdkServiceTest {
                     listOf("messages", "publication")
                 }
                 assertEquals(listOf("active completed") + queued, events)
-                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
             }
         }
     }
@@ -1985,7 +2008,7 @@ class PaykitSdkServiceTest {
                 verify(keychain).upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session")
                 verify(sdk).initialize()
                 verify(sdk).publishPaykitNoiseKeyAuthorization()
-                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
                 verify(sdk).resolveProfile(RING_PUBKY, true)
             }
             verify(sdk, times(1)).initialize()
@@ -2082,7 +2105,7 @@ class PaykitSdkServiceTest {
                 assertSame(result, service.importSession("new-session"))
                 verify(sdk, times(2)).initialize()
                 verify(sdk, times(if (failAuthorization) 2 else 1)).publishPaykitNoiseKeyAuthorization()
-                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
             }
         }
     }
@@ -2401,7 +2424,7 @@ class PaykitSdkServiceTest {
                     verify(keychain).upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, bytes.toHex())
                     verify(sdk).initialize()
                     verify(sdk).publishPaykitNoiseKeyAuthorization()
-                    verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                    verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
                 }
                 verify(sdk, never()).identityStatus()
                 verify(blocking, never()).delete(any())
@@ -3515,7 +3538,7 @@ class PaykitSdkServiceTest {
 
             service.initialize()
 
-            verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(enabled, true, false, true))
+            verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(enabled, true, true, true))
             verify(sdk, never()).identityStatus()
         }
     }

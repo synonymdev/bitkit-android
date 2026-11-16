@@ -967,6 +967,9 @@
     <string name="wallet__drawer__status">Estado de la App</string>
     <string name="wallet__drawer__support">Soporte</string>
     <string name="wallet__drawer__wallet">Monedero</string>
+    <string name="wallet__receipt_failed">Error al enviar el recibo</string>
+    <string name="wallet__receipt_sending">Enviando recibo</string>
+    <string name="wallet__receipt_sent">Recibo enviado</string>
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Recibir</string>
     <string name="wallet__details_transfer_subtitle">Transferencia Entrante: </string>
