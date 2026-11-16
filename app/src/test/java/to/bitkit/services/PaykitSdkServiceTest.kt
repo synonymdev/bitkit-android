@@ -281,6 +281,12 @@ class PaykitSdkServiceTest {
             verify(sdk).processPendingPrivateMessages()
             verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
         }
+
+        // A withdrawal supersedes a queued list instead of sending it first.
+        val withdrawal = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, emptyList()))
+        service.syncPrivatePaymentListsWithReservations(withdrawal, false)
+        service.syncPrivatePaymentListsWithReservations(emptyList(), true)
+        verify(sdk, times(1)).processPendingPrivateMessages()
     }
 
     @Test

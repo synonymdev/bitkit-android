@@ -839,7 +839,6 @@ class PaykitSdkService @Inject constructor(
                 if (hasActiveSubscription) throw PubkyContactError.ActiveSubscription
                 peers.filter { it.state == LinkedPeerState.LINKED }.forEach {
                     runSuspendCatching {
-                        sendPendingMessages(handle)
                         val report = completeSdkCall { handle.clearPrivatePaymentListAndProcessOutbound(publicKey) }
                         if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
                             Logger.warn("Failed to withdraw private endpoints before contact deletion", context = TAG)
@@ -959,7 +958,8 @@ class PaykitSdkService @Inject constructor(
         deferDuringPayment: Boolean,
     ): PrivatePaymentListDeliveryReport {
         isSetup.await()
-        val priority = if (clearUnlistedLinkedPeers || updates.any { it.reservations.isEmpty() }) {
+        val withdraws = clearUnlistedLinkedPeers || updates.any { it.reservations.isEmpty() }
+        val priority = if (withdraws) {
             PaykitSdkOperationLock.Priority.Ordered
         } else {
             PaykitSdkOperationLock.Priority.Background
@@ -968,7 +968,8 @@ class PaykitSdkService @Inject constructor(
             val admissionPriority = if (deferDuringPayment) priority else Priority.Ordered
             checkRefreshAdmission(admissionPriority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(admissionPriority) }) { handle ->
-                sendPendingMessages(handle)
+                // A withdrawal must supersede any list still queued, so it never sends one first.
+                if (!withdraws) sendPendingMessages(handle)
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -1029,7 +1030,6 @@ class PaykitSdkService @Inject constructor(
                     }
                 }
                 checkPaykitContactSync(isStillCurrent)
-                sendPendingMessages(handle)
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -1171,8 +1171,9 @@ class PaykitSdkService @Inject constructor(
     }
 
     /**
-     * Sends and records what is already queued, receipts included, before a payment-list sync whose own drain would
-     * send them unreported.
+     * Sends and records what is already queued, receipts included, before a payment-list publication whose own drain
+     * would send them unreported. Withdrawals skip it; a receipt they send stays unrecorded until the SDK reports
+     * delivery per receipt.
      */
     private suspend fun sendPendingMessages(handle: PaykitSdk) {
         runSuspendCatching {
@@ -1691,7 +1692,7 @@ class PaykitSdkService @Inject constructor(
                         amount = amount,
                         afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
                         maxAdvanceSteps = 1u,
-                    )
+                    ).also { recordDelivery(cachedPaykitKey?.publicKey, listOfNotNull(it.outboundReport)) }
                 }
             }
         }
@@ -1708,14 +1709,14 @@ class PaykitSdkService @Inject constructor(
     ): PaykitPreparedPrivateContactPayment {
         isSetup.await()
         val prepared = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
-            withStateRevisionTracking {
+            withStateRevisionTracking { handle ->
                 completeSdkCall {
-                    it.prepareAndResolvePrivatePaymentRequest(
+                    handle.prepareAndResolvePrivatePaymentRequest(
                         counterparty,
                         paymentRequestId,
                         afterPrivatePaymentListVersion,
                         1u,
-                    )
+                    ).also { recordDelivery(cachedPaykitKey?.publicKey, listOfNotNull(it.outboundReport)) }
                 }
             }
         }
