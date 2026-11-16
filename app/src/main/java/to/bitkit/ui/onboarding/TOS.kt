@@ -370,7 +370,7 @@ private val htmlPubky = """
 <br>
 <P>6.5.3 Deleting your Pubky profile stops the Bitkit Wallet from publishing new payment details, and the Bitkit Wallet removes the details it published where the homeserver allows it. Synonym cannot recall payment details that other Persons have already read or stored.</P>
 <br>
-<P>6.5.4 Your Pubky profile and the payment details described above are stored on the homeserver you choose, which may be operated by Synonym or by a third party. A homeserver operated by a third party is a Third-Party Service under Section 9.</P>
+<P>6.5.4 Your Pubky profile and the payment details described above are stored on the homeserver that hosts your Pubky, which may be operated by Synonym or by a third party. A homeserver operated by a third party is a Third-Party Service under Section 9.</P>
 <br>
 <P>6.5.5 Synonym does not verify the identity behind any Pubky or the payment details published under it, and you are responsible for checking that you pay the intended Person.</P>
 """.trimIndent()
