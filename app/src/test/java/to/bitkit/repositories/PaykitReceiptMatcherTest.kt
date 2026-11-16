@@ -262,6 +262,32 @@ class PaykitReceiptMatcherTest {
     }
 
     @Test
+    fun `one transaction paying two requests receipts each`() {
+        val claim = proof("bitcoin-onchain-txid", TXID, ONCHAIN_METHOD)
+        val first = payeeRequest(proofs = listOf(claim), endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
+        val second = payeeRequest(
+            requestId = "9a8b7c6d-1d2e-4f5a-8b6c-7d8e9f0a1b2c",
+            proofs = listOf(claim),
+            endpoints = mapOf(ONCHAIN_METHOD to payload("bcrt1qsecond")),
+        )
+        val overlapping = payeeRequest(
+            requestId = "8a8b7c6d-1d2e-4f5a-8b6c-7d8e9f0a1b2c",
+            proofs = listOf(claim),
+            endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)),
+        )
+        val batch = onchainReceive(
+            40_000uL,
+            contact = BUYER,
+            outputs = mapOf(ADDRESS.lowercase() to 10_000uL, "bcrt1qsecond" to 30_000uL),
+        )
+
+        val amounts = match(first, second, onchain = listOf(batch)).map { it.receive.amount.atomic }.sorted()
+
+        assertEquals(listOf(10_000uL, 30_000uL), amounts)
+        assertTrue(match(first, overlapping, onchain = listOf(batch)).isEmpty())
+    }
+
+    @Test
     fun `an on-chain receipt is withheld when its outputs are unknown`() {
         val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
 

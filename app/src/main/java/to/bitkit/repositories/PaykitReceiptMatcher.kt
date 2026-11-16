@@ -40,6 +40,8 @@ internal data class PaykitRecordedReceive(
     val transactionId: String = paymentId,
     /** Sats an on-chain receive paid to each of this wallet's addresses, keyed lowercase; null when unknown. */
     val outputs: Map<String, ULong>? = null,
+    /** The addresses whose outputs this receive counts toward a request, once narrowed; empty for other rails. */
+    val countedAddresses: Set<String> = emptySet(),
 ) {
     /**
      * An on-chain receive narrowed to what it paid to [addresses], so a batch paying other addresses of this wallet
@@ -48,9 +50,12 @@ internal data class PaykitRecordedReceive(
     fun paidTo(addresses: Collection<String>): PaykitRecordedReceive? {
         if (rail != PaykitReceiptRail.Onchain) return this
         val outputs = outputs ?: return null
-        val sats = addresses.map { it.lowercase() }.toSet().sumOf { outputs[it] ?: 0uL }.takeIf { it > 0uL }
-            ?: return null
-        return copy(amount = PaykitAmount(PaykitAsset.BTC, sats))
+        val counted = addresses.map { it.lowercase() }.filter { (outputs[it] ?: 0uL) > 0uL }.toSet()
+        if (counted.isEmpty()) return null
+        return copy(
+            amount = PaykitAmount(PaykitAsset.BTC, counted.sumOf { outputs.getValue(it) }),
+            countedAddresses = counted,
+        )
     }
 }
 
@@ -160,7 +165,17 @@ internal object PaykitReceiptMatcher {
             }
             .groupBy { it.receive.paymentId }
             .values
-            .mapNotNull { it.singleOrNull() }
+            // Requests that claim the same payment are left alone; one transaction paying separate outputs to each
+            // of several requests receipts each one.
+            .flatMap { claims ->
+                claims.filterIndexed { index, claim ->
+                    val counted = claim.receive.countedAddresses
+                    claims.indices.none { other ->
+                        val otherCounted = claims[other].receive.countedAddresses
+                        other != index && (counted.isEmpty() || counted.any(otherCounted::contains))
+                    }
+                }
+            }
     }
 
     private fun PaymentRequestRecord.couldBePaidBy(receive: PaykitRecordedReceive): Boolean {

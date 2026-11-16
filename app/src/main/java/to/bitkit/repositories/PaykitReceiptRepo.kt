@@ -30,7 +30,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** How far the receipt for a received payment got: issued and queued, delivered to the payer, or stopped. */
-enum class PaykitReceiptStatus { Sending, Sent, Failed }
+enum class PaykitReceiptStatus {
+    Sending, Sent, Failed;
+
+    companion object {
+        /** The status a payment shows when it carries several receipts: any failure, else any still sending. */
+        fun combined(first: PaykitReceiptStatus?, second: PaykitReceiptStatus): PaykitReceiptStatus = when {
+            first == null -> second
+            first == Failed || second == Failed -> Failed
+            first == Sending || second == Sending -> Sending
+            else -> Sent
+        }
+    }
+}
 
 /**
  * Issues a Paykit receipt for each request this wallet issued once its payment is recorded here, on any rail, and
@@ -53,7 +65,7 @@ class PaykitReceiptRepo @Inject constructor(
 
     @Volatile
     private var attemptedReceiptIds = emptySet<String>()
-    private var candidates: Map<String, PaykitReceiptCandidate> = emptyMap()
+    private var candidates: Map<String, List<PaykitReceiptCandidate>> = emptyMap()
     private var identity: String? = null
 
     /** Confirmed transactions do not change, so their outputs are read once per launch. */
@@ -73,11 +85,12 @@ class PaykitReceiptRepo @Inject constructor(
     suspend fun retry(statusKey: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             mutex.withLock {
-                val candidate = checkNotNull(candidates[statusKey.lowercase()]) { "No receipt for this payment" }
+                val key = statusKey.lowercase()
+                val receipts = checkNotNull(candidates[key]) { "No receipt for this payment" }
                 val expectedIdentity = checkNotNull(identity) { "No Paykit identity" }
-                _statuses.update { it + (candidate.receive.statusKey.lowercase() to PaykitReceiptStatus.Sending) }
-                issue(candidate, expectedIdentity)
-                check(publish(candidates.values, expectedIdentity)) { "Could not read issued receipts" }
+                _statuses.update { it + (key to PaykitReceiptStatus.Sending) }
+                receipts.forEach { issue(it, expectedIdentity) }
+                check(publish(candidates.values.flatten(), expectedIdentity)) { "Could not read issued receipts" }
             }
         }.onFailure {
             Logger.warn("Failed to retry a Paykit receipt", it, context = TAG)
@@ -131,7 +144,7 @@ class PaykitReceiptRepo @Inject constructor(
         } else {
             emptyList()
         }
-        candidates = found.associateBy { it.receive.statusKey.lowercase() }
+        candidates = found.groupBy { it.receive.statusKey.lowercase() }
         if (found.isEmpty()) {
             _statuses.update { emptyMap() }
             return
@@ -167,7 +180,8 @@ class PaykitReceiptRepo @Inject constructor(
             unreachable = drain(undelivered, views, expectedIdentity)
             views = readIssuedViews() ?: return false
         }
-        val updated = found.associate { candidate ->
+        val updated = mutableMapOf<String, PaykitReceiptStatus>()
+        found.forEach { candidate ->
             val sent = deliveryOf(candidate, views, expectedIdentity)
             val reachable = unreachable.none { PubkyPublicKeyFormat.matches(it, candidate.counterparty) }
             val status = when {
@@ -177,9 +191,10 @@ class PaykitReceiptRepo @Inject constructor(
                 !reachable -> PaykitReceiptStatus.Failed
                 else -> PaykitReceiptStatus.Sending
             }
-            candidate.receive.statusKey.lowercase() to status
+            val key = candidate.receive.statusKey.lowercase()
+            updated[key] = PaykitReceiptStatus.combined(updated[key], status)
         }
-        _statuses.update { updated }
+        _statuses.update { updated.toMap() }
         return true
     }
 
