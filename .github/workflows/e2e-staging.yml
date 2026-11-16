@@ -167,8 +167,15 @@ jobs:
         if: matrix.shard.name == 'hardware_wallet'
         working-directory: bitkit-e2e-tests
         run: |
-          cd docker
-          docker compose --profile trezor pull --quiet trezor-user-env
+          if [[ -x ./scripts/local-backend ]]; then
+            ./scripts/local-backend prepare
+            export BITKIT_LOCAL_BACKEND_ROOT="$(./scripts/local-backend path)"
+            ./scripts/trezor-emulator pull
+            printf 'BITKIT_LOCAL_BACKEND_ROOT=%s\n' "$BITKIT_LOCAL_BACKEND_ROOT" >> "$GITHUB_ENV"
+          else
+            cd docker
+            docker compose --profile trezor pull --quiet trezor-user-env
+          fi
 
       - name: Run E2E Tests 1 (${{ matrix.shard.name }})
         continue-on-error: true

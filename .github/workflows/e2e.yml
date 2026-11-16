@@ -119,7 +119,7 @@ jobs:
       # They sit in Linux's ephemeral range, so an outbound connection made before `docker compose up`
       # (npm ci, image pulls) can take one and fail the bind. Reserve them before any network step.
       - name: Reserve regtest host ports
-        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=39388,43782,60001
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=23009,23180,23735,39388,43782,60001
 
       - name: Resolve E2E tests ref
         id: e2e-ref
@@ -191,19 +191,20 @@ jobs:
 
       - name: Run regtest setup
         working-directory: bitkit-e2e-tests
-        run: |
-          cd docker
-          mkdir lnd && chmod 777 lnd
-          docker compose pull --quiet
-          docker compose up -d
-
-      - name: Wait for electrum server and LND
-        working-directory: bitkit-e2e-tests
         timeout-minutes: 10
         run: |
-          while ! nc -z '127.0.0.1' 60001; do sleep 1; done
-          sudo bash -c "while [ ! -f docker/lnd/data/chain/bitcoin/regtest/admin.macaroon ]; do sleep 1; done"
-          sudo chmod -R 777 docker/lnd
+          if [[ -x ./scripts/local-backend ]]; then
+            ./scripts/local-backend up
+            ./scripts/local-backend github-env >> "$GITHUB_ENV"
+          else
+            # Older E2E refs still use their bundled Compose stack.
+            mkdir -p docker/lnd
+            chmod 777 docker/lnd
+            (cd docker && docker compose pull --quiet && docker compose up -d)
+            while ! nc -z '127.0.0.1' 60001; do sleep 1; done
+            sudo bash -c "while [ ! -f docker/lnd/data/chain/bitcoin/regtest/admin.macaroon ]; do sleep 1; done"
+            sudo chmod -R 777 docker/lnd
+          fi
 
       - name: Run E2E Tests 1 (${{ matrix.shard.name }})
         continue-on-error: true
