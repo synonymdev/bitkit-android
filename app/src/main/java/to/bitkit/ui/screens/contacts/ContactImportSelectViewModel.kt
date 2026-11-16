@@ -15,12 +15,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class ContactImportSelectViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ContactImportSelectUiState())
@@ -34,7 +36,7 @@ class ContactImportSelectViewModel @Inject constructor(
             val profile = pubkyRepo.pendingImportProfile.value
             val contacts = pubkyRepo.pendingImportContacts.value
             if (!hasPendingImport(profile, contacts)) {
-                _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
+                redirectToPayContacts()
                 return@launch
             }
             _uiState.update {
@@ -86,14 +88,12 @@ class ContactImportSelectViewModel @Inject constructor(
             try {
                 if (selected.isEmpty()) {
                     pubkyRepo.clearPendingImport()
-                    _effects.emit(ContactImportSelectEffect.ImportComplete)
+                    completeImport()
                     return@launch
                 }
 
                 pubkyRepo.importContacts(selected.map { it.profile })
-                    .onSuccess {
-                        _effects.emit(ContactImportSelectEffect.ImportComplete)
-                    }
+                    .onSuccess { completeImport() }
             } finally {
                 _uiState.update { it.copy(isImporting = false) }
             }
@@ -104,6 +104,16 @@ class ContactImportSelectViewModel @Inject constructor(
         viewModelScope.launch {
             _effects.emit(ContactImportSelectEffect.NavigateBack)
         }
+    }
+
+    private suspend fun completeImport() {
+        contactPaymentSettingsRepo.enableForNewProfile()
+        _effects.emit(ContactImportSelectEffect.ImportComplete)
+    }
+
+    private fun redirectToPayContacts() {
+        contactPaymentSettingsRepo.enableForNewProfile()
+        _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
     }
 }
 

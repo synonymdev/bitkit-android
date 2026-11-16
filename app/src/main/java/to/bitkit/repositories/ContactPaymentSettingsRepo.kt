@@ -1,25 +1,29 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import to.bitkit.async.appScope
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.areContactPaymentsEnabled
 import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "ContactPaymentSettingsRepo"
 
 @Singleton
 class ContactPaymentSettingsRepo @Inject constructor(
@@ -30,12 +34,104 @@ class ContactPaymentSettingsRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val sharingMutex = Mutex()
+    private val scope = appScope(ioDispatcher, TAG)
+    private var newProfileJob: Job? = null
 
-    val isEnabled: Flow<Boolean> = settingsStore.data.map { it.areContactPaymentsEnabled() }
-    val isPublicEnabled: Flow<Boolean> = settingsStore.data.map { it.sharesPublicPaykitEndpoints }
+    /**
+     * Turns private and public payments on for a profile just set up in this app. Both settings are written
+     * together first, so both modes count as on right away; the syncs then run in the background so profile
+     * setup never waits on endpoint publishing. Each mode rolls only itself back if its sync fails, and the
+     * foreground check in [to.bitkit.usecases.KeepContactPaymentsOnUseCase] turns it on again later.
+     * A call while a previous one is still running is ignored.
+     */
+    @Synchronized
+    fun enableForNewProfile() {
+        if (newProfileJob?.isActive == true) return
+        newProfileJob = scope.launch {
+            sharingMutex.withLock { if (isPaykitUiEnabled()) enableBothForNewProfile() }
+        }
+    }
+
+    /**
+     * Checked under [sharingMutex] before any enable. Dev Settings stores the flag before [disablePaykit] queues on
+     * the mutex, so an enable that gets the lock after a Paykit disable leaves sharing off.
+     */
+    private suspend fun isPaykitUiEnabled(): Boolean =
+        PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first())
+
+    private suspend fun enableBothForNewProfile() {
+        val signIn = pubkyRepo.currentSignIn()
+        val canSync = {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
+        val previous = settingsStore.data.first()
+        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+        var publicCompleted = false
+        try {
+            runSuspendCatching {
+                withContext(NonCancellable) {
+                    settingsStore.update {
+                        if (!canSync()) throw PublicPaykitError.SessionNotActive
+                        it.copy(
+                            sharesPrivatePaykitEndpoints = true,
+                            hasConfirmedPublicPaykitEndpoints = true,
+                            sharesPublicPaykitEndpoints = true,
+                            publicPaykitCleanupPending = true,
+                        )
+                    }
+                }
+            }.onFailure {
+                publicCompleted = true
+                Logger.error("Failed to enable payments for new profile", it, context = TAG)
+                return
+            }
+
+            finishPrivateEnable(previous, contacts, canSync).onFailure {
+                Logger.error("Failed to enable private payments for new profile", it, context = TAG)
+            }
+
+            runSuspendCatching {
+                currentCoroutineContext().ensureActive()
+                publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canSync).getOrThrow()
+            }.onFailure {
+                rollbackPublicEnabled(previous, canSync, it)
+                Logger.error("Failed to enable public payments for new profile", it, context = TAG)
+            }.also { publicCompleted = true }
+        } finally {
+            if (!publicCompleted) {
+                withContext(NonCancellable) { restorePublicSettings(previous, canSync) }
+            }
+        }
+    }
+
+    /** Completes private sharing whose setting is already on, restoring only the private setting on failure. */
+    private suspend fun finishPrivateEnable(
+        previous: SettingsData,
+        contacts: List<String>,
+        canSync: () -> Boolean,
+    ): Result<Unit> = runSuspendCatching {
+        if (!privatePaykitRepo.hasPrivatePaymentAccess()) throw PrivatePaykitError.PrivateUnavailable
+        publicPaykitRepo.syncPaykitApp(canSync = { canSync() }).getOrThrow()
+        prepareCurrentSavedContacts(canSync).getOrThrow()
+    }.onFailure {
+        if (it is PrivatePaykitError.PrivateUnavailable) {
+            restorePrivateSetting(previous, canSync, it)
+        } else {
+            rollbackEnabled(previous, contacts, canSync, it)
+        }
+    }
+
+    private suspend fun restorePrivateSetting(previous: SettingsData, canSync: () -> Boolean, error: Throwable) {
+        runSuspendCatching {
+            settingsStore.update {
+                if (canSync()) it.copy(sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints) else it
+            }
+        }.onFailure(error::addSuppressed)
+    }
 
     suspend fun setPublicEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
         sharingMutex.withLock {
+            if (isEnabled && !isPaykitUiEnabled()) return@withLock Result.failure(PublicPaykitError.PaykitDisabled)
             val signIn = pubkyRepo.currentSignIn()
             val previous = settingsStore.data.first()
             val canPublish = {
@@ -115,6 +211,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
     suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
         sharingMutex.withLock {
+            if (isEnabled && !isPaykitUiEnabled()) return@withLock Result.failure(PublicPaykitError.PaykitDisabled)
             val contacts = pubkyRepo.contacts.value.map { it.publicKey }
             if (isEnabled) enable(contacts) else disable(contacts)
         }

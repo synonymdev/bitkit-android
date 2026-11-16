@@ -15,6 +15,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
@@ -28,6 +29,7 @@ import kotlin.test.assertTrue
 class CreateProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo = mock()
 
     private lateinit var sut: CreateProfileViewModel
 
@@ -44,11 +46,12 @@ class CreateProfileViewModelTest : BaseUnitTest() {
         sut = CreateProfileViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
+            contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         )
     }
 
     @Test
-    fun `save should emit success effect without toast`() = test {
+    fun `save should enable payments and emit success effect without toast`() = test {
         whenever(pubkyRepo.createIdentity(any(), any(), any(), any(), any())).thenReturn(Result.success(Unit))
 
         val effects = mutableListOf<CreateProfileEffect>()
@@ -65,6 +68,7 @@ class CreateProfileViewModelTest : BaseUnitTest() {
         assertEquals(1, effects.size)
         assertEquals(CreateProfileEffect.CreateSuccess, effects.single())
         assertTrue(toasts.isEmpty())
+        verify(contactPaymentSettingsRepo).enableForNewProfile()
 
         effectsJob.cancel()
         toastJob.cancel()
@@ -88,6 +92,7 @@ class CreateProfileViewModelTest : BaseUnitTest() {
 
         assertEquals(CreateProfileEffect.CreateSuccess, effects.single())
         assertEquals(warning, toasts.single().title)
+        verify(contactPaymentSettingsRepo).enableForNewProfile()
 
         effectsJob.cancel()
         toastJob.cancel()
@@ -97,7 +102,11 @@ class CreateProfileViewModelTest : BaseUnitTest() {
     fun `save should not publish after a failed lookup for a signed-in pubky`() = test {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
         whenever(pubkyRepo.fetchRemoteProfile(any())).thenReturn(Result.failure(CreateProfileTestAppError("timeout")))
-        sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
+        sut = CreateProfileViewModel(
+            context = context,
+            pubkyRepo = pubkyRepo,
+            contactPaymentSettingsRepo = contactPaymentSettingsRepo,
+        )
 
         sut.onNameChange("Alice")
         advanceUntilIdle()
@@ -111,7 +120,11 @@ class CreateProfileViewModelTest : BaseUnitTest() {
     fun `save should not publish after a failed lookup for a stored pubky`() = test {
         whenever(pubkyRepo.hasStoredSecretKey()).thenReturn(true)
         whenever(pubkyRepo.fetchRemoteProfile(any())).thenReturn(Result.failure(CreateProfileTestAppError("timeout")))
-        sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
+        sut = CreateProfileViewModel(
+            context = context,
+            pubkyRepo = pubkyRepo,
+            contactPaymentSettingsRepo = contactPaymentSettingsRepo,
+        )
 
         sut.onNameChange("Alice")
         advanceUntilIdle()
@@ -126,7 +139,11 @@ class CreateProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.fetchRemoteProfile(any()))
             .thenReturn(Result.failure(CreateProfileTestAppError("no homeserver")))
         whenever(pubkyRepo.createIdentity(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
-        sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
+        sut = CreateProfileViewModel(
+            context = context,
+            pubkyRepo = pubkyRepo,
+            contactPaymentSettingsRepo = contactPaymentSettingsRepo,
+        )
 
         sut.onNameChange("Alice")
         advanceUntilIdle()

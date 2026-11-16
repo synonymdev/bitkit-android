@@ -1471,17 +1471,10 @@
     <string name="profile__intro_description">Com o seu perfil portátil, os seus contactos podem encontrá-lo e pagar-lhe em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Use a Bitkit com os seus contactos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Não foi possível preparar os dados do endpoint de pagamento.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Não há nenhum endpoint de pagamento suportado disponível.</string>
-    <string name="profile__pay_contacts_error_retry">Não foi possível ativar os pagamentos com contactos. Os contactos guardados não foram alterados. Tente novamente.</string>
-    <string name="profile__pay_contacts_error_session">Volte a ligar o seu perfil Pubky para partilhar os dados de pagamento.</string>
-    <string name="profile__pay_contacts_error_wallet">A carteira ainda está a iniciar. Tente novamente daqui a pouco.</string>
     <string name="profile__pay_contacts_headline">Deixe os seus\ncontactos\n&lt;accent&gt;pagar-lhe&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar a contactos</string>
-    <string name="profile__private_payments_toggle">Pagamentos privados com contactos</string>
     <string name="profile__pubky_copied">pubky copiado para a área de transferência</string>
     <string name="profile__public_key">Chave pública</string>
-    <string name="profile__public_payments_toggle">Pagamentos públicos</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">A sessão do seu perfil expirou. Volte a ligar para restaurar o seu perfil.</string>
     <string name="profile__sign_out">Desligar</string>

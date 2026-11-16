@@ -16,12 +16,14 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class ContactImportOverviewViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ContactImportOverviewUiState())
@@ -37,7 +39,7 @@ class ContactImportOverviewViewModel @Inject constructor(
             val profile = pubkyRepo.pendingImportProfile.value
             val contacts = pubkyRepo.pendingImportContacts.value
             if (!hasPendingImport(profile, contacts)) {
-                _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
+                redirectToPayContacts()
                 return@launch
             }
             _uiState.update {
@@ -89,6 +91,11 @@ class ContactImportOverviewViewModel @Inject constructor(
 
     private fun completeImport() {
         if (hasLeft) return
+        redirectToPayContacts()
+    }
+
+    private fun redirectToPayContacts() {
+        contactPaymentSettingsRepo.enableForNewProfile()
         _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
     }
 }
