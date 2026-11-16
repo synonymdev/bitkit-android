@@ -73,6 +73,9 @@ fun Context.bluetoothState(role: NearbyRole): BluetoothState {
         role == NearbyRole.SCAN && Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !isLocationEnabled() ->
             BluetoothState.LOCATION_OFF
 
+        // Some phones can scan but not advertise; Receive must not claim it can be found over Bluetooth there.
+        role == NearbyRole.ADVERTISE && !adapter.isMultipleAdvertisementSupported -> BluetoothState.UNAVAILABLE
+
         else -> BluetoothState.ON
     }
 }
