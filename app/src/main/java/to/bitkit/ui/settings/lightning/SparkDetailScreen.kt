@@ -28,6 +28,7 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.repositories.SparkDeposit
+import to.bitkit.repositories.SparkExitEarlierAddress
 import to.bitkit.repositories.SparkWithdrawal
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionB
@@ -35,6 +36,7 @@ import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -47,6 +49,7 @@ import to.bitkit.ui.utils.getBlockExplorerUrl
 fun SparkDetailScreen(
     onBack: () -> Unit,
     onTransferToSavings: () -> Unit,
+    onEmergencyExit: (showsResult: Boolean) -> Unit,
     viewModel: SparkDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -59,6 +62,7 @@ fun SparkDetailScreen(
         onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
         onCopyText = { context.setClipboardText(it) },
         onTransferToSavings = onTransferToSavings,
+        onEmergencyExit = { onEmergencyExit(uiState.spark?.showsExitResult == true) },
     )
 }
 
@@ -71,6 +75,7 @@ private fun Content(
     onOpenTx: (String) -> Unit = {},
     onCopyText: (String) -> Unit = {},
     onTransferToSavings: () -> Unit = {},
+    onEmergencyExit: () -> Unit = {},
 ) {
     val spark = uiState.spark ?: SparkUi(balanceSats = 0uL)
     ScreenColumn {
@@ -150,6 +155,15 @@ private fun Content(
                     }
                 }
 
+                if (spark.earlierAddresses.isNotEmpty()) {
+                    SectionTitle(stringResource(R.string.lightning__spark_exit__earlier_addresses))
+                    BodyS(
+                        text = stringResource(R.string.lightning__spark_exit__earlier_addresses_text),
+                        color = Colors.White64,
+                    )
+                    spark.earlierAddresses.forEach { EarlierExitAddressRows(it, onCopyText) }
+                }
+
                 if (spark.withdrawals.isNotEmpty()) {
                     SectionTitle(stringResource(R.string.lightning__savings_confirm__label))
                     spark.withdrawals.forEach { withdrawal ->
@@ -178,14 +192,49 @@ private fun Content(
             PrimaryButton(
                 text = stringResource(R.string.wallet__transfer_to_savings),
                 onClick = onTransferToSavings,
-                enabled = spark.balanceSats > 0uL,
+                enabled = spark.balanceSats > 0uL && !spark.isExiting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("SparkTransferToSavings")
             )
-
+            if (spark.showsExit) {
+                VerticalSpacer(8.dp)
+                TertiaryButton(
+                    text = stringResource(R.string.lightning__spark_exit__button),
+                    onClick = onEmergencyExit,
+                    modifier = Modifier.testTag("SparkEmergencyExit")
+                )
+            }
             VerticalSpacer(16.dp)
         }
+    }
+}
+
+@Composable
+private fun EarlierExitAddressRows(entry: SparkExitEarlierAddress, onCopyText: (String) -> Unit) {
+    SectionRow(
+        name = stringResource(R.string.wallet__activity_address),
+        valueContent = {
+            CaptionB(
+                text = entry.address,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                textAlign = TextAlign.End,
+            )
+        },
+        onClick = { onCopyText(entry.address) },
+        modifier = Modifier.testTag("SparkEarlierExitAddress"),
+    )
+    SectionRow(
+        name = stringResource(R.string.lightning__spark_exit__earlier_path),
+        valueContent = { CaptionB(text = entry.path, textAlign = TextAlign.End) },
+        onClick = { onCopyText(entry.path) },
+    )
+    entry.sats?.takeIf { it > 0uL }?.let { sats ->
+        SectionRow(
+            name = stringResource(R.string.lightning__balance),
+            valueContent = { MoneyCaptionB(sats = sats.toLong(), symbol = true) },
+        )
     }
 }
 

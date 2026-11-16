@@ -66,6 +66,7 @@ data class PaykitPaymentStateBackup(
         val privatePaymentListVersion: ULong? = null,
         val previousPrivatePaymentListVersion: ULong? = null,
         val allowanceId: String? = null,
+        val sparkWithdrawal: Boolean = false,
     ) {
         init {
             require(
@@ -98,6 +99,7 @@ data class PaykitPaymentStateBackup(
             privatePaymentListVersion = proof.privatePaymentListVersion,
             previousPrivatePaymentListVersion = proof.previousPrivatePaymentListVersion,
             allowanceId = proof.allowanceId,
+            sparkWithdrawal = proof.sparkWithdrawal,
         )
 
         fun restored() = PendingPaykitPaymentProof(
@@ -124,6 +126,7 @@ data class PaykitPaymentStateBackup(
             privatePaymentListVersion = privatePaymentListVersion,
             previousPrivatePaymentListVersion = previousPrivatePaymentListVersion,
             allowanceId = allowanceId,
+            sparkWithdrawal = sparkWithdrawal,
         )
     }
 }

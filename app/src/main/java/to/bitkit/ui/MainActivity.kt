@@ -299,6 +299,10 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleLaunchIntent(intent: Intent) {
+        if (intent.getBooleanExtra(EXTRA_SPARK_EXIT, false)) {
+            intent.removeExtra(EXTRA_SPARK_EXIT)
+            appViewModel.onSparkExitNotificationTapped()
+        }
         if (intent.getBooleanExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE, false)) {
             intent.removeExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE)
             appViewModel.onPaykitSubscriptionNotificationTapped(

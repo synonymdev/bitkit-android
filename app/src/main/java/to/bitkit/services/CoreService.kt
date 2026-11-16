@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
@@ -45,6 +46,7 @@ import com.synonym.bitkitcore.getTags
 import com.synonym.bitkitcore.initDb
 import com.synonym.bitkitcore.insertActivity
 import com.synonym.bitkitcore.onchainBroadcastRawTx
+import com.synonym.bitkitcore.onchainGetAddressInfo
 import com.synonym.bitkitcore.openChannel
 import com.synonym.bitkitcore.prepareLegacyRnNativeSegwitRecoverySweep
 import com.synonym.bitkitcore.refreshActiveCjitEntries
@@ -58,6 +60,7 @@ import com.synonym.bitkitcore.upsertActivity
 import com.synonym.bitkitcore.upsertCjitEntries
 import com.synonym.bitkitcore.upsertClosedChannels
 import com.synonym.bitkitcore.upsertInfo
+import com.synonym.bitkitcore.upsertOnchainActivityPreservingFeeRate
 import com.synonym.bitkitcore.upsertOrders
 import com.synonym.bitkitcore.upsertTransactionDetails
 import com.synonym.bitkitcore.wipeAllDatabases
@@ -100,6 +103,7 @@ import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.RbfOriginalConfirmed
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Provider
@@ -111,6 +115,7 @@ import com.synonym.bitkitcore.TxOutput as BitkitCoreTxOutput
 import com.synonym.bitkitcore.getLnurlInvoiceForPayData as coreGetLnurlInvoiceForPayData
 import com.synonym.bitkitcore.getTransactionDetails as getBitkitCoreTransactionDetails
 import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
+import com.synonym.bitkitcore.recordRbfBoost as coreRecordRbfBoost
 
 // region Core
 
@@ -420,6 +425,18 @@ class ActivityService(
     suspend fun upsert(activity: Activity) = ServiceQueue.CORE.background {
         invalidatePaykitContactBackfill()
         upsertActivity(activity)
+    }
+
+    suspend fun recordRbfBoost(
+        originalActivityId: String,
+        replacementTxId: String,
+        feeRate: ULong,
+        walletId: String = defaultWalletId,
+    ) = ServiceQueue.CORE.background {
+        val original = getActivityById(walletId, originalActivityId) as? Activity.Onchain
+        if (original?.v1?.confirmed == true) throw RbfOriginalConfirmed()
+        invalidatePaykitContactBackfill()
+        coreRecordRbfBoost(walletId, originalActivityId, replacementTxId, feeRate)
     }
 
     suspend fun upsertList(activities: List<Activity>) = ServiceQueue.CORE.background {
@@ -1424,9 +1441,8 @@ class ActivityService(
         }
 
         if (existingActivity != Activity.Onchain(onChain)) paykitActivityRevision++
-        if (existingActivity != null && existingActivity is Activity.Onchain) {
-            val existingOnchain = existingActivity.v1
-            updateActivity(activityId = existingOnchain.id, activity = Activity.Onchain(onChain))
+        if (existingActivity is Activity.Onchain) {
+            upsertOnchainActivityPreservingFeeRate(onChain)
         } else {
             upsertActivity(Activity.Onchain(onChain))
         }
@@ -1696,7 +1712,10 @@ class ActivityService(
             require(originalTxId.isNotBlank() && replacementTxId.isNotBlank() && originalTxId != replacementTxId) {
                 "RBF must replace the original transaction"
             }
-            checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) { "RBF original is not available" }
+            val initialOriginal = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId)) {
+                "RBF original is not available"
+            }
+            if (initialOriginal.confirmed) throw RbfOriginalConfirmed()
             if (getOrCreateReplacementActivity(replacementTxId) == null) {
                 // RBF returns after broadcast, before wallet sync discovers the new payment.
                 lightningService.sync()
@@ -1704,6 +1723,7 @@ class ActivityService(
             }
             val cache = cacheStore.data.first()
             val original = checkNotNull(getActivityByTxId(defaultWalletId, originalTxId))
+            if (original.confirmed) throw RbfOriginalConfirmed()
             val replacement = checkNotNull(getActivityByTxId(defaultWalletId, replacementTxId))
             check(original.txType == PaymentType.SENT && replacement.txType == PaymentType.SENT)
             check(!cache.isActivityDeleted(original.id, defaultWalletId))
@@ -1765,7 +1785,7 @@ class ActivityService(
                 updatedAt = nowTimestamp().epochSecond.toULong()
             )
             paykitActivityRevision++
-            updateActivity(activityId = replacedActivity.id, activity = Activity.Onchain(updatedActivity))
+            upsertOnchainActivityPreservingFeeRate(updatedActivity)
             Logger.info("Marked transaction $txid as replaced", context = TAG)
         } else {
             Logger.info(
@@ -1811,7 +1831,7 @@ class ActivityService(
             if (tags.isNotEmpty()) addTags(defaultWalletId, replacementActivity.id, tags)
         }
         paykitActivityRevision++
-        updateActivity(replacementActivity.id, updated)
+        upsertOnchainActivityPreservingFeeRate(updated.v1)
         Logger.info("Updated replacement '$conflictTxid' with boostTxId '$txid'", context = TAG)
         return updated
     }
@@ -1830,7 +1850,8 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                update(onchain.id, Activity.Onchain(updatedActivity))
+                invalidatePaykitContactBackfill()
+                upsertOnchainActivityPreservingFeeRate(updatedActivity)
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction reorged for $txid", e, context = TAG)
             }
@@ -1850,7 +1871,8 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                update(onchain.id, Activity.Onchain(updatedActivity))
+                invalidatePaykitContactBackfill()
+                upsertOnchainActivityPreservingFeeRate(updatedActivity)
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction evicted for $txid", e, context = TAG)
             }
@@ -2389,6 +2411,17 @@ class OnchainService {
                 indexLimit = indexLimit,
                 bip39Passphrase = bip39Passphrase,
             )
+        }
+    }
+
+    /** The outputs [address] holds unspent on chain, each with its confirmations, as [electrumUrl] lists them. */
+    suspend fun unspentOutputs(address: String, electrumUrl: String, network: Network?): List<AccountUtxo> {
+        return ServiceQueue.CORE.background {
+            onchainGetAddressInfo(
+                address = address,
+                electrumUrl = electrumUrl,
+                network = network?.toCoreNetwork(),
+            ).utxos
         }
     }
 

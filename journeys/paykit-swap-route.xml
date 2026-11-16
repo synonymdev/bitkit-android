@@ -1,0 +1,28 @@
+<journey name="paykit swap route">
+  <description>
+    Proves that paying a Paykit contact whose only endpoint is on-chain, from a wallet that holds only a spending
+    balance, routes through a Pubky Swaps provider found among the user's own contacts, without the user picking a
+    swap, and that the contact receives the exact amount on chain.
+
+    Preconditions: a dev debug build with E2E=true, E2E_BACKEND=local, E2E_HOMESERVER_PUBKY set to the local
+    marketplace homeserver and PUBKY_SWAPS_ROUTES=true; bitkit-docker's
+    default stack with the marketplace, payment-requests and lnurl-pay profiles; the provider running against
+    bitkit-docker's LND and funded; adb reverse for 6286, 6287, 6288, 15411, 15412, 60001, 23735, 23000 and 23010.
+    The wallet has a spending balance from an LNURL channel with bitkit-docker's LND and an empty savings balance,
+    a Pubky profile on the local homeserver, and both the provider's and the fixture-issuer's pubkys saved as contacts.
+    The contact is bitkit-docker's fixture-issuer, which publishes only a btc-regtest-p2wpkh endpoint.
+  </description>
+  <actions>
+    <action>Verify the savings balance (tag "ActivitySavings") shows 0 and the spending balance (tag "ActivitySpending") is above 25 000</action>
+    <action>Tap Send (tag "Send"), then Contact (tag "RecipientContact")</action>
+    <action>Verify the contact list shows both the fixture-issuer and the provider, and tap the fixture-issuer (tag "SendContact_" followed by its pubky)</action>
+    <action>Verify the amount screen (tag "send_amount_screen") offers SPENDING as the source</action>
+    <action>Enter 20000 and tap Continue (tag "ContinueAmount")</action>
+    <action>Verify the Confirm screen (tag "SendConfirm") is visible, then tap Show Details (tag "SendConfirmToggleDetails")</action>
+    <action>Verify FROM is SPENDING, TO is the contact, and ROUTE (tag "ReviewSwapRoute") reads "Pubky Swaps" followed by the provider's shortened pubky</action>
+    <action>Swipe to pay (tag "GRAB")</action>
+    <action>Once the provider logs "HTLC funded; awaiting client claim", mine one block on bitkit-docker's bitcoind</action>
+    <action>Verify the Bitcoin Sent screen (tag "SendSuccess") is visible</action>
+    <action>Verify the provider logs "client claimed; hold invoice settled", and bitcoind shows the claim transaction paying exactly 0.0002 BTC to the fixture-issuer's address</action>
+  </actions>
+</journey>

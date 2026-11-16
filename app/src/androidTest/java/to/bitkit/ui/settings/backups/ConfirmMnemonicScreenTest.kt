@@ -2,13 +2,19 @@ package to.bitkit.ui.settings.backups
 
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onChildAt
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -54,7 +60,14 @@ class ConfirmMnemonicScreenTest {
         composeTestRule.waitForIdle()
     }
 
-    private fun tapChip(word: String) = tap("Word-$word")
+    private fun chip(word: String) = composeTestRule.onNode(
+        hasText(word) and hasClickAction() and hasAnyAncestor(hasTestTag("backup_shuffled_words_grid"))
+    )
+
+    private fun tapChip(word: String) {
+        chip(word).performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+    }
 
     private fun selectedWord(number: Int) = composeTestRule.onNodeWithTag("SelectedWord-$number")
 
@@ -66,13 +79,21 @@ class ConfirmMnemonicScreenTest {
 
     private fun chipOrder(): List<String> = WORDS.sortedWith(
         compareBy(
-            { composeTestRule.onNodeWithTag("Word-$it").fetchSemanticsNode().boundsInRoot.top },
-            { composeTestRule.onNodeWithTag("Word-$it").fetchSemanticsNode().boundsInRoot.left },
+            { chip(it).fetchSemanticsNode().boundsInRoot.top },
+            { chip(it).fetchSemanticsNode().boundsInRoot.left },
         )
     )
 
     private fun completeFrom(position: Int) {
         WORDS.drop(position).forEach { tapChip(it) }
+    }
+
+    @Test
+    fun chipTags_carryPositionNotWord() {
+        setScreen()
+
+        WORDS.indices.forEach { composeTestRule.onNodeWithTag("ShuffledWord-$it").assertExists() }
+        WORDS.forEach { composeTestRule.onAllNodesWithTag("Word-$it").assertCountEquals(0) }
     }
 
     @Test

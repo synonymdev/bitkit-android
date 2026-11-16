@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import kotlinx.serialization.Serializable
+import to.bitkit.ext.activityManager
 import to.bitkit.ext.powerManager
 import to.bitkit.ext.usageStatsManager
 
@@ -17,6 +18,7 @@ data class BatterySettingsSnapshot(
     val isLowPowerStandbyEnabled: Boolean?,
     val isExemptFromLowPowerStandby: Boolean?,
     val appStandbyBucket: String?,
+    val isBackgroundRestricted: Boolean? = null,
 ) {
     val logSummary: String
         get() = listOf(
@@ -27,6 +29,7 @@ data class BatterySettingsSnapshot(
             "lowPowerStandbyEnabled='${isLowPowerStandbyEnabled.logValue()}'",
             "exemptFromLowPowerStandby='${isExemptFromLowPowerStandby.logValue()}'",
             "appStandbyBucket='${appStandbyBucket.logValue()}'",
+            "backgroundRestricted='${isBackgroundRestricted.logValue()}'",
         ).joinToString()
 }
 
@@ -54,6 +57,7 @@ fun Context.batterySettingsSnapshot(): BatterySettingsSnapshot {
             null
         },
         appStandbyBucket = runCatching { usageStatsManager.appStandbyBucket.toAppStandbyBucketName() }.getOrNull(),
+        isBackgroundRestricted = runCatching { activityManager.isBackgroundRestricted }.getOrNull(),
     )
 }
 

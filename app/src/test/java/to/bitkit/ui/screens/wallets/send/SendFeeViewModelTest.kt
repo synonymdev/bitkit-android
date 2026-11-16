@@ -42,7 +42,7 @@ class SendFeeViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(any())).thenReturn("text")
 
-        whenever { lightningRepo.calculateTotalFee(any(), any(), any(), any(), any()) }
+        whenever { lightningRepo.calculateTotalFee(any(), any(), any(), any(), any(), any()) }
             .thenReturn(Result.success(fee))
 
         whenever(walletRepo.balanceState)
@@ -113,7 +113,7 @@ class SendFeeViewModelTest : BaseUnitTest() {
 
     @Test
     fun `validateCustomFee should return true when fee calculation fails (999 fallback)`() = test {
-        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), any()))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), any(), any()))
             .thenReturn(Result.success(0uL))
         sut.init(createSendUiState())
         sut.onKeyPress(KEY_DELETE)

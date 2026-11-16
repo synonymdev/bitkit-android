@@ -66,6 +66,17 @@ internal object Env {
      */
     val isSwapSupported get() = network == Network.BITCOIN
 
+    /**
+     * Whether a Paykit payment may route through a Pubky Swaps provider when no balance reaches the contact's
+     * endpoints. Regtest debug builds with `PUBKY_SWAPS_ROUTES=true` only.
+     */
+    val isPubkySwapsRouteEnabled: Boolean
+        get() = isDebug && network == Network.REGTEST && BuildConfig.PUBKY_SWAPS_ROUTES
+
+    /** Swap providers to ask besides the user's contacts, from `PUBKY_SWAPS_PROVIDERS` (comma-separated pubkys). */
+    val pubkySwapsProviders: List<String>
+        get() = BuildConfig.PUBKY_SWAPS_PROVIDERS.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
     const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
@@ -260,6 +271,26 @@ internal object Env {
     /** A restored Spark exit data backup waiting to be imported once Spark connects; outside Spark's storage. */
     fun sparkExitRestorePath(walletIndex: Int) =
         Path(storagePathOf(walletIndex, network.name.lowercase(), "spark-restore"), "exit-state.json").toString()
+
+    /** The running Spark emergency exit, if any: its signed recovery and how far it got. */
+    fun sparkExitRecordPath(walletIndex: Int): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        return Path(appStoragePath, network.name.lowercase(), "wallet$walletIndex", "spark-exit.json").toString()
+    }
+
+    /** Leaves an older state of the wallet claimed on-chain, kept past the exit record that found them. */
+    fun sparkExitLostLeavesPath(walletIndex: Int): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val wallet = "wallet$walletIndex"
+        return Path(appStoragePath, network.name.lowercase(), wallet, "spark-exit-lost-leaves.json").toString()
+    }
+
+    /** Earlier exits' funding addresses that hold, or may still receive, coins, kept past the exit record. */
+    fun sparkExitEarlierAddressesPath(walletIndex: Int): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val wallet = "wallet$walletIndex"
+        return Path(appStoragePath, network.name.lowercase(), wallet, "spark-exit-earlier-addresses.json").toString()
+    }
 
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")

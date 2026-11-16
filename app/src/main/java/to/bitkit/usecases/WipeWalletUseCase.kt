@@ -18,6 +18,7 @@ import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
@@ -44,6 +45,7 @@ class WipeWalletUseCase @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
     private val lightningRepo: LightningRepo,
     private val pubkyRepo: PubkyRepo,
+    private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val firebaseMessaging: FirebaseMessaging,
@@ -100,6 +102,7 @@ class WipeWalletUseCase @Inject constructor(
 
     private suspend fun wipeLocal(walletIndex: Int, resetWalletState: () -> Unit): Result<Unit> {
         lightningRepo.wipeStorage(walletIndex).onFailure { return Result.failure(it) }
+        pubkySwapsRouteRepo.resetForWipe()
         step("clear post-migration sync flag") { migrationService.setNeedsPostMigrationSync(false) }
         step("clear migration data") { migrationService.cleanupAfterMigration() }
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }

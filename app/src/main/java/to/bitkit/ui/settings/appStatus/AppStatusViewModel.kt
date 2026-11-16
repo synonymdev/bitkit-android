@@ -20,6 +20,9 @@ import to.bitkit.models.HealthState
 import to.bitkit.repositories.AppHealthState
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.SparkExitFundingState
+import to.bitkit.repositories.SparkExitRecord
+import to.bitkit.repositories.SparkExitRepo
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,6 +30,7 @@ class AppStatusViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val healthRepo: HealthRepo,
     private val lightningRepo: LightningRepo,
+    private val sparkExitRepo: SparkExitRepo,
     private val cacheStore: CacheStore,
 ) : ViewModel() {
 
@@ -42,7 +46,8 @@ class AppStatusViewModel @Inject constructor(
             healthRepo.healthState,
             cacheStore.backupStatuses,
             lightningRepo.lightningState,
-        ) { healthState, backupStatuses, lightningState ->
+            sparkExitRepo.state,
+        ) { healthState, backupStatuses, lightningState, exitState ->
             AppStatusUiState(
                 health = healthState,
                 backupSubtitle = computeBackupSubtitle(healthState.backups, backupStatuses),
@@ -50,6 +55,7 @@ class AppStatusViewModel @Inject constructor(
                     HealthState.ERROR -> context.getString(R.string.settings__status__lightning_node__error)
                     else -> lightningState.nodeLifecycleState.uiText(context)
                 },
+                exitStep = exitState.record.exitStep(exitState.fundingState),
             )
         }.collect { newState ->
             _uiState.update { newState }
@@ -80,4 +86,19 @@ data class AppStatusUiState(
     val health: AppHealthState = AppHealthState(),
     val backupSubtitle: String = "",
     val nodeSubtitle: String = "",
+    /** Null while no emergency exit runs. */
+    val exitStep: ExitStep? = null,
 )
+
+enum class ExitStep { FUNDING, RUNNING }
+
+/** Asks for fee funding only while no payment covers it, as the progress screen does. */
+internal fun SparkExitRecord?.exitStep(funding: SparkExitFundingState? = null): ExitStep? {
+    val record = this?.takeIf { it.isActive } ?: return null
+    // Before the first tick reads the funding, a savings payment the exit has not adopted yet counts as paid,
+    // as on iOS.
+    val isPaymentPending = record.fundingPaymentTxid?.let { txid -> record.funding.none { it.txid == txid } } == true
+    val isAskingFunding = record.fundingShortfallSats != null &&
+        if (funding == null) !isPaymentPending else funding is SparkExitFundingState.Ask
+    return if (isAskingFunding) ExitStep.FUNDING else ExitStep.RUNNING
+}

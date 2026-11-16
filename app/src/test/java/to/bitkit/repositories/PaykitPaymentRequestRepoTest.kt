@@ -2467,6 +2467,27 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `dismissed request is not presented again when the sdk lists it as proposed again`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        whenever(paykitSdkService.rejectPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID)).thenReturn(record)
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        assertTrue(sut.markPresented(request))
+
+        sut.dismiss(request).getOrThrow()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.REJECTED)))
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        assertEquals(request.id, sut.pendingRequests.value.single().id)
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+    }
+
+    @Test
     fun `surfaced request stays pending and is excluded from automatic presentation`() = test {
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
         sut.refresh().getOrThrow()

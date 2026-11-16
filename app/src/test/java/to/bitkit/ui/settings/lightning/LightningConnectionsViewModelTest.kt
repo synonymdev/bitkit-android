@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -19,6 +20,8 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
 import to.bitkit.test.BaseUnitTest
@@ -79,5 +82,6 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
         logsRepo = logsRepo,
         activityRepo = activityRepo,
         sparkRepo = sparkRepo,
+        sparkExitRepo = mock<SparkExitRepo> { on { state } doReturn MutableStateFlow(SparkExitState()) },
     )
 }

@@ -240,7 +240,7 @@ object MoveToSparkMath {
     fun movableSats(channels: List<ChannelDetails>?): ULong = channels.totalNextOutboundHtlcLimitSats()
 
     /** Whether Spark can take a move; every Move to Spark check goes through here. */
-    fun isSparkUsable(spark: SparkState): Boolean = spark.isReady
+    fun isSparkUsable(spark: SparkState): Boolean = spark.isReady && !spark.isExiting
 
     /** Whether the channels hold a balance worth moving to a usable Spark wallet. */
     fun canMove(channels: List<ChannelDetails>?, spark: SparkState): Boolean =

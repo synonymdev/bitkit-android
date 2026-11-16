@@ -79,6 +79,7 @@ class SendCoinSelectionViewModelTest : BaseUnitTest() {
             speed = anyOrNull(),
             utxosToSpend = eq(expected),
             feeRates = anyOrNull(),
+            allowFallback = any(),
         )
     }
 
@@ -212,14 +213,21 @@ class SendCoinSelectionViewModelTest : BaseUnitTest() {
     fun `loadUtxos does not retry fee calculation failure`() = test {
         val error = ServiceError.NodeNotSetup()
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(listOf(LARGE_UTXO)))
-        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.failure(error))
 
         sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
         advanceUntilIdle()
 
         verify(lightningRepo, times(1)).listSpendableOutputs()
-        verify(lightningRepo, times(1)).calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(lightningRepo, times(1)).calculateTotalFee(
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
         assertEquals(error, sut.uiState.value.loadError)
         assertFalse(sut.uiState.value.isLoading)
     }
@@ -278,7 +286,7 @@ class SendCoinSelectionViewModelTest : BaseUnitTest() {
     }
 
     private suspend fun stubFee(fee: ULong = FEE) {
-        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenReturn(Result.success(fee))
     }
 }

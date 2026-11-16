@@ -18,6 +18,8 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
+import to.bitkit.repositories.PendingSparkWithdrawal
+import to.bitkit.repositories.SentSparkWithdrawal
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -334,6 +336,30 @@ data class AppCacheData(
     val quickPayLedger: QuickPayLedger? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /**
+     * When a Spark leaf optimization last ran or was cut short, in epoch milliseconds; cleared once it completed or
+     * an exit quote waited out the counter-swap grace. Kept across processes, since a swap the app's close cut short
+     * leaves value in flight.
+     */
+    val sparkOptimizationActivityAt: Long? = null,
+    /**
+     * The funding key index the next Spark emergency exit takes, per `{network}/wallet{n}`, so each exit pays its fees
+     * from an address of its own.
+     */
+    val sparkExitNextFundingIndexes: Map<String, Int> = mapOf(),
+    /**
+     * The `{network}/wallet{n}` keys whose funding index a restore brought back, so the exit looks once for funding
+     * addresses that still hold coins and nothing watches.
+     */
+    val sparkExitFundingRecoveryPending: Set<String> = emptySet(),
+    /** A Spark withdrawal to a Paykit contact that started, kept until Spark's payment list settles it. */
+    val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
+    /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */
+    val sentSparkWithdrawals: List<SentSparkWithdrawal> = listOf(),
+    /** Pubky Swaps routes committed or restored whose claim has not confirmed yet, so each start resumes them. */
+    val unfinishedPubkySwaps: List<String> = listOf(),
+    /** The hold payment hash of each unfinished Pubky Swaps route by swap id, so its failure stops the swap. */
+    val pubkySwapHoldHashes: Map<String, String> = mapOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */
@@ -353,9 +379,8 @@ data class AppCacheData(
      */
     val ldkSendHashesSeeded: Boolean = false,
     /**
-     * When a metadata restore brought back [sparkSendHashes], in epoch seconds, until Spark's synced list fills them:
-     * the backup can predate a send Spark made, so meanwhile a Spark that can't list its payments holds the node off
-     * invoices created before it. Null on an install that was never restored, whose kept hashes are complete.
+     * When a metadata restore brought back [sparkSendHashes], in epoch seconds, until Spark's synced list fills them,
+     * as the backup can predate a send Spark made. Null on an install that was never restored.
      */
     val sparkHistoryUnseededSince: Long? = null,
     /**
@@ -366,7 +391,7 @@ data class AppCacheData(
     /**
      * When the wallet was restored, in epoch seconds. Spark's list can lack a send it made before then even after a
      * sync, so both rails refuse a still-valid invoice created before it that Spark hasn't listed as pending or paid,
-     * until that invoice expires.
+     * unless the Spark operators show it unsent.
      */
     val sparkRestoredAt: Long? = null,
 ) {

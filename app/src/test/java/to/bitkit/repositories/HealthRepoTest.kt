@@ -310,6 +310,23 @@ class HealthRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `channels status is not through spark while an emergency exit runs`() = test {
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isSupported = true, isReady = true, isExiting = true))
+        )
+
+        sut = createSut()
+
+        sut.healthState.test {
+            val state = awaitItem()
+            assertEquals(HealthState.ERROR, state.channels)
+            assertEquals(false, state.isLightningViaSpark)
+            assertEquals(HealthState.READY, state.spark)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `channels status is error when neither a channel nor spark can pay`() = test {
         whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true)))
 

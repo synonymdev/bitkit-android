@@ -1113,6 +1113,27 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
+    /**
+     * Records a manual on-chain send of [requestId] that Spark's list later shows sent as succeeded with its
+     * [transactionId], so an attempt left unknown no longer holds the request. Throws when an outcome could not be
+     * recorded, so the proof that found it stays for another pass.
+     */
+    suspend fun onchainSendSettled(payerIdentity: String?, requestId: PaykitPaymentRequestId, transactionId: String) {
+        val identity = activeIdentity?.takeIf { PubkyPublicKeyFormat.matches(it, payerIdentity) } ?: return
+        withContext(ioDispatcher) {
+            settleMutex.withLock {
+                val attempts = localState(identity).journal.filter {
+                    it.requestId == requestId && !it.isAutomatic && it.paymentHash == null &&
+                        it.stage in SETTLEABLE_STAGES
+                }
+                for (attempt in attempts) {
+                    updateJournalEntry(attempt.attemptId, identity) { it.copy(transactionId = transactionId) }
+                    record(attempt.attemptId, PaymentOutcome.SUCCEEDED, identity)
+                }
+            }
+        }
+    }
+
     // endregion
 
     // region Helpers

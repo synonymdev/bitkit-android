@@ -41,6 +41,9 @@ interface TransferDao {
     @Query("UPDATE transfers SET isSettled = 1, settledAt = :settledAt WHERE id = :id")
     suspend fun markSettled(id: String, settledAt: Long)
 
+    @Query("UPDATE transfers SET claimableAtHeight = :claimableAtHeight WHERE id = :id")
+    suspend fun updateClaimableAtHeight(id: String, claimableAtHeight: Int?)
+
     @Query("DELETE FROM transfers WHERE isSettled = 1 AND settledAt < :expirationTimestamp")
     suspend fun deleteOldSettled(expirationTimestamp: Long)
 }

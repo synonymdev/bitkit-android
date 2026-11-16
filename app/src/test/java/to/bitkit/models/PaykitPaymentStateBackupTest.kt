@@ -53,6 +53,23 @@ class PaykitPaymentStateBackupTest {
     }
 
     @Test
+    fun `spark withdrawal proof keeps its rail through backup`() {
+        WalletScope.pushTestOverride("wallet0").use {
+            val backup = Json.decodeFromString<PaykitPaymentStateBackup.Proof>(
+                """
+                    {"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},
+                    "paymentEndpointIdentifier":"btc-regtest-p2wpkh","kind":"bitcoin-onchain-txid","paymentStarted":true,
+                    "onchainMatchingTransactionIdsBeforeAttempt":[],"sparkWithdrawal":true}
+                """.trimIndent(),
+            )
+            val restored = backup.restored()
+            assertTrue(restored.sparkWithdrawal)
+            val json = Json.encodeToString(PaykitPaymentStateBackup.Proof(restored))
+            assertContains(json, "\"sparkWithdrawal\":true")
+        }
+    }
+
+    @Test
     fun `shared active operation survives payment backup reader writer roundtrip`() {
         val wire = """
             {"subscriptions":{},"pendingProofs":[],"activeOnchainAttempt":{"version":1,"wallet":{"kind":"software","network":"regtest","binding":"${"ab".repeat(

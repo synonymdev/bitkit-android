@@ -67,6 +67,7 @@ fun AppStatusScreen(
         onChannelsClick = { navController.navigateTo(Routes.LightningConnections) },
         onSparkClick = { navController.navigateTo(Routes.SparkDetail) },
         onBackupClick = { navController.navigateTo(Routes.BackupSettings) },
+        onExitClick = { navController.navigateTo(Routes.SparkExitProgress) },
     )
 }
 
@@ -80,6 +81,7 @@ private fun Content(
     onChannelsClick: () -> Unit = {},
     onSparkClick: () -> Unit = {},
     onBackupClick: () -> Unit = {},
+    onExitClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -180,6 +182,22 @@ private fun Content(
                     ),
                     // Spark's detail shows a zero balance until Spark has read its state.
                     onClick = onSparkClick.takeIf { sparkHealth == HealthState.READY },
+                )
+            }
+
+            uiState.exitStep?.let { exitStep ->
+                StatusItem(
+                    statusUi = StatusUi(
+                        id = "spark_exit",
+                        title = stringResource(R.string.settings__status__exit__title),
+                        subtitle = when (exitStep) {
+                            ExitStep.FUNDING -> stringResource(R.string.settings__status__exit__funding)
+                            ExitStep.RUNNING -> stringResource(R.string.settings__status__exit__pending)
+                        },
+                        iconRes = R.drawable.ic_warning,
+                        state = HealthState.PENDING,
+                    ),
+                    onClick = onExitClick,
                 )
             }
 
@@ -294,6 +312,7 @@ private fun Preview() {
                 ),
                 backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
                 nodeSubtitle = "Running",
+                exitStep = ExitStep.RUNNING,
             ),
         )
     }

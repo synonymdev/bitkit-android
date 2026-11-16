@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -44,19 +45,27 @@ class TransferRepo @Inject constructor(
     private val coreService: CoreService,
     private val transferDao: TransferDao,
     private val clock: Clock,
+    private val sparkExitTip: SparkExitTip = SparkExitTip(),
 ) {
     private val lastOrdersFetchMs = AtomicLong(0L)
 
     val activeTransfers: Flow<List<TransferEntity>> = transferDao.getActiveTransfers()
 
+    /** The countdown of a force close or, without one, a Spark exit, whose heights are read on Spark's chain. */
     val forceCloseRemainingDuration: Flow<String?> = combine(
         activeTransfers,
         lightningRepo.lightningState,
-    ) { transfers, lightningState ->
+        sparkExitTip.height,
+    ) { transfers, lightningState, sparkExitHeight ->
         val forceClose = transfers.firstOrNull { it.type == TransferType.FORCE_CLOSE }
-            ?: return@combine null
-        val targetHeight = forceClose.claimableAtHeight?.toUInt() ?: return@combine null
-        val currentHeight = lightningState.block()?.height ?: return@combine null
+        val sparkExit = transfers.firstOrNull { it.type == TransferType.SPARK_EXIT }
+        val (transfer, currentHeight) = when {
+            forceClose != null -> forceClose to lightningState.block()?.height
+            sparkExit != null -> sparkExit to sparkExitHeight
+            else -> return@combine null
+        }
+        val targetHeight = transfer.claimableAtHeight?.toUInt() ?: return@combine null
+        currentHeight ?: return@combine null
         val remaining = BlockTimeHelpers.blocksRemaining(targetHeight, currentHeight)
         if (remaining <= 0) return@combine null
         BlockTimeHelpers.getDurationForBlocks(remaining)
@@ -108,6 +117,18 @@ class TransferRepo @Inject constructor(
         }.onFailure { e ->
             Logger.error("Failed to settle transfer", e, context = TAG)
         }
+    }
+
+    /** Moves a transfer's countdown target, as a Spark exit learns when its timelocks mature. */
+    suspend fun updateClaimableAtHeight(
+        id: String,
+        claimableAtHeight: UInt?
+    ): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching { transferDao.updateClaimableAtHeight(id, claimableAtHeight?.toInt()) }
+    }
+
+    suspend fun isSettled(id: String): Result<Boolean> = withContext(bgDispatcher) {
+        runSuspendCatching { transferDao.getById(id)?.isSettled ?: true }
     }
 
     suspend fun findLspOrderIdByFundingTxId(fundingTxId: String): Result<String?> = withContext(bgDispatcher) {
@@ -269,7 +290,8 @@ class TransferRepo @Inject constructor(
         channels: List<ChannelDetails>,
         balances: BalanceDetails?,
     ) {
-        val toSavings = activeTransfers.filter { it.type.isToSavings() }
+        // A Spark exit has no channel; the exit settles its transfer once the sweep reaches savings.
+        val toSavings = activeTransfers.filter { it.type.isToSavings() && it.type != TransferType.SPARK_EXIT }
         if (toSavings.isEmpty()) return
 
         val balanceDetails = balances ?: run {
@@ -405,6 +427,12 @@ class TransferRepo @Inject constructor(
     companion object {
         private const val TAG = "TransferRepo"
     }
+}
+
+/** The tip of the chain the Spark SDK reads, as a running Spark exit last saw it. */
+@Singleton
+class SparkExitTip @Inject constructor() {
+    val height = MutableStateFlow<UInt?>(null)
 }
 
 private fun IBtOrder.hasClosedChannel(): Boolean {
