@@ -185,7 +185,8 @@ internal object PaykitReceiptMatcher {
         val proposedAt = runCatching { Instant.parse(recordedAt) }.getOrNull() ?: return false
         // Lightning receive and request times both come from this device's clock; only block time can lag.
         val tolerance = if (receive.rail == PaykitReceiptRail.Lightning) Duration.ZERO else RECEIVE_TIME_TOLERANCE
-        return Instant.fromEpochSeconds(receivedAt.toLong()) >= proposedAt - tolerance
+        // Receive times are whole seconds, so compare at that precision.
+        return receivedAt.toLong() >= (proposedAt - tolerance).epochSeconds
     }
 
     private fun isReceiptable(record: PaymentRequestRecord): Boolean =
@@ -202,30 +203,40 @@ internal object PaykitReceiptMatcher {
         parseInvoice: (String) -> Bolt11Invoice,
     ): List<Pair<String, PaykitRecordedReceive>> {
         val terms = record.terms ?: return emptyList()
-        return terms.paymentEndpoints.orEmpty()
+        val lightning = terms.paymentEndpoints.orEmpty()
             .filterKeys(terms.acceptedPaymentEndpointIdentifiers::contains)
-            .flatMap { (identifier, payload) ->
+            .mapNotNull { (identifier, payload) ->
                 val endpoint = PublicPaykitRepo.parseEndpoint(identifier, payload, network)
-                    ?: return@flatMap emptyList()
-                when {
-                    endpoint.methodId == MethodId.Bolt11 -> listOfNotNull(
-                        runCatching { parseInvoice(endpoint.value).paymentHash().lowercase() }.getOrNull()
-                            ?.let(lightningReceives::get)
-                    )
-                    // A batch can pay the request's address while the activity shows another one, so match the outputs.
-                    endpoint.methodId.isOnchain -> onchainReceives.mapNotNull { it.paidTo(listOf(endpoint.value)) }
-                    else -> emptyList()
-                }.map { identifier to it }
+                    ?.takeIf { it.methodId == MethodId.Bolt11 } ?: return@mapNotNull null
+                runCatching { parseInvoice(endpoint.value).paymentHash().lowercase() }.getOrNull()
+                    ?.let(lightningReceives::get)
+                    ?.let { identifier to it }
             }
+        // One receive counts once toward the request, over every on-chain address it names, so a transaction paying
+        // two of them is receipted in full. A batch can pay them while the activity shows another address.
+        val endpoints = onchainEndpoints(record, network)
+        val onchain = onchainReceives.mapNotNull { receive ->
+            val paid = receive.paidTo(endpoints.map { it.second }) ?: return@mapNotNull null
+            val endpoint = endpoints.firstOrNull { it.second.lowercase() in paid.countedAddresses }
+                ?: return@mapNotNull null
+            endpoint.first to paid
+        }
+        return lightning + onchain
     }
 
-    private fun onchainAddresses(record: PaymentRequestRecord, network: Network): List<String> {
+    private fun onchainAddresses(record: PaymentRequestRecord, network: Network): List<String> =
+        onchainEndpoints(record, network).map { it.second }
+
+    private fun onchainEndpoints(record: PaymentRequestRecord, network: Network): List<Pair<String, String>> {
         val terms = record.terms ?: return emptyList()
         return terms.paymentEndpoints.orEmpty()
             .filterKeys(terms.acceptedPaymentEndpointIdentifiers::contains)
-            .mapNotNull { (identifier, payload) -> PublicPaykitRepo.parseEndpoint(identifier, payload, network) }
-            .filter { it.methodId.isOnchain }
-            .map { it.value }
+            .mapNotNull { (identifier, payload) ->
+                PublicPaykitRepo.parseEndpoint(identifier, payload, network)
+                    ?.takeIf { it.methodId.isOnchain }
+                    ?.let { identifier to it.value }
+            }
+            .sortedBy { it.first }
     }
 
     private fun PaykitVerifiedUsdtReceive.matches(record: PaymentRequestRecord): Boolean =

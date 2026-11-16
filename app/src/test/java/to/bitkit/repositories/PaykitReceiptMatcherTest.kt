@@ -34,6 +34,7 @@ class PaykitReceiptMatcherTest {
 
         /** Regtest on-chain endpoint identifier. */
         const val ONCHAIN_METHOD = "btc-regtest-p2wpkh"
+        const val TAPROOT_METHOD = "btc-regtest-p2tr"
 
         /** Lightning endpoint identifier. */
         const val BOLT11_METHOD = "btc-lightning-bolt11"
@@ -78,7 +79,7 @@ class PaykitReceiptMatcherTest {
             val terms = PaymentRequestTerms(
                 amount = PaymentRequestAmount("0.00015", "btc"), paymentReference = reference,
                 proposalExpiresAt = null, recurrence = null,
-                acceptedPaymentEndpointIdentifiers = listOf(ONCHAIN_METHOD, BOLT11_METHOD),
+                acceptedPaymentEndpointIdentifiers = listOf(ONCHAIN_METHOD, TAPROOT_METHOD, BOLT11_METHOD),
                 paymentEndpoints = endpoints, requiredAppId = "bitkit", conversion = null,
                 paymentDeadline = null, metadata = mock(),
             )
@@ -288,6 +289,17 @@ class PaykitReceiptMatcherTest {
     }
 
     @Test
+    fun `one transaction paying two of a request's addresses is receipted in full`() {
+        val request = payeeRequest(
+            endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS), TAPROOT_METHOD to payload("bcrt1psecond")),
+        )
+        val outputs = mapOf(ADDRESS.lowercase() to 6_000uL, "bcrt1psecond" to 4_000uL)
+        val receive = onchainReceive(10_000uL, outputs = outputs)
+
+        assertEquals(listOf(10_000uL), match(request, onchain = listOf(receive)).map { it.receive.amount.atomic })
+    }
+
+    @Test
     fun `an endpoint-only request paid in a batch shown under another address is receipted`() {
         val request = payeeRequest(endpoints = mapOf(ONCHAIN_METHOD to payload(ADDRESS)))
         val batch = onchainReceive(
@@ -317,6 +329,19 @@ class PaykitReceiptMatcherTest {
 
         assertTrue(match(request, lightning = listOf(earlier)).isEmpty())
         assertEquals(1, match(request, lightning = listOf(later)).size)
+    }
+
+    @Test
+    fun `a lightning receive in the same second as the request is receipted`() {
+        val request = payeeRequest(
+            proofs = listOf(proof("bitcoin-bolt11-preimage", PREIMAGE, BOLT11_METHOD)),
+            proposedAt = "2026-11-14T12:00:00.123456789+00:00",
+        )
+        val sameSecond = bitcoinReceive(HASH, PaykitReceiptRail.Lightning, 1uL, receivedAt = 1_794_657_600uL)
+        val secondBefore = bitcoinReceive(HASH, PaykitReceiptRail.Lightning, 1uL, receivedAt = 1_794_657_599uL)
+
+        assertEquals(1, match(request, lightning = listOf(sameSecond)).size)
+        assertTrue(match(request, lightning = listOf(secondBefore)).isEmpty())
     }
 
     @Test
