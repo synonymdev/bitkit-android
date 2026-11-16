@@ -306,9 +306,6 @@ fun SettingsData.resetPin() = this.copy(
     isBiometricEnabled = false,
 )
 
-fun SettingsData.areContactPaymentsEnabled(): Boolean =
-    sharesPrivatePaykitEndpoints
-
 fun SettingsData.withIndependentPaykitSharing(): SettingsData {
     if (hasIndependentPaykitSharing) return this
     val hadPublicState = hasPublicPaykitPublicationState()

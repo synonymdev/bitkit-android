@@ -27,6 +27,12 @@ Prepare that paid-address fixture separately; the journey itself sends no additi
 If the required issuer or paid-address state is unavailable, report the corresponding journey
 as blocked, not as an app failure or a pass.
 
+`public-node-lightning-endpoint.xml` requires a regtest Lightning node with announced channels
+that reach Bitkit's graph through the regtest RGS server, and an issuer that can send that node's
+bolt11 invoice without route hints as the request's only endpoint. Before running it, export the
+graph's node list from the LDK debug screen and check the payee is listed; otherwise report the
+journey as blocked.
+
 The accepted journey uses:
 
 - Payment Request ID: `71300000-0000-4000-8000-000000000001`

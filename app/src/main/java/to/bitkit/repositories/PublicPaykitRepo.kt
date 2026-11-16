@@ -46,6 +46,7 @@ sealed class PublicPaykitError(message: String) : AppError(message) {
     data object SessionNotActive : PublicPaykitError("No active Paykit session")
     data object WalletNotReady : PublicPaykitError("Wallet is not ready to publish Paykit endpoints")
     data object PublicationFailed : PublicPaykitError("Failed to publish Paykit payment endpoints")
+    data object PaykitDisabled : PublicPaykitError("Paykit is disabled")
 }
 
 sealed interface PublicPaykitPaymentResult {

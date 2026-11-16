@@ -1510,17 +1510,10 @@
     <string name="profile__intro_description">Amb el teu perfil portable, els teus contactes et poden trobar i pagar a qualsevol lloc.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTABLE&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Utilitza Bitkit amb els teus contactes per enviar pagaments directament, en qualsevol moment i a qualsevol lloc.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">No s\'han pogut preparar les dades del punt de pagament.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">No hi ha cap punt de pagament compatible disponible.</string>
-    <string name="profile__pay_contacts_error_retry">No s\'han pogut activar els pagaments amb contactes. Els teus contactes desats no han canviat. Torna-ho a provar.</string>
-    <string name="profile__pay_contacts_error_session">Torna a connectar el teu perfil de Pubky per compartir les dades de pagament.</string>
-    <string name="profile__pay_contacts_error_wallet">La cartera encara s\'està iniciant. Torna-ho a provar d\'aquí a un moment.</string>
     <string name="profile__pay_contacts_headline">Deixa que els\nteus contactes\n&lt;accent&gt;et paguin&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar contactes</string>
-    <string name="profile__private_payments_toggle">Pagaments privats amb contactes</string>
     <string name="profile__pubky_copied">pubky copiat al porta-retalls</string>
     <string name="profile__public_key">Clau pública</string>
-    <string name="profile__public_payments_toggle">Pagaments públics</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">La sessió del teu perfil ha caducat. Torna a connectar-te per restaurar el teu perfil.</string>
     <string name="profile__sign_out">Desconnectar</string>

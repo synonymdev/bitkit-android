@@ -1511,17 +1511,10 @@
     <string name="profile__intro_description">Dzięki przenośnemu profilowi Twoje kontakty mogą skontaktować się z Tobą i zapłacić Ci w dowolnym miejscu.</string>
     <string name="profile__intro_title">PRZENOŚNY\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Używaj Bitkit ze swoimi kontaktami, aby wysyłać płatności bezpośrednio, zawsze i wszędzie.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Nie udało się przygotować danych punktu płatności.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Brak dostępnego obsługiwanego punktu płatności.</string>
-    <string name="profile__pay_contacts_error_retry">Nie udało się włączyć płatności z kontaktami. Zapisane kontakty pozostały bez zmian. Spróbuj ponownie.</string>
-    <string name="profile__pay_contacts_error_session">Połącz ponownie swój profil Pubky, aby udostępnić dane płatności.</string>
-    <string name="profile__pay_contacts_error_wallet">Portfel wciąż się uruchamia. Spróbuj ponownie za chwilę.</string>
     <string name="profile__pay_contacts_headline">Pozwól\nkontaktom\n&lt;accent&gt;płacić Ci&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Płać kontaktom</string>
-    <string name="profile__private_payments_toggle">Prywatne płatności z kontaktami</string>
     <string name="profile__pubky_copied">pubky skopiowany do schowka</string>
     <string name="profile__public_key">Klucz publiczny</string>
-    <string name="profile__public_payments_toggle">Płatności publiczne</string>
     <string name="profile__restore_nav_title">Przywróć profil</string>
     <string name="profile__session_expired">Sesja Twojego profilu wygasła. Połącz się ponownie, aby przywrócić profil.</string>
     <string name="profile__sign_out">Odłącz</string>
