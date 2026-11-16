@@ -1176,8 +1176,11 @@ class PaykitSdkService @Inject constructor(
      */
     private suspend fun sendPendingMessages(handle: PaykitSdk) {
         runSuspendCatching {
-            val reports = completeSdkCall { handle.processPendingPrivateMessages() }
-            recordDelivery(cachedPaykitKey?.publicKey, reports.mapNotNull { it.report })
+            completeSdkCall {
+                handle.processPendingPrivateMessages().also { reports ->
+                    recordDelivery(cachedPaykitKey?.publicKey, reports.mapNotNull { it.report })
+                }
+            }
         }.onFailure {
             Logger.warn("Failed to send queued Paykit messages before a payment-list sync", it, context = TAG)
         }
