@@ -23,14 +23,16 @@ fun nfcPaymentUri(request: String?): String? {
 
 private const val BITCOIN_WITHOUT_ADDRESS = "bitcoin:?"
 private val LIGHTNING_PARAMS = listOf("lightning", "lno")
+private const val REQUIRED_PARAM_PREFIX = "req-"
 
 /**
  * Turns a payment request read from a tag or a nearby device into one the scanner decodes.
  *
  * A BIP 321 URI may leave the address out and carry only a Lightning request
  * (`bitcoin:?lightning=<invoice>`, used by Numo and planned by Square). The scanner rejects a
- * `bitcoin:` URI without an address, so that form becomes `lightning:<invoice>`. Anything else is
- * returned trimmed and unchanged.
+ * `bitcoin:` URI without an address, so that form becomes `lightning:<invoice>`. A URI with a
+ * required (`req-`) parameter is kept, since BIP 321 forbids paying it without handling that
+ * parameter and the rewrite would drop it. Anything else is returned trimmed and unchanged.
  */
 fun scannedPaymentRequest(text: String): String {
     val trimmed = text.trim()
@@ -40,6 +42,7 @@ fun scannedPaymentRequest(text: String): String {
         val value = it.substringAfter('=', missingDelimiterValue = "")
         if (key.isEmpty() || value.isEmpty()) null else key.lowercase() to value
     }.toMap()
+    if (params.keys.any { it.startsWith(REQUIRED_PARAM_PREFIX) }) return trimmed
     val request = LIGHTNING_PARAMS.firstNotNullOfOrNull { params[it] } ?: return trimmed
     return "lightning:$request"
 }
