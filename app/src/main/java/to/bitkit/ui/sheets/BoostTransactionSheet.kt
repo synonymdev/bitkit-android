@@ -17,6 +17,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.ui.components.BodyMSB
@@ -70,46 +74,55 @@ fun BoostTransactionSheet(
 ) {
     val haptic = LocalHapticFeedback.current
 
-    // Setup activity when component is first created
-    LaunchedEffect(Unit) {
-        viewModel.setupActivity(item)
+    val dispatchEffect by rememberUpdatedState<(BoostTransactionEffects) -> Unit> { event ->
+        when (event) {
+            BoostTransactionEffects.OnBoostFailed -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onFailure()
+            }
+
+            BoostTransactionEffects.OnBoostPending -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onPending()
+            }
+
+            BoostTransactionEffects.OnBoostSuccess -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onSuccess()
+            }
+
+            BoostTransactionEffects.OnMaxFee -> {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onMaxFee()
+            }
+
+            BoostTransactionEffects.OnMinFee -> {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onMinFee()
+            }
+        }
     }
 
-    // Handle effects
-    LaunchedEffect(Unit) {
-        viewModel.boostTransactionEffect.collect { event ->
-            when (event) {
-                BoostTransactionEffects.OnBoostFailed -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onFailure()
-                }
-
-                BoostTransactionEffects.OnBoostPending -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onPending()
-                }
-
-                BoostTransactionEffects.OnBoostSuccess -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onSuccess()
-                }
-
-                BoostTransactionEffects.OnMaxFee -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onMaxFee()
-                }
-
-                BoostTransactionEffects.OnMinFee -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onMinFee()
-                }
+    LaunchedEffect(viewModel, item.v1.walletId, item.v1.txId) {
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            viewModel.boostTransactionEffect.collect { event ->
+                if (viewModel.canDeliver(event, item)) dispatchEffect(event.effect)
             }
+        }
+        val origin = viewModel.setupActivity(item)
+        try {
+            awaitCancellation()
+        } finally {
+            viewModel.clearActivity(origin)
         }
     }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    BottomSheet(onDismissRequest = onDismiss) {
+    BottomSheet(onDismissRequest = {
+        viewModel.clearActivity()
+        onDismiss()
+    }) {
         BoostTransactionContent(
             uiState = uiState,
             onClickEdit = viewModel::onClickEdit,
@@ -152,7 +165,7 @@ fun BoostTransactionContent(
         }
 
         BodyS(
-            text = stringResource(bodyText),
+            text = stringResource(if (uiState.publicationSlow) R.string.wallet__boost_pending_msg else bodyText),
             color = Colors.White64,
             modifier = Modifier.testTag(BoostTransactionTestTags.DESCRIPTION_TEXT)
         )

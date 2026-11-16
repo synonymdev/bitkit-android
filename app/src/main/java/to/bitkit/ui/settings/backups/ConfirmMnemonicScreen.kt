@@ -189,7 +189,7 @@ private fun ConfirmMnemonicContent(
                         fullWidth = false,
                         size = ButtonSize.Small,
                         onClick = { onWordPress(index) },
-                        modifier = Modifier.testTag("Word-$word")
+                        modifier = Modifier.testTag("ShuffledWord-$index")
                     )
                 }
             }

@@ -105,9 +105,6 @@
     <string name="lightning__spark_claim_fee">Frais de réclamation</string>
     <string name="lightning__spark_confirmations">%1$d/3 confirmations</string>
     <string name="lightning__spark_deposit">Dépôt</string>
-    <string name="lightning__spark_deposit__claimed">Spark l\'ajoute à votre solde de dépenses.</string>
-    <string name="lightning__spark_deposit__looking">En attente que Spark voie votre transfert.</string>
-    <string name="lightning__spark_deposit__standard">Spark l\'ajoute à votre solde de dépenses après {standard} confirmations, dans environ {minutes} minutes.</string>
     <string name="lightning__spark_deposit__wait_button">Attendre</string>
     <string name="lightning__spark_deposits_claimed">Dépôts réclamés</string>
     <string name="lightning__spark_deposits_pending">Dépôts en cours</string>
@@ -280,12 +277,6 @@
     <string name="lightning__receiving_label">Capacité de réception</string>
     <string name="lightning__rgs_snapshot_time">Heure de l\'instantané Rapid Gossip Sync</string>
     <string name="lightning__scores_sync_time">Heure de synchronisation des scores de routage</string>
-    <string name="lightning__setting_up__not_seen">Spark n\'a pas encore vu votre transfert. Il est ajouté après 3 confirmations ; vous pouvez quitter cet écran.</string>
-    <string name="lightning__setting_up__pay">Payer ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instantané coûte maintenant &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Payez-le, ou attendez 3 confirmations, environ 30 minutes, pour des frais moins élevés.</string>
-    <string name="lightning__setting_up__speed">Vitesse : {speed}</string>
-    <string name="lightning__setting_up__step_adding">Ajout aux dépenses</string>
-    <string name="lightning__setting_up__unavailable">Instantané n\'est pas disponible pour ce transfert. Spark l\'ajoute à votre solde de dépenses après 3 confirmations, environ 30 minutes.</string>
     <string name="lightning__setting_up_button">Continuer à utiliser Bitkit</string>
     <string name="lightning__setting_up_step1">Traitement des paiements</string>
     <string name="lightning__setting_up_step2">Paiement réussi</string>
@@ -1037,6 +1028,8 @@
     <string name="wallet__note">Note</string>
     <string name="wallet__lnurl_pay_confirm__comment">Commentaire</string>
     <string name="wallet__lnurl_pay_confirm__comment_placeholder">Commentaire facultatif au destinataire</string>
+    <string name="wallet__swap_route_restored_text">Un paiement à un contact interrompu par la restauration est revenu sur ton épargne.</string>
+    <string name="wallet__swap_route_restored_title">Paiement renvoyé vers l\'Épargne</string>
     <string name="wallet__tags">Tags</string>
     <string name="wallet__tags_add">Ajouter une étiquette</string>
     <string name="wallet__tags_add_button">Ajouter</string>

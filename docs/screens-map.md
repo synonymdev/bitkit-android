@@ -135,7 +135,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure) › Transfer all funds to savings review |
 | SavingsIntroScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings |
 | SavingsProgressScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings progress 2 |
-| SettingUpScreen.kt | Funds In Transfer › Transfer to Spending Progress 1 |
+| SettingUpScreen.kt | Funds In Transfer (spark) › Transfer - Processing Payment |
 | SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
 | SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm |
 | SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Intro |

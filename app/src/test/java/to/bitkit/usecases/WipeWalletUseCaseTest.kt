@@ -33,6 +33,7 @@ import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
@@ -65,6 +66,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val pubkySwapsRouteRepo = mock<PubkySwapsRouteRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
@@ -111,6 +113,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             hwWalletRepo = hwWalletRepo,
             lightningRepo = lightningRepo,
             pubkyRepo = pubkyRepo,
+            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
             privatePaykitRepo = privatePaykitRepoProvider,
             privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
             firebaseMessaging = firebaseMessaging,
@@ -145,6 +148,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             hwWalletRepo,
             lightningRepo,
             pubkyRepo,
+            pubkySwapsRouteRepo,
             privatePaykitRepo,
             privatePaykitAddressReservationRepo,
             migrationService,
@@ -159,6 +163,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(privatePaykitRepo).closeAndClear()
         inOrder.verify(wakeRepo).unregister()
         inOrder.verify(lightningRepo).wipeStorage(0)
+        inOrder.verify(pubkySwapsRouteRepo).resetForWipe()
         inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
         inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()

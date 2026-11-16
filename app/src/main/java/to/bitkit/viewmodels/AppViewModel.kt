@@ -30,6 +30,8 @@ import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PubkySwapRoutePayment
+import com.synonym.bitkitcore.PubkySwapRouteQuote
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.SortDirection
@@ -78,6 +80,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -223,6 +226,8 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.repositories.PubkySwapClaimTimeoutException
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
@@ -258,6 +263,7 @@ import to.bitkit.ui.pushNotification
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -280,6 +286,7 @@ import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -334,6 +341,7 @@ class AppViewModel @Inject constructor(
     private val paykitPaymentRequestDiagnostics: PaykitPaymentRequestDiagnostics,
     private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
     private val usdtRepo: UsdtRepo,
+    private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
     private val paykitRouteRepo: PaykitRouteRepo,
     val paykitUsdtPayments: PaykitUsdtPaymentRepo,
     private val samRockRepo: SamRockRepo,
@@ -414,6 +422,9 @@ class AppViewModel @Inject constructor(
     private var fundingSourceSwitchPending = false
     private var onchainSendRefreshJob: Job? = null
     private var sendStateGeneration = 0L
+
+    /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
+    private var sendSession = 0L
 
     fun setSendEvent(event: SendEvent) {
         if ((currentSheet.value as? Sheet.Send)?.preparingRequest != null) return
@@ -575,6 +586,13 @@ class AppViewModel @Inject constructor(
     /** The address and amount of the uncertain Spark withdrawal to a contact a pending screen waits on. */
     @Volatile
     private var uncertainSparkWithdrawal: Pair<String, ULong>? = null
+
+    /** The swap whose hold payment went out for a send, which may still pay the contact, so that send pays once. */
+    @Volatile
+    private var committedSwap: CommittedSwap? = null
+
+    /** The swap behind each hold payment still out, so a hold that fails gives the contact's list back. */
+    private val swapIdsByHoldHash = ConcurrentHashMap<String, String>()
     private var isPresentingPaymentRequest = false
     private val isPaymentRequestPollingStopped = MutableStateFlow(false)
     private var isPaymentRequestOverlayVisible = false
@@ -584,6 +602,9 @@ class AppViewModel @Inject constructor(
     private var isPaymentRequestIdentityActivating = false
     private var isSubmittingPaymentRequest = false
     private var isSoftwarePaymentSubmissionActive = false
+
+    // The confirmed send that holds the submission guard; dismissing that send releases the guard for the next one.
+    private var confirmedPaymentSubmission: Any? = null
     private val activePaymentSubmissions = mutableSetOf<Any>()
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
@@ -1500,6 +1521,13 @@ class AppViewModel @Inject constructor(
     val isSparkExitRequested = _isSparkExitRequested.asStateFlow()
 
     fun onSparkExitNotificationTapped() = _isSparkExitRequested.update { true }
+
+    /** A Spark emergency exit is under way, so the Savings transfer banner on Home opens its progress. */
+    val isSparkExiting: StateFlow<Boolean> = sparkExitRepo.state.map { it.isExiting }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Opens the running emergency exit's progress, the way its notification does. */
+    fun onSparkExitBannerTapped() = _isSparkExitRequested.update { true }
 
     /**
      * Says whether the exit opens on its progress rather than a new exit, then clears the tapped notification: cleared
@@ -2970,6 +2998,7 @@ class AppViewModel @Inject constructor(
             if (isAutomaticAllowancePayment(paymentHash)) return
             if (moveToSparkRepo.isWatchedMovePayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
+                releaseFailedSwapHold(paymentHash)
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
                 if (shouldNotifyPendingResolution(paymentHash)) {
@@ -2991,14 +3020,21 @@ class AppViewModel @Inject constructor(
 
     private fun closeActiveSendForFailedPayment(paymentHash: String, reason: PaymentFailureReason?): Boolean {
         val activePaymentHash = _sendUiState.value.decodedInvoice?.paymentHash?.toHex()
+            ?: _sendUiState.value.activePaykitSwapRoute?.holdPaymentHash
         if (_currentSheet.value !is Sheet.Send || activePaymentHash != paymentHash) return false
 
         setSendEffect(
             SendEffect.NavigateToError(
-                reason.toSendFailureDetails(
+                failure = reason.toSendFailureDetails(
                     context = context,
                     paymentRequest = _sendUiState.value.currentLightningPaymentRequest(),
-                )
+                ),
+                // The swap provider consumed the committed quote, so a retry re-quotes from the amount.
+                retryRoute = if (_sendUiState.value.activePaykitSwapRoute != null) {
+                    SendRetryRoute.Amount
+                } else {
+                    SendRetryRoute.Confirm
+                },
             )
         )
         return true
@@ -3248,6 +3284,7 @@ class AppViewModel @Inject constructor(
                         is SendEvent.AddressContinue -> onAddressContinue(it.data)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
+                        is SendEvent.AmountMax -> onAmountMax(it.amount)
                         SendEvent.AmountReset -> resetAmountInput()
                         SendEvent.AmountContinue -> try {
                             onAmountContinue()
@@ -4128,11 +4165,12 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long?,
     ) {
         requireCurrentPaymentPreparation(walletGeneration)
-        val decoded = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
-            .map {
-                coreService.decode(it.paymentRequest).also { requireCurrentPaymentPreparation(walletGeneration) }
-            }
-        val address = decoded.filterIsInstance<Scanner.OnChain>().lastOrNull()?.invoice?.address.orEmpty()
+        val bitcoinEndpoints = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
+        val decoded = bitcoinEndpoints.map {
+            coreService.decode(it.paymentRequest).also { requireCurrentPaymentPreparation(walletGeneration) }
+        }
+        val onchainEndpoint = bitcoinEndpoints.zip(decoded).lastOrNull { it.second is Scanner.OnChain }
+        val address = (onchainEndpoint?.second as? Scanner.OnChain)?.invoice?.address.orEmpty()
         val invoice = decoded.filterIsInstance<Scanner.Lightning>().lastOrNull()?.invoice
         val lnurl = decoded.filterIsInstance<Scanner.LnurlPay>().lastOrNull()?.let { LnurlParams.LnurlPay(it.data) }
         val usdtEndpoint = payment.endpoints.firstOrNull { it.methodId == MethodId.UsdtArbitrum }
@@ -4159,7 +4197,19 @@ class AppViewModel @Inject constructor(
             invoice = invoice,
             lnurl = lnurl,
         ).takeIf { it.endpoints.isNotEmpty() }
-        val payMethod = if (offersSparkLeg && !canUseOnchain) {
+        // Without a Spark leg, a Pubky Swaps provider can pay it from Spending: the router weighs swaps after service
+        // legs.
+        val swapRoute = if (offersSparkLeg) {
+            null
+        } else {
+            paykitSwapRoute(
+                payment = payment,
+                methodId = onchainEndpoint?.first?.methodId,
+                address = address,
+                canPayDirectly = canUseLightning || canUseOnchain || useUsdt,
+            )
+        }
+        val payMethod = if (swapRoute != null || offersSparkLeg && !canUseOnchain) {
             SendMethod.LIGHTNING
         } else {
             paykitBitcoinMethod(canUseLightning, address, invoice, lnurl)
@@ -4172,6 +4222,7 @@ class AppViewModel @Inject constructor(
                 paykitAmount = "",
                 payMethod = payMethod,
                 paykitRoute = route,
+                paykitSwapRoute = swapRoute,
             )
         }
         if (usdtRepo.shouldRefresh(isUsdtEnabled.value)) usdtRepo.refresh(history = false)
@@ -4325,6 +4376,23 @@ class AppViewModel @Inject constructor(
     }
 
     /**
+     * A contact whose only reachable endpoint is on-chain, paid from spending when savings cannot cover it: bitkit-core
+     * routes it through a Pubky Swaps provider. Incoming requests keep their own proof flow and are never swap-routed.
+     */
+    private fun paykitSwapRoute(
+        payment: ContactPaymentContext,
+        methodId: MethodId?,
+        address: String,
+        canPayDirectly: Boolean,
+    ): PaykitSwapRouteUi? {
+        if (!pubkySwapsRouteRepo.isEnabled || canPayDirectly || address.isEmpty()) return null
+        if (payment.incomingPaymentRequest != null) return null
+        if (walletRepo.balanceState.value.maxSendLightningSats == 0uL) return null
+        if (methodId?.isOnchain != true) return null
+        return PaykitSwapRouteUi(endpoint = PaykitEndpoint(methodId = methodId.rawValue, value = address))
+    }
+
+    /**
      * Offered whatever Lightning can pay when the payment opens: an amount entered later can pass Lightning's limit,
      * and the router still prefers a direct payment that works.
      */
@@ -4357,13 +4425,30 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
         paykitRouteDecided = false
         _sendUiState.update {
+            // A quote is for the amount it was made for, so a new amount needs a new quote.
+            val staleQuote = it.paykitSwapRoute?.quote?.let { quote -> quote.deliveredSat != amount } == true
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
+                isMaxAmount = it.isMaxAmount && amount == it.amount,
                 confirmedWarnings = persistentListOf(),
+                paykitSwapRoute = if (staleQuote) {
+                    it.paykitSwapRoute.copy(quote = null, providerName = null, holdPaymentHash = null)
+                } else {
+                    it.paykitSwapRoute
+                },
+                lightningFeeSats = if (staleQuote) 0 else it.lightningFeeSats,
             )
         }
         updateCanSwitchWallet()
+    }
+
+    private suspend fun onAmountMax(amount: ULong) {
+        onAmountChange(amount)
+        _sendUiState.update {
+            val isWalletOnchain = it.payMethod == SendMethod.ONCHAIN && it.hardwareWalletId == null
+            it.copy(isMaxAmount = isWalletOnchain && it.amount == amount)
+        }
     }
 
     private fun onCommentChange(comment: String) {
@@ -4489,11 +4574,13 @@ class AppViewModel @Inject constructor(
         val generation = ++sendStateGeneration
         cancelOnchainSendRefresh()
         _sendUiState.update {
+            val nextAmount = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else it.amount
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,
                 paykitUsesUsdt = target == PaykitAsset.USDT,
                 paykitRateUnavailable = false,
-                amount = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else it.amount,
+                amount = nextAmount,
+                isMaxAmount = it.isMaxAmount && nextAmount == it.amount,
                 paykitAmount = if (target == PaykitAsset.USDT) {
                     converted?.takeIf { amount -> amount.atomic > 0uL }?.inputValue.orEmpty()
                 } else {
@@ -4505,18 +4592,19 @@ class AppViewModel @Inject constructor(
         if (sendStateGeneration != generation) return
         _sendUiState.update {
             it.copy(
-                isAmountInputValid = if (it.paykitUsesUsdt) {
-                    validUsdtAmount(
-                        it.paykitAmount
-                    )
-                } else {
-                    validateAmount(it.amount)
+                isAmountInputValid = when {
+                    it.paykitUsesUsdt -> validUsdtAmount(it.paykitAmount)
+                    // the Savings refresh checked it against the max for this recipient and speed
+                    nextSource == SendFundingSource.Savings -> it.isAmountInputValid
+                    else -> validateAmount(it.amount)
                 },
             )
         }
         updateCanSwitchWallet()
         // A source switch on Confirm asks the router again, for a request (no amount step) or a route already decided.
-        if (activeIncomingPaymentRequest() != null || paykitRouteDecided) {
+        // A swap route pays its own quote, so the router never adds a Spark leg beside it.
+        val reroutes = activeIncomingPaymentRequest() != null || paykitRouteDecided
+        if (_sendUiState.value.paykitSwapRoute == null && reroutes) {
             _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
                 // A refused route leaves no leg or invoice to pay, and a picked LNURL past its limits can't be paid;
                 // switching the source again recomputes validity.
@@ -4618,7 +4706,8 @@ class AppViewModel @Inject constructor(
                         hardwareWalletId = null,
                         hardwareWalletName = null,
                         hardwareAvailableSats = 0uL,
-                        lightningFeeSats = 0,
+                        // A quoted swap route pays the quote's fee on Spending.
+                        lightningFeeSats = it.paykitSwapRoute?.quote?.totalFeeSat?.toLong() ?: 0,
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
                         isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
@@ -4638,6 +4727,8 @@ class AppViewModel @Inject constructor(
                         confirmedWarnings = persistentListOf(),
                     )
                 }
+                // the cached max stands in until the refresh prices this recipient and speed, or when it can't
+                _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount)) }
                 refreshOnchainSendIfNeeded()?.join()
             }
 
@@ -4733,6 +4824,7 @@ class AppViewModel @Inject constructor(
                     hardwareAvailableSats = 0uL,
                     lightningFeeSats = 0,
                     amount = amount,
+                    isMaxAmount = it.isMaxAmount && amount == it.amount,
                     isAmountInputValid = validateAmount(amount, SendMethod.LIGHTNING),
                     confirmedWarnings = persistentListOf(),
                 )
@@ -4757,16 +4849,10 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
         }
-        // A Spark leg pays the on-chain endpoint, so the unselected LNURL's limits never apply to it.
-        _sendUiState.value.paykitRoute?.takeIf { _sendUiState.value.routesPaykitPayment }?.let {
-            when (routePaykitPayment(it)) {
-                PaykitRouteOutcome.Leg -> {
-                    setSendEffect(SendEffect.NavigateToConfirm)
-                    return
-                }
-                PaykitRouteOutcome.Refused, PaykitRouteOutcome.Stale -> return
-                PaykitRouteOutcome.Direct -> Unit
-            }
+        if (!routePaykitPaymentOnContinue()) return
+        _sendUiState.value.activePaykitSwapRoute?.let {
+            if (quotePaykitSwapRoute(it)) setSendEffect(SendEffect.NavigateToConfirm)
+            return
         }
         // The route can restore an LNURL a BOLT11 pick cleared, so its limits are read after routing. An on-chain
         // pick keeps the contact's LNURL in state, and its limits never apply to that payment.
@@ -4788,6 +4874,108 @@ class AppViewModel @Inject constructor(
         updateCanSwitchWallet()
 
         setSendEffect(SendEffect.NavigateToConfirm)
+    }
+
+    /**
+     * Asks the router first: a swap route alone is quoted on its own, but next to a Spark leg the swap covers only
+     * what Spark can't pay, so a smaller amount entered later goes back to Spark. False when Continue stops here.
+     */
+    private suspend fun routePaykitPaymentOnContinue(): Boolean {
+        val state = _sendUiState.value
+        // A Spark leg pays the on-chain endpoint, so the unselected LNURL's limits never apply to it.
+        val route = state.paykitRoute
+            ?.takeIf { state.routesPaykitPayment && (state.activePaykitSwapRoute == null || it.offersSparkLeg) }
+            ?: return true
+        val swapFallback = if (route.offersSparkLeg && state.payMethod == SendMethod.LIGHTNING) {
+            paykitSwapRouteFallback(route, state.address)
+        } else {
+            null
+        }
+        return when (routePaykitPayment(route, hasSwapFallback = swapFallback != null)) {
+            PaykitRouteOutcome.Leg -> {
+                _sendUiState.update { it.copy(paykitSwapRoute = null) }
+                setSendEffect(SendEffect.NavigateToConfirm)
+                false
+            }
+            PaykitRouteOutcome.Refused, PaykitRouteOutcome.Stale -> false
+            PaykitRouteOutcome.Direct -> {
+                _sendUiState.update { it.copy(paykitSwapRoute = null) }
+                true
+            }
+            PaykitRouteOutcome.SwapFallback -> {
+                _sendUiState.update { it.copy(paykitSwapRoute = swapFallback) }
+                true
+            }
+        }
+    }
+
+    /** The Pubky Swaps route that pays an on-chain contact from Spending when Spark can't, or null when no swap can. */
+    private fun paykitSwapRouteFallback(route: PaykitRouteUi, address: String): PaykitSwapRouteUi? {
+        val payment = synchronized(contactPaymentContextLock) { activeContactPaymentContext } ?: return null
+        val methodId = route.endpoints.lastOrNull { it.isOnchain() }?.methodId
+            ?.let { MethodId.fromRawValue(it) }
+        val canPayFromSavings = walletRepo.balanceState.value.maxSendOnchainSats > Defaults.dustLimit.toULong()
+        return paykitSwapRoute(payment, methodId, address, canPayDirectly = canPayFromSavings)
+    }
+
+    private suspend fun quotePaykitSwapRoute(route: PaykitSwapRouteUi): Boolean {
+        val generation = sendStateGeneration
+        val walletGeneration = connectionRecovery.currentGeneration()
+        val payment = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        _sendUiState.update { it.copy(isLoading = true) }
+        val balances = walletRepo.balanceState.value
+        val result = pubkySwapsRouteRepo.route(
+            amountSats = _sendUiState.value.amount,
+            endpoints = listOf(route.endpoint),
+            lightningSpendableSats = maxSendableLightningSats(),
+            onchainSpendableSats = balances.maxSendOnchainSats,
+        )
+        _sendUiState.update { it.copy(isLoading = false) }
+        if (
+            generation != sendStateGeneration || !connectionRecovery.isCurrentGeneration(walletGeneration) ||
+            synchronized(contactPaymentContextLock) { activeContactPaymentContext } != payment
+        ) {
+            return false
+        }
+        val paykitRoute = result.getOrElse {
+            Logger.error("Failed to route Paykit payment through Pubky Swaps", it, context = TAG)
+            toast(it)
+            return false
+        }
+        val quote = when (paykitRoute) {
+            is PaykitRoute.Swap -> paykitRoute.quote
+            is PaykitRoute.None -> {
+                toast(AppError(paykitRoute.reason))
+                return false
+            }
+            // No service legs are passed in yet, so the router cannot pick one.
+            is PaykitRoute.Service -> {
+                Logger.error("Unexpected service route '${paykitRoute.leg.service}'", context = TAG)
+                toast(AppError(context.getString(R.string.common__error_body)))
+                return false
+            }
+            // Savings now covers the payment, so it goes on-chain directly.
+            is PaykitRoute.Direct -> {
+                _sendUiState.update { it.copy(paykitSwapRoute = null) }
+                selectFundingSource(SendFundingSource.Savings, _sendUiState.value)
+                _sendUiState.update { it.copy(isAmountInputValid = validateAmount(it.amount, SendMethod.ONCHAIN)) }
+                updateCanSwitchWallet()
+                toast(AppError(context.getString(R.string.common__error_body)))
+                return false
+            }
+        }
+        _sendUiState.update {
+            it.copy(
+                // A new quote replaces the committed one, so its hold payment is no longer this send's.
+                paykitSwapRoute = route.copy(
+                    quote = quote,
+                    providerName = pubkySwapsRouteRepo.providerContact(quote.providerPubky)?.name,
+                    holdPaymentHash = null,
+                ),
+                lightningFeeSats = quote.totalFeeSat.toLong(),
+            )
+        }
+        return true
     }
 
     /** Shows [lnurl]'s too-low or too-high toast when [amount] is outside its limits; true when it accepts it. */
@@ -4820,7 +5008,7 @@ class AppViewModel @Inject constructor(
      * LNURL whose limits refuse the amount, and a Spark leg to on-chain ones; Savings only the on-chain endpoints.
      * Direct pays the endpoint it names.
      */
-    private suspend fun routePaykitPayment(route: PaykitRouteUi): PaykitRouteOutcome {
+    private suspend fun routePaykitPayment(route: PaykitRouteUi, hasSwapFallback: Boolean = false): PaykitRouteOutcome {
         val state = _sendUiState.value
         val generation = sendStateGeneration
         val contact = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
@@ -4858,7 +5046,14 @@ class AppViewModel @Inject constructor(
         // Spark could reach the contact, but not with the withdrawal fee on top, so no route pays for want of balance.
         val isLegOverBalance = result.exceptionOrNull() is SparkError.WithdrawalOverBalance
         // Only a Spark leg could pay, and Spark takes one contact withdrawal at a time.
-        val isLegSettling = result.exceptionOrNull() is SparkError.WithdrawalPending
+        val settling = result.exceptionOrNull() as? SparkError.WithdrawalPending
+        val isLegSettling = settling != null
+        // A swap pays from Spending, so only a withdrawal still settling to this contact, or to an unknown one, keeps
+        // the payment from a swap that could pay the contact a second time.
+        val isSettlingHere = settling != null && (
+            settling.address == null || settling.address in route.endpoints.map { it.value } ||
+                settling.contact == contact?.publicKey
+            )
         val picked = if (isLegOverBalance || isLegSettling) {
             PaykitRoute.None(result.exceptionOrNull()?.message.orEmpty())
         } else {
@@ -4891,6 +5086,9 @@ class AppViewModel @Inject constructor(
                 val reason = (picked as? PaykitRoute.None)?.reason ?: "Swap routes are unsupported"
                 Logger.warn("Found no Paykit route: '$reason'", context = TAG)
                 _sendUiState.update { it.copy(paykitRoute = route.copy(serviceLeg = null)) }
+                // A Spark balance too small for the amount and fee, or no route at all, leaves the payment to a swap
+                // provider when one can carry it: its quote follows, so nothing shows here.
+                if (hasSwapFallback && !isSettlingHere) return PaykitRouteOutcome.SwapFallback
                 // The router's reason is English for the log: the app tells a short balance from an unusable contact.
                 val isAmountShort = state.amount > lightningSpendable.safe() + onchainSpendable.safe()
                 // The router never saw an LNURL whose limits refuse the amount, so its limit says why.
@@ -5066,6 +5264,7 @@ class AppViewModel @Inject constructor(
             it.copy(selectedUtxos = utxos.toImmutableList())
         }
         launchOnchainFeeRefresh(generation, walletGeneration) {
+            refreshMaxSendOnchain()
             refreshOnchainFeeUi(walletGeneration)
             val refreshJob = currentCoroutineContext().job
             setSendEffect(SendEffect.NavigateToConfirm) {
@@ -5245,7 +5444,11 @@ class AppViewModel @Inject constructor(
         val fromMainScanner = isMainScanner
         if (
             contactPaymentContext != null &&
-            (requiresPaykitAssetSelection(contactPaymentContext) || requiresPaykitServiceRoute(contactPaymentContext))
+            (
+                requiresPaykitAssetSelection(contactPaymentContext) ||
+                    requiresPaykitServiceRoute(contactPaymentContext) ||
+                    requiresPaykitSwapRoute(contactPaymentContext)
+                )
         ) {
             openPaykitContactPayment(contactPaymentContext, fromMainScanner, suppressQuickPay, walletGeneration)
             return@withContext
@@ -5358,6 +5561,13 @@ class AppViewModel @Inject constructor(
         mainScreenEffect(MainScreenEffect.Navigate(Routes.UsdtPayment(request.recipient, amount))) {
             canPrepareSend(walletGeneration)
         }
+    }
+
+    private fun requiresPaykitSwapRoute(payment: ContactPaymentContext): Boolean {
+        if (!pubkySwapsRouteRepo.isEnabled || payment.incomingPaymentRequest != null) return false
+        if (payment.endpoints.isEmpty() || !payment.endpoints.all { it.methodId.isOnchain }) return false
+        val balances = walletRepo.balanceState.value
+        return balances.maxSendOnchainSats <= Defaults.dustLimit.toULong() && balances.maxSendLightningSats > 0uL
     }
 
     /** Any on-chain endpoint lets Spark pay an amount the contact's Lightning endpoints or Savings can't. */
@@ -6017,7 +6227,7 @@ class AppViewModel @Inject constructor(
         if (state.usdtRecipient != null) add(SendFundingSource.Usdt)
         if (
             state.isUnified || state.decodedInvoice != null || state.lnurl is LnurlParams.LnurlPay ||
-            state.paykitRoute?.offersSparkLeg == true
+            state.paykitSwapRoute != null || state.paykitRoute?.offersSparkLeg == true
         ) {
             add(
                 SendFundingSource.Spending
@@ -6435,6 +6645,7 @@ class AppViewModel @Inject constructor(
             state.copy(
                 amount = 0u,
                 isAmountInputValid = false,
+                isMaxAmount = false,
             )
         }
     }
@@ -6495,9 +6706,10 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.showSanityWarningDialog != null) return
 
         val settings = settingsStore.data.first()
-        // A Spark leg spends its debit, the amount plus Spark's fees, from Spark's balance.
+        // A Spark leg spends its debit, the amount plus Spark's fees, from Spark's balance; a swap quote its debit
+        // from Spending.
         val leg = _sendUiState.value.routedPaykitRoute?.serviceLeg
-        val spentSats = leg?.debitSat ?: amountSats
+        val spentSats = _sendUiState.value.activePaykitSwapRoute?.quote?.debitSat ?: leg?.debitSat ?: amountSats
         val balanceToCheck = when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 _sendUiState.value.hardwareAvailableSats
@@ -6576,7 +6788,17 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
+        if (showCommittedSwap()) return
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
+        _sendUiState.value.activePaykitSwapRoute?.let { route ->
+            if (route.quote?.deliveredSat == _sendUiState.value.amount) return@let
+            // The route must be quoted for the confirmed amount before it is committed.
+            _sendUiState.update {
+                it.copy(paykitSwapRoute = route.copy(quote = null, providerName = null), lightningFeeSats = 0)
+            }
+            setSendEffect(SendEffect.NavigateToAmount)
+            return
+        }
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
         val proofPreparation = preparePaymentProof(incomingPaymentRequest)
@@ -6634,7 +6856,7 @@ class AppViewModel @Inject constructor(
         val lnurl = _sendUiState.value.lnurl
         // An on-chain payment, from Savings or a Spark leg, fetches no invoice from the unselected LNURL.
         val isLnurlPay = lnurl is LnurlParams.LnurlPay && _sendUiState.value.payMethod == SendMethod.LIGHTNING &&
-            _sendUiState.value.routedPaykitRoute?.serviceLeg == null
+            _sendUiState.value.routedPaykitRoute?.serviceLeg == null && _sendUiState.value.activePaykitSwapRoute == null
 
         if (isLnurlPay) {
             val amountMsats = lnurl.data.callbackAmountMsats(amount)
@@ -6674,6 +6896,11 @@ class AppViewModel @Inject constructor(
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+
+        _sendUiState.value.activePaykitSwapRoute?.quote?.let {
+            proceedWithSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId)
             return
         }
 
@@ -7094,6 +7321,258 @@ class AppViewModel @Inject constructor(
                 refusalReason = refusalReason,
             )
         )
+    }
+
+    private suspend fun proceedWithSwapRoutedPayment(
+        quote: PubkySwapRouteQuote,
+        contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String?,
+    ) {
+        val sendGeneration = sendStateGeneration
+        val session = sendSession
+        // A payment edited from Amount in the same sheet holds a fresh quote or none, so the result is no longer its.
+        val isSendCurrent = {
+            sendGeneration == sendStateGeneration &&
+                _sendUiState.value.paykitSwapRoute?.quote?.quoteId == quote.quoteId
+        }
+        // Read before the commit: a commit returning after dismissal must not take the next send's tags or address.
+        val tags = _sendUiState.value.selectedTags
+        val address = _sendUiState.value.address
+        val payment = pubkySwapsRouteRepo.commit(quote.quoteId).getOrElse {
+            failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
+            return
+        }
+        Logger.info("Committed Pubky Swaps route '${payment.swapId}' to '${payment.destinationAddress}'", context = TAG)
+        val holdPaymentHash = runSuspendCatching {
+            requireNotNull((coreService.decode(payment.invoice) as? Scanner.Lightning)?.invoice) {
+                "Swap hold invoice is not a Lightning invoice"
+            }.paymentHash.toHex()
+        }.getOrElse {
+            // No hold payment goes out, so the provider never funds the swap.
+            pubkySwapsRouteRepo.dropFailedSwap(payment.swapId)
+            failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
+            return
+        }
+        // A failed hold payment closes the send through the node's failure event, like a regular Lightning send.
+        if (isSendCurrent()) {
+            _sendUiState.update {
+                it.copy(paykitSwapRoute = it.paykitSwapRoute?.copy(holdPaymentHash = holdPaymentHash))
+            }
+        }
+        val tagsSaved = saveSwapRouteTags(holdPaymentHash, tags, address)
+        // Recorded before the payment goes out, so a hold failing at any point stops the swap.
+        pubkySwapsRouteRepo.watchHold(payment.swapId, holdPaymentHash)
+        val holdFailure = viewModelScope.async(start = CoroutineStart.UNDISPATCHED) {
+            lightningRepo.nodeEvents.watchUntil {
+                when (it) {
+                    is Event.PaymentFailed if it.paymentHash == holdPaymentHash -> WatchResult.Complete(it.reason)
+                    else -> WatchResult.Continue()
+                }
+            }
+        }
+        contactPaymentContext?.let {
+            synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[holdPaymentHash] = it }
+        }
+        committedSwap = CommittedSwap(session, holdPaymentHash, payment.deliveredSat)
+        swapIdsByHoldHash[holdPaymentHash] = payment.swapId
+        // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
+        lightningRepo.payInvoice(payment.invoice).onFailure {
+            // Spark may have sent it, so an unknown outcome waits on the claim like a sent hold payment.
+            if (it is PaymentPendingException) return@onFailure
+            holdFailure.cancel()
+            swapIdsByHoldHash.remove(holdPaymentHash)
+            pubkySwapsRouteRepo.dropFailedSwap(payment.swapId)
+            clearCommittedSwap(holdPaymentHash)
+            clearPendingContactPaymentContext(holdPaymentHash)
+            if (tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
+            failSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId, isSendCurrent())
+            return
+        }
+        // The provider settles the hold payment once it sees the claim, so the send waits on it as a pending Lightning
+        // payment. Pending has no way back to Amount, where a fresh quote could pay the contact a second time.
+        // A hold payment that failed before payInvoice returned already opened the error screen through its event.
+        val holdFailedEarly = holdFailure.isCompleted
+        if (!holdFailedEarly) pendingPaymentRepo.track(holdPaymentHash)
+        if (!holdFailedEarly && isSendCurrent()) {
+            synchronized(contactPaymentContextLock) { activeContactPaymentContext = null }
+            setSendEffect(
+                SendEffect.NavigateToPending(
+                    paymentHash = holdPaymentHash,
+                    amount = payment.deliveredSat.toLong(),
+                    // The provider consumed the committed quote, so a retry re-quotes from the amount.
+                    retryRoute = SendRetryRoute.Amount,
+                ),
+            )
+        }
+        // The claim wait can take minutes, so it runs outside this send's submission: other sends, backups and
+        // Paykit's background work go on meanwhile.
+        viewModelScope.launch {
+            finishSwapRoutedPayment(
+                SwapRoutedPayment(
+                    payment = payment,
+                    holdPaymentHash = holdPaymentHash,
+                    tagsSaved = tagsSaved,
+                    contactPaymentContext = contactPaymentContext,
+                    allowanceAttemptId = allowanceAttemptId,
+                    sendSession = session,
+                ),
+                holdFailure,
+                isSendCurrent,
+            )
+        }
+    }
+
+    private suspend fun finishSwapRoutedPayment(
+        swap: SwapRoutedPayment,
+        holdFailure: Deferred<PaymentFailureReason?>,
+        isSendCurrent: () -> Boolean,
+    ) {
+        val payment = swap.payment
+        val holdPaymentHash = swap.holdPaymentHash
+        // The send itself finishes on the hold payment's own events; this drives the swap to its claim.
+        val claim = try {
+            awaitSwapClaim(payment, holdFailure)
+        } finally {
+            holdFailure.cancel()
+        }
+        claim.onSuccess {
+            swapIdsByHoldHash.remove(holdPaymentHash)
+            finishManualAllowancePayment(swap.allowanceAttemptId, succeeded = true)
+            Logger.info("Claimed Pubky Swaps route '${payment.swapId}' in '$it'", context = TAG)
+        }.onFailure {
+            if (it is PubkySwapClaimTimeoutException) {
+                // The provider may still settle the hold payment, so the send stays pending on it.
+                Logger.warn("Pubky Swaps route '${payment.swapId}' outcome unknown", it, context = TAG)
+                return
+            }
+            // A failed hold payment keeps its hash on the send: its own failure handler may still be on its way to
+            // the error screen and finds the send by that hash.
+            clearSwapRouteQuote(isSendCurrent(), keepHoldPaymentHash = it is LightningPaymentFailedError)
+            clearCommittedSwap(holdPaymentHash)
+            swapIdsByHoldHash.remove(holdPaymentHash)
+            finishManualAllowancePayment(swap.allowanceAttemptId, succeeded = false)
+            clearPendingContactPaymentContext(holdPaymentHash)
+            releaseSwapPrivatePaymentList(swap.contactPaymentContext)
+            if (swap.tagsSaved) preActivityMetadataRepo.deletePreActivityMetadata(holdPaymentHash)
+            if (it is LightningPaymentFailedError) {
+                restoreSwapContact(swap)
+                return
+            }
+            // A failed swap never reveals the preimage, so its hold payment cannot settle and a retry is safe.
+            Logger.error("Failed Pubky Swaps route '${payment.swapId}'", it, context = TAG)
+            pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(holdPaymentHash))
+            if (shouldNotifyPendingResolution(holdPaymentHash)) notifyPendingPaymentFailed()
+        }
+    }
+
+    private fun restoreSwapContact(swap: SwapRoutedPayment) {
+        if (swap.sendSession != sendSession) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext == null) activeContactPaymentContext = swap.contactPaymentContext
+        }
+    }
+
+    /** A swap that failed before its hold payment went out moved no funds, so the send retries from the amount. */
+    private suspend fun failSwapRoutedPayment(
+        error: Throwable,
+        contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String?,
+        isCurrent: Boolean,
+    ) {
+        clearSwapRouteQuote(isCurrent)
+        releaseSwapPrivatePaymentList(contactPaymentContext)
+        finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+        if (!isCurrent) {
+            handlePaymentPreparationFailure(error, contactPaymentContext, isSendCurrent = false)
+            return
+        }
+        setSendEffect(
+            SendEffect.NavigateToError(
+                failure = error.toSendFailureDetails(context, paymentRequest = null),
+                retryRoute = SendRetryRoute.Amount,
+            ),
+        )
+        if (contactPaymentContext?.incomingPaymentRequest != null) {
+            viewModelScope.launch {
+                refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
+            }
+        }
+    }
+
+    private fun showCommittedSwap(): Boolean {
+        val swap = committedSwap?.takeIf { it.sendSession == sendSession } ?: return false
+        setSendEffect(
+            SendEffect.NavigateToPending(
+                paymentHash = swap.holdPaymentHash,
+                amount = swap.deliveredSat.toLong(),
+                retryRoute = SendRetryRoute.Amount,
+            ),
+        )
+        return true
+    }
+
+    private suspend fun releaseSwapPrivatePaymentList(context: ContactPaymentContext?) {
+        val privatePaymentContext = context?.privatePaymentContext ?: return
+        privatePaykitRepo.releasePrivatePaymentList(context.publicKey, privatePaymentContext)
+    }
+
+    private fun clearCommittedSwap(holdPaymentHash: String) {
+        if (committedSwap?.holdPaymentHash == holdPaymentHash) committedSwap = null
+    }
+
+    private fun releaseFailedSwapHold(paymentHash: String) {
+        // A failed hold payment paid the contact's list nothing; the swaps repo stops the swap itself.
+        swapIdsByHoldHash.remove(paymentHash)?.let {
+            val context = synchronized(contactPaymentContextLock) { pendingContactPaymentContexts[paymentHash] }
+            viewModelScope.launch { releaseSwapPrivatePaymentList(context) }
+        }
+        val swap = committedSwap?.takeIf { it.holdPaymentHash == paymentHash } ?: return
+        committedSwap = null
+        if (swap.sendSession != sendSession) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext == null) {
+                activeContactPaymentContext = pendingContactPaymentContexts[paymentHash]
+            }
+        }
+    }
+
+    private fun clearSwapRouteQuote(isSendCurrent: Boolean, keepHoldPaymentHash: Boolean = false) {
+        if (!isSendCurrent) return
+        _sendUiState.update {
+            val route = it.paykitSwapRoute
+            it.copy(
+                paykitSwapRoute = route?.copy(
+                    quote = null,
+                    providerName = null,
+                    holdPaymentHash = route.holdPaymentHash.takeIf { keepHoldPaymentHash },
+                ),
+                lightningFeeSats = 0,
+            )
+        }
+    }
+
+    private suspend fun awaitSwapClaim(
+        payment: PubkySwapRoutePayment,
+        holdFailure: Deferred<PaymentFailureReason?>,
+    ): Result<String> = coroutineScope {
+        val claim = async { pubkySwapsRouteRepo.awaitClaim(payment.swapId, holdFailure = holdFailure) }
+        select {
+            claim.onAwait { it }
+            holdFailure.onAwait {
+                Result.failure(LightningPaymentFailedError(reason = it, paymentRequest = payment.invoice))
+            }
+        }.also { claim.cancel() }
+    }
+
+    private suspend fun saveSwapRouteTags(paymentHash: String, tags: List<String>, address: String): Boolean {
+        if (tags.isEmpty()) return false
+        return preActivityMetadataRepo.savePreActivityMetadata(
+            id = paymentHash,
+            paymentHash = paymentHash,
+            address = address,
+            isReceive = false,
+            tags = tags,
+        ).isSuccess
     }
 
     private suspend fun proceedWithServiceRoutedPayment(
@@ -7706,7 +8185,7 @@ class AppViewModel @Inject constructor(
         utxosToSpend = _sendUiState.value.selectedUtxos,
         feeRates = _sendUiState.value.feeRates,
         isMaxAmount = activeIncomingPaymentRequest() == null && _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-            amount == walletRepo.balanceState.value.maxSendOnchainSats,
+            _sendUiState.value.isMaxAmount,
         tags = tags,
         requestId = requestId,
         payerIdentity = payerIdentity,
@@ -7794,7 +8273,7 @@ class AppViewModel @Inject constructor(
         job?.cancel()
     }
 
-    /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
+    /** Recheck the max sendable, reselect utxos for current amount & speed, then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
         prepare: (suspend () -> Unit)? = null,
@@ -7811,6 +8290,9 @@ class AppViewModel @Inject constructor(
 
         return launchOnchainFeeRefresh(generation, walletGeneration) {
             prepare?.invoke()
+            requireCurrentPaymentPreparation(walletGeneration)
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
+            refreshMaxSendOnchain()
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
             val currentState = _sendUiState.value
@@ -7888,6 +8370,69 @@ class AppViewModel @Inject constructor(
         job.start()
         return job
     }
+
+    /**
+     * Moves a Max send to the max sendable to this recipient at the selected speed, so the confirmed figure matches
+     * what the drain delivers. Any other amount is kept as entered and marked invalid when it no longer fits.
+     */
+    private suspend fun refreshMaxSendOnchain() {
+        val generation = sendStateGeneration
+        val state = _sendUiState.value
+        if (state.payMethod != SendMethod.ONCHAIN || state.hardwareWalletId != null) return
+        // a payment request fixes the amount, so it is never lowered to the max or sent as a drain
+        if (activeIncomingPaymentRequest() != null) return
+        if (state.amount == 0uL || state.address.isEmpty()) return
+
+        val max = lightningRepo.estimateMaxSendOnchain(
+            address = state.address,
+            speed = state.speed,
+            feeRates = state.feeRates,
+        ).getOrNull()?.takeIf { it > 0uL }
+
+        if (max == null) {
+            // the cached max is priced at the default speed, so draining on it can deliver another amount
+            _sendUiState.update {
+                if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
+                it.copy(isMaxAmount = false)
+            }
+            return
+        }
+
+        if (state.isMaxAmount) {
+            if (state.amount != max) {
+                Logger.info(
+                    "Updating max amount '${state.amount}' to '$max' at speed '${state.speed.serialized()}'",
+                    context = TAG,
+                )
+            }
+            _sendUiState.update {
+                if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
+                // validateAmount caps at the cached max, which a max at a cheaper speed can exceed
+                it.copy(amount = max, isAmountInputValid = max > Defaults.dustLimit.toULong())
+            }
+            return
+        }
+
+        val isAmountInputValid = state.amount <= max && validateAmount(state.amount, state.payMethod)
+        _sendUiState.update {
+            if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
+            it.copy(isAmountInputValid = isAmountInputValid)
+        }
+        if (state.amount <= max || generation != sendStateGeneration || _sendUiState.value.divergedFrom(state)) return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_insufficient_savings),
+            description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
+                .replace("{amount}", formatMoneyValue(state.amount.safe() - max.safe())),
+            testTag = "InsufficientSavingsToast",
+        )
+    }
+
+    private fun SendUiState.divergedFrom(snapshot: SendUiState) = amount != snapshot.amount ||
+        payMethod != snapshot.payMethod ||
+        address != snapshot.address ||
+        speed != snapshot.speed ||
+        hardwareWalletId != snapshot.hardwareWalletId
 
     /**
      * With [selectedSpeedOnly], only the selected speed's fee is estimated and `estimates` is left
@@ -8062,6 +8607,7 @@ class AppViewModel @Inject constructor(
         val hardwareAvailableSats = hardwareWalletId?.let { hardwareEstimatedAvailable(it, speed, rates) } ?: 0uL
         if (!canPrepareSend(walletGeneration)) return false
         sendStateGeneration++
+        sendSession++
         addressValidationJob?.cancel()
         paykitReviewedAmount = null
         paykitAmountConversion = PaykitAmountConversion()
@@ -8325,6 +8871,10 @@ class AppViewModel @Inject constructor(
         }
         if (_currentSheet.value is Sheet.Send) {
             sendStateGeneration++
+            // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
+            sendSession++
+            // A payment still running for the dismissed send, like a slow swap commit, must not block the next.
+            if (confirmedPaymentSubmission != null) releaseConfirmedPaymentSubmission()
             cancelHardwarePaymentRequestIfNeeded()
             resetQuickPay()
             quickPayRepo.detachAll()
@@ -8535,11 +9085,11 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
-        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive ||
-            !_sendUiState.value.isHardwareFeeReady
-        ) {
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) {
+            _sendUiState.update { it.copy(shouldConfirmPay = false) }
             return
         }
+        if (!_sendUiState.value.isHardwareFeeReady) return
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -8554,6 +9104,7 @@ class AppViewModel @Inject constructor(
             return
         }
         isSoftwarePaymentSubmissionActive = true
+        val submission = Any().also { confirmedPaymentSubmission = it }
         viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             val finishSubmission = beginPaymentSubmission()
             try {
@@ -8561,10 +9112,15 @@ class AppViewModel @Inject constructor(
                 proceedWithPayment(contactPaymentContext)
             } finally {
                 finishSubmission()
-                isSubmittingPaymentRequest = false
-                isSoftwarePaymentSubmissionActive = false
+                if (confirmedPaymentSubmission === submission) releaseConfirmedPaymentSubmission()
             }
         }
+    }
+
+    private fun releaseConfirmedPaymentSubmission() {
+        confirmedPaymentSubmission = null
+        isSubmittingPaymentRequest = false
+        isSoftwarePaymentSubmissionActive = false
     }
 
     override fun onCleared() {
@@ -9223,8 +9779,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun handlePaymentPreparationFailure(error: Throwable, contactPaymentContext: ContactPaymentContext?) {
-        if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
+    private fun handlePaymentPreparationFailure(
+        error: Throwable,
+        contactPaymentContext: ContactPaymentContext?,
+        isSendCurrent: Boolean = true,
+    ) {
+        if (isSendCurrent && contactPaymentContext?.isInitialSubscriptionPayment == true) {
             setSendEffect(
                 SendEffect.NavigateToError(
                     error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
@@ -9232,7 +9792,7 @@ class AppViewModel @Inject constructor(
             )
         } else {
             toast(error)
-            hideSheet()
+            if (isSendCurrent) hideSheet()
         }
         if (contactPaymentContext?.incomingPaymentRequest != null) {
             viewModelScope.launch {
@@ -9628,6 +10188,7 @@ data class SendUiState(
     val isAddressInputValid: Boolean = false,
     val amount: ULong = 0u,
     val isAmountInputValid: Boolean = false,
+    val isMaxAmount: Boolean = false,
     val isUnified: Boolean = false,
     val canSwitchWallet: Boolean = false,
     val canSwitchFundingSource: Boolean = false,
@@ -9670,8 +10231,13 @@ data class SendUiState(
     val fixedOnchainAmount: ULong? = null,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
+    val paykitSwapRoute: PaykitSwapRouteUi? = null,
     val paykitRoute: PaykitRouteUi? = null,
 ) {
+    /** The swap route while Spending pays: picking another funding source pays that source directly. */
+    val activePaykitSwapRoute: PaykitSwapRouteUi?
+        get() = paykitSwapRoute?.takeIf { payMethod == SendMethod.LIGHTNING && hardwareWalletId == null }
+
     /** The Paykit route this payment takes: a Spark leg runs only while Spending is the source. */
     val routedPaykitRoute: PaykitRouteUi?
         get() = paykitRoute?.takeIf { payMethod == SendMethod.LIGHTNING }
@@ -9708,6 +10274,15 @@ data class SendUiState(
             !initialSubscriptionPaymentNeedsConfirmation && !requiresAmountReview
 }
 
+/** A Paykit payment routed through a Pubky Swaps provider: the endpoint, the route once quoted, and its provider. */
+@Stable
+data class PaykitSwapRouteUi(
+    val endpoint: PaykitEndpoint,
+    val quote: PubkySwapRouteQuote? = null,
+    val providerName: String? = null,
+    val holdPaymentHash: String? = null,
+)
+
 /**
  * A contact payment bitkit-core's router picks the way for: the contact's bitcoin endpoints, whether a Spark leg may
  * reach its on-chain ones, the leg once the router picked one, and the decoded invoice and LNURL a Direct pick pays.
@@ -9721,7 +10296,7 @@ data class PaykitRouteUi(
     val lnurl: LnurlParams.LnurlPay? = null,
 )
 
-private enum class PaykitRouteOutcome { Direct, Leg, Refused, Stale }
+private enum class PaykitRouteOutcome { Direct, Leg, Refused, Stale, SwapFallback }
 
 private fun PaykitEndpoint.isOnchain(): Boolean = MethodId.fromRawValue(methodId)?.isOnchain == true
 
@@ -9834,13 +10409,17 @@ sealed class SendEffect {
     data object NavigateToContacts : SendEffect()
     data object NavigateToComingSoon : SendEffect()
     data object PaymentSuccess : SendEffect()
-    data class NavigateToError(val failure: SendFailureDetails) : SendEffect()
+    data class NavigateToError(
+        val failure: SendFailureDetails,
+        val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
+    ) : SendEffect()
     data class NavigateToPending(
         val paymentHash: String,
         val amount: Long,
         val observeResolution: Boolean = true,
         val isOnchain: Boolean = false,
         val refusalReason: String? = null,
+        val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
     ) : SendEffect()
 }
 
@@ -9867,6 +10446,7 @@ sealed interface SendEvent {
     data object AmountReset : SendEvent
     data object AmountContinue : SendEvent
     data class AmountChange(val amount: ULong) : SendEvent
+    data class AmountMax(val amount: ULong) : SendEvent
 
     data class CoinSelectionContinue(val utxos: List<SpendableUtxo>) : SendEvent
 
@@ -9887,6 +10467,21 @@ sealed interface SendEvent {
     data object NavToAddress : SendEvent
     data object Contacts : SendEvent
 }
+
+private data class SwapRoutedPayment(
+    val payment: PubkySwapRoutePayment,
+    val holdPaymentHash: String,
+    val tagsSaved: Boolean,
+    val contactPaymentContext: ContactPaymentContext?,
+    val allowanceAttemptId: String?,
+    val sendSession: Long,
+)
+
+private data class CommittedSwap(
+    val sendSession: Long,
+    val holdPaymentHash: String,
+    val deliveredSat: ULong,
+)
 
 private class LightningPaymentFailedError(
     val reason: PaymentFailureReason?,

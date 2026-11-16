@@ -1078,8 +1078,8 @@ class BackupRepo @Inject constructor(
                 connectionSession.replay()
                 prepareUsdtRecoveryRestore()
                 // Armed before any category, so a restore whose metadata is missing or unreadable holds each rail off
-                // invoices from before it too: until that rail lists its own sends, and, for one Spark hasn't listed,
-                // until the invoice expires.
+                // invoices from before it too: Spark until the node lists its own sends, and both rails off one Spark
+                // hasn't listed, until the Spark operators show it unsent or it expires.
                 val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
                 cacheStore.update {
                     it.copy(
