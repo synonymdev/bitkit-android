@@ -9,22 +9,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
-import to.bitkit.ext.filterOpen
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.MoveToSparkError
 import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.MoveToSparkOutcome
 import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.usecases.CloseChannelUseCase
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Holds the Move to Spark screen's state for the app's lifetime, so a move and its outcome outlive the screen: leaving
- * while the payment is under way no longer stops the wait, and opening the screen again shows that move.
+ * Holds the Update Spending Balance modal's state for the app's lifetime, so a move and its outcome outlive the modal:
+ * leaving while the payment is under way no longer stops the wait, and opening the modal again shows that move. Once a
+ * move settles, it closes the channels the move emptied.
  */
 @Singleton
 class MoveToSparkManager @Inject constructor(
@@ -32,6 +34,7 @@ class MoveToSparkManager @Inject constructor(
     private val moveToSparkRepo: MoveToSparkRepo,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
+    private val closeChannelUseCase: CloseChannelUseCase,
 ) {
     companion object {
         private const val TAG = "MoveToSparkManager"
@@ -107,6 +110,7 @@ class MoveToSparkManager @Inject constructor(
         val confirm = _uiState.value as? MoveToSparkUiState.Confirm ?: return
         if (confirm.isMoving) return
         val quote = confirm.quote
+        val channelsBefore = lightningRepo.lightningState.value.channels.toList()
         val moveGeneration = generation.incrementAndGet()
         keepsOutcome = true
         isMoveInFlight = true
@@ -120,7 +124,11 @@ class MoveToSparkManager @Inject constructor(
                         }
                         val done = done(outcome)
                         if (generation.get() == moveGeneration) _uiState.update { done }
-                        settled?.await()?.let { showLateOutcome(it, moveGeneration) }
+                        if (outcome is MoveToSparkOutcome.Moved) closeEmptied(channelsBefore)
+                        settled?.await()?.let {
+                            showLateOutcome(it, moveGeneration)
+                            if (it.isSuccess) closeEmptied(channelsBefore)
+                        }
                     },
                     onFailure = { error ->
                         if (generation.get() == moveGeneration) _uiState.update { error.toUiState() }
@@ -135,7 +143,14 @@ class MoveToSparkManager @Inject constructor(
     private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done {
         walletRepo.syncNodeAndWallet()
         val hasRest = MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
-        return MoveToSparkUiState.Done(outcome, emptiedChannelId(), hasRest)
+        return MoveToSparkUiState.Done(outcome, hasRest)
+    }
+
+    private fun closeEmptied(channelsBefore: List<ChannelDetails>) {
+        scope.launch {
+            walletRepo.syncNodeAndWallet()
+            closeChannelUseCase.closeEmptiedByMove(channelsBefore)
+        }
     }
 
     private suspend fun showLateOutcome(settled: Result<MoveToSparkOutcome.Moved>, moveGeneration: Int) {
@@ -149,10 +164,6 @@ class MoveToSparkManager @Inject constructor(
 
     private fun MoveToSparkUiState.isInFlight(): Boolean =
         this is MoveToSparkUiState.Done && outcome is MoveToSparkOutcome.InFlight
-
-    /** The channel to close after the move, when exactly one is open; with several, the user picks in Connections. */
-    private fun emptiedChannelId(): String? = lightningRepo.lightningState.value.channels.filterOpen()
-        .singleOrNull()?.channelId
 
     private fun Throwable.toUiState(): MoveToSparkUiState = when (this) {
         is MoveToSparkError.TooLarge -> MoveToSparkUiState.TooLarge(

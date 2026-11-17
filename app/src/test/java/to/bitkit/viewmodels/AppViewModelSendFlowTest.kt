@@ -173,6 +173,10 @@ import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.MoveToSparkError
+import to.bitkit.repositories.MoveToSparkOutcome
+import to.bitkit.repositories.MoveToSparkQuote
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
@@ -262,6 +266,7 @@ import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.NumberPadInputHandler
 import to.bitkit.ui.utils.ScreenDeepLinks
+import to.bitkit.usecases.CloseChannelUseCase
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.KeepContactPaymentsOnUseCase
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
@@ -313,6 +318,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val notifyChannelReadyHandler = mock<NotifyChannelReadyHandler>()
     private val cacheStore = mock<CacheStore>()
     private val quickPayRepo = mock<QuickPayRepo>()
+    private val moveToSparkRepo = mock<MoveToSparkRepo> {
+        on { canMove } doReturn emptyFlow()
+        onBlocking { isMovePayment(any()) } doReturn false
+    }
+    private val closeChannelUseCase = mock<CloseChannelUseCase>()
     private val quickPayUnhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val transferRepo = mock<TransferRepo>()
     private val sparkExitRepo = mock<SparkExitRepo>()
@@ -1045,10 +1055,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             on { type } doReturn TimedSheetType.MOVE_TO_SPARK
             onBlocking { shouldShow() } doReturn false
         },
-        moveToSparkRepo = mock {
-            on { canMove } doReturn emptyFlow()
-            onBlocking { isMovePayment(any()) } doReturn false
-        },
+        moveToSparkRepo = moveToSparkRepo,
+        closeChannelUseCase = closeChannelUseCase,
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         wakeRepo = wakeRepo,
@@ -20517,6 +20525,131 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         field.isAccessible = true
         val contexts = field.get(sut) as MutableMap<String, ContactPaymentContext>
         return contexts[paymentHash]
+    }
+
+    @Test
+    fun `a payment that fits only across channels and spark updates the spending balance before paying`() = test {
+        val bolt11 = "lnbcrt1update"
+        val quote = MoveToSparkQuote("lnbcrt1spark", amountSats = 50_000uL, feeSats = 12uL)
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        val moved = MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL)
+        whenever(moveToSparkRepo.updateToSend(eq(quote), eq(60_000uL), any())).thenReturn(Result.success(moved))
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success("010203"))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = quote,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        val onMove = argumentCaptor<(MoveToSparkOutcome) -> Unit>()
+        inOrder(moveToSparkRepo, lightningRepo) {
+            verify(moveToSparkRepo).updateToSend(eq(quote), eq(60_000uL), onMove.capture())
+            verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+        }
+        onMove.firstValue(moved)
+        advanceUntilIdle()
+        verify(closeChannelUseCase).closeEmptiedByMove(any())
+    }
+
+    @Test
+    fun `a failed spending balance update shows the payment error and pays nothing`() = test {
+        val bolt11 = "lnbcrt1updatefails"
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
+            .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+    }
+
+    @Test
+    fun `a settled move closes the emptied channels even when the payment after it fails`() = test {
+        val bolt11 = "lnbcrt1movedunsettled"
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
+            .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        val onMove = argumentCaptor<(MoveToSparkOutcome) -> Unit>()
+        verify(moveToSparkRepo).updateToSend(anyOrNull(), eq(60_000uL), onMove.capture())
+        onMove.firstValue(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL))
+        advanceUntilIdle()
+        verify(closeChannelUseCase).closeEmptiedByMove(any())
+    }
+
+    @Test
+    fun `an in-flight move closes the emptied channels once it settles`() = test {
+        val bolt11 = "lnbcrt1inflight"
+        val inFlight = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash", paymentId = "id")
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
+            .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
+        whenever(moveToSparkRepo.awaitSettled(inFlight))
+            .thenReturn(Result.success(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL)))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        val onMove = argumentCaptor<(MoveToSparkOutcome) -> Unit>()
+        verify(moveToSparkRepo).updateToSend(anyOrNull(), eq(60_000uL), onMove.capture())
+        onMove.firstValue(inFlight)
+        advanceUntilIdle()
+        verify(moveToSparkRepo).awaitSettled(inFlight)
+        verify(closeChannelUseCase).closeEmptiedByMove(any())
+    }
+
+    @Test
+    fun `a payment that needs the update is never sent by QuickPay`() = test {
+        val bolt11 = "lnbcrt1quickpayupdate"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(moveToSparkRepo.needsUpdateToSend(500uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(MoveToSparkQuote("lnbcrt1spark", 500uL, 1uL)))
+        whenever(moveToSparkRepo.estimateFeeAfterUpdate(bolt11, 500uL)).thenReturn(2uL)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(quickPayRepo, never()).canApply(any<ULong>())
     }
 
     @Suppress("UNCHECKED_CAST")

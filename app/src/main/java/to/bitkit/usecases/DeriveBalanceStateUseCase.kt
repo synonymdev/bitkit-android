@@ -13,13 +13,13 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
-import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BalanceState
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.models.toBalance
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
@@ -65,11 +65,8 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 totalOnchainSats = totalOnchainSats,
                 channelFundableBalance = channelFundableBalance,
                 totalLightningSats = totalLightningSats,
-                // A payment goes over one rail, so the larger of the two balances caps it; Spark keeps its fee.
-                maxSendLightningSats = maxOf(
-                    lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
-                    sparkRepo.state.value.sendableSats,
-                ),
+                // A payment goes over one rail, or over Spark once the channels' balance is updated to it.
+                maxSendLightningSats = MoveToSparkMath.maxSendSats(lightningRepo.getChannels(), sparkRepo.state.value),
                 maxSendOnchainSats = getMaxSendAmount(balanceDetails),
                 balanceInTransferToSavings = (toSavingsAmount.safe() - coopCloseSavingsSats.safe()).safe() +
                     sparkExitSats.safe(),

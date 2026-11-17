@@ -41,7 +41,6 @@ import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
-import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
@@ -449,7 +448,7 @@ class WalletRepo @Inject constructor(
     fun refreshMaxSendLightning() {
         val state = lightningRepo.lightningState.value
         if (!state.nodeLifecycleState.isRunning()) return
-        val maxSendSats = maxOf(state.channels.totalNextOutboundHtlcLimitSats(), sparkRepo.state.value.sendableSats)
+        val maxSendSats = MoveToSparkMath.maxSendSats(state.channels, sparkRepo.state.value)
         _balanceState.update { it.copy(maxSendLightningSats = maxSendSats) }
     }
 
@@ -1029,10 +1028,6 @@ class WalletRepo @Inject constructor(
 
     /** Spark receives any amount without inbound liquidity, so no channel or CJIT is needed. */
     fun canReceiveWithSpark(): Boolean = sparkRepo.canReceive()
-
-    suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
-        return@withContext currentReadyChannels().calculateRemoteBalance()
-    }
 
     private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
         if (sparkRepo.canReceive()) return true

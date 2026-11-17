@@ -73,7 +73,7 @@ class SendConfirmLnurlOnchainTest {
             ),
         )
 
-        composeRule.onNodeWithTag("ReviewSwapRoute").assertExists()
+        composeRule.onNodeWithTag("ReviewSwapRoute").assertDoesNotExist()
         composeRule.onNodeWithTag("ReviewUri").assertTextEquals(ADDRESS)
     }
 
@@ -100,7 +100,7 @@ class SendConfirmLnurlOnchainTest {
             ),
         )
 
-        composeRule.onNodeWithTag("ReviewSwapRoute").assertExists()
+        composeRule.onNodeWithTag("ReviewSwapRoute").assertDoesNotExist()
         composeRule.onNodeWithTag("CommentInput").assertDoesNotExist()
         composeRule.onNodeWithTag("TagsAddSend").assertExists()
     }

@@ -24,9 +24,11 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.LdkError
+import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -301,5 +303,151 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         direction = PaymentDirection.OUTBOUND,
         status = status,
         latestUpdateTimestamp = 0uL,
+    )
+
+    @Test
+    fun `combined sendable is what Spark can send once the channels' balance less the fee guess moved`() {
+        val channels = listOf(channel("c1", 100_000uL))
+
+        val combined = MoveToSparkMath.combinedSendableSats(
+            channels,
+            SparkState(isReady = true, balanceSats = 50_000uL)
+        )
+
+        // The fee guess on 100 000 sats is 500, so 99 498 move; Spark keeps 0.25% of 149 498.
+        assertEquals(149_125uL, combined)
+    }
+
+    @Test
+    fun `combined sendable is zero without a usable Spark or a balance worth moving`() {
+        val channels = listOf(channel("c1", 100_000uL))
+        assertEquals(0uL, MoveToSparkMath.combinedSendableSats(channels, SparkState(isReady = false)))
+        assertEquals(0uL, MoveToSparkMath.combinedSendableSats(channels, SparkState(isReady = true, isExiting = true)))
+        assertEquals(0uL, MoveToSparkMath.combinedSendableSats(emptyList(), SparkState(isReady = true)))
+    }
+
+    @Test
+    fun `a payment needs the update only above both rails and within the combined balance`() {
+        val channels = listOf(channel("c1", 100_000uL))
+        val spark = SparkState(isReady = true, balanceSats = 50_000uL)
+
+        assertTrue(!MoveToSparkMath.needsUpdateToSend(100_000uL, channels, spark))
+        assertTrue(!MoveToSparkMath.needsUpdateToSend(spark.sendableSats, channels, spark))
+        assertTrue(MoveToSparkMath.needsUpdateToSend(100_001uL, channels, spark))
+        assertTrue(MoveToSparkMath.needsUpdateToSend(149_125uL, channels, spark))
+        assertTrue(!MoveToSparkMath.needsUpdateToSend(149_126uL, channels, spark))
+    }
+
+    @Test
+    fun `max send counts the combined balance`() {
+        val channels = listOf(channel("c1", 100_000uL))
+        val spark = SparkState(isReady = true, balanceSats = 50_000uL)
+
+        assertEquals(149_125uL, MoveToSparkMath.maxSendSats(channels, spark))
+        assertEquals(100_000uL, MoveToSparkMath.maxSendSats(channels, SparkState(isReady = false)))
+    }
+
+    @Test
+    fun `emptied channels are the open ones a move took from the minimum to below it`() {
+        val before = listOf(
+            channel("emptied", 50_000uL),
+            channel("small", 500uL),
+            channel("kept", 20_000uL),
+        )
+        val after = listOf(
+            channel("emptied", 0uL),
+            channel("small", 0uL),
+            channel("kept", 10_000uL),
+            channel("new", 0uL),
+            channel("emptied_pending", 0uL).copy(isChannelReady = false),
+        )
+
+        assertEquals(listOf("emptied"), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
+    }
+
+    @Test
+    fun `combined amounts keep their invariants for generated balances`() {
+        val random = Random(seed = 64)
+        repeat(1_000) {
+            val channels = List(random.nextInt(0, 4)) { index ->
+                channel("c$index", random.nextLong(0L, 2_000_000L).toULong())
+            }
+            val spark = SparkState(
+                isReady = random.nextBoolean(),
+                isExiting = random.nextInt(10) == 0,
+                balanceSats = random.nextLong(0L, 2_000_000L).toULong(),
+            )
+            val movable = MoveToSparkMath.movableSats(channels)
+            val combined = MoveToSparkMath.combinedSendableSats(channels, spark)
+            val max = MoveToSparkMath.maxSendSats(channels, spark)
+
+            assertTrue(combined <= SparkFees.sendableSats(spark.balanceSats + movable), "combined '$combined'")
+            assertTrue(max >= movable && max >= spark.sendableSats && max >= combined, "max '$max'")
+            if (MoveToSparkMath.canMove(channels, spark)) assertTrue(combined >= spark.sendableSats)
+            val amount = random.nextLong(1L, 4_000_000L).toULong()
+            if (MoveToSparkMath.needsUpdateToSend(amount, channels, spark)) {
+                assertTrue(amount > movable && amount <= combined && amount <= max, "amount '$amount'")
+            }
+        }
+    }
+
+    @Test
+    fun `update to send moves the balance, then waits until Spark can pay`() = test {
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        whenever(sparkRepo.canSend(60_000uL)).thenReturn(false, false, true)
+        whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
+        val updating = async { sut.updateToSend(quote, 60_000uL) }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), updating.await().getOrThrow())
+        verify(sparkRepo).refreshState()
+    }
+
+    @Test
+    fun `update to send fails as unsettled while the move is in flight`() = test {
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+
+        var moved: MoveToSparkOutcome? = null
+
+        val result = sut.updateToSend(quote, 60_000uL) { moved = it }
+
+        assertIs<MoveToSparkError.UpdateUnsettled>(result.exceptionOrNull())
+        assertIs<MoveToSparkOutcome.InFlight>(moved)
+        verify(sparkRepo, never()).refreshState()
+    }
+
+    @Test
+    fun `update to send reports a settled move even when Spark never shows the balance`() = test {
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        whenever(sparkRepo.canSend(60_000uL)).thenReturn(false)
+        whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
+        var moved: MoveToSparkOutcome? = null
+        val updating = async { sut.updateToSend(quote, 60_000uL) { moved = it } }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertIs<MoveToSparkError.UpdateUnsettled>(updating.await().exceptionOrNull())
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), moved)
+    }
+
+    @Test
+    fun `the fee after an update falls back to Spark's service fee when Spark cannot price it yet`() = test {
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
+
+        assertEquals(SparkFees.serviceFeeSats(60_000uL), sut.estimateFeeAfterUpdate(INVOICE, 60_000uL))
+    }
+
+    private fun channel(id: String, sendableSats: ULong) = createChannelDetails().copy(
+        channelId = id,
+        isUsable = true,
+        isChannelReady = true,
+        nextOutboundHtlcLimitMsat = sendableSats * 1000uL,
     )
 }

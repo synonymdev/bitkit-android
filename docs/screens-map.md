@@ -189,7 +189,6 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | EditInvoiceScreen.kt | Send (Contact) (Lightning) › Edit invoice populated |
 | ReceiveQrScreen.kt | Receive Lightning Active › Receive Auto (Unified QR) |
-| TransferUnavailableScreen.kt | `todo` |
 
 ## ui/screens/wallets/send
 
@@ -316,7 +315,6 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | ChannelDetailScreen.kt | Settings > Advanced › Connection details |
 | CloseConnectionScreen.kt | Settings > Advanced › Close connection |
 | LightningConnectionsScreen.kt | Settings > Advanced › Lightning Connections overview |
-| MoveToSparkScreen.kt | `todo` |
 | SparkDetailScreen.kt | `todo` |
 | SparkExitConfirmScreen.kt | `todo` |
 | SparkExitFeeBumpScreen.kt | `todo` |
@@ -369,3 +367,7 @@ Amount entry stays in dollars with a BTC equivalent; QR and shared payment amoun
 `UsdtIntroSheet.kt` implements [New: USDT](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50228-146387). `SettingsScreen.kt` includes the [USDT (Tether) switch](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=48063-277709). Both are covered by `journeys/usdt-opt-in.xml`.
 
 `UsdtNetworkPicker.kt` shares the receive network rows with the [send network sheet](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50231-146880); all available routes remain scrollable.
+
+### Update spending balance
+
+`MoveToSparkSheet.kt` implements [Modal Update Spending Balance](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=52052-404808) and [Spending Balance Updated](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=52052-409823) in Wallet Lightning - Transfer to Spending Balance. Its in-flight, move-rest, too-large and failed states have no frame and keep their earlier copy in the same sheet. Covered by `journeys/transfer/move-to-spark.xml`; the update before a payment is covered by `journeys/send/update-spending-balance-payment.xml`.

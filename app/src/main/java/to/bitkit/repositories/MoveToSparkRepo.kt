@@ -4,11 +4,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
@@ -19,8 +22,10 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.filterOpen
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
@@ -57,6 +62,12 @@ class MoveToSparkRepo internal constructor(
         /** How often a move waiting past its timeout reads the node's stored payment again, as the node may be down. */
         private val STORED_PAYMENT_RECHECK = 30.seconds
 
+        /** How long a payment after an update waits for Spark to show the moved balance. */
+        private val SPARK_BALANCE_WAIT = 1.minutes
+
+        /** How often that wait reads Spark's balance again. */
+        private val SPARK_BALANCE_RECHECK = 2.seconds
+
         /** The failures that mean no route carried the amount, so a smaller one may route. */
         private val NO_ROUTE_REASONS =
             setOf(PaymentFailureReason.ROUTE_NOT_FOUND, PaymentFailureReason.RETRIES_EXHAUSTED)
@@ -71,6 +82,9 @@ class MoveToSparkRepo internal constructor(
     ) : this(bgDispatcher, lightningRepo, sparkRepo, cacheStore, { Bolt11Invoice.fromStr(it).paymentHash() })
 
     private val watchedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
+
+    /** One move at a time: the modal's and a payment's update would otherwise pay from the same channel balance. */
+    private val moveLock = Mutex()
     private val reportedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
     /**
@@ -97,6 +111,61 @@ class MoveToSparkRepo internal constructor(
 
     /** The most the channels can send now, before routing fees. */
     fun movableSats(): ULong = MoveToSparkMath.movableSats(lightningRepo.lightningState.value.channels)
+
+    /** The most a Lightning payment can send once the channels' balance is updated to Spark first. */
+    fun combinedSendableSats(): ULong = MoveToSparkMath.combinedSendableSats(
+        channels = lightningRepo.lightningState.value.channels.takeIf { canRunNode() },
+        spark = sparkRepo.state.value,
+    )
+
+    /** Whether paying [amountSats] needs the channels' balance updated to Spark first, as neither rail covers it. */
+    fun needsUpdateToSend(amountSats: ULong): Boolean = MoveToSparkMath.needsUpdateToSend(
+        amountSats = amountSats,
+        channels = lightningRepo.lightningState.value.channels.takeIf { canRunNode() },
+        spark = sparkRepo.state.value,
+    )
+
+    private fun canRunNode(): Boolean = lightningRepo.lightningState.value.nodeLifecycleState.canRun()
+
+    /**
+     * Updates the spending balance for a payment of [amountSats]: moves the channels' balance to Spark with
+     * [knownQuote], or a new quote, and waits until Spark can pay the amount. A move still in flight, or a balance
+     * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
+     * own. [onMove] gets the move's outcome as soon as the move returns, before the wait.
+     */
+    suspend fun updateToSend(
+        knownQuote: MoveToSparkQuote?,
+        amountSats: ULong,
+        onMove: (MoveToSparkOutcome) -> Unit = {},
+    ): Result<MoveToSparkOutcome.Moved> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val usedQuote = knownQuote ?: quote().getOrThrow()
+                val outcome = move(usedQuote).getOrThrow().also(onMove)
+                val moved = outcome as? MoveToSparkOutcome.Moved ?: throw MoveToSparkError.UpdateUnsettled()
+                val shown = withTimeoutOrNull(SPARK_BALANCE_WAIT) {
+                    while (!sparkRepo.canSend(amountSats)) {
+                        sparkRepo.refreshState()
+                        if (!sparkRepo.canSend(amountSats)) delay(SPARK_BALANCE_RECHECK)
+                    }
+                }
+                if (shown == null) throw MoveToSparkError.UpdateUnsettled()
+                moved
+            }.onFailure {
+                Logger.warn("Failed to update the spending balance for '$amountSats' sats", it, context = TAG)
+            }
+        }
+
+    /**
+     * The fee Spark charges for paying [bolt11] once the spending balance is updated; Spark's service fee alone when
+     * Spark cannot price it before the moved balance arrives.
+     */
+    suspend fun estimateFeeAfterUpdate(bolt11: String, amountSats: ULong): ULong = withContext(bgDispatcher) {
+        sparkRepo.estimateFeeSats(bolt11, amountSats).getOrElse {
+            Logger.debug("Fell back to Spark's service fee for an update payment", context = TAG)
+            SparkFees.serviceFeeSats(amountSats)
+        }
+    }
 
     /**
      * Quotes moving [targetSats], or everything the channels can send, to a new Spark invoice.
@@ -138,13 +207,15 @@ class MoveToSparkRepo internal constructor(
     /** Pays [quote] over the channels and waits for it to settle in Spark. */
     suspend fun move(quote: MoveToSparkQuote): Result<MoveToSparkOutcome> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val paymentHash = paymentHashOf(quote.invoice)
-            cacheStore.addMoveToSparkHash(paymentHash)
-            watchedPaymentHashes += paymentHash
-            try {
-                payAndWait(quote, paymentHash)
-            } finally {
-                watchedPaymentHashes -= paymentHash
+            moveLock.withLock {
+                val paymentHash = paymentHashOf(quote.invoice)
+                cacheStore.addMoveToSparkHash(paymentHash)
+                watchedPaymentHashes += paymentHash
+                try {
+                    payAndWait(quote, paymentHash)
+                } finally {
+                    watchedPaymentHashes -= paymentHash
+                }
             }
         }.onFailure {
             Logger.error("Failed to move '${quote.amountSats}' sats to Spark", it, context = TAG)
@@ -288,8 +359,37 @@ object MoveToSparkMath {
     /** The routing fee cap for the payment: exactly the quoted fee, so it never pays more than shown. */
     fun feeCapMsat(feeSats: ULong): ULong = feeSats.safe() * 1000uL.safe()
 
+    /** The most a Lightning payment can send: over the channels, from Spark, or from Spark after an update. */
+    fun maxSendSats(channels: List<ChannelDetails>?, spark: SparkState): ULong =
+        maxOf(movableSats(channels), spark.sendableSats, combinedSendableSats(channels, spark))
+
     /** The smaller amount to offer after one did not route: half of it, or nothing below the minimum. */
     fun smallerAmount(sats: ULong): ULong? = (sats / 2uL).takeIf { it >= MIN_MOVE_SATS }
+
+    /**
+     * The most Spark can send once the channels' balance less a guessed routing fee has moved to it; 0 when nothing
+     * can move.
+     */
+    fun combinedSendableSats(channels: List<ChannelDetails>?, spark: SparkState): ULong {
+        if (!canMove(channels, spark)) return 0uL
+        val limitSats = movableSats(channels)
+        return SparkFees.sendableSats(spark.balanceSats.safe() + firstCandidate(limitSats, limitSats).safe())
+    }
+
+    /** Whether [amountSats] fits neither the channels nor Spark alone, but fits Spark once the channels moved to it. */
+    fun needsUpdateToSend(amountSats: ULong, channels: List<ChannelDetails>?, spark: SparkState): Boolean {
+        val singleRailSats = maxOf(movableSats(channels), spark.sendableSats.takeIf { spark.isReady } ?: 0uL)
+        return amountSats > singleRailSats && amountSats <= combinedSendableSats(channels, spark)
+    }
+
+    /** The open channels in [after] that could send at least [MIN_MOVE_SATS] in [before] and no longer can. */
+    fun emptiedChannels(before: List<ChannelDetails>, after: List<ChannelDetails>?): List<ChannelDetails> {
+        val beforeSats = before.associate { it.channelId to msatFloorOf(it.nextOutboundHtlcLimitMsat) }
+        return after.orEmpty().filterOpen().filter {
+            val wasSats = beforeSats[it.channelId] ?: return@filter false
+            wasSats >= MIN_MOVE_SATS && msatFloorOf(it.nextOutboundHtlcLimitMsat) < MIN_MOVE_SATS
+        }
+    }
 }
 
 data class MoveToSparkQuote(
@@ -321,6 +421,9 @@ sealed class MoveToSparkError(message: String, cause: Throwable? = null) : AppEr
         cause: Throwable? = null,
         val reason: PaymentFailureReason? = null,
     ) : MoveToSparkError("Could not route '$amountSats' sats to Spark, reason '$reason'", cause)
+
+    /** The update moved the balance, but Spark cannot pay with it yet: the move or Spark's balance has not settled. */
+    class UpdateUnsettled : MoveToSparkError("The update to Spark has not settled yet")
 
     /** The payment failed for a reason other than its route, such as an expired invoice. */
     class PaymentFailed(val reason: PaymentFailureReason?) : MoveToSparkError("Failed to pay Spark, reason '$reason'")

@@ -878,6 +878,8 @@ private fun LightningDetails(
             }
         }
 
+        UpdateFeeCell(uiState.sparkUpdateQuote?.feeSats)
+
         val swapRoute = uiState.paykitSwapRoute
         val swapQuote = swapRoute?.quote
         if (swapQuote != null) {
@@ -886,14 +888,6 @@ private fun LightningDetails(
             SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
                 BodySSB(
                     text = stringResource(R.string.wallet__send_swap_route_provider, provider),
-                    maxLines = 1,
-                    modifier = Modifier.testTag("ReviewSwapRoute")
-                )
-            }
-        } else if (uiState.routedPaykitRoute?.serviceLeg != null) {
-            SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
-                BodySSB(
-                    text = stringResource(R.string.wallet__send_swap_route_spark),
                     maxLines = 1,
                     modifier = Modifier.testTag("ReviewSwapRoute")
                 )
@@ -1001,6 +995,8 @@ private fun LnurlPayDetails(
                     } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
             }
         }
+
+        UpdateFeeCell(uiState.sparkUpdateQuote?.feeSats)
 
         if (lnurlPay.data.commentAllowed()) {
             LnurlCommentSection(uiState, onEvent)
@@ -1363,5 +1359,20 @@ private fun PreviewNodeNotRunning() {
                 modifier = Modifier.sheetHeight(),
             )
         }
+    }
+}
+
+/** The fee of the spending balance update a payment that fits only across the channels and Spark runs first. */
+@Composable
+private fun UpdateFeeCell(feeSats: ULong?) {
+    if (feeSats == null) return
+    SendCell(caption = stringResource(R.string.wallet__send_update_fee)) {
+        BodySSB(
+            text = (rememberMoneyText(feeSats.toLong(), showSymbol = true) ?: "").withAccent(
+                accentColor = Colors.White
+            ),
+            maxLines = 1,
+            modifier = Modifier.testTag("ReviewUpdateFee")
+        )
     }
 }

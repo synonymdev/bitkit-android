@@ -88,6 +88,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
@@ -184,6 +185,8 @@ import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.MoveToSparkOutcome
+import to.bitkit.repositories.MoveToSparkQuote
 import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainPreparedReceipt
@@ -270,6 +273,7 @@ import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.localizedPubkyAuthMessage
+import to.bitkit.usecases.CloseChannelUseCase
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.KeepContactPaymentsOnUseCase
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
@@ -358,6 +362,7 @@ class AppViewModel @Inject constructor(
     private val highBalanceSheet: HighBalanceTimedSheet,
     private val moveToSparkSheet: MoveToSparkTimedSheet,
     private val moveToSparkRepo: MoveToSparkRepo,
+    private val closeChannelUseCase: CloseChannelUseCase,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
     private val wakeRepo: WakeRepo,
@@ -3475,7 +3480,7 @@ class AppViewModel @Inject constructor(
 
         if (invoice.amountSatoshis > 0uL) {
             lightningRepo.syncState()
-            if (!lightningRepo.canSend(invoice.amountSatoshis)) {
+            if (!canSendLightning(invoice.amountSatoshis)) {
                 val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
                 val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
                 showAddressValidationError(
@@ -3626,7 +3631,7 @@ class AppViewModel @Inject constructor(
                     return@takeIf false
                 }
                 waitForUsableChannels(walletGeneration)
-                val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
+                val canSend = canSendLightning(lnInv.amountSatoshis.coerceAtLeast(1u))
                 if (!canSend) {
                     val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
                     if (nodeState is NodeLifecycleState.Stopped) {
@@ -5304,11 +5309,11 @@ class AppViewModel @Inject constructor(
                 sparkWithdrawalValidity(amount)?.let { return it }
                 val maxSendable = maxSendableLightningSats()
                 when (val lnurl = _sendUiState.value.lnurl) {
-                    null -> amount <= maxSendable && lightningRepo.canSend(amount)
+                    null -> amount <= maxSendable && canSendLightning(amount)
                     is LnurlParams.LnurlWithdraw -> amount <= lnurl.data.maxWithdrawableSat()
                     is LnurlParams.LnurlPay -> {
                         val maxSat = lnurl.data.maxSendableSat()
-                        amount <= maxSat && amount <= maxSendable && lightningRepo.canSend(amount)
+                        amount <= maxSat && amount <= maxSendable && canSendLightning(amount)
                     }
                 }
             }
@@ -5334,6 +5339,10 @@ class AppViewModel @Inject constructor(
         if (leg != null) return lightningRepo.canWithdrawWithSpark(leg.debitSat)
         return true.takeIf { lightningRepo.canWithdrawWithSpark(amount) }
     }
+
+    /** Whether a Lightning send can pay [amount]: over one rail, or from Spark once the spending balance is updated. */
+    private fun canSendLightning(amount: ULong): Boolean =
+        lightningRepo.canSend(amount) || moveToSparkRepo.needsUpdateToSend(amount)
 
     private fun maxSendableLightningSats(): ULong {
         val max = walletRepo.balanceState.value.maxSendLightningSats
@@ -5940,7 +5949,7 @@ class AppViewModel @Inject constructor(
                     PublicPaykitRepo.onchainMethodId(invoice.address),
                     Clock.System.now()
                 ).amount.atomic
-                if (!lightningRepo.canSend(amount) && onchainAmount <= maxSendOnchain) {
+                if (!canSendLightning(amount) && onchainAmount <= maxSendOnchain) {
                     amount = onchainAmount
                     _sendUiState.update { it.copy(payMethod = SendMethod.ONCHAIN, amount = onchainAmount) }
                 }
@@ -6332,7 +6341,7 @@ class AppViewModel @Inject constructor(
         if (quickPayHandled) return
 
         waitForUsableChannels(walletGeneration)
-        if (!lightningRepo.canSend(amount)) {
+        if (!canSendLightning(amount)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = amount.safe() - maxSendLightning.safe()
             toast(
@@ -6412,7 +6421,7 @@ class AppViewModel @Inject constructor(
         val paymentAmount = incomingAmount ?: displaySats
 
         waitForUsableChannels(walletGeneration)
-        if (!lightningRepo.canSend(paymentAmount.coerceAtLeast(1u))) {
+        if (!canSendLightning(paymentAmount.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_pay_error),
@@ -6604,6 +6613,8 @@ class AppViewModel @Inject constructor(
         if (hasActiveContactPaymentContext()) return false
         val invoiceHash = invoice?.paymentHash?.toHex()?.takeIf { it.isNotBlank() }
         val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
+        // QuickPay has no confirm screen to show the update fee, so a payment that needs the update is reviewed.
+        if (!open && moveToSparkRepo.needsUpdateToSend(amountSats)) return false
         val canApply = open || canApplyQuickPay(amountSats)
         requireCurrentPaymentPreparation(walletGeneration)
         if (!canApply) return false
@@ -7782,16 +7793,21 @@ class AppViewModel @Inject constructor(
         allowanceAttemptId?.let { paykitAllowanceRepo.manualLightningPaymentSent(it, paymentHash) }
 
         var authorizationError: Throwable? = null
-        val result = sendLightning(
-            decodedInvoice.bolt11,
-            paymentAmount,
-            incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
-        ) {
-            authorizationError = incomingPaymentRequest?.let {
-                paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
-            }
-            authorizationError == null
-        }
+        val result = updateSpendingBalanceIfNeeded(displayAmountSats).fold(
+            onSuccess = {
+                sendLightning(
+                    decodedInvoice.bolt11,
+                    paymentAmount,
+                    incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
+                ) {
+                    authorizationError = incomingPaymentRequest?.let {
+                        paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
+                    }
+                    authorizationError == null
+                }
+            },
+            onFailure = { Result.failure(it) },
+        )
         authorizationError?.let {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
@@ -7840,6 +7856,26 @@ class AppViewModel @Inject constructor(
                 else -> error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
             }
             setSendEffect(SendEffect.NavigateToError(failure))
+        }
+    }
+
+    /**
+     * Before a payment of [amountSats] that fits only across the channels and Spark, moves the channels' balance to
+     * Spark. Once the move settles, closes the channels it emptied in the background, even when the payment then fails.
+     * A failure after the move leaves the funds in Spark.
+     */
+    private suspend fun updateSpendingBalanceIfNeeded(amountSats: ULong): Result<Unit> {
+        if (!moveToSparkRepo.needsUpdateToSend(amountSats)) return Result.success(Unit)
+        val channelsBefore = lightningRepo.lightningState.value.channels.toList()
+        return moveToSparkRepo.updateToSend(_sendUiState.value.sparkUpdateQuote, amountSats) {
+            closeChannelsEmptiedBy(it, channelsBefore)
+        }.map { }
+    }
+
+    private fun closeChannelsEmptiedBy(outcome: MoveToSparkOutcome, channelsBefore: List<ChannelDetails>) {
+        viewModelScope.launch(bgDispatcher) {
+            if (outcome is MoveToSparkOutcome.InFlight && moveToSparkRepo.awaitSettled(outcome).isFailure) return@launch
+            closeChannelUseCase.closeEmptiedByMove(channelsBefore)
         }
     }
 
@@ -8538,6 +8574,12 @@ class AppViewModel @Inject constructor(
         // A Spark leg pays the contact's other endpoint, so its fee is the leg's, never the retained invoice's.
         if (currentState.routedPaykitRoute?.serviceLeg != null) return
         val decodedInvoice = currentState.decodedInvoice ?: return
+        val payAmount = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: currentState.amount
+        if (moveToSparkRepo.needsUpdateToSend(payAmount)) {
+            estimateSparkUpdateFees(decodedInvoice.bolt11, payAmount, generation, walletGeneration)
+            return
+        }
+        _sendUiState.update { if (generation != sendStateGeneration) it else it.copy(sparkUpdateQuote = null) }
 
         val feeResult = if (decodedInvoice.amountSatoshis > 0uL) {
             lightningRepo.estimateRoutingFees(decodedInvoice.bolt11)
@@ -8554,6 +8596,22 @@ class AppViewModel @Inject constructor(
                     lastLightningFee = fee.toLong(),
                 )
             }
+        }
+    }
+
+    /** Quotes the spending balance update a payment of [payAmount] needs, and Spark's fee for the payment after it. */
+    private suspend fun estimateSparkUpdateFees(
+        bolt11: String,
+        payAmount: ULong,
+        generation: Long,
+        walletGeneration: Long?,
+    ) {
+        val quote = moveToSparkRepo.quote().getOrNull()
+        val fee = moveToSparkRepo.estimateFeeAfterUpdate(bolt11, payAmount)
+        requireCurrentPaymentPreparation(walletGeneration)
+        _sendUiState.update {
+            if (generation != sendStateGeneration) return@update it
+            it.copy(lightningFeeSats = fee.toLong(), lastLightningFee = fee.toLong(), sparkUpdateQuote = quote)
         }
     }
 
@@ -10236,6 +10294,8 @@ data class SendUiState(
     val feeRates: FeeRates? = null,
     val onchainFeeUi: OnchainFeeUi = OnchainFeeUi(),
     val lightningFeeSats: Long? = null,
+    /** The spending balance update a Lightning payment that fits only across the channels and Spark runs first. */
+    val sparkUpdateQuote: MoveToSparkQuote? = null,
     val estimatedRoutingFee: ULong = 0uL,
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,

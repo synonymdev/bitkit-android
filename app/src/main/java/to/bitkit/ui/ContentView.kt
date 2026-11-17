@@ -207,7 +207,6 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
-import to.bitkit.ui.settings.lightning.MoveToSparkScreen
 import to.bitkit.ui.settings.lightning.SparkDetailScreen
 import to.bitkit.ui.settings.lightning.SparkExitConfirmScreen
 import to.bitkit.ui.settings.lightning.SparkExitFeeBumpScreen
@@ -670,10 +669,6 @@ fun ContentView(
                                     hardwareWalletId = sheet.hardwareWalletId,
                                     walletState = walletState,
                                     isOffline = connectivityState != ConnectivityState.CONNECTED,
-                                    navigateToExternalConnection = {
-                                        navController.navigateTo(ExternalConnection())
-                                        appViewModel.hideSheet()
-                                    },
                                 )
                             }
                         }
@@ -722,6 +717,10 @@ fun ContentView(
                         }
                         is Sheet.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
                         Sheet.ForceTransfer -> ForceTransferSheet(appViewModel, transferViewModel)
+                        Sheet.MoveToSpark -> MoveToSparkSheet(
+                            viewModel = hiltViewModel(),
+                            onDismiss = { appViewModel.hideSheet() },
+                        )
                         Sheet.ConnectionClosed -> ConnectionClosedSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
@@ -793,11 +792,8 @@ fun ContentView(
                                 }
 
                                 TimedSheetType.MOVE_TO_SPARK -> MoveToSparkSheet(
-                                    onLater = { appViewModel.dismissTimedSheet() },
-                                    onMove = {
-                                        appViewModel.dismissTimedSheet()
-                                        navController.navigateTo(Routes.MoveToSpark)
-                                    },
+                                    viewModel = hiltViewModel(),
+                                    onDismiss = { appViewModel.dismissTimedSheet() },
                                 )
 
                                 TimedSheetType.HIGH_BALANCE -> {
@@ -1055,7 +1051,7 @@ private fun RootNavHost(
         cjitDetailSettings(navController)
         swapsSettings(navController)
         swapDetailSettings(navController)
-        lightningConnections(navController)
+        lightningConnections(navController, onMoveToSpark = { appViewModel.showSheet(Sheet.MoveToSpark) })
         activityItem(activityListViewModel, navController, settingsViewModel)
         authCheck(navController)
         logs(navController)
@@ -1421,7 +1417,7 @@ private fun NavGraphBuilder.home(
             channels = lightningState.channels,
             hasSparkBalance = sparkState.shownSpendingSats > 0uL,
             canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
-            onMoveToSparkClick = { navController.navigateTo(Routes.MoveToSpark) },
+            onMoveToSparkClick = { appViewModel.showSheet(Sheet.MoveToSpark) },
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = {
@@ -2051,6 +2047,7 @@ private fun NavGraphBuilder.swapDetailSettings(
 
 private fun NavGraphBuilder.lightningConnections(
     navController: NavHostController,
+    onMoveToSpark: () -> Unit,
 ) {
     navigationWithDefaultTransitions<Routes.ConnectionsNav>(
         startDestination = Routes.LightningConnections,
@@ -2058,7 +2055,7 @@ private fun NavGraphBuilder.lightningConnections(
         deepLinkableComposable<Routes.LightningConnections> {
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
             val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
-            LightningConnectionsScreen(navController, viewModel)
+            LightningConnectionsScreen(navController, viewModel, onMoveToSpark)
         }
         deepLinkableComposable<Routes.ChannelDetail> {
             val route = it.toRoute<Routes.ChannelDetail>()
@@ -2085,18 +2082,6 @@ private fun NavGraphBuilder.lightningConnections(
             )
         }
         sparkExit(navController)
-        composableWithDefaultTransitions<Routes.MoveToSpark> {
-            MoveToSparkScreen(
-                viewModel = hiltViewModel(),
-                onBack = { navController.popBackStack() },
-                onCloseChannel = { channelId ->
-                    // Closing returns to Lightning Connections, so the close screen opens on top of it.
-                    navController.popBackStack()
-                    navController.navigateTo(Routes.LightningConnections)
-                    channelId?.let { navController.navigateTo(Routes.CloseConnection(it)) }
-                },
-            )
-        }
         deepLinkableComposable<Routes.CloseConnection> {
             val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
@@ -2657,9 +2642,6 @@ sealed interface Routes {
 
     @Serializable
     data object SparkExitFeeBump : Routes.InternalOnly
-
-    @Serializable
-    data object MoveToSpark : Routes.InternalOnly
 
     @Serializable
     data object DevSettings : Routes.DeepLinkable

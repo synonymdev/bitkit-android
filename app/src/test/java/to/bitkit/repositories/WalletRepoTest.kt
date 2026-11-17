@@ -1649,16 +1649,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `inboundLiquiditySats should count ready channels`() = test {
-        val mixedChannels = (channels + readyButNotUsableChannels).toImmutableList()
-        whenever(lightningRepo.lightningState)
-            .thenReturn(MutableStateFlow(LightningState(channels = mixedChannels)))
-        whenever(lightningRepo.getChannels()).thenReturn(mixedChannels)
-
-        assertEquals(2_000uL, sut.inboundLiquiditySats())
-    }
-
-    @Test
     fun `updateBip21Invoice should build correct BIP21 URL`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS)))
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any(), any())).thenReturn(Result.success(INVOICE))

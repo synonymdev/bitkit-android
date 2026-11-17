@@ -5,10 +5,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -22,6 +24,7 @@ import to.bitkit.repositories.MoveToSparkQuote
 import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.usecases.CloseChannelUseCase
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
@@ -29,6 +32,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     private val moveToSparkRepo = mock<MoveToSparkRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val walletRepo = mock<WalletRepo>()
+    private val closeChannelUseCase = mock<CloseChannelUseCase>()
 
     private val quote = MoveToSparkQuote(invoice = "lnbcrt1spark", amountSats = 50_000uL, feeSats = 10uL)
     private val firstMove = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash_1", paymentId = "id_1")
@@ -38,7 +42,15 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     private val secondMove = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash_2", paymentId = "id_2")
     private val firstSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
     private val secondSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
-    private val manager by lazy { MoveToSparkManager(testDispatcher, moveToSparkRepo, lightningRepo, walletRepo) }
+    private val manager by lazy {
+        MoveToSparkManager(
+            testDispatcher,
+            moveToSparkRepo,
+            lightningRepo,
+            walletRepo,
+            closeChannelUseCase
+        )
+    }
 
     @Before
     fun setUp() {
@@ -81,7 +93,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         firstSettled.complete(Result.success(moved))
 
-        assertEquals(MoveToSparkUiState.Done(moved, closeChannelId = "channel_1", hasRest = true), sut.uiState.value)
+        assertEquals(MoveToSparkUiState.Done(moved, hasRest = true), sut.uiState.value)
     }
 
     @Test
@@ -114,7 +126,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         payment.complete(Result.success(moved))
 
-        assertEquals(MoveToSparkUiState.Done(moved, closeChannelId = null), reopened.uiState.value)
+        assertEquals(MoveToSparkUiState.Done(moved), reopened.uiState.value)
         verify(moveToSparkRepo, times(1)).quote(anyOrNull())
     }
 
@@ -126,7 +138,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         val reopened = createViewModel()
         firstSettled.complete(Result.success(moved))
 
-        assertEquals(MoveToSparkUiState.Done(moved, closeChannelId = null), reopened.uiState.value)
+        assertEquals(MoveToSparkUiState.Done(moved), reopened.uiState.value)
     }
 
     @Test
@@ -163,5 +175,47 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         verify(moveToSparkRepo, times(2)).quote(anyOrNull())
     }
 
-    private fun createViewModel() = MoveToSparkViewModel(manager)
+    @Test
+    fun `a settled move closes the channels it emptied once it moved`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(openChannel))
+        whenever(moveToSparkRepo.move(eq(quote))).thenReturn(Result.success(moved))
+
+        createViewModel().move()
+
+        verify(closeChannelUseCase).closeEmptiedByMove(listOf(openChannel))
+    }
+
+    @Test
+    fun `an in-flight move closes nothing until it settles`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(openChannel))
+        createViewModel().move()
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+
+        firstSettled.complete(Result.success(moved))
+
+        verify(closeChannelUseCase).closeEmptiedByMove(listOf(openChannel))
+    }
+
+    @Test
+    fun `a move that fails late closes nothing`() = test {
+        createViewModel().move()
+
+        firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
+
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+    }
+
+    @Test
+    fun `closing the modal after a settled move quotes anew on the next opening`() = test {
+        whenever(moveToSparkRepo.move(eq(quote))).thenReturn(Result.success(moved))
+        val sut = createViewModel()
+        sut.move()
+
+        sut.close()
+        sut.open()
+
+        assertEquals(MoveToSparkUiState.Confirm(quote), sut.uiState.value)
+    }
+
+    private fun createViewModel() = MoveToSparkViewModel(manager).also { it.open() }
 }

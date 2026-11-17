@@ -59,7 +59,6 @@ import kotlin.time.ExperimentalTime
 @Composable
 fun ReceiveSheet(
     appViewModel: AppViewModel,
-    navigateToExternalConnection: () -> Unit,
     walletState: WalletState,
     isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
@@ -82,7 +81,6 @@ fun ReceiveSheet(
     LaunchedEffect(startRoute) {
         navController.navigateToReceiveStart(startRoute)
     }
-    var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
@@ -150,15 +148,12 @@ fun ReceiveSheet(
                         walletState = walletState,
                         lightningState = lightningState,
                         canReceiveWithSpark = sparkState.isUsable,
-                        onClickReceiveCjit = { navController.navigateTo(ReceiveRoute.TransferUnavailable) },
                         onClickEditInvoice = {
-                            editInvoiceSourceTab = it
                             invoiceEditState.beginSoftwareEdit(it)
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            editInvoiceSourceTab = ReceiveTab.HARDWARE
                             invoiceEditState.beginHardwareEdit()
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
@@ -269,19 +264,12 @@ fun ReceiveSheet(
                         )
                     }
                 }
-                composableWithDefaultTransitions<ReceiveRoute.TransferUnavailable> {
-                    TransferUnavailableScreen(
-                        onBack = { navController.popBackStack() },
-                        onContinue = navigateToExternalConnection,
-                    )
-                }
                 composableWithDefaultTransitions<ReceiveRoute.EditInvoice> {
                     val walletUiState by wallet.walletState.collectAsStateWithLifecycle()
                     @Suppress("ViewModelForwarding")
                     EditInvoiceScreen(
                         amountInputViewModel = editInvoiceAmountViewModel,
                         walletUiState = walletUiState,
-                        sourceTab = editInvoiceSourceTab,
                         onBack = { navController.popBackStack() },
                         updateInvoice = wallet::updateBip21Invoice,
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
@@ -301,7 +289,6 @@ fun ReceiveSheet(
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
-                        navigateTransferUnavailable = { navController.navigateTo(ReceiveRoute.TransferUnavailable) },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.AddTag> {
@@ -400,15 +387,11 @@ sealed interface ReceiveRoute {
     @Serializable
     data object PaymentRequestSent : InternalOnly
 
-    @Serializable
-    data object TransferUnavailable : DeepLinkStart
-
     companion object {
         private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
             QR,
             EditInvoice,
             AddTag,
-            TransferUnavailable,
         )
 
         fun fromDeepLink(path: String): DeepLinkStart? =
