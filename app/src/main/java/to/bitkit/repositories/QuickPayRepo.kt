@@ -50,6 +50,7 @@ import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.asNodeException
+import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -377,6 +378,7 @@ class QuickPayRepo @Inject constructor(
                 invoiceHash = invoiceHash,
                 displaySats = invoice.amountSats,
                 reservedCents = prepared.amountCents,
+                valueCents = prepared.valueCents,
                 paymentRequest = invoice.bolt11,
                 dispatched = false,
                 sessionId = session.id,
@@ -447,7 +449,9 @@ class QuickPayRepo @Inject constructor(
     private suspend fun sendRejectionLocked(op: InFlightOp, settings: SettingsData?): QuickPayRejection? {
         val current = settings ?: return QuickPayRejection.SETTINGS_UNREADABLE
         settingsRejection(current, op.displaySats)?.let { return it }
-        if (op.reservedCents > quickPayThresholdCents(current.quickPayAmount)) return QuickPayRejection.OVER_THRESHOLD
+        if (op.valueCents > BigDecimal.valueOf(quickPayThresholdCents(current.quickPayAmount))) {
+            return QuickPayRejection.OVER_THRESHOLD
+        }
         val capCents = quickPayCapCents(current.quickPayAmount, current.quickPayDailyLimitMultiplier)
         if (spend.snapshot().spentCents > capCents) return QuickPayRejection.DAILY_CAP
         return null
@@ -754,6 +758,7 @@ class QuickPayRepo @Inject constructor(
         invoiceHash = invoiceHash,
         displaySats = invoice.amountSats,
         reservedCents = open.amountCents,
+        valueCents = BigDecimal.valueOf(open.amountCents),
         paymentRequest = invoice.bolt11,
         dispatched = true,
         sessionId = session.id,
@@ -863,6 +868,7 @@ class QuickPayRepo @Inject constructor(
             PreparedReserve(
                 amountCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount, amountSats),
                 capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier),
+                valueCents = converted.value.movePointRight(2),
             ),
         )
     }
@@ -880,6 +886,7 @@ class QuickPayRepo @Inject constructor(
         val invoiceHash: String,
         val displaySats: ULong,
         val reservedCents: Long,
+        val valueCents: BigDecimal,
         val paymentRequest: String,
         var dispatched: Boolean,
         var sessionId: String?,
@@ -899,6 +906,7 @@ class QuickPayRepo @Inject constructor(
     private data class PreparedReserve(
         val amountCents: Long,
         val capCents: Long,
+        val valueCents: BigDecimal,
     )
 
     private sealed interface ReserveDecision {

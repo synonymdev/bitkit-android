@@ -1286,6 +1286,37 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lowering the threshold below an amount that rounds down to it aborts the dispatch`() = test {
+        val (bolt11, hash) = testInvoice()
+        whenever(currencyRepo.convertFiatToSats(5.0, USD)).thenAnswer { 5000uL }
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer { invocation ->
+            val sats = invocation.getArgument<Long>(0)
+            val usd = BigDecimal.valueOf(sats).movePointLeft(3)
+            ConvertedAmount(
+                value = usd,
+                formatted = usd.toPlainString(),
+                symbol = "$",
+                currency = "USD",
+                flag = "",
+                sats = sats,
+                locale = Locale.US,
+            )
+        }
+        val proceeded = stubPayInvoiceChangingSettings {
+            settingsData.value = settingsData.value.copy(quickPayAmount = 1)
+        }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 1004u))
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertFalse(proceeded.await())
+        assertEquals(0L, spentCents())
+        assertFalse(sut.hasOpen(hash))
+    }
+
+    @Test
     fun `lowering the daily limit before send aborts the dispatch`() = test {
         val (bolt11, hash) = testInvoice()
         assertNotNull(sut.reserveBound("other", 1000u).getOrThrow())
