@@ -589,8 +589,15 @@ class SparkRepo @Inject constructor(
                     runSuspendCatching { sparkService.send(prepared) }.also { result ->
                         hasReturned = true
                         // Taken before the in-flight attempt is dropped, so an earlier failure never finds neither.
+                        val attempt = SendAttempt(sentAt.toULong(), earlierIds)
                         if (result.getOrNull()?.status == PaymentStatus.PENDING) {
-                            takenAttempts[paymentHash.lowercase()] = SendAttempt(sentAt.toULong(), earlierIds)
+                            takenAttempts[paymentHash.lowercase()] = attempt
+                        }
+                        // A send whose call failed may still have gone out, so it is in doubt before the in-flight
+                        // attempt is dropped.
+                        if (result.isFailure) {
+                            uncertainSends[paymentHash.lowercase()] =
+                                UncertainSend(clock.now().epochSeconds.toULong(), expiresAt, attempt)
                         }
                     }
                 }
@@ -609,6 +616,7 @@ class SparkRepo @Inject constructor(
             val payment = sent.getOrElse {
                 // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
                 if (it.isInvoiceExpired()) {
+                    uncertainSends.remove(paymentHash.lowercase())
                     cacheStore.removeSparkUncertainSend(paymentHash)
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw SparkError.InvoiceExpired(it)
@@ -616,6 +624,7 @@ class SparkRepo @Inject constructor(
                 // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                 // nothing, for instance when an earlier send spent it after the balance was read.
                 if (it is SdkException.InsufficientFunds) {
+                    uncertainSends.remove(paymentHash.lowercase())
                     cacheStore.removeSparkUncertainSend(paymentHash)
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw SparkError.SendRefused("Spark balance can't cover the payment", it)
@@ -1296,8 +1305,12 @@ class SparkRepo @Inject constructor(
         )
     }
 
-    /** Drops restored exit data Spark rejected, once the backup set a copy of it aside, unless newer data came. */
+    /**
+     * Drops restored exit data Spark rejected, once the backup set a copy of it aside, unless newer data came. The
+     * stored backup is merged again before the next upload, as that copy may be older than it.
+     */
     fun discardStagedExitState(exitState: String) {
+        hasMergedRemoteExitState = false
         val staged = File(Env.sparkExitRestorePath(walletIndex))
         if (staged.exists() && staged.readText() == exitState) staged.delete()
     }
@@ -1343,6 +1356,8 @@ class SparkRepo @Inject constructor(
         val info = sparkService.getInfo()
         info.lastSyncError?.let { Logger.warn("Failed to sync Spark, balances may be stale: '$it'", context = TAG) }
         val unclaimed = sparkService.listUnclaimedDeposits()
+        // Read before the list, so a retry recorded after it keeps its row from a failure the list still shows.
+        val records = sendRecords.get()
         val payments = sparkService.listPayments()
         val claimedPayments = payments
             .filter { it.method == PaymentMethod.DEPOSIT && it.status == PaymentStatus.COMPLETED }
@@ -1395,7 +1410,7 @@ class SparkRepo @Inject constructor(
         markClaimedDeposits(claimed)
         payments
             .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
-            .forEach { recordActivity(it) }
+            .forEach { recordActivity(it, records = records) }
         // Off the refresh, so a slow Electrum server never holds a send that waits for it.
         scope.launch { confirmMinedPayouts(payments) }
         markTransfers(payments)
@@ -1807,7 +1822,7 @@ class SparkRepo @Inject constructor(
         val isSynced = canListPayments()
         val payments = sparkService.listPayments()
         if (isSynced) seedSendHashes(payments)
-        val isSaved = payments.map { recordActivity(it) }.all { it }
+        val isSaved = payments.map { recordActivity(it, records = recordsBefore) }.all { it }
         releaseFailedSends(payments, recordsBefore, inFlightBefore)
         if (!settleJournal || wasWithdrawing || isWithdrawing || withdrawalSendsEnded.get() != sendsEndedBefore) {
             return isSaved
