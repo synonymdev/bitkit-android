@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.models.HealthState
+import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkRepo
@@ -26,6 +28,7 @@ class SparkDetailViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val sparkRepo: SparkRepo,
     private val sparkExitRepo: SparkExitRepo,
+    private val healthRepo: HealthRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SparkDetailUiState())
     val uiState = _uiState.asStateFlow()
@@ -38,6 +41,11 @@ class SparkDetailViewModel @Inject constructor(
                         it.copy(spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses))
                     }
                 }
+        }
+        viewModelScope.launch(bgDispatcher) {
+            healthRepo.healthState.collect { health ->
+                _uiState.update { it.copy(status = health.spark ?: HealthState.ERROR) }
+            }
         }
         viewModelScope.launch(bgDispatcher) {
             // A cancelled exit's address may still receive a late payment: its balance shows here.
@@ -75,6 +83,8 @@ class SparkDetailViewModel @Inject constructor(
 data class SparkDetailUiState(
     val spark: SparkUi? = null,
     val isRefreshing: Boolean = false,
+    /** Spark's connection, as App Status shows it. */
+    val status: HealthState = HealthState.PENDING,
     /** Spark's on-chain deposit address, shown on regtest to fund Spark from Lightspark's regtest faucet. */
     val depositAddress: String? = null,
 )

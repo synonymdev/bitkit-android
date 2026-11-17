@@ -219,10 +219,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 تأكيدات</string>
     <string name="lightning__spark_deposit">إيداع</string>
     <string name="lightning__spark_deposit__wait_button">انتظر</string>
-    <string name="lightning__spark_deposits_claimed">إيداعات تمت المطالبة بها</string>
-    <string name="lightning__spark_deposits_pending">إيداعات قيد التنفيذ</string>
+    <string name="lightning__spark_deposit_tx">معاملة الإيداع</string>
+    <string name="lightning__spark_deposits">الإيداعات</string>
     <string name="lightning__spark_exit__amount">المبلغ المراد تحويله</string>
-    <string name="lightning__spark_exit__button">تحويل قسري</string>
+    <string name="lightning__spark_exit__button">تحويل قسري إلى المدخرات</string>
     <string name="lightning__spark_exit__cancel">إلغاء التحويل</string>
     <string name="lightning__spark_exit__cancel_failed">تعذّر التحقق من عنوان التمويل. حاول مرة أخرى.</string>
     <string name="lightning__spark_exit__cancel_text">يعود Spark إلى ما كان عليه. إذا وصلت دفعة إلى عنوان رسوم الطوارئ، يعيدها Bitkit إلى المدخرات.</string>
@@ -327,10 +327,11 @@
     <string name="lightning__spark_learn__about_title">حول\n&lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
     <string name="lightning__spark_learn__fast_text">تكون أموالك عادةً جاهزة للإنفاق خلال بضع دقائق، دون الحاجة إلى انتظار التأكيدات.</string>
     <string name="lightning__spark_learn__later_text">تصبح أموالك متاحة بعد 3 تأكيدات، عادةً خلال 30 دقيقة تقريبًا.</string>
+    <string name="lightning__spark_operators">Lightspark وBreez وFlashnet</string>
     <string name="lightning__spark_provider">المزوّد</string>
     <string name="lightning__spark_provider_value">Spark عبر Breez</string>
     <string name="lightning__spark_receiving_unlimited">بلا حد</string>
-    <string name="lightning__spark_trust">يُحفظ هذا الرصيد على Spark الذي تديره Lightspark وBreez وFlashnet. يبقى آمنًا ما دام أحدهم على الأقل يتصرف بأمانة. يمكنهم إيقاف الوصول مؤقتًا، والخروج من دونهم يتطلب خروجًا على السلسلة.</string>
+    <string name="lightning__spark_trust">يستخدم رصيد الإنفاق Spark، الذي تديره Lightspark وBreez وFlashnet. يعتمد أمانه على تصرّف مشغّل واحد على الأقل بأمانة. يمكن للمشغّلين إيقاف الوصول مؤقتًا، والسحب من دون تعاونهم يتطلب منك بدء خروج على السلسلة.</string>
     <string name="lightning__spendable_onchain">قابل للإنفاق على السلسلة</string>
     <string name="lightning__spending">الإنفاق</string>
     <string name="lightning__spending_amount__error_balance__description">لا تكفي مدخراتك لتغطية هذا التحويل ورسومه. جرّب مبلغًا أصغر.</string>
@@ -794,6 +795,7 @@
     <string name="settings__security__section_safety">الأمان</string>
     <string name="settings__security_title">الأمان والخصوصية</string>
     <string name="settings__settings">الإعدادات</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
     <string name="settings__status__backup__error">فشل إكمال النسخة الاحتياطية الكاملة</string>
     <string name="settings__status__backup__pending">جارٍ النسخ الاحتياطي...</string>
     <string name="settings__status__backup__ready">تم النسخ الاحتياطي</string>
@@ -1832,11 +1834,10 @@
     <string name="widgets__widget__size_wide">عريض</string>
     <string name="wallet__balance_updating">جارٍ تحديث الرصيد…</string>
     <string name="settings__status__exit__funding">يلزم تمويل الرسوم</string>
-    <string name="settings__status__exit__pending">قيد التنفيذ</string>
-    <string name="settings__status__exit__title">الخروج الطارئ</string>
     <string name="settings__status__lightning_connection__spark">يستخدم Spark</string>
-    <string name="settings__status__spark__error">غير متصل</string>
+    <string name="settings__status__spark__error">غير متصل...</string>
+    <string name="settings__status__spark__exit">جارٍ التحويل القسري إلى المدخرات...</string>
     <string name="settings__status__spark__pending">جارٍ الاتصال...</string>
     <string name="settings__status__spark__ready">متصل</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">مزوّد Lightning (Spark)</string>
 </resources>

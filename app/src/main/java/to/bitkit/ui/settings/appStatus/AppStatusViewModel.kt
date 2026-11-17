@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.CacheStore
+import to.bitkit.env.Env
 import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -88,6 +89,8 @@ data class AppStatusUiState(
     val nodeSubtitle: String = "",
     /** Null while no emergency exit runs. */
     val exitStep: ExitStep? = null,
+    /** The app's version and build, as "3.2.0 (182)". */
+    val appVersion: String = Env.version,
 )
 
 enum class ExitStep { FUNDING, RUNNING }

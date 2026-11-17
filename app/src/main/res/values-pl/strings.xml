@@ -109,10 +109,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 potwierdzeń</string>
     <string name="lightning__spark_deposit">Wpłata</string>
     <string name="lightning__spark_deposit__wait_button">Czekaj</string>
-    <string name="lightning__spark_deposits_claimed">Odebrane wpłaty</string>
-    <string name="lightning__spark_deposits_pending">Wpłaty w toku</string>
+    <string name="lightning__spark_deposit_tx">Tx wpłaty</string>
+    <string name="lightning__spark_deposits">Wpłaty</string>
     <string name="lightning__spark_exit__amount">Kwota do przesłania</string>
-    <string name="lightning__spark_exit__button">Wymuś transfer</string>
+    <string name="lightning__spark_exit__button">Wymuś transfer na oszczędności</string>
     <string name="lightning__spark_exit__cancel">Anuluj transfer</string>
     <string name="lightning__spark_exit__cancel_failed">Nie udało się sprawdzić adresu finansowania. Spróbuj ponownie.</string>
     <string name="lightning__spark_exit__cancel_text">Spark wraca do poprzedniego stanu. Jeśli płatność dotarła na adres opłat awaryjnych, Bitkit odeśle ją do Oszczędności.</string>
@@ -217,10 +217,11 @@
     <string name="lightning__spark_learn__about_title">O Twoim\n&lt;accent&gt;saldzie wydatków&lt;/accent&gt;</string>
     <string name="lightning__spark_learn__fast_text">Twoje środki są zwykle gotowe do wydania w ciągu kilku minut, bez czekania na potwierdzenia.</string>
     <string name="lightning__spark_learn__later_text">Twoje środki będą dostępne po 3 potwierdzeniach, zwykle po około 30 minutach.</string>
+    <string name="lightning__spark_operators">Lightspark, Breez i Flashnet</string>
     <string name="lightning__spark_provider">Dostawca</string>
     <string name="lightning__spark_provider_value">Spark przez Breez</string>
-    <string name="lightning__spark_receiving_unlimited">Bez limitu</string>
-    <string name="lightning__spark_trust">To saldo jest przechowywane na Spark, prowadzonym przez Lightspark, Breez i Flashnet. Jest bezpieczne, dopóki co najmniej jeden z nich działa uczciwie. Mogą wstrzymać dostęp, a wyjście bez nich wymaga wyjścia on-chain.</string>
+    <string name="lightning__spark_receiving_unlimited">bez limitu</string>
+    <string name="lightning__spark_trust">Twoje saldo wydatków korzysta ze Spark, prowadzonego przez Lightspark, Breez i Flashnet. Jego bezpieczeństwo zależy od tego, czy co najmniej jeden operator działa uczciwie. Operatorzy mogą wstrzymać dostęp, a wypłata bez ich współpracy wymaga rozpoczęcia wyjścia on-chain.</string>
     <string name="lightning__funding__nav_title">Saldo wydatków</string>
     <string name="lightning__funding__title">Zasil swoje &lt;accent&gt;saldo wydatków&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Prześlij z Oszczędności</string>
@@ -664,6 +665,7 @@
     <string name="settings__general_title">Ogólne</string>
     <string name="settings__security_title">Bezpieczeństwo i prywatność</string>
     <string name="settings__advanced_title">Zaawansowane</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
     <string name="settings__support_title">Wsparcie</string>
     <string name="settings__about__legal">Prawne</string>
     <string name="settings__about__share">Udostępnij</string>
@@ -1830,11 +1832,10 @@
     <string name="widgets__widget__size_wide">Szeroki</string>
     <string name="wallet__balance_updating">Aktualizowanie salda…</string>
     <string name="settings__status__exit__funding">Potrzebne finansowanie opłat</string>
-    <string name="settings__status__exit__pending">W toku</string>
-    <string name="settings__status__exit__title">Wyjście awaryjne</string>
     <string name="settings__status__lightning_connection__spark">Przez Spark</string>
-    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__error">Offline...</string>
+    <string name="settings__status__spark__exit">Trwa wymuszony transfer na oszczędności...</string>
     <string name="settings__status__spark__pending">Łączenie...</string>
     <string name="settings__status__spark__ready">Połączono</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">Dostawca Lightning (Spark)</string>
 </resources>

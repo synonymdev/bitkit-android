@@ -262,22 +262,25 @@ data class SparkUi(
     val showsExitResult: Boolean = false,
     /** Earlier exits' funding addresses that hold, or may still receive, coins. */
     val earlierAddresses: ImmutableList<SparkExitEarlierAddress> = persistentListOf(),
+    /** Spark is connected with no exit running, so it receives with no limit. */
+    val isReceiving: Boolean = false,
 ) {
     /**
      * The emergency exit is offered while Spark holds funds, also a kept balance while it reads 0, and leads to its
      * progress while it shows one.
      */
     val showsExit get() = balanceSats > 0uL || recoverableFundsSats > 0uL || showsExitResult
-
-    val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
-    val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
 }
 
 data class SparkDepositUi(
     val deposit: SparkDeposit,
     /** On-chain confirmations, known for deposits this wallet sent. */
     val confirmations: UInt? = null,
-)
+) {
+    /** The amount sent on-chain, which stays the same once Spark claims it for a fee. */
+    val grossSats: ULong
+        get() = if (deposit.isClaimed) deposit.amountSats.safe() + deposit.feeSats.safe() else deposit.amountSats
+}
 
 internal suspend fun SparkState.toUi(
     lightningRepo: LightningRepo,
@@ -304,6 +307,7 @@ internal suspend fun SparkState.toUi(
         isExiting = isExiting,
         showsExitResult = showsExit,
         earlierAddresses = earlierAddresses.toImmutableList(),
+        isReceiving = isUsable,
     )
 }
 

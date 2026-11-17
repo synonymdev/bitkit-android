@@ -226,10 +226,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 potvrzení</string>
     <string name="lightning__spark_deposit">Vklad</string>
     <string name="lightning__spark_deposit__wait_button">Počkat</string>
-    <string name="lightning__spark_deposits_claimed">Připsané vklady</string>
-    <string name="lightning__spark_deposits_pending">Probíhající vklady</string>
+    <string name="lightning__spark_deposit_tx">Tx vkladu</string>
+    <string name="lightning__spark_deposits">Vklady</string>
     <string name="lightning__spark_exit__amount">Částka k převodu</string>
-    <string name="lightning__spark_exit__button">Vynutit převod</string>
+    <string name="lightning__spark_exit__button">Vynutit převod do úspor</string>
     <string name="lightning__spark_exit__cancel">Zrušit převod</string>
     <string name="lightning__spark_exit__cancel_failed">Adresu pro financování se nepodařilo zkontrolovat. Zkuste to znovu.</string>
     <string name="lightning__spark_exit__cancel_text">Spark se vrátí do původního stavu. Pokud na adresu pro nouzové poplatky dorazila platba, Bitkit ji pošle zpět do úspor.</string>
@@ -334,10 +334,11 @@
     <string name="lightning__spark_learn__about_title">O vašem\n&lt;accent&gt;výdajovém zůstatku&lt;/accent&gt;</string>
     <string name="lightning__spark_learn__fast_text">Vaše prostředky jsou obvykle připraveny k útratě do několika minut, bez čekání na potvrzení.</string>
     <string name="lightning__spark_learn__later_text">Vaše prostředky budou dostupné po 3 potvrzeních, obvykle asi za 30 minut.</string>
+    <string name="lightning__spark_operators">Lightspark, Breez a Flashnet</string>
     <string name="lightning__spark_provider">Poskytovatel</string>
     <string name="lightning__spark_provider_value">Spark přes Breez</string>
-    <string name="lightning__spark_receiving_unlimited">Bez limitu</string>
-    <string name="lightning__spark_trust">Tento zůstatek je uložen na Spark, který provozují Lightspark, Breez a Flashnet. Je v bezpečí, dokud alespoň jeden z nich jedná poctivě. Mohou pozastavit přístup a odchod bez nich vyžaduje on-chain výstup.</string>
+    <string name="lightning__spark_receiving_unlimited">bez limitu</string>
+    <string name="lightning__spark_trust">Váš výdajový zůstatek využívá Spark, který provozují Lightspark, Breez a Flashnet. Jeho bezpečnost závisí na tom, že alespoň jeden provozovatel jedná poctivě. Provozovatelé mohou pozastavit přístup a výběr bez jejich spolupráce vyžaduje, abyste zahájili on-chain výstup.</string>
     <string name="lightning__spendable_onchain">Utratitelné onchain</string>
     <string name="lightning__spending">Útraty</string>
     <string name="lightning__spending_amount__error_balance__description">Vaše úspory nepokryjí tento převod a jeho poplatky. Zkuste menší částku.</string>
@@ -814,6 +815,7 @@
     <string name="settings__security__section_safety">Bezpečnost</string>
     <string name="settings__security_title">Bezpečnost a soukromí</string>
     <string name="settings__settings">Nastavení</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
     <string name="settings__status__backup__error">Selhalo dokončení úplné zálohy</string>
     <string name="settings__status__backup__pending">Zálohování...</string>
     <string name="settings__status__backup__ready">Zálohováno</string>
@@ -1830,11 +1832,10 @@
     <string name="widgets__widget__size_wide">Široký</string>
     <string name="wallet__balance_updating">Aktualizace zůstatku…</string>
     <string name="settings__status__exit__funding">Je potřeba financovat poplatky</string>
-    <string name="settings__status__exit__pending">Probíhá</string>
-    <string name="settings__status__exit__title">Nouzový odchod</string>
     <string name="settings__status__lightning_connection__spark">Používá Spark</string>
-    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__error">Offline...</string>
+    <string name="settings__status__spark__exit">Probíhá vynucený převod do úspor...</string>
     <string name="settings__status__spark__pending">Připojování...</string>
     <string name="settings__status__spark__ready">Připojeno</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">Poskytovatel Lightning (Spark)</string>
 </resources>
