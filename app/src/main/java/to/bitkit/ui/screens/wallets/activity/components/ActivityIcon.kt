@@ -62,7 +62,7 @@ fun ActivityIcon(
             )
         }
 
-        isMoveToSpark -> CircularIcon(
+        isMoveToSpark && status == PaymentState.SUCCEEDED -> CircularIcon(
             icon = painterResource(R.drawable.ic_transfer),
             iconColor = Colors.Purple,
             backgroundColor = Colors.Purple16,

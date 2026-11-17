@@ -741,9 +741,21 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun keepUnimportableExitBackup(stored: ByteArray, exitState: String?) {
-        vssBackupClient.putObject(key = SPARK_EXIT_UNIMPORTED_KEY, data = stored).getOrThrow()
+        setAsideRejectedExitBackup(stored)
         sparkRepo.skipUnimportableRemoteExitState(exitState)
-        Logger.warn("Kept unimportable Spark exit data under '$SPARK_EXIT_UNIMPORTED_KEY'", context = TAG)
+    }
+
+    private suspend fun setAsideRejectedExitBackup(data: ByteArray) {
+        var key = SPARK_EXIT_REJECTED_KEY
+        val kept = vssBackupClient.getObject(key).getOrThrow()?.value
+        if (kept != null) {
+            if (kept.contentEquals(data)) return
+            val digest = MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }
+            key += "_" + digest.take(REJECTED_DIGEST_HEX_DIGITS)
+            if (vssBackupClient.getObject(key).getOrThrow() != null) return
+        }
+        vssBackupClient.putObject(key = key, data = data).getOrThrow()
+        Logger.warn("Set Spark exit data Spark can't import aside as '$key'", context = TAG)
     }
 
     suspend fun persistWalletBackup(): Result<Unit> =
@@ -938,6 +950,8 @@ class BackupRepo @Inject constructor(
             pubkyContactProfileOverrides = pubkyContactProfileOverrides,
             hwWalletNames = hwWalletNames,
             sparkExitEarlierAddresses = sparkExitEarlierAddressesBackup(),
+            moveToSparkPaymentHashes = cacheData.moveToSparkHashes.map { it.lowercase() }.distinct().sorted()
+                .takeIf { it.isNotEmpty() },
         )
 
         json.encodeToString(payload).toByteArray()
@@ -1282,6 +1296,10 @@ class BackupRepo @Inject constructor(
                 // The exit then looks once for funding addresses that still hold coins and nothing watches: each one
                 // below the index, and those a scan forward from it finds used, which also moves the index past them.
                 sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
+                // Both apps back the moves up beside the cache; the device's own stay.
+                moveToSparkHashes = (
+                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty()
+                    ).map { hash -> hash.lowercase() }.distinct(),
             )
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
@@ -1572,8 +1590,12 @@ class BackupRepo @Inject constructor(
         private const val MINUTE_IN_MS = 60_000
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds
 
-        /** Where stored Spark exit data that Spark can't import is kept, apart from the exit data backups. */
-        internal const val SPARK_EXIT_UNIMPORTED_KEY = "SPARK_EXIT_UNIMPORTED"
+        /**
+         * The remote key of exit data Spark can never import, shared with bitkit-ios. A later, different copy goes
+         * under this key plus `_` and the first 16 hex digits of its SHA-256; an existing copy is never replaced.
+         */
+        internal const val SPARK_EXIT_REJECTED_KEY = "SPARK_EXIT_REJECTED"
+        private const val REJECTED_DIGEST_HEX_DIGITS = 16
 
         /** Spark's exit data can reach several MB and changes with every payment, so its uploads are spaced out. */
         private const val SPARK_EXIT_BACKUP_DEBOUNCE = 60_000L

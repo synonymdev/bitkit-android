@@ -25,7 +25,7 @@
     <action>Swipe to move (testTag "MoveToSparkSwipe") and verify "Moved to Spark" shows the moved amount (testTag "MoveToSparkMoved") and "Close" (testTag "MoveToSparkClose")</action>
     <action>Tap "Close" (testTag "MoveToSparkClose"), then "Close" on the close confirmation, and verify Lightning Connections shows no open connection and the Spark balance grew by the moved amount</action>
     <action>Go back to Home, open Spending and verify the "Move To Spark" button is gone</action>
-    <action>Open All Activity and verify the move shows as one outgoing row titled "Move to Spark" with the transfer icon (testTag "MoveToSparkIcon") and the moved amount plus the routing fee, and no received row</action>
+    <action>Open All Activity and verify the move shows as one outgoing row titled "Move to Spark" with the transfer icon (testTag "MoveToSparkIcon") and the moved amount plus the routing fee, and no received row; on the Other tab the row lists, and on the Sent tab it does not</action>
     <action>Tap the "Move to Spark" row and verify the detail's title is "Move to Spark" and it shows the routing fee</action>
   </actions>
 </journey>

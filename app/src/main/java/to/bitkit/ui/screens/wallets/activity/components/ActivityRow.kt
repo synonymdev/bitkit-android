@@ -148,7 +148,11 @@ fun ActivityRow(
             )
             val context = LocalContext.current
             val subtitleText = when (item) {
-                is Activity.Lightning if isMoveToSpark -> activityTimeText(timestamp)
+                is Activity.Lightning if isMoveToSpark -> when (item.v1.status) {
+                    PaymentState.FAILED -> stringResource(R.string.wallet__activity_failed)
+                    PaymentState.PENDING -> stringResource(R.string.wallet__activity_pending)
+                    PaymentState.SUCCEEDED -> activityTimeText(timestamp)
+                }
                 is Activity.Lightning -> item.v1.message.ifEmpty { activityTimeText(timestamp) }
                 is Activity.Onchain -> {
                     when {

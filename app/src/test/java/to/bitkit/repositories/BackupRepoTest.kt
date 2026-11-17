@@ -102,6 +102,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -434,7 +435,7 @@ class BackupRepoTest : BaseUnitTest() {
         sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
 
         inOrder(sparkRepo, vssBackupClient) {
-            verify(vssBackupClient).putObject(BackupRepo.SPARK_EXIT_UNIMPORTED_KEY, stored)
+            verify(vssBackupClient).putObject(BackupRepo.SPARK_EXIT_REJECTED_KEY, stored)
             verify(sparkRepo).skipUnimportableRemoteExitState("v9")
             verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
         }
@@ -452,9 +453,48 @@ class BackupRepoTest : BaseUnitTest() {
 
         sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
 
-        verify(vssBackupClient).putObject(BackupRepo.SPARK_EXIT_UNIMPORTED_KEY, stored)
+        verify(vssBackupClient).putObject(BackupRepo.SPARK_EXIT_REJECTED_KEY, stored)
         verify(sparkRepo, never()).mergeRemoteExitBackup(anyOrNull())
         verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `a rejected spark exit copy already set aside is kept and not uploaded again`() = test {
+        val stored = "not exit data".toByteArray()
+        stubUnreadableStoredExit(stored)
+        whenever(vssBackupClient.getObject(BackupRepo.SPARK_EXIT_REJECTED_KEY))
+            .thenReturn(Result.success(VssItem(key = BackupRepo.SPARK_EXIT_REJECTED_KEY, value = stored, version = 1)))
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        verify(vssBackupClient, never()).putObject(argThat { startsWith(BackupRepo.SPARK_EXIT_REJECTED_KEY) }, any())
+        verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `a different rejected spark exit copy goes under its digest and the first stays`() = test {
+        val stored = "not exit data".toByteArray()
+        stubUnreadableStoredExit(stored)
+        whenever(vssBackupClient.getObject(BackupRepo.SPARK_EXIT_REJECTED_KEY)).thenReturn(
+            Result.success(
+                VssItem(key = BackupRepo.SPARK_EXIT_REJECTED_KEY, value = "older".toByteArray(), version = 1)
+            )
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        val digest = MessageDigest.getInstance("SHA-256").digest(stored).joinToString("") { "%02x".format(it) }
+        verify(vssBackupClient).putObject("${BackupRepo.SPARK_EXIT_REJECTED_KEY}_${digest.take(16)}", stored)
+        verify(vssBackupClient, never()).putObject(eq(BackupRepo.SPARK_EXIT_REJECTED_KEY), any())
+    }
+
+    private suspend fun stubUnreadableStoredExit(stored: ByteArray) {
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
     }
 
     @Test
@@ -471,7 +511,7 @@ class BackupRepoTest : BaseUnitTest() {
 
         assertTrue(sut.triggerBackup(BackupCategory.SPARK_EXIT).isFailure)
 
-        verify(vssBackupClient, never()).putObject(eq(BackupRepo.SPARK_EXIT_UNIMPORTED_KEY), any())
+        verify(vssBackupClient, never()).putObject(eq(BackupRepo.SPARK_EXIT_REJECTED_KEY), any())
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
     }
 
@@ -1997,6 +2037,51 @@ class BackupRepoTest : BaseUnitTest() {
             SparkExitEarlierAddressBackupV1("bcrt1qcancelled", "m/84'/1'/7797'/0/0", "cancelledFunding", 2L),
         )
         assertEquals(mapOf(sparkWalletKey to expected), payload.sparkExitEarlierAddresses)
+    }
+
+    @Test
+    fun `a metadata backup carries the move to spark hashes lowercase and sorted`() = test {
+        stubMetadataBackupReads()
+        cacheData.value = cacheData.value.copy(moveToSparkHashes = listOf("bb", "AA"))
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf("aa", "bb"), payload.moveToSparkPaymentHashes)
+    }
+
+    @Test
+    fun `a metadata backup leaves the move to spark hashes out with none`() = test {
+        stubMetadataBackupReads()
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        assertFalse("moveToSparkPaymentHashes" in dataCaptor.firstValue.decodeToString())
+    }
+
+    @Test
+    fun `a metadata restore adds the backed-up move to spark hashes to the device's`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        cacheData.value = cacheData.value.copy(moveToSparkHashes = listOf("dd"))
+        val envelope = json.encodeToString(
+            MetadataBackupV1(
+                createdAt = 123,
+                tagMetadata = emptyList(),
+                cache = AppCacheData(moveToSparkHashes = listOf("cc")),
+                moveToSparkPaymentHashes = listOf("AA"),
+            )
+        )
+        stubMetadataRestore(envelope = envelope)
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(setOf("dd", "cc", "aa"), cacheData.value.moveToSparkHashes.toSet())
     }
 
     @Test

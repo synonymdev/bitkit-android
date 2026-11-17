@@ -78,7 +78,7 @@ fun Activity.isTransfer() = this is Activity.Onchain && this.v1.isTransfer
 
 /** Whether this is the channel send of a move to Spark, one of [moveHashes], which Activity shows as a move. */
 fun Activity.isMoveToSpark(moveHashes: Set<String>) = this is Activity.Lightning &&
-    v1.txType == PaymentType.SENT && v1.status != PaymentState.FAILED && v1.id.lowercase() in moveHashes
+    v1.txType == PaymentType.SENT && v1.id.lowercase() in moveHashes
 
 fun Activity.doesExist() = this is Activity.Onchain && this.v1.doesExist
 

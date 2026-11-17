@@ -7,8 +7,18 @@ import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.PreActivityMetadata
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.WatchOnlyAccountAllocationState
@@ -44,7 +54,30 @@ data class MetadataBackupV1(
      * `sparkExitNextFundingIndexes`. Null in envelopes written before this field.
      */
     val sparkExitEarlierAddresses: Map<String, List<SparkExitEarlierAddressBackupV1>>? = null,
+    /**
+     * The payment hashes of moves to Spark, lowercase hex and sorted, which Activity shows as moves. Null in envelopes
+     * written before this field or with none; a value that is not a list of strings reads as none.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @Serializable(with = LenientStringListSerializer::class)
+    val moveToSparkPaymentHashes: List<String>? = null,
 )
+
+/** Reads a list of strings, or an empty list for any other value, so one unreadable field keeps the rest. */
+internal object LenientStringListSerializer : KSerializer<List<String>> {
+    private val delegate = ListSerializer(String.serializer())
+    override val descriptor = delegate.descriptor
+
+    override fun serialize(encoder: Encoder, value: List<String>) = delegate.serialize(encoder, value)
+
+    override fun deserialize(decoder: Decoder): List<String> {
+        val element = (decoder as? JsonDecoder)?.decodeJsonElement() ?: return delegate.deserialize(decoder)
+        val items = (element as? JsonArray)?.map { it as? JsonPrimitive } ?: return emptyList()
+        if (items.any { it == null || !it.isString }) return emptyList()
+        return items.map { requireNotNull(it).content }
+    }
+}
 
 /**
  * An earlier Spark exit address as both apps back it up. [kind] is `keptChange` or `cancelledFunding`; a reader skips
