@@ -107,8 +107,6 @@
     <string name="lightning__spark_confirmations">%1$d/3 Bestätigungen</string>
     <string name="lightning__spark_deposit">Einzahlung</string>
     <string name="lightning__spark_deposit__wait_button">Warten</string>
-    <string name="lightning__spark_deposits_claimed">Eingelöste Einzahlungen</string>
-    <string name="lightning__spark_deposits_pending">Laufende Einzahlungen</string>
     <string name="lightning__spark_exit__amount">Auszahlungsbetrag</string>
     <string name="lightning__spark_exit__button">Notausstieg</string>
     <string name="lightning__spark_exit__cancel">Ausstieg abbrechen</string>
@@ -1812,8 +1810,6 @@
     <string name="widgets__widget__size_wide">Breit</string>
     <string name="wallet__balance_updating">Kontostand wird aktualisiert…</string>
     <string name="settings__status__exit__funding">Gebührenfinanzierung nötig</string>
-    <string name="settings__status__exit__pending">Läuft</string>
-    <string name="settings__status__exit__title">Notausstieg</string>
     <string name="settings__status__lightning_connection__spark">Nutzt Spark</string>
     <string name="settings__status__spark__error">Offline</string>
     <string name="settings__status__spark__pending">Verbinden...</string>

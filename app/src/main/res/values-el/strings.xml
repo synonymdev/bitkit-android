@@ -218,8 +218,6 @@
     <string name="lightning__spark_confirmations">%1$d/3 επιβεβαιώσεις</string>
     <string name="lightning__spark_deposit">Κατάθεση</string>
     <string name="lightning__spark_deposit__wait_button">Αναμονή</string>
-    <string name="lightning__spark_deposits_claimed">Εξαργυρωμένες καταθέσεις</string>
-    <string name="lightning__spark_deposits_pending">Καταθέσεις σε εξέλιξη</string>
     <string name="lightning__spark_exit__amount">Ποσό εξόδου</string>
     <string name="lightning__spark_exit__button">Έξοδος έκτακτης ανάγκης</string>
     <string name="lightning__spark_exit__cancel">Ακύρωση εξόδου</string>
@@ -1812,8 +1810,6 @@
     <string name="widgets__widget__size_wide">Φαρδύ</string>
     <string name="wallet__balance_updating">Ενημέρωση υπολοίπου…</string>
     <string name="settings__status__exit__funding">Απαιτείται χρηματοδότηση τελών</string>
-    <string name="settings__status__exit__pending">Σε εξέλιξη</string>
-    <string name="settings__status__exit__title">Έξοδος Έκτακτης Ανάγκης</string>
     <string name="settings__status__lightning_connection__spark">Χρήση Spark</string>
     <string name="settings__status__spark__error">Εκτός σύνδεσης</string>
     <string name="settings__status__spark__pending">Σύνδεση...</string>

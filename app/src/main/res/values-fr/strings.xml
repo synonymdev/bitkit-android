@@ -106,8 +106,6 @@
     <string name="lightning__spark_confirmations">%1$d/3 confirmations</string>
     <string name="lightning__spark_deposit">Dépôt</string>
     <string name="lightning__spark_deposit__wait_button">Attendre</string>
-    <string name="lightning__spark_deposits_claimed">Dépôts réclamés</string>
-    <string name="lightning__spark_deposits_pending">Dépôts en cours</string>
     <string name="lightning__spark_exit__amount">Montant à sortir</string>
     <string name="lightning__spark_exit__button">Sortie d\'urgence</string>
     <string name="lightning__spark_exit__cancel">Annuler la sortie</string>
@@ -1813,8 +1811,6 @@
     <string name="widgets__widget__size_wide">Large</string>
     <string name="wallet__balance_updating">Mise à jour du solde…</string>
     <string name="settings__status__exit__funding">Financement des frais requis</string>
-    <string name="settings__status__exit__pending">En cours</string>
-    <string name="settings__status__exit__title">Sortie d\'urgence</string>
     <string name="settings__status__lightning_connection__spark">Via Spark</string>
     <string name="settings__status__spark__error">Hors ligne</string>
     <string name="settings__status__spark__pending">Connexion...</string>

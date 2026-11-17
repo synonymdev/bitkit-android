@@ -218,8 +218,6 @@
     <string name="lightning__spark_confirmations">%1$d/3 تأكيدات</string>
     <string name="lightning__spark_deposit">إيداع</string>
     <string name="lightning__spark_deposit__wait_button">انتظر</string>
-    <string name="lightning__spark_deposits_claimed">إيداعات تمت المطالبة بها</string>
-    <string name="lightning__spark_deposits_pending">إيداعات قيد التنفيذ</string>
     <string name="lightning__spark_exit__amount">المبلغ المراد إخراجه</string>
     <string name="lightning__spark_exit__button">خروج طارئ</string>
     <string name="lightning__spark_exit__cancel">إلغاء الخروج</string>
@@ -1816,8 +1814,6 @@
     <string name="widgets__widget__size_wide">عريض</string>
     <string name="wallet__balance_updating">جارٍ تحديث الرصيد…</string>
     <string name="settings__status__exit__funding">يلزم تمويل الرسوم</string>
-    <string name="settings__status__exit__pending">قيد التنفيذ</string>
-    <string name="settings__status__exit__title">الخروج الطارئ</string>
     <string name="settings__status__lightning_connection__spark">يستخدم Spark</string>
     <string name="settings__status__spark__error">غير متصل</string>
     <string name="settings__status__spark__pending">جارٍ الاتصال...</string>

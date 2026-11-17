@@ -40,15 +40,24 @@ fun LightningChannel(
     status: ChannelStatusUi = ChannelStatusUi.PENDING,
     showLabels: Boolean = false,
     showReceiving: Boolean = true,
+    receivingUnlimited: Boolean = false,
 ) {
-    val isEmptySpendingBar = !showReceiving && localBalance == 0L
+    val isEmptySpendingBar = (!showReceiving || receivingUnlimited) && localBalance == 0L
     val spendingColor = if (status == ChannelStatusUi.CLOSED || isEmptySpendingBar) Colors.Gray5 else Colors.Purple50
     val spendingAvailableColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray3 else Colors.Purple
-    val receivingColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray5 else Colors.White64
+    val receivingColor = when {
+        receivingUnlimited -> Colors.White
+        status == ChannelStatusUi.CLOSED -> Colors.Gray5
+        else -> Colors.White64
+    }
     val receivingAvailableColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray3 else Colors.White
 
     val spendingAvailableFraction = if (capacity > 0) localBalance.toFloat() / capacity else 0f
-    val receivingAvailableFraction = if (capacity > 0) remoteBalance.toFloat() / capacity else 0f
+    val receivingAvailableFraction = when {
+        receivingUnlimited -> 1f
+        capacity > 0 -> remoteBalance.toFloat() / capacity
+        else -> 0f
+    }
 
     Column(
         modifier = modifier
@@ -90,10 +99,17 @@ fun LightningChannel(
                         tint = receivingAvailableColor,
                         modifier = Modifier.size(14.dp)
                     )
-                    MoneyCaptionB(
-                        sats = remoteBalance,
-                        color = receivingAvailableColor,
-                    )
+                    if (receivingUnlimited) {
+                        CaptionB(
+                            text = stringResource(R.string.lightning__spark_receiving_unlimited),
+                            color = receivingAvailableColor,
+                        )
+                    } else {
+                        MoneyCaptionB(
+                            sats = remoteBalance,
+                            color = receivingAvailableColor,
+                        )
+                    }
                 }
             }
         }
@@ -197,6 +213,21 @@ private fun PreviewChannelClosed() {
             remoteBalance = 100_000,
             status = ChannelStatusUi.CLOSED,
             showLabels = true,
+            modifier = Modifier.padding(16.dp)
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewReceivingUnlimited() {
+    AppThemeSurface {
+        LightningChannel(
+            capacity = 580_000,
+            localBalance = 580_000,
+            remoteBalance = 0,
+            status = ChannelStatusUi.OPEN,
+            receivingUnlimited = true,
             modifier = Modifier.padding(16.dp)
         )
     }

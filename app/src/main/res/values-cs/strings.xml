@@ -225,8 +225,6 @@
     <string name="lightning__spark_confirmations">%1$d/3 potvrzení</string>
     <string name="lightning__spark_deposit">Vklad</string>
     <string name="lightning__spark_deposit__wait_button">Počkat</string>
-    <string name="lightning__spark_deposits_claimed">Připsané vklady</string>
-    <string name="lightning__spark_deposits_pending">Probíhající vklady</string>
     <string name="lightning__spark_exit__amount">Částka k odchodu</string>
     <string name="lightning__spark_exit__button">Nouzový odchod</string>
     <string name="lightning__spark_exit__cancel">Zrušit odchod</string>
@@ -1814,8 +1812,6 @@
     <string name="widgets__widget__size_wide">Široký</string>
     <string name="wallet__balance_updating">Aktualizace zůstatku…</string>
     <string name="settings__status__exit__funding">Je potřeba financovat poplatky</string>
-    <string name="settings__status__exit__pending">Probíhá</string>
-    <string name="settings__status__exit__title">Nouzový odchod</string>
     <string name="settings__status__lightning_connection__spark">Používá Spark</string>
     <string name="settings__status__spark__error">Offline</string>
     <string name="settings__status__spark__pending">Připojování...</string>

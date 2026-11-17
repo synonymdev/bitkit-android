@@ -234,8 +234,6 @@
     <string name="lightning__spark_confirmations">%1$d/3 подтверждений</string>
     <string name="lightning__spark_deposit">Депозит</string>
     <string name="lightning__spark_deposit__wait_button">Ждать</string>
-    <string name="lightning__spark_deposits_claimed">Зачисленные депозиты</string>
-    <string name="lightning__spark_deposits_pending">Депозиты в обработке</string>
     <string name="lightning__spark_exit__amount">Сумма выхода</string>
     <string name="lightning__spark_exit__button">Экстренный выход</string>
     <string name="lightning__spark_exit__cancel">Отменить выход</string>
@@ -1828,8 +1826,6 @@
     <string name="widgets__widget__size_wide">Широкий</string>
     <string name="wallet__balance_updating">Обновление баланса…</string>
     <string name="settings__status__exit__funding">Нужны средства на комиссии</string>
-    <string name="settings__status__exit__pending">Выполняется</string>
-    <string name="settings__status__exit__title">Экстренный Выход</string>
     <string name="settings__status__lightning_connection__spark">Через Spark</string>
     <string name="settings__status__spark__error">Не в сети</string>
     <string name="settings__status__spark__pending">Подключение...</string>

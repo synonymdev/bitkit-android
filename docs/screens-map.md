@@ -317,7 +317,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | CloseConnectionScreen.kt | Settings > Advanced › Close connection |
 | LightningConnectionsScreen.kt | Settings > Advanced › Lightning Connections overview |
 | MoveToSparkScreen.kt | `todo` |
-| SparkDetailScreen.kt | `todo` |
+| SparkDetailScreen.kt | Settings > Advanced › Connection details Spark |
 | SparkExitConfirmScreen.kt | `todo` |
 | SparkExitFeeBumpScreen.kt | `todo` |
 | SparkExitFundingScreen.kt | `todo` |

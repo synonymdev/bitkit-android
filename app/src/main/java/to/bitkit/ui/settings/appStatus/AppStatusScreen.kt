@@ -5,9 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -35,6 +36,7 @@ import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.HealthState
 import to.bitkit.repositories.AppHealthState
 import to.bitkit.ui.Routes
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -92,7 +94,8 @@ private fun Content(
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
@@ -167,39 +170,12 @@ private fun Content(
                 onClick = onChannelsClick,
             )
 
-            uiState.health.spark?.let { sparkHealth ->
-                StatusItem(
-                    statusUi = StatusUi(
-                        id = "spark",
-                        title = stringResource(R.string.settings__status__spark__title),
-                        subtitle = when (sparkHealth) {
-                            HealthState.READY -> stringResource(R.string.settings__status__spark__ready)
-                            HealthState.PENDING -> stringResource(R.string.settings__status__spark__pending)
-                            HealthState.ERROR -> stringResource(R.string.settings__status__spark__error)
-                        },
-                        iconRes = R.drawable.ic_asterisk,
-                        state = sparkHealth,
-                    ),
-                    // Spark's detail shows a zero balance until Spark has read its state.
-                    onClick = onSparkClick.takeIf { sparkHealth == HealthState.READY },
-                )
-            }
-
-            uiState.exitStep?.let { exitStep ->
-                StatusItem(
-                    statusUi = StatusUi(
-                        id = "spark_exit",
-                        title = stringResource(R.string.settings__status__exit__title),
-                        subtitle = when (exitStep) {
-                            ExitStep.FUNDING -> stringResource(R.string.settings__status__exit__funding)
-                            ExitStep.RUNNING -> stringResource(R.string.settings__status__exit__pending)
-                        },
-                        iconRes = R.drawable.ic_warning,
-                        state = HealthState.PENDING,
-                    ),
-                    onClick = onExitClick,
-                )
-            }
+            SparkStatusItem(
+                sparkHealth = uiState.health.spark,
+                exitStep = uiState.exitStep,
+                onSparkClick = onSparkClick,
+                onExitClick = onExitClick,
+            )
 
             StatusItem(
                 statusUi = StatusUi(
@@ -221,7 +197,59 @@ private fun Content(
 
             VerticalSpacer(16.dp)
         }
+
+        BodyM(
+            text = stringResource(R.string.settings__status__app_version).replace("{version}", uiState.appVersion),
+            color = Colors.White64,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .navigationBarsPadding()
+                .testTag("AppVersion")
+        )
     }
+}
+
+@Composable
+private fun SparkStatusItem(
+    sparkHealth: HealthState?,
+    exitStep: ExitStep?,
+    onSparkClick: () -> Unit,
+    onExitClick: () -> Unit,
+) {
+    if (exitStep != null) {
+        StatusItem(
+            statusUi = StatusUi(
+                id = "spark_exit",
+                title = stringResource(R.string.settings__status__spark__title),
+                subtitle = when (exitStep) {
+                    ExitStep.FUNDING -> stringResource(R.string.settings__status__exit__funding)
+                    ExitStep.RUNNING -> stringResource(R.string.settings__status__spark__exit)
+                },
+                iconRes = R.drawable.ic_warning,
+                state = HealthState.PENDING,
+            ),
+            onClick = onExitClick,
+        )
+        return
+    }
+    if (sparkHealth == null) return
+    StatusItem(
+        statusUi = StatusUi(
+            id = "spark",
+            title = stringResource(R.string.settings__status__spark__title),
+            subtitle = when (sparkHealth) {
+                HealthState.READY -> stringResource(R.string.settings__status__spark__ready)
+                HealthState.PENDING -> stringResource(R.string.settings__status__spark__pending)
+                HealthState.ERROR -> stringResource(R.string.settings__status__spark__error)
+            },
+            iconRes = R.drawable.ic_asterisk,
+            state = sparkHealth,
+        ),
+        // Spark's detail shows a zero balance until Spark has read its state.
+        onClick = onSparkClick.takeIf { sparkHealth == HealthState.READY },
+    )
 }
 
 @Composable
@@ -313,6 +341,7 @@ private fun Preview() {
                 backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
                 nodeSubtitle = "Running",
                 exitStep = ExitStep.RUNNING,
+                appVersion = "3.2.0 (182)",
             ),
         )
     }
