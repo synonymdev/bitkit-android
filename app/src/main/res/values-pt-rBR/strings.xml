@@ -178,7 +178,7 @@
     <string name="lightning__move_to_spark__amount">Valor</string>
     <string name="lightning__move_to_spark__confirm_text">Seu saldo passa para a Spark através da Lightning, a forma mais barata de o manter nos Gastos. A taxa de roteamento abaixo é o máximo que paga.</string>
     <string name="lightning__move_to_spark__confirm_title">Mover para a\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
-    <string name="lightning__move_to_spark__done_rest_text">Parte dseu saldo já está na Spark. Mova o resto da mesma forma e depois feche a conexão esvaziada.</string>
+    <string name="lightning__move_to_spark__done_rest_text">Parte do seu saldo já está na Spark. Mova o resto da mesma forma e depois feche a conexão esvaziada.</string>
     <string name="lightning__move_to_spark__done_text">Seu saldo já está na Spark. Feche a conexão esvaziada para devolver a reserva dela à poupança.</string>
     <string name="lightning__move_to_spark__done_title">Movido para a\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__failed_nothing">Suas conexões Lightning não têm mais saldo para mover.</string>
@@ -1192,7 +1192,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_paykit_no_route__description">Este contato não tem nenhum método de pagamento que o Bitkit possa usar agora.</string>
     <string name="wallet__send_paykit_no_route__title">Não é possível pagar este contato</string>
-    <string name="wallet__send_paykit_withdrawal_settling__description">Um levantamento anterior dseu saldo de gastos ainda está a ser concluído. Tente novamente quando for concluído.</string>
+    <string name="wallet__send_paykit_withdrawal_settling__description">Um levantamento anterior do seu saldo de gastos ainda está a ser concluído. Tente novamente quando for concluído.</string>
     <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos não estão mais disponíveis. O Bitkit primeiro verifica a rede e depois devolve as moedas desta transferência para sua carteira, para que a transferência original nunca seja confirmada. Isso tem uma taxa de rede.</string>
     <string name="wallet__send_pending__description">Esse pagamento está demorando mais do que o esperado. Enquanto isso, você pode continuar usando a Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento Pendente</string>
@@ -1434,8 +1434,8 @@
     <string name="lightning__savings_confirm__spark_fee">Taxa do Spark</string>
     <string name="lightning__savings_settling__text">Sua transferência foi iniciada e está sendo &lt;accent&gt;liquidada onchain&lt;/accent&gt;. Seu saldo de poupança será atualizado automaticamente quando ela for concluída.</string>
     <string name="lightning__savings_settling__title">Transferência\n&lt;accent&gt;a caminho&lt;/accent&gt;</string>
-    <string name="lightning__savings_spark_failed">Seu saldo Spark não pôde ser movido para a poupança e fica nseu saldo de gastos.</string>
-    <string name="lightning__savings_spark_failed_channels">Os fundos dos seus canais estão sendo movidos para a poupança, mas seu saldo Spark não pôde ser movido e fica nseu saldo de gastos.</string>
+    <string name="lightning__savings_spark_failed">Seu saldo Spark não pôde ser movido para a poupança e fica no seu saldo de gastos.</string>
+    <string name="lightning__savings_spark_failed_channels">Os fundos dos seus canais estão sendo movidos para a poupança, mas seu saldo Spark não pôde ser movido e fica no seu saldo de gastos.</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Conectando&lt;/accent&gt;\nà rede</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Reconecte seu dispositivo de hardware, ele parece estar desconectado do seu telefone.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Reconectar Dispositivo de Hardware</string>
