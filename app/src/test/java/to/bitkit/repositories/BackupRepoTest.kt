@@ -435,7 +435,7 @@ class BackupRepoTest : BaseUnitTest() {
 
         inOrder(sparkRepo, vssBackupClient) {
             verify(vssBackupClient).putObject(BackupRepo.SPARK_EXIT_UNIMPORTED_KEY, stored)
-            verify(sparkRepo).skipUnimportableRemoteExitState()
+            verify(sparkRepo).skipUnimportableRemoteExitState("v9")
             verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
         }
     }

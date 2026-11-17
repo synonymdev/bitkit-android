@@ -44,6 +44,7 @@ class MoveToSparkManager @Inject constructor(
 
     /** Counts quotes, moves and resets; a quote or move writes its result only while it is still the latest. */
     private val generation = AtomicInteger(0)
+    private val latestScreen = AtomicInteger(0)
     private var quoteJob: Job? = null
 
     /** A move was started and its outcome is still the screen's, so opening the screen again keeps it. */
@@ -54,15 +55,22 @@ class MoveToSparkManager @Inject constructor(
     @Volatile
     private var isMoveInFlight = false
 
-    /** Opens the screen: quotes a new move, unless one is quoting or a move is running or still shows its outcome. */
-    fun start() {
-        if (keepsOutcome || quoteJob?.isActive == true) return
-        quote()
+    /**
+     * Opens the screen: quotes a new move, unless one is quoting or a move is running or still shows its outcome.
+     * Returns the screen's token for [reset].
+     */
+    fun start(): Int {
+        val screen = latestScreen.incrementAndGet()
+        if (!keepsOutcome && quoteJob?.isActive != true) quote()
+        return screen
     }
 
-    /** Forgets the last move once its screen is left, unless its payment is still in flight. */
-    fun reset() {
-        if (isMoveInFlight) return
+    /**
+     * Forgets the last move once its [screen] is left, unless its payment is still in flight or a newer screen opened
+     * before this one closed.
+     */
+    fun reset(screen: Int) {
+        if (screen != latestScreen.get() || isMoveInFlight) return
         generation.incrementAndGet()
         quoteJob?.cancel()
         keepsOutcome = false

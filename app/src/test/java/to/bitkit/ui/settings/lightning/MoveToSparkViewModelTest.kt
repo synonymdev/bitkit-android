@@ -108,7 +108,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         whenever(moveToSparkRepo.move(eq(quote))).doSuspendableAnswer { payment.await() }
         createViewModel().move()
 
-        manager.reset()
+        manager.reset(screen = 1)
         val reopened = createViewModel()
         assertEquals(MoveToSparkUiState.Confirm(quote, isMoving = true), reopened.uiState.value)
 
@@ -122,7 +122,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     fun `leaving the screen while a move is in flight keeps waiting for its outcome`() = test {
         createViewModel().move()
 
-        manager.reset()
+        manager.reset(screen = 1)
         val reopened = createViewModel()
         firstSettled.complete(Result.success(moved))
 
@@ -134,11 +134,21 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         whenever(moveToSparkRepo.move(eq(quote))).thenReturn(Result.success(moved))
         createViewModel().move()
 
-        manager.reset()
+        manager.reset(screen = 1)
         val reopened = createViewModel()
 
         assertEquals(MoveToSparkUiState.Confirm(quote), reopened.uiState.value)
         verify(moveToSparkRepo, times(2)).quote(anyOrNull())
+    }
+
+    @Test
+    fun `a closed screen's late cleanup leaves the reopened screen's quote`() = test {
+        createViewModel()
+        val reopened = createViewModel()
+
+        manager.reset(screen = 1)
+
+        assertEquals(MoveToSparkUiState.Confirm(quote), reopened.uiState.value)
     }
 
     private fun createViewModel() = MoveToSparkViewModel(manager)

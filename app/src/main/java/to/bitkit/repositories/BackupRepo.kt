@@ -730,7 +730,7 @@ class BackupRepo @Inject constructor(
             }
             merged.recoverCatching {
                 if (it !is SparkError.ExitStateUnimportable || stored == null) throw it
-                keepUnimportableExitBackup(stored)
+                keepUnimportableExitBackup(stored, remote?.exitState)
             }.getOrThrow()
         }
         val backup = sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
@@ -740,10 +740,9 @@ class BackupRepo @Inject constructor(
         ).getOrThrow()
     }
 
-    /** Keeps stored exit data Spark can never import under its own key, so the fresh export doesn't replace it. */
-    private suspend fun keepUnimportableExitBackup(stored: ByteArray) {
+    private suspend fun keepUnimportableExitBackup(stored: ByteArray, exitState: String?) {
         vssBackupClient.putObject(key = SPARK_EXIT_UNIMPORTED_KEY, data = stored).getOrThrow()
-        sparkRepo.skipUnimportableRemoteExitState()
+        sparkRepo.skipUnimportableRemoteExitState(exitState)
         Logger.warn("Kept unimportable Spark exit data under '$SPARK_EXIT_UNIMPORTED_KEY'", context = TAG)
     }
 

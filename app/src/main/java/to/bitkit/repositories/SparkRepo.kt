@@ -1159,10 +1159,11 @@ class SparkRepo @Inject constructor(
 
     /**
      * Stops merging stored exit data Spark can never import, which the caller kept apart, so the next upload replaces
-     * it; a staged restore of it is dropped too.
+     * it. A staged restore is dropped only when it holds that same [exitState]; other staged data still imports.
      */
-    fun skipUnimportableRemoteExitState() {
-        File(Env.sparkExitRestorePath(walletIndex)).delete()
+    fun skipUnimportableRemoteExitState(exitState: String?) {
+        val staged = File(Env.sparkExitRestorePath(walletIndex))
+        if (exitState != null && staged.exists() && staged.readText() == exitState) staged.delete()
         hasMergedRemoteExitState = true
     }
 
@@ -1749,17 +1750,13 @@ class SparkRepo @Inject constructor(
 
     private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
 
-    /** The payment hash of this send, at [status] when given. */
-    /**
-     * Whether this failed send started before the uncertain send of its hash, so it is an earlier attempt's. Spark
-     * dates a payment when it starts it, in epoch seconds; with the start unknown, as after a restart, it is not.
-     */
     private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
         val sentAt = uncertainSends[hash.lowercase()]?.sentAt ?: return false
         return timestamp < sentAt
     }
 
+    /** The payment hash of this send, at [status] when given. */
     private fun Payment.sendHash(status: PaymentStatus? = null): String? = (details as? PaymentDetails.Lightning)
         ?.takeIf { paymentType == SparkPaymentType.SEND && (status == null || this.status == status) }
         ?.htlcDetails?.paymentHash

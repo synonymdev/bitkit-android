@@ -15,9 +15,7 @@ class MoveToSparkViewModel @Inject constructor(
 
     val uiState = manager.uiState
 
-    init {
-        manager.start()
-    }
+    private val screen = manager.start()
 
     /** Quotes moving [targetSats], or everything the channels can send. */
     fun quote(targetSats: ULong? = null) = manager.quote(targetSats)
@@ -25,7 +23,7 @@ class MoveToSparkViewModel @Inject constructor(
     fun move() = manager.move()
 
     override fun onCleared() {
-        manager.reset()
+        manager.reset(screen)
     }
 }
 
