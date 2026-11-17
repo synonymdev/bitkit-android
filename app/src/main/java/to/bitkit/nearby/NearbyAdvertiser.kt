@@ -29,12 +29,15 @@ class NearbyAdvertiser(
     @Volatile
     private var request: ByteArray? = null
     private var gattServer: BluetoothGattServer? = null
-    private var isAdvertising = false
+    private var advertiseCallback: AdvertiseCallback? = null
+    private val isAdvertising get() = advertiseCallback != null
 
-    private val advertiseCallback = object : AdvertiseCallback() {
+    /** A new callback per start, so a failure reported after [stop] or a later start is ignored. */
+    private fun newAdvertiseCallback(): AdvertiseCallback = object : AdvertiseCallback() {
         override fun onStartFailure(errorCode: Int) {
-            isAdvertising = false
             Logger.warn("Failed nearby advertising with error '$errorCode'", context = TAG)
+            if (advertiseCallback !== this) return
+            advertiseCallback = null
             onFailed()
         }
     }
@@ -69,10 +72,10 @@ class NearbyAdvertiser(
     @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE])
     fun stop() {
         request = null
-        if (isAdvertising) {
-            runCatching { bluetoothManager.adapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback) }
-            isAdvertising = false
+        advertiseCallback?.let { callback ->
+            runCatching { bluetoothManager.adapter?.bluetoothLeAdvertiser?.stopAdvertising(callback) }
         }
+        advertiseCallback = null
         runCatching { gattServer?.close() }
         gattServer = null
     }
@@ -116,9 +119,11 @@ class NearbyAdvertiser(
             .setIncludeTxPowerLevel(false)
             .addServiceUuid(ParcelUuid(NearbyProtocol.SERVICE_UUID))
             .build()
-        runCatching { advertiser.startAdvertising(settings, data, advertiseCallback) }
-            .onSuccess { isAdvertising = true }
+        val callback = newAdvertiseCallback()
+        advertiseCallback = callback
+        runCatching { advertiser.startAdvertising(settings, data, callback) }
             .onFailure {
+                advertiseCallback = null
                 Logger.warn("Failed to start nearby advertising", it, context = TAG)
                 onFailed()
             }
