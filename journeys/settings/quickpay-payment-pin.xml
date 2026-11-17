@@ -11,10 +11,14 @@
     than once.
 
     The PIN pad is drawn over the QuickPay screen and reads "Please enter your PIN code to confirm
-    this QuickPay change." The slider stops are their labels under each slider: "$1" to "$50" for
-    the amount (testTag "QuickpayAmountSlider") and "1×" to "50×" for the daily limit (testTag
-    "QuickpayDailyLimitSlider"). Read the current values from the text above each slider rather
-    than the knob position.
+    this QuickPay change." Each slider has stops labelled "$1" to "$50" for the amount (testTag
+    "QuickpayAmountSlider") and "1×" to "50×" for the daily limit (testTag
+    "QuickpayDailyLimitSlider"). The labels themselves are not tappable, so "tap the "$20" stop" means
+    tapping the slider track directly above that label. Read the current values from the text above
+    each slider rather than the knob position.
+
+    Android differences: with biometrics enrolled, a failed biometric check falls back to the PIN pad;
+    on iOS it counts as not approved. This journey runs without biometrics, so no step changes.
   </description>
   <actions>
     <action>Tap the menu button (testTag "HeaderMenu") and tap Settings (testTag "DrawerSettings")</action>
