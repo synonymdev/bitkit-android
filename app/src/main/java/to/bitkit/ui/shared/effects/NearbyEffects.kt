@@ -150,15 +150,19 @@ fun NearbyScanEffect(enabled: Boolean, onRead: (String) -> Unit) {
 @SuppressLint("MissingPermission") // NearbyScanEffect runs only while the scan permissions are granted.
 private fun startScanner(scanner: NearbyScanner) = scanner.start()
 
-/** Serves [uri] to nearby Bitkit wallets over Bluetooth while the calling screen is resumed. */
+/**
+ * Serves [uri] to nearby Bitkit wallets over Bluetooth while the calling screen is resumed.
+ * [onFailed] runs when advertising can't start, so the screen stops saying it can be tapped.
+ */
 @Composable
-fun NearbyAdvertiseEffect(uri: String?) {
+fun NearbyAdvertiseEffect(uri: String?, onFailed: () -> Unit = {}) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnFailed by rememberUpdatedState(onFailed)
 
     DisposableEffect(context, lifecycleOwner, uri) {
         if (uri.isNullOrBlank()) return@DisposableEffect onDispose {}
-        val advertiser = NearbyAdvertiser(context.applicationContext)
+        val advertiser = NearbyAdvertiser(context.applicationContext) { currentOnFailed() }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> startAdvertiser(advertiser, uri)
@@ -185,6 +189,7 @@ private fun stopAdvertiser(advertiser: NearbyAdvertiser) = advertiser.stop()
  * Offers the Receive request to nearby payers while the calling screen is resumed and the app is
  * unlocked: over NFC when the device can emulate a tag, and over Bluetooth when it is on and the
  * nearby setting allows it. Returns whether either is active, which is when Receive says it can be tapped.
+ * Bluetooth stops counting as active once its advertising fails to start.
  */
 @Composable
 fun offerPaymentNearby(request: String?): Boolean {
@@ -194,9 +199,11 @@ fun offerPaymentNearby(request: String?): Boolean {
     val bluetoothState = rememberBluetoothState(NearbyRole.ADVERTISE)
     val isNearbyEnabled by settingsViewModel?.isNearbyPaymentsEnabled?.collectAsStateWithLifecycle()
         ?: remember { mutableStateOf(false) }
-    val canAdvertise = isNearbyEnabled && bluetoothState == BluetoothState.ON
+    // A failed start is retried when the request or the Bluetooth state changes.
+    var advertiseFailed by remember(uri, bluetoothState) { mutableStateOf(false) }
+    val canAdvertise = isNearbyEnabled && bluetoothState == BluetoothState.ON && !advertiseFailed
 
     NfcEmitterEffect(uri = uri.takeIf { canEmitNfc })
-    NearbyAdvertiseEffect(uri = uri.takeIf { canAdvertise })
+    NearbyAdvertiseEffect(uri = uri.takeIf { canAdvertise }, onFailed = { advertiseFailed = true })
     return uri != null && (canEmitNfc || canAdvertise)
 }

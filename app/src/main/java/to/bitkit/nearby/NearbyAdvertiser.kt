@@ -20,7 +20,10 @@ import to.bitkit.utils.Logger
  * Serves one payment request to nearby Bitkit wallets: a GATT server with the nearby service and a
  * connectable advertisement carrying only the service UUID. [start] and [stop] run on the main thread.
  */
-class NearbyAdvertiser(private val context: Context) {
+class NearbyAdvertiser(
+    private val context: Context,
+    private val onFailed: () -> Unit = {},
+) {
     private val bluetoothManager = context.bluetoothManager
 
     @Volatile
@@ -32,6 +35,7 @@ class NearbyAdvertiser(private val context: Context) {
         override fun onStartFailure(errorCode: Int) {
             isAdvertising = false
             Logger.warn("Failed nearby advertising with error '$errorCode'", context = TAG)
+            onFailed()
         }
     }
 
@@ -58,7 +62,7 @@ class NearbyAdvertiser(private val context: Context) {
     fun start(uri: String) {
         val encoded = NearbyProtocol.encodeRequest(uri) ?: return stop()
         request = encoded
-        if (gattServer == null) gattServer = openServer() ?: return
+        if (gattServer == null) gattServer = openServer() ?: return onFailed()
         if (!isAdvertising) startAdvertising()
     }
 
@@ -101,7 +105,7 @@ class NearbyAdvertiser(private val context: Context) {
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
     private fun startAdvertising() {
-        val advertiser = bluetoothManager.adapter?.bluetoothLeAdvertiser ?: return
+        val advertiser = bluetoothManager.adapter?.bluetoothLeAdvertiser ?: return onFailed()
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_LOW)
@@ -114,7 +118,10 @@ class NearbyAdvertiser(private val context: Context) {
             .build()
         runCatching { advertiser.startAdvertising(settings, data, advertiseCallback) }
             .onSuccess { isAdvertising = true }
-            .onFailure { Logger.warn("Failed to start nearby advertising", it, context = TAG) }
+            .onFailure {
+                Logger.warn("Failed to start nearby advertising", it, context = TAG)
+                onFailed()
+            }
     }
 
     private companion object {
