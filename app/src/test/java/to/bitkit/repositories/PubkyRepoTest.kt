@@ -81,6 +81,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.ext.isPaykitTemporarilyUnavailable
+import to.bitkit.ext.isWebLink
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
@@ -88,6 +89,7 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileDataLink
+import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitReadLane
@@ -1287,6 +1289,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile publishes every link the profile editor accepts as a social v1 web URL`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val accepted = listOf("example.com", "Https://example.com", "HTTP://example.com/path")
+        accepted.forEach { assertTrue(it.isWebLink(), it) }
+
+        sut.saveProfile(
+            name = "Test",
+            bio = "",
+            links = accepted.mapIndexed { i, url -> PubkyProfileLink(label = "Link $i", url = url) },
+            tags = emptyList(),
+            imageUrl = null,
+        )
+
+        val update = argumentCaptor<PubkyProfileUpdate>()
+        verifyBlocking(pubkyService) { publishPubkyProfile(update.capture(), anyOrNull(), any()) }
+        val rejectedByV1 = update.firstValue.links.orEmpty().map { it.url }
+            .filterNot { it.startsWith("http://") || it.startsWith("https://") }
+        assertEquals(emptyList(), rejectedByV1, "links social v1 rejects")
+    }
+
+    @Test
     fun `saveProfile reports a tag change it could not store while the tags cannot be read`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
@@ -1651,9 +1674,7 @@ class PubkyRepoTest : BaseUnitTest() {
                     image = null,
                     links = listOf(
                         SdkPubkyProfileLink(title = "Site", url = "https://example.com"),
-                        SdkPubkyProfileLink(title = "Mail", url = "mailto:a@b.com"),
                         SdkPubkyProfileLink(title = "Medium", url = "https://medium.com/@alice"),
-                        SdkPubkyProfileLink(title = "Dotted", url = "tel:5551234567"),
                         SdkPubkyProfileLink(title = "Loopback", url = "https://127.1"),
                     ),
                 ),

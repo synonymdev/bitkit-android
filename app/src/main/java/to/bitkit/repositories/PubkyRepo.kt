@@ -1426,14 +1426,14 @@ class PubkyRepo @Inject constructor(
         return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
     }
 
-    /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five valid links. */
+    /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five web links. */
     private fun fitted(name: String, bio: String, links: List<PubkyProfileLink>) = FittedProfile(
         name = name.singleLine().takeCodePoints(PUBKY_APP_NAME_MAX_LENGTH),
         bio = bio.singleLine().takeCodePoints(PUBKY_APP_BIO_MAX_LENGTH),
         links = links
             .mapNotNull { link ->
                 val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                val url = link.url.toPubkyAppLinkUrl() ?: return@mapNotNull null
+                val url = link.url.toPubkyAppLinkUrl()?.takeIf { it.isSocialV1WebUrl() } ?: return@mapNotNull null
                 PubkyProfileLink(label = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
             }
             .take(PUBKY_APP_LINKS_MAX_COUNT),
@@ -1549,8 +1549,9 @@ class PubkyRepo @Inject constructor(
         val value = trim().takeIf { it.isNotEmpty() } ?: return null
         val isPhone = value.isPhoneNumber()
         if (!isPhone && value.any { it.isWhitespace() }) return null
+        val scheme = if (isPhone) null else runCatching { URI(value).scheme }.getOrNull()
         val url = when {
-            !isPhone && runCatching { URI(value).scheme }.getOrNull() != null -> value
+            scheme != null -> scheme.lowercase() + value.substring(scheme.length)
             value.isEmailAddress() -> "mailto:$value"
             isPhone -> "tel:" + value.filterNot { it in " -()." }
             '.' in value && !value.startsWith('.') -> "https://$value"
@@ -1587,6 +1588,9 @@ class PubkyRepo @Inject constructor(
         return (startsWith('+') || digits >= 7) && digits >= 5 && all { it in "+0123456789 -()." } && '+' !in drop(1) &&
             !ISO_DATE.matches(this) && !IPV4.matches(this)
     }
+
+    /** Social v1's own link rule: a lowercase `http://` or `https://` prefix; it drops other links on migration too. */
+    private fun String.isSocialV1WebUrl() = startsWith("http://") || startsWith("https://")
 
     private fun String.isPaykitStorage() = "/pub/paykit/" in this
 

@@ -29,12 +29,12 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.ext.isWebLink
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import java.net.URI
 
 private val LINK_SUGGESTIONS = persistentListOf(
     "Email", "Phone", "Website", "Twitter", "Telegram", "Instagram",
@@ -44,22 +44,6 @@ private val LINK_SUGGESTIONS = persistentListOf(
 
 /** Suggestions whose links are not web links, which social v1 profiles reject. */
 private val NON_WEB_SUGGESTIONS = setOf("Email", "Phone")
-
-private val WEB_LINK_SCHEMES = setOf("http", "https")
-private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:(?!\\d)")
-
-/** Whether this is an http(s) link, with or without its scheme: the only links a social v1 profile accepts. */
-internal fun String.isWebLink(): Boolean {
-    val value = trim()
-    if (value.isEmpty() || value.any { it.isWhitespace() }) return false
-    val hasScheme = URI_SCHEME.containsMatchIn(value)
-    if (!hasScheme && '@' in value) return false
-    val uri = runCatching { URI(if (hasScheme) value else "https://$value") }.getOrNull() ?: return false
-    val host = uri.host ?: return false
-    return uri.scheme.lowercase() in WEB_LINK_SCHEMES &&
-        '.' in host &&
-        !host.substringAfterLast('.').all { it.isDigit() }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -3,6 +3,7 @@ package to.bitkit.ext
 import android.icu.text.MessageFormat
 import to.bitkit.env.Defaults
 import to.bitkit.utils.Logger
+import java.net.URI
 
 private const val TAG = "StringExt"
 
@@ -50,3 +51,22 @@ fun String.formatPlural(argMap: Map<Any, Any>): String =
             Logger.warn("Failed to format plural pattern '$this'", it, context = TAG)
             this
         }
+
+private val WEB_LINK_SCHEMES = setOf("http", "https")
+private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")
+
+/**
+ * Whether this is an http(s) link, with or without its scheme: the only links a social v1 profile accepts.
+ * A value with any other scheme, including a bare `host:port`, is refused, as the profile write keeps it unchanged.
+ */
+fun String.isWebLink(): Boolean {
+    val value = trim()
+    if (value.isEmpty() || value.any { it.isWhitespace() }) return false
+    val hasScheme = URI_SCHEME.containsMatchIn(value)
+    if (!hasScheme && '@' in value) return false
+    val uri = runCatching { URI(if (hasScheme) value else "https://$value") }.getOrNull() ?: return false
+    val host = uri.host ?: return false
+    return uri.scheme.lowercase() in WEB_LINK_SCHEMES &&
+        '.' in host &&
+        !host.substringAfterLast('.').all { it.isDigit() }
+}
