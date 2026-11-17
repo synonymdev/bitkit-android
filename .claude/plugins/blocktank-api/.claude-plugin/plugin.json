@@ -1,4 +1,4 @@
 {
   "name": "blocktank-api",
-  "description": "Interact with the Blocktank LSP API for Lightning testing during bitkit development."
+  "description": "Blocktank staging API: regtest mining, deposits, invoice payments and lookups of existing orders."
 }

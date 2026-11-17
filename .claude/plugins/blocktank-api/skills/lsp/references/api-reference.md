@@ -1,6 +1,8 @@
 # Blocktank LSP API Reference
 
-Complete reference for all Blocktank LSP HTTP API endpoints.
+Reference for the Blocktank LSP HTTP API routes staging still serves.
+
+Blocktank no longer opens channels: creating an order, opening a paid order, creating a CJIT entry and the gift routes return 404. The order fee estimates still answer but no order can use them, so they are left out. Orders and CJIT entries can still be read, for wallets that hold them from before the sunset. `POST /regtest/channel/close` is gone (500 `Worker method closeChannelByFundingTx not found`).
 
 Base URL: `https://api.stag0.blocktank.to/blocktank/api/v2` (staging)
 
@@ -52,40 +54,7 @@ General information about the service, LSP nodes, and channel configuration limi
 
 ---
 
-## Channel Orders
-
-### POST /channels
-
-Create a new channel order.
-
-**Request body:**
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `lspBalanceSat` | integer | Yes | — | LSP-side balance. Min 20,000 sat. |
-| `channelExpiryWeeks` | integer | Yes | — | Lease duration. Between minExpiryWeeks and maxExpiryWeeks from /info. |
-| `clientBalanceSat` | integer | No | 0 | Client-side balance. Must be <= lspBalanceSat. |
-| `zeroConf` | boolean | No | false | Turbo channel (0-conf channel open). |
-| `zeroConfPayment` | boolean | No | null | Accept 0-conf onchain payment. Cannot use with clientBalanceSat. |
-| `zeroReserve` | boolean | No | false | Zero channel reserve (dust limit). |
-| `couponCode` | string | No | null | Discount code. Max 128 chars. |
-| `discountCode` | string | No | null | Discount code (newer field). Max 128 chars. |
-| `source` | string | No | null | Order source tracking. Max 128 chars. |
-| `lspNodeId` | string | No | null | Specific LSP node pubkey. Must be from /info nodes list. |
-| `clientNodeId` | string | No | null | Client node pubkey for compliance checks. |
-| `signature` | string | No | null | Signature of `channelOpen-${timestamp}` by client node. |
-| `timestamp` | string | No | null | ISO datetime used for signature. |
-| `announceChannel` | boolean | No | false | Public channel. Cannot be true for zeroConf channels. |
-| `refundOnchainAddress` | string | No | null | Refund address. Max 512 chars. |
-
-**Validation rules:**
-- `lspBalanceSat + clientBalanceSat` must be between `minChannelSizeSat` and `maxChannelSizeSat`
-- `zeroConfPayment` cannot be used when `clientBalanceSat > 0`
-- If `signature` is provided, `clientNodeId` and `timestamp` must also be provided
-
-**Response (201):** Order object (see Order Schema below)
-
-**Errors:** 400 (validation error)
+## Channel Orders (lookup only)
 
 ### GET /channels/:id
 
@@ -107,113 +76,7 @@ Get multiple orders by IDs.
 
 **Errors:** 404 (not found)
 
-### POST /channels/:id/open
-
-Open a channel for a paid order.
-
-**Path params:** `id` — UUID
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `connectionStringOrPubkey` | string | Yes | `pubkey@host:port` or just `pubkey`. If pubkey only, client must have an active peer connection to the LSP. |
-| `announceChannel` | boolean | No | Announce channel to network. Cannot be true for zeroConf. |
-
-**Response (200):** Updated Order object
-
-**Errors:**
-- 400 — Order not in correct state
-- 404 — Order not found
-- 412 — Channel open failed (see ChannelOpenError)
-
-**Channel open error codes:**
-- `WRONG_ORDER_STATE` — Order not in "paid" state
-- `PEER_NOT_REACHABLE` — Cannot connect to peer
-- `CHANNEL_REJECTED_BY_DESTINATION` — Peer rejected the channel
-- `CHANNEL_REJECTED_BY_LSP` — LSP rejected the channel
-- `BLOCKTANK_NOT_READY` — Service temporarily unavailable
-- `UNKNOWN_ERROR` — Generic error
-
-### GET /channels/:id/min-0conf-tx-fee
-
-Get the minimum onchain fee for a 0-conf payment to be accepted. Valid for at least 2 minutes from time of calling.
-
-**Path params:** `id` — UUID
-
-**Response (200):**
-
-```json
-{
-  "id": "69ce39f6-4918-416e-9056-8dba678c8af2",
-  "satPerVByte": 24.3,
-  "validityEndsAt": "2023-07-28T07:39:00.342Z"
-}
-```
-
-### POST /channels/estimate-fee
-
-Estimate channel order fee without creating an order.
-
-**Request body:** Same as POST /channels
-
-**Response (200):**
-
-```json
-{
-  "feeSat": 10192,
-  "min0ConfTxFee": {
-    "satPerVByte": 50.1,
-    "validityEndsAt": "2023-07-06T07:58:39.588Z"
-  }
-}
-```
-
-### POST /channels/estimate-fee-full
-
-Estimate fee with network and service fee breakdown.
-
-**Request body:** Same as POST /channels
-
-**Response (200):**
-
-```json
-{
-  "feeSat": 10192,
-  "networkFeeSat": 5096,
-  "serviceFeeSat": 5096,
-  "min0ConfTxFee": {
-    "satPerVByte": 50.1,
-    "validityEndsAt": "2023-07-06T07:58:39.588Z"
-  }
-}
-```
-
----
-
-## CJIT (Just-In-Time Channels)
-
-### POST /cjit
-
-Create a CJIT channel entry. The LSP creates a hold invoice; when paid, the channel opens automatically.
-
-**Request body:**
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `channelSizeSat` | integer | Yes | — | Channel size. Must be >= invoiceSat. Between min/max from /info. |
-| `invoiceSat` | integer | Yes | — | Invoice amount. Min 1. |
-| `invoiceDescription` | string | No | "" | Invoice description. |
-| `channelExpiryWeeks` | integer | Yes | — | Lease duration. Between min/max from /info. |
-| `nodeId` | string | Yes | — | Pubkey of the node to open the channel to. |
-| `couponCode` | string | No | null | Discount code. Max 128 chars. |
-| `source` | string | No | null | Order source tracking. Max 128 chars. |
-| `discountCode` | string | No | null | Discount code. Max 128 chars. |
-| `zeroReserve` | boolean | No | false | Zero channel reserve. |
-
-**Response (201):** CJitEntry object (see CJitEntry Schema below)
-
-**Errors:** 400 (validation or compliance check failure)
+## CJIT Entries (lookup only)
 
 ### GET /cjit/:id
 
@@ -224,49 +87,6 @@ Get CJIT entry by ID.
 **Response (200):** CJitEntry object
 
 **Errors:** 404 (not found)
-
----
-
-## Gift
-
-### POST /gift/pay
-
-Pay a gift invoice.
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `invoice` | string | Yes | Valid bolt11 invoice string. |
-
-**Response (200):** Gift object
-
-**Errors:** 400
-
-### POST /gift/order
-
-Create a gift order.
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `clientNodeId` | string | Yes | Client node ID. |
-| `code` | string | Yes | Gift code. |
-
-**Response (200):** Gift object
-
-**Errors:** 400
-
-### GET /gift/:id
-
-Get gift by ID.
-
-**Path params:** `id` — UUID
-
-**Response (200):** Gift object
-
-**Errors:** 400
 
 ---
 
@@ -319,20 +139,6 @@ Get payment status by ID.
 **Path params:** `id` — UUID (payment ID from POST /regtest/channel/pay)
 
 **Response (200):** Payment object with invoice state
-
-### POST /regtest/channel/close
-
-Force close a channel.
-
-**Request body:**
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `fundingTxId` | string | Yes | — | Funding transaction ID from `channel.fundingTx.id`. |
-| `vout` | integer | Yes | — | Output index from `channel.fundingTx.vout`. Min 0. |
-| `forceCloseAfterSec` | integer | No | 86400 | Seconds before force close. Use 0 for immediate force close. |
-
-**Response (200):** Closing transaction ID string
 
 ---
 
@@ -455,18 +261,3 @@ Force close a channel.
 ```
 
 **CJIT states:** `created`, `completed`, `expired`, `failed`
-
-### ChannelOpenError
-
-Returned as HTTP 412 from POST /channels/:id/open:
-
-```json
-{
-  "message": "Channel has been rejected by the client.",
-  "code": "CHANNEL_REJECTED_BY_DESTINATION",
-  "details": {},
-  "name": "ChannelOpenError"
-}
-```
-
-**Error codes:** `WRONG_ORDER_STATE`, `PEER_NOT_REACHABLE`, `CHANNEL_REJECTED_BY_DESTINATION`, `CHANNEL_REJECTED_BY_LSP`, `BLOCKTANK_NOT_READY`, `UNKNOWN_ERROR`
