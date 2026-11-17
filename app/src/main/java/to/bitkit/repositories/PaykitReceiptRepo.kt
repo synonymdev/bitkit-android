@@ -202,10 +202,11 @@ class PaykitReceiptRepo @Inject constructor(
         val updated = mutableMapOf<String, PaykitReceiptStatus>()
         found.forEach { candidate ->
             val reachable = unreachable.none { PubkyPublicKeyFormat.matches(it, candidate.counterparty) }
+            val view = views[candidate.receiptId]
             val status = when {
                 isSent(candidate, views, expectedIdentity) -> PaykitReceiptStatus.Sent
-                views[candidate.receiptId]?.status != ReceiptIssuanceStatus.ACCESS_QUEUED -> PaykitReceiptStatus.Failed
-                !reachable -> PaykitReceiptStatus.Failed
+                view?.status != ReceiptIssuanceStatus.ACCESS_QUEUED -> PaykitReceiptStatus.Failed
+                view.lastError != null || !reachable -> PaykitReceiptStatus.Failed
                 else -> PaykitReceiptStatus.Sending
             }
             val key = candidate.receive.statusKey.lowercase()

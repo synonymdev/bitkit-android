@@ -57,6 +57,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     private val sentIds = mutableSetOf<String>()
     private val accessStatus = mutableMapOf<String, ReceiptIssuanceStatus>()
     private val issued = mutableMapOf<String, ReceiptIssuanceView>()
+    private val lastErrors = mutableMapOf<String, String>()
     private var drainOutcome: Boolean? = true
 
     private lateinit var sut: PaykitReceiptRepo
@@ -112,6 +113,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
         val view = mock<ReceiptIssuanceView> {
             on { receiptId }.thenReturn(candidate.receiptId)
             on { status }.thenAnswer { accessStatus.getValue(candidate.receiptId) }
+            on { lastError }.thenAnswer { lastErrors[candidate.receiptId] }
             on { outboundMessageId }.thenReturn(MESSAGE_ID)
         }
         issued[candidate.receiptId] = view
@@ -214,6 +216,22 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
         stubPaidRequest()
         drainOutcome = false
         whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+
+        sut.reconcile()
+
+        assertEquals(mapOf(HASH to PaykitReceiptStatus.Failed), sut.statuses.value)
+    }
+
+    @Test
+    fun `receipt fails when its last send attempt failed`() = test {
+        stubPaidRequest()
+        drainOutcome = null
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.processOutboundPrivateMessages(eq(BUYER), eq(Priority.Background), eq(SELLER)))
+            .doSuspendableAnswer {
+                accessStatus.keys.forEach { id -> lastErrors[id] = "peer unreachable" }
+                mock<OutboundPrivateSendReport>()
+            }
 
         sut.reconcile()
 
