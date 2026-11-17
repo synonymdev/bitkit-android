@@ -480,7 +480,7 @@ class PaykitSdkServiceTest {
                 val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
                 whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).doSuspendableAnswer {
                     if (withdrawalFails && it.getArgument<List<Any>>(0).isEmpty()) {
-                        throw IllegalStateException("offline")
+                        error("offline")
                     }
                     report
                 }

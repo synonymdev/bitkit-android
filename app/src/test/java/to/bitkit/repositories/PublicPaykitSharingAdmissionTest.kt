@@ -276,7 +276,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             sut.syncCurrentPublishedEndpoints().getOrThrow()
             assertFalse(settingsFlow.value.publicPaykitCleanupPending)
             val endpoints = argumentCaptor<List<Endpoint>>()
-            verifyBlocking(paykitSdkService, times(6)) { syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull()) }
+            verifyBlocking(paykitSdkService, times(6)) {
+                syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+            }
             assertEquals(
                 listOf(
                     null,
@@ -328,7 +330,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             .thenReturn(endpointSync)
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull()) }
+        verifyBlocking(paykitSdkService, times(2)) {
+            syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+        }
         assertEquals(listOf("ln-new"), endpoints.firstValue.map { it.value })
         assertEquals(listOf("ln-new", usdt.value), endpoints.secondValue.map { it.value })
         verifyBlocking(lightningRepo, times(1)) { createInvoice(null, "", 86_400u, true) }

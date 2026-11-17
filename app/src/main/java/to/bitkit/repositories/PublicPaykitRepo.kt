@@ -236,7 +236,6 @@ class PublicPaykitRepo @Inject constructor(
             }?.result
     }
 
-
     private class LightningRefresh(signIn: PubkySignIn?, val ownsIdentity: () -> Boolean) {
         val signIn = AtomicReference(signIn)
         var invalidateInvoice = true

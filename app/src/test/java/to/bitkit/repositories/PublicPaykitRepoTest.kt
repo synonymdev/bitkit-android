@@ -434,11 +434,15 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         older.await().getOrThrow()
 
         val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull()) }
+        verifyBlocking(paykitSdkService, times(2)) {
+            syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+        }
         assertEquals(listOf("lnbc1replacement", "lnbc1paid"), endpoints.allValues.map { it.single().value })
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
         sut.syncCurrentPublishedEndpoints().getOrThrow()
-        verifyBlocking(paykitSdkService, times(3)) { syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull()) }
+        verifyBlocking(paykitSdkService, times(3)) {
+            syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+        }
         assertEquals("lnbc1replacement", endpoints.lastValue.single().value)
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
     }
@@ -503,13 +507,17 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             }
 
             val endpoints = argumentCaptor<List<Endpoint>>()
-            verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull()) }
+            verifyBlocking(paykitSdkService, times(2)) {
+                syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+            }
             assertEquals(listOf("bc1qrotated", "bc1qpublic"), endpoints.allValues.map { it.single().value })
             assertTrue(endpoints.allValues.all { it.single().methodId == MethodId.P2wpkh })
             assertEquals("bc1qpublic", remoteAddress)
             assertTrue(settingsFlow.value.publicPaykitCleanupPending)
             sut.syncCurrentPublishedEndpoints().getOrThrow()
-            verifyBlocking(paykitSdkService, times(3)) { syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull()) }
+            verifyBlocking(paykitSdkService, times(3)) {
+                syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+            }
             assertEquals("bc1qrotated", endpoints.lastValue.single().value)
             assertEquals("bc1qrotated", remoteAddress)
             assertFalse(settingsFlow.value.publicPaykitCleanupPending)
@@ -827,7 +835,9 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     fun `syncPublishedEndpoints remove preserves both cleanup failures`() = test {
         val endpointError = RuntimeException("endpoint failed")
         val appError = RuntimeException("app registration failed")
-        whenever { paykitSdkService.syncPublicEndpointsWithEpoch(eq(emptyList()), any(), anyOrNull()) }.thenThrow(endpointError)
+        whenever {
+            paykitSdkService.syncPublicEndpointsWithEpoch(eq(emptyList()), any(), anyOrNull())
+        }.thenThrow(endpointError)
         whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = null, priority = Priority.Interactive) }
             .thenThrow(appError)
 

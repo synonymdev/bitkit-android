@@ -248,8 +248,8 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
-import to.bitkit.services.PublicEndpointSync
 import to.bitkit.services.PendingChannelMigration
+import to.bitkit.services.PublicEndpointSync
 import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
