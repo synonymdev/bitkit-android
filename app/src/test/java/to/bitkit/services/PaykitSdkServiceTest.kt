@@ -95,6 +95,7 @@ import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PubkyContactError
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
@@ -454,6 +455,82 @@ class PaykitSdkServiceTest {
         caller.join()
         assertTrue(finished.isCompleted)
         verify(sdk).importContacts(any(), any())
+    }
+
+    @Test
+    fun `overlapping ordinary refresh reuses a successful forced publication for the same sign in`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).doSuspendableAnswer {
+                if (entered.complete(Unit)) release.await()
+                report
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+            val forced = PublicEndpointRefresh(PubkySignIn(RING_PUBKY, 1L), service.publicEndpointSyncEpoch(), false)
+            val first = async { service.syncPublicEndpointsWithEpoch(endpoints, { true }, forced) }
+            entered.await()
+            val overlap = PublicEndpointRefresh(PubkySignIn(RING_PUBKY, 1L), service.publicEndpointSyncEpoch())
+            val follower = async { service.syncPublicEndpointsWithEpoch(endpoints, { true }, overlap) }
+            runCurrent()
+            assertFalse(follower.isCompleted)
+            release.complete(Unit)
+
+            assertSame(first.await(), follower.await())
+            verify(sdk).syncPublicEndpointsWithReceivingDetails(any())
+
+            val later = PublicEndpointRefresh(PubkySignIn(RING_PUBKY, 1L), service.publicEndpointSyncEpoch())
+            service.syncPublicEndpointsWithEpoch(endpoints, { true }, later)
+            verify(sdk, times(2)).syncPublicEndpointsWithReceivingDetails(any())
+        }
+    }
+
+    @Test
+    fun `a direct public withdrawal invalidates overlapping refresh reuse`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+            val refresh = PublicEndpointRefresh(PubkySignIn(RING_PUBKY, 1L), service.publicEndpointSyncEpoch())
+            val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, refresh))
+
+            service.syncPublicEndpoints(emptyList())
+            assertTrue(service.publicEndpointSyncEpoch() > published.epoch)
+            val repeated = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, refresh))
+
+            assertTrue(repeated.epoch > published.epoch)
+            verify(sdk).syncPublicEndpointsWithReceivingDetails(emptyList())
+            verify(sdk, times(3)).syncPublicEndpointsWithReceivingDetails(any())
+        }
+    }
+
+    @Test
+    fun `a failed endpoint mutation and a replacement sign in each require a fresh write`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any()))
+                .thenReturn(report)
+                .thenThrow(IllegalStateException("offline"))
+                .thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+            val refresh = PublicEndpointRefresh(PubkySignIn(RING_PUBKY, 1L), service.publicEndpointSyncEpoch())
+            service.syncPublicEndpointsWithEpoch(endpoints, { true }, refresh)
+
+            assertFailsWith<IllegalStateException> { service.syncPublicEndpoints(emptyList()) }
+            service.syncPublicEndpointsWithEpoch(endpoints, { true }, refresh)
+            verify(sdk, times(3)).syncPublicEndpointsWithReceivingDetails(any())
+
+            val replacement = PublicEndpointRefresh(PubkySignIn(RING_PUBKY, 2L), refresh.epochAtStart)
+            service.syncPublicEndpointsWithEpoch(endpoints, { true }, replacement)
+            verify(sdk, times(4)).syncPublicEndpointsWithReceivingDetails(any())
+        }
     }
 
     @Test

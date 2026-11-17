@@ -139,11 +139,13 @@ import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitReceiptCandidate
 import to.bitkit.repositories.PubkyContactError
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -169,6 +171,26 @@ data class PaykitPrivateContactPaymentResolution(
 data class PaykitPublicContactPaymentResolution(
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
 )
+
+internal class PublicEndpointRefresh(
+    val signIn: PubkySignIn,
+    val epochAtStart: Long,
+    val reuseMatching: Boolean = true,
+)
+
+internal class PublicEndpointSync(val report: EndpointSyncReport, val epoch: Long)
+
+private class CompletedEndpointSync(
+    val signIn: PubkySignIn,
+    val endpoints: List<Endpoint>,
+    val result: PublicEndpointSync,
+) {
+    /** A later independent refresh still reads and reconciles remote state. */
+    fun canReuse(refresh: PublicEndpointRefresh, endpoints: List<Endpoint>): Boolean =
+        refresh.reuseMatching && result.epoch != refresh.epochAtStart &&
+            signIn.generation == refresh.signIn.generation && signIn.publicKey == refresh.signIn.publicKey &&
+            this.endpoints == endpoints
+}
 
 data class PaykitResolvedPaymentEndpoint(
     val appId: String,
@@ -287,6 +309,8 @@ class PaykitSdkService @Inject constructor(
     private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationLock = PaykitSdkOperationLock()
+    private val publicEndpointEpoch = AtomicLong()
+    private var completedEndpointSync: CompletedEndpointSync? = null
     private val publicReadSlots = PaykitPublicReadSlots(PUBLIC_READ_PERMITS)
     private val bulkReadPermits = Semaphore(BULK_READ_PERMITS)
     private val setupMutex = Mutex()
@@ -919,7 +943,15 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun syncPublicEndpoints(
         endpoints: List<Endpoint>,
         canPublish: suspend () -> Boolean,
-    ): EndpointSyncReport? {
+    ): EndpointSyncReport? = syncPublicEndpointsWithEpoch(endpoints, refresh = null, canPublish = canPublish)?.report
+
+    internal fun publicEndpointSyncEpoch(): Long = publicEndpointEpoch.get()
+
+    internal suspend fun syncPublicEndpointsWithEpoch(
+        endpoints: List<Endpoint>,
+        canPublish: suspend () -> Boolean,
+        refresh: PublicEndpointRefresh?,
+    ): PublicEndpointSync? {
         isSetup.await()
         val priority = if (endpoints.isEmpty()) {
             PaykitSdkOperationLock.Priority.Ordered
@@ -927,11 +959,23 @@ class PaykitSdkService @Inject constructor(
             PaykitSdkOperationLock.Priority.Background
         }
         return operationLock.withLock(priority) {
+            val previous = completedEndpointSync
+            if (refresh != null && previous != null && previous.canReuse(refresh, endpoints)) {
+                return@withLock if (canPublish()) previous.result else null
+            }
             withStateRevisionTracking { handle ->
                 if (!canPublish()) return@withStateRevisionTracking null
-                completeSdkCall {
+                // Direct withdrawals use this same lock. An uncertain write invalidates earlier success too.
+                publicEndpointEpoch.incrementAndGet()
+                completedEndpointSync = null
+                val report = completeSdkCall {
                     handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
                 }
+                val result = PublicEndpointSync(report, publicEndpointEpoch.incrementAndGet())
+                if (refresh != null && report.failed.isEmpty()) {
+                    completedEndpointSync = CompletedEndpointSync(refresh.signIn, endpoints, result)
+                }
+                result
             }
         }
     }
@@ -2106,6 +2150,8 @@ class PaykitSdkService @Inject constructor(
 
     private fun resetRuntime() {
         runtimeGeneration++
+        publicEndpointEpoch.incrementAndGet()
+        completedEndpointSync = null
         sdk = null
         cachedPaykitKey = null
         cachedBackupState = null

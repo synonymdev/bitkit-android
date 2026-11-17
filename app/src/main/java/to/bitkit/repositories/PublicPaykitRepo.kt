@@ -26,6 +26,7 @@ import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.PublicEndpointRefresh
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
@@ -214,16 +215,7 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private val publishMutex = Mutex()
-    private val lastPublication = AtomicReference<EndpointPublication?>(null)
     private val invoiceMutex = Mutex()
-
-    private class EndpointPublication(val signIn: PubkySignIn, val endpoints: List<Endpoint>) {
-        fun matches(signIn: PubkySignIn, endpoints: List<Endpoint>): Boolean =
-            this.signIn.generation == signIn.generation && this.signIn.publicKey == signIn.publicKey &&
-                this.endpoints == endpoints
-    }
-
-    private class AutomaticRefresh(val signIn: PubkySignIn, val publicationAtStart: EndpointPublication?)
 
     private class LightningRefresh(signIn: PubkySignIn?, val ownsIdentity: () -> Boolean) {
         val signIn = AtomicReference(signIn)
@@ -286,14 +278,16 @@ class PublicPaykitRepo @Inject constructor(
             val signIn = pubkyRepo.currentSignIn() ?: return@runSuspendCatching
             val canPublish = { pubkyRepo.isCurrent(signIn) && isStillCurrent?.invoke() != false }
             if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
-            val refresh = AutomaticRefresh(signIn, lastPublication.get())
+            val refresh = PublicEndpointRefresh(signIn, paykitSdkService.publicEndpointSyncEpoch())
             val desired = buildWalletEndpoints(signIn.publicKey, canPublish, refresh = true)
             if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
             syncPaykitApp(canSync = { isAutomaticPublicationAllowed(canPublish) }).getOrThrow()
             applyPublishedEndpoints(
                 desired,
                 beforePublish = { markPublicationPending(canPublish) },
-                acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, canPublish) },
+                acknowledge = { current ->
+                    acknowledgePublishedEndpoints(desired, signIn.publicKey) { current() && canPublish() }
+                },
                 canPublish = { isAutomaticPublicationAllowed(canPublish) },
                 refresh = refresh,
             )
@@ -312,7 +306,11 @@ class PublicPaykitRepo @Inject constructor(
             val ownsPublication = { pubkyRepo.isCurrent(signIn) && canPublish() }
             if (!isAutomaticPublicationAllowed(ownsPublication)) return@runSuspendCatching
             val requestedRefresh = currentLightningRefresh()
-            val refresh = AutomaticRefresh(signIn, lastPublication.get())
+            val refresh = PublicEndpointRefresh(
+                signIn,
+                paykitSdkService.publicEndpointSyncEpoch(),
+                reuseMatching = !forceRefreshLightning && requestedRefresh == null,
+            )
             val desired = buildWalletEndpoints(
                 publicKey = signIn.publicKey,
                 canPublish = ownsPublication,
@@ -326,9 +324,11 @@ class PublicPaykitRepo @Inject constructor(
             val published = applyPublishedEndpoints(
                 desired,
                 beforePublish = { markPublicationPending(ownsPublication) },
-                acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, ownsPublication) },
+                acknowledge = { current ->
+                    acknowledgePublishedEndpoints(desired, signIn.publicKey) { current() && ownsPublication() }
+                },
                 canPublish = { isAutomaticPublicationAllowed(ownsPublication) },
-                refresh = refresh.takeUnless { forceRefreshLightning || requestedRefresh != null },
+                refresh = refresh,
             )
             if (published) {
                 if (isAutomaticPublicationAllowed(ownsPublication) &&
@@ -357,7 +357,9 @@ class PublicPaykitRepo @Inject constructor(
             applyPublishedEndpoints(
                 desired,
                 beforePublish = { markPublicationPending(ownsPublication) },
-                acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, ownsPublication) },
+                acknowledge = { current ->
+                    acknowledgePublishedEndpoints(desired, signIn.publicKey) { current() && ownsPublication() }
+                },
                 canPublish = { isAutomaticPublicationAllowed(ownsPublication) },
             )
             Unit
@@ -433,27 +435,18 @@ class PublicPaykitRepo @Inject constructor(
     private suspend fun applyPublishedEndpoints(
         desiredEndpoints: List<Endpoint>,
         beforePublish: suspend () -> Unit = {},
-        acknowledge: suspend () -> Unit = {},
+        acknowledge: suspend (() -> Boolean) -> Unit = {},
         canPublish: suspend () -> Boolean = { true },
-        refresh: AutomaticRefresh? = null,
+        refresh: PublicEndpointRefresh? = null,
     ): Boolean =
         publishMutex.withLock {
             if (!canPublish()) return@withLock false
-            val previous = lastPublication.get()
-            // Reuse only a matching write completed while this refresh was in progress. A later independent
-            // reconciliation still reads and repairs remote state.
-            if (refresh != null && previous != null && previous !== refresh.publicationAtStart &&
-                previous.matches(refresh.signIn, desiredEndpoints)
-            ) {
-                acknowledge()
-                return@withLock true
-            }
             requireCurrentPublicKey()
             beforePublish()
             if (!canPublish()) return@withLock false
-            // A failed or cancelled SDK call may already have changed remote endpoints.
-            lastPublication.set(null)
-            val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints, canPublish) ?: return@withLock false
+            val result = paykitSdkService.syncPublicEndpointsWithEpoch(desiredEndpoints, canPublish, refresh)
+                ?: return@withLock false
+            val report = result.report
             report.failed.forEach { failure ->
                 Logger.warn(
                     "Failed to sync public Paykit endpoint '${failure.identifier}': ${failure.error}",
@@ -461,9 +454,9 @@ class PublicPaykitRepo @Inject constructor(
                 )
             }
             if (report.failed.isNotEmpty()) throw PublicPaykitError.PublicationFailed
-            acknowledge()
-            if (refresh != null) lastPublication.set(EndpointPublication(refresh.signIn, desiredEndpoints))
-            true
+            val stillCurrent = { paykitSdkService.publicEndpointSyncEpoch() == result.epoch }
+            acknowledge(stillCurrent)
+            stillCurrent()
         }
 
     private suspend fun requireCurrentPublicKey(): String {

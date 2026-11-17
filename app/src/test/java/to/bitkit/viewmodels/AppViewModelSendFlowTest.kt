@@ -248,6 +248,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.PublicEndpointSync
 import to.bitkit.services.PendingChannelMigration
 import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
@@ -8859,13 +8860,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val sdk = mock<PaykitSdkService>()
         val publications = mutableListOf<String>()
         var failPublication = false
-        whenever(sdk.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+        whenever(sdk.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).doSuspendableAnswer {
             if (!it.getArgument<suspend () -> Boolean>(1)()) return@doSuspendableAnswer null
             check(!failPublication)
             val address = it.getArgument<List<Endpoint>>(0).single().value
             assertEquals(address, ledger.value.publicAssignments.values.single().address)
             publications += address
-            EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            PublicEndpointSync(EndpointSyncReport(emptyList(), emptyList(), emptyList()), epoch = 0L)
         }
         val publisher = PublicPaykitRepo(
             ioDispatcher = testDispatcher,
