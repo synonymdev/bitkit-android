@@ -1021,6 +1021,7 @@
     <string name="wallet__min_possible_fee_rate_msg">Aumenta la comisión personalizada e inténtalo de nuevo.</string>
     <string name="wallet__max_possible_fee_rate">La Comisión Excede el Límite Máximo</string>
     <string name="wallet__max_possible_fee_rate_msg">Reduce la comisión personalizada e inténtalo de nuevo.</string>
+    <string name="wallet__send_fee_changed_not_sent">La comisión de red es más alta que la que confirmó, por lo que el pago no se envió. Por favor, inténtelo de nuevo.</string>
     <string name="wallet__send_fee_custom">Fijar tarifa personalizada</string>
     <string name="wallet__send_fee_total">₿ {feeSats} para esta transacción</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} para esta transacción ({fiatSymbol}{fiatFormatted})</string>

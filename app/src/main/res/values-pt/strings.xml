@@ -888,6 +888,7 @@
     <string name="wallet__min_possible_fee_rate">Taxa abaixo do limite mínimo</string>
     <string name="wallet__min_possible_fee_rate_msg">Aumente a taxa personalizada e tente novamente.</string>
     <string name="wallet__send_fee_error_min">Não é possível reduzir ainda mais a taxa.</string>
+    <string name="wallet__send_fee_changed_not_sent">A taxa de rede é superior à que confirmou, pelo que o pagamento não foi enviado. Por favor, tente novamente.</string>
     <string name="wallet__send_fee_custom">Definir Taxa Personalizada</string>
     <string name="wallet__send_fee_total">₿ {feeSats} para esta transação</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} para esta transação ({fiatSymbol}{fiatFormatted} )</string>

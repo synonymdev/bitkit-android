@@ -11,3 +11,5 @@ The native-binding tests also cover labels, proof-of-payment aliases and questio
 `own-invoice-guard.xml` covers the existing Lightning self-payment guard and is unchanged by this adoption.
 
 The shared journey verifies the recipient and amount in the payment UI. Metadata preservation, including `bitcoin:donation`, is asserted by the native-binding and app regression tests. Neither platform’s confirmation displays a standalone BIP21 note. Inspect the full recipient through the `ReviewUri` test tag after opening Show Details.
+
+`prepared-fee-review.xml` covers the renewed approval of an on-chain send whose prepared transaction costs more mining fee than the confirmation showed. Confirm preselects inputs and the send reuses them, so an ordinary send does not diverge; the journey reproduces it with an amount within about one fee of the whole balance (preselection fails) and a deposit confirmed while Confirm is open, as its description explains. The request, expiry, wallet-change and persistence-failure cases need controlled faults the Capabilities table does not provide and are covered by `LightningRepoTest.kt` and `AppViewModelSendFlowTest.kt`.

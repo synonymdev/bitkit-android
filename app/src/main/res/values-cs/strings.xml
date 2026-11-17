@@ -1132,6 +1132,7 @@
     <string name="wallet__send_error_support">Kontaktovat podporu</string>
     <string name="wallet__send_error_tx_failed">Transakce selhala</string>
     <string name="wallet__send_fee_and_speed">Rychlost a poplatek</string>
+    <string name="wallet__send_fee_changed_not_sent">Síťový poplatek je vyšší než ten, který jste potvrdili, takže platba nebyla odeslána. Zkuste to prosím znovu.</string>
     <string name="wallet__send_fee_custom">Nastavit vlastní poplatek</string>
     <string name="wallet__send_fee_error">Neplatný poplatek</string>
     <string name="wallet__send_fee_error_max">Poplatek nelze dále zvýšit. Jinak by přesáhl polovinu aktuálního vstupního zůstatku.</string>

@@ -1129,6 +1129,7 @@
     <string name="wallet__send_error_support">Contactar con el servicio de asistencia</string>
     <string name="wallet__send_error_tx_failed">Transacción ha fallado</string>
     <string name="wallet__send_fee_and_speed">Velocidad y tarifa</string>
+    <string name="wallet__send_fee_changed_not_sent">La comisión de red es más alta que la que confirmaste, por lo que el pago no se envió. Por favor, inténtalo de nuevo.</string>
     <string name="wallet__send_fee_custom">Fijar tarifa personalizada</string>
     <string name="wallet__send_fee_error">Comisión inválida</string>
     <string name="wallet__send_fee_error_max">No se puede aumentar más la comisión. De lo contrario, excederá la mitad del saldo de entrada actual.</string>
