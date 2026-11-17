@@ -239,6 +239,23 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pass interrupted by a wipe writes nothing after it`() = test {
+        stubPaidRequest()
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        whenever(sdk.processOutboundPrivateMessages(eq(BUYER), eq(Priority.Background), eq(SELLER)))
+            .doSuspendableAnswer {
+                deliverAll(ACCESS_SENT)
+                sut.resetForWipe()
+                mock<OutboundPrivateSendReport>()
+            }
+
+        sut.reconcile()
+
+        assertTrue(sentIds.isEmpty())
+        assertEquals(emptyMap(), sut.statuses.value)
+    }
+
+    @Test
     fun `receipt fails when its counterparty cannot be reached`() = test {
         stubPaidRequest()
         drainOutcome = null
