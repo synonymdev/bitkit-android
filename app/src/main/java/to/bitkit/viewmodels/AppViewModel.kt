@@ -3369,13 +3369,16 @@ class AppViewModel @Inject constructor(
                         SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                         SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                         SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
-                        SendEvent.Contacts -> setSendEffect(
-                            if (isPaykitEnabled.value) {
-                                SendEffect.NavigateToContacts
-                            } else {
-                                SendEffect.NavigateToComingSoon
-                            }
-                        )
+                        SendEvent.Contacts -> {
+                            cancelNearbyAddressScan()
+                            setSendEffect(
+                                if (isPaykitEnabled.value) {
+                                    SendEffect.NavigateToContacts
+                                } else {
+                                    SendEffect.NavigateToComingSoon
+                                },
+                            )
+                        }
                     }
                 } catch (_: CancellationException) {
                     currentCoroutineContext().ensureActive()
@@ -3389,10 +3392,14 @@ class AppViewModel @Inject constructor(
     private val activeHardwareWalletId: String?
         get() = (currentSheet.value as? Sheet.Send)?.hardwareWalletId
 
-    private fun onEnterManuallyClick() {
-        // A nearby request still decoding must not route over the address the user is about to type.
+    /** A nearby request still decoding must not route over the choice the user just made on the recipient screen. */
+    private fun cancelNearbyAddressScan() {
         nearbyAddressScanJob?.cancel()
         nearbyAddressScanJob = null
+    }
+
+    private fun onEnterManuallyClick() {
+        cancelNearbyAddressScan()
         clearActiveContactPaymentContext()
         resetAddressInput()
         setSendEffect(SendEffect.NavigateToAddress)
