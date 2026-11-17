@@ -46,6 +46,7 @@ class MoveToSparkManager @Inject constructor(
     private val generation = AtomicInteger(0)
     private val latestScreen = AtomicInteger(0)
     private var quoteJob: Job? = null
+    private var moveJob: Job? = null
 
     /** A move was started and its outcome is still the screen's, so opening the screen again keeps it. */
     @Volatile
@@ -77,6 +78,16 @@ class MoveToSparkManager @Inject constructor(
         _uiState.update { MoveToSparkUiState.Quoting }
     }
 
+    /** Drops the move, its outcome and any quote when the wallet is wiped, so the next wallet starts on a new quote. */
+    fun resetForWipe() {
+        generation.incrementAndGet()
+        quoteJob?.cancel()
+        moveJob?.cancel()
+        keepsOutcome = false
+        isMoveInFlight = false
+        _uiState.update { MoveToSparkUiState.Quoting }
+    }
+
     /** Quotes moving [targetSats], or everything the channels can send. */
     fun quote(targetSats: ULong? = null) {
         val quoteGeneration = generation.incrementAndGet()
@@ -100,7 +111,7 @@ class MoveToSparkManager @Inject constructor(
         keepsOutcome = true
         isMoveInFlight = true
         _uiState.update { MoveToSparkUiState.Confirm(quote, isMoving = true) }
-        scope.launch {
+        moveJob = scope.launch {
             try {
                 moveToSparkRepo.move(quote).fold(
                     onSuccess = { outcome ->

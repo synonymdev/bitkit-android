@@ -26,6 +26,7 @@ import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -58,6 +59,7 @@ class WipeWalletUseCase @Inject constructor(
     private val paykitReceiptRepo: PaykitReceiptRepo,
     private val connectionRecovery: WalletConnectionRecovery,
     private val wakeRepo: WakeRepo,
+    private val moveToSparkManager: Provider<MoveToSparkManager>,
 ) {
     private val wipeMutex = Mutex()
 
@@ -125,6 +127,7 @@ class WipeWalletUseCase @Inject constructor(
         blocktankRepo.resetState()
         activityRepo.resetState()
         hwWalletRepo.resetState()
+        moveToSparkManager.get().resetForWipe()
         resetWalletState()
         step("mark migration checked") { migrationService.markMigrationChecked() }
         return if (keychainWiped) Result.success(Unit) else Result.failure(WipeIncomplete())

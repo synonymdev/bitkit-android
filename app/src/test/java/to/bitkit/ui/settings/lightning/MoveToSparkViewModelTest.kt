@@ -151,5 +151,17 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         assertEquals(MoveToSparkUiState.Confirm(quote), reopened.uiState.value)
     }
 
+    @Test
+    fun `wiping the wallet drops an in-flight move and quotes anew on return`() = test {
+        createViewModel().move()
+
+        manager.resetForWipe()
+        val reopened = createViewModel()
+        firstSettled.complete(Result.success(moved))
+
+        assertEquals(MoveToSparkUiState.Confirm(quote), reopened.uiState.value)
+        verify(moveToSparkRepo, times(2)).quote(anyOrNull())
+    }
+
     private fun createViewModel() = MoveToSparkViewModel(manager)
 }
