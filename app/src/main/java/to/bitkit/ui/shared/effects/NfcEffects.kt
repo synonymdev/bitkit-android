@@ -100,8 +100,9 @@ fun NfcReaderEffect(
 
         val mainHandler = Handler(Looper.getMainLooper())
         val dispatcher = NfcReadDispatcher(onRead = { currentOnRead(it) }, onUnreadable = { currentOnUnreadable() })
-        val callback = NfcAdapter.ReaderCallback { tag ->
-            val activation = dispatcher.activation
+
+        // Android may call a callback after reader mode is disabled, so each activation gets its own callback.
+        fun callback(activation: Int) = NfcAdapter.ReaderCallback { tag ->
             val text = readPaymentText(tag)
             // The tag stays in range after the read; hold reader mode so Android does not deliver it again.
             if (text != null) NfcRepeatGuard.engage(activity, tag)
@@ -111,15 +112,15 @@ fun NfcReaderEffect(
         val owner = Any()
 
         fun enable() = runCatching {
-            adapter.enableReaderMode(activity, callback, READER_FLAGS, null)
+            adapter.enableReaderMode(activity, callback(dispatcher.open()), READER_FLAGS, null)
             ReaderModeOwner.current = owner
         }.onFailure { Logger.warn("Failed to enable NFC reader mode", it, context = TAG) }
 
         val resume: () -> Unit = { enable() }
 
         fun disable() {
-            // A read still in progress posts after this; the dispatcher drops it.
-            dispatcher.invalidate()
+            // A read still in progress, or a callback Android calls after this, posts a closed activation.
+            dispatcher.close()
             if (ReaderModeOwner.resumeScanner === resume) ReaderModeOwner.resumeScanner = null
             if (ReaderModeOwner.current !== owner) return
             ReaderModeOwner.current = null

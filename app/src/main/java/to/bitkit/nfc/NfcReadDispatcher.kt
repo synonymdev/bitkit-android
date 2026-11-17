@@ -5,9 +5,10 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Hands NFC reads to a scanner screen. Call [deliver] and [invalidate] on the main thread only. It drops a repeat of
- * the same request within [DUPLICATE_READ_WINDOW], and any read that started before the last [invalidate], since a tag
- * read can finish after the reader paused or the screen left.
+ * Hands NFC reads to a scanner screen. Call it on the main thread only. Each time reader mode is enabled, [open]
+ * starts a new activation, and the callback registered with it passes that number to [deliver]. A read is dropped
+ * when its activation is not the open one: the reader paused, the screen left, or Android called an old callback
+ * after reader mode was disabled. A repeat of the same request within [DUPLICATE_READ_WINDOW] is dropped too.
  */
 internal class NfcReadDispatcher(
     private val onRead: (String) -> Unit,
@@ -15,14 +16,23 @@ internal class NfcReadDispatcher(
     private val now: () -> Long = { nowMillis() },
 ) {
     private var lastRead: Pair<String, Long>? = null
+    private var activation = 0
+    private var isOpen = false
 
-    /** The current reader activation. A read captures it when it starts, on the reader's binder thread. */
-    @Volatile
-    var activation = 0
-        private set
+    /** Starts a new activation and returns its number, for the callback registered with it. */
+    fun open(): Int {
+        activation++
+        isOpen = true
+        return activation
+    }
+
+    /** Ends the open activation. Reads from it, or from an earlier one, are dropped. */
+    fun close() {
+        isOpen = false
+    }
 
     fun deliver(text: String?, readActivation: Int) {
-        if (readActivation != activation) return
+        if (!isOpen || readActivation != activation) return
         if (text == null) {
             onUnreadable()
             return
@@ -33,10 +43,6 @@ internal class NfcReadDispatcher(
         if (isRepeat) return
         lastRead = text to time
         onRead(text)
-    }
-
-    fun invalidate() {
-        activation++
     }
 
     companion object {

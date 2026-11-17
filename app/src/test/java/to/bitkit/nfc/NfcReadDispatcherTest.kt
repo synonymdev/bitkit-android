@@ -11,8 +11,9 @@ class NfcReadDispatcherTest {
 
     @Test
     fun `delivers a read and reports an unreadable tag`() {
-        sut.deliver("lightning:lnbcrt1", sut.activation)
-        sut.deliver(null, sut.activation)
+        val activation = sut.open()
+        sut.deliver("lightning:lnbcrt1", activation)
+        sut.deliver(null, activation)
 
         assertEquals(listOf("lightning:lnbcrt1"), reads)
         assertEquals(1, unreadable)
@@ -20,34 +21,43 @@ class NfcReadDispatcherTest {
 
     @Test
     fun `drops a repeat of the same request within the window`() {
-        sut.deliver("lightning:lnbcrt1", sut.activation)
+        val activation = sut.open()
+        sut.deliver("lightning:lnbcrt1", activation)
         time += 1_000
-        sut.deliver("lightning:lnbcrt1", sut.activation)
-        sut.deliver("lightning:lnbcrt2", sut.activation)
+        sut.deliver("lightning:lnbcrt1", activation)
+        sut.deliver("lightning:lnbcrt2", activation)
         time += NfcReadDispatcher.DUPLICATE_READ_WINDOW.inWholeMilliseconds
-        sut.deliver("lightning:lnbcrt2", sut.activation)
+        sut.deliver("lightning:lnbcrt2", activation)
 
         assertEquals(listOf("lightning:lnbcrt1", "lightning:lnbcrt2", "lightning:lnbcrt2"), reads)
     }
 
     @Test
-    fun `drops a read that started before the reader paused`() {
-        val started = sut.activation
-        sut.invalidate()
-        sut.deliver("lightning:lnbcrt1", started)
-        sut.deliver(null, started)
+    fun `drops a read from a reader that paused or closed`() {
+        val activation = sut.open()
+        sut.close()
+        sut.deliver("lightning:lnbcrt1", activation)
+        sut.deliver(null, activation)
 
         assertEquals(emptyList<String>(), reads)
         assertEquals(0, unreadable)
     }
 
     @Test
-    fun `drops an old read that lands after the reader resumed`() {
-        val started = sut.activation
-        sut.invalidate()
-        sut.deliver("lightning:lnbcrt1", started)
-        sut.deliver("lightning:lnbcrt2", sut.activation)
+    fun `drops a read from an earlier activation after the reader resumed`() {
+        val paused = sut.open()
+        sut.close()
+        val resumed = sut.open()
+        sut.deliver("lightning:lnbcrt1", paused)
+        sut.deliver("lightning:lnbcrt2", resumed)
 
         assertEquals(listOf("lightning:lnbcrt2"), reads)
+    }
+
+    @Test
+    fun `drops a read before the reader opens`() {
+        sut.deliver("lightning:lnbcrt1", 0)
+
+        assertEquals(emptyList<String>(), reads)
     }
 }
