@@ -43,9 +43,12 @@ class CloseChannelUseCase @Inject constructor(
 
     /**
      * Closes each channel a move to Spark emptied: one that could send at least the move minimum in [before] and can
-     * no longer. A close that fails leaves its channel listed for a manual close.
+     * no longer, read from the node after a sync. A close that fails leaves its channel listed for a manual close.
      */
     suspend fun closeEmptiedByMove(before: List<ChannelDetails>) = withContext(ioDispatcher) {
+        walletRepo.syncNodeAndWallet()
+        // A sync already running returns at once, so the channels are read from the node directly.
+        lightningRepo.syncState()
         val emptied = MoveToSparkMath.emptiedChannels(before, lightningRepo.lightningState.value.channels)
         emptied.forEach { channel ->
             invoke(channel)

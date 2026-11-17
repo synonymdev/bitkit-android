@@ -185,6 +185,7 @@ import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.MoveToSparkError
 import to.bitkit.repositories.MoveToSparkOutcome
 import to.bitkit.repositories.MoveToSparkQuote
 import to.bitkit.repositories.MoveToSparkRepo
@@ -4951,7 +4952,8 @@ class AppViewModel @Inject constructor(
         val result = pubkySwapsRouteRepo.route(
             amountSats = _sendUiState.value.amount,
             endpoints = listOf(route.endpoint),
-            lightningSpendableSats = maxSendableLightningSats(),
+            // The hold payment goes out over one rail, never after a spending balance update.
+            lightningSpendableSats = minOf(maxSendableLightningSats(), moveToSparkRepo.singleRailSendableSats()),
             onchainSpendableSats = balances.maxSendOnchainSats,
         )
         _sendUiState.update { it.copy(isLoading = false) }
@@ -6829,6 +6831,7 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToAmount)
             return
         }
+        if (!confirmSparkUpdateQuote()) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
         val proofPreparation = preparePaymentProof(incomingPaymentRequest)
@@ -7792,8 +7795,16 @@ class AppViewModel @Inject constructor(
         // The node's payment events settle this attempt by hash, like an automatic one.
         allowanceAttemptId?.let { paykitAllowanceRepo.manualLightningPaymentSent(it, paymentHash) }
 
-        var authorizationError: Throwable? = null
-        val result = updateSpendingBalanceIfNeeded(displayAmountSats).fold(
+        // A request refused before the update must move nothing, so its allowance is checked before the move too.
+        val refusedBeforeUpdate = incomingPaymentRequest
+            ?.takeIf { moveToSparkRepo.needsUpdateToSend(displayAmountSats) }
+            ?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull() }
+        var authorizationError: Throwable? = refusedBeforeUpdate
+        val result = if (refusedBeforeUpdate != null) {
+            Result.failure(refusedBeforeUpdate)
+        } else {
+            updateSpendingBalanceIfNeeded(displayAmountSats)
+        }.fold(
             onSuccess = {
                 sendLightning(
                     decodedInvoice.bolt11,
@@ -7872,6 +7883,31 @@ class AppViewModel @Inject constructor(
         }.map { }
     }
 
+    /**
+     * Quotes the spending balance update again when the payment needs one, before anything is prepared or sent. A
+     * quote the user did not see, or a fee above the one shown, stops the swipe and shows the new fee instead.
+     */
+    private suspend fun confirmSparkUpdateQuote(): Boolean {
+        val state = _sendUiState.value
+        if (state.payMethod != SendMethod.LIGHTNING || state.routedPaykitRoute?.serviceLeg != null) return true
+        if (state.activePaykitSwapRoute != null) return true
+        val payAmount = state.decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: state.amount
+        if (!moveToSparkRepo.needsUpdateToSend(payAmount)) return true
+        val generation = sendStateGeneration
+        val fresh = moveToSparkRepo.quote().getOrElse {
+            val failure = it.toSendFailureDetails(context, state.currentLightningPaymentRequest())
+            setSendEffect(SendEffect.NavigateToError(failure))
+            return false
+        }
+        if (generation != sendStateGeneration) return false
+        val shown = state.sparkUpdateQuote
+        _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
+        if (shown != null && fresh.feeSats <= shown.feeSats) return true
+        Logger.info("Stopped a payment to show the update fee '${fresh.feeSats}'", context = TAG)
+        setSendEffect(SendEffect.ResetConfirm)
+        return false
+    }
+
     private fun closeChannelsEmptiedBy(outcome: MoveToSparkOutcome, channelsBefore: List<ChannelDetails>) {
         viewModelScope.launch(bgDispatcher) {
             if (outcome is MoveToSparkOutcome.InFlight && moveToSparkRepo.awaitSettled(outcome).isFailure) return@launch
@@ -7894,7 +7930,8 @@ class AppViewModel @Inject constructor(
     ): Boolean = when (error) {
         is PaymentPendingException -> false
         else if !isPaymentRequest -> true
-        is LightningPaymentFailedError -> {
+        // A failed spending balance update happens before the invoice is paid, so nothing was sent.
+        is LightningPaymentFailedError, is MoveToSparkError -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }
@@ -8569,6 +8606,7 @@ class AppViewModel @Inject constructor(
     ) {
         requireCurrentPaymentPreparation(walletGeneration)
         val generation = sendStateGeneration
+        _sendUiState.update { if (generation != sendStateGeneration) it else it.copy(sparkUpdateQuote = null) }
         val currentState = _sendUiState.value
         if (currentState.payMethod != SendMethod.LIGHTNING) return
         // A Spark leg pays the contact's other endpoint, so its fee is the leg's, never the retained invoice's.
@@ -8579,7 +8617,6 @@ class AppViewModel @Inject constructor(
             estimateSparkUpdateFees(decodedInvoice.bolt11, payAmount, generation, walletGeneration)
             return
         }
-        _sendUiState.update { if (generation != sendStateGeneration) it else it.copy(sparkUpdateQuote = null) }
 
         val feeResult = if (decodedInvoice.amountSatoshis > 0uL) {
             lightningRepo.estimateRoutingFees(decodedInvoice.bolt11)
@@ -10485,6 +10522,7 @@ sealed class SendEffect {
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
     data object NavigateToConfirm : SendEffect()
+    data object ResetConfirm : SendEffect()
     data object NavigateToUsdtReview : SendEffect()
     data class ShowPaykitConfirmation(val route: SendRoute) : SendEffect()
     data object NavigateToHardwareSign : SendEffect()

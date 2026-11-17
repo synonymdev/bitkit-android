@@ -26,7 +26,7 @@
     <action>Tap "Move To Spark" and verify the "Update Spending Balance" modal opens and shows "Update fee: " with an amount once the Update button (testTag "UpdateSpendingBalanceUpdate") stops loading</action>
     <action>Tap "Update" and verify the modal titled "Spending Balance Updated" (testTag "SpendingBalanceUpdated") shows "SPENDING BALANCE UPDATED" and "Your spending balance has been successfully migrated to Spark, Bitkit’s new Lightning service provider."</action>
     <action>Tap "OK" (testTag "SpendingBalanceUpdatedOk") and verify the modal closes</action>
-    <action>Open Settings › Advanced › Lightning Connections and verify the channel is closing or closed, with no open connection left, and the Spark balance grew by the moved amount</action>
+    <action>Open Settings › Advanced › Lightning Connections and verify the channel is closing or closed, and that it shows no channel under OPEN CONNECTIONS, only Spark via Breez, whose balance grew by the moved amount</action>
     <action>Go back to Home and verify Activity lists a "Move to Spark" transfer row with the moved amount plus the routing fee, whose detail screen is titled "Move to Spark", and a transfer to Savings for the closed channel</action>
     <action>Open Spending and verify the "Move To Spark" button is gone</action>
   </actions>

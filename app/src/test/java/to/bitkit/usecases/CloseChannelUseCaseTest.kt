@@ -7,6 +7,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -80,6 +81,23 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
 
         verify(lightningRepo).closeChannel(eq(channel("channel_1", 0uL)), any(), anyOrNull())
         verify(lightningRepo, never()).closeChannel(eq(kept), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a move's close reads the channels from the node after a sync, not the stale state`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(channel))
+        whenever(lightningRepo.syncState()).thenAnswer {
+            lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL)))
+            Unit
+        }
+
+        sut.closeEmptiedByMove(listOf(channel))
+
+        inOrder(walletRepo, lightningRepo) {
+            verify(walletRepo).syncNodeAndWallet(anyOrNull())
+            verify(lightningRepo).syncState()
+            verify(lightningRepo).closeChannel(eq(channel("channel_1", 0uL)), any(), anyOrNull())
+        }
     }
 
     private fun channel(id: String, sendableSats: ULong) = createChannelDetails().copy(

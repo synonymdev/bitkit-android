@@ -118,6 +118,12 @@ class MoveToSparkRepo internal constructor(
         spark = sparkRepo.state.value,
     )
 
+    /** The most a Lightning payment can send over the channels or Spark alone, without an update. */
+    fun singleRailSendableSats(): ULong = MoveToSparkMath.singleRailSendableSats(
+        channels = lightningRepo.lightningState.value.channels.takeIf { canRunNode() },
+        spark = sparkRepo.state.value,
+    )
+
     /** Whether paying [amountSats] needs the channels' balance updated to Spark first, as neither rail covers it. */
     fun needsUpdateToSend(amountSats: ULong): Boolean = MoveToSparkMath.needsUpdateToSend(
         amountSats = amountSats,
@@ -131,7 +137,8 @@ class MoveToSparkRepo internal constructor(
      * Updates the spending balance for a payment of [amountSats]: moves the channels' balance to Spark with
      * [knownQuote], or a new quote, and waits until Spark can pay the amount. A move still in flight, or a balance
      * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
-     * own. [onMove] gets the move's outcome as soon as the move returns, before the wait.
+     * own. [onMove] gets the move's outcome as soon as the move returns, before the wait. A quote whose amount, with
+     * Spark's balance, would not cover the payment fails with [MoveToSparkError.UpdateFallsShort] before any move.
      */
     suspend fun updateToSend(
         knownQuote: MoveToSparkQuote?,
@@ -141,6 +148,9 @@ class MoveToSparkRepo internal constructor(
         withContext(bgDispatcher) {
             runSuspendCatching {
                 val usedQuote = knownQuote ?: quote().getOrThrow()
+                if (!MoveToSparkMath.coversPayment(usedQuote, sparkRepo.state.value, amountSats)) {
+                    throw MoveToSparkError.UpdateFallsShort(amountSats)
+                }
                 val outcome = move(usedQuote).getOrThrow().also(onMove)
                 val moved = outcome as? MoveToSparkOutcome.Moved ?: throw MoveToSparkError.UpdateUnsettled()
                 val shown = withTimeoutOrNull(SPARK_BALANCE_WAIT) {
@@ -376,11 +386,17 @@ object MoveToSparkMath {
         return SparkFees.sendableSats(spark.balanceSats.safe() + firstCandidate(limitSats, limitSats).safe())
     }
 
+    /** The most the channels or a ready Spark can send alone. */
+    fun singleRailSendableSats(channels: List<ChannelDetails>?, spark: SparkState): ULong =
+        maxOf(movableSats(channels), spark.sendableSats.takeIf { spark.isReady } ?: 0uL)
+
     /** Whether [amountSats] fits neither the channels nor Spark alone, but fits Spark once the channels moved to it. */
-    fun needsUpdateToSend(amountSats: ULong, channels: List<ChannelDetails>?, spark: SparkState): Boolean {
-        val singleRailSats = maxOf(movableSats(channels), spark.sendableSats.takeIf { spark.isReady } ?: 0uL)
-        return amountSats > singleRailSats && amountSats <= combinedSendableSats(channels, spark)
-    }
+    fun needsUpdateToSend(amountSats: ULong, channels: List<ChannelDetails>?, spark: SparkState): Boolean =
+        amountSats > singleRailSendableSats(channels, spark) && amountSats <= combinedSendableSats(channels, spark)
+
+    /** Whether Spark can pay [amountSats], its service fee included, once [quote] has moved to it. */
+    fun coversPayment(quote: MoveToSparkQuote, spark: SparkState, amountSats: ULong): Boolean =
+        spark.isUsable && SparkFees.sendableSats(spark.balanceSats.safe() + quote.amountSats.safe()) >= amountSats
 
     /** The open channels in [after] that could send at least [MIN_MOVE_SATS] in [before] and no longer can. */
     fun emptiedChannels(before: List<ChannelDetails>, after: List<ChannelDetails>?): List<ChannelDetails> {
@@ -421,6 +437,10 @@ sealed class MoveToSparkError(message: String, cause: Throwable? = null) : AppEr
         cause: Throwable? = null,
         val reason: PaymentFailureReason? = null,
     ) : MoveToSparkError("Could not route '$amountSats' sats to Spark, reason '$reason'", cause)
+
+    /** The quoted move, with Spark's balance, would not cover a payment of [amountSats], so nothing moved. */
+    class UpdateFallsShort(val amountSats: ULong) :
+        MoveToSparkError("An update would not cover a payment of '$amountSats' sats")
 
     /** The update moved the balance, but Spark cannot pay with it yet: the move or Spark's balance has not settled. */
     class UpdateUnsettled : MoveToSparkError("The update to Spark has not settled yet")

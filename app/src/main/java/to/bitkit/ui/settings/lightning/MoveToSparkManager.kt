@@ -147,10 +147,7 @@ class MoveToSparkManager @Inject constructor(
     }
 
     private fun closeEmptied(channelsBefore: List<ChannelDetails>) {
-        scope.launch {
-            walletRepo.syncNodeAndWallet()
-            closeChannelUseCase.closeEmptiedByMove(channelsBefore)
-        }
+        scope.launch { closeChannelUseCase.closeEmptiedByMove(channelsBefore) }
     }
 
     private suspend fun showLateOutcome(settled: Result<MoveToSparkOutcome.Moved>, moveGeneration: Int) {

@@ -20533,6 +20533,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val quote = MoveToSparkQuote("lnbcrt1spark", amountSats = 50_000uL, feeSats = 12uL)
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
         val moved = MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(quote))
         whenever(moveToSparkRepo.updateToSend(eq(quote), eq(60_000uL), any())).thenReturn(Result.success(moved))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success("010203"))
         setSendState(
@@ -20561,6 +20562,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `a failed spending balance update shows the payment error and pays nothing`() = test {
         val bolt11 = "lnbcrt1updatefails"
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
         whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
             .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
@@ -20570,6 +20572,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = 60_000uL,
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20585,6 +20588,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `a settled move closes the emptied channels even when the payment after it fails`() = test {
         val bolt11 = "lnbcrt1movedunsettled"
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
         whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
             .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
@@ -20594,6 +20598,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = 60_000uL,
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20611,6 +20616,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `an in-flight move closes the emptied channels once it settles`() = test {
         val bolt11 = "lnbcrt1inflight"
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
         val inFlight = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash", paymentId = "id")
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
         whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
@@ -20623,6 +20629,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = 60_000uL,
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20650,6 +20657,218 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(quickPayRepo, never()).canApply(any<ULong>())
+    }
+
+    @Test
+    fun `a failed spending balance update on a payment request shows the error and releases the request`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1updaterequest"
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            paykitPaymentProofRepo.prepare(
+                request,
+                MethodId.Bolt11.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Lightning
+            )
+        )
+            .doSuspendableAnswer {
+                setSendState(
+                    sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amount.atomic))
+                )
+                Result.success(Unit)
+            }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitAllowanceRepo.beginManualPayment(eq(request), any(), anyOrNull()))
+            .thenReturn(Result.success("update-attempt"))
+        whenever(moveToSparkRepo.needsUpdateToSend(request.amount.atomic)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(request.amount.atomic), any()))
+            .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                sparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        verify(pendingPaymentRepo, never()).track(any())
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(paykitAllowanceRepo).finishManualPayment("update-attempt", false, null)
+    }
+
+    @Test
+    fun `a refused payment request moves nothing and closes nothing`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1refusedrequest"
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            paykitPaymentProofRepo.prepare(
+                request,
+                MethodId.Bolt11.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Lightning
+            )
+        )
+            .doSuspendableAnswer {
+                setSendState(
+                    sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amount.atomic))
+                )
+                Result.success(Unit)
+            }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitAllowanceRepo.beginManualPayment(eq(request), any(), anyOrNull()))
+            .thenReturn(Result.success("refused-attempt"))
+        whenever(moveToSparkRepo.needsUpdateToSend(request.amount.atomic)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                sparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+        verify(pendingPaymentRepo, never()).track(any())
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(paykitAllowanceRepo).finishManualPayment("refused-attempt", false, null)
+    }
+
+    @Test
+    fun `a swipe without a shown update fee shows the fee instead of moving`() = test {
+        val bolt11 = "lnbcrt1noshownfee"
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.ResetConfirm, awaitItem())
+        }
+        assertEquals(UPDATE_QUOTE, sut.sendUiState.value.sparkUpdateQuote)
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+    }
+
+    @Test
+    fun `a swipe whose update fee rose shows the new fee instead of moving`() = test {
+        val bolt11 = "lnbcrt1feerose"
+        val raised = UPDATE_QUOTE.copy(feeSats = UPDATE_QUOTE.feeSats + 1uL)
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(raised))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.ResetConfirm, awaitItem())
+        }
+        assertEquals(raised, sut.sendUiState.value.sparkUpdateQuote)
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `a swipe whose update cannot be quoted shows the error and moves nothing`() = test {
+        val bolt11 = "lnbcrt1noquote"
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.failure(MoveToSparkError.NothingToMove()))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `a fee estimate that stops early drops a stale update quote`() = test {
+        setSendState(
+            SendUiState(
+                amount = 1_000uL,
+                isAmountInputValid = true,
+                payMethod = SendMethod.LIGHTNING,
+                sparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        assertNull(sut.sendUiState.value.sparkUpdateQuote)
+    }
+
+    @Test
+    fun `a swap route is quoted with what one rail can pay, never the update's combined amount`() = test {
+        whenever(moveToSparkRepo.singleRailSendableSats()).thenReturn(20_000uL)
+        openSwapRoutedContactPayment()
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(pubkySwapsRouteRepo).route(any(), any(), eq(20_000uL), any(), any())
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -22128,6 +22347,7 @@ private const val SWAP_HOLD_INVOICE = "lnbcrt1swaphold"
 
 /** The hex of [lightningInvoice]'s payment hash. */
 private const val SWAP_HOLD_HASH = "010203"
+private val UPDATE_QUOTE = MoveToSparkQuote("lnbcrt1spark", amountSats = 50_000uL, feeSats = 12uL)
 private const val SWAP_CLAIM_TXID = "claimtxid"
 private const val SWAP_DELIVERED_SATS = 20_000uL
 private const val SWAP_DEBIT_SATS = 20_100uL

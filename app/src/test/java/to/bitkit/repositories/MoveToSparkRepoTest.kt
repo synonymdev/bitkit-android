@@ -392,7 +392,40 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `update to send moves nothing when the quote and Spark's balance fall short of the payment`() = test {
+        sparkState.value = SparkState(isReady = true, balanceSats = 5_000uL)
+
+        val result = sut.updateToSend(quote, 60_000uL)
+
+        assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
+        verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a quote covers a payment once Spark can pay it with its service fee`() {
+        val spark = SparkState(isReady = true, balanceSats = 10_000uL)
+        val sendable = SparkFees.sendableSats(10_000uL + quote.amountSats)
+
+        assertTrue(MoveToSparkMath.coversPayment(quote, spark, sendable))
+        assertTrue(!MoveToSparkMath.coversPayment(quote, spark, sendable + 1uL))
+        assertTrue(!MoveToSparkMath.coversPayment(quote, spark.copy(isExiting = true), 1_000uL))
+    }
+
+    @Test
+    fun `single rail sendable is the larger of the channels and a ready Spark`() {
+        val channels = listOf(channel("a", 30_000uL))
+
+        assertEquals(30_000uL, MoveToSparkMath.singleRailSendableSats(channels, SparkState(isReady = true)))
+        assertEquals(
+            SparkFees.sendableSats(50_000uL),
+            MoveToSparkMath.singleRailSendableSats(channels, SparkState(isReady = true, balanceSats = 50_000uL)),
+        )
+        assertEquals(30_000uL, MoveToSparkMath.singleRailSendableSats(channels, SparkState(balanceSats = 50_000uL)))
+    }
+
+    @Test
     fun `update to send moves the balance, then waits until Spark can pay`() = test {
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(
             lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
         ).thenReturn(Result.success("id"))
@@ -408,6 +441,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `update to send fails as unsettled while the move is in flight`() = test {
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(
             lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
         ).thenReturn(Result.success("id"))
@@ -423,6 +457,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `update to send reports a settled move even when Spark never shows the balance`() = test {
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(
             lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
         ).thenReturn(Result.success("id"))
