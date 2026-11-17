@@ -589,6 +589,7 @@
     <string name="security__pin_forgot_title">Ξέχασες το PIN;</string>
     <string name="security__pin_last_attempt">Τελευταία προσπάθεια. Αν εισάγεις λάθος PIN ξανά, το πορτοφόλι σου θα επαναφερθεί.</string>
     <string name="security__pin_not_match">Δοκίμασε ξανά, δεν είναι το ίδιο PIN.</string>
+    <string name="security__pin_quickpay">Εισάγαγε τον κωδικό PIN για να επιβεβαιώσεις αυτή την αλλαγή στο QuickPay.</string>
     <string name="security__pin_retype_header">Επανάληψη 4ψήφιου PIN</string>
     <string name="security__pin_retype_text">Πληκτρολόγησε ξανά το 4ψήφιο PIN για να ολοκληρώσεις τη διαδικασία ρύθμισης.</string>
     <string name="security__pin_security_button">Ασφάλισε το πορτοφόλι</string>

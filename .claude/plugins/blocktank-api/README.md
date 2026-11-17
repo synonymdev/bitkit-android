@@ -1,6 +1,6 @@
 # Blocktank API Plugin
 
-A Claude Code plugin that gives Claude knowledge of the full Blocktank LSP API, enabling it to autonomously create channels, fund them, mine blocks, pay invoices, and close channels during Blocktank LSP testing.
+A Claude Code plugin for the Blocktank staging API: mine blocks, deposit to regtest addresses, pay invoices from the LSP node, and look up existing orders and CJIT entries. Blocktank no longer opens channels, so the order, CJIT and gift creation routes and the channel close route are not covered.
 
 ## Setup
 
@@ -15,8 +15,8 @@ Restart Claude Code once. The `blocktank-api:lsp` skill (invoked as `/lsp`) is t
 ## Usage
 
 Once installed, the skill auto-triggers when you mention things like:
-- "mine blocks", "deposit sats", "pay invoice", "force close"
-- "channel order", "CJIT", "blocktank", "LSP"
+- "mine blocks", "deposit sats", "pay invoice"
+- "Blocktank order", "CJIT entry", "blocktank", "LSP"
 
 Claude will use the `./lsp` wrapper at the repo root to make API calls directly.
 

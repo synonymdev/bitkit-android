@@ -54,6 +54,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.MoneyCaptionB
+import to.bitkit.ui.components.PaymentAuthorizationOverlay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.PubkyContactRow
@@ -154,10 +155,11 @@ fun AllowanceSheet(
             }
         }
         uiState.authorization?.let {
-            AllowanceAuthorizationOverlay(
-                authorization = it,
+            PaymentAuthorizationOverlay(
+                useBiometrics = it.useBiometrics,
+                pinDescriptionRes = R.string.security__pin_allowance,
                 onCancel = onAuthorizationCancel,
-                onVerified = viewModel::onAuthorized,
+                onVerify = viewModel::onAuthorized,
             )
         }
     }

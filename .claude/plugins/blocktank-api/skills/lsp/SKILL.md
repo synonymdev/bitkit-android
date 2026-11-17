@@ -1,16 +1,15 @@
 ---
 name: lsp
 description: >
-  This skill should be used when the user asks to interact with the Blocktank LSP API,
-  "mine blocks", "deposit sats", "pay invoice", "force close a channel", "create a channel order",
-  "open a channel", "estimate fees", "create a CJIT channel", or mentions "blocktank", "regtest",
-  "LSP", or Lightning channel testing workflows during bitkit development.
+  This skill should be used when the user asks to interact with the Blocktank LSP API on
+  staging regtest, "mine blocks", "deposit sats", "pay invoice", "look up a Blocktank order" or
+  "CJIT entry", or mentions "blocktank" or "LSP" during bitkit development.
 version: 0.1.0
 ---
 
 # Blocktank LSP API
 
-Blocktank is the Lightning Service Provider (LSP) used by Bitkit. This skill provides full knowledge of its REST API and a utility script to call any endpoint from the command line.
+Blocktank was Bitkit's Lightning Service Provider (LSP). It no longer opens channels: on staging, creating an order, opening a paid order, creating a CJIT entry and the gift routes return 404, and `POST /regtest/channel/close` fails (500 `Worker method closeChannelByFundingTx not found`). What staging still serves, and this skill covers, is service info, lookups of existing orders and CJIT entries, and the regtest chain and payment tools. Spending balances now come from Spark, which this skill does not cover.
 
 All requests and responses use JSON. Staging's `/regtest/*` routes need basic auth: set `BLOCKTANK_REGTEST_AUTH=user:password` and the script sends it; without it they return `401`. Other routes need no authentication. Debug builds of the app send the same value from Settings > Blocktank Regtest when `BLOCKTANK_REGTEST_AUTH` is set at build time (environment variable, Gradle property or `local.properties`); release builds never carry it.
 
@@ -35,9 +34,6 @@ Examples:
 # Get service info
 ./lsp GET /info
 
-# Create a channel order
-./lsp POST /channels '{"lspBalanceSat":100000,"channelExpiryWeeks":12}'
-
 # Mine 6 blocks
 ./lsp POST /regtest/chain/mine '{"count":6}'
 
@@ -57,32 +53,18 @@ On HTTP errors (4xx/5xx), the script prints the status code to stderr and the er
 |--------|------|-------------|
 | GET | `/info` | Service info, LSP nodes, channel size limits, fee rates |
 
-### Channel Orders
+### Channel Orders (lookup only)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/channels` | Create a channel order |
 | GET | `/channels/:id` | Get order by ID |
 | GET | `/channels?ids[]=` | Get multiple orders (1-50 IDs) |
-| POST | `/channels/:id/open` | Open a paid channel |
-| GET | `/channels/:id/min-0conf-tx-fee` | Get 0-conf fee window |
-| POST | `/channels/estimate-fee` | Estimate order fee |
-| POST | `/channels/estimate-fee-full` | Estimate fee with breakdown |
 
-### CJIT (Just-In-Time Channels)
+### CJIT Entries (lookup only)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/cjit` | Create a JIT channel entry |
 | GET | `/cjit/:id` | Get CJIT entry status |
-
-### Gift
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/gift/pay` | Pay a gift invoice |
-| POST | `/gift/order` | Create a gift order |
-| GET | `/gift/:id` | Get gift info |
 
 ### Regtest Tools (regtest only)
 
@@ -92,40 +74,14 @@ On HTTP errors (4xx/5xx), the script prints the status code to stderr and the er
 | POST | `/regtest/chain/deposit` | Deposit sats to address (default: 100,000) |
 | POST | `/regtest/channel/pay` | Pay a Lightning invoice |
 | GET | `/regtest/channel/pay/:id` | Get payment status |
-| POST | `/regtest/channel/close` | Force close a channel |
 
 ## Common Workflows
 
-### Workflow A: Purchase a Channel
-
-1. **Get service info** — `GET /info` to retrieve LSP node pubkeys and channel size limits
-2. **Create order** — `POST /channels` with `lspBalanceSat`, `channelExpiryWeeks`, and optional `clientBalanceSat`
-3. **Extract payment info** — from response: `payment.onchain.address` (bitcoin address) and `feeSat` (amount to pay)
-4. **Fund the order** — `POST /regtest/chain/deposit` with the payment address and fee amount
-5. **Confirm payment** — `POST /regtest/chain/mine` with `count: 1` to mine a block
-6. **Poll order status** — `GET /channels/:id` until `state2` becomes `paid`
-7. **Open channel** — `POST /channels/:id/open` with the client's `connectionStringOrPubkey`
-8. **Confirm channel** — `POST /regtest/chain/mine` with `count: 6` to fully confirm
-
-### Workflow B: CJIT Channel (Just-In-Time)
-
-1. **Get service info** — `GET /info` for node pubkeys and limits
-2. **Create CJIT entry** — `POST /cjit` with `channelSizeSat`, `invoiceSat`, `nodeId`, `channelExpiryWeeks`
-3. **Extract invoice** — from response: `invoice.request` (bolt11 invoice string)
-4. **Client pays invoice** — the mobile app pays the invoice, triggering automatic channel opening
-5. **Poll status** — `GET /cjit/:id` until `state` becomes `completed`
-
-### Workflow C: Force Close a Channel
-
-1. **Get order info** — `GET /channels/:id` to find `channel.fundingTx.id` and `channel.fundingTx.vout`
-2. **Close channel** — `POST /regtest/channel/close` with `fundingTxId`, `vout`, and `forceCloseAfterSec: 0` for immediate close
-3. **Mine blocks** — `POST /regtest/chain/mine` with `count: 6` to finalize the closure
-
-### Workflow D: Automated Invoice Payments
+### Automated Invoice Payments
 
 Bulk-create and pay invoices to populate the app with payment activity.
 
-**Prerequisites:** Dev debug build installed, wallet set up, LDK node running, open channel with inbound capacity, ADB connected.
+**Prerequisites:** Dev debug build installed, wallet set up, LDK node running, an existing channel with the Blocktank staging node that has inbound capacity (Blocktank opens no new ones), ADB connected.
 
 **Run with defaults** (21 invoices of 1..21 sats, mine 150 blocks in batches of 10):
 
@@ -152,6 +108,8 @@ adb shell "content call --uri content://to.bitkit.dev.devtools \
 ```
 
 ## State Machines
+
+These describe the orders and CJIT entries the lookup routes return.
 
 ### Order States (`state2`)
 

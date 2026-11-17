@@ -607,6 +607,7 @@
     <string name="security__pin_forgot_title">¿Ha olvidado el PIN?</string>
     <string name="security__pin_last_attempt">Último intento. Si vuelve a introducir un PIN erróneo, se reiniciará su monedero.</string>
     <string name="security__pin_not_match">Inténtelo de nuevo, no es el mismo PIN.</string>
+    <string name="security__pin_quickpay">Por favor, introduzca su código PIN para confirmar este cambio en QuickPay.</string>
     <string name="security__pin_retype_header">Vuelva a introducir el PIN de 4 dígitos</string>
     <string name="security__pin_retype_text">Vuelva a introducir su PIN de 4 dígitos para completar el proceso de configuración.</string>
     <string name="security__pin_security_button">Proteger Monedero</string>

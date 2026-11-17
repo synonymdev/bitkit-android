@@ -582,6 +582,7 @@
     <string name="security__pin_security_button">Portefeuille sécurisé</string>
     <string name="security__pin_choose_header">Choisissez un code PIN à 4 chiffres</string>
     <string name="security__pin_choose_text">Veuillez utiliser un code PIN dont vous vous souviendrez. Si vous oubliez votre code PIN, vous pouvez le réinitialiser, mais cela nécessitera de restaurer votre portefeuille.</string>
+    <string name="security__pin_quickpay">Veuillez saisir votre code PIN pour confirmer cette modification de QuickPay.</string>
     <string name="security__pin_retype_header">Retapez le code PIN à 4 chiffres</string>
     <string name="security__pin_retype_text">Veuillez retaper votre code PIN à 4 chiffres pour terminer la procédure de configuration.</string>
     <string name="security__pin_not_match">Réessayez, il ne s\'agit pas du même code PIN.</string>
