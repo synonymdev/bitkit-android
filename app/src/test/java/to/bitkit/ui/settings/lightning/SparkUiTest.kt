@@ -51,10 +51,11 @@ class SparkUiTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark receives with no limit only while connected and not exiting`() = test {
+    fun `spark receives with no limit only while online, connected and not exiting`() = test {
         val ready = SparkState(isReady = true, balanceSats = 10_000uL)
 
         assertTrue(assertNotNull(ready.toUi(mock())).isReceiving)
         assertFalse(assertNotNull(ready.copy(isExiting = true).toUi(mock())).isReceiving)
+        assertFalse(assertNotNull(ready.toUi(mock(), isOnline = false)).isReceiving)
     }
 }

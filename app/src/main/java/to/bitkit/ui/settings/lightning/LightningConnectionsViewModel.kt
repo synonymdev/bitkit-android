@@ -17,6 +17,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -31,10 +33,12 @@ import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
+import to.bitkit.models.HealthState
 import to.bitkit.models.Toast
 import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.LogsRepo
@@ -61,6 +65,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val sparkRepo: SparkRepo,
     private val sparkExitRepo: SparkExitRepo,
+    private val healthRepo: HealthRepo,
 ) : ViewModel() {
 
     companion object {
@@ -108,8 +113,9 @@ class LightningConnectionsViewModel @Inject constructor(
                 lightningRepo.lastKnownChannels,
                 sparkRepo.state,
                 sparkExitRepo.state,
-            ) { lightningState, channels, sparkState, exitState ->
-                ConnectionsSnapshot(lightningState, channels, sparkState, exitState)
+                healthRepo.healthState.map { it.internet == HealthState.READY }.distinctUntilChanged(),
+            ) { lightningState, channels, sparkState, exitState, isOnline ->
+                ConnectionsSnapshot(lightningState, channels, sparkState, exitState, isOnline)
             }.collect { snapshot ->
                 val (lightningState, channels, sparkState) = snapshot
                 val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
@@ -132,8 +138,9 @@ class LightningConnectionsViewModel @Inject constructor(
                             lightningRepo,
                             snapshot.exitState.showsResult,
                             snapshot.exitState.earlierAddresses,
+                            snapshot.isOnline,
                         ),
-                        isSparkReceiving = sparkState.isUsable,
+                        isSparkReceiving = sparkState.isReceiving(snapshot.isOnline),
                     )
                 }
             }
@@ -286,6 +293,7 @@ internal suspend fun SparkState.toUi(
     lightningRepo: LightningRepo,
     showsExitResult: Boolean = false,
     earlierAddresses: List<SparkExitEarlierAddress> = emptyList(),
+    isOnline: Boolean = true,
 ): SparkUi? {
     val showsExit = isExiting || showsExitResult
     // An emergency exit keeps Spark listed, also while it cannot connect, so its progress stays reachable. So do an
@@ -307,15 +315,19 @@ internal suspend fun SparkState.toUi(
         isExiting = isExiting,
         showsExitResult = showsExit,
         earlierAddresses = earlierAddresses.toImmutableList(),
-        isReceiving = isUsable,
+        isReceiving = isReceiving(isOnline),
     )
 }
+
+/** Spark receives with no limit only while the device is online and Spark is usable, as its status shows. */
+internal fun SparkState.isReceiving(isOnline: Boolean) = isOnline && isUsable
 
 private data class ConnectionsSnapshot(
     val lightningState: LightningState,
     val channels: List<ChannelDetails>,
     val sparkState: SparkState,
     val exitState: SparkExitState,
+    val isOnline: Boolean,
 )
 
 data class ChannelUi(

@@ -9,6 +9,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Network
@@ -35,12 +37,13 @@ class SparkDetailViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(bgDispatcher) {
-            combine(sparkRepo.state, sparkExitRepo.state) { state, exit -> state to exit }
-                .collect { (state, exit) ->
-                    _uiState.update {
-                        it.copy(spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses))
-                    }
+            combine(sparkRepo.state, sparkExitRepo.state, isOnline()) { state, exit, isOnline ->
+                Triple(state, exit, isOnline)
+            }.collect { (state, exit, isOnline) ->
+                _uiState.update {
+                    it.copy(spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline))
                 }
+            }
         }
         viewModelScope.launch(bgDispatcher) {
             healthRepo.healthState.collect { health ->
@@ -64,6 +67,8 @@ class SparkDetailViewModel @Inject constructor(
         }
     }
 
+    private fun isOnline() = healthRepo.healthState.map { it.internet == HealthState.READY }.distinctUntilChanged()
+
     fun onPullToRefresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
@@ -71,7 +76,14 @@ class SparkDetailViewModel @Inject constructor(
             sparkExitRepo.refreshEarlierAddresses()
             val exit = sparkExitRepo.state.value
             _uiState.update {
-                it.copy(spark = sparkRepo.state.value.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses))
+                it.copy(
+                    spark = sparkRepo.state.value.toUi(
+                        lightningRepo,
+                        exit.showsResult,
+                        exit.earlierAddresses,
+                        healthRepo.healthState.value.internet == HealthState.READY,
+                    )
+                )
             }
             delay(500.milliseconds)
             _uiState.update { it.copy(isRefreshing = false) }
