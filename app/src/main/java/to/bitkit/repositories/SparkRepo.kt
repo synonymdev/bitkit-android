@@ -178,6 +178,9 @@ class SparkRepo @Inject constructor(
 
     private val refreshMutex = Mutex()
 
+    /** Orders recording a send against a payment event releasing its invoice, so an older event never releases it. */
+    private val sendReleaseMutex = Mutex()
+
     /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
     private val sendsInFlight = ConcurrentHashMap<String, String>()
 
@@ -560,7 +563,7 @@ class SparkRepo @Inject constructor(
             val sentAt = clock.now().epochSeconds
             val sent = try {
                 inFlightSentAt[paymentHash.lowercase()] = sentAt.toULong()
-                sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
+                sendReleaseMutex.withLock { sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet() }
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
                 spending {
                     // Kept until the call returns, so a send cut off by process death or cancellation stays held.
@@ -1787,6 +1790,10 @@ class SparkRepo @Inject constructor(
 
     private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
 
+    /** Whether this failure is an earlier attempt's, of a retry in doubt or one sent after [records] was read. */
+    private fun Payment.isOutrunByRetry(records: Long): Boolean =
+        isEarlierFailureOfUncertainSend() || hasRecordedSendSince(records, sendHash(PaymentStatus.FAILED))
+
     private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
         val key = hash.lowercase()
@@ -1835,27 +1842,36 @@ class SparkRepo @Inject constructor(
     }
 
     private suspend fun onPayment(payment: Payment) {
+        // A retry of the invoice can start while this event is handled, so each step checks for one sent since now.
+        val records = sendRecords.get()
         // The event carries its outcome, so a failed balance read never holds back its settlement.
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         // An earlier attempt's failure can arrive after a retry of its invoice went uncertain, and ends nothing of the
         // retry's: Spark may still finish it, so its hold and its Activity row stay until the expiry rule of
         // trySettleUncertainSend.
-        if (payment.isEarlierFailureOfUncertainSend()) {
+        if (payment.isOutrunByRetry(records)) {
             Logger.info("Kept uncertain Spark send '${payment.sendHash()}' held past an older failure", context = TAG)
             return
         }
-        recordActivity(payment, settlesJournal = false)
-        // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
-        payment.sendHash()?.let {
-            uncertainSends.remove(it.lowercase())
-            cacheStore.removeSparkUncertainSend(it)
-        }
-        payment.sendHash(PaymentStatus.FAILED)?.let { hash ->
-            val latest = listedLightningSend(hash)
+        recordActivity(payment, settlesJournal = false, records = records)
+        val failedHash = payment.sendHash(PaymentStatus.FAILED)
+        val latest = failedHash?.let { listedLightningSend(it) }
+        val isSettled = sendReleaseMutex.withLock {
+            if (payment.isOutrunByRetry(records)) return@withLock false
+            // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
+            payment.sendHash()?.let {
+                uncertainSends.remove(it.lowercase())
+                cacheStore.removeSparkUncertainSend(it)
+            }
             val isReleased = latest == SparkLightningSend.NotFound ||
                 (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
-            if (isReleased) cacheStore.removeSparkSendHash(hash)
+            if (failedHash != null && isReleased) cacheStore.removeSparkSendHash(failedHash)
+            true
+        }
+        if (!isSettled) {
+            Logger.info("Kept Spark send '${payment.sendHash()}' held for a retry sent meanwhile", context = TAG)
+            return
         }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
@@ -1865,11 +1881,15 @@ class SparkRepo @Inject constructor(
      * Spark's list or its send response [settlesJournal]: a payment event can come before the list holds the
      * withdrawal, which recovery reads, so its journal stays open until the list shows it.
      */
-    private suspend fun recordActivity(payment: Payment, settlesJournal: Boolean = true): Boolean {
+    private suspend fun recordActivity(
+        payment: Payment,
+        settlesJournal: Boolean = true,
+        records: Long = sendRecords.get(),
+    ): Boolean {
         (payment.details as? PaymentDetails.Withdraw)?.let { return recordWithdrawal(payment, it, settlesJournal) }
         val lightning = payment.details as? PaymentDetails.Lightning ?: return true
         // An earlier attempt's failure, listed or reported, leaves the row of a retry Spark may still finish.
-        if (payment.isEarlierFailureOfUncertainSend()) return true
+        if (payment.isOutrunByRetry(records)) return true
         if (payment.status == PaymentStatus.PENDING && payment.paymentType == SparkPaymentType.RECEIVE) {
             return true
         }
@@ -1917,8 +1937,11 @@ class SparkRepo @Inject constructor(
             contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,
         )
-        val saved = activityRepo.get().upsertActivity(Activity.Lightning(activity))
-            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+        // The lookup above suspends, so a retry sent meanwhile is checked for again before the write.
+        val saved = sendReleaseMutex.withLock {
+            if (payment.isOutrunByRetry(records)) return true
+            activityRepo.get().upsertActivity(Activity.Lightning(activity))
+        }.let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
         if (!saved) {
             unsavedPayments.add(payment.id)
             return false

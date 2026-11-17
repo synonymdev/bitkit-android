@@ -3828,6 +3828,42 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an older failure handled across a retry's start leaves the retry's hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        val olderFailure = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(olderFailure))
+        // The older failure's handler waits on its Activity lookup while the retry starts.
+        val lookup = CompletableDeferred<Unit>()
+        whenever { activityRepo.getActivity(any(), any()) }.doSuspendableAnswer {
+            lookup.await()
+            Result.success(null)
+        }
+        sparkEvents.emit(SdkEvent.PaymentFailed(olderFailure))
+        runCurrent()
+        backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
+        runCurrent()
+
+        lookup.complete(Unit)
+        runCurrent()
+
+        val cache = store.data.first()
+        assertTrue("hash" in cache.sparkUncertainSends, "an older failure dropped the retry's hold")
+        assertTrue("hash" in cache.sparkSendHashes, "an older failure released the retry's invoice")
+        assertTrue(events.none { it is Event.PaymentFailed }, "an older failure ended a send Spark may finish")
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
+    }
+
+    @Test
     fun `a cancelled spark retry stays held while spark lists only its older failure`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isConnected).thenReturn(true)
