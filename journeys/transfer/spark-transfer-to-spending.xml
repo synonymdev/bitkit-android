@@ -27,7 +27,7 @@
     <action>Tap the fees (testTag "SpendingConfirmFees") and verify every amount on the screen switches to the local currency; tap them again and verify they switch back to bitcoin</action>
     <action>Tap "Learn More" (testTag "SpendingConfirmMore"), verify the screen explains the Fast and Later transfer speeds and the spending balance, then tap "Understood" (testTag "LiquidityContinue")</action>
     <action>Verify the confirm screen still shows Normal selected</action>
-    <action>Tap the fees (testTag "SpendingConfirmFees") so the amounts show the local currency, go back to the amount screen and verify the amount (testTag "SpendingAmountNumberField") shows in the local currency; tap delete (testTag "NRemove") and verify the amount shrinks in the local currency with no maximum toast</action>
+    <action>Tap the fees (testTag "SpendingConfirmFees") so the amounts show the local currency, go back to the amount screen and verify the amount (testTag "SpendingAmountNumberField") shows in the local currency; tap delete (testTag "NRemove") and verify the amount loses its last typed digit in the local currency (50.00 becomes 50.0) with no maximum toast</action>
     <action>Tap the unit button (testTag "SpendingNumberPadUnit") to switch back to bitcoin; go back to the wallet home</action>
     <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending") and verify the amount screen opens directly, with no intro</action>
   </actions>
