@@ -591,7 +591,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `public endpoint writes wait for the preceding acknowledgement`() = test {
+    fun `automatic refresh reuses matching endpoints from concurrent setup`() = test {
         settingsFlow.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
             publicPaykitLightningEnabled = false,
@@ -606,7 +606,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             }
             it.getArgument<suspend (Boolean) -> Unit>(2)(true)
         }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
-        val first = async { sut.syncCurrentPublishedEndpoints() }
+        val first = async { sut.syncPublishedEndpoints(publish = true) }
         entered.await()
         val later = async { sut.syncCurrentPublishedEndpoints() }
 
@@ -615,6 +615,65 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         release.complete(Unit)
         first.await().getOrThrow()
         later.await().getOrThrow()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(any(), any()) }
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `overlapping refresh retries matching endpoints after the first publication fails`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            if (entered.complete(Unit)) {
+                release.await()
+                throw AppError("offline")
+            }
+            syncReport()
+        }.whenever(paykitSdkService).syncPublicEndpoints(any(), any())
+
+        val first = async { sut.syncCurrentPublishedEndpoints() }
+        entered.await()
+        val retry = async { sut.syncCurrentPublishedEndpoints() }
+        assertFalse(retry.isCompleted)
+        release.complete(Unit)
+
+        assertTrue(first.await().isFailure)
+        retry.await().getOrThrow()
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(any(), any()) }
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `overlapping forced refresh still reconciles matching endpoints`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            if (entered.complete(Unit)) release.await()
+            syncReport()
+        }.whenever(paykitSdkService).syncPublicEndpoints(any(), any())
+
+        val first = async { sut.syncCurrentPublishedEndpoints() }
+        entered.await()
+        val forced = async { sut.syncCurrentPublishedEndpoints(forceRefreshLightning = true) }
+        assertFalse(forced.isCompleted)
+        release.complete(Unit)
+
+        first.await().getOrThrow()
+        forced.await().getOrThrow()
         verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(any(), any()) }
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
     }
