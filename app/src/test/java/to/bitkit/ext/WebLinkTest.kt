@@ -7,7 +7,14 @@ import kotlin.test.assertTrue
 class WebLinkTest {
     @Test
     fun `web links are accepted with or without their scheme`() {
-        listOf("https://example.com", "http://example.com/a?b=c", "example.com", " www.example.com/path ").forEach {
+        listOf(
+            "https://example.com",
+            "http://example.com/a?b=c",
+            "example.com",
+            " www.example.com/path ",
+            "medium.com/@alice",
+            "example.com/a@b",
+        ).forEach {
             assertTrue(it.isWebLink(), it)
         }
     }

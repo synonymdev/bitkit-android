@@ -63,7 +63,7 @@ fun String.isWebLink(): Boolean {
     val value = trim()
     if (value.isEmpty() || value.any { it.isWhitespace() }) return false
     val hasScheme = URI_SCHEME.containsMatchIn(value)
-    if (!hasScheme && '@' in value) return false
+    if (!hasScheme && '@' in value.substringBefore('/')) return false
     val uri = runCatching { URI(if (hasScheme) value else "https://$value") }.getOrNull() ?: return false
     val host = uri.host ?: return false
     return uri.scheme.lowercase() in WEB_LINK_SCHEMES &&
