@@ -12588,6 +12588,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a review ended by its node stopping does not close a send opened during its cleanup`() = test {
+        val cleanup = CompletableDeferred<Unit>()
+        whenever { paykitPaymentProofRepo.reconcile() }.doSuspendableAnswer { cleanup.await() }
+        stubOnchainSend(
+            PREPARED_FEE_ADDRESS,
+            1_000uL,
+            Result.failure(OnchainSendNotDispatchedError(OnchainSendReviewInterruptedError())),
+        )
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmPreparedPayment()
+        clearInvocations(toastManager)
+
+        sut.hideSheet()
+        val next = Sheet.Send(SendRoute.Amount)
+        sut.showSheet(next)
+        settlePreparedPayment()
+        assertEquals(next, sut.currentSheet.value)
+        cleanup.complete(Unit)
+        settlePreparedPayment()
+
+        assertEquals(next, sut.currentSheet.value)
+        verifyFeeChangedNotSentToast()
+    }
+
+    @Test
     fun `a review ended in the background reports the send once the app is back and unlocked`() = test {
         stubOnchainSend(
             PREPARED_FEE_ADDRESS,

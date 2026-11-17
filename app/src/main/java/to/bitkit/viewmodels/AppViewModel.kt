@@ -7127,6 +7127,7 @@ class AppViewModel @Inject constructor(
                 preparedPaymentProofRequest = proofRequest,
                 contactPaymentContext = contactPaymentContext,
                 allowanceAttemptId = allowanceAttemptId,
+                session = session,
             )
         }
     }
@@ -7144,6 +7145,7 @@ class AppViewModel @Inject constructor(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
         contactPaymentContext: ContactPaymentContext?,
+        session: Long,
         allowanceAttemptId: String? = null,
     ) {
         val amount = _sendUiState.value.amount
@@ -7236,17 +7238,23 @@ class AppViewModel @Inject constructor(
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         cancelPaymentProofPreparation(preparedPaymentProofRequest)
         if (error is OnchainSendNotDispatchedError) paykitPaymentProofRepo.reconcile()
-        showOnchainPaymentFailure(error, contactPaymentContext)
+        showOnchainPaymentFailure(error, contactPaymentContext, session)
     }
 
-    private fun showOnchainPaymentFailure(error: Throwable, contactPaymentContext: ContactPaymentContext?) {
+    private fun showOnchainPaymentFailure(
+        error: Throwable,
+        contactPaymentContext: ContactPaymentContext?,
+        session: Long,
+    ) {
         val cancelled = error.cause as? PreparedFeeReviewCancelledError
         val isInterrupted = error.cause is OnchainSendReviewInterruptedError
         if (cancelled != null || isInterrupted) {
             Logger.info("Cancelled on-chain send at its prepared fee review", context = TAG)
             if (cancelled?.isNotified == false) return
             toastFeeChangedNotSent()
-            if (cancelled?.closesSend == true || isInterrupted && currentSheet.value is Sheet.Send) hideSheet()
+            // The cleanup before this can outlast the send, so only the sheet of that same send is closed.
+            val isSameSend = session == sendSession && currentSheet.value is Sheet.Send
+            if (isSameSend && (cancelled?.closesSend == true || isInterrupted)) hideSheet()
             return
         }
         Logger.error("Error sending onchain payment", error, context = TAG)
