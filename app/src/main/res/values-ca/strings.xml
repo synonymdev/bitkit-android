@@ -370,7 +370,6 @@
     <string name="lightning__spending_amount__error_min__title">Mínim del saldo d\'estalvis</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Transferir\n&lt;accent&gt;a despesa&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">A despesa</string>
     <string name="lightning__spending_confirm__error_quote">Bitkit no ha pogut obtenir les comissions d\'aquesta transferència. Comprova la connexió i torna-ho a provar.</string>
     <string name="lightning__spending_confirm__fees_changed_network">Les tarifes són {amount} més altes perquè les taxes de tarifa o el teu saldo d\'estalvis han canviat mentre eres en aquesta pantalla. Torna a desplaçar per confirmar.</string>
@@ -1195,7 +1194,6 @@
     <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_sent">Bitcoin enviat</string>
     <string name="wallet__send_swap_route">Ruta</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">Desplaça per pagar</string>
     <string name="wallet__send_to">A</string>
     <string name="wallet__send_yes">Sí, Enviar</string>

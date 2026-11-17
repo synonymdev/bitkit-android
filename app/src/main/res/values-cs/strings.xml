@@ -373,7 +373,6 @@
     <string name="lightning__spending_amount__error_min__title">Minimální zůstatek úspor</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Převést\n&lt;accent&gt;do výdajů&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">Do výdajů</string>
     <string name="lightning__spending_confirm__error_quote">Bitkit nedokázal získat poplatky za tento převod. Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="lightning__spending_confirm__fees_changed_network">Poplatky jsou o {amount} vyšší, protože se během zobrazení této obrazovky změnily sazby poplatků nebo zůstatek vašich úspor. Pro potvrzení přejeďte znovu.</string>
@@ -1200,7 +1199,6 @@
     <string name="wallet__send_review">Potvrdit</string>
     <string name="wallet__send_sent">bitcoin odeslán</string>
     <string name="wallet__send_swap_route">Trasa</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">Zaplatit přejetím prstem</string>
     <string name="wallet__send_to">Komu</string>
     <string name="wallet__send_yes">Ano, odeslat</string>

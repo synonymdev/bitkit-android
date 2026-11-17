@@ -720,7 +720,9 @@ class BackupRepo @Inject constructor(
         if (!sparkRepo.hasMergedRemoteExitState) {
             sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
             val stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
-            val remote = stored?.let { runCatching { json.decodeFromString<SparkExitBackupV1>(String(it)) }.getOrNull() }
+            val remote = stored?.let { bytes ->
+                runCatching { json.decodeFromString<SparkExitBackupV1>(String(bytes)) }.getOrNull()
+            }
             val merged = if (stored != null && remote == null) {
                 Result.failure(SparkError.ExitStateUnimportable())
             } else {

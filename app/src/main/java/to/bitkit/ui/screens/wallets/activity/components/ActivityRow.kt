@@ -31,8 +31,8 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
-import to.bitkit.ext.isSent
 import to.bitkit.ext.isMoveToSpark
+import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue

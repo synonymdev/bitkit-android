@@ -251,7 +251,6 @@
     <string name="lightning__funding__button1">Prześlij z Oszczędności</string>
     <string name="lightning__funding_advanced__button2">Konfiguracja ręczna</string>
     <string name="lightning__spending_amount__title">Prześlij \n&lt;accent&gt;na saldo wydatków&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__error_quote">Bitkit nie mógł pobrać opłat za ten transfer. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="lightning__spending_confirm__max_changed">Maksymalna kwota do przesłania wynosi teraz {amount}, ponieważ stawki opłat lub Twoje saldo oszczędności zmieniły się, gdy byłeś na tym ekranie. Przesuń ponownie, aby potwierdzić.</string>
     <string name="lightning__spending_confirm__max_changed_title">Kwota zmieniona</string>
@@ -1029,7 +1028,6 @@
     <string name="wallet__send_paykit_no_route__title">Nie można zapłacić temu kontaktowi</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Wcześniejsza wypłata z Twojego salda wydatków wciąż się rozlicza. Spróbuj ponownie po jej zakończeniu.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Przelewy na saldo wydatków nie są już dostępne. Bitkit najpierw sprawdza sieć, a potem odsyła monety z tego przelewu do Twojego portfela, aby pierwotny przelew nigdy nie został potwierdzony. Wiąże się to z opłatą sieciową.</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_to">Do</string>
     <string name="wallet__recipient_contact">Kontakt</string>
     <string name="wallet__recipient_invoice">Wklej fakturę</string>

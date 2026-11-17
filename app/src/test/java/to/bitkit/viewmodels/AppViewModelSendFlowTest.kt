@@ -1045,7 +1045,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             on { type } doReturn TimedSheetType.MOVE_TO_SPARK
             onBlocking { shouldShow() } doReturn false
         },
-        moveToSparkRepo = mock { on { canMove } doReturn emptyFlow() },
+        moveToSparkRepo = mock {
+            on { canMove } doReturn emptyFlow()
+            onBlocking { isMovePayment(any()) } doReturn false
+        },
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         wakeRepo = wakeRepo,

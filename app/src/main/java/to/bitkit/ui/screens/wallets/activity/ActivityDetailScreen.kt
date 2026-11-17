@@ -57,8 +57,8 @@ import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.contact
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.isSent
 import to.bitkit.ext.isMoveToSpark
+import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp

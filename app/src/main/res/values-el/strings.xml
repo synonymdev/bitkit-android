@@ -366,7 +366,6 @@
     <string name="lightning__spending_amount__error_min__title">Ελάχιστο υπόλοιπο αποταμίευσης</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Μεταφορά\n&lt;accent&gt;σε δαπάνες&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">Σε δαπάνες</string>
     <string name="lightning__spending_confirm__error_quote">Το Bitkit δεν μπόρεσε να λάβει τα τέλη για αυτή τη μεταφορά. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="lightning__spending_confirm__fees_changed_network">Τα τέλη είναι {amount} υψηλότερα, επειδή τα ποσοστά τελών ή το υπόλοιπο αποταμιεύσεων άλλαξαν ενώ ήσουν σε αυτή την οθόνη. Σύρε ξανά για επιβεβαίωση.</string>
@@ -1174,7 +1173,6 @@
     <string name="wallet__send_review">Επιβεβαίωση</string>
     <string name="wallet__send_sent">Τα Bitcoin στάλθηκαν</string>
     <string name="wallet__send_swap_route">Διαδρομή</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">Σύρε για πληρωμή</string>
     <string name="wallet__send_to">Προς</string>
     <string name="wallet__send_yes">Ναι, Στείλε</string>

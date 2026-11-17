@@ -249,7 +249,6 @@
     <string name="lightning__funding__button1">Transférer depuis l\'épargne</string>
     <string name="lightning__funding_advanced__button2">Configuration manuelle</string>
     <string name="lightning__spending_amount__title">Transfert \n&lt;accent&gt;Dépenses&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__error_quote">Bitkit n\'a pas pu obtenir les frais de ce transfert. Vérifiez votre connexion et réessayez.</string>
     <string name="lightning__spending_confirm__max_changed">Le maximum que vous pouvez transférer est désormais {amount}, car les taux de frais ou votre solde d\'épargne ont changé pendant que vous étiez sur cet écran. Glissez à nouveau pour confirmer.</string>
     <string name="lightning__spending_confirm__max_changed_title">Montant modifié</string>
@@ -1027,7 +1026,6 @@
     <string name="wallet__send_paykit_no_route__title">Impossible de payer ce contact</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Un retrait précédent de votre solde dépenses est encore en cours de règlement. Réessayez une fois terminé.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Les transferts vers le solde de dépenses ne sont plus disponibles. Bitkit vérifie d\'abord le réseau, puis renvoie les pièces de ce transfert vers votre portefeuille afin que le transfert d\'origine ne soit jamais confirmé. Cela coûte des frais de réseau.</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_to">Pour</string>
     <string name="wallet__recipient_contact">Contact</string>
     <string name="wallet__recipient_invoice">Coller la facture</string>

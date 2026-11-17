@@ -371,7 +371,6 @@
     <string name="lightning__spending_amount__error_min__title">Saldo minimo dei risparmi</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Trasferisci\n&lt;accent&gt;alle spese&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">Alle spese</string>
     <string name="lightning__spending_confirm__error_quote">Bitkit non è riuscito a ottenere le commissioni per questo trasferimento. Controlla la connessione e riprova.</string>
     <string name="lightning__spending_confirm__fees_changed_network">Le commissioni sono aumentate di {amount} perché i tassi di commissione o il saldo dei tuoi risparmi sono cambiati mentre eri su questa schermata. Scorri di nuovo per confermare.</string>
@@ -1198,7 +1197,6 @@
     <string name="wallet__send_review">Conferma</string>
     <string name="wallet__send_sent">Bitcoin Inviati</string>
     <string name="wallet__send_swap_route">Percorso</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">Scorri per Pagare</string>
     <string name="wallet__send_to">A</string>
     <string name="wallet__send_yes">Si, Invia</string>

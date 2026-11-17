@@ -374,7 +374,6 @@
     <string name="lightning__spending_amount__error_min__title">Saldo mínimo da poupança</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Transferir\n&lt;accent&gt;para gastos&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">Para gastos</string>
     <string name="lightning__spending_confirm__error_quote">O Bitkit não conseguiu obter as taxas desta transferência. Verifique sua conexão e tente novamente.</string>
     <string name="lightning__spending_confirm__fees_changed_network">As taxas estão {amount} mais altas porque as taxas de rede ou seu saldo de poupança mudaram enquanto você estava nesta tela. Deslize novamente para confirmar.</string>
@@ -1202,7 +1201,6 @@
     <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_sent">Bitcoin Enviado</string>
     <string name="wallet__send_swap_route">Rota</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">Deslize para Pagar</string>
     <string name="wallet__send_to">Para</string>
     <string name="wallet__send_yes">Sim, Enviar</string>

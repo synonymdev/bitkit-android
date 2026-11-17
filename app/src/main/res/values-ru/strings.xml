@@ -382,7 +382,6 @@
     <string name="lightning__spending_amount__error_min__title">Минимум баланса сбережений</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Перевод\n&lt;accent&gt;на Расходы&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">На Баланс Расходов</string>
     <string name="lightning__spending_confirm__error_quote">Bitkit не удалось получить комиссии за этот перевод. Проверьте соединение и попробуйте ещё раз.</string>
     <string name="lightning__spending_confirm__fees_changed_network">Комиссии выросли на {amount}, потому что ставки комиссий или баланс сбережений изменились, пока вы были на этом экране. Проведите ещё раз для подтверждения.</string>
@@ -1216,7 +1215,6 @@
     <string name="wallet__send_review">Подтвердить</string>
     <string name="wallet__send_sent">Биткоины отправлены</string>
     <string name="wallet__send_swap_route">Маршрут</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">Отправить</string>
     <string name="wallet__send_to">Кому</string>
     <string name="wallet__send_yes">Да, Отправить</string>

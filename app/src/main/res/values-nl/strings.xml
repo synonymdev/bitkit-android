@@ -370,7 +370,6 @@
     <string name="lightning__spending_amount__error_min__title">Minimaal spaarsaldo</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Overboeken\n&lt;accent&gt;naar bestedingssaldo&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">Naar bestedingssaldo</string>
     <string name="lightning__spending_confirm__error_quote">Bitkit kon de kosten voor deze overboeking niet ophalen. Controleer je verbinding en probeer opnieuw.</string>
     <string name="lightning__spending_confirm__fees_changed_network">De vergoedingen zijn {amount} hoger, omdat de vergoedingstarieven of uw spaargeld zijn gewijzigd terwijl u op dit scherm was. Veeg opnieuw om te bevestigen.</string>
@@ -1193,7 +1192,6 @@
     <string name="wallet__send_review">Bevestigen</string>
     <string name="wallet__send_sent">Bitcoin verzonden</string>
     <string name="wallet__send_swap_route">Route</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">Veeg om te betalen</string>
     <string name="wallet__send_to">Naar</string>
     <string name="wallet__send_yes">Ja, verzenden</string>

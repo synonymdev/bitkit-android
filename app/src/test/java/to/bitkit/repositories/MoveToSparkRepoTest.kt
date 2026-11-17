@@ -232,7 +232,9 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `move pays over the channels capped at the quoted fee and reports the fee paid`() = test {
-        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
         val moving = async { sut.move(quote) }
 
         nodeEvents.emit(Event.PaymentSuccessful("other", "other_hash", null, 1_000uL))
@@ -249,7 +251,9 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `move matches a failure without its hash by the payment id`() = test {
-        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
         val moving = async { sut.move(quote) }
 
         nodeEvents.emit(Event.PaymentFailed("other", null, PaymentFailureReason.ROUTE_NOT_FOUND))
@@ -261,7 +265,9 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `move reports a payment without an outcome in time as in flight`() = test {
-        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
         // Nothing settles it, so the virtual clock runs to the end of the wait.
         assertEquals(inFlight, sut.move(quote).getOrThrow())
         assertTrue(sut.isWatchedMovePayment("hash").not(), "a move no one waits on still mutes the app's notices")
@@ -269,7 +275,9 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a move's payment stays a move after a restart`() = test {
-        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
         sut.move(quote)
 
         assertTrue(createSut().isMovePayment("HASH"), "a restart forgot the move's payment")

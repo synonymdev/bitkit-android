@@ -366,7 +366,6 @@
     <string name="lightning__spending_amount__error_min__title">الحد الأدنى لرصيد المدخرات</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">تحويل\n&lt;accent&gt;إلى الإنفاق&lt;/accent&gt;</string>
-    <string name="lightning__spending_confirm__about">±</string>
     <string name="lightning__spending_confirm__amount">إلى الإنفاق</string>
     <string name="lightning__spending_confirm__error_quote">تعذّر على Bitkit الحصول على رسوم هذا التحويل. تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="lightning__spending_confirm__fees_changed_network">الرسوم أعلى بمقدار {amount} لأن معدلات الرسوم أو رصيد مدخراتك تغيّر أثناء وجودك في هذه الشاشة. اسحب مرة أخرى للتأكيد.</string>
@@ -1169,7 +1168,6 @@
     <string name="wallet__send_review">تأكيد</string>
     <string name="wallet__send_sent">تم إرسال Bitcoin</string>
     <string name="wallet__send_swap_route">المسار</string>
-    <string name="wallet__send_swap_route_spark">Spark</string>
     <string name="wallet__send_swipe">اسحب للدفع</string>
     <string name="wallet__send_to">إلى</string>
     <string name="wallet__send_yes">نعم، أرسل</string>

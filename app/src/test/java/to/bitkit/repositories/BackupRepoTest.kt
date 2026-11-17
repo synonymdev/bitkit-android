@@ -94,10 +94,10 @@ import to.bitkit.models.WalletScope
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.WidgetsBackupV1
-import to.bitkit.services.SparkError
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError

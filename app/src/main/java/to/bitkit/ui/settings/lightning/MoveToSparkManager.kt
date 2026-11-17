@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.filterOpen
 import to.bitkit.repositories.LightningRepo
@@ -17,7 +18,6 @@ import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.MoveToSparkOutcome
 import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.async.appScope
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
