@@ -541,6 +541,62 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `staged exit data spark rejects merges the stored backup another device replaced before the upload`() = test {
+        val newer = SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "newer")
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(
+                VssItem(
+                    key = BackupCategory.SPARK_EXIT.name,
+                    value = json.encodeToString(newer).toByteArray(),
+                    version = 2
+                )
+            )
+        )
+        // A merge already ran in this session, before another device stored newer exit data.
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(true)
+        whenever(sparkRepo.importStagedExitState()).thenReturn(StagedExitImport.Rejected("v9", "regtest"))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(sparkRepo).mergeRemoteExitBackup(newer)
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+    }
+
+    @Test
+    fun `stored exit data replaced while unreadable data was set aside is merged before the upload`() = test {
+        val unreadable = "not exit data".toByteArray()
+        val replaced = SparkExitBackupV1(createdAt = 600, network = "regtest", exitState = "other device")
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = unreadable, version = 1)),
+            Result.success(
+                VssItem(
+                    key = BackupCategory.SPARK_EXIT.name,
+                    value = json.encodeToString(replaced).toByteArray(),
+                    version = 2
+                )
+            ),
+        )
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(unreadable), unreadable)
+            verify(sparkRepo).mergeRemoteExitBackup(replaced)
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+        verify(sparkRepo, never()).skipUnimportableRemoteExitState(anyOrNull())
+    }
+
+    @Test
     fun `a spark exit merge that fails for another reason still blocks the upload`() = test {
         val stored = json.encodeToString(SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "v1"))
             .toByteArray()
