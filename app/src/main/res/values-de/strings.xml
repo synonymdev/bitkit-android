@@ -127,6 +127,7 @@
     <string name="lightning__spark_exit__done_title">Übertragung\n&lt;accent&gt;abgeschlossen&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Frühere Adressen für Notfallgebühren</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Frühere forcierte Übertragungen haben diese Adressen für Notfallgebühren verwendet. Coins, die bei einer verbleiben, gehören weiterhin dir: Gib sie mit deiner Wiederherstellungsphrase und ihrem Ableitungspfad aus.</string>
+    <string name="lightning__spark_exit__earlier_path">Ableitungspfad</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} wurde von den Spark-Betreibern on-chain verschoben und ist nicht auf Spark. Die Betreiber können es dir weiterhin freigeben.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} bleibt auf Spark.</string>
     <string name="lightning__spark_exit__failed_text">Es konnte nichts zurückgeholt werden.</string>

@@ -242,6 +242,7 @@
     <string name="lightning__spark_exit__done_title">Transferència\n&lt;accent&gt;completada&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Adreces de comissions d\'emergència anteriors</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Les transferències forçoses anteriors van utilitzar aquestes adreces de comissions d\'emergència. Les monedes que quedin en una continuen sent teves: gasta-les amb la teva frase de recuperació i el seu camí de derivació.</string>
+    <string name="lightning__spark_exit__earlier_path">Camí de derivació</string>
     <string name="lightning__spark_exit__failed_leaves">Els operadors de Spark han mogut {amount} on-chain i no és a Spark. Els operadors encara te\'l poden alliberar.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} es queda a Spark.</string>
     <string name="lightning__spark_exit__failed_text">No s\'ha pogut recuperar res.</string>

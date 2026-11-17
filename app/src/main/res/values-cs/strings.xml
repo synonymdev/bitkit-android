@@ -245,6 +245,7 @@
     <string name="lightning__spark_exit__done_title">Převod\n&lt;accent&gt;dokončen&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Dřívější adresy pro nouzové poplatky</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Dřívější vynucené převody používaly tyto adresy pro nouzové poplatky. Mince, které na nich zůstaly, jsou stále vaše: utratíte je pomocí své obnovovací fráze a její derivační cesty.</string>
+    <string name="lightning__spark_exit__earlier_path">Derivační cesta</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} přesunuli operátoři Sparku on-chain a není na Spark. Operátoři vám je stále mohou uvolnit.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} zůstává na Spark.</string>
     <string name="lightning__spark_exit__failed_text">Nic se nepodařilo získat zpět.</string>

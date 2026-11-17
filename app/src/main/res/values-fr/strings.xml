@@ -126,6 +126,7 @@
     <string name="lightning__spark_exit__done_title">Transfert\n&lt;accent&gt;terminé&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Anciennes adresses de frais d\'urgence</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Les transferts forcés précédents ont utilisé ces adresses de frais d\'urgence. Les pièces restées à l\'une d\'elles vous appartiennent toujours : dépensez-les avec votre phrase de récupération et son chemin de dérivation.</string>
+    <string name="lightning__spark_exit__earlier_path">Chemin de dérivation</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} a été déplacé on-chain par les opérateurs Spark et n\'est pas sur Spark. Les opérateurs peuvent encore vous le libérer.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} reste sur Spark.</string>
     <string name="lightning__spark_exit__failed_text">Rien n\'a pu être récupéré.</string>

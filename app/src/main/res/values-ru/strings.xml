@@ -254,6 +254,7 @@
     <string name="lightning__spark_exit__done_title">Перевод\n&lt;accent&gt;завершён&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Прежние адреса экстренных комиссий</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Прежние принудительные переводы использовали эти адреса экстренных комиссий. Монеты на них остаются вашими: потратьте их с помощью фразы восстановления и пути деривации.</string>
+    <string name="lightning__spark_exit__earlier_path">Путь деривации</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} операторы Spark перевели ончейн, и этих средств больше нет в Spark. Операторы всё ещё могут выдать их вам.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} остаются в Spark.</string>
     <string name="lightning__spark_exit__failed_text">Ничего не удалось вернуть.</string>

@@ -238,6 +238,7 @@
     <string name="lightning__spark_exit__done_title">Η μεταφορά\n&lt;accent&gt;ολοκληρώθηκε&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Προηγούμενες διευθύνσεις έκτακτων τελών</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Οι προηγούμενες αναγκαστικές μεταφορές χρησιμοποίησαν αυτές τις διευθύνσεις έκτακτων τελών. Τα νομίσματα που έμειναν σε μία παραμένουν δικά σας: ξοδέψτε τα με τη φράση ανάκτησής σας και τη διαδρομή παραγωγής της.</string>
+    <string name="lightning__spark_exit__earlier_path">Διαδρομή παραγωγής</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} μεταφέρθηκαν on-chain από τους διαχειριστές του Spark και δεν βρίσκονται στο Spark. Οι διαχειριστές μπορούν ακόμα να σας τα αποδεσμεύσουν.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} παραμένουν στο Spark.</string>
     <string name="lightning__spark_exit__failed_text">Δεν ήταν δυνατή η ανάκτηση τίποτα.</string>

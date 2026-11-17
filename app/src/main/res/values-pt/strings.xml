@@ -123,6 +123,7 @@
     <string name="lightning__spark_exit__done_title">Transferência\n&lt;accent&gt;concluída&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Endereços de taxas de emergência anteriores</string>
     <string name="lightning__spark_exit__earlier_addresses_text">As transferências forçadas anteriores usaram estes endereços de taxas de emergência. As moedas que ficarem num deles continuam suas: gaste-as com a sua frase de recuperação e o respetivo caminho de derivação.</string>
+    <string name="lightning__spark_exit__earlier_path">Caminho de derivação</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} foi movido on-chain pelos operadores da Spark e não está na Spark. Os operadores ainda o podem libertar para si.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} fica na Spark.</string>
     <string name="lightning__spark_exit__failed_text">Não foi possível recuperar nada.</string>

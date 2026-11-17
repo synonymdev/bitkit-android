@@ -128,6 +128,7 @@
     <string name="lightning__spark_exit__done_title">Transfer\n&lt;accent&gt;zakończony&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Wcześniejsze adresy opłat awaryjnych</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Wcześniejsze wymuszone transfery używały tych adresów opłat awaryjnych. Monety pozostawione na jednym z nich nadal należą do Ciebie: wydaj je za pomocą frazy odzyskiwania i jej ścieżki derywacji.</string>
+    <string name="lightning__spark_exit__earlier_path">Ścieżka derywacji</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} zostało przeniesione on-chain przez operatorów Spark i nie jest na Spark. Operatorzy wciąż mogą Ci je zwolnić.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} pozostaje na Spark.</string>
     <string name="lightning__spark_exit__failed_text">Nie udało się niczego odzyskać.</string>

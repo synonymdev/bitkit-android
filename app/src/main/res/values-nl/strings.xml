@@ -242,6 +242,7 @@
     <string name="lightning__spark_exit__done_title">Overboeking\n&lt;accent&gt;voltooid&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Eerdere adressen voor noodkosten</string>
     <string name="lightning__spark_exit__earlier_addresses_text">Eerdere geforceerde overboekingen gebruikten deze adressen voor noodkosten. Coins die op een adres zijn achtergebleven blijven van jou: besteed ze met je herstelzin en het afleidingspad.</string>
+    <string name="lightning__spark_exit__earlier_path">Afleidingspad</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} is door de Spark-beheerders on-chain verplaatst en staat niet op Spark. De beheerders kunnen het nog steeds aan je vrijgeven.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} blijft op Spark.</string>
     <string name="lightning__spark_exit__failed_text">Er kon niets worden teruggehaald.</string>

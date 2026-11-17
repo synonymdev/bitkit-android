@@ -238,6 +238,7 @@
     <string name="lightning__spark_exit__done_title">اكتمل\n&lt;accent&gt;التحويل&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">عناوين رسوم الطوارئ السابقة</string>
     <string name="lightning__spark_exit__earlier_addresses_text">استخدمت التحويلات القسرية السابقة عناوين رسوم الطوارئ هذه. تبقى العملات المتروكة في أحدها ملكك: أنفقها بعبارة الاسترداد ومسار الاشتقاق الخاص بها.</string>
+    <string name="lightning__spark_exit__earlier_path">مسار الاشتقاق</string>
     <string name="lightning__spark_exit__failed_leaves">نقل مشغّلو Spark مبلغ {amount} على السلسلة ولم يعد على Spark. لا يزال بإمكان المشغّلين الإفراج عنه لك.</string>
     <string name="lightning__spark_exit__failed_stays">يبقى {amount} على Spark.</string>
     <string name="lightning__spark_exit__failed_text">تعذّر استرداد أي شيء.</string>

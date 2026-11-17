@@ -243,6 +243,7 @@
     <string name="lightning__spark_exit__done_title">Trasferimento\n&lt;accent&gt;completato&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__earlier_addresses">Indirizzi precedenti delle commissioni di emergenza</string>
     <string name="lightning__spark_exit__earlier_addresses_text">I precedenti trasferimenti forzati usavano questi indirizzi per le commissioni di emergenza. Le monete rimaste su uno di essi restano tue: spendile con la tua frase di recupero e il relativo percorso di derivazione.</string>
+    <string name="lightning__spark_exit__earlier_path">Percorso di derivazione</string>
     <string name="lightning__spark_exit__failed_leaves">{amount} è stato spostato on-chain dagli operatori Spark e non è su Spark. Gli operatori possono ancora sbloccarlo per te.</string>
     <string name="lightning__spark_exit__failed_stays">{amount} resta su Spark.</string>
     <string name="lightning__spark_exit__failed_text">Non è stato possibile recuperare nulla.</string>
