@@ -64,10 +64,10 @@ private fun Content(
         ) {
             VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__spark_exit__confirm_title).withExitAccent())
-            VerticalSpacer(16.dp)
+            VerticalSpacer(32.dp)
             uiState.quote?.let { SparkExitQuoteRows(it) }
             uiState.savingsTotalSats?.let {
-                VerticalSpacer(16.dp)
+                VerticalSpacer(32.dp)
                 SparkExitFeesRow(stringResource(R.string.lightning__spark_exit__fees_savings), it)
             }
             VerticalSpacer(32.dp)
