@@ -219,6 +219,7 @@ private fun Content(
         AddLinkSheet(
             onDismiss = onDismissAddLinkSheet,
             onSave = onSaveLink,
+            webLinksOnly = true,
         )
     }
 

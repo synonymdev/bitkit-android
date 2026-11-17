@@ -27,12 +27,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import java.net.URI
 
 private val LINK_SUGGESTIONS = persistentListOf(
     "Email", "Phone", "Website", "Twitter", "Telegram", "Instagram",
@@ -40,11 +42,31 @@ private val LINK_SUGGESTIONS = persistentListOf(
     "Twitch", "Pinterest", "TikTok", "Spotify",
 )
 
+/** Suggestions whose links are not web links, which social v1 profiles reject. */
+private val NON_WEB_SUGGESTIONS = setOf("Email", "Phone")
+
+private val WEB_LINK_SCHEMES = setOf("http", "https")
+private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:(?!\\d)")
+
+/** Whether this is an http(s) link, with or without its scheme: the only links a social v1 profile accepts. */
+internal fun String.isWebLink(): Boolean {
+    val value = trim()
+    if (value.isEmpty() || value.any { it.isWhitespace() }) return false
+    val hasScheme = URI_SCHEME.containsMatchIn(value)
+    if (!hasScheme && '@' in value) return false
+    val uri = runCatching { URI(if (hasScheme) value else "https://$value") }.getOrNull() ?: return false
+    val host = uri.host ?: return false
+    return uri.scheme.lowercase() in WEB_LINK_SCHEMES &&
+        '.' in host &&
+        !host.substringAfterLast('.').all { it.isDigit() }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddLinkSheet(
     onDismiss: () -> Unit,
     onSave: (label: String, url: String) -> Unit,
+    webLinksOnly: Boolean = false,
 ) {
     var label by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
@@ -68,7 +90,11 @@ fun AddLinkSheet(
         if (showSuggestions) {
             SuggestionsContent(
                 title = stringResource(R.string.profile__suggestions_to_add),
-                suggestions = LINK_SUGGESTIONS,
+                suggestions = if (webLinksOnly) {
+                    LINK_SUGGESTIONS.filterNot { it in NON_WEB_SUGGESTIONS }.toImmutableList()
+                } else {
+                    LINK_SUGGESTIONS
+                },
                 onSelect = {
                     dismissKeyboard()
                     label = it
@@ -87,7 +113,7 @@ fun AddLinkSheet(
                     dismissKeyboard()
                     onSave(label, url)
                 },
-                isSaveEnabled = label.isNotBlank() && url.isNotBlank(),
+                isSaveEnabled = label.isNotBlank() && url.isNotBlank() && (!webLinksOnly || url.isWebLink()),
             )
         }
     }
