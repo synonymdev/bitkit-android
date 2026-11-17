@@ -3800,6 +3800,51 @@ class SparkRepoTest : BaseUnitTest() {
         assertTakenRetryKeptPastEarlierFailure(restart = true)
     }
 
+    @Test
+    fun `a taken spark retry without earlier ids ends its row once its invoice expires`() = test {
+        val sentAt = now.epochSeconds
+        // Spark took the retry before a restart, while its earlier attempts' ids couldn't be read.
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to sentAt + 3_600),
+                    sparkUncertainSendStarts = mapOf("hash" to sentAt),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever(activityRepo.getActivity(eq("hash"), any())).thenReturn(Result.success(pendingSendRow()))
+        whenever(activityRepo.upsertActivity(any())).thenReturn(Result.success(Unit))
+        val ownFailure = sentPayment(fees = 0).copy(
+            id = "retry",
+            status = PaymentStatus.FAILED,
+            timestamp = sentAt.toULong() + 1uL,
+        )
+        whenever(sparkService.listPayments()).thenReturn(listOf(ownFailure))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        // Its own failure, dated within the 10 s a clock difference may account for, can't be told from an earlier one.
+        sparkEvents.emit(SdkEvent.PaymentFailed(ownFailure))
+        advanceUntilIdle()
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
+
+        now += 2.hours
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        verify(activityRepo).upsertActivity(
+            argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
+        )
+        assertFalse("hash" in store.data.first().sparkUncertainSendStarts)
+    }
+
     private suspend fun TestScope.assertTakenRetryKeptPastEarlierFailure(restart: Boolean) {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isConnected).thenReturn(true)

@@ -773,13 +773,26 @@ class SparkRepo @Inject constructor(
             }
     }
 
-    /** Drops the attempts of sends Spark took whose invoice expired, as nothing of them can settle any more. */
+    /**
+     * Drops the attempts of sends Spark took whose invoice expired, once their row is written from Spark's list, as a
+     * failure the attempt held back may be the send's own. A send Spark still runs, or a list it can't read, keeps it.
+     */
     private suspend fun dropExpiredTakenAttempts() {
         val expiries = cacheStore.data.first().sparkSendExpiries
         val now = clock.now().epochSeconds
-        takenAttempts.keys.filter { (expiries[it] ?: Long.MAX_VALUE) <= now }.forEach {
-            takenAttempts.remove(it)
-            cacheStore.removeSparkUncertainSend(it)
+        takenAttempts.keys.filter { (expiries[it] ?: Long.MAX_VALUE) <= now }.forEach { hash ->
+            val (send, listed) = listedLightningSendPayment(hash)
+            when (send) {
+                SparkLightningSend.Unavailable -> return@forEach
+                SparkLightningSend.NotFound -> if (!failHeldRow(hash)) return@forEach
+                is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@forEach
+                is SparkLightningSend.Found -> Unit
+            }
+            takenAttempts.remove(hash)
+            cacheStore.removeSparkUncertainSend(hash)
+            // Written once the attempt is gone, so it no longer holds the row back; a failed write is retried at the
+            // next refresh.
+            listed?.let { recordActivity(it) }
         }
     }
 
@@ -1877,9 +1890,10 @@ class SparkRepo @Inject constructor(
         }
         // A send in flight, also one that ended while this list was read, or recorded after it was read while the
         // activities were recorded, may be missing from it or show only its earlier failed attempt, so it stays, as
-        // does one whose outcome Spark didn't report, also from before a restart.
+        // does one whose outcome Spark didn't report, also from before a restart, and one Spark took that keeps its
+        // attempt, until the expiry rule writes its row.
         val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys + inFlightBefore +
-            recordedSince(recordsBefore) + uncertainSendHashes()
+            recordedSince(recordsBefore) + uncertainSendHashes() + takenAttempts.keys
         val paid = sendHashes(PaymentStatus.COMPLETED) - live
         cacheStore.trimSparkSendHashes(
             paid = paid,
@@ -1897,7 +1911,7 @@ class SparkRepo @Inject constructor(
         val inFlightBeforeCurrent = sendsInFlight.keys.toSet()
         val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return
         val liveCurrent = sendsInFlight.keys + inFlightBeforeCurrent + recordedSince(recordsBeforeCurrent) +
-            uncertainSendHashes()
+            uncertainSendHashes() + takenAttempts.keys
         failed
             .filter { it.lowercase() !in liveCurrent }
             .filter { current.latestSend(it)?.status == PaymentStatus.FAILED }
