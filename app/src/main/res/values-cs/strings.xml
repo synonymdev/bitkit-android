@@ -1085,6 +1085,9 @@
     <string name="wallet__note">Poznámka</string>
     <string name="wallet__payment_received">bitcoin přijatý</string>
     <string name="wallet__peer_disconnected">Peer odpojen.</string>
+    <string name="wallet__receipt_failed">Odeslání potvrzení selhalo</string>
+    <string name="wallet__receipt_sending">Odesílání potvrzení</string>
+    <string name="wallet__receipt_sent">Potvrzení odesláno</string>
     <string name="wallet__receive">Přijmout</string>
     <string name="wallet__receive__cjit">Přijímat Lightning prostředky</string>
     <string name="wallet__receive_bitcoin">Přijmout bitcoin</string>
@@ -1496,17 +1499,10 @@
     <string name="profile__intro_description">Díky přenosnému profilu vás kontakty mohou kdekoli zastihnout a zaplatit vám.</string>
     <string name="profile__intro_title">PŘENOSNÝ\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Používejte Bitkit se svými kontakty a posílejte platby přímo, kdykoli a kdekoli.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Data platebního endpointu se nepodařilo připravit.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Není k dispozici žádný podporovaný platební endpoint.</string>
-    <string name="profile__pay_contacts_error_retry">Platby s kontakty se nepodařilo povolit. Vaše uložené kontakty zůstaly beze změny. Zkuste to prosím znovu.</string>
-    <string name="profile__pay_contacts_error_session">Pro sdílení platebních dat znovu připojte svůj profil Pubky.</string>
-    <string name="profile__pay_contacts_error_wallet">Peněženka se stále spouští. Zkuste to za chvíli znovu.</string>
     <string name="profile__pay_contacts_headline">Nechte své\nkontakty\n&lt;accent&gt;platit vám&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Platby kontaktům</string>
-    <string name="profile__private_payments_toggle">Soukromé platby s kontakty</string>
     <string name="profile__pubky_copied">pubky zkopírován do schránky</string>
     <string name="profile__public_key">Veřejný klíč</string>
-    <string name="profile__public_payments_toggle">Veřejné platby</string>
     <string name="profile__restore_nav_title">Obnovit profil</string>
     <string name="profile__session_expired">Platnost relace vašeho profilu vypršela. Pro obnovení profilu se prosím znovu připojte.</string>
     <string name="profile__sign_out">Odpojit</string>

@@ -117,6 +117,8 @@ private fun Throwable.isPaykitReadTimeout(): Boolean =
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
+data object PubkyIdentityUnavailableError : AppError("Pubky identity is not available yet")
+
 /**
  * The profile an edit starts from and the pubky.app revision it was read at; null when none exists yet. [tagsUnread] is
  * set when the Paykit copy could not be read, so the profile's tags are not the stored ones and a save keeps those.
@@ -2190,6 +2192,59 @@ class PubkyRepo @Inject constructor(
                 ),
             )
         }
+    }
+
+    // endregion
+
+    // region Wake
+
+    /**
+     * The `pk:` identity a wake registration proves besides `ln:`, or null when it proves `ln:` alone: without a
+     * profile, or with a session whose key this device does not hold. Fails while a saved identity cannot be read yet,
+     * so the caller skips the registration rather than dropping `pk:` and the grants tied to it.
+     */
+    suspend fun wakeIdentity(): Result<String?> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            when (awaitIdentityReady()) {
+                PubkyIdentityReadiness.Missing -> null
+                PubkyIdentityReadiness.Unavailable -> throw PubkyIdentityUnavailableError
+                PubkyIdentityReadiness.Ready -> {
+                    val publicKey = _publicKey.value ?: throw PubkyIdentityUnavailableError
+                    publicKey.takeIf { hasWakeKeyFor(it) }?.let(::pubkyWakeIdentity)
+                }
+            }
+        }
+    }
+
+    /** Signs a wake registration [message] for the `pk:` proof of [identity], with its key read just in time. */
+    suspend fun signWakeRegistration(identity: String, message: String): Result<String> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val publicKey = checkNotNull(_publicKey.value) { "No active Pubky session" }
+            check(pubkyWakeIdentity(publicKey) == identity) { "Pubky identity changed since the registration" }
+            val secretKeyHex = checkNotNull(wakeSecretKeyFor(publicKey)) { "No key for the Pubky identity" }
+            pubkyService.signWakeRegistration(secretKeyHex, message)
+        }
+    }
+
+    /** Whether this device holds the key of [publicKey], decided without reading a Ring-adopted key from Ring. */
+    private suspend fun hasWakeKeyFor(publicKey: String): Boolean {
+        val localKey = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        if (!localKey.isNullOrEmpty()) {
+            return pubkyService.publicKeyFromSecret(localKey).ensurePubkyPrefix() == publicKey
+        }
+        val source = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        return source == "${SharedPubkyContract.RING_SOURCE_PREFIX}${publicKey.removePrefix(PUBKY_PREFIX)}"
+    }
+
+    private suspend fun wakeSecretKeyFor(publicKey: String): String? {
+        val localKey = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        if (!localKey.isNullOrEmpty()) {
+            return localKey.takeIf { pubkyService.publicKeyFromSecret(it).ensurePubkyPrefix() == publicKey }
+        }
+        val bareKey = publicKey.removePrefix(PUBKY_PREFIX)
+        val source = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        if (source != "${SharedPubkyContract.RING_SOURCE_PREFIX}$bareKey") return null
+        return sharedPubkyClient.ringCredential(bareKey).getOrThrow()
     }
 
     // endregion

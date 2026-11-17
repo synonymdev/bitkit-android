@@ -195,6 +195,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRefreshMode
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitReceiptRepo
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitRouteRepo
 import to.bitkit.repositories.PaykitSparkWithdrawalRelease
@@ -234,6 +235,7 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.UsdtWalletState
+import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.repositories.WidgetsRepo
@@ -261,6 +263,7 @@ import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.NumberPadInputHandler
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.usecases.KeepContactPaymentsOnUseCase
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
@@ -334,10 +337,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitRouteRepo = mock<PaykitRouteRepo>()
     private val usdtState = MutableStateFlow(UsdtWalletState(balance = 1_000_000u))
     private val paykitUsdtPayments = mock<PaykitUsdtPaymentRepo>()
+    private val paykitReceiptRepo = mock<PaykitReceiptRepo>()
     private val samRockRepo = mock<SamRockRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
+    private val wakeRepo = mock<WakeRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
     private val refreshContactPaykitLink = mock<RefreshContactPaykitLinkUseCase>()
+    private val keepContactPaymentsOn = mock<KeepContactPaymentsOnUseCase>()
     private val clipboardManager = mock<ClipboardManager>()
     private val toastManager = mock<ToastQueueManager>()
     private val toastState = MutableStateFlow<Toast?>(null)
@@ -823,6 +829,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { pubkyRepo.refreshContacts() }.thenReturn(true)
         whenever { pubkyRepo.importShopContacts() }.thenReturn(Result.success(Unit))
         whenever { refreshContactPaykitLink(any()) }.thenReturn(Result.success(Unit))
+        whenever { keepContactPaymentsOn() }.thenReturn(Unit)
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull(), canSync = anyOrNull()) }
             .thenReturn(Result.success(Unit))
         whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
@@ -1014,6 +1021,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         privatePaykitRepo = privatePaykitRepo,
         privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
         contactPaymentSettingsRepo = contactPaymentSettingsRepo,
+        keepContactPaymentsOn = keepContactPaymentsOn,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo,
         paykitAllowanceRepo = paykitAllowanceRepo,
         paykitPaymentProofRepo = paykitPaymentProofRepo,
@@ -1023,6 +1031,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         paykitRouteRepo = paykitRouteRepo,
         paykitUsdtPayments = paykitUsdtPayments,
+        paykitReceiptRepo = paykitReceiptRepo,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },
         backupSheet = backupSheet,
@@ -1039,6 +1048,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         moveToSparkRepo = mock { on { canMove } doReturn emptyFlow() },
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
+        wakeRepo = wakeRepo,
         pubkyRepo = pubkyRepo,
         timeSource = testDispatcher.scheduler.timeSource,
         sparkExitRepo = sparkExitRepo,

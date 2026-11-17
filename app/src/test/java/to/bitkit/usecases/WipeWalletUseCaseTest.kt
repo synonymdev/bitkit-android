@@ -35,6 +35,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -70,6 +71,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
     private val migrationService = mock<MigrationService>()
+    private val wakeRepo = mock<WakeRepo>()
     private val paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() }
     private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
 
@@ -91,6 +93,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitAddressReservationRepo.clear() }.thenReturn(Unit)
+        whenever { wakeRepo.unregister() }.thenReturn(Result.success(Unit))
         onWipeCalled = false
         onSetWalletExistsStateCalled = false
 
@@ -100,6 +103,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             coreService = coreService,
             usdtRepo = usdtRepo,
             paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
+            paykitReceiptRepo = mock(),
             db = db,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
@@ -117,6 +121,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             migrationService = migrationService,
             paykitSdkService = paykitSdkService,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
+            wakeRepo = wakeRepo,
         )
     }
 
@@ -148,6 +153,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             privatePaykitRepo,
             privatePaykitAddressReservationRepo,
             migrationService,
+            wakeRepo,
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(lightningRepo).setWiping(true)
@@ -156,6 +162,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(privatePaykitRepo).closeAndClear()
+        inOrder.verify(wakeRepo).unregister()
         inOrder.verify(lightningRepo).wipeStorage(0)
         inOrder.verify(pubkySwapsRouteRepo).resetForWipe()
         inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
@@ -330,6 +337,22 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(privatePaykitRepo).closeAndClear()
         verify(pubkyRepo).wipeLocalState()
         verify(keychain).wipe()
+        verify(backupRepo).setWiping(false)
+    }
+
+    @Test
+    fun `invoke should unregister the wake device before wiping the keychain and continue when it fails`() = runTest {
+        whenever { wakeRepo.unregister() }.thenReturn(Result.failure(RuntimeException("Gateway unreachable")))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        val inOrder = inOrder(wakeRepo, keychain)
+        inOrder.verify(wakeRepo).unregister()
+        inOrder.verify(keychain).wipe()
         verify(backupRepo).setWiping(false)
     }
 

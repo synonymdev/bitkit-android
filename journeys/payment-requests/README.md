@@ -27,6 +27,12 @@ Prepare that paid-address fixture separately; the journey itself sends no additi
 If the required issuer or paid-address state is unavailable, report the corresponding journey
 as blocked, not as an app failure or a pass.
 
+`public-node-lightning-endpoint.xml` requires a regtest Lightning node with announced channels
+that reach Bitkit's graph through the regtest RGS server, and an issuer that can send that node's
+bolt11 invoice without route hints as the request's only endpoint. Before running it, export the
+graph's node list from the LDK debug screen and check the payee is listed; otherwise report the
+journey as blocked.
+
 The accepted journey uses:
 
 - Payment Request ID: `71300000-0000-4000-8000-000000000001`
@@ -40,6 +46,10 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 `request-note-too-long.xml` checks that a request whose note does not fit one Paykit message is
 refused with "Shorten the note and try again." before anything is sent, and sends after the note is
 shortened. It uses the same two-instance setup as `request-summary.xml`.
+
+`paid-request-receipt.xml` uses the same two-instance setup as `request-summary.xml`. Its failure step installs a bitkit-docker
+`homeserver-proxy` rule that answers the requester's `PUT` requests with 503 while the payer pays, then releases it
+before Retry (bitkit-docker README, "Homeserver proxy").
 
 `success-dismissal.xml` matches iOS's journey: after paying a Lightning request, closing success
 must leave no error toast or duplicate payment; closing a later unpaid request must not send it.
