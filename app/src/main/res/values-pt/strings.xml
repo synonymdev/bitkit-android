@@ -572,6 +572,7 @@
     <string name="security__pin_security_button">Segurança de Carteira</string>
     <string name="security__pin_choose_header">Escolha o PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
+    <string name="security__pin_quickpay">Digite seu código PIN para confirmar essa alteração no QuickPay.</string>
     <string name="security__pin_retype_header">Digite novamente o PIN de 4 dígitos</string>
     <string name="security__pin_retype_text">Digite novamente o PIN de 4 dígitos para concluir o processo de configuração.</string>
     <string name="security__pin_not_match">Tente novamente, este não é o mesmo PIN.</string>

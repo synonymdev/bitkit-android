@@ -591,6 +591,7 @@
     <string name="security__pin_security_button">Wallet sichern</string>
     <string name="security__pin_choose_header">4-stelligen PIN wählen</string>
     <string name="security__pin_choose_text">Bitte verwende einen PIN, den du dir merken wirst. Wenn du deinen PIN vergisst, kannst du ihn zurücksetzen, aber das erfordert die Wiederherstellung deines Wallets.</string>
+    <string name="security__pin_quickpay">Bitte gib deinen PIN-Code ein, um diese Änderung an QuickPay zu bestätigen.</string>
     <string name="security__pin_retype_header">4-stelligen PIN erneut eingeben</string>
     <string name="security__pin_retype_text">Bitte gib deinen 4-stelligen PIN erneut ein, um den Einrichtungsprozess abzuschließen.</string>
     <string name="security__pin_not_match">Versuche es erneut, dieser PIN stimmt nicht überein.</string>

@@ -80,6 +80,7 @@ import to.bitkit.ui.components.BottomSheetOverlayHost
 import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
+import to.bitkit.ui.components.PaymentAuthorizationHost
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetDragHandle
 import to.bitkit.ui.components.SheetHandlePlacement
@@ -220,6 +221,7 @@ import to.bitkit.ui.settings.lightning.SparkExitViewModel
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
+import to.bitkit.ui.settings.quickPay.QuickPaySettingsViewModel
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
@@ -794,19 +796,28 @@ fun ContentView(
                                 }
 
                                 TimedSheetType.NFC -> {
-                                    val isQuickPayEnabled by settingsViewModel.isQuickpayEnabled
-                                        .collectAsStateWithLifecycle()
-                                    NfcIntroSheet(
-                                        isQuickPayEnabled = isQuickPayEnabled,
-                                        onToggleQuickPay = {
-                                            settingsViewModel.setIsQuickPayEnabled(!isQuickPayEnabled)
-                                        },
-                                        onSettings = {
-                                            appViewModel.dismissTimedSheet()
-                                            navController.navigateTo(Routes.QuickPaySettings)
-                                        },
-                                        onContinue = { appViewModel.dismissTimedSheet() },
-                                    )
+                                    // Turning QuickPay on asks for the payment PIN, as in QuickPay settings.
+                                    val quickPaySettings: QuickPaySettingsViewModel = hiltViewModel()
+                                    val quickPayState by quickPaySettings.uiState.collectAsStateWithLifecycle()
+                                    val authorization = quickPayState.authorization
+                                    PaymentAuthorizationHost(
+                                        useBiometrics = authorization?.useBiometrics,
+                                        pinDescriptionRes = R.string.security__pin_quickpay,
+                                        onCancel = quickPaySettings::onAuthorizationCancelled,
+                                        onVerify = { authorization?.let(quickPaySettings::onAuthorized) },
+                                    ) {
+                                        NfcIntroSheet(
+                                            isQuickPayEnabled = quickPayState.isQuickPayEnabled,
+                                            onToggleQuickPay = {
+                                                quickPaySettings.setQuickPayEnabled(!quickPayState.isQuickPayEnabled)
+                                            },
+                                            onSettings = {
+                                                appViewModel.dismissTimedSheet()
+                                                navController.navigateTo(Routes.QuickPaySettings)
+                                            },
+                                            onContinue = { appViewModel.dismissTimedSheet() },
+                                        )
+                                    }
                                 }
 
                                 TimedSheetType.MOVE_TO_SPARK -> MoveToSparkSheet(

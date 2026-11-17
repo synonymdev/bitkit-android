@@ -613,6 +613,7 @@
     <string name="security__pin_forgot_title">Has oblidat el PIN?</string>
     <string name="security__pin_last_attempt">Darrer intent. Introduir el PIN incorrecte de nou reiniciarà la teva cartera.</string>
     <string name="security__pin_not_match">Torna a provar, això no és el mateix PIN.</string>
+    <string name="security__pin_quickpay">Si us plau, introdueix el teu codi PIN per confirmar aquest canvi a QuickPay.</string>
     <string name="security__pin_retype_header">Reescriu el PIN de 4 dígits</string>
     <string name="security__pin_retype_text">Si us plau, torna a escriure el teu PIN de 4 dígits per completar el procés de configuració.</string>
     <string name="security__pin_security_button">Cartera segura</string>
