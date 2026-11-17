@@ -107,6 +107,12 @@ class SparkRepo @Inject constructor(
         /** Looks for 5 minutes before telling the user Spark hasn't seen the deposit yet. */
         private const val CLAIM_POLL_ATTEMPTS = 60
 
+        /**
+         * How far Spark's clock may run behind the phone's: a failure dated within this of a retry's start counts as
+         * the retry's own.
+         */
+        private const val RAIL_CLOCK_SKEW_SECONDS = 10uL
+
         private val SEND_STATUS_PRIORITY = listOf(PaymentStatus.COMPLETED, PaymentStatus.PENDING, PaymentStatus.FAILED)
 
         /** How long the SDK leaves the counter-swap of a leaf swap cut short unclaimed (its 300 s), plus a margin. */
@@ -1167,6 +1173,31 @@ class SparkRepo @Inject constructor(
         hasMergedRemoteExitState = true
     }
 
+    /** Tries the import of restored exit data again while connected, and says what became of it. */
+    suspend fun importStagedExitState(): StagedExitImport = withContext(bgDispatcher) {
+        val file = File(Env.sparkExitRestorePath(walletIndex))
+        if (!file.exists()) return@withContext StagedExitImport.NothingStaged
+        val network = sparkService.networkName
+        if (!sparkService.isConnected || network == null) return@withContext StagedExitImport.Pending
+        val staged = file.readText()
+        importRestoredExitState(walletIndex).fold(
+            onSuccess = { StagedExitImport.Imported },
+            onFailure = {
+                if (it is SdkException.InvalidInput) {
+                    StagedExitImport.Rejected(staged, network)
+                } else {
+                    StagedExitImport.Pending
+                }
+            },
+        )
+    }
+
+    /** Drops restored exit data Spark rejected, once the backup set a copy of it aside, unless newer data came. */
+    fun discardStagedExitState(exitState: String) {
+        val staged = File(Env.sparkExitRestorePath(walletIndex))
+        if (staged.exists() && staged.readText() == exitState) staged.delete()
+    }
+
     /**
      * Puts a restored exit data backup back: at once while Spark is connected, otherwise right after it connects,
      * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable.
@@ -1753,7 +1784,7 @@ class SparkRepo @Inject constructor(
     private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
         val sentAt = uncertainSends[hash.lowercase()]?.sentAt ?: return false
-        return timestamp < sentAt
+        return timestamp + RAIL_CLOCK_SKEW_SECONDS < sentAt
     }
 
     /** The payment hash of this send, at [status] when given. */
@@ -2302,4 +2333,16 @@ fun SparkEarlyClaim.toDepositClaim(offer: SparkClaimOffer.Choice): SparkDepositC
     SparkEarlyClaim.Waiting -> SparkDepositClaim.Looking
     is SparkEarlyClaim.Repriced -> SparkDepositClaim.Repriced(offer.copy(earlyFeeSats = requiredFeeSats))
     SparkEarlyClaim.Declined -> SparkDepositClaim.Unavailable
+}
+
+/** What became of restored exit data waiting for Spark to import it. */
+sealed interface StagedExitImport {
+    data object NothingStaged : StagedExitImport
+    data object Imported : StagedExitImport
+
+    /** Spark is not connected, or the import failed for a reason that may pass. */
+    data object Pending : StagedExitImport
+
+    /** Spark can never import [exitState], restored for [network]. */
+    data class Rejected(val exitState: String, val network: String) : StagedExitImport
 }

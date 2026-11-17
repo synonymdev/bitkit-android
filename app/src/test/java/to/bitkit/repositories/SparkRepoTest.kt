@@ -2612,6 +2612,32 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `staged exit data spark rejects as invalid reads as rejected and stays until discarded`() = test {
+        whenever { sparkService.importExitState(any()) }.thenAnswer { throw SdkException.InvalidInput("bad") }
+        val sut = createSut()
+        sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        assertEquals(StagedExitImport.Rejected("s", "regtest"), sut.importStagedExitState())
+        sut.discardStagedExitState("other")
+        assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+        sut.discardStagedExitState("s")
+        assertFalse(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `staged exit data spark fails to import for another reason stays pending`() = test {
+        whenever { sparkService.importExitState(any()) }.thenAnswer { throw SdkException.Generic("offline") }
+        val sut = createSut()
+        sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertEquals(StagedExitImport.Pending, sut.importStagedExitState())
+        whenever(sparkService.isConnected).thenReturn(true)
+        assertEquals(StagedExitImport.Pending, sut.importStagedExitState())
+        assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
     fun `a failed withdrawal keeps the balance shown while spark reads zero`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
@@ -3583,6 +3609,37 @@ class SparkRepoTest : BaseUnitTest() {
         verify(activityRepo, never()).upsertActivity(
             argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
         )
+    }
+
+    @Test
+    fun `a failure dated within spark's clock skew of an uncertain retry ends its hold`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        // Spark's clock runs 5 s behind the phone's, so the retry's own failure is dated before it started.
+        val failed = sentPayment(fees = 0).copy(
+            status = PaymentStatus.FAILED,
+            timestamp = now.epochSeconds.toULong() - 5uL,
+        )
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed))
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"), lastSyncedAt = 1uL)
+        )
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        runCurrent()
+
+        sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+        advanceUntilIdle()
+
+        assertTrue(events.any { it is Event.PaymentFailed }, "a failure within the clock skew didn't end the send")
+        assertNull(sut.earlierLightningSend("lnbc1", "hash"), "a failure within the clock skew kept the retry held")
     }
 
     @Test

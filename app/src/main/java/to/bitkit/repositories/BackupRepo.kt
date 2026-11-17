@@ -717,6 +717,11 @@ class BackupRepo @Inject constructor(
      * read, so a failed or skipped restore never loses the stored exit data.
      */
     private suspend fun uploadSparkExitBackup(): Result<Unit> = runSuspendCatching {
+        val staged = sparkRepo.importStagedExitState()
+        if (staged is StagedExitImport.Rejected) {
+            setAsideRejectedExitBackup(rejectedStagedExitCopy(staged))
+            sparkRepo.discardStagedExitState(staged.exitState)
+        }
         if (!sparkRepo.hasMergedRemoteExitState) {
             sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
             val stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
@@ -745,15 +750,23 @@ class BackupRepo @Inject constructor(
         sparkRepo.skipUnimportableRemoteExitState(exitState)
     }
 
-    private suspend fun setAsideRejectedExitBackup(data: ByteArray) {
-        var key = SPARK_EXIT_REJECTED_KEY
-        val kept = vssBackupClient.getObject(key).getOrThrow()?.value
-        if (kept != null) {
-            if (kept.contentEquals(data)) return
-            val digest = MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }
-            key += "_" + digest.take(REJECTED_DIGEST_HEX_DIGITS)
-            if (vssBackupClient.getObject(key).getOrThrow() != null) return
+    private suspend fun rejectedStagedExitCopy(staged: StagedExitImport.Rejected): ByteArray {
+        val stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+        val remote = stored?.let { bytes ->
+            runCatching { json.decodeFromString<SparkExitBackupV1>(String(bytes)) }.getOrNull()
         }
+        if (stored != null && remote?.exitState == staged.exitState) return stored
+        val copy = SparkExitBackupV1(
+            createdAt = currentTimeMillis(),
+            network = remote?.network ?: staged.network,
+            exitState = staged.exitState,
+        )
+        return json.encodeToString(copy).toByteArray()
+    }
+
+    private suspend fun setAsideRejectedExitBackup(data: ByteArray) {
+        val key = rejectedExitKey(data)
+        if (vssBackupClient.getObject(key).getOrThrow() != null) return
         vssBackupClient.putObject(key = key, data = data).getOrThrow()
         Logger.warn("Set Spark exit data Spark can't import aside as '$key'", context = TAG)
     }
@@ -1596,6 +1609,12 @@ class BackupRepo @Inject constructor(
          */
         internal const val SPARK_EXIT_REJECTED_KEY = "SPARK_EXIT_REJECTED"
         private const val REJECTED_DIGEST_HEX_DIGITS = 16
+
+        /** Where exit data Spark can't import is kept: one key per copy, so none replaces another. */
+        internal fun rejectedExitKey(data: ByteArray): String {
+            val digest = MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }
+            return SPARK_EXIT_REJECTED_KEY + "_" + digest.take(REJECTED_DIGEST_HEX_DIGITS)
+        }
 
         /** Spark's exit data can reach several MB and changes with every payment, so its uploads are spaced out. */
         private const val SPARK_EXIT_BACKUP_DEBOUNCE = 60_000L
