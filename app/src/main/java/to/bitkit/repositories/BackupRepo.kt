@@ -1175,7 +1175,14 @@ class BackupRepo @Inject constructor(
                 connectionSession.replay()
                 // Before the slower categories, so the exit data is staged before Spark connects and syncs.
                 performRestore(BackupCategory.SPARK_EXIT, failedCategories) { dataBytes ->
-                    val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
+                    val parsed = runCatching { json.decodeFromString<SparkExitBackupV1>(String(dataBytes)) }
+                        .getOrElse {
+                            // A layout this app can't read never becomes readable here, so it is kept for one that can.
+                            if (it !is IllegalArgumentException) throw it
+                            Logger.warn("Failed to read '${BackupCategory.SPARK_EXIT}' backup", it, context = TAG)
+                            setAsideRejectedExitBackup(dataBytes)
+                            return@performRestore currentTimeMillis()
+                        }
                     sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
                     parsed.createdAt
                 }

@@ -574,6 +574,19 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a restore sets aside spark exit data it can't read and completes`() = test {
+        val stored = "not exit data".toByteArray()
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertFalse(BackupCategory.SPARK_EXIT in failed)
+        verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(stored), stored)
+        verify(sparkRepo, never()).restoreExitBackup(any(), any())
+    }
+
+    @Test
     fun `a failed spark exit restore is reported as an incomplete restore`() = test {
         whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
             .thenReturn(Result.failure(AppError("unreachable")))

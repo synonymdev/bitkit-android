@@ -174,16 +174,30 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds. */
-    suspend fun addSparkUncertainSend(paymentHash: String, failedAt: Long) {
+    /**
+     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds, and
+     * when it was sent, [sentAt], once known.
+     */
+    suspend fun addSparkUncertainSend(paymentHash: String, failedAt: Long, sentAt: Long? = null) {
         val hash = paymentHash.lowercase()
-        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt)) }
+        store.updateData {
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt),
+                sparkUncertainSendStarts = sentAt?.let { start -> it.sparkUncertainSendStarts + (hash to start) }
+                    ?: it.sparkUncertainSendStarts,
+            )
+        }
     }
 
     suspend fun removeSparkUncertainSend(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkUncertainSends) return
-        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
+        store.updateData {
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends - hash,
+                sparkUncertainSendStarts = it.sparkUncertainSendStarts - hash,
+            )
+        }
     }
 
     suspend fun addMoveToSparkHash(paymentHash: String) {
@@ -375,6 +389,11 @@ data class AppCacheData(
      * never reads a retry's earlier failed attempt as its outcome.
      */
     val sparkUncertainSends: Map<String, Long> = mapOf(),
+    /**
+     * When each of those sends went out, in epoch seconds, so a failure Spark dates before it still reads as an earlier
+     * attempt's after a restart. Sends kept before this was have none.
+     */
+    val sparkUncertainSendStarts: Map<String, Long> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.

@@ -609,7 +609,7 @@ class SparkRepo @Inject constructor(
     private suspend fun settleUncertainSend(paymentHash: String, sentAt: Long, expiresAt: ULong) {
         val failedAt = clock.now().epochSeconds
         uncertainSends[paymentHash.lowercase()] = UncertainSend(failedAt.toULong(), expiresAt, sentAt.toULong())
-        cacheStore.addSparkUncertainSend(paymentHash, failedAt)
+        cacheStore.addSparkUncertainSend(paymentHash, failedAt, sentAt)
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
@@ -664,7 +664,7 @@ class SparkRepo @Inject constructor(
 
     /**
      * A send whose outcome Spark didn't report: when it failed, when its invoice expires and when it started, in epoch
-     * seconds. Its start is unknown after a restart, which keeps one stored time.
+     * seconds. Its start is kept across a restart; a send kept before starts were stored has none.
      */
     private data class UncertainSend(val failedAt: ULong, val expiresAt: ULong, val sentAt: ULong? = null)
 
@@ -673,7 +673,8 @@ class SparkRepo @Inject constructor(
         val cache = cacheStore.data.first()
         cache.sparkUncertainSends.forEach { (hash, failedAt) ->
             val expiresAt = cache.sparkSendExpiries[hash]?.toULong() ?: ULong.MAX_VALUE
-            uncertainSends.putIfAbsent(hash, UncertainSend(failedAt.toULong(), expiresAt))
+            val sentAt = cache.sparkUncertainSendStarts[hash]?.toULong()
+            uncertainSends.putIfAbsent(hash, UncertainSend(failedAt.toULong(), expiresAt, sentAt))
         }
     }
 

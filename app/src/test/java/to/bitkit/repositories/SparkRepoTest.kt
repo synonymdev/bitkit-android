@@ -3540,7 +3540,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val deadline = now + 1.seconds
-        whenever { cacheStore.addSparkUncertainSend(any(), any()) }.thenAnswer {
+        whenever { cacheStore.addSparkUncertainSend(any(), any(), anyOrNull()) }.thenAnswer {
             now = deadline + 1.seconds
             Unit
         }
@@ -3675,6 +3675,40 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertNull(after.earlierLightningSend("lnbc1", "hash"), "the retry's own failure still held the node off")
+    }
+
+    @Test
+    fun `an older attempt's failure after a restart keeps an uncertain spark retry held`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        )
+        val before = createSut(store)
+        before.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(before.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        runCurrent()
+        val after = createSut(store)
+        after.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { after.nodeEvents.collect { events += it } }
+        runCurrent()
+
+        // The earlier attempt's failure, made long before the retry went out, arrives after the restart.
+        val olderFailure = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(olderFailure))
+        sparkEvents.emit(SdkEvent.PaymentFailed(olderFailure))
+        advanceUntilIdle()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "an older failure ended a send Spark may finish")
+        assertEquals(EarlierSend.Pending("hash"), after.earlierLightningSend("lnbc1", "hash"))
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
     }
 
     @Test
