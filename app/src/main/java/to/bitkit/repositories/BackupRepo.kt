@@ -722,21 +722,11 @@ class BackupRepo @Inject constructor(
             setAsideRejectedExitBackup(rejectedStagedExitCopy(staged))
             sparkRepo.discardStagedExitState(staged.exitState)
         }
-        if (!sparkRepo.hasMergedRemoteExitState) {
+        // A rejected staged copy may be older than the stored backup, which another device can have replaced, so the
+        // stored one is merged before anything replaces it.
+        if (!sparkRepo.hasMergedRemoteExitState || staged is StagedExitImport.Rejected) {
             sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
-            val stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
-            val remote = stored?.let { bytes ->
-                runCatching { json.decodeFromString<SparkExitBackupV1>(String(bytes)) }.getOrNull()
-            }
-            val merged = if (stored != null && remote == null) {
-                Result.failure(SparkError.ExitStateUnimportable())
-            } else {
-                sparkRepo.mergeRemoteExitBackup(remote)
-            }
-            merged.recoverCatching {
-                if (it !is SparkError.ExitStateUnimportable || stored == null) throw it
-                keepUnimportableExitBackup(stored, remote?.exitState)
-            }.getOrThrow()
+            mergeStoredExitBackup()
         }
         val backup = sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
         vssBackupClient.putObject(
@@ -745,9 +735,33 @@ class BackupRepo @Inject constructor(
         ).getOrThrow()
     }
 
-    private suspend fun keepUnimportableExitBackup(stored: ByteArray, exitState: String?) {
-        setAsideRejectedExitBackup(stored)
-        sparkRepo.skipUnimportableRemoteExitState(exitState)
+    /**
+     * Merges the stored exit backup into Spark. One Spark can't import is set aside, and replaced only when it is still
+     * the stored one after that, so exit data another device stored meanwhile is merged first.
+     */
+    private suspend fun mergeStoredExitBackup() {
+        var stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+        repeat(EXIT_MERGE_ATTEMPTS) {
+            val remote = stored?.let { bytes ->
+                runCatching { json.decodeFromString<SparkExitBackupV1>(String(bytes)) }.getOrNull()
+            }
+            val merged = if (stored != null && remote == null) {
+                Result.failure(SparkError.ExitStateUnimportable())
+            } else {
+                sparkRepo.mergeRemoteExitBackup(remote)
+            }
+            val error = merged.exceptionOrNull() ?: return
+            val unimportable = stored
+            if (error !is SparkError.ExitStateUnimportable || unimportable == null) throw error
+            setAsideRejectedExitBackup(unimportable)
+            val current = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+            if (current.contentEquals(unimportable)) {
+                sparkRepo.skipUnimportableRemoteExitState(remote?.exitState)
+                return
+            }
+            stored = current
+        }
+        throw SparkExitBackupChanged()
     }
 
     private suspend fun rejectedStagedExitCopy(staged: StagedExitImport.Rejected): ByteArray {
@@ -1628,6 +1642,9 @@ class BackupRepo @Inject constructor(
         /** Spark's exit data can reach several MB and changes with every payment, so its uploads are spaced out. */
         private const val SPARK_EXIT_BACKUP_DEBOUNCE = 60_000L
 
+        /** How many times the exit backup merges stored data another device replaced meanwhile before it gives up. */
+        private const val EXIT_MERGE_ATTEMPTS = 3
+
         /** Maximum captures before deferring a changing wallet to the next scheduled backup. */
         private const val WALLET_SNAPSHOT_ATTEMPTS = 3
 
@@ -1657,6 +1674,8 @@ class BackupRepo @Inject constructor(
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
 
 internal class SparkExitBackupDeferred : AppError("Spark has not connected and synced yet")
+
+internal class SparkExitBackupChanged : AppError("Stored Spark exit backup kept changing while it was merged")
 
 private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
     "Failed to retain public address exclusion during restore",
