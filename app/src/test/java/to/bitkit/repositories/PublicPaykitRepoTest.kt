@@ -45,7 +45,6 @@ import to.bitkit.services.PaykitPublicContactPaymentResolution
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
-import to.bitkit.services.PublicEndpointRefresh
 import to.bitkit.services.PublicEndpointSync
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -593,7 +592,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `automatic refresh waits for setup acknowledgement and supplies its overlap context`() = test {
+    fun `automatic refresh reuses matching endpoints after setup acknowledgement`() = test {
         settingsFlow.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
             publicPaykitLightningEnabled = false,
@@ -608,6 +607,8 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             }
             it.getArgument<suspend (Boolean) -> Unit>(2)(true)
         }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
+        val published = syncReport()
+        whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).thenReturn(published)
         val first = async { sut.syncPublishedEndpoints(publish = true) }
         entered.await()
         val later = async { sut.syncCurrentPublishedEndpoints() }
@@ -617,10 +618,56 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         release.complete(Unit)
         first.await().getOrThrow()
         later.await().getOrThrow()
-        val refreshes = argumentCaptor<PublicEndpointRefresh>()
-        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpointsWithEpoch(any(), any(), refreshes.capture()) }
-        assertTrue(refreshes.allValues.all { it.reuseMatching && it.signIn.publicKey == "pubkyself" })
+        verifyBlocking(paykitSdkService) { syncPublicEndpointsWithEpoch(any(), any(), eq(published)) }
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpointsWithEpoch(any(), any(), isNull()) }
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `overlapping refresh can reuse a paid invoice replacement after acknowledgement`() = test {
+        for (cancelBeforeAcknowledgement in listOf(false, true)) {
+            sut = createRepo()
+            clearInvocations(paykitSdkService)
+            settingsFlow.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitUsdtEnabled = false,
+                publicPaykitBolt11 = "lnbc1paid",
+                publicPaykitBolt11PaymentHash = "010203",
+                publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+            )
+            stubPublicInvoice("lnbc1replacement", byteArrayOf(4, 5, 6))
+            val published = syncReport()
+            whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).thenReturn(published)
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            doSuspendableAnswer {
+                if (entered.complete(Unit)) release.await()
+                it.getArgument<suspend (Boolean) -> Unit>(2)(true)
+            }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
+
+            val paid = async { sut.refreshPublishedBolt11ForPayment("010203") }
+            entered.await()
+            val refresh = async { sut.syncCurrentPublishedEndpoints() }
+            assertFalse(refresh.isCompleted)
+            if (cancelBeforeAcknowledgement) {
+                paid.cancelAndJoin()
+            } else {
+                release.complete(Unit)
+                paid.await().getOrThrow()
+            }
+            refresh.await().getOrThrow()
+
+            if (cancelBeforeAcknowledgement) {
+                verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpointsWithEpoch(any(), any(), isNull()) }
+            } else {
+                verifyBlocking(paykitSdkService) { syncPublicEndpointsWithEpoch(any(), any(), isNull()) }
+                verifyBlocking(paykitSdkService) { syncPublicEndpointsWithEpoch(any(), any(), eq(published)) }
+            }
+            assertEquals("lnbc1replacement", settingsFlow.value.publicPaykitBolt11)
+            assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+        }
     }
 
     @Test
