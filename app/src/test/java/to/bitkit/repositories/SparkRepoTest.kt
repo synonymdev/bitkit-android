@@ -3747,6 +3747,56 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an earlier attempt's late failure leaves a spark retry spark took and still runs`() = test {
+        assertTakenRetryKeptPastEarlierFailure(restart = false)
+    }
+
+    @Test
+    fun `an earlier attempt's late failure after a restart leaves a spark retry spark still runs`() = test {
+        assertTakenRetryKeptPastEarlierFailure(restart = true)
+    }
+
+    private suspend fun TestScope.assertTakenRetryKeptPastEarlierFailure(restart: Boolean) {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        // Dated well after the retry went out, past the 10 s a clock difference may account for.
+        val older = sentPayment(fees = 0).copy(
+            id = "older",
+            status = PaymentStatus.FAILED,
+            timestamp = now.epochSeconds.toULong() + 60uL,
+        )
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(older))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(retry)
+        val before = createSut(store)
+        before.start(0).getOrThrow()
+        assertEquals("hash", before.payInvoice("lnbc1", 100uL).getOrThrow())
+        runCurrent()
+        whenever { sparkService.listPayments() }.thenReturn(listOf(older, retry))
+        clearInvocations(activityRepo)
+        val events = MutableSharedFlow<SdkEvent>()
+        val sut = if (restart) {
+            whenever(sparkService.events).thenReturn(events)
+            createSut(store).also { it.start(0).getOrThrow() }
+        } else {
+            before
+        }
+        val nodeEvents = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { nodeEvents += it } }
+        runCurrent()
+
+        (if (restart) events else sparkEvents).emit(SdkEvent.PaymentFailed(older))
+        advanceUntilIdle()
+
+        assertTrue(nodeEvents.none { it is Event.PaymentFailed }, "an earlier failure ended a send Spark still runs")
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
+    }
+
+    @Test
     fun `an older attempt's failure after a restart keeps an uncertain spark retry held`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)

@@ -197,9 +197,19 @@ class CacheStore internal constructor(
         }
     }
 
-    suspend fun removeSparkUncertainSend(paymentHash: String) {
+    /** Ends the doubt over a send Spark took and still runs, keeping its start time and earlier attempts' ids. */
+    suspend fun keepSparkSendAttempt(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkUncertainSends) return
+        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
+    }
+
+    suspend fun removeSparkUncertainSend(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        val data = store.data.first()
+        val isKept = hash in data.sparkUncertainSends || hash in data.sparkUncertainSendStarts ||
+            hash in data.sparkUncertainSendEarlierIds
+        if (!isKept) return
         store.updateData {
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends - hash,
