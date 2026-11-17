@@ -32,11 +32,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.repositories.SparkClaimSpeed
-import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.illustrationRes
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -57,7 +57,6 @@ fun SpendingHwSignScreen(
     walletId: String,
     viewModel: SparkFundingViewModel,
     onBackClick: () -> Unit,
-    onLearnMoreClick: () -> Unit,
     onSent: () -> Unit,
     hwSendViewModel: HwSendViewModel = hiltViewModel(),
 ) {
@@ -69,6 +68,7 @@ fun SpendingHwSignScreen(
     }
     var request by remember { mutableStateOf<HwSendRequest?>(null) }
     val isBusy = state.isSending || hwState.isSigning
+    val currency = currencyViewModel
 
     BackHandler(enabled = !hwState.canLeave || state.isSending) {}
 
@@ -109,8 +109,8 @@ fun SpendingHwSignScreen(
         isSigning = isBusy,
         hasPendingBroadcast = hwState.hasPendingBroadcast,
         onBackClick = { if (hwState.canLeave && !state.isSending) onBackClick() },
-        onLearnMoreClick = { if (!isBusy) onLearnMoreClick() },
         onSpeedChange = { if (!isBusy) viewModel.onSpeedChange(it) },
+        onFeesClick = { currency?.switchUnit() },
         onOpenConnect = {
             // A pending broadcast resumes only for the exact request it was signed for.
             val pending = request?.takeIf { hwState.hasPendingBroadcast }
@@ -140,8 +140,8 @@ private fun Content(
     isSigning: Boolean = false,
     hasPendingBroadcast: Boolean = false,
     onBackClick: () -> Unit = {},
-    onLearnMoreClick: () -> Unit = {},
     onSpeedChange: (SparkClaimSpeed) -> Unit = {},
+    onFeesClick: () -> Unit = {},
     onOpenConnect: () -> Unit = {},
 ) {
     val quote = state.quote
@@ -181,22 +181,16 @@ private fun Content(
                     )
                     VerticalSpacer(8.dp)
 
-                    SpendingFeeGrid(quote = quote, speed = state.speed)
+                    SpendingFeeGrid(
+                        quote = quote,
+                        speed = state.speed,
+                        address = quote?.address,
+                        onClick = onFeesClick,
+                    )
 
-                    VerticalSpacer(16.dp)
+                    VerticalSpacer(24.dp)
 
                     SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
-
-                    VerticalSpacer(16.dp)
-
-                    PrimaryButton(
-                        text = stringResource(R.string.common__learn_more),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        enabled = !isSigning && !hasPendingBroadcast,
-                        onClick = onLearnMoreClick,
-                        modifier = Modifier.testTag("HardwareTransferSignLearnMore")
-                    )
 
                     Box(
                         contentAlignment = Alignment.Center,
@@ -230,7 +224,7 @@ private fun Content(
 }
 
 private val previewQuote = Quote(
-    address = "bcrt1q",
+    address = "bcrt1q5pz8luhp0c7khjr27m2ct55qyr5s985fey9xh3c4kq0p7rnvzd3s2fz2tq",
     amountSats = 50_000,
     networkFeeSats = 1_141,
     instantFeeSats = 1_350,

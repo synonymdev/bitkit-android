@@ -344,18 +344,15 @@
     <string name="lightning__spending_confirm__fees_changed_network">Les tarifes són {amount} més altes perquè les taxes de tarifa o el teu saldo d\'estalvis han canviat mentre eres en aquesta pantalla. Torna a desplaçar per confirmar.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Les tarifes han canviat</string>
     <string name="lightning__spending_confirm__instant_text">A punt en pocs minuts</string>
-    <string name="lightning__spending_confirm__later_text">Després de 3 confirmacions, uns 30 minuts</string>
     <string name="lightning__spending_confirm__lsp_fee">Tarifes de servei</string>
     <string name="lightning__spending_confirm__network_fee">Tarifes de xarxa</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit no ha pogut obtenir les comissions actuals d\'aquesta transferència. Comprova la connexió i torna-ho a provar.</string>
     <string name="lightning__spending_confirm__quote_error_title">Comissions no disponibles</string>
-    <string name="lightning__spending_confirm__spending_fee">Comissió de despesa</string>
     <string name="lightning__spending_confirm__total">Total</string>
     <string name="lightning__spending_intro__button">Començar</string>
     <string name="lightning__spending_intro__text">Transfereix fons al teu saldo de despesa per gaudir de transaccions instantànies i barates amb amics, família i comerciants.</string>
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;a despesa&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Saldo de despesa</string>
-    <string name="lightning__spending_learn_more__text">Instant paga el proveïdor per afegir la teva transferència al saldo de despesa abans que es confirmi, normalment en pocs minuts.\n\nDesprés espera 3 confirmacions, uns 30 minuts, amb una comissió més baixa.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Estat</string>
     <string name="lightning__support">Suport</string>
@@ -370,7 +367,6 @@
     <string name="lightning__transfer_hw__open_connect">Obrir Trezor Connect</string>
     <string name="lightning__transfer_in_progress">TRANSFERÈNCIA EN CURS</string>
     <string name="lightning__transfer_intro__button">Començar</string>
-    <string name="lightning__transfer_intro__text">Finança el teu saldo de despesa per gaudir de transaccions instantànies i barates amb amics, família i comerciants.</string>
     <string name="lightning__transfer_intro__title">Saldo de\n&lt;accent&gt;despesa&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">Transferència realitzada</string>
     <string name="lightning__transfer_success__text_savings">Els teus fons han estat transferits. Pots utilitzar aquests fons immediatament.</string>

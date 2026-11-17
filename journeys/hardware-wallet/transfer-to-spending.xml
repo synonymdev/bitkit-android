@@ -4,7 +4,9 @@
     Your Device -> Transaction Signed -> setting-up progress, then verifies the new transfer is
     represented once in the hardware wallet's Core activity scope. Requires Spark connected on its
     regtest, built with `ESPLORA_URL` on Spark's regtest chain through `scripts/spark-regtest-esplora.py` (without it the transfer opens the Transfer Unavailable sheet), and a paired Bridge emulator whose native-segwit account holds spendable regtest funds and
-    at least one older hardware receive row with a distinct amount.
+    at least one older hardware receive row with a distinct amount. The hardware wallet syncs over Electrum, not
+    `ESPLORA_URL`, so fund the Trezor on the Electrum regtest (`./lsp`); its signed deposit then never reaches
+    Spark's chain, and the transfer stays in progress after the journey ends.
   </description>
   <actions>
     <action>
@@ -32,7 +34,7 @@
       Tap "Continue" (testTag "HardwareTransferAmountContinue") and wait for the fee estimate
     </action>
     <action>
-      Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", showing the NETWORK FEES, SPENDING FEE, TO SPENDING and TOTAL cells, the Instant and Later rows, the Learn More button, and the Trezor illustration
+      Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", showing the NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL cells, the deposit address under "ADDRESS (CONFIRM ON DEVICE)" (testTag "SpendingConfirmAddress"), the Fast and Normal rows with Fast selected, and the Trezor illustration
     </action>
     <action>
       Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect"). If the fees rose since they were shown, verify a "Fees changed" toast, the fee cells refresh, and tap "Open Trezor Connect" again; otherwise signing starts immediately
