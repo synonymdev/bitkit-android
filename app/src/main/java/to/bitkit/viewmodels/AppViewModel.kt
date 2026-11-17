@@ -46,6 +46,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -137,6 +138,7 @@ import to.bitkit.ext.totalValue
 import to.bitkit.ext.walletId
 import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.FeeRate
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWallet
@@ -432,6 +434,7 @@ class AppViewModel @Inject constructor(
 
     fun setSendEvent(event: SendEvent) {
         if ((currentSheet.value as? Sheet.Send)?.preparingRequest != null) return
+        if (preparedFeeReview != null && event.changesReviewedSend()) return
         when (event) {
             SendEvent.AmountContinue -> {
                 if (amountContinuePending) return
@@ -609,6 +612,10 @@ class AppViewModel @Inject constructor(
 
     // The confirmed send that holds the submission guard; dismissing that send releases the guard for the next one.
     private var confirmedPaymentSubmission: Any? = null
+
+    // The prepared send whose mining fee is above the reviewed one, held until it is approved again or cancelled.
+    @Volatile
+    private var preparedFeeReview: PreparedFeeReview? = null
     private val activePaymentSubmissions = mutableSetOf<Any>()
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
@@ -6673,12 +6680,15 @@ class AppViewModel @Inject constructor(
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
         if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
         viewModelScope.launch {
-            if (!prepareCoinSelection()) return@launch
+            val review = preparedFeeReview
+            if (review == null && !prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
 
-            handleSanityChecks(amount)
+            handleSanityChecks(amount, preparedFeeSats = review?.feeSats)
             if (_sendUiState.value.showSanityWarningDialog != null) return@launch // await for dialog UI interaction
 
+            if (preparedFeeReview !== review) return@launch
+            review?.isSwiped = true
             _sendUiState.update { it.copy(shouldConfirmPay = true) }
         }
     }
@@ -6721,7 +6731,7 @@ class AppViewModel @Inject constructor(
         handlePaymentPreparationFailure(PaykitPaymentRequestError.RequestUnavailable, contactPaymentContext)
     }
 
-    private suspend fun handleSanityChecks(amountSats: ULong) {
+    private suspend fun handleSanityChecks(amountSats: ULong, preparedFeeSats: ULong? = null) {
         if (_sendUiState.value.showSanityWarningDialog != null) return
 
         val settings = settingsStore.data.first()
@@ -6763,7 +6773,9 @@ class AppViewModel @Inject constructor(
 
         if (_sendUiState.value.payMethod != SendMethod.ONCHAIN && leg == null) return
 
-        val totalFee = if (leg != null) {
+        val totalFee = if (preparedFeeSats != null) {
+            preparedFeeSats
+        } else if (leg != null) {
             leg.debitSat.safe() - leg.deliveredSat.safe()
         } else if (_sendUiState.value.hardwareWalletId != null) {
             _sendUiState.value.onchainFeeUi.sats?.toULong() ?: return
@@ -6805,6 +6817,8 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
+        val reviewedOnchainFeeSats = _sendUiState.value.onchainFeeUi.sats?.toULong() ?: 0uL
+        val session = sendSession
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
         if (showCommittedSwap()) return
@@ -6941,6 +6955,8 @@ class AppViewModel @Inject constructor(
                 contactPaymentContext,
                 amount,
                 allowanceAttemptId,
+                reviewedOnchainFeeSats,
+                session,
             )
 
             SendMethod.LIGHTNING -> proceedWithLightningPayment(
@@ -6986,6 +7002,8 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
         allowanceAttemptId: String?,
+        reviewedFeeSats: ULong,
+        session: Long,
     ) {
         val originalPayer = preparedPaymentProofRequest?.let {
             paykitPaymentProofRepo.captureOriginalOnchainPayer(it).getOrElse { error ->
@@ -7025,6 +7043,18 @@ class AppViewModel @Inject constructor(
                 }
                 incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
                 sendAttempted = true
+            },
+            approvedMiningFeeSats = reviewedFeeSats,
+            reviewHigherFee = { receipt ->
+                reviewPreparedFee(receipt, session)
+                // The request and its payer are checked again, since the renewed approval can come much later.
+                if (preparedPaymentProofRequest != null) {
+                    paykitPaymentProofRepo.verifyOriginalOnchainPayer(
+                        preparedPaymentProofRequest,
+                        requireNotNull(originalPayer),
+                    ).getOrThrow()
+                }
+                incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
             },
         ).onSuccess { outcome ->
             proofRequest = null
@@ -7195,6 +7225,14 @@ class AppViewModel @Inject constructor(
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         cancelPaymentProofPreparation(preparedPaymentProofRequest)
         if (error is OnchainSendNotDispatchedError) paykitPaymentProofRepo.reconcile()
+        showOnchainPaymentFailure(error, contactPaymentContext)
+    }
+
+    private fun showOnchainPaymentFailure(error: Throwable, contactPaymentContext: ContactPaymentContext?) {
+        if (error.cause is PreparedFeeReviewCancelledError) {
+            Logger.info("Cancelled on-chain send at its prepared fee review", context = TAG)
+            return
+        }
         Logger.error("Error sending onchain payment", error, context = TAG)
         if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
             setSendEffect(SendEffect.NavigateToError(error.toSendFailureDetails(context, _sendUiState.value.address)))
@@ -7206,6 +7244,69 @@ class AppViewModel @Inject constructor(
             )
             hideSheet()
         }
+    }
+
+    /**
+     * Shows the prepared send on the confirmation and returns once it is approved again, by the swipe and the PIN or
+     * biometrics the first approval used. Throws when the send is cancelled or no longer the one on screen.
+     */
+    private suspend fun reviewPreparedFee(receipt: OnchainPreparedReceipt, session: Long) {
+        val feeSats = requireNotNull(receipt.miningFeeSats)
+        check(feeSats <= Long.MAX_VALUE.toULong())
+        val reviewedFeeSats = _sendUiState.value.onchainFeeUi.sats?.toULong() ?: 0uL
+        val increase = formatMoneyValue(feeSats.safe() - reviewedFeeSats.safe())
+        if (session != sendSession || currentSheet.value !is Sheet.Send ||
+            receipt.address != _sendUiState.value.address
+        ) {
+            throw PreparedFeeReviewCancelledError()
+        }
+        val review = PreparedFeeReview(feeSats)
+        preparedFeeReview = review
+        Logger.info("Asking to approve prepared fee '$feeSats' above reviewed '$reviewedFeeSats'", context = TAG)
+        _sendUiState.update {
+            it.copy(
+                amount = receipt.amountSats,
+                onchainFeeUi = it.onchainFeeUi.copy(sats = feeSats.toLong(), isLoading = false),
+                confirmedWarnings = it.confirmedWarnings
+                    .filterNot { warning ->
+                        warning == SanityWarning.FEE_OVER_HALF_VALUE || warning == SanityWarning.FEE_OVER_10_USD
+                    }
+                    .toImmutableList(),
+                showSanityWarningDialog = null,
+                shouldConfirmPay = false,
+                isPreparedFeeReview = true,
+            )
+        }
+        toast(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+            description = context.getString(R.string.lightning__spending_confirm__fees_changed_network)
+                .replace("{amount}", "$BITCOIN_SYMBOL $increase"),
+        )
+        try {
+            val isApproved = coroutineScope {
+                val dismissal = launch {
+                    currentSheet.first { it !is Sheet.Send }
+                    review.answer.complete(false)
+                }
+                review.answer.await().also { dismissal.cancel() }
+            }
+            val current = _sendUiState.value
+            if (!isApproved || session != sendSession) throw PreparedFeeReviewCancelledError()
+            check(
+                current.amount == receipt.amountSats && current.address == receipt.address &&
+                    current.onchainFeeUi.sats == feeSats.toLong()
+            ) { "Reviewed send differs from the prepared one" }
+        } finally {
+            if (preparedFeeReview === review) {
+                preparedFeeReview = null
+                _sendUiState.update { it.copy(isPreparedFeeReview = false) }
+            }
+        }
+    }
+
+    private fun cancelPreparedFeeReview() {
+        preparedFeeReview?.answer?.complete(false)
     }
 
     suspend fun retryOriginalOnchainSend(
@@ -8197,6 +8298,8 @@ class AppViewModel @Inject constructor(
         paymentDeadlineAt: Instant? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
+        approvedMiningFeeSats: ULong? = null,
+        reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)? = null,
     ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
         address = address,
         sats = amount,
@@ -8212,6 +8315,8 @@ class AppViewModel @Inject constructor(
         paymentDeadlineAt = paymentDeadlineAt,
         beforeSendAttempt = beforeSendAttempt,
         onBroadcast = onBroadcast,
+        approvedMiningFeeSats = approvedMiningFeeSats,
+        reviewHigherFee = reviewHigherFee,
     )
 
     private suspend fun sendLightning(
@@ -8524,7 +8629,11 @@ class AppViewModel @Inject constructor(
 
     private fun updateOnchainFeeUi(transform: (OnchainFeeUi) -> OnchainFeeUi) {
         _sendUiState.update {
-            if (it.isRetainedHardwarePayment) it else it.copy(onchainFeeUi = transform(it.onchainFeeUi))
+            if (it.isRetainedHardwarePayment || it.isPreparedFeeReview) {
+                it
+            } else {
+                it.copy(onchainFeeUi = transform(it.onchainFeeUi))
+            }
         }
     }
 
@@ -8627,6 +8736,7 @@ class AppViewModel @Inject constructor(
         if (!canPrepareSend(walletGeneration)) return false
         sendStateGeneration++
         sendSession++
+        cancelPreparedFeeReview()
         addressValidationJob?.cancel()
         paykitReviewedAmount = null
         paykitAmountConversion = PaykitAmountConversion()
@@ -8899,6 +9009,7 @@ class AppViewModel @Inject constructor(
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++
+            cancelPreparedFeeReview()
             // A payment still running for the dismissed send, like a slow swap commit, must not block the next.
             if (confirmedPaymentSubmission != null) releaseConfirmedPaymentSubmission()
             cancelHardwarePaymentRequestIfNeeded()
@@ -9111,6 +9222,12 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
+        preparedFeeReview?.let { review ->
+            _sendUiState.update { it.copy(shouldConfirmPay = false) }
+            // Only the confirmation of a swipe made on the prepared fee approves it.
+            if (review.isSwiped) review.answer.complete(true)
+            return
+        }
         if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) {
             _sendUiState.update { it.copy(shouldConfirmPay = false) }
             return
@@ -10226,6 +10343,8 @@ data class SendUiState(
     val showSanityWarningDialog: SanityWarning? = null,
     val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
     val shouldConfirmPay: Boolean = false,
+    /** The confirmation shows a prepared send's actual mining fee, above the one first reviewed, for approval. */
+    val isPreparedFeeReview: Boolean = false,
     val selectedUtxos: ImmutableList<SpendableUtxo>? = null,
     val lnurl: LnurlParams? = null,
     val isLoading: Boolean = false,
@@ -10493,6 +10612,22 @@ sealed interface SendEvent {
     data object NavToAddress : SendEvent
     data object Contacts : SendEvent
 }
+
+private fun SendEvent.changesReviewedSend(): Boolean = when (this) {
+    SendEvent.SpeedAndFee, SendEvent.BackToAmount, SendEvent.NavToAddress, SendEvent.PaymentMethodSwitch,
+    is SendEvent.PaymentMethodSelect -> true
+
+    else -> false
+}
+
+private class PreparedFeeReview(val feeSats: ULong) {
+    val answer = CompletableDeferred<Boolean>()
+
+    @Volatile
+    var isSwiped = false
+}
+
+private class PreparedFeeReviewCancelledError : AppError("On-chain send was cancelled at its prepared fee review")
 
 private data class SwapRoutedPayment(
     val payment: PubkySwapRoutePayment,

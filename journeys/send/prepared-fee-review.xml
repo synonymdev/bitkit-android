@@ -1,0 +1,25 @@
+<journey name="prepared fee review">
+  <description>
+    Verifies that an on-chain send from Savings whose prepared transaction costs more mining fee than
+    the confirmation showed is not broadcast under that approval: the confirmation returns with the
+    actual fee, and the payment goes out only after a second swipe, with PIN or biometrics when they
+    are enabled for payments. Preconditions: an onboarded regtest wallet with automatic coin selection
+    whose Savings hold several confirmed outputs of different sizes, so that the fee estimate and the
+    prepared transaction select different inputs (the first observed case: 1 000 sats at 1 sat/vB
+    estimated at 203 sats from one input without change, prepared at 212 sats from two inputs with
+    change), and a second regtest wallet's address. The divergence depends on the wallet's outputs:
+    when the prepared fee is not higher the send completes after the first swipe, which is the
+    unchanged behaviour and does not exercise this journey. Record the fee shown before each swipe.
+  </description>
+  <actions>
+    <action>Hand the receiving test wallet address to the app with adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;test recipient address&gt;?amount=0.00001" to.bitkit.dev</action>
+    <action>Verify the Confirm screen opens with 1 000 sats (tag "ReviewAmount"), expand Show Details (tag "SendConfirmToggleDetails") if collapsed, and record the fee shown under Speed and Fee</action>
+    <action>Swipe the send handle (tag "GRAB") fully to the right and enter the PIN if asked</action>
+    <action>Verify the Confirm screen (tag "SendConfirmContent") is shown again instead of the success screen, the fee under Speed and Fee is higher than the recorded one, the amount (tag "ReviewAmount") is still 1 000 sats and the send handle (tag "GRAB") is back at its start; take a screenshot right after the swipe to capture the Fees changed toast</action>
+    <action>Tap the Speed and Fee value and the amount (tag "ReviewAmount") and verify neither opens another screen</action>
+    <action>Swipe the send handle (tag "GRAB") fully to the right again and enter the PIN if asked</action>
+    <action>Wait for the Bitcoin Sent success screen (tag "SendSuccess"), tap Details (tag "Details"), and verify the sent activity shows the higher fee, not the first recorded one</action>
+    <action>Return to the wallet home screen, repeat the first three actions for another send that returns to the Confirm screen with a higher fee, then press system Back</action>
+    <action>Verify the send sheet closes without a success screen or an error toast, the activity list has no new sent payment, and a new send to the same address reaches the Confirm screen</action>
+  </actions>
+</journey>

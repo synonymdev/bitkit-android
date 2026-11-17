@@ -1925,6 +1925,7 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant? = null,
         contactPublicKey: String? = null,
         approvedMiningFeeSats: ULong? = null,
+        reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
@@ -2002,12 +2003,8 @@ class LightningRepo @Inject constructor(
                     .also { prepared ->
                         checkPreparedSpend(prepared.receipt, sats, isDrain, isTransfer, utxosForSend)
                         if (approvedMiningFeeSats != null) {
-                            val miningFee = prepared.receipt.miningFeeSats
-                            if (prepared.receipt.amountSats != sats || miningFee == null ||
-                                miningFee > approvedMiningFeeSats
-                            ) {
-                                throw OnchainSendChangedError(miningFee)
-                            }
+                            val receipt = prepared.receipt.copy(feeRateSatsPerVByte = satsPerVByte)
+                            checkApprovedSpend(receipt, sats, approvedMiningFeeSats, reviewHigherFee)
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(
                             attempt.attemptId,
@@ -2123,6 +2120,20 @@ class LightningRepo @Inject constructor(
         val fee = lightningService.estimateSendAllFee(address, satsPerVByte)
         spendableSats.safe() - fee.safe()
     }.getOrNull()
+
+    private suspend fun checkApprovedSpend(
+        receipt: OnchainPreparedReceipt,
+        sats: ULong,
+        approvedMiningFeeSats: ULong,
+        reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)?,
+    ) {
+        val miningFee = receipt.miningFeeSats
+        if (receipt.amountSats != sats || miningFee == null) throw OnchainSendChangedError(miningFee)
+        if (miningFee <= approvedMiningFeeSats) return
+        // Returns once this exact prepared send is approved again, throws to send nothing.
+        reviewHigherFee ?: throw OnchainSendChangedError(miningFee)
+        reviewHigherFee(receipt)
+    }
 
     private fun checkPreparedSpend(
         receipt: OnchainPreparedReceipt,

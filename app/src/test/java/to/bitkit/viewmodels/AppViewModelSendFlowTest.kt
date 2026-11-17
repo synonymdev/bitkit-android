@@ -174,10 +174,12 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
+import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PaykitAllowanceEvent
@@ -7882,7 +7884,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
     }
@@ -12097,6 +12099,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     paymentDeadlineAt = anyOrNull(),
                     contactPublicKey = anyOrNull(),
                     approvedMiningFeeSats = anyOrNull(),
+                    reviewHigherFee = anyOrNull(),
                 ),
             ).doSuspendableAnswer {
                 entered.complete(Unit)
@@ -12218,6 +12221,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
         verify(
             paykitPaymentProofRepo
@@ -12293,6 +12297,182 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(privatePaykitRepo).consumePrivatePaymentList(contactKey, privateContext)
+    }
+
+    @Test
+    fun `a higher prepared fee is not sent under the first approval`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+
+        confirmCurrentPayment()
+
+        assertEquals(0, broadcasts)
+        val review = sut.sendUiState.value
+        assertTrue(review.isPreparedFeeReview)
+        assertEquals(212L, review.onchainFeeUi.sats)
+        assertEquals(1_000uL, review.amount)
+        assertFalse(review.shouldConfirmPay)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.INFO, it.type)
+                assertEquals("Fees changed", it.title)
+                assertEquals("Fees are ₿ 9 higher", it.description)
+            },
+        )
+        verify(formatMoneyValue).invoke(9uL)
+
+        // A confirmation that no swipe on the actual fee asked for approves nothing.
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        assertEquals(0, broadcasts)
+        assertTrue(sut.sendUiState.value.isPreparedFeeReview)
+    }
+
+    @Test
+    fun `renewed approval sends the prepared candidate once`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmCurrentPayment()
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+        assertEquals(0, broadcasts)
+        assertTrue(sut.sendUiState.value.shouldConfirmPay)
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        assertEquals(1, broadcasts)
+        assertFalse(sut.sendUiState.value.isPreparedFeeReview)
+        assertEquals("txid", sut.successSendUiState.value.paymentHashOrTxId)
+        verifyOnchainSendCount(1)
+    }
+
+    @Test
+    fun `the review of a prepared fee cannot be edited into another send`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmCurrentPayment()
+        val review = sut.sendUiState.value
+
+        for (event in listOf(SendEvent.SpeedAndFee, SendEvent.BackToAmount, SendEvent.PaymentMethodSwitch)) {
+            sut.setSendEvent(event)
+            advanceUntilIdle()
+        }
+
+        assertEquals(review, sut.sendUiState.value)
+        assertEquals(0, broadcasts)
+    }
+
+    @Test
+    fun `dismissing the review of a higher prepared fee sends nothing and frees the next send`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmCurrentPayment()
+        clearInvocations(toastManager)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(0, broadcasts)
+        assertFalse(sut.sendUiState.value.isPreparedFeeReview)
+        verify(paykitPaymentProofRepo).reconcile()
+        verify(toastManager, never()).enqueue(any())
+
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 212)
+        confirmCurrentPayment()
+
+        assertEquals(1, broadcasts)
+        verifyOnchainSendCount(2)
+    }
+
+    @Test
+    fun `cancelling the review of a request's prepared fee fails its started proof without sending`() = test {
+        val request = paymentRequest()
+        val privateContext = privatePaymentContext(7uL)
+        var broadcasts = 0
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203, request = request, privateContext = privateContext)
+        confirmCurrentPayment()
+        assertTrue(sut.sendUiState.value.isPreparedFeeReview)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(0, broadcasts)
+        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+        verify(paykitPaymentProofRepo).reconcile()
+        verify(privatePaykitRepo, times(1)).consumePrivatePaymentList(testPublicKey, privateContext)
+        verifyOnchainSendCount(1)
+    }
+
+    @Test
+    fun `a request that ended during the review of its prepared fee is not paid`() = test {
+        val request = paymentRequest()
+        val privateContext = privatePaymentContext(7uL)
+        var broadcasts = 0
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203, request = request, privateContext = privateContext)
+        confirmCurrentPayment()
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+
+        confirmCurrentPayment()
+
+        assertEquals(0, broadcasts)
+        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+        verifyOnchainSendCount(1)
+    }
+
+    @Test
+    fun `an equal or lower prepared fee sends without a second approval`() = test {
+        for (preparedFeeSats in listOf(203uL, 190uL)) {
+            var broadcasts = 0
+            stubPreparedOnchainSend(preparedFeeSats) { broadcasts++ }
+            openOnchainConfirm(reviewedFeeSats = 203)
+
+            confirmCurrentPayment()
+
+            assertEquals(1, broadcasts, "Fee $preparedFeeSats")
+            assertFalse(sut.sendUiState.value.isPreparedFeeReview)
+            assertEquals(203L, sut.sendUiState.value.onchainFeeUi.sats)
+        }
+    }
+
+    @Test
+    fun `fee warnings of a renewed approval use the prepared fee`() = test {
+        var broadcasts = 0
+        sut.setIsAuthenticated(true)
+        stubPreparedOnchainSend(preparedFeeSats = 600uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmCurrentPayment()
+        assertNull(sut.sendUiState.value.showSanityWarningDialog)
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        // 600 of fee is over half the 1 000 sent, which the 203 first reviewed was not.
+        assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        assertEquals(0, broadcasts)
+
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.FEE_OVER_HALF_VALUE))
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.shouldConfirmPay)
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        assertEquals(1, broadcasts)
     }
 
     @Test
@@ -12647,6 +12827,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -13571,6 +13752,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -13848,6 +14030,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -13899,6 +14082,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
             any(),
@@ -14854,6 +15038,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -15000,6 +15185,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -15093,6 +15279,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -16350,6 +16537,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -16397,6 +16585,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -16464,6 +16653,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -16593,6 +16783,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -17332,6 +17523,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -19100,6 +19292,109 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
     }
 
+    private suspend fun TestScope.openOnchainConfirm(
+        reviewedFeeSats: Long,
+        request: PaykitPaymentRequest? = null,
+        privateContext: PrivatePaykitPaymentContext? = null,
+    ) {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(formatMoneyValue(any())).thenReturn("9")
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_title))
+            .thenReturn("Fees changed")
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn("Fees are {amount} higher")
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        if (request != null) {
+            whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+            setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        }
+        setSendState(
+            SendUiState(
+                address = PREPARED_FEE_ADDRESS,
+                amount = request?.amount?.atomic ?: 1_000uL,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = request != null,
+                onchainFeeUi = OnchainFeeUi(sats = reviewedFeeSats),
+            ),
+        )
+    }
+
+    /**
+     * Stands in for the repository's prepared send: a mining fee above the approved one is handed to the reviewer,
+     * and only its return lets the same prepared transaction be broadcast.
+     */
+    private suspend fun stubPreparedOnchainSend(preparedFeeSats: ULong, onBroadcast: () -> Unit) {
+        whenever {
+            lightningRepo.sendOnChain(
+                address = any(),
+                sats = any(),
+                speed = anyOrNull(),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                isMaxAmount = any(),
+                tags = any(),
+                beforeSendAttempt = any(),
+                onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
+                transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
+            )
+        }.doSuspendableAnswer { invocation ->
+            runSuspendCatching {
+                invocation.getArgument<suspend () -> Unit>(9)()
+                val approvedFeeSats = requireNotNull(invocation.getArgument<ULong?>(17))
+                if (preparedFeeSats > approvedFeeSats) {
+                    val receipt = OnchainPreparedReceipt(
+                        txid = "txid",
+                        inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                        address = invocation.getArgument(0),
+                        amountSats = invocation.getArgument<Long>(1).toULong(),
+                        feeRateSatsPerVByte = 1uL,
+                        miningFeeSats = preparedFeeSats,
+                    )
+                    val review = requireNotNull(invocation.getArgument<(suspend (OnchainPreparedReceipt) -> Unit)?>(18))
+                    runSuspendCatching { review(receipt) }.getOrElse { throw OnchainSendNotDispatchedError(it) }
+                }
+                onBroadcast()
+                OnchainSendOutcome.Accepted("txid")
+            }
+        }
+    }
+
+    private suspend fun verifyOnchainSendCount(count: Int) {
+        verify(lightningRepo, times(count)).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = anyOrNull(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
+        )
+    }
+
     private suspend fun stubSuccessfulOnchainSend(address: String, sats: ULong, txId: String = "txid") {
         stubOnchainSend(address, sats, Result.success(OnchainSendOutcome.Accepted(txId)), broadcastTxId = txId)
     }
@@ -19130,6 +19425,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -19160,6 +19456,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)
@@ -21834,7 +22131,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
@@ -21986,6 +22283,7 @@ private const val SAMROCK_SETUP_URL =
 private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
+private const val PREPARED_FEE_ADDRESS = "bcrt1qpreparedfee"
 private const val SWAP_QUOTE_ID = "swap-quote"
 private const val SWAP_ID = "swap"
 private const val SWAP_HOLD_INVOICE = "lnbcrt1swaphold"
