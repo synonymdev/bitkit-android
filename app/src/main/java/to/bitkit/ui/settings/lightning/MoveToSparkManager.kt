@@ -48,9 +48,17 @@ class MoveToSparkManager @Inject constructor(
     private var quoteJob: Job? = null
     private var moveJob: Job? = null
 
-    /** A move was started and its outcome is still the screen's, so opening the screen again keeps it. */
-    @Volatile
-    private var keepsOutcome = false
+    private val _hasRetainedMove = MutableStateFlow(false)
+
+    /**
+     * A move was started and its outcome is still the screen's, so opening the screen again keeps it and its entry
+     * points stay, also once no balance is left to move.
+     */
+    val hasRetainedMove: StateFlow<Boolean> = _hasRetainedMove.asStateFlow()
+
+    private var keepsOutcome: Boolean
+        get() = _hasRetainedMove.value
+        set(value) = _hasRetainedMove.update { value }
 
     /** A swiped payment that has not settled yet; leaving the screen keeps it, so it is never quoted over. */
     @Volatile

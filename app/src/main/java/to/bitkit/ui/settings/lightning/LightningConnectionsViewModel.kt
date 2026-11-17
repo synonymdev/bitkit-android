@@ -61,6 +61,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val sparkRepo: SparkRepo,
     private val sparkExitRepo: SparkExitRepo,
+    private val moveToSparkManager: MoveToSparkManager,
 ) : ViewModel() {
 
     companion object {
@@ -108,8 +109,9 @@ class LightningConnectionsViewModel @Inject constructor(
                 lightningRepo.lastKnownChannels,
                 sparkRepo.state,
                 sparkExitRepo.state,
-            ) { lightningState, channels, sparkState, exitState ->
-                ConnectionsSnapshot(lightningState, channels, sparkState, exitState)
+                moveToSparkManager.hasRetainedMove,
+            ) { lightningState, channels, sparkState, exitState, hasRetainedMove ->
+                ConnectionsSnapshot(lightningState, channels, sparkState, exitState, hasRetainedMove)
             }.collect { snapshot ->
                 val (lightningState, channels, sparkState) = snapshot
                 val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
@@ -127,7 +129,9 @@ class LightningConnectionsViewModel @Inject constructor(
                         localBalance = calculateLocalBalance(channels).safe() + sparkState.shownSpendingSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
                         // The cached channels outlive a stopped node; the move reads the live ones.
-                        canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
+                        // A move left while it ran keeps its way back to its result, also once nothing is left to move.
+                        canMoveToSpark = snapshot.hasRetainedMove ||
+                            MoveToSparkMath.canMove(lightningState.channels, sparkState),
                         spark = sparkState.toUi(
                             lightningRepo,
                             snapshot.exitState.showsResult,
@@ -312,6 +316,7 @@ private data class ConnectionsSnapshot(
     val channels: List<ChannelDetails>,
     val sparkState: SparkState,
     val exitState: SparkExitState,
+    val hasRetainedMove: Boolean,
 )
 
 data class ChannelUi(

@@ -1416,11 +1416,13 @@ private fun NavGraphBuilder.home(
         val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
+        val hasRetainedMove by walletViewModel.hasRetainedMove.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
             channels = lightningState.channels,
             hasSparkBalance = sparkState.shownSpendingSats > 0uL,
-            canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
+            // A move left while it ran keeps its way back to its result, also once nothing is left to move.
+            canMoveToSpark = hasRetainedMove || MoveToSparkMath.canMove(lightningState.channels, sparkState),
             onMoveToSparkClick = { navController.navigateTo(Routes.MoveToSpark) },
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
