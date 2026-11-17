@@ -226,12 +226,20 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
     if (funding != null && address != null) {
         VerticalSpacer(24.dp)
         when (funding) {
-            is SparkExitFundingState.Ask -> SparkExitFundingAddress(
-                address = address,
-                requiredSats = funding.sats,
-                seenSats = 0uL,
-                partial = funding.partial,
-            )
+            is SparkExitFundingState.Ask -> {
+                SparkExitFeesRow(
+                    label = stringResource(R.string.lightning__spark_exit__pay_amount),
+                    sats = funding.sats,
+                    modifier = Modifier.testTag("SparkExitProgressFundingAmount")
+                )
+                VerticalSpacer(32.dp)
+                SparkExitFundingAddress(
+                    address = address,
+                    requiredSats = funding.sats,
+                    seenSats = 0uL,
+                    partial = funding.partial,
+                )
+            }
             is SparkExitFundingState.Paid -> SparkExitTxNote(
                 text = stringResource(R.string.lightning__spark_exit__fund_paid),
                 txid = funding.txid,
