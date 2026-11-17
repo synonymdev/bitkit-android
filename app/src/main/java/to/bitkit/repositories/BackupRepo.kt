@@ -87,6 +87,7 @@ import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.SparkError
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -718,15 +719,30 @@ class BackupRepo @Inject constructor(
     private suspend fun uploadSparkExitBackup(): Result<Unit> = runSuspendCatching {
         if (!sparkRepo.hasMergedRemoteExitState) {
             sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
-            val remote = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
-                ?.let { json.decodeFromString<SparkExitBackupV1>(String(it)) }
-            sparkRepo.mergeRemoteExitBackup(remote).getOrThrow()
+            val stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+            val remote = stored?.let { runCatching { json.decodeFromString<SparkExitBackupV1>(String(it)) }.getOrNull() }
+            val merged = if (stored != null && remote == null) {
+                Result.failure(SparkError.ExitStateUnimportable())
+            } else {
+                sparkRepo.mergeRemoteExitBackup(remote)
+            }
+            merged.recoverCatching {
+                if (it !is SparkError.ExitStateUnimportable || stored == null) throw it
+                keepUnimportableExitBackup(stored)
+            }.getOrThrow()
         }
         val backup = sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
         vssBackupClient.putObject(
             key = BackupCategory.SPARK_EXIT.name,
             data = json.encodeToString(backup).toByteArray(),
         ).getOrThrow()
+    }
+
+    /** Keeps stored exit data Spark can never import under its own key, so the fresh export doesn't replace it. */
+    private suspend fun keepUnimportableExitBackup(stored: ByteArray) {
+        vssBackupClient.putObject(key = SPARK_EXIT_UNIMPORTED_KEY, data = stored).getOrThrow()
+        sparkRepo.skipUnimportableRemoteExitState()
+        Logger.warn("Kept unimportable Spark exit data under '$SPARK_EXIT_UNIMPORTED_KEY'", context = TAG)
     }
 
     suspend fun persistWalletBackup(): Result<Unit> =
@@ -1554,6 +1570,9 @@ class BackupRepo @Inject constructor(
 
         private const val MINUTE_IN_MS = 60_000
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds
+
+        /** Where stored Spark exit data that Spark can't import is kept, apart from the exit data backups. */
+        internal const val SPARK_EXIT_UNIMPORTED_KEY = "SPARK_EXIT_UNIMPORTED"
 
         /** Spark's exit data can reach several MB and changes with every payment, so its uploads are spaced out. */
         private const val SPARK_EXIT_BACKUP_DEBOUNCE = 60_000L

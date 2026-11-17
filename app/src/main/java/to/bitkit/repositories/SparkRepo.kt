@@ -1147,11 +1147,23 @@ class SparkRepo @Inject constructor(
     suspend fun mergeRemoteExitBackup(remote: SparkExitBackupV1?): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             if (remote != null && remote.network == sparkService.networkName) {
-                val merged = sparkService.importExitState(remote.exitState)
+                val merged = runSuspendCatching { sparkService.importExitState(remote.exitState) }.getOrElse {
+                    // Spark checks the version and parses the payload without the operators, so this one never passes.
+                    throw if (it is SdkException.InvalidInput) SparkError.ExitStateUnimportable(it) else it
+                }
                 Logger.info("Merged stored Spark exit data: '${merged.importedLeaves}' leaves", context = TAG)
             }
             hasMergedRemoteExitState = true
         }
+    }
+
+    /**
+     * Stops merging stored exit data Spark can never import, which the caller kept apart, so the next upload replaces
+     * it; a staged restore of it is dropped too.
+     */
+    fun skipUnimportableRemoteExitState() {
+        File(Env.sparkExitRestorePath(walletIndex)).delete()
+        hasMergedRemoteExitState = true
     }
 
     /**
