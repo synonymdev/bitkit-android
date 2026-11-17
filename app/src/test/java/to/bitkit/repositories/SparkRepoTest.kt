@@ -2322,22 +2322,23 @@ class SparkRepoTest : BaseUnitTest() {
     fun `instant claims early at once when the offer is within the ceiling`() = test {
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
-        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(ClaimDepositOutcome.Submitted)
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(ClaimDepositOutcome.Submitted)
         whenever { sparkService.listPayments() }.thenReturn(emptyList(), listOf(depositPayment()))
         val sut = createSut()
 
         sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
         advanceUntilIdle()
 
-        verify(sparkService).claimDeposit("txid", 0u, 300uL)
+        verify(sparkService).claimDeposit("txid", 0u, 500uL)
         assertEquals(SparkDepositClaim.Claimed, sut.depositClaims.value["txid"])
     }
 
     @Test
-    fun `instant stops quoting once spark waits for the early claim`() = test {
+    fun `instant stops quoting once spark waits for the early claim, capped at the ceiling`() = test {
         listDeposit()
+        // Spark keeps the ceiling as the cap, so it claims a later offer within it by itself.
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
-        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }
             .thenReturn(ClaimDepositOutcome.Deferred(ClaimDeferredReason.NoEarlyClaimAvailable))
         val sut = createSut()
 
@@ -2345,7 +2346,8 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(sparkService, times(1)).fetchClaimQuote("txid", 0u)
-        verify(sparkService, times(1)).claimDeposit("txid", 0u, 300uL)
+        verify(sparkService, times(1)).claimDeposit(any(), any(), any())
+        verify(sparkService).claimDeposit("txid", 0u, 500uL)
         assertEquals(SparkDepositClaim.Unavailable, sut.depositClaims.value["txid"])
     }
 
@@ -2356,14 +2358,14 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.listUnclaimedDeposits() }
             .thenReturn(listOf(deposit), listOf(deposit), listOf(deposit), emptyList())
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
-        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }
             .thenReturn(ClaimDepositOutcome.Deferred(ClaimDeferredReason.NoEarlyClaimAvailable))
         val sut = createSut()
 
         sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
         advanceUntilIdle()
 
-        verify(sparkService, times(1)).claimDeposit("txid", 0u, 300uL)
+        verify(sparkService, times(1)).claimDeposit("txid", 0u, 500uL)
         assertEquals(SparkDepositClaim.Adding, sut.depositClaims.value["txid"])
     }
 
@@ -2401,9 +2403,9 @@ class SparkRepoTest : BaseUnitTest() {
     fun `instant shows the new price when the claim comes back repriced`() = test {
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
-        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(
             ClaimDepositOutcome.Deferred(
-                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 450uL, maxFeeSats = 300uL)
+                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 600uL, maxFeeSats = 500uL)
             )
         )
         val sut = createSut()
@@ -2412,16 +2414,16 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val claim = assertIs<SparkDepositClaim.Repriced>(sut.depositClaims.value["txid"])
-        assertEquals(450uL, claim.offer.earlyFeeSats)
+        assertEquals(600uL, claim.offer.earlyFeeSats)
     }
 
     @Test
     fun `wait after a claim time reprice clears the early claim cap`() = test {
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
-        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(
             ClaimDepositOutcome.Deferred(
-                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 450uL, maxFeeSats = 300uL)
+                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 600uL, maxFeeSats = 500uL)
             )
         )
         val sut = createSut()
@@ -2439,9 +2441,9 @@ class SparkRepoTest : BaseUnitTest() {
     fun `wait clears the early claim cap again when another claim held the deposit`() = test {
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
-        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(
             ClaimDepositOutcome.Deferred(
-                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 450uL, maxFeeSats = 300uL)
+                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 600uL, maxFeeSats = 500uL)
             )
         )
         // The first call meets Spark's own sync claiming the deposit, which leaves the cap in place.
@@ -2501,7 +2503,7 @@ class SparkRepoTest : BaseUnitTest() {
     fun `instant is unavailable when the provider declines the early claim`() = test {
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
-        whenever { sparkService.claimDeposit("txid", 0u, 300uL) }.thenReturn(
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(
             ClaimDepositOutcome.Deferred(ClaimDeferredReason.ProviderDeclined("no"))
         )
         val sut = createSut()
@@ -3875,6 +3877,87 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(events.any { it is Event.PaymentFailed }, "the expired retry was never reported failed")
+        verify(activityRepo, atLeastOnce()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
+        )
+    }
+
+    @Test
+    fun `an older attempt's failure after a spark retry was cancelled inside its send keeps its hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer { awaitCancellation() }
+        val olderFailure = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(olderFailure))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        clearInvocations(activityRepo)
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        val send = backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
+        runCurrent()
+
+        // The send screen goes away while Spark's send call runs, and the older failure arrives after.
+        send.cancel()
+        runCurrent()
+        sparkEvents.emit(SdkEvent.PaymentFailed(olderFailure))
+        runCurrent()
+
+        assertTrue(
+            events.none { it is Event.PaymentFailed },
+            "an older failure ended a cancelled send Spark may finish"
+        )
+        assertTrue(
+            "hash" in store.data.first().sparkUncertainSends,
+            "an older failure dropped the cancelled send's hold"
+        )
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
+    }
+
+    @Test
+    fun `an expired spark send missing from spark keeps its hold until its row is marked failed`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val pending = LightningActivity.create(
+            id = "hash",
+            txType = ActivityPaymentType.SENT,
+            status = PaymentState.PENDING,
+            value = 100uL,
+            invoice = "lnbc1",
+            timestamp = 1uL,
+        )
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.thenReturn(Result.success(Activity.Lightning(pending)))
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(IllegalStateException("disk full")))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        // The invoice expires and Spark syncs, listing no such send, while Activity can't be written.
+        now += 2.hours
+        whenever { sparkService.getInfo() }.thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "a send was reported failed while its row stayed pending")
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+
+        // The next sync writes the row, which ends the hold.
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
+        clearInvocations(activityRepo)
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertTrue(events.any { it is Event.PaymentFailed }, "the expired send was never reported failed")
         verify(activityRepo, atLeastOnce()).upsertActivity(
             argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
         )

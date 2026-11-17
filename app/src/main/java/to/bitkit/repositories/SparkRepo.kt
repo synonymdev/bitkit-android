@@ -562,6 +562,8 @@ class SparkRepo @Inject constructor(
                 throw PaymentPendingException(paymentHash)
             }
             val sentAt = clock.now().epochSeconds
+            var isDispatched = false
+            var hasReturned = false
             val sent = try {
                 inFlightAttempts[paymentHash.lowercase()] = SendAttempt(sentAt.toULong(), earlierIds)
                 sendReleaseMutex.withLock { sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet() }
@@ -579,9 +581,18 @@ class SparkRepo @Inject constructor(
                         cacheStore.removeSparkSendHash(paymentHash)
                         throw it
                     }
-                    runSuspendCatching { sparkService.send(prepared) }
+                    isDispatched = true
+                    runSuspendCatching { sparkService.send(prepared) }.also { hasReturned = true }
                 }
             } finally {
+                // A send cancelled inside Spark's call stays in doubt, as its journal entry does, so a sync settles it.
+                if (isDispatched && !hasReturned) {
+                    val attempt = SendAttempt(sentAt.toULong(), earlierIds)
+                    uncertainSends.putIfAbsent(
+                        paymentHash.lowercase(),
+                        UncertainSend(clock.now().epochSeconds.toULong(), expiresAt, attempt),
+                    )
+                }
                 inFlightAttempts.remove(paymentHash.lowercase())
                 sendsInFlight.remove(paymentHash.lowercase())
             }
@@ -652,13 +663,15 @@ class SparkRepo @Inject constructor(
             is SparkLightningSend.Found -> send.status != PaymentStatus.FAILED || isFinal
             SparkLightningSend.Unavailable -> false
         }
+        if (!isSettled) return false
+        // A missing send's row is ended here, as no listed payment revisits it, so the hold stays until it is written.
+        if (send == SparkLightningSend.NotFound && !failHeldRow(paymentHash)) return false
         // Only the caller that takes the hash off settles it, so its outcome is reported once.
-        if (!isSettled || !uncertainSends.remove(key, uncertain)) return isSettled
+        if (!uncertainSends.remove(key, uncertain)) return true
         cacheStore.removeSparkUncertainSend(paymentHash)
         when (send) {
             SparkLightningSend.NotFound -> {
                 cacheStore.removeSparkSendHash(paymentHash)
-                finishHeldActivity(paymentHash)
                 _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR))
             }
             // A pending send ends with its own payment event.
@@ -666,7 +679,7 @@ class SparkRepo @Inject constructor(
             is SparkLightningSend.Found -> {
                 if (send.status == PaymentStatus.FAILED) {
                     cacheStore.removeSparkSendHash(paymentHash)
-                    finishHeldActivity(paymentHash)
+                    recordHeldSend(paymentHash)
                 }
                 settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
             }
@@ -676,22 +689,31 @@ class SparkRepo @Inject constructor(
     }
 
     /**
-     * Ends the Activity row a held send kept pending, as an earlier attempt's failure is skipped while the hold lasts:
-     * from Spark's listed send, or as failed when Spark lists none.
+     * Records Spark's listed send of [paymentHash] once its hold ended, as an earlier attempt's failure is skipped
+     * while the hold lasts; a failed write is retried at the next refresh.
      */
-    private suspend fun finishHeldActivity(paymentHash: String) {
-        val listed = runSuspendCatching { sparkService.listPayments() }
+    private suspend fun recordHeldSend(paymentHash: String) {
+        runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments for '$paymentHash'", it, context = TAG) }
             .getOrNull()
             ?.latestSend(paymentHash)
-        if (listed != null) {
-            recordActivity(listed)
-            return
+            ?.let { recordActivity(it) }
+    }
+
+    /**
+     * Marks the pending send row of [paymentHash] failed, as Spark lists no send of it; true once nothing is pending.
+     * Read and write share the lock Spark's own row writes take, so a settlement written meanwhile is not overwritten.
+     */
+    private suspend fun failHeldRow(paymentHash: String): Boolean = sendReleaseMutex.withLock {
+        val stored = activityRepo.get().getActivity(paymentHash).getOrElse {
+            Logger.warn("Failed to read activity of Spark send '$paymentHash'", it, context = TAG)
+            return@withLock false
         }
-        val stored = activityRepo.get().getActivity(paymentHash).getOrNull() as? Activity.Lightning ?: return
-        if (stored.v1.txType != PaymentType.SENT || stored.v1.status != PaymentState.PENDING) return
-        activityRepo.get().upsertActivity(Activity.Lightning(stored.v1.copy(status = PaymentState.FAILED)))
+        val send = (stored as? Activity.Lightning)?.v1
+        if (send?.txType != PaymentType.SENT || send.status != PaymentState.PENDING) return@withLock true
+        activityRepo.get().upsertActivity(Activity.Lightning(send.copy(status = PaymentState.FAILED)))
             .onFailure { Logger.warn("Failed to mark Spark send '$paymentHash' failed", it, context = TAG) }
+            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
     }
 
     /**
@@ -803,8 +825,9 @@ class SparkRepo @Inject constructor(
 
     private suspend fun claimInstantly(txid: String, ceilingSats: ULong) {
         var isSeen = false
-        // Once Spark waits for the early claim, the fee cap stays on the deposit and Spark claims it by itself when the
-        // provider offers it, so the poll only watches for the claim and asks the provider nothing more.
+        // Once Spark waits for the early claim, the user's ceiling stays on the deposit as its cap and Spark claims it
+        // by itself when the provider offers it within the cap, so the poll only watches for the claim and asks the
+        // provider nothing more; an offer above the cap is never charged and the deposit is claimed at maturity.
         var isWaiting = false
         repeat(CLAIM_POLL_ATTEMPTS) {
             runSuspendCatching { refresh() }
@@ -825,7 +848,7 @@ class SparkRepo @Inject constructor(
                     SparkClaimStep.Adding -> SparkDepositClaim.Adding
                     SparkClaimStep.Unavailable -> SparkDepositClaim.Unavailable
                     is SparkClaimStep.Ask -> SparkDepositClaim.Repriced(step.offer)
-                    is SparkClaimStep.ClaimEarly -> claimEarly(step.offer).getOrNull()
+                    is SparkClaimStep.ClaimEarly -> claimEarly(step.offer, ceilingSats).getOrNull()
                         ?.also { isWaiting = it == SparkEarlyClaim.Waiting }
                         ?.toDepositClaim(step.offer)
                 }
@@ -869,10 +892,16 @@ class SparkRepo @Inject constructor(
         }
     }
 
-    /** Accepts the early claim of [offer] at its quoted fee. */
-    suspend fun claimEarly(offer: SparkClaimOffer.Choice): Result<SparkEarlyClaim> = withContext(bgDispatcher) {
+    /**
+     * Accepts the early claim of [offer] for at most [maxFeeSats], the fee the user accepted. Spark keeps it as the cap
+     * when it waits, so a later offer within it is claimed too.
+     */
+    suspend fun claimEarly(
+        offer: SparkClaimOffer.Choice,
+        maxFeeSats: ULong = offer.earlyFeeSats,
+    ): Result<SparkEarlyClaim> = withContext(bgDispatcher) {
         earlyClaimVouts[offer.txid] = offer.vout
-        runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, offer.earlyFeeSats) }
+        runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, maxFeeSats) }
             .map { SparkEarlyClaim.from(it) }
             .recoverCatching { if (it is SdkException.DepositClaimInProgress) SparkEarlyClaim.Claimed else throw it }
             .onSuccess {
