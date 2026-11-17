@@ -275,7 +275,7 @@ internal fun SparkDepositRows(depositUi: SparkDepositUi, onOpenTx: (String) -> U
 
             else -> CompactRow(name = stringResource(R.string.lightning__status)) {
                 CaptionB(
-                    text = depositUi.confirmations?.let {
+                    text = depositUi.confirmations?.takeIf { it > 0u }?.let {
                         stringResource(
                             R.string.lightning__spark_confirmations,
                             minOf(it.toInt(), SPARK_CLAIM_CONFIRMATIONS),

@@ -62,6 +62,14 @@ class SparkDetailScreenTest {
     }
 
     @Test
+    fun `an unclaimed deposit still in the mempool shows as pending`() {
+        setDeposit(SparkDepositUi(SparkDeposit(TXID, 15_000uL, isClaimed = false), confirmations = 0u))
+
+        composeRule.onNodeWithText("Pending").assertExists()
+        composeRule.onNodeWithText("0/3 confirmations").assertDoesNotExist()
+    }
+
+    @Test
     fun `the bar reads no limit while spark receives`() {
         setBar(isReceiving = true)
 
