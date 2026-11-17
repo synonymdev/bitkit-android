@@ -431,6 +431,8 @@
     <string name="onboarding__empty_wallet">Pour\ncommencer,\n&lt;accent&gt;envoyez\ndu bitcoin&lt;/accent&gt;.</string>
     <string name="onboarding__multiple_header">&lt;accent&gt;Attention :&lt;/accent&gt;\nplusieurs appareils</string>
     <string name="onboarding__multiple_text">N\'installez pas votre phrase de récupération Bitkit sur plusieurs téléphones simultanément, car cela pourrait corrompre vos données.</string>
+    <string name="other__bluetooth_enable">Activer le Bluetooth</string>
+    <string name="other__nfc_enable">Activer le NFC</string>
     <string name="other__nfc_read_error_text">Ce tag NFC ne contient aucune demande de paiement utilisable par Bitkit.</string>
     <string name="other__nfc_read_error_title">Impossible de lire le NFC</string>
     <string name="other__nfc_service_description">Demande de paiement Bitkit</string>

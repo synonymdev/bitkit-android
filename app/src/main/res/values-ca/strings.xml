@@ -474,6 +474,8 @@
     <string name="other__lnurl_withdr_success_msg">La teva retirada s\'ha sol·licitat correctament. Esperant el pagament.</string>
     <string name="other__lnurl_withdr_success_title">Retirada sol·licitada</string>
     <string name="other__logs_export_error">Error en crear el fitxer zip de registres</string>
+    <string name="other__bluetooth_enable">Habilitar Bluetooth</string>
+    <string name="other__nfc_enable">Habilitar NFC</string>
     <string name="other__nfc_read_error_text">Aquesta etiqueta no conté cap sol·licitud de pagament que Bitkit pugui utilitzar.</string>
     <string name="other__nfc_read_error_title">No es pot llegir l\'NFC</string>
     <string name="other__nfc_service_description">Sol·licitud de pagament de Bitkit</string>

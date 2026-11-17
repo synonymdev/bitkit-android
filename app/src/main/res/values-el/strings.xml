@@ -470,6 +470,8 @@
     <string name="other__lnurl_withdr_success_msg">Η ανάληψή σου ζητήθηκε επιτυχώς. Αναμονή πληρωμής.</string>
     <string name="other__lnurl_withdr_success_title">Ζητήθηκε ανάληψη</string>
     <string name="other__logs_export_error">Αποτυχία δημιουργίας αρχείου zip καταγραφής</string>
+    <string name="other__bluetooth_enable">Ενεργοποίηση Bluetooth</string>
+    <string name="other__nfc_enable">Ενεργοποίηση NFC</string>
     <string name="other__nfc_read_error_text">Αυτή η ετικέτα δεν περιέχει αίτημα πληρωμής που μπορεί να χρησιμοποιήσει το Bitkit.</string>
     <string name="other__nfc_read_error_title">Αδυναμία ανάγνωσης NFC</string>
     <string name="other__nfc_service_description">Αίτημα πληρωμής Bitkit</string>

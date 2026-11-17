@@ -488,6 +488,8 @@
     <string name="other__lnurl_withdr_success_msg">Ваш запрос на вывод успешно отправлен. Ожидание платежа.</string>
     <string name="other__lnurl_withdr_success_title">Запрос на Вывод</string>
     <string name="other__logs_export_error">Не удалось создать zip-файл логов</string>
+    <string name="other__bluetooth_enable">Включить Bluetooth</string>
+    <string name="other__nfc_enable">Включить NFC</string>
     <string name="other__nfc_read_error_text">Эта метка не содержит запрос на оплату, который может использовать Bitkit.</string>
     <string name="other__nfc_read_error_title">Не удалось прочитать NFC</string>
     <string name="other__nfc_service_description">Запрос на оплату Bitkit</string>

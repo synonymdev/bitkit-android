@@ -433,6 +433,8 @@
     <string name="onboarding__empty_wallet">Aby\nrozpocząć\n&lt;accent&gt;wyślij\nBitcoin&lt;/accent&gt;\nna swój\nportfel</string>
     <string name="onboarding__multiple_header">&lt;accent&gt;Uwaga:&lt;/accent&gt;\nwiele urządzeń</string>
     <string name="onboarding__multiple_text">Nie instaluj swojej frazy odzyskiwania Bitkit na kilku telefonach jednocześnie, ponieważ może to uszkodzić Twoje dane.</string>
+    <string name="other__bluetooth_enable">Włącz Bluetooth</string>
+    <string name="other__nfc_enable">Włącz NFC</string>
     <string name="other__nfc_read_error_text">Ten tag nie zawiera żądania płatności, którego Bitkit może użyć.</string>
     <string name="other__nfc_read_error_title">Nie można odczytać NFC</string>
     <string name="other__nfc_service_description">Żądanie płatności Bitkit</string>

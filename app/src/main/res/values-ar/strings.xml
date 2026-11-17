@@ -470,6 +470,8 @@
     <string name="other__lnurl_withdr_success_msg">تم طلب السحب بنجاح. في انتظار الدفع.</string>
     <string name="other__lnurl_withdr_success_title">تم طلب السحب</string>
     <string name="other__logs_export_error">فشل إنشاء ملف السجلات المضغوط</string>
+    <string name="other__bluetooth_enable">تفعيل البلوتوث</string>
+    <string name="other__nfc_enable">تفعيل NFC</string>
     <string name="other__nfc_read_error_text">لا تحتوي هذه العلامة على طلب دفع يمكن لـ Bitkit استخدامه.</string>
     <string name="other__nfc_read_error_title">تعذر قراءة NFC</string>
     <string name="other__nfc_service_description">طلب دفع Bitkit</string>

@@ -477,6 +477,8 @@
     <string name="other__lnurl_withdr_success_msg">Váš výběr byl úspěšně vyžádán. Čekání na platbu.</string>
     <string name="other__lnurl_withdr_success_title">Výběr vyžádán</string>
     <string name="other__logs_export_error">Nepodařilo se vytvořit soubor zip s protokoly</string>
+    <string name="other__bluetooth_enable">Povolit Bluetooth</string>
+    <string name="other__nfc_enable">Povolit NFC</string>
     <string name="other__nfc_read_error_text">Tento tag neobsahuje žádost o platbu, kterou by Bitkit mohl použít.</string>
     <string name="other__nfc_read_error_title">Nelze přečíst NFC</string>
     <string name="other__nfc_service_description">Žádost o platbu Bitkit</string>

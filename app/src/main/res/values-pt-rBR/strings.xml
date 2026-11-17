@@ -478,6 +478,8 @@
     <string name="other__lnurl_withdr_success_msg">Seu saque foi solicitado com sucesso. Aguardando pagamento.</string>
     <string name="other__lnurl_withdr_success_title">Saque solicitado</string>
     <string name="other__logs_export_error">Falha ao criar arquivo zip de logs</string>
+    <string name="other__bluetooth_enable">Ativar Bluetooth</string>
+    <string name="other__nfc_enable">Ativar NFC</string>
     <string name="other__nfc_read_error_text">Esta tag não contém uma solicitação de pagamento que a Bitkit possa usar.</string>
     <string name="other__nfc_read_error_title">Incapaz de Ler o NFC</string>
     <string name="other__nfc_service_description">Solicitação de pagamento Bitkit</string>

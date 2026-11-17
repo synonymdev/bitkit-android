@@ -477,6 +477,8 @@
     <string name="other__lnurl_withdr_success_msg">Su retiro ha sido solicitado con éxito. Esperando el pago.</string>
     <string name="other__lnurl_withdr_success_title">Retiro solicitado</string>
     <string name="other__logs_export_error">Error al crear el archivo zip de logs</string>
+    <string name="other__bluetooth_enable">Habilitar Bluetooth</string>
+    <string name="other__nfc_enable">Habilitar NFC</string>
     <string name="other__nfc_read_error_text">Esta etiqueta no contiene una solicitud de pago que Bitkit pueda usar.</string>
     <string name="other__nfc_read_error_title">No se puede leer el NFC</string>
     <string name="other__nfc_service_description">Solicitud de pago de Bitkit</string>

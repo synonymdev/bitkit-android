@@ -475,6 +475,8 @@
     <string name="other__lnurl_withdr_success_msg">Il tuo prelievo e\' stato richiesto con successo. In attesa del pagamento.</string>
     <string name="other__lnurl_withdr_success_title">Prelievo Richiesto</string>
     <string name="other__logs_export_error">Creazione file zip log non riuscita</string>
+    <string name="other__bluetooth_enable">Abilita Bluetooth</string>
+    <string name="other__nfc_enable">Abilita NFC</string>
     <string name="other__nfc_read_error_text">Questo tag non contiene una richiesta di pagamento utilizzabile da Bitkit.</string>
     <string name="other__nfc_read_error_title">Impossibile leggere NFC</string>
     <string name="other__nfc_service_description">Richiesta di pagamento Bitkit</string>

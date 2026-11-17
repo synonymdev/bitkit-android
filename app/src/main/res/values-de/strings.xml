@@ -432,6 +432,8 @@
     <string name="onboarding__empty_wallet">Um zu\nbeginnen,\n&lt;accent&gt;sende\nBitcoin&lt;/accent&gt;\nan dein\nWallet</string>
     <string name="onboarding__multiple_header">&lt;accent&gt;Achtung:&lt;/accent&gt;\nMehrere Geräte</string>
     <string name="onboarding__multiple_text">Füge deine Wiederherstellungsphrase nicht mehreren Geräten gleichzeitig hinzu, da es zu unwiderruflichen Schäden deiner Daten kommen kann.</string>
+    <string name="other__bluetooth_enable">Bluetooth aktivieren</string>
+    <string name="other__nfc_enable">NFC aktivieren</string>
     <string name="other__nfc_read_error_text">Dieses NFC-Tag enthält keine Zahlungsanforderung, die Bitkit verwenden kann.</string>
     <string name="other__nfc_read_error_title">NFC kann nicht gelesen werden</string>
     <string name="other__nfc_service_description">Bitkit-Zahlungsanforderung</string>

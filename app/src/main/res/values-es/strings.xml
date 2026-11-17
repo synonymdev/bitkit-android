@@ -429,6 +429,8 @@
     <string name="onboarding__restore_no_backup_button">Proceder sin respaldo de la copia de seguridad</string>
     <string name="onboarding__restore_no_backup_warn">Si anteriormente tenía una copia de seguridad Lightning, ésta se sobrescribirá y se perderá. Esto podría provocar una pérdida de fondos.</string>
     <string name="onboarding__empty_wallet">Para\nempezar\n&lt;accent&gt;envíe\nBitcoin&lt;/accent&gt;\na su\nmonedero</string>
+    <string name="other__bluetooth_enable">Activar Bluetooth</string>
+    <string name="other__nfc_enable">Activar NFC</string>
     <string name="other__nfc_read_error_text">Esta etiqueta no contiene una solicitud de pago que Bitkit pueda usar.</string>
     <string name="other__nfc_read_error_title">Incapaz De Leer NFC</string>
     <string name="other__nfc_service_description">Solicitud de pago de Bitkit</string>

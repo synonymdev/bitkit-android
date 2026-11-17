@@ -474,6 +474,8 @@
     <string name="other__lnurl_withdr_success_msg">Je opname is succesvol aangevraagd. Wachten op betaling.</string>
     <string name="other__lnurl_withdr_success_title">Opname aangevraagd</string>
     <string name="other__logs_export_error">Log-zipbestand aanmaken mislukt</string>
+    <string name="other__bluetooth_enable">Bluetooth inschakelen</string>
+    <string name="other__nfc_enable">NFC inschakelen</string>
     <string name="other__nfc_read_error_text">Deze tag bevat geen betaalverzoek dat Bitkit kan gebruiken.</string>
     <string name="other__nfc_read_error_title">Kan NFC niet lezen</string>
     <string name="other__nfc_service_description">Bitkit-betaalverzoek</string>
