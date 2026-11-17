@@ -1645,8 +1645,8 @@ class LightningRepo @Inject constructor(
         key: String,
         ldkRecordsBefore: Long,
     ): Result<PaymentId>? {
-        // Read before the row too, so a send that ends while it is read still counts as live. The mark comes first,
-        // so a send it counts as recorded is already admitted or in flight when liveness is read.
+        // Read before the row too, so a send that ends while it is read still counts as live. The mark comes first, so
+        // a send it counts was admitted before liveness is read: still live then, or ended before the row is read.
         val sparkRecordsBefore = sparkRepo.sendRecordMark()
         val wasLive = isSendLive(paymentHash, key, ldkRecordsBefore)
         val send = sparkRepo.lightningSend(paymentHash) as? SparkLightningSend.Found ?: return null

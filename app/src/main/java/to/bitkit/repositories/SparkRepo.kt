@@ -548,12 +548,13 @@ class SparkRepo @Inject constructor(
             if (sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) != null) {
                 throw PaymentPendingException(paymentHash)
             }
+            val sentAt = clock.now().epochSeconds
             val sent = try {
                 sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
                 spending {
                     // Kept until the call returns, so a send cut off by process death or cancellation stays held.
-                    cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
+                    cacheStore.addSparkUncertainSend(paymentHash, sentAt)
                     // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
                     // are checked last, before the send.
                     runCatching {
@@ -584,7 +585,7 @@ class SparkRepo @Inject constructor(
                     throw SparkError.SendRefused("Spark balance can't cover the payment", it)
                 }
                 Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
-                settleUncertainSend(paymentHash, expiresAt)
+                settleUncertainSend(paymentHash, sentAt, expiresAt)
                 throw PaymentPendingException(paymentHash)
             }
             cacheStore.removeSparkUncertainSend(paymentHash)
@@ -599,9 +600,9 @@ class SparkRepo @Inject constructor(
         }
     }
 
-    private suspend fun settleUncertainSend(paymentHash: String, expiresAt: ULong) {
+    private suspend fun settleUncertainSend(paymentHash: String, sentAt: Long, expiresAt: ULong) {
         val failedAt = clock.now().epochSeconds
-        uncertainSends[paymentHash.lowercase()] = UncertainSend(failedAt.toULong(), expiresAt)
+        uncertainSends[paymentHash.lowercase()] = UncertainSend(failedAt.toULong(), expiresAt, sentAt.toULong())
         cacheStore.addSparkUncertainSend(paymentHash, failedAt)
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
@@ -655,8 +656,11 @@ class SparkRepo @Inject constructor(
         return true
     }
 
-    /** A send whose outcome Spark didn't report: when it failed, and when its invoice expires, in epoch seconds. */
-    private data class UncertainSend(val failedAt: ULong, val expiresAt: ULong)
+    /**
+     * A send whose outcome Spark didn't report: when it failed, when its invoice expires and when it started, in epoch
+     * seconds. Its start is unknown after a restart, which keeps one stored time.
+     */
+    private data class UncertainSend(val failedAt: ULong, val expiresAt: ULong, val sentAt: ULong? = null)
 
     /** Takes back the sends whose outcome Spark didn't report before a restart, so a sync can still settle them. */
     private suspend fun restoreUncertainSends() {
@@ -747,6 +751,9 @@ class SparkRepo @Inject constructor(
 
     private suspend fun claimInstantly(txid: String, ceilingSats: ULong) {
         var isSeen = false
+        // Once Spark waits for the early claim, the fee cap stays on the deposit and Spark claims it by itself when the
+        // provider offers it, so the poll only watches for the claim and asks the provider nothing more.
+        var isWaiting = false
         repeat(CLAIM_POLL_ATTEMPTS) {
             runSuspendCatching { refresh() }
                 .onFailure { Logger.warn("Failed to refresh Spark state", it, context = TAG) }
@@ -754,7 +761,9 @@ class SparkRepo @Inject constructor(
                 setDepositClaim(txid, SparkDepositClaim.Claimed)
                 return
             }
-            if (_depositClaims.value[txid] != SparkDepositClaim.Adding) {
+            if (isWaiting && _depositClaims.value[txid] != SparkDepositClaim.Adding) {
+                if (isClaimStarted(txid)) setDepositClaim(txid, SparkDepositClaim.Adding)
+            } else if (_depositClaims.value[txid] != SparkDepositClaim.Adding) {
                 val offer = depositClaimOffer(txid)
                     .onFailure { Logger.warn("Failed to quote Spark deposit '$txid'", it, context = TAG) }
                     .getOrNull()
@@ -764,7 +773,9 @@ class SparkRepo @Inject constructor(
                     SparkClaimStep.Adding -> SparkDepositClaim.Adding
                     SparkClaimStep.Unavailable -> SparkDepositClaim.Unavailable
                     is SparkClaimStep.Ask -> SparkDepositClaim.Repriced(step.offer)
-                    is SparkClaimStep.ClaimEarly -> claimEarly(step.offer).getOrNull()?.toDepositClaim(step.offer)
+                    is SparkClaimStep.ClaimEarly -> claimEarly(step.offer).getOrNull()
+                        ?.also { isWaiting = it == SparkEarlyClaim.Waiting }
+                        ?.toDepositClaim(step.offer)
                 }
                 if (claim != null) setDepositClaim(txid, claim)
                 if (claim?.isFinal == true) return
@@ -783,6 +794,11 @@ class SparkRepo @Inject constructor(
     fun followShownDeposit(txid: String) {
         _depositClaims.update { if (txid in it) it else it + (txid to SparkDepositClaim.Later) }
     }
+
+    /** Whether Spark no longer lists the deposit in [txid] as unclaimed, so its claim is under way. */
+    private suspend fun isClaimStarted(txid: String): Boolean = runSuspendCatching {
+        sparkService.listUnclaimedDeposits().none { it.txid.equals(txid, ignoreCase = true) }
+    }.onFailure { Logger.warn("Failed to list unclaimed Spark deposits", it, context = TAG) }.getOrDefault(false)
 
     private fun isClaimed(txid: String): Boolean =
         _state.value.deposits.any { it.isClaimed && it.txid.equals(txid, ignoreCase = true) }
@@ -1722,6 +1738,16 @@ class SparkRepo @Inject constructor(
     private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
 
     /** The payment hash of this send, at [status] when given. */
+    /**
+     * Whether this failed send started before the uncertain send of its hash, so it is an earlier attempt's. Spark
+     * dates a payment when it starts it, in epoch seconds; with the start unknown, as after a restart, it is not.
+     */
+    private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
+        val hash = sendHash(PaymentStatus.FAILED) ?: return false
+        val sentAt = uncertainSends[hash.lowercase()]?.sentAt ?: return false
+        return timestamp < sentAt
+    }
+
     private fun Payment.sendHash(status: PaymentStatus? = null): String? = (details as? PaymentDetails.Lightning)
         ?.takeIf { paymentType == SparkPaymentType.SEND && (status == null || this.status == status) }
         ?.htlcDetails?.paymentHash
@@ -1766,6 +1792,12 @@ class SparkRepo @Inject constructor(
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
         recordActivity(payment, settlesJournal = false)
+        // An earlier attempt's failure can arrive after a retry of its invoice went uncertain, and ends nothing of the
+        // retry's: Spark may still finish it, so its hold stays until the expiry rule of trySettleUncertainSend.
+        if (payment.isEarlierFailureOfUncertainSend()) {
+            Logger.info("Kept uncertain Spark send '${payment.sendHash()}' held past an older failure", context = TAG)
+            return
+        }
         // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
         payment.sendHash()?.let {
             uncertainSends.remove(it.lowercase())
