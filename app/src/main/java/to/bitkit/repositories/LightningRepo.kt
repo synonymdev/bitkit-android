@@ -2143,6 +2143,7 @@ class LightningRepo @Inject constructor(
         if (miningFee <= approvedMiningFeeSats) return
         reviewHigherFee ?: throw OnchainSendChangedError(miningFee)
         reviewedPreparedSend.set(prepared)
+        var isKept = false
         try {
             // Returns once this exact prepared send is approved again, throws to send nothing. A node that stops
             // meanwhile can no longer submit it, so the review ends there.
@@ -2158,12 +2159,11 @@ class LightningRepo @Inject constructor(
                 }
             }
             // Nothing of a send its node cannot submit is persisted.
-            if (!isApproved || !prepared.isUsable) {
-                if (reviewedPreparedSend.compareAndSet(prepared, null)) prepared.release()
-                throw OnchainSendReviewInterruptedError()
-            }
+            if (!isApproved || !prepared.isUsable) throw OnchainSendReviewInterruptedError()
+            isKept = true
         } finally {
-            reviewedPreparedSend.compareAndSet(prepared, null)
+            // An unapproved send frees its inputs and change now, not when its handle is collected.
+            if (reviewedPreparedSend.compareAndSet(prepared, null) && !isKept) prepared.release()
         }
     }
 

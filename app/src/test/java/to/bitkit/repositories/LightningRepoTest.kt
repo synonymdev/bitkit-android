@@ -3528,6 +3528,45 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a review that ends without approval releases the prepared send at once`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        var releases = 0
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(feeReviewPrepared(discard = { releases++ }) { broadcasts++ })
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { throw AppError("cancelled") },
+        )
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(1, releases)
+        assertEquals(0, broadcasts)
+        assertNull(store.current())
+        // The node stopping later finds nothing left to release.
+        repo.stop()
+        assertEquals(1, releases)
+    }
+
+    @Test
+    fun `an approved review keeps the prepared send for its broadcast`() = test {
+        val (repo, _) = feeReviewRepo()
+        var releases = 0
+        var releasesAtBroadcast = -1
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(feeReviewPrepared(discard = { releases++ }) { releasesAtBroadcast = releases })
+
+        val result = repo.sendOnChain("address", 1_000uL, approvedMiningFeeSats = 203uL, reviewHigherFee = {})
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, releasesAtBroadcast)
+        assertEquals(0, releases)
+    }
+
+    @Test
     fun `a request approved on a replaced node is refused before its candidate is saved`() = test {
         val (repo, store) = feeReviewRepo()
         val requestId = PaykitPaymentRequestId("request", "payer")
