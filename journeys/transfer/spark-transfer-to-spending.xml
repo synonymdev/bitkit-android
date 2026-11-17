@@ -1,12 +1,13 @@
 <journey name="spark transfer to spending">
   <description>
     Verifies the transfer to spending flow on Spark. With Spark ready, the Spending suggestion card opens the
-    "Spending Balance" intro once, then Funding, which leads with "Transfer From Savings" (testTag "FundTransfer")
-    and "Use Other Wallet" (testTag "FundReceive") above "Manual Setup" (testTag "FundManual"). Transfer from
-    Savings opens the "Transfer to spending" intro once, then the amount screen (testTag "SpendingAmount"). The
-    confirm screen shows "Network fees", "Spending fee", "To spending" and "Total", and the Instant and Later rows:
-    Both rows show their fee as "±" in sats and fiat, and picking a row updates the Spending fee and To spending
-    tiles. Learn more explains Instant and Later. Whether the provider offers Instant needs a real deposit Spark
+    "Spending Balance" intro once, then Funding, which lists "Transfer from Savings" (testTag "FundTransfer"),
+    "Transfer from HW wallet" (testTag "FundHardware"), "Use other wallet" (testTag "FundReceive") and "Manual setup"
+    (testTag "FundManual"), in that order, with no Learn More button. Transfer from Savings opens the "Transfer to
+    spending" intro once, then the amount screen (testTag "SpendingAmount"). The confirm screen shows "Network fees",
+    "Service fees", "To spending" and "Total", and the Fast and Normal rows: Fast's fee is marked "max" and Normal's
+    "est", and picking a row updates the Service fees and To spending tiles. Learn more explains the Fast and Later
+    transfer speeds and the spending balance. Whether the provider offers a fast transfer needs a real deposit Spark
     sees, so this journey stops before the swipe; the states after it are covered by SettingUpScreen previews and
     SparkRepoTest.
 
@@ -16,14 +17,18 @@
   </description>
   <actions>
     <action>Tap the Spending suggestion card and verify the "Spending Balance" intro opens; tap "Get Started" (testTag "TransferIntro-button")</action>
-    <action>Verify "Transfer From Savings" (testTag "FundTransfer") and "Use Other Wallet" (testTag "FundReceive") are enabled above "Manual Setup" (testTag "FundManual")</action>
-    <action>Tap "Transfer From Savings" and verify the "Transfer to spending" intro opens; tap "Get Started" (testTag "SpendingIntro-button")</action>
+    <action>Verify "Transfer from Savings" (testTag "FundTransfer"), "Transfer from HW wallet" (testTag "FundHardware"), "Use other wallet" (testTag "FundReceive") and "Manual setup" (testTag "FundManual") are listed in that order and enabled, with no "Learn More" button (testTag "FundLearnMore")</action>
+    <action>Tap "Transfer from Savings" and verify the "Transfer to spending" intro opens; tap "Get Started" (testTag "SpendingIntro-button")</action>
     <action>Verify the amount screen (testTag "SpendingAmount") opens and wait until the available amount (testTag "SpendingAmountAvailable") shows a positive value</action>
     <action>Tap "25%" (testTag "SpendingAmountQuarter") and verify the amount is a quarter of the available amount; tap "Max" (testTag "SpendingAmountMax") and verify it equals the available amount</action>
-    <action>Tap "Continue" (testTag "SpendingAmountContinue") and verify the confirm screen shows "Network fees", "Spending fee", "To spending" and "Total", with "Instant" (testTag "SpendingConfirmInstant") selected and its fee shown as "±"</action>
-    <action>Tap "Later" (testTag "SpendingConfirmLater") and verify the Spending fee shows "±" with a lower amount and "To spending" grows by the difference</action>
-    <action>Tap "Learn More" (testTag "SpendingConfirmMore"), verify the "Transfer speed" screen with the spending balance bar, and tap "Understood" (testTag "LiquidityContinue")</action>
-    <action>Verify the confirm screen still shows Later selected; go back to the wallet home</action>
+    <action>Tap "Continue" (testTag "SpendingAmountContinue") and verify the confirm screen shows "Network fees", "Service fees", "To spending" and "Total", with "Fast" (testTag "SpendingConfirmInstant") selected, its fee marked "max", and "Normal" (testTag "SpendingConfirmLater") below it, its fee marked "est"</action>
+    <action>Verify "Service fees" equals the Fast row's fee, and "To spending" equals the amount less that fee</action>
+    <action>Tap "Normal" and verify "Service fees" shows the Normal row's fee and "To spending" grows by the difference, while "Network fees" and "Total" stay the same</action>
+    <action>Tap the fees (testTag "SpendingConfirmFees") and verify every amount on the screen switches to the local currency; tap them again and verify they switch back to bitcoin</action>
+    <action>Tap "Learn More" (testTag "SpendingConfirmMore"), verify the screen explains the Fast and Later transfer speeds and the spending balance, then tap "Understood" (testTag "LiquidityContinue")</action>
+    <action>Verify the confirm screen still shows Normal selected</action>
+    <action>Tap the fees (testTag "SpendingConfirmFees") so the amounts show the local currency, go back to the amount screen and verify the amount (testTag "SpendingAmountNumberField") shows in the local currency; tap delete (testTag "NRemove") and verify the amount shrinks in the local currency with no maximum toast</action>
+    <action>Tap the unit button (testTag "SpendingNumberPadUnit") to switch back to bitcoin; go back to the wallet home</action>
     <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending") and verify the amount screen opens directly, with no intro</action>
   </actions>
 </journey>

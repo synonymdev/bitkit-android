@@ -79,7 +79,6 @@ fun FundingScreen(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             VerticalSpacer(24.dp)
-            // Spark keeps Spending fundable from savings or another wallet without a channel.
             if (canFundWithSpark) {
                 FundingOption(
                     R.string.lightning__funding__button1,
@@ -89,50 +88,57 @@ fun FundingScreen(
                     { if (hasSavings) onTransfer() else showNoFundsAlert = true }.takeIf { canFundOnChain },
                 )
                 FundingOption(
+                    R.string.lightning__funding__button_hw,
+                    R.drawable.ic_device_tablet_speaker,
+                    16.25.dp,
+                    "FundHardware",
+                    onHardware.takeIf { canFundOnChain },
+                )
+                FundingOption(
                     R.string.lightning__funding__button2,
                     R.drawable.ic_qr_purple,
                     13.75.dp,
                     "FundReceive",
-                    onFund
+                    onFund,
                 )
-            }
-            VerticalSpacer(8.dp)
-            RectangleButton(
-                label = stringResource(R.string.lightning__funding_advanced__button2),
-                icon = R.drawable.ic_pencil_full,
-                iconTint = Colors.Purple,
-                iconSize = 13.37.dp,
-                onClick = onManual,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .testTag("FundManual")
-            )
-            if (!canFundWithSpark) {
+                FundingOption(
+                    R.string.lightning__funding_advanced__button2,
+                    R.drawable.ic_pencil_full,
+                    13.37.dp,
+                    "FundManual",
+                    onManual,
+                )
+            } else {
+                FundingOption(
+                    R.string.lightning__funding_advanced__button2,
+                    R.drawable.ic_pencil_full,
+                    13.37.dp,
+                    "FundManual",
+                    onManual,
+                )
                 FundingOption(R.string.lightning__funding__button1, R.drawable.ic_transfer, 20.dp, "FundTransfer")
-            }
-            FundingOption(
-                R.string.lightning__funding__button_hw,
-                R.drawable.ic_device_tablet_speaker,
-                16.25.dp,
-                "FundHardware",
-                onHardware.takeIf { canFundWithSpark && canFundOnChain },
-            )
-            if (!canFundWithSpark) {
+                FundingOption(
+                    R.string.lightning__funding__button_hw,
+                    R.drawable.ic_device_tablet_speaker,
+                    16.25.dp,
+                    "FundHardware",
+                )
                 FundingOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")
             }
             VerticalSpacer(32.dp)
         }
-        SecondaryButton(
-            text = stringResource(R.string.common__learn_more),
-            onClick = {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Env.BLOCKTANK_SUNSET_URL.toUri())) }
-            },
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .testTag("FundLearnMore")
-        )
-        VerticalSpacer(16.dp)
+        if (!canFundWithSpark) {
+            SecondaryButton(
+                text = stringResource(R.string.common__learn_more),
+                onClick = {
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Env.BLOCKTANK_SUNSET_URL.toUri())) }
+                },
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .testTag("FundLearnMore")
+            )
+            VerticalSpacer(16.dp)
+        }
         if (showNoFundsAlert) {
             AppAlertDialog(
                 title = stringResource(R.string.lightning__no_funds__title),

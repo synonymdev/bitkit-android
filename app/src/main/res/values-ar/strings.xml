@@ -331,18 +331,15 @@
     <string name="lightning__spending_confirm__fees_changed_network">الرسوم أعلى بمقدار {amount} لأن معدلات الرسوم أو رصيد مدخراتك تغيّر أثناء وجودك في هذه الشاشة. اسحب مرة أخرى للتأكيد.</string>
     <string name="lightning__spending_confirm__fees_changed_title">تغيّرت الرسوم</string>
     <string name="lightning__spending_confirm__instant_text">جاهز خلال دقائق</string>
-    <string name="lightning__spending_confirm__later_text">بعد 3 تأكيدات، نحو 30 دقيقة</string>
     <string name="lightning__spending_confirm__lsp_fee">رسوم الخدمة</string>
     <string name="lightning__spending_confirm__network_fee">رسوم الشبكة</string>
     <string name="lightning__spending_confirm__quote_error_text">تعذّر على Bitkit الحصول على الرسوم الحالية لهذا التحويل. تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="lightning__spending_confirm__quote_error_title">الرسوم غير متاحة</string>
-    <string name="lightning__spending_confirm__spending_fee">رسوم الإنفاق</string>
     <string name="lightning__spending_confirm__total">الإجمالي</string>
     <string name="lightning__spending_intro__button">ابدأ</string>
     <string name="lightning__spending_intro__text">حوّل الأموال إلى رصيد الإنفاق للاستمتاع بمعاملات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
     <string name="lightning__spending_intro__title">تحويل\n&lt;accent&gt;إلى الإنفاق&lt;/accent&gt;</string>
     <string name="lightning__spending_label">رصيد الإنفاق</string>
-    <string name="lightning__spending_learn_more__text">يدفع الفوري للمزوّد لإضافة تحويلك إلى رصيد الإنفاق قبل تأكيده، عادةً خلال دقائق.\n\nأما لاحقًا فينتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">الحالة</string>
     <string name="lightning__support">الدعم</string>
@@ -357,7 +354,6 @@
     <string name="lightning__transfer_hw__open_connect">فتح Trezor Connect</string>
     <string name="lightning__transfer_in_progress">جارٍ التحويل</string>
     <string name="lightning__transfer_intro__button">ابدأ</string>
-    <string name="lightning__transfer_intro__text">موّل رصيد الإنفاق للاستمتاع بمعاملات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
     <string name="lightning__transfer_intro__title">رصيد\n&lt;accent&gt;الإنفاق&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">نجح التحويل</string>
     <string name="lightning__transfer_success__text_savings">تم تحويل أموالك. يمكنك استخدام هذه الأموال فورًا.</string>

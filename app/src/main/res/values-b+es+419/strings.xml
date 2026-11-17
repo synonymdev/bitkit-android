@@ -338,18 +338,15 @@
     <string name="lightning__spending_confirm__fees_changed_network">Las comisiones son {amount} más altas porque las tarifas o su saldo de ahorros cambiaron mientras estaba en esta pantalla. Deslice de nuevo para confirmar.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Las comisiones cambiaron</string>
     <string name="lightning__spending_confirm__instant_text">Listo en unos minutos</string>
-    <string name="lightning__spending_confirm__later_text">Después de 3 confirmaciones, unos 30 minutos</string>
     <string name="lightning__spending_confirm__lsp_fee">Comisión de servicio</string>
     <string name="lightning__spending_confirm__network_fee">Comisiones de red</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit no pudo obtener las comisiones actuales de esta transferencia. Revisa tu conexión e inténtalo de nuevo.</string>
     <string name="lightning__spending_confirm__quote_error_title">Comisiones no disponibles</string>
-    <string name="lightning__spending_confirm__spending_fee">Comisión de gastos</string>
     <string name="lightning__spending_confirm__total">Total</string>
     <string name="lightning__spending_intro__button">Empezar</string>
     <string name="lightning__spending_intro__text">Transfiera fondos a su saldo de gastos para disfrutar de transacciones baratas e instantáneas con amigos y comercios.</string>
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;a gastos&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Saldo para gastos</string>
-    <string name="lightning__spending_learn_more__text">Instantáneo le paga al proveedor para agregar tu transferencia a tu saldo para gastos antes de que se confirme, normalmente en unos minutos.\n\nDespués espera 3 confirmaciones, unos 30 minutos, con una comisión menor.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Estatus</string>
     <string name="lightning__support">Soporte</string>
@@ -364,7 +361,6 @@
     <string name="lightning__transfer_hw__open_connect">Abrir Trezor Connect</string>
     <string name="lightning__transfer_in_progress">TRANSFERENCIA EN PROGRESO</string>
     <string name="lightning__transfer_intro__button">Empezar</string>
-    <string name="lightning__transfer_intro__text">Fondee el saldo de gastos para disfrutar de transacciones baratas e instantáneas con amigos y comercios.</string>
     <string name="lightning__transfer_intro__title">Saldo de\n&lt;accent&gt;Gasto&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">Transferencia exitosa</string>
     <string name="lightning__transfer_success__text_savings">Sus fondos han sido transferidos. Podrá utilizar estos fondos inmediatamente.</string>

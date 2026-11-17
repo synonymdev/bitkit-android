@@ -338,18 +338,15 @@
     <string name="lightning__spending_confirm__fees_changed_network">Poplatky jsou o {amount} vyšší, protože se během zobrazení této obrazovky změnily sazby poplatků nebo zůstatek vašich úspor. Pro potvrzení přejeďte znovu.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Poplatky se změnily</string>
     <string name="lightning__spending_confirm__instant_text">Hotovo za pár minut</string>
-    <string name="lightning__spending_confirm__later_text">Po 3 potvrzeních, asi 30 minut</string>
     <string name="lightning__spending_confirm__lsp_fee">Poplatky za služby</string>
     <string name="lightning__spending_confirm__network_fee">Síťové poplatky</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit nedokázal získat aktuální poplatky za tento převod. Zkontroluj připojení a zkus to znovu.</string>
     <string name="lightning__spending_confirm__quote_error_title">Poplatky nedostupné</string>
-    <string name="lightning__spending_confirm__spending_fee">Poplatek za výdaje</string>
     <string name="lightning__spending_confirm__total">Celkem</string>
     <string name="lightning__spending_intro__button">Začít</string>
     <string name="lightning__spending_intro__text">Převeďte peníze na svůj disponibilní zůstatek a využívejte okamžité a levné transakce s přáteli, rodinou a obchodníky.</string>
     <string name="lightning__spending_intro__title">Převést\n&lt;accent&gt;do výdajů&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Disponibilní zůstatek</string>
-    <string name="lightning__spending_learn_more__text">Okamžitě platí poskytovateli za přidání převodu do zůstatku pro výdaje ještě před potvrzením, obvykle během pár minut.\n\nPozději čeká na 3 potvrzení, asi 30 minut, s nižším poplatkem.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Status</string>
     <string name="lightning__support">Podpora</string>
@@ -364,7 +361,6 @@
     <string name="lightning__transfer_hw__open_connect">Otevřít Trezor Connect</string>
     <string name="lightning__transfer_in_progress">PŘEVOD PROBÍHÁ</string>
     <string name="lightning__transfer_intro__button">Začít</string>
-    <string name="lightning__transfer_intro__text">Navyšte svůj disponibilní zůstatek a užívejte si okamžité a levné transakce s přáteli, rodinou a obchodníky.</string>
     <string name="lightning__transfer_intro__title">Disponibilní\n&lt;accent&gt;Zůstatek&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">Přenos úspěšný</string>
     <string name="lightning__transfer_success__text_savings">Vaše prostředky byly převedeny. Tyto prostředky můžete okamžitě použít.</string>

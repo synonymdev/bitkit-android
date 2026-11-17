@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -59,6 +60,12 @@ private val PAD_ROW_HEIGHT = 78.dp
 
 /** Shortest number pad row, reached only when four 50 dp rows don't fit, as on a 640 dp tall phone. */
 private val PAD_ROW_MIN_HEIGHT = 40.dp
+
+/** Gap between the amount and the Available row; it gives way only once the pad rows are at their shortest. */
+private val AVAILABLE_ROW_GAP = 32.dp
+
+/** Number pad rows; the layout reserves room for at least this many rows of [PAD_ROW_MIN_HEIGHT]. */
+private const val PAD_ROWS = 4
 
 @Suppress("ViewModelForwarding")
 @Composable
@@ -177,6 +184,12 @@ private fun SpendingAmountNodeRunning(
         if (!uiState.isMaxLoading) amountInputViewModel.setMaxAmount(uiState.maxSats)
     }
 
+    // Review's fee grid switches the unit while this screen waits in the back stack, so redraw the amount in it.
+    LaunchedEffect(currencies.primaryDisplay) {
+        val sats = amountInputViewModel.uiState.value.sats
+        if (sats > 0) amountInputViewModel.setSats(sats, currencies)
+    }
+
     Column(
         modifier = Modifier
             .padding(horizontal = 16.dp)
@@ -208,55 +221,54 @@ private fun SpendingAmountNodeRunning(
                 .testTag("${tag}NumberField")
         )
 
-        Column(
-            verticalArrangement = Arrangement.Bottom,
-            modifier = Modifier.weight(1f)
-        ) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.testTag(
-                    if (isHardware) "HardwareTransferAmountNumberPad" else "SendAmountNumberPad"
-                )
-            ) {
-                Column {
-                    Text13Up(
-                        text = stringResource(R.string.wallet__send_available),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("${tag}Available")
+        AvailableRowLayout(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.testTag(
+                        if (isHardware) "HardwareTransferAmountNumberPad" else "SendAmountNumberPad"
                     )
-                    VerticalSpacer(8.dp)
-                    MoneySSB(
-                        sats = uiState.maxSats,
-                        showSymbol = true,
-                        modifier = Modifier.testTag("${tag}Unit")
+                ) {
+                    Column {
+                        Text13Up(
+                            text = stringResource(R.string.wallet__send_available),
+                            color = Colors.White64,
+                            modifier = Modifier.testTag("${tag}Available")
+                        )
+                        VerticalSpacer(4.dp)
+                        MoneySSB(
+                            sats = uiState.maxSats,
+                            showSymbol = true,
+                            modifier = Modifier.testTag("${tag}Unit")
+                        )
+                    }
+                    FillWidth()
+                    UnitButton(
+                        color = Colors.Purple,
+                        onClick = { amountInputViewModel.switchUnit(currencies) },
+                        modifier = Modifier.testTag(
+                            if (isHardware) "HardwareTransferAmountUnitButton" else "SpendingNumberPadUnit"
+                        )
+                    )
+                    NumberPadActionButton(
+                        text = stringResource(R.string.lightning__spending_amount__quarter),
+                        color = Colors.Purple,
+                        enabled = isReady && hasFunds,
+                        onClick = onClickQuarter,
+                        modifier = Modifier.testTag("${tag}Quarter")
+                    )
+                    NumberPadActionButton(
+                        text = stringResource(R.string.common__max),
+                        color = Colors.Purple,
+                        enabled = isReady && hasFunds,
+                        onClick = onClickMaxAmount,
+                        modifier = Modifier.testTag("${tag}Max")
                     )
                 }
-                FillWidth()
-                UnitButton(
-                    color = Colors.Purple,
-                    onClick = { amountInputViewModel.switchUnit(currencies) },
-                    modifier = Modifier.testTag(
-                        if (isHardware) "HardwareTransferAmountUnitButton" else "SpendingNumberPadUnit"
-                    )
-                )
-                NumberPadActionButton(
-                    text = stringResource(R.string.lightning__spending_amount__quarter),
-                    color = Colors.Purple,
-                    enabled = isReady && hasFunds,
-                    onClick = onClickQuarter,
-                    modifier = Modifier.testTag("${tag}Quarter")
-                )
-                NumberPadActionButton(
-                    text = stringResource(R.string.common__max),
-                    color = Colors.Purple,
-                    enabled = isReady && hasFunds,
-                    onClick = onClickMaxAmount,
-                    modifier = Modifier.testTag("${tag}Max")
-                )
-            }
 
-            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
+                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+            }
 
             NumberPad(
                 viewModel = amountInputViewModel,
@@ -264,18 +276,45 @@ private fun SpendingAmountNodeRunning(
                 enabled = isReady && hasFunds,
                 idealRowHeight = PAD_ROW_HEIGHT,
                 minRowHeight = PAD_ROW_MIN_HEIGHT,
-                modifier = Modifier.weight(1f, fill = false)
+                modifier = Modifier.fillMaxWidth()
             )
 
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                onClick = onConfirmAmount,
-                enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
-                isLoading = uiState.isLoading,
-                modifier = Modifier.testTag("${tag}Continue")
-            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__continue),
+                    onClick = onConfirmAmount,
+                    enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
+                    isLoading = uiState.isLoading,
+                    modifier = Modifier.testTag("${tag}Continue")
+                )
+                VerticalSpacer(16.dp)
+            }
+        }
+    }
+}
 
-            VerticalSpacer(16.dp)
+/**
+ * Lays out the Available row, the number pad and Continue: the row [AVAILABLE_ROW_GAP] under the amount, the pad and
+ * Continue pinned to the bottom. The pad rows shrink first; the gap gives way only once they are at their shortest.
+ */
+@Composable
+private fun AvailableRowLayout(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val (rowMeasurable, padMeasurable, footerMeasurable) = measurables
+        val loose = constraints.copy(minHeight = 0)
+        val row = rowMeasurable.measure(loose)
+        val footer = footerMeasurable.measure(loose)
+        val gap = AVAILABLE_ROW_GAP.roundToPx()
+        val room = (constraints.maxHeight - row.height - footer.height).coerceAtLeast(0)
+        val minPad = (PAD_ROW_MIN_HEIGHT * PAD_ROWS).roundToPx().coerceAtMost(room)
+        val pad = padMeasurable.measure(loose.copy(maxHeight = (room - gap).coerceAtLeast(minPad)))
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            row.place(0, gap.coerceAtMost(room - pad.height))
+            footer.place(0, constraints.maxHeight - footer.height)
+            pad.place(0, constraints.maxHeight - footer.height - pad.height)
         }
     }
 }

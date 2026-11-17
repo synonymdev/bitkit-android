@@ -331,18 +331,15 @@
     <string name="lightning__spending_confirm__fees_changed_network">Τα τέλη είναι {amount} υψηλότερα, επειδή τα ποσοστά τελών ή το υπόλοιπο αποταμιεύσεων άλλαξαν ενώ ήσουν σε αυτή την οθόνη. Σύρε ξανά για επιβεβαίωση.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Τα τέλη άλλαξαν</string>
     <string name="lightning__spending_confirm__instant_text">Έτοιμο σε λίγα λεπτά</string>
-    <string name="lightning__spending_confirm__later_text">Μετά από 3 επιβεβαιώσεις, περίπου 30 λεπτά</string>
     <string name="lightning__spending_confirm__lsp_fee">Τέλη υπηρεσίας</string>
     <string name="lightning__spending_confirm__network_fee">Τέλη δικτύου</string>
     <string name="lightning__spending_confirm__quote_error_text">Το Bitkit δεν μπόρεσε να λάβει τις τρέχουσες χρεώσεις για αυτή τη μεταφορά. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="lightning__spending_confirm__quote_error_title">Μη διαθέσιμες χρεώσεις</string>
-    <string name="lightning__spending_confirm__spending_fee">Χρέωση δαπανών</string>
     <string name="lightning__spending_confirm__total">Σύνολο</string>
     <string name="lightning__spending_intro__button">Ξεκίνα</string>
     <string name="lightning__spending_intro__text">Μετέφερε κεφάλαια στο υπόλοιπο δαπανών για να απολαύσεις άμεσες και φθηνές συναλλαγές με φίλους, οικογένεια και εμπόρους.</string>
     <string name="lightning__spending_intro__title">Μεταφορά\n&lt;accent&gt;σε δαπάνες&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Υπόλοιπο δαπανών</string>
-    <string name="lightning__spending_learn_more__text">Το Άμεσα πληρώνει τον πάροχο για να προσθέσει τη μεταφορά σου στο υπόλοιπο δαπανών πριν επιβεβαιωθεί, συνήθως μέσα σε λίγα λεπτά.\n\nΤο Αργότερα περιμένει 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Κατάσταση</string>
     <string name="lightning__support">Υποστήριξη</string>
@@ -357,7 +354,6 @@
     <string name="lightning__transfer_hw__open_connect">Άνοιγμα Trezor Connect</string>
     <string name="lightning__transfer_in_progress">ΜΕΤΑΦΟΡΑ ΣΕ ΕΞΕΛΙΞΗ</string>
     <string name="lightning__transfer_intro__button">Ξεκίνα</string>
-    <string name="lightning__transfer_intro__text">Χρηματοδότησε το υπόλοιπο δαπανών για να απολαύσεις άμεσες και φθηνές συναλλαγές με φίλους, οικογένεια και εμπόρους.</string>
     <string name="lightning__transfer_intro__title">Υπόλοιπο\n&lt;accent&gt;δαπανών&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">Επιτυχής μεταφορά</string>
     <string name="lightning__transfer_success__text_savings">Τα κεφάλαιά σου μεταφέρθηκαν. Μπορείς να χρησιμοποιήσεις αυτά τα κεφάλαια αμέσως.</string>

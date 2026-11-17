@@ -223,13 +223,11 @@
     <string name="lightning__spending_confirm__network_fee">Netzgebühren</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit konnte die aktuellen Gebühren für diese Überweisung nicht abrufen. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="lightning__spending_confirm__quote_error_title">Gebühren nicht verfügbar</string>
-    <string name="lightning__spending_confirm__spending_fee">Ausgabengebühr</string>
     <string name="lightning__spending_confirm__lsp_fee">Servicegebühren</string>
     <string name="lightning__spending_confirm__amount">Zu den Ausgaben</string>
     <string name="lightning__spending_confirm__fees_changed_network">Die Gebühren sind um {amount} höher, weil sich die Gebührensätze oder dein Sparguthaben geändert haben, während du auf diesem Bildschirm warst. Wische erneut, um zu bestätigen.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Gebühren geändert</string>
     <string name="lightning__spending_confirm__instant_text">In wenigen Minuten bereit</string>
-    <string name="lightning__spending_confirm__later_text">Nach 3 Bestätigungen, etwa 30 Minuten</string>
     <string name="lightning__spending_confirm__total">Total</string>
     <string name="lightning__spending_intro__button">Los geht\'s</string>
     <string name="lightning__spending_intro__text">Überweisen Sie Geld auf Ihr Guthaben, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu tätigen.</string>
@@ -273,7 +271,6 @@
     <string name="lightning__spending_amount__error_balance__title">Unzureichendes Sparguthaben</string>
     <string name="lightning__savings">Sparkonto</string>
     <string name="lightning__spending_label">Ausgabenguthaben</string>
-    <string name="lightning__spending_learn_more__text">Sofort bezahlt den Anbieter dafür, deine Überweisung schon vor der Bestätigung deinem Ausgabenguthaben hinzuzufügen, meist innerhalb weniger Minuten.\n\nSpäter wartet auf 3 Bestätigungen, etwa 30 Minuten, zu einer niedrigeren Gebühr.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__receiving_label">Empfangskapazität</string>
     <string name="lightning__node_info">Lightning Node</string>
@@ -369,7 +366,6 @@
     <string name="lightning__total_onchain">Gesamt Onchain</string>
     <string name="lightning__transfer_in_progress">ÜBERTRAGUNG LÄUFT</string>
     <string name="lightning__transfer_intro__button">Los geht\'s</string>
-    <string name="lightning__transfer_intro__text">Fülle dein Guthaben auf, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Bitte warte bis sich Bitkit mit dem Zahlungsnetzwerk verbunden hat (±10 Sekunden).</string>
     <string name="lightning__wait_text_top_onchain">Bitte warte bis sich Bitkit mit dem Bitcoin-Netzwerk verbunden hat (±10 Sekunden).</string>

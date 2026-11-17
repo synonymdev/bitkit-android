@@ -219,13 +219,11 @@
     <string name="lightning__spending_confirm__network_fee">Taxa da rede</string>
     <string name="lightning__spending_confirm__quote_error_text">A Bitkit não conseguiu obter as taxas atuais desta transferência. Verifique a sua ligação e tente novamente.</string>
     <string name="lightning__spending_confirm__quote_error_title">Taxas indisponíveis</string>
-    <string name="lightning__spending_confirm__spending_fee">Taxa de gastos</string>
     <string name="lightning__spending_confirm__lsp_fee">Taxa de serviço</string>
     <string name="lightning__spending_confirm__amount">Para gastos</string>
     <string name="lightning__spending_confirm__fees_changed_network">As taxas estão {amount} mais altas porque as taxas de rede ou o seu saldo de poupança mudaram enquanto estava neste ecrã. Deslize novamente para confirmar.</string>
     <string name="lightning__spending_confirm__fees_changed_title">As taxas mudaram</string>
     <string name="lightning__spending_confirm__instant_text">Pronto em poucos minutos</string>
-    <string name="lightning__spending_confirm__later_text">Após 3 confirmações, cerca de 30 minutos</string>
     <string name="lightning__spending_confirm__total">Total</string>
     <string name="lightning__spending_intro__button">Começar</string>
     <string name="lightning__spending_intro__text">Transfira fundos para seu saldo de gastos para desfrutar de transações instantâneas e baratas com amigos, familiares e comerciantes.</string>
@@ -269,7 +267,6 @@
     <string name="lightning__spending_amount__error_balance__title">Saldo de Poupança Insuficiente</string>
     <string name="lightning__savings">Poupança</string>
     <string name="lightning__spending_label">Saldo de gastos</string>
-    <string name="lightning__spending_learn_more__text">Instantâneo paga ao fornecedor para adicionar a sua transferência ao saldo de gastos antes de ser confirmada, normalmente em poucos minutos.\n\nDepois aguarda 3 confirmações, cerca de 30 minutos, com uma taxa mais baixa.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__receiving_label">Capacidade de recebimento</string>
     <string name="lightning__node_info">Nó Lightning</string>
@@ -366,7 +363,6 @@
     <string name="lightning__monitor_height">Altura do Arquivo do Monitor de Canal</string>
     <string name="lightning__transfer_in_progress">TRANSFERÊNCIA EM ANDAMENTO</string>
     <string name="lightning__transfer_intro__button">Começar</string>
-    <string name="lightning__transfer_intro__text">Use seu saldo de gastos para desfrutar de transações instantâneas e baratas com amigos, familiares e comerciantes.</string>
     <string name="lightning__transfer_intro__title">Saldo de\n&lt;accent&gt;Gastos&lt;/accent&gt;</string>
     <string name="lightning__conn_onboarding_button">Começar</string>
     <string name="lightning__conn_onboarding_text">Configure o seu saldo de despesas para desfrutar de transações instantâneas e económicas com amigos, familiares e comerciantes.</string>

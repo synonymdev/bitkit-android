@@ -5,8 +5,6 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,36 +26,36 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.SparkClaimSpeed
-import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.MoneyMSB
-import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -69,7 +67,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-private const val SWIPE_ROTATION_DEGREES = 14f
+/** Gap above each fee grid row after the first, as the Review and HW sign frames draw it. */
+private val FEE_GRID_ROW_GAP = 24.dp
 
 @Composable
 fun SpendingConfirmScreen(
@@ -81,6 +80,7 @@ fun SpendingConfirmScreen(
     onFundingPending: (OnchainSendAttempt) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val currency = currencyViewModel
 
     BackHandler(enabled = state.isSending) {}
 
@@ -104,6 +104,7 @@ fun SpendingConfirmScreen(
             onBackClick = { if (!state.isSending) onBackClick() },
             onLearnMoreClick = { if (!state.isSending) onLearnMoreClick() },
             onSpeedChange = viewModel::onSpeedChange,
+            onFeesClick = { currency?.switchUnit() },
             onConfirm = viewModel::onConfirm,
         )
         AnimatedVisibility(
@@ -125,9 +126,9 @@ private fun Content(
     onBackClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onSpeedChange: (SparkClaimSpeed) -> Unit = {},
+    onFeesClick: () -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
-    val swipeProgress = remember { mutableFloatStateOf(0f) }
     val quote = state.quote
 
     ScreenColumn {
@@ -159,13 +160,13 @@ private fun Content(
                     )
                     VerticalSpacer(8.dp)
 
-                    SpendingFeeGrid(quote = quote, speed = state.speed)
+                    SpendingFeeGrid(quote = quote, speed = state.speed, onClick = onFeesClick)
 
-                    VerticalSpacer(16.dp)
+                    VerticalSpacer(24.dp)
 
                     SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
 
-                    VerticalSpacer(16.dp)
+                    VerticalSpacer(24.dp)
 
                     PrimaryButton(
                         text = stringResource(R.string.common__learn_more),
@@ -174,22 +175,7 @@ private fun Content(
                         onClick = onLearnMoreClick,
                         modifier = Modifier.testTag("SpendingConfirmMore")
                     )
-
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.coin_stack_x),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .padding(horizontal = 44.dp, vertical = 8.dp)
-                                .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
-                        )
-                    }
+                    VerticalSpacer(16.dp)
                 }
             }
 
@@ -200,7 +186,6 @@ private fun Content(
                 confirmed = state.isSending,
                 enabled = canConfirm,
                 color = Colors.Purple,
-                progress = swipeProgress,
                 onConfirm = { if (canConfirm) onConfirm() },
             )
             VerticalSpacer(16.dp)
@@ -209,13 +194,24 @@ private fun Content(
 }
 
 /**
- * The four fee tiles of a transfer to spending, at the selected claim [speed]. The claim fee is an estimate at either
- * speed, so the tiles that come from it, Spending fee and To spending, show `±`; Network fees and Total are exact.
+ * The four fee tiles of a transfer to spending, at the selected claim [speed], plus the deposit [address] a hardware
+ * wallet confirms on the device, with [rowGap] above each row after the first. With [onClick], a tap anywhere on the
+ * grid switches the amounts between bitcoin and fiat.
  */
 @Composable
-internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        val estimatePrefix = stringResource(R.string.lightning__spending_confirm__about)
+internal fun SpendingFeeGrid(
+    quote: Quote?,
+    speed: SparkClaimSpeed,
+    modifier: Modifier = Modifier,
+    address: String? = null,
+    rowGap: Dp = FEE_GRID_ROW_GAP,
+    onClick: (() -> Unit)? = null,
+) {
+    Column(
+        modifier = modifier
+            .clickableAlpha(onClick = onClick)
+            .testTag("SpendingConfirmFees")
+    ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
@@ -226,10 +222,9 @@ internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Mo
                 modifier = Modifier.testTag("SpendingConfirmNetworkFee")
             )
             FeeInfo(
-                label = stringResource(R.string.lightning__spending_confirm__spending_fee),
+                label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
                 amount = quote?.claimFeeSats(speed) ?: 0,
-                prefix = estimatePrefix,
-                modifier = Modifier.testTag("SpendingConfirmSpendingFee")
+                modifier = Modifier.testTag("SpendingConfirmServiceFee")
             )
         }
         Row(
@@ -239,19 +234,33 @@ internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Mo
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__amount),
                 amount = quote?.toSpendingSats(speed) ?: 0,
-                prefix = estimatePrefix,
+                topPadding = rowGap,
                 modifier = Modifier.testTag("SpendingConfirmAmount")
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__total),
                 amount = quote?.totalSats ?: 0,
+                topPadding = rowGap,
                 modifier = Modifier.testTag("SpendingConfirmTotal")
             )
+        }
+        if (address != null) {
+            Column(
+                modifier = Modifier
+                    .padding(top = rowGap)
+                    .testTag("SpendingConfirmAddress")
+            ) {
+                Caption13Up(text = stringResource(R.string.lightning__transfer_hw__address), color = Colors.White64)
+                VerticalSpacer(8.dp)
+                BodySSB(text = address, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                VerticalSpacer(16.dp)
+                HorizontalDivider()
+            }
         }
     }
 }
 
-/** The Instant and Later rows a transfer to spending picks its claim speed with. */
+/** The Fast and Normal rows a transfer to spending picks its claim speed with. */
 @Composable
 internal fun SpendingSpeedRows(
     quote: Quote?,
@@ -261,23 +270,22 @@ internal fun SpendingSpeedRows(
 ) {
     Column(modifier = modifier) {
         SpeedItem(
-            title = stringResource(R.string.fee__instant__title),
+            title = stringResource(R.string.fee__fast__title),
             description = stringResource(R.string.lightning__spending_confirm__instant_text),
-            feePrefix = stringResource(R.string.lightning__spending_confirm__about),
             feeSats = quote?.instantFeeSats,
+            feeCaption = stringResource(R.string.lightning__spending_confirm__fee_max),
             icon = R.drawable.ic_speed_fast,
-            iconColor = Colors.Purple,
             isSelected = speed == SparkClaimSpeed.Instant,
             onClick = { onSpeedChange(SparkClaimSpeed.Instant) },
             modifier = Modifier.testTag("SpendingConfirmInstant")
         )
+        HorizontalDivider()
         SpeedItem(
-            title = stringResource(R.string.common__later),
-            description = stringResource(R.string.lightning__spending_confirm__later_text),
-            feePrefix = stringResource(R.string.lightning__spending_confirm__about),
+            title = stringResource(R.string.fee__normal__title),
+            description = stringResource(R.string.lightning__spending_confirm__normal_text),
             feeSats = quote?.laterFeeSats,
-            icon = R.drawable.ic_speed_normal,
-            iconColor = Colors.Purple,
+            feeCaption = stringResource(R.string.lightning__spending_confirm__fee_est),
+            icon = R.drawable.ic_clock,
             isSelected = speed == SparkClaimSpeed.Later,
             onClick = { onSpeedChange(SparkClaimSpeed.Later) },
             modifier = Modifier.testTag("SpendingConfirmLater")
@@ -289,50 +297,47 @@ internal fun SpendingSpeedRows(
 private fun SpeedItem(
     title: String,
     description: String,
-    feePrefix: String,
     feeSats: Long?,
+    feeCaption: String,
     @DrawableRes icon: Int,
-    iconColor: Color,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.clickableAlpha(onClick = onClick)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .then(if (isSelected) Modifier.background(Colors.White06) else Modifier)
-                .padding(horizontal = 16.dp)
-                .heightIn(min = 72.dp)
-                .padding(vertical = 8.dp)
-        ) {
-            Icon(
-                painter = painterResource(icon),
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(32.dp),
-            )
-            HorizontalSpacer(16.dp)
-            // The text wraps, so the fee keeps its lines at the end of the row.
-            Column(modifier = Modifier.weight(1f)) {
-                BodyMSB(title, color = MaterialTheme.colorScheme.primary)
-                BodySSB(description, color = MaterialTheme.colorScheme.secondary)
-            }
-            if (feeSats != null) {
-                HorizontalSpacer(8.dp)
-                Column(horizontalAlignment = Alignment.End) {
-                    Row {
-                        BodyMSB("$feePrefix ", color = Colors.White64)
-                        MoneyMSB(sats = feeSats, showSymbol = true)
-                    }
-                    Row {
-                        BodySSB("$feePrefix ", color = Colors.White64)
-                        MoneySSB(sats = feeSats, unit = LocalCurrencies.current.primaryDisplay.not(), showSymbol = true)
-                    }
-                }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clickableAlpha(onClick = onClick)
+            .semantics { selected = isSelected }
+            .padding(vertical = 16.dp)
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = Colors.Purple,
+            modifier = Modifier.size(32.dp),
+        )
+        HorizontalSpacer(16.dp)
+        Column(modifier = Modifier.weight(1f)) {
+            BodyMSB(title, color = MaterialTheme.colorScheme.primary)
+            BodySSB(description, color = MaterialTheme.colorScheme.secondary)
+        }
+        if (feeSats != null) {
+            HorizontalSpacer(12.dp)
+            Column(horizontalAlignment = Alignment.End) {
+                MoneyMSB(sats = feeSats, showSymbol = true)
+                BodySSB(feeCaption, color = Colors.White64)
             }
         }
-        HorizontalDivider()
+        HorizontalSpacer(12.dp)
+        Icon(
+            painter = painterResource(R.drawable.ic_checkmark),
+            contentDescription = null,
+            tint = Colors.Purple,
+            modifier = Modifier
+                .size(22.dp)
+                .alpha(if (isSelected) 1f else 0f)
+        )
     }
 }
 
@@ -345,17 +350,17 @@ private val previewQuote = Quote(
     spendableSats = 158_234,
 )
 
-@Preview(showSystemUi = true, showBackground = true, name = "Instant")
+@Preview(showSystemUi = true, showBackground = true, name = "Fast")
 @Composable
-private fun PreviewInstant() {
+private fun PreviewFast() {
     AppThemeSurface {
         Content(state = UiState(amountSats = 50_000, quote = previewQuote))
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true, name = "Later")
+@Preview(showSystemUi = true, showBackground = true, name = "Normal")
 @Composable
-private fun PreviewLater() {
+private fun PreviewNormal() {
     AppThemeSurface {
         Content(state = UiState(amountSats = 50_000, quote = previewQuote, speed = SparkClaimSpeed.Later))
     }

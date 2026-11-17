@@ -336,18 +336,15 @@
     <string name="lightning__spending_confirm__fees_changed_network">Le commissioni sono aumentate di {amount} perché i tassi di commissione o il saldo dei tuoi risparmi sono cambiati mentre eri su questa schermata. Scorri di nuovo per confermare.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Commissioni cambiate</string>
     <string name="lightning__spending_confirm__instant_text">Pronto in pochi minuti</string>
-    <string name="lightning__spending_confirm__later_text">Dopo 3 conferme, circa 30 minuti</string>
     <string name="lightning__spending_confirm__lsp_fee">Commissioni servizio</string>
     <string name="lightning__spending_confirm__network_fee">Commissioni rete</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit non è riuscito a ottenere le commissioni attuali per questo trasferimento. Controlla la connessione e riprova.</string>
     <string name="lightning__spending_confirm__quote_error_title">Commissioni non disponibili</string>
-    <string name="lightning__spending_confirm__spending_fee">Commissione di spesa</string>
     <string name="lightning__spending_confirm__total">Totale</string>
     <string name="lightning__spending_intro__button">Inizia</string>
     <string name="lightning__spending_intro__text">Trasferisci fondi al tuo conto di spesa per usufruire di transazioni istantanee ed economiche con amici, familiari e commercianti.</string>
     <string name="lightning__spending_intro__title">Trasferisci\n&lt;accent&gt;alle spese&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Conto di spesa</string>
-    <string name="lightning__spending_learn_more__text">Istantanea paga il fornitore per aggiungere il tuo trasferimento al conto di spesa prima della conferma, di solito in pochi minuti.\n\nPiù tardi attende 3 conferme, circa 30 minuti, con una commissione più bassa.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Stato</string>
     <string name="lightning__support">Supporto</string>
@@ -362,7 +359,6 @@
     <string name="lightning__transfer_hw__open_connect">Apri Trezor Connect</string>
     <string name="lightning__transfer_in_progress">TRASFERIMENTO IN CORSO</string>
     <string name="lightning__transfer_intro__button">Inizia</string>
-    <string name="lightning__transfer_intro__text">Manda fondi al tuo conto di spesa per usufruire di transazioni istantanee ed economiche con amici, familiari e commercianti.</string>
     <string name="lightning__transfer_intro__title">Conto\n&lt;accent&gt;di Spesa&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">Trasferimento Riuscito</string>
     <string name="lightning__transfer_success__text_savings">I tuoi fondi sono stati trasferiti. Puoi utilizzare questi fondi immediatamente.</string>
