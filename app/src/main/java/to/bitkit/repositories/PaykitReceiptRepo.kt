@@ -169,7 +169,7 @@ class PaykitReceiptRepo @Inject constructor(
 
         val issued = issuedViews()
         found
-            .filter { issued[it.receiptId]?.status != ReceiptIssuanceStatus.ACCESS_QUEUED }
+            .filter { issued[it.receiptId]?.status.needsIssuing() }
             .filter { it.receiptId !in attemptedReceiptIds }
             .forEach {
                 issue(it, currentIdentity)
@@ -191,20 +191,20 @@ class PaykitReceiptRepo @Inject constructor(
     /** Returns false when it could not read the issued receipts and left the statuses as they were. */
     private suspend fun publish(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String): Boolean {
         var views = readIssuedViews() ?: return false
-        val undelivered = found.filter { deliveryOf(it, views, expectedIdentity) != true }
+        val queued = found.filter {
+            views[it.receiptId]?.status == ReceiptIssuanceStatus.ACCESS_QUEUED && !isSent(it, views, expectedIdentity)
+        }
         var unreachable = emptyList<String>()
-        if (undelivered.isNotEmpty()) {
-            unreachable = drain(undelivered, views, expectedIdentity)
+        if (queued.isNotEmpty()) {
+            unreachable = drain(queued, expectedIdentity)
             views = readIssuedViews() ?: return false
         }
         val updated = mutableMapOf<String, PaykitReceiptStatus>()
         found.forEach { candidate ->
-            val sent = deliveryOf(candidate, views, expectedIdentity)
             val reachable = unreachable.none { PubkyPublicKeyFormat.matches(it, candidate.counterparty) }
             val status = when {
-                sent == true -> PaykitReceiptStatus.Sent
+                isSent(candidate, views, expectedIdentity) -> PaykitReceiptStatus.Sent
                 views[candidate.receiptId]?.status != ReceiptIssuanceStatus.ACCESS_QUEUED -> PaykitReceiptStatus.Failed
-                sent == false -> PaykitReceiptStatus.Failed
                 !reachable -> PaykitReceiptStatus.Failed
                 else -> PaykitReceiptStatus.Sending
             }
@@ -215,38 +215,30 @@ class PaykitReceiptRepo @Inject constructor(
         return true
     }
 
-    private suspend fun deliveryOf(
+    private suspend fun isSent(
         candidate: PaykitReceiptCandidate,
         views: Map<String, ReceiptIssuanceView>,
         identity: String,
-    ): Boolean? = outboundDeliveryStore.deliveryOf(
-        identity = identity,
-        receiptId = candidate.receiptId,
-        messageId = views[candidate.receiptId]?.outboundMessageId,
-    )
+    ): Boolean {
+        if (views[candidate.receiptId]?.status == ReceiptIssuanceStatus.ACCESS_SENT) {
+            outboundDeliveryStore.markSent(identity, candidate.receiptId)
+            return true
+        }
+        return outboundDeliveryStore.isSent(identity, candidate.receiptId)
+    }
 
-    /**
-     * Drains each counterparty's queue and marks its receipts sent right after, before a later drain can prune the
-     * evidence. Returns the counterparties that could not be reached.
-     */
-    private suspend fun drain(
-        found: Collection<PaykitReceiptCandidate>,
-        views: Map<String, ReceiptIssuanceView>,
-        expectedIdentity: String,
-    ): List<String> {
+    /** Drains each counterparty's queue. Returns the counterparties that could not be reached. */
+    private suspend fun drain(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String): List<String> {
         val counterparties = found.map { it.counterparty }
             .fold(emptyList<String>()) { acc, key ->
                 if (acc.any { PubkyPublicKeyFormat.matches(it, key) }) acc else acc + key
             }
         return counterparties.filter { counterparty ->
-            val failed = runSuspendCatching {
+            runSuspendCatching {
                 paykitSdkService.processOutboundPrivateMessages(counterparty, Priority.Background, expectedIdentity)
             }.onFailure {
                 Logger.warn("Failed to send Paykit receipt access", it, context = TAG)
             }.isFailure
-            found.filter { PubkyPublicKeyFormat.matches(it.counterparty, counterparty) }
-                .forEach { deliveryOf(it, views, expectedIdentity) }
-            failed
         }
     }
 
@@ -325,4 +317,14 @@ class PaykitReceiptRepo @Inject constructor(
         usdtPayments.get().receipts.value
             .filter { it.verified && !it.beforeRequest && PubkyPublicKeyFormat.matches(it.identity, currentIdentity) }
             .map { PaykitVerifiedUsdtReceive(it.requestId, it.proofEventId, it.transferId, it.amount) }
+}
+
+/** Not yet stored or queued, or that attempt failed: issuing again resumes the same issuance. */
+private fun ReceiptIssuanceStatus?.needsIssuing(): Boolean = when (this) {
+    null, ReceiptIssuanceStatus.PENDING_STORAGE, ReceiptIssuanceStatus.STORED, ReceiptIssuanceStatus.FAILED -> true
+    ReceiptIssuanceStatus.ACCESS_QUEUED,
+    ReceiptIssuanceStatus.ACCESS_SENT,
+    ReceiptIssuanceStatus.ACCESS_FAILED,
+    ReceiptIssuanceStatus.UNKNOWN,
+    -> false
 }

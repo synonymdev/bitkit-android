@@ -8,6 +8,9 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.ReceiptIssuanceStatus
+import com.synonym.paykit.ReceiptIssuanceStatus.ACCESS_FAILED
+import com.synonym.paykit.ReceiptIssuanceStatus.ACCESS_QUEUED
+import com.synonym.paykit.ReceiptIssuanceStatus.ACCESS_SENT
 import com.synonym.paykit.ReceiptIssuanceView
 import dagger.Lazy
 import kotlinx.coroutines.CompletableDeferred
@@ -51,7 +54,8 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val usdtPayments = mock<PaykitUsdtPaymentRepo>()
     private val delivery = mock<PaykitOutboundDeliveryStore>()
-    private val outcomes = mutableMapOf<ULong, Boolean>()
+    private val sentIds = mutableSetOf<String>()
+    private val accessStatus = mutableMapOf<String, ReceiptIssuanceStatus>()
     private val issued = mutableMapOf<String, ReceiptIssuanceView>()
     private var drainOutcome: Boolean? = true
 
@@ -90,19 +94,24 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
         }
         whenever(usdtPayments.receipts).thenReturn(MutableStateFlow(emptyList()))
         whenever(sdk.issuedReceipts(any())).doSuspendableAnswer { issued.values.toList() }
-        whenever(delivery.deliveryOf(eq(SELLER), any(), anyOrNull()))
-            .doSuspendableAnswer { outcomes[it.arguments[2] as ULong?] }
+        whenever(delivery.isSent(eq(SELLER), any())).doSuspendableAnswer { it.getArgument<String>(1) in sentIds }
+        whenever(delivery.markSent(eq(SELLER), any())).doSuspendableAnswer { sentIds += it.getArgument<String>(1) }
         whenever(sdk.processOutboundPrivateMessages(eq(BUYER), eq(Priority.Background), eq(SELLER)))
             .doSuspendableAnswer {
-                drainOutcome?.let { outcomes[MESSAGE_ID] = it }
+                drainOutcome?.let { sent -> deliverAll(if (sent) ACCESS_SENT else ACCESS_FAILED) }
                 mock<OutboundPrivateSendReport>()
             }
     }
 
+    private fun deliverAll(status: ReceiptIssuanceStatus) {
+        accessStatus.replaceAll { _, current -> if (current == ACCESS_QUEUED) status else current }
+    }
+
     private fun queue(candidate: PaykitReceiptCandidate): ReceiptIssuanceView {
+        accessStatus.putIfAbsent(candidate.receiptId, ACCESS_QUEUED)
         val view = mock<ReceiptIssuanceView> {
             on { receiptId }.thenReturn(candidate.receiptId)
-            on { status }.thenReturn(ReceiptIssuanceStatus.ACCESS_QUEUED)
+            on { status }.thenAnswer { accessStatus.getValue(candidate.receiptId) }
             on { outboundMessageId }.thenReturn(MESSAGE_ID)
         }
         issued[candidate.receiptId] = view
@@ -190,7 +199,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `receipt stays sending until a drain reports its message sent`() = test {
+    fun `receipt stays sending while its access is queued`() = test {
         stubPaidRequest()
         drainOutcome = null
         whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
@@ -201,7 +210,7 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `receipt fails when its message fails to send`() = test {
+    fun `receipt fails when the sdk reports its access failed`() = test {
         stubPaidRequest()
         drainOutcome = false
         whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
@@ -231,10 +240,36 @@ class PaykitReceiptRepoTest : BaseUnitTest() {
         whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
         sut.reconcile()
 
-        outcomes[MESSAGE_ID] = true
+        deliverAll(ACCESS_SENT)
         sut.reconcile()
 
         assertEquals(mapOf(HASH to PaykitReceiptStatus.Sent), sut.statuses.value)
+        verify(delivery).markSent(eq(SELLER), any())
+    }
+
+    @Test
+    fun `sent receipt is not issued again`() = test {
+        stubPaidRequest()
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer { queue(it.getArgument(0)) }
+        sut.reconcile()
+
+        PaykitReceiptRepo(testDispatcher, sdk, activityRepo, Lazy { usdtPayments }, delivery).reconcile()
+
+        verify(sdk, times(1)).issueReceipt(any(), eq(SELLER), any())
+    }
+
+    @Test
+    fun `restored receipt the backup marks sent stays sent without a drain`() = test {
+        stubPaidRequest()
+        drainOutcome = null
+        whenever(sdk.issueReceipt(any(), eq(SELLER), any())).doSuspendableAnswer {
+            queue(it.getArgument(0)).also { view -> sentIds += view.receiptId }
+        }
+
+        sut.reconcile()
+
+        assertEquals(mapOf(HASH to PaykitReceiptStatus.Sent), sut.statuses.value)
+        verify(sdk, never()).processOutboundPrivateMessages(any(), any(), any())
     }
 
     @Test
