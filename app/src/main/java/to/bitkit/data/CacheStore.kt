@@ -175,16 +175,24 @@ class CacheStore internal constructor(
     }
 
     /**
-     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds, and
-     * when it was sent, [sentAt], once known.
+     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds, with
+     * when it was sent, [sentAt], and Spark's ids of the invoice's earlier attempts, [earlierIds], once known.
      */
-    suspend fun addSparkUncertainSend(paymentHash: String, failedAt: Long, sentAt: Long? = null) {
+    suspend fun addSparkUncertainSend(
+        paymentHash: String,
+        failedAt: Long,
+        sentAt: Long? = null,
+        earlierIds: Set<String>? = null,
+    ) {
         val hash = paymentHash.lowercase()
         store.updateData {
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt),
                 sparkUncertainSendStarts = sentAt?.let { start -> it.sparkUncertainSendStarts + (hash to start) }
                     ?: it.sparkUncertainSendStarts,
+                sparkUncertainSendEarlierIds = earlierIds
+                    ?.let { ids -> it.sparkUncertainSendEarlierIds + (hash to ids.sorted()) }
+                    ?: it.sparkUncertainSendEarlierIds,
             )
         }
     }
@@ -196,6 +204,7 @@ class CacheStore internal constructor(
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends - hash,
                 sparkUncertainSendStarts = it.sparkUncertainSendStarts - hash,
+                sparkUncertainSendEarlierIds = it.sparkUncertainSendEarlierIds - hash,
             )
         }
     }
@@ -394,6 +403,11 @@ data class AppCacheData(
      * attempt's after a restart. Sends kept before this was have none.
      */
     val sparkUncertainSendStarts: Map<String, Long> = mapOf(),
+    /**
+     * Spark's payment ids of each of those sends' earlier attempts, read before it went out, so only those attempts'
+     * failures read as earlier ones. Absent where Spark couldn't list them.
+     */
+    val sparkUncertainSendEarlierIds: Map<String, List<String>> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.
