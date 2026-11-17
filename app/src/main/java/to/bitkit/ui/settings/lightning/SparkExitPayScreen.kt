@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -19,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
@@ -53,12 +55,22 @@ fun SparkExitPayScreen(
         requestNotifications()
         viewModel.start()
     }
-    Content(uiState = uiState, onBack = onBack)
+    Content(
+        uiState = uiState,
+        canRetry = hasAutoStarted && uiState.canContinueFunding && !uiState.isStarting,
+        onRetry = {
+            requestNotifications()
+            viewModel.start()
+        },
+        onBack = onBack,
+    )
 }
 
 @Composable
 private fun Content(
     uiState: SparkExitUiState,
+    canRetry: Boolean = false,
+    onRetry: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     ScreenColumn {
@@ -93,6 +105,14 @@ private fun Content(
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            if (canRetry) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__try_again),
+                    onClick = onRetry,
+                    modifier = Modifier.testTag("SparkExitPayRetry")
+                )
+                VerticalSpacer(16.dp)
+            }
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
                 onClick = onBack,
