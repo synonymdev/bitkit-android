@@ -39,7 +39,6 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
-import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
@@ -137,7 +136,10 @@ private fun SparkExitAmountRow(label: String, sats: ULong) {
             .height(50.dp)
     ) {
         CaptionB(text = label, modifier = Modifier.weight(1f))
-        MoneyCaptionB(sats = sats.toLong(), symbol = true)
+        // Always in bitcoin, with no exchange rate needed: the user may have to send exactly this amount.
+        val amount = rememberMoneyText(sats.toLong(), unit = PrimaryDisplay.BITCOIN, showSymbol = true)
+            ?: "<accent>$BITCOIN_SYMBOL</accent> ${sats.formatToModernDisplay()}"
+        CaptionB(text = amount.withAccent(accentColor = Colors.White64))
     }
     HorizontalDivider()
 }
