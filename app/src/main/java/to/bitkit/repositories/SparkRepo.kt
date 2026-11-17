@@ -1800,13 +1800,14 @@ class SparkRepo @Inject constructor(
         // The event carries its outcome, so a failed balance read never holds back its settlement.
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
-        recordActivity(payment, settlesJournal = false)
         // An earlier attempt's failure can arrive after a retry of its invoice went uncertain, and ends nothing of the
-        // retry's: Spark may still finish it, so its hold stays until the expiry rule of trySettleUncertainSend.
+        // retry's: Spark may still finish it, so its hold and its Activity row stay until the expiry rule of
+        // trySettleUncertainSend.
         if (payment.isEarlierFailureOfUncertainSend()) {
             Logger.info("Kept uncertain Spark send '${payment.sendHash()}' held past an older failure", context = TAG)
             return
         }
+        recordActivity(payment, settlesJournal = false)
         // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
         payment.sendHash()?.let {
             uncertainSends.remove(it.lowercase())

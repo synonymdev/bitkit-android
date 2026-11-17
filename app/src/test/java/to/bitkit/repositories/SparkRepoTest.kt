@@ -56,6 +56,7 @@ import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.clearInvocations
@@ -3579,6 +3580,9 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertTrue(events.none { it is Event.PaymentFailed }, "an older failure ended a send Spark may finish")
         assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
     }
 
     @Test
