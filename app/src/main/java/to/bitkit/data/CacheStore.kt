@@ -175,8 +175,8 @@ class CacheStore internal constructor(
     }
 
     /**
-     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds, with
-     * when it was sent, [sentAt], and Spark's ids of the invoice's earlier attempts, [earlierIds], once known.
+     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds,
+     * with when it was sent, [sentAt], and Spark's ids of the invoice's earlier attempts, [earlierIds], once known.
      */
     suspend fun addSparkUncertainSend(
         paymentHash: String,

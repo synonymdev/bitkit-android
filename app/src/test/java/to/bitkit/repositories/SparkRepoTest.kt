@@ -3644,8 +3644,8 @@ class SparkRepoTest : BaseUnitTest() {
         }
 
     /**
-     * Sends a retry whose outcome stays unknown, with Spark listing [listedBeforeSend] before it goes out (null while it
-     * never synced, so it can't list), then delivers [failure]; true when the retry stays held.
+     * Sends a retry whose outcome stays unknown, with Spark listing [listedBeforeSend] before it goes out (null while
+     * it never synced, so it can't list), then delivers [failure]; true when the retry stays held.
      */
     private suspend fun TestScope.retryHeldAfter(listedBeforeSend: List<Payment>?, failure: Payment): Boolean {
         whenever(sparkService.isSupported).thenReturn(true)
