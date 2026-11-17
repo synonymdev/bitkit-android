@@ -21,8 +21,11 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.LdkError
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -40,6 +43,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     private val lightningState = MutableStateFlow(LightningState())
     private val nodeEvents = MutableSharedFlow<Event>()
     private val inFlight = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash", paymentId = "id")
+    private val cacheStore = CacheStore(InMemoryDataStore(AppCacheData()))
+    private val quote = MoveToSparkQuote(INVOICE, amountSats = 50_000uL, feeSats = 12uL)
     private lateinit var sut: MoveToSparkRepo
 
     @Before
@@ -47,8 +52,10 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(sparkRepo.state).thenReturn(sparkState)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
-        sut = MoveToSparkRepo(testDispatcher, lightningRepo, sparkRepo)
+        sut = createSut()
     }
+
+    private fun createSut() = MoveToSparkRepo(testDispatcher, lightningRepo, sparkRepo, cacheStore) { "hash" }
 
     private fun sendable(sats: ULong) {
         val channel = createChannelDetails().copy(isUsable = true, nextOutboundHtlcLimitMsat = sats * 1000uL)
@@ -221,6 +228,52 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(nodeSend(PaymentStatus.FAILED)))
 
         assertIs<MoveToSparkError.PaymentFailed>(sut.awaitSettled(inFlight).exceptionOrNull())
+    }
+
+    @Test
+    fun `move pays over the channels capped at the quoted fee and reports the fee paid`() = test {
+        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        val moving = async { sut.move(quote) }
+
+        nodeEvents.emit(Event.PaymentSuccessful("other", "other_hash", null, 1_000uL))
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), moving.await().getOrThrow())
+        verify(lightningRepo).payInvoiceOverLdk(
+            bolt11 = INVOICE,
+            paymentHash = "hash",
+            sats = 50_000uL,
+            maxTotalRoutingFeeMsat = 12_000uL,
+        )
+    }
+
+    @Test
+    fun `move matches a failure without its hash by the payment id`() = test {
+        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        val moving = async { sut.move(quote) }
+
+        nodeEvents.emit(Event.PaymentFailed("other", null, PaymentFailureReason.ROUTE_NOT_FOUND))
+        nodeEvents.emit(Event.PaymentFailed("id", null, PaymentFailureReason.PAYMENT_EXPIRED))
+
+        val error = assertIs<MoveToSparkError.PaymentFailed>(moving.await().exceptionOrNull())
+        assertEquals(PaymentFailureReason.PAYMENT_EXPIRED, error.reason)
+    }
+
+    @Test
+    fun `move reports a payment without an outcome in time as in flight`() = test {
+        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        // Nothing settles it, so the virtual clock runs to the end of the wait.
+        assertEquals(inFlight, sut.move(quote).getOrThrow())
+        assertTrue(sut.isWatchedMovePayment("hash").not(), "a move no one waits on still mutes the app's notices")
+    }
+
+    @Test
+    fun `a move's payment stays a move after a restart`() = test {
+        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).thenReturn(Result.success("id"))
+        sut.move(quote)
+
+        assertTrue(createSut().isMovePayment("HASH"), "a restart forgot the move's payment")
+        assertTrue(!createSut().isMovePayment("other"))
     }
 
     private fun nodeSend(status: PaymentStatus) = PaymentDetails(

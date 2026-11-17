@@ -16,6 +16,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -35,10 +36,12 @@ import kotlin.time.Duration.Companion.minutes
  * channels only. Blocktank is closing its channels, and this is the cheapest way to keep the balance in Spending.
  */
 @Singleton
-class MoveToSparkRepo @Inject constructor(
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+class MoveToSparkRepo internal constructor(
+    private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val sparkRepo: SparkRepo,
+    private val cacheStore: CacheStore,
+    private val paymentHashOf: (bolt11: String) -> String,
 ) {
     companion object {
         private const val TAG = "MoveToSparkRepo"
@@ -54,12 +57,23 @@ class MoveToSparkRepo @Inject constructor(
             setOf(PaymentFailureReason.ROUTE_NOT_FOUND, PaymentFailureReason.RETRIES_EXHAUSTED)
     }
 
-    private val ownPaymentHashes = ConcurrentHashMap.newKeySet<String>()
+    @Inject
+    constructor(
+        @BgDispatcher bgDispatcher: CoroutineDispatcher,
+        lightningRepo: LightningRepo,
+        sparkRepo: SparkRepo,
+        cacheStore: CacheStore,
+    ) : this(bgDispatcher, lightningRepo, sparkRepo, cacheStore, { Bolt11Invoice.fromStr(it).paymentHash() })
+
     private val watchedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
     private val reportedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
-    /** Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments. */
-    fun isMovePayment(paymentHash: String): Boolean = paymentHash in ownPaymentHashes
+    /**
+     * Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments; also one
+     * from before a restart.
+     */
+    suspend fun isMovePayment(paymentHash: String): Boolean =
+        paymentHash.lowercase() in cacheStore.data.first().moveToSparkHashes
 
     /**
      * Whether the move screen waits on [paymentHash] or already reported its outcome, so the app raises no failure
@@ -116,8 +130,8 @@ class MoveToSparkRepo @Inject constructor(
     /** Pays [quote] over the channels and waits for it to settle in Spark. */
     suspend fun move(quote: MoveToSparkQuote): Result<MoveToSparkOutcome> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val paymentHash = Bolt11Invoice.fromStr(quote.invoice).paymentHash()
-            ownPaymentHashes += paymentHash
+            val paymentHash = paymentHashOf(quote.invoice)
+            cacheStore.addMoveToSparkHash(paymentHash)
             watchedPaymentHashes += paymentHash
             try {
                 payAndWait(quote, paymentHash)

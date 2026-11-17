@@ -9,6 +9,8 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.repositories.LightningRepo
@@ -36,6 +38,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     private val secondMove = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash_2", paymentId = "id_2")
     private val firstSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
     private val secondSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
+    private val manager by lazy { MoveToSparkManager(testDispatcher, moveToSparkRepo, lightningRepo, walletRepo) }
 
     @Before
     fun setUp() {
@@ -99,9 +102,44 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         return sut
     }
 
-    private fun createViewModel() = MoveToSparkViewModel(
-        moveToSparkRepo = moveToSparkRepo,
-        lightningRepo = lightningRepo,
-        walletRepo = walletRepo,
-    )
+    @Test
+    fun `leaving the screen while a move runs keeps the move and shows it again`() = test {
+        val payment = CompletableDeferred<Result<MoveToSparkOutcome>>()
+        whenever(moveToSparkRepo.move(eq(quote))).doSuspendableAnswer { payment.await() }
+        createViewModel().move()
+
+        manager.reset()
+        val reopened = createViewModel()
+        assertEquals(MoveToSparkUiState.Confirm(quote, isMoving = true), reopened.uiState.value)
+
+        payment.complete(Result.success(moved))
+
+        assertEquals(MoveToSparkUiState.Done(moved, closeChannelId = null), reopened.uiState.value)
+        verify(moveToSparkRepo, times(1)).quote(anyOrNull())
+    }
+
+    @Test
+    fun `leaving the screen while a move is in flight keeps waiting for its outcome`() = test {
+        createViewModel().move()
+
+        manager.reset()
+        val reopened = createViewModel()
+        firstSettled.complete(Result.success(moved))
+
+        assertEquals(MoveToSparkUiState.Done(moved, closeChannelId = null), reopened.uiState.value)
+    }
+
+    @Test
+    fun `leaving the screen after a settled move quotes anew on return`() = test {
+        whenever(moveToSparkRepo.move(eq(quote))).thenReturn(Result.success(moved))
+        createViewModel().move()
+
+        manager.reset()
+        val reopened = createViewModel()
+
+        assertEquals(MoveToSparkUiState.Confirm(quote), reopened.uiState.value)
+        verify(moveToSparkRepo, times(2)).quote(anyOrNull())
+    }
+
+    private fun createViewModel() = MoveToSparkViewModel(manager)
 }
