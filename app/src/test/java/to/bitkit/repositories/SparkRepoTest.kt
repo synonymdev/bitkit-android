@@ -3799,6 +3799,35 @@ class SparkRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `an older attempt's failure during a spark retry's send keeps its hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        // Spark's send call is still running when the earlier attempt's failure arrives.
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
+        runCurrent()
+        val olderFailure = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(olderFailure))
+
+        sparkEvents.emit(SdkEvent.PaymentFailed(olderFailure))
+        runCurrent()
+
+        val cache = store.data.first()
+        assertTrue("hash" in cache.sparkUncertainSends, "an older failure dropped the in-flight send's hold")
+        assertTrue("hash" in cache.sparkSendHashes, "an older failure released the in-flight send's invoice")
+        assertTrue(events.none { it is Event.PaymentFailed }, "an older failure ended a send Spark may finish")
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
+    }
+
+    @Test
     fun `a cancelled spark retry stays held while spark lists only its older failure`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isConnected).thenReturn(true)

@@ -181,6 +181,9 @@ class SparkRepo @Inject constructor(
     /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
     private val sendsInFlight = ConcurrentHashMap<String, String>()
 
+    /** When each send still inside Spark's send call went out, in epoch seconds, by lowercase payment hash. */
+    private val inFlightSentAt = ConcurrentHashMap<String, ULong>()
+
     /** Counts sends recorded, so a listing drops a failed hash only when it was recorded before the listing. */
     private val sendRecords = AtomicLong()
     private val sendRecordedAt = ConcurrentHashMap<String, Long>()
@@ -556,6 +559,7 @@ class SparkRepo @Inject constructor(
             }
             val sentAt = clock.now().epochSeconds
             val sent = try {
+                inFlightSentAt[paymentHash.lowercase()] = sentAt.toULong()
                 sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
                 spending {
@@ -574,6 +578,7 @@ class SparkRepo @Inject constructor(
                     runSuspendCatching { sparkService.send(prepared) }
                 }
             } finally {
+                inFlightSentAt.remove(paymentHash.lowercase())
                 sendsInFlight.remove(paymentHash.lowercase())
             }
             val payment = sent.getOrElse {
@@ -1784,7 +1789,8 @@ class SparkRepo @Inject constructor(
 
     private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
-        val sentAt = uncertainSends[hash.lowercase()]?.sentAt ?: return false
+        val key = hash.lowercase()
+        val sentAt = uncertainSends[key]?.sentAt ?: inFlightSentAt[key] ?: return false
         return timestamp + RAIL_CLOCK_SKEW_SECONDS < sentAt
     }
 
