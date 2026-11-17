@@ -9751,7 +9751,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(Sheet.Send())
         advanceUntilIdle()
         sut.sendEffect.test {
-            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true))
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true, isNearbyRead = true))
             advanceUntilIdle()
             assertTrue(entered.isCompleted)
             sut.setSendEvent(SendEvent.EnterManually)
@@ -9780,11 +9780,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(Sheet.Send())
         advanceUntilIdle()
         sut.sendEffect.test {
-            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true))
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true, isNearbyRead = true))
             advanceUntilIdle()
             assertTrue(entered.isCompleted)
-            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true))
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true, isNearbyRead = true))
             advanceUntilIdle()
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `nfc read still decoding does not route after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input, isNearbyRead = true))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
             sut.setSendEvent(SendEvent.EnterManually)
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToAddress, awaitItem())

@@ -3318,7 +3318,7 @@ class AppViewModel @Inject constructor(
 
                         is SendEvent.AddressChange -> onAddressChange(it.value)
                         SendEvent.AddressReset -> resetAddressInput()
-                        is SendEvent.AddressContinue -> onAddressContinue(it.data, it.suppressQuickPay)
+                        is SendEvent.AddressContinue -> onAddressContinue(it.data, it.suppressQuickPay, it.isNearbyRead)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
                         is SendEvent.AmountMax -> onAmountMax(it.amount)
@@ -4060,7 +4060,7 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onAddressContinue(data: String, suppressQuickPay: Boolean) {
+    private fun onAddressContinue(data: String, suppressQuickPay: Boolean, isNearbyRead: Boolean) {
         clearActiveContactPaymentContext()
         val job = launchScan(
             source = ScanSource.ADDRESS_CONTINUE,
@@ -4068,9 +4068,10 @@ class AppViewModel @Inject constructor(
             routePubkyKeys = true,
             suppressQuickPay = suppressQuickPay,
         )
-        // Only a nearby read suppresses QuickPay here, so cancelling it never stops a payment in progress.
+        // A nearby read (NFC or Bluetooth) arrives on its own, so Enter Manually must be able to drop it.
+        // Its job ends once it routes, so cancelling it never stops a payment in progress.
         // A duplicate read returns no job; keep the handle of the scan still running.
-        if (suppressQuickPay) job?.let { nearbyAddressScanJob = it }
+        if (isNearbyRead) job?.let { nearbyAddressScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {
@@ -10507,7 +10508,11 @@ sealed interface SendEvent {
 
     data object AddressReset : SendEvent
     data class AddressChange(val value: String) : SendEvent
-    data class AddressContinue(val data: String, val suppressQuickPay: Boolean = false) : SendEvent
+    data class AddressContinue(
+        val data: String,
+        val suppressQuickPay: Boolean = false,
+        val isNearbyRead: Boolean = false,
+    ) : SendEvent
 
     data object AmountReset : SendEvent
     data object AmountContinue : SendEvent

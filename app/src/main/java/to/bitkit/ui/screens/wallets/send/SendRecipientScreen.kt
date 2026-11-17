@@ -111,7 +111,7 @@ fun SendRecipientScreen(
 
     val nearbySources = rememberNearbyScanSources(enabled = true) { text, isNearby ->
         Logger.debug("Read nearby request '${text.sanitizedQrLogValue()}'", context = TAG)
-        onEvent(SendEvent.AddressContinue(text, suppressQuickPay = isNearby))
+        onEvent(SendEvent.AddressContinue(text, suppressQuickPay = isNearby, isNearbyRead = true))
     }
 
     // Camera state
