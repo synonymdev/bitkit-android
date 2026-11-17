@@ -656,7 +656,8 @@ class SparkRepo @Inject constructor(
         // Spark keeps a send it committed but didn't finish in a cache no call exposes, and a sync that reached Spark
         // can still fail to resume it, so only an expired invoice shows a missing send will never go out.
         val isFinal = isSynced && clock.now().epochSeconds.toULong() >= uncertain.expiresAt
-        val send = listedLightningSend(paymentHash)
+        // The outcome and the payment its row is written from come from one read, so a later read can't miss it.
+        val (send, listed) = listedLightningSendPayment(paymentHash)
         val isSettled = when (send) {
             SparkLightningSend.NotFound -> isFinal
             // A failed row may be an earlier attempt's, so it is final only when a missing one would be.
@@ -679,25 +680,15 @@ class SparkRepo @Inject constructor(
             is SparkLightningSend.Found -> {
                 if (send.status == PaymentStatus.FAILED) {
                     cacheStore.removeSparkSendHash(paymentHash)
-                    recordHeldSend(paymentHash)
+                    // An earlier attempt's failure was skipped while the hold lasted; a failed write is retried at the
+                    // next refresh.
+                    listed?.let { recordActivity(it) }
                 }
                 settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
             }
             SparkLightningSend.Unavailable -> Unit
         }
         return true
-    }
-
-    /**
-     * Records Spark's listed send of [paymentHash] once its hold ended, as an earlier attempt's failure is skipped
-     * while the hold lasts; a failed write is retried at the next refresh.
-     */
-    private suspend fun recordHeldSend(paymentHash: String) {
-        runSuspendCatching { sparkService.listPayments() }
-            .onFailure { Logger.warn("Failed to list Spark payments for '$paymentHash'", it, context = TAG) }
-            .getOrNull()
-            ?.latestSend(paymentHash)
-            ?.let { recordActivity(it) }
     }
 
     /**
@@ -1525,16 +1516,22 @@ class SparkRepo @Inject constructor(
     }
 
     /** Spark's listed record of the Lightning send with [paymentHash], as [lightningSend] reads it before its holds. */
-    private suspend fun listedLightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
-        if (!sparkService.isSupported) return@withContext SparkLightningSend.NotFound
-        if (!canListPayments()) return@withContext SparkLightningSend.Unavailable
-        val payments = runSuspendCatching { sparkService.listPayments() }
-            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
-            .getOrElse { return@withContext SparkLightningSend.Unavailable }
-        payments.latestSend(paymentHash)
-            ?.let { SparkLightningSend.Found(it.status, (it.details as PaymentDetails.Lightning).htlcDetails.preimage) }
-            ?: SparkLightningSend.NotFound
-    }
+    private suspend fun listedLightningSend(paymentHash: String): SparkLightningSend =
+        listedLightningSendPayment(paymentHash).first
+
+    /** Spark's listed record of the Lightning send with [paymentHash] and the payment it was read from, in one read. */
+    private suspend fun listedLightningSendPayment(paymentHash: String): Pair<SparkLightningSend, Payment?> =
+        withContext(bgDispatcher) {
+            if (!sparkService.isSupported) return@withContext SparkLightningSend.NotFound to null
+            if (!canListPayments()) return@withContext SparkLightningSend.Unavailable to null
+            val payments = runSuspendCatching { sparkService.listPayments() }
+                .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+                .getOrElse { return@withContext SparkLightningSend.Unavailable to null }
+            val latest = payments.latestSend(paymentHash)
+                ?: return@withContext SparkLightningSend.NotFound to null
+            val preimage = (latest.details as PaymentDetails.Lightning).htlcDetails.preimage
+            SparkLightningSend.Found(latest.status, preimage) to latest
+        }
 
     /**
      * Spark's pending or paid send of [bolt11], matched by the invoice or its [paymentHash], so the node never pays it
@@ -1870,7 +1867,9 @@ class SparkRepo @Inject constructor(
         val key = hash.lowercase()
         val attempt = uncertainSends[key]?.attempt ?: inFlightAttempts[key] ?: return false
         attempt.earlierIds?.let { return id in it }
-        val sentAt = attempt.sentAt ?: return false
+        // A send kept before start times were stored can't tell its own failure from an earlier one, so it stays held
+        // until its invoice expires, when the expiry rule settles it and its row.
+        val sentAt = attempt.sentAt ?: return true
         return timestamp < sentAt + RAIL_CLOCK_SKEW_SECONDS
     }
 

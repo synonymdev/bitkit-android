@@ -3717,6 +3717,36 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send kept in doubt before start times were stored stays held past a failure`() = test {
+        val expiresAt = now.epochSeconds + 3_600
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to expiresAt),
+                    sparkUncertainSends = mapOf("hash" to now.epochSeconds),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+
+        // The failure may be its own or an earlier attempt's: without a start time, nothing tells them apart.
+        sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+        advanceUntilIdle()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "a send Spark may still finish was reported failed")
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+    }
+
+    @Test
     fun `an older attempt's failure after a restart keeps an uncertain spark retry held`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)
@@ -3877,6 +3907,56 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(events.any { it is Event.PaymentFailed }, "the expired retry was never reported failed")
+        verify(activityRepo, atLeastOnce()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
+        )
+    }
+
+    @Test
+    fun `an expired spark retry listed as failed writes its row from the read that ends its hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        val olderFailure = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(olderFailure))
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        )
+        val before = createSut(store)
+        before.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(before.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        runCurrent()
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL)
+        )
+        clearInvocations(activityRepo)
+        val restartedEvents = MutableSharedFlow<SdkEvent>()
+        whenever(sparkService.events).thenReturn(restartedEvents)
+        val after = createSut(store)
+        after.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { after.nodeEvents.collect { events += it } }
+        runCurrent()
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
+
+        // The invoice expires and Spark syncs, still listing only the older failure.
+        now += 2.hours
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong())
+        )
+        // Only the read that settles the hold reaches Spark; every other read of its list fails.
+        whenever { sparkService.listPayments() }.thenAnswer {
+            val isSettleRead = Thread.currentThread().stackTrace.any { it.className.contains("listedLightningSend") }
+            if (!isSettleRead) throw SdkException.Generic("operators unreachable")
+            listOf(olderFailure)
+        }
+        restartedEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
         verify(activityRepo, atLeastOnce()).upsertActivity(
             argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
         )
