@@ -560,7 +560,7 @@ class SparkRepo @Inject constructor(
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
                 spending {
                     // Kept until the call returns, so a send cut off by process death or cancellation stays held.
-                    cacheStore.addSparkUncertainSend(paymentHash, sentAt)
+                    cacheStore.addSparkUncertainSend(paymentHash, sentAt, sentAt)
                     // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
                     // are checked last, before the send.
                     runCatching {
@@ -1862,6 +1862,8 @@ class SparkRepo @Inject constructor(
     private suspend fun recordActivity(payment: Payment, settlesJournal: Boolean = true): Boolean {
         (payment.details as? PaymentDetails.Withdraw)?.let { return recordWithdrawal(payment, it, settlesJournal) }
         val lightning = payment.details as? PaymentDetails.Lightning ?: return true
+        // An earlier attempt's failure, listed or reported, leaves the row of a retry Spark may still finish.
+        if (payment.isEarlierFailureOfUncertainSend()) return true
         if (payment.status == PaymentStatus.PENDING && payment.paymentType == SparkPaymentType.RECEIVE) {
             return true
         }

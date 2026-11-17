@@ -3741,9 +3741,13 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.getInfo() }.thenReturn(
             info(0uL).copy(lastSyncError = syncError, lastSyncedAt = now.epochSeconds.toULong() + 1uL)
         )
+        clearInvocations(activityRepo)
         val after = createSut(store)
         after.start(0).getOrThrow()
 
+        verify(activityRepo, never()).upsertActivity(
+            argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+        )
         assertTrue("hash" in store.data.first().sparkSendHashes, "A restart released a retry Spark may resume")
         assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), after.lightningSend("hash"))
         assertEquals(EarlierSend.Pending("hash"), after.earlierLightningSend("lnbc1", "hash"))
@@ -3768,8 +3772,19 @@ class SparkRepoTest : BaseUnitTest() {
             whenever { sparkService.getInfo() }.thenReturn(
                 info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL)
             )
+            assertEquals(now.epochSeconds, store.data.first().sparkUncertainSendStarts["hash"])
+            clearInvocations(activityRepo)
+            // A new process: only the restarted repo hears Spark's events.
+            val restartedEvents = MutableSharedFlow<SdkEvent>()
+            whenever(sparkService.events).thenReturn(restartedEvents)
             val after = createSut(store)
             after.start(0).getOrThrow()
+            val events = mutableListOf<Event>()
+            backgroundScope.launch { after.nodeEvents.collect { events += it } }
+            runCurrent()
+            // The earlier attempt's failure arrives again as an event after the restart.
+            restartedEvents.emit(SdkEvent.PaymentFailed(sentPayment(fees = 0).copy(status = PaymentStatus.FAILED)))
+            advanceUntilIdle()
 
             assertEquals(
                 EarlierSend.Pending("hash"),
@@ -3777,6 +3792,10 @@ class SparkRepoTest : BaseUnitTest() {
                 "A restart released a retry Spark may resume to the node",
             )
             assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), after.lightningSend("hash"))
+            assertTrue(events.none { it is Event.PaymentFailed }, "an older failure ended a send Spark may finish")
+            verify(activityRepo, never()).upsertActivity(
+                argThat { this is Activity.Lightning && v1.status == PaymentState.FAILED }
+            )
         }
 
     @Test
