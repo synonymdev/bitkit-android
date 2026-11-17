@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
@@ -81,6 +82,9 @@ class MoveToSparkRepo internal constructor(
      */
     fun isWatchedMovePayment(paymentHash: String): Boolean =
         paymentHash in watchedPaymentHashes || paymentHash in reportedPaymentHashes
+
+    /** The payment hashes of the moves to Spark, so Activity shows each as a move rather than a payment. */
+    val moveHashes: Flow<Set<String>> = cacheStore.data.map { it.moveToSparkHashes.toSet() }.distinctUntilChanged()
 
     /** Whether the channels hold a balance worth moving to a usable Spark wallet. */
     val canMove: Flow<Boolean> = combine(lightningRepo.lightningState, sparkRepo.state) { lightning, spark ->

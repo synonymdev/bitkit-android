@@ -1508,6 +1508,7 @@
     <string name="wallet__activity_input">{count, plural, one {INPUT} other {INPUTS (#)}}</string>
     <string name="wallet__activity_invoice">Invoice</string>
     <string name="wallet__activity_invoice_note">Invoice note</string>
+    <string name="wallet__activity_move_to_spark">Move to Spark</string>
     <string name="wallet__activity_next_month">Next month</string>
     <string name="wallet__activity_no">No activity yet</string>
     <string name="wallet__activity_no_explain">Receive some funds to get started</string>

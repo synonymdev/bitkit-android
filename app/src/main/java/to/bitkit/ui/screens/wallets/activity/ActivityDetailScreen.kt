@@ -58,6 +58,7 @@ import to.bitkit.ext.contact
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
+import to.bitkit.ext.isMoveToSpark
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
@@ -180,6 +181,8 @@ fun ActivityDetailScreen(
                 val settings = settingsViewModel ?: return@Box
                 val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
                 val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+                val moveHashes by app.moveToSparkHashes.collectAsStateWithLifecycle(initialValue = emptySet())
+                val isMoveToSpark = item.isMoveToSpark(moveHashes)
                 val copyToastTitle = stringResource(R.string.common__copied)
 
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
@@ -232,10 +235,10 @@ fun ActivityDetailScreen(
                 ) {
                     AppTopBar(
                         titleText = stringResource(
-                            if (isCpfpChild) {
-                                R.string.wallet__activity_boost_fee
-                            } else {
-                                item.getScreenTitleRes()
+                            when {
+                                isCpfpChild -> R.string.wallet__activity_boost_fee
+                                isMoveToSpark -> R.string.wallet__activity_move_to_spark
+                                else -> item.getScreenTitleRes()
                             }
                         ),
                         onBackClick = onBackClick,
@@ -257,6 +260,7 @@ fun ActivityDetailScreen(
                         isCpfpChild = isCpfpChild,
                         isHardware = uiState.isHardwareActivity,
                         isSparkWithdrawal = isSparkWithdrawal,
+                        isMoveToSpark = isMoveToSpark,
                         showContactActions = isPaykitEnabled &&
                             (!uiState.isHardwareActivity || assignedContact != null),
                         boostTxDoesExist = boostTxDoesExist,
@@ -351,6 +355,7 @@ private fun ActivityDetailContent(
     isCpfpChild: Boolean = false,
     isHardware: Boolean = false,
     isSparkWithdrawal: Boolean = false,
+    isMoveToSpark: Boolean = false,
     showContactActions: Boolean = true,
     boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
@@ -428,6 +433,7 @@ private fun ActivityDetailContent(
                 size = 48.dp,
                 isCpfpChild = isCpfpChild,
                 isHardware = isHardware,
+                isMoveToSpark = isMoveToSpark,
             )
         }
 

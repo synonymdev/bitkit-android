@@ -8724,6 +8724,8 @@ class AppViewModel @Inject constructor(
     /** Receipt status by the payment's hash, txid or USDT transfer id, lowercase. */
     val paykitReceiptStatuses get() = paykitReceiptRepo.statuses
 
+    val moveToSparkHashes get() = moveToSparkRepo.moveHashes
+
     fun retryPaykitReceipt(paymentId: String) = viewModelScope.launch(bgDispatcher) {
         paykitReceiptRepo.retry(paymentId)
     }
