@@ -13,7 +13,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
@@ -23,10 +22,8 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberSubscriptionNotificationsRequest
-import to.bitkit.ui.utils.withAccent
-import to.bitkit.ui.utils.withAccentBoldBright
 
-/** The last look before the exit starts: what arrives and for how long the funds are out of reach. */
+/** The last look before the force transfer starts: what reaches savings and what savings pays for it. */
 @Composable
 fun SparkExitConfirmScreen(
     viewModel: SparkExitViewModel,
@@ -66,22 +63,19 @@ private fun Content(
                 .verticalScroll(rememberScrollState())
         ) {
             VerticalSpacer(32.dp)
-            Display(text = stringResource(R.string.lightning__spark_exit__confirm_title).withAccent())
-            BodyM(
-                text = stringResource(R.string.lightning__spark_exit__confirm_text).withAccentBoldBright(),
-                color = Colors.White64,
-            )
-            VerticalSpacer(32.dp)
+            Display(text = stringResource(R.string.lightning__spark_exit__confirm_title).withExitAccent())
+            VerticalSpacer(16.dp)
             uiState.quote?.let { SparkExitQuoteRows(it) }
-            uiState.savingsTotalSats?.let { total ->
-                uiState.savingsFeeSats?.let { fee -> SparkExitSavingsRows(fee, total) }
+            uiState.savingsTotalSats?.let {
+                VerticalSpacer(16.dp)
+                SparkExitFeesRow(stringResource(R.string.lightning__spark_exit__fees_savings), it)
             }
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__spark_exit__swipe),
-                color = Colors.Brand,
+                color = Colors.Yellow,
                 loading = uiState.isStarting,
                 enabled = uiState.quote != null && !uiState.isStarting,
                 onConfirm = onSwipe,

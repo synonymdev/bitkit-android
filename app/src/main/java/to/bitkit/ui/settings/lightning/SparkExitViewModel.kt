@@ -146,10 +146,14 @@ class SparkExitViewModel @Inject constructor(
      */
     fun onFundingShown() {
         stopWatchingFundingAddress()
-        _uiState.update { it.copy(fundFromSavings = false, showsFundingAddress = false) }
+        _uiState.update {
+            it.copy(fundFromSavings = false, showsFundingAddress = false, isReadingFundingAddress = true)
+        }
         viewModelScope.launch {
-            val seen = sparkExitRepo.refreshFundingAddress().getOrNull() ?: return@launch
-            if (seen > 0uL) onFundExternally()
+            val seen = sparkExitRepo.refreshFundingAddress().getOrNull()
+            _uiState.update {
+                it.copy(showsFundingAddress = seen != null && seen > 0uL, isReadingFundingAddress = false)
+            }
         }
     }
 
@@ -157,9 +161,9 @@ class SparkExitViewModel @Inject constructor(
         _uiState.update { it.copy(fundFromSavings = true) }
     }
 
-    fun onFundExternally() {
+    /** Another wallet pays: Pay to confirm watches the funding address from here on. */
+    fun onPayExternally() {
         _uiState.update { it.copy(fundFromSavings = false, showsFundingAddress = true) }
-        watchFundingAddress()
     }
 
     fun watchFundingAddress() {
@@ -178,6 +182,7 @@ class SparkExitViewModel @Inject constructor(
     }
 
     fun start() {
+        if (_uiState.value.isStarting) return
         viewModelScope.launch {
             _uiState.update { it.copy(isStarting = true) }
             sparkExitRepo.start(_uiState.value.fundFromSavings)
@@ -327,6 +332,8 @@ data class SparkExitUiState(
     val canFundFromSavings: Boolean = false,
     val fundFromSavings: Boolean = false,
     val showsFundingAddress: Boolean = false,
+    /** The funding step reads its address once on entry: a payment found there means another wallet pays. */
+    val isReadingFundingAddress: Boolean = false,
     val isStarting: Boolean = false,
     /** The exit started: whichever exit screen shows, also one the user went back to meanwhile, opens its progress. */
     val isStarted: Boolean = false,
@@ -362,13 +369,28 @@ data class SparkExitUiState(
     val savingsFundingSats: ULong
         get() = SparkExitMath.savingsFundingSats(fundingSats, fundingSeenCount, fundingSeenSats, fundingFeeRate ?: 0uL)
 
-    /** What leaves savings when it pays the fee funding: the funding and the fee of the payment that sends it. */
-    val savingsTotalSats: ULong?
+    /** What would leave savings to pay the fee funding: the funding and the fee of the payment that sends it. */
+    val savingsCostSats: ULong?
         get() {
-            val fundingSats = savingsFundingSats.takeIf { fundFromSavings && it > 0uL } ?: return null
+            val fundingSats = savingsFundingSats.takeIf { it > 0uL } ?: return null
             val feeSats = savingsFeeSats ?: return null
             return fundingSats.safe() + feeSats.safe()
         }
+
+    /** What leaves savings once the user goes on with savings paying the fee funding. */
+    val savingsTotalSats: ULong? get() = savingsCostSats.takeIf { fundFromSavings }
+
+    /** The fees screen waits to know who pays: the address read on entry, then savings' price. */
+    val isLoadingFees: Boolean get() = isReadingFundingAddress || (isPricingSavings && !showsFundingAddress)
+
+    /** Savings is still being priced for the fee funding. */
+    val isPricingSavings: Boolean get() = savingsFeeSats == null && !hasSavingsFeeFailed
+
+    /**
+     * Another wallet pays the emergency fees: once a payment reached the funding address, or when savings cannot
+     * cover them.
+     */
+    val paysExternally: Boolean get() = showsFundingAddress || (!isPricingSavings && !canFundFromSavings)
 
     /** Progress offers Pay a higher fee. */
     val canPayHigherFee: Boolean get() = record?.canPayHigherFee(tipHeight, networkFees) == true

@@ -44,13 +44,13 @@ class SparkExitViewModelTest : BaseUnitTest() {
     fun `entering the funding step again offers both choices while nothing was paid`() = test {
         whenever(repo.refreshFundingAddress()).thenReturn(Result.success(0uL))
         val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
-        sut.onFundExternally()
-        sut.stopWatchingFundingAddress()
+        sut.onPayExternally()
 
         sut.onFundingShown()
 
         assertFalse(sut.uiState.value.showsFundingAddress)
         assertFalse(sut.uiState.value.fundFromSavings)
+        assertFalse(sut.uiState.value.isReadingFundingAddress, "continue waits only for the first read")
     }
 
     @Test
@@ -274,6 +274,19 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertEquals(20_300uL, state.savingsTotalSats)
         assertNull(state.copy(fundFromSavings = false).savingsTotalSats)
         assertNull(state.copy(savingsFeeSats = null).savingsTotalSats)
+    }
+
+    @Test
+    fun `emergency fees go to another wallet only once savings is priced and can't pay`() {
+        val pricing = SparkExitUiState()
+        assertTrue(pricing.isPricingSavings)
+        assertFalse(pricing.paysExternally)
+        assertFalse(pricing.copy(savingsFeeSats = 300uL, canFundFromSavings = true).paysExternally)
+        assertTrue(pricing.copy(savingsFeeSats = 300uL, canFundFromSavings = false).paysExternally)
+        assertTrue(pricing.copy(hasSavingsFeeFailed = true).paysExternally)
+        assertTrue(
+            pricing.copy(savingsFeeSats = 300uL, canFundFromSavings = true, showsFundingAddress = true).paysExternally
+        )
     }
 
     @Test

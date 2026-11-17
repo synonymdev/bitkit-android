@@ -1,12 +1,13 @@
 package to.bitkit.ui.settings.lightning
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -18,7 +19,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -28,30 +28,33 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withAccent
-import to.bitkit.ui.utils.withAccentBoldBright
 
-/** Pays the CPFP fee funding from savings, or shows the funding address to pay from another wallet. */
+/**
+ * The emergency fees the force transfer pays on-chain: from savings when it can cover them, else from another wallet.
+ */
 @Composable
 fun SparkExitFundingScreen(
     viewModel: SparkExitViewModel,
     onBack: () -> Unit,
-    onContinue: () -> Unit,
+    onPayFromSavings: () -> Unit,
+    onPayExternally: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.onFundingShown() }
     // Priced again once another wallet's payment shows: savings then sends only the rest.
     LaunchedEffect(uiState.savingsFundingSats) { viewModel.loadSavingsFunding() }
-    DisposableEffect(Unit) { onDispose { viewModel.stopWatchingFundingAddress() } }
     Content(
         uiState = uiState,
         onBack = onBack,
-        onFundFromSavings = {
-            viewModel.onFundFromSavings()
-            onContinue()
+        onContinue = {
+            if (uiState.paysExternally) {
+                viewModel.onPayExternally()
+                onPayExternally()
+            } else {
+                viewModel.onFundFromSavings()
+                onPayFromSavings()
+            }
         },
-        onFundExternally = viewModel::onFundExternally,
-        onContinue = onContinue,
     )
 }
 
@@ -59,11 +62,8 @@ fun SparkExitFundingScreen(
 private fun Content(
     uiState: SparkExitUiState,
     onBack: () -> Unit = {},
-    onFundFromSavings: () -> Unit = {},
-    onFundExternally: () -> Unit = {},
     onContinue: () -> Unit = {},
 ) {
-    val fundingSats = uiState.fundingSats
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
@@ -77,67 +77,51 @@ private fun Content(
                 .verticalScroll(rememberScrollState())
         ) {
             VerticalSpacer(32.dp)
-            Display(text = stringResource(R.string.lightning__spark_exit__funding_title).withAccent())
+            Display(text = stringResource(R.string.lightning__spark_exit__fees_title).withExitAccent())
             BodyM(
-                text = stringResource(R.string.lightning__spark_exit__funding_text)
-                    .replace("{amount}", sparkExitSendAmountText(fundingSats))
-                    .withAccentBoldBright(),
+                text = stringResource(R.string.lightning__spark_exit__fees_text),
                 color = Colors.White64,
             )
-            uiState.quote?.fundedSteps?.takeIf { it > 1 }?.let {
-                VerticalSpacer(16.dp)
-                BodyS(
-                    text = stringResource(R.string.lightning__spark_exit__funding_split).replace("{count}", "$it"),
-                    color = Colors.White64,
-                    modifier = Modifier.testTag("SparkExitFundingSplit")
+            VerticalSpacer(16.dp)
+            val savingsCost = uiState.savingsCostSats
+            when {
+                uiState.paysExternally -> SparkExitFeesRow(
+                    label = stringResource(R.string.lightning__spark_exit__fees_other_wallet),
+                    sats = uiState.fundingSats,
+                    modifier = Modifier.testTag("SparkExitFeesExternal")
+                )
+                savingsCost != null -> SparkExitFeesRow(
+                    label = stringResource(R.string.lightning__spark_exit__fees_savings_note),
+                    sats = savingsCost,
+                    modifier = Modifier.testTag("SparkExitFeesSavings")
                 )
             }
-            val address = uiState.fundingAddress
-            if (uiState.showsFundingAddress && address != null) {
-                VerticalSpacer(24.dp)
-                SparkExitFundingAddress(
-                    address = address,
-                    requiredSats = fundingSats,
-                    seenSats = uiState.fundingSeenSats,
-                    partial = uiState.prestartFunding.partial,
-                    isCovered = uiState.canContinueFunding,
+            if (uiState.paysExternally || savingsCost != null) {
+                VerticalSpacer(16.dp)
+                BodyS(
+                    text = stringResource(R.string.lightning__spark_exit__fees_unused),
+                    color = Colors.White64,
                 )
             }
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            if (uiState.showsFundingAddress) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__cancel),
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f)
+                )
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
                     onClick = onContinue,
-                    enabled = uiState.canContinueFunding,
+                    isLoading = uiState.isLoadingFees,
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
                         .testTag("SparkExitFundingContinue")
-                )
-            } else {
-                val isPricing = uiState.savingsFeeSats == null && !uiState.hasSavingsFeeFailed
-                if (!isPricing && !uiState.canFundFromSavings) {
-                    Caption(
-                        text = stringResource(R.string.lightning__spark_exit__fund_insufficient),
-                        color = Colors.White64,
-                    )
-                    VerticalSpacer(16.dp)
-                }
-                PrimaryButton(
-                    text = stringResource(R.string.lightning__spark_exit__fund_savings),
-                    onClick = onFundFromSavings,
-                    isLoading = isPricing,
-                    enabled = uiState.canFundFromSavings,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("SparkExitFundSavings")
-                )
-                VerticalSpacer(16.dp)
-                SecondaryButton(
-                    text = stringResource(R.string.lightning__spark_exit__fund_external),
-                    onClick = onFundExternally,
-                    testTag = "SparkExitFundExternal",
                 )
             }
             VerticalSpacer(16.dp)
@@ -149,6 +133,6 @@ private fun Content(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content(uiState = SparkExitUiState(hasSavingsFeeFailed = true))
+        Content(uiState = SparkExitUiState(savingsFeeSats = 490uL, canFundFromSavings = true))
     }
 }

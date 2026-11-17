@@ -129,12 +129,6 @@ data class SparkExitQuote(
             return beyond?.let { SparkExitMath.beyondLostLeaves(it, lostLeafSats) }?.takeIf { it > 0uL }
         }
 
-    /**
-     * How many UTXOs the SDK splits the fee funding into, one per transaction it fee-bumps under per-node funding: the
-     * funding screen names it when more than one.
-     */
-    val fundedSteps: Int get() = prepared.funding?.perBranch?.size ?: 0
-
     /** Breez's rule: only exit when the value is more than its fees. */
     val isWorthExiting: Boolean get() = prepared.leaves.isNotEmpty() && exitSats > networkFeeSats
 }

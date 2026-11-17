@@ -594,12 +594,11 @@ class SparkExitFundingTest {
     }
 
     @Test
-    fun `a per-node quote names how many parts the funding is split into`() {
+    fun `a per-node quote asks for the whole funding`() {
         val entries = List(3) { PerBranchFunding("leaf-$it", 2_000uL) }
         val prepared = SparkExitFixtures.prepared().let {
             it.copy(funding = RecoveryFunding(7_000uL, entries, CpfpFundingStrategy.PER_NODE))
         }
-        assertEquals(3, SparkExitQuote(prepared).fundedSteps)
         assertEquals(7_000uL, SparkExitQuote(prepared).fundingSats)
     }
 
