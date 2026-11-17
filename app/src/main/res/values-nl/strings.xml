@@ -604,6 +604,7 @@
     <string name="security__pin_forgot_title">Pincode vergeten?</string>
     <string name="security__pin_last_attempt">Laatste poging. Als je opnieuw de verkeerde pincode invoert, wordt je wallet gereset.</string>
     <string name="security__pin_not_match">Probeer opnieuw, dit is niet dezelfde pincode.</string>
+    <string name="security__pin_quickpay">Voer je pincode in om deze wijziging van QuickPay te bevestigen.</string>
     <string name="security__pin_retype_header">4-cijferige pincode opnieuw typen</string>
     <string name="security__pin_retype_text">Typ je 4-cijferige pincode opnieuw in om het installatieproces te voltooien.</string>
     <string name="security__pin_security_button">Wallet beveiligen</string>

@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.requiresPaymentAuth
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
@@ -190,7 +191,7 @@ class AllowancesViewModel @Inject constructor(
         if (isWorking.value || authorization.value != null) return
         viewModelScope.launch {
             val settings = settingsStore.data.first()
-            if (!settings.isPinEnabled || !settings.isPinForPaymentsEnabled) return@launch action()
+            if (!settings.requiresPaymentAuth) return@launch action()
             authorizedAction = action
             authorization.update { AllowanceAuthorization(useBiometrics = settings.isBiometricEnabled) }
         }

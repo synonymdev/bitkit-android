@@ -606,6 +606,7 @@
     <string name="security__pin_forgot_title">Ha dimenticato il PIN?</string>
     <string name="security__pin_last_attempt">Ultimo tentativo. Se inserisci nuovamente il PIN sbagliato, il wallet verrà resettato.</string>
     <string name="security__pin_not_match">Provi di nuovo, il PIN non coincide.</string>
+    <string name="security__pin_quickpay">Inserisci il codice PIN per confermare questa modifica a QuickPay.</string>
     <string name="security__pin_retype_header">Digita di nuovo il PIN a 4 cifre</string>
     <string name="security__pin_retype_text">Digita nuovamente il tuo PIN a 4 cifre per completare il processo di configurazione.</string>
     <string name="security__pin_security_button">Wallet Sicuro</string>

@@ -622,6 +622,7 @@
     <string name="security__pin_forgot_title">Забыли PIN-код?</string>
     <string name="security__pin_last_attempt">Последняя попытка. Повторный ввод неправильного PIN-кода приведёт к сбросу вашего кошелька.</string>
     <string name="security__pin_not_match">Попробуйте ещё раз, это не тот PIN-код.</string>
+    <string name="security__pin_quickpay">Введите PIN-код, чтобы подтвердить это изменение QuickPay.</string>
     <string name="security__pin_retype_header">Повторите 4-значный PIN-код</string>
     <string name="security__pin_retype_text">Повторно введите 4-значный PIN-код, чтобы завершить процесс установки.</string>
     <string name="security__pin_security_button">Защитить Кошелёк</string>
