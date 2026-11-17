@@ -15,7 +15,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
@@ -184,8 +187,12 @@ private fun SpendingAmountNodeRunning(
         if (!uiState.isMaxLoading) amountInputViewModel.setMaxAmount(uiState.maxSats)
     }
 
-    // Review's fee grid switches the unit while this screen waits in the back stack, so redraw the amount in it.
+    // Review's fee grid switches the unit while this screen waits in the back stack, so redraw the amount in it,
+    // only when the unit changed: redrawing on every return would rewrite what the user typed.
+    var drawnDisplay by rememberSaveable { mutableStateOf(currencies.primaryDisplay) }
     LaunchedEffect(currencies.primaryDisplay) {
+        if (currencies.primaryDisplay == drawnDisplay) return@LaunchedEffect
+        drawnDisplay = currencies.primaryDisplay
         val sats = amountInputViewModel.uiState.value.sats
         if (sats > 0) amountInputViewModel.setSats(sats, currencies)
     }

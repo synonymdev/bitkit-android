@@ -128,6 +128,45 @@ class SpendingAmountScreenTest {
         assertEquals(reference.uiState.value.sats, viewModel.uiState.value.sats)
     }
 
+    @Config(sdk = [34])
+    @Test
+    fun `returning to the amount keeps what was typed`() {
+        val fiat = CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)
+        val viewModel = AmountInputViewModel(AmountInputHandler.stub())
+        val reference = AmountInputViewModel(AmountInputHandler.stub())
+        listOf("1", "2").forEach {
+            viewModel.handleNumberPadInput(it, fiat)
+            reference.handleNumberPadInput(it, fiat)
+        }
+        var isShown by mutableStateOf(true)
+        composeRule.setContent {
+            CompositionLocalProvider(LocalInspectionMode provides true) {
+                AppThemeSurface {
+                    if (isShown) {
+                        Content(
+                            uiState = UiState(isNodeRunning = true, isMaxLoading = false, maxSats = 158_234),
+                            amountInputViewModel = viewModel,
+                            currencies = fiat,
+                            onBackClick = {},
+                            onClickQuarter = {},
+                            onClickMaxAmount = {},
+                            onConfirmAmount = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        isShown = false
+        composeRule.waitForIdle()
+        isShown = true
+        composeRule.waitForIdle()
+        viewModel.handleNumberPadInput("3", fiat)
+        reference.handleNumberPadInput("3", fiat)
+
+        assertEquals(reference.uiState.value.text, viewModel.uiState.value.text)
+    }
+
     /** Pads the screen as the system bars do on a device, since Robolectric reports no insets. */
     private fun setContent(statusBar: Dp = 0.dp, navigationBar: Dp = 0.dp) {
         composeRule.setContent {
