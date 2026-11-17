@@ -1591,7 +1591,8 @@ class PubkyRepo @Inject constructor(
     private fun String.isPaykitStorage() = "/pub/paykit/" in this
 
     private fun String.isPubkyAppFile() =
-        "/pub/pubky.app/files/" in this && codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
+        ("/pub/pubky.app/files/" in this || "/pub/social/v1/files/" in this) &&
+            codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
 
     private suspend fun publishPaykitProfileCopy(
         publicKey: String,
