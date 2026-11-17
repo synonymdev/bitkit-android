@@ -25,8 +25,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import to.bitkit.androidServices.NdefTagService
-import to.bitkit.ext.nowMillis
 import to.bitkit.nfc.NdefCodec
+import to.bitkit.nfc.NfcReadDispatcher
 import to.bitkit.nfc.NfcRepeatGuard
 import to.bitkit.nfc.NfcTagEmitter
 import to.bitkit.nfc.READER_FLAGS
@@ -34,11 +34,8 @@ import to.bitkit.nfc.ReaderModeOwner
 import to.bitkit.nfc.Type4TagEmulator
 import to.bitkit.nfc.scannedPaymentRequest
 import to.bitkit.utils.Logger
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "NfcEffects"
-private val DUPLICATE_READ_WINDOW: Duration = 3.seconds
 private val NDEF_AIDS = listOf(Type4TagEmulator.NDEF_AID_HEX)
 
 enum class NfcState { UNAVAILABLE, OFF, ON }
@@ -102,25 +99,12 @@ fun NfcReaderEffect(
         if (!enabled || adapter == null) return@DisposableEffect onDispose {}
 
         val mainHandler = Handler(Looper.getMainLooper())
-        var lastRead: Pair<String, Long>? = null
+        val dispatcher = NfcReadDispatcher(onRead = { currentOnRead(it) }, onUnreadable = { currentOnUnreadable() })
         val callback = NfcAdapter.ReaderCallback { tag ->
             val text = readPaymentText(tag)
             // The tag stays in range after the read; hold reader mode so Android does not deliver it again.
             if (text != null) NfcRepeatGuard.engage(activity, tag)
-            mainHandler.post {
-                if (text == null) {
-                    currentOnUnreadable()
-                    return@post
-                }
-                val now = nowMillis()
-                val previous = lastRead
-                val window = DUPLICATE_READ_WINDOW.inWholeMilliseconds
-                if (previous != null && previous.first == text && now - previous.second < window) {
-                    return@post
-                }
-                lastRead = text to now
-                currentOnRead(text)
-            }
+            mainHandler.post { dispatcher.deliver(text) }
         }
 
         val owner = Any()
@@ -159,6 +143,8 @@ fun NfcReaderEffect(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             disable()
+            // A read still in progress posts after this; the closed dispatcher drops it.
+            dispatcher.close()
             mainHandler.removeCallbacksAndMessages(null)
         }
     }
