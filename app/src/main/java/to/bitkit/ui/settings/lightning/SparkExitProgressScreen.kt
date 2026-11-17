@@ -226,12 +226,20 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
     if (funding != null && address != null) {
         VerticalSpacer(24.dp)
         when (funding) {
-            is SparkExitFundingState.Ask -> SparkExitFundingAddress(
-                address = address,
-                requiredSats = funding.sats,
-                seenSats = 0uL,
-                partial = funding.partial,
-            )
+            is SparkExitFundingState.Ask -> {
+                SparkExitFeesRow(
+                    label = stringResource(R.string.lightning__spark_exit__pay_amount),
+                    sats = funding.sats,
+                    modifier = Modifier.testTag("SparkExitProgressFundingAmount")
+                )
+                VerticalSpacer(32.dp)
+                SparkExitFundingAddress(
+                    address = address,
+                    requiredSats = funding.sats,
+                    seenSats = 0uL,
+                    partial = funding.partial,
+                )
+            }
             is SparkExitFundingState.Paid -> SparkExitTxNote(
                 text = stringResource(R.string.lightning__spark_exit__fund_paid),
                 txid = funding.txid,
@@ -414,12 +422,12 @@ private fun ReturnedNote(receivedSats: ULong, feesSats: ULong) {
     VerticalSpacer(32.dp)
     val text = if (feesSats > 0uL) {
         stringResource(R.string.lightning__spark_exit__done_returned_fees)
-            .replace("{fees}", sparkExitAmountAccent(feesSats))
+            .replace("{fees}", sparkExitAmountText(feesSats))
     } else {
         stringResource(R.string.lightning__spark_exit__done_returned)
     }
     BodyS(
-        text = text.replace("{amount}", sparkExitAmountAccent(receivedSats)).withAccentBoldBright(),
+        text = text.replace("{amount}", sparkExitAmountText(receivedSats)).withAccentBoldBright(),
         color = Colors.White64,
         modifier = Modifier.testTag("SparkExitReturned")
     )
