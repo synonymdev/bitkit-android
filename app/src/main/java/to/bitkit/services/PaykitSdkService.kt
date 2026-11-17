@@ -144,6 +144,7 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -169,6 +170,8 @@ data class PaykitPrivateContactPaymentResolution(
 data class PaykitPublicContactPaymentResolution(
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
 )
+
+internal class PublicEndpointSync(val report: EndpointSyncReport, val epoch: Long)
 
 data class PaykitResolvedPaymentEndpoint(
     val appId: String,
@@ -287,6 +290,7 @@ class PaykitSdkService @Inject constructor(
     private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationLock = PaykitSdkOperationLock()
+    private val publicEndpointEpoch = AtomicLong()
     private val publicReadSlots = PaykitPublicReadSlots(PUBLIC_READ_PERMITS)
     private val bulkReadPermits = Semaphore(BULK_READ_PERMITS)
     private val setupMutex = Mutex()
@@ -919,7 +923,15 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun syncPublicEndpoints(
         endpoints: List<Endpoint>,
         canPublish: suspend () -> Boolean,
-    ): EndpointSyncReport? {
+    ): EndpointSyncReport? = syncPublicEndpointsWithEpoch(endpoints, canPublish, reusable = null)?.report
+
+    internal fun publicEndpointSyncEpoch(): Long = publicEndpointEpoch.get()
+
+    internal suspend fun syncPublicEndpointsWithEpoch(
+        endpoints: List<Endpoint>,
+        canPublish: suspend () -> Boolean,
+        reusable: PublicEndpointSync?,
+    ): PublicEndpointSync? {
         isSetup.await()
         val priority = if (endpoints.isEmpty()) {
             PaykitSdkOperationLock.Priority.Ordered
@@ -927,11 +939,19 @@ class PaykitSdkService @Inject constructor(
             PaykitSdkOperationLock.Priority.Background
         }
         return operationLock.withLock(priority) {
+            if (reusable != null && reusable.epoch == publicEndpointSyncEpoch()) {
+                if (!canPublish()) return@withLock null
+                Logger.debug("Reused overlapping public endpoint sync", context = TAG)
+                return@withLock reusable
+            }
             withStateRevisionTracking { handle ->
                 if (!canPublish()) return@withStateRevisionTracking null
-                completeSdkCall {
+                // Direct withdrawals use this same lock. An uncertain write invalidates earlier success too.
+                val epoch = publicEndpointEpoch.incrementAndGet()
+                val report = completeSdkCall {
                     handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
                 }
+                PublicEndpointSync(report, epoch)
             }
         }
     }
@@ -2106,6 +2126,7 @@ class PaykitSdkService @Inject constructor(
 
     private fun resetRuntime() {
         runtimeGeneration++
+        publicEndpointEpoch.incrementAndGet()
         sdk = null
         cachedPaykitKey = null
         cachedBackupState = null

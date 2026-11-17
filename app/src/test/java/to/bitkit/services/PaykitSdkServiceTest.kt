@@ -457,6 +457,53 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `a current endpoint publication is reusable while another write has not started`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+            val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+            assertNull(service.syncPublicEndpointsWithEpoch(endpoints, { false }, published))
+            assertSame(published, service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+            verify(sdk).syncPublicEndpointsWithReceivingDetails(any())
+        }
+    }
+
+    @Test
+    fun `a direct public withdrawal invalidates overlapping refresh reuse even if it fails`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            for (withdrawalFails in listOf(false, true)) {
+                val sdk = mock<PaykitSdk>()
+                val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+                whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).doSuspendableAnswer {
+                    if (withdrawalFails && it.getArgument<List<Any>>(0).isEmpty()) {
+                        error("offline")
+                    }
+                    report
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+                val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+                if (withdrawalFails) {
+                    assertFailsWith<IllegalStateException> { service.syncPublicEndpoints(emptyList()) }
+                } else {
+                    service.syncPublicEndpoints(emptyList())
+                }
+                assertTrue(service.publicEndpointSyncEpoch() > published.epoch)
+                val repeated = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+
+                assertTrue(repeated.epoch > published.epoch)
+                verify(sdk).syncPublicEndpointsWithReceivingDetails(emptyList())
+                verify(sdk, times(3)).syncPublicEndpointsWithReceivingDetails(any())
+            }
+        }
+    }
+
+    @Test
     fun `queued public publication cannot restore endpoints after cleanup ends admission`() = runTest {
         mockConstruction(PaymentPayload::class.java).use {
             val sdk = mock<PaykitSdk>()
