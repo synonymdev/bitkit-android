@@ -9,9 +9,12 @@
     path shows the same sheet content.
 
     Precondition: dev build, onboarded wallet with a positive on-chain Savings balance, an empty Spending
-    balance, no channels and Spark not running (a build without a Breez API key, or Spark's regtest
-    unreachable). A build without `ESPLORA_URL` still connects Spark, so it does not reach this sheet; with
-    Spark connected, see spark-transfer-to-spending.xml. Start on the wallet home screen.
+    balance, no channels and Spark failing to start. On regtest Spark needs no Breez key and starts from local
+    state even when its servers are blocked; on a debug build, stop it by replacing the app's
+    `files/regtest/wallet0/spark` directory with a plain file through `run-as`, then relaunch (the log shows
+    "Failed to start Spark wallet"). A build without `ESPLORA_URL` reaches the sheet from the Transfer To
+    Spending entries, but Lightning Connections and Receive need Spark down; with Spark connected, see
+    spark-transfer-to-spending.xml. Start on the wallet home screen.
   </description>
   <actions>
     <action>Tap the Savings balance card (testTag "ActivitySavings") and verify "Transfer To Spending" (testTag "TransferToSpending") is shown</action>
