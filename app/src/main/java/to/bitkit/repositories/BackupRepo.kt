@@ -45,6 +45,7 @@ import to.bitkit.async.appScope
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PaykitOutboundDeliveryStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountStore
@@ -146,6 +147,7 @@ class BackupRepo @Inject constructor(
     private val paykitPaymentRequestRepo: Provider<PaykitPaymentRequestRepo>,
     private val paykitPresentationStore: PaykitPaymentRequestPresentationStore,
     private val paykitAllowanceStore: PaykitAllowanceStore,
+    private val paykitOutboundDeliveryStore: PaykitOutboundDeliveryStore,
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val lightningRepo: Provider<LightningRepo>,
@@ -467,6 +469,9 @@ class BackupRepo @Inject constructor(
         )
         dataListenerJobs.add(observeBackupChanges(paykitPresentationStore.backupStateVersion, BackupCategory.WALLET))
         dataListenerJobs.add(observeBackupChanges(paykitAllowanceStore.backupStateVersion, BackupCategory.WALLET))
+        dataListenerJobs.add(
+            observeBackupChanges(paykitOutboundDeliveryStore.backupStateVersion, BackupCategory.WALLET)
+        )
         dataListenerJobs.add(
             observeBackupChanges(
                 privatePaykitAddressReservationRepo.get().backupStateVersion,
@@ -1018,6 +1023,7 @@ class BackupRepo @Inject constructor(
                 allowances = paykitAllowanceStore.backupSnapshot()
                     .mapValues { PaykitAllowanceStateBackup(it.value) }
                     .ifEmpty { null },
+                sentReceipts = paykitOutboundDeliveryStore.backupSnapshot().ifEmpty { null },
             ),
         )
 
@@ -1078,8 +1084,8 @@ class BackupRepo @Inject constructor(
                 connectionSession.replay()
                 prepareUsdtRecoveryRestore()
                 // Armed before any category, so a restore whose metadata is missing or unreadable holds each rail off
-                // invoices from before it too: until that rail lists its own sends, and, for one Spark hasn't listed,
-                // until the invoice expires.
+                // invoices from before it too: Spark until the node lists its own sends, and both rails off one Spark
+                // hasn't listed, until the Spark operators show it unsent or it expires.
                 val restoredAt = currentTimeMillis().milliseconds.inWholeSeconds
                 cacheStore.update {
                     it.copy(
@@ -1256,7 +1262,8 @@ class BackupRepo @Inject constructor(
                     it.sparkExitNextFundingIndexes,
                     cleanCache.sparkExitNextFundingIndexes,
                 ),
-                // The exit then looks once for funding addresses that still hold coins and nothing watches.
+                // The exit then looks once for funding addresses that still hold coins and nothing watches: each one
+                // below the index, and those a scan forward from it finds used, which also moves the index past them.
                 sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
             )
         }
@@ -1347,6 +1354,7 @@ class BackupRepo @Inject constructor(
             paykitPaymentProofRepo.get().restoreBackup(it.pendingProofs)
             paykitPresentationStore.restoreAcceptedOneTimeRequests(it.acceptedOneTimeRequests.orEmpty())
             paykitAllowanceStore.restoreBackup(allowances)
+            paykitOutboundDeliveryStore.restoreBackup(it.sentReceipts.orEmpty())
         }
         db.transferDao().upsert(parsed.transfers)
         watchOnlyAccountRepo.restore(

@@ -102,9 +102,6 @@
     <string name="lightning__spark_claim_fee">Taxa de resgate</string>
     <string name="lightning__spark_confirmations">%1$d/3 confirmações</string>
     <string name="lightning__spark_deposit">Depósito</string>
-    <string name="lightning__spark_deposit__claimed">A Spark está a adicioná-lo ao seu saldo de gastos.</string>
-    <string name="lightning__spark_deposit__looking">A aguardar que a Spark veja a sua transferência.</string>
-    <string name="lightning__spark_deposit__standard">A Spark adiciona-o ao seu saldo de gastos após {standard} confirmações, dentro de cerca de {minutes} minutos.</string>
     <string name="lightning__spark_deposit__wait_button">Esperar</string>
     <string name="lightning__spark_deposits_claimed">Depósitos resgatados</string>
     <string name="lightning__spark_deposits_pending">Depósitos em curso</string>
@@ -354,12 +351,6 @@
     <string name="lightning__node_sync_time">Tempo de Sinc. da Carteira Lightning</string>
     <string name="lightning__rgs_snapshot_time">Tempo do Snapshot Rapid Gossip Sync</string>
     <string name="lightning__scores_sync_time">Tempo de Sinc. das Pontuações de Pathfinding</string>
-    <string name="lightning__setting_up__not_seen">A Spark ainda não viu a sua transferência. É adicionada após 3 confirmações; pode sair deste ecrã.</string>
-    <string name="lightning__setting_up__pay">Pagar ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instantâneo custa agora &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Pague-o ou aguarde 3 confirmações, cerca de 30 minutos, com uma taxa mais baixa.</string>
-    <string name="lightning__setting_up__speed">Velocidade: {speed}</string>
-    <string name="lightning__setting_up__step_adding">A adicionar aos gastos</string>
-    <string name="lightning__setting_up__unavailable">Instantâneo não está disponível para esta transferência. A Spark adiciona-a ao seu saldo de gastos após 3 confirmações, cerca de 30 minutos.</string>
     <string name="lightning__setting_up_button">Continuar Usando o Bitkit</string>
     <string name="lightning__setting_up_step1">Processando Pagamento</string>
     <string name="lightning__setting_up_step2">Pagamento Realizado</string>
@@ -572,6 +563,7 @@
     <string name="security__pin_security_button">Segurança de Carteira</string>
     <string name="security__pin_choose_header">Escolha o PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
+    <string name="security__pin_quickpay">Digite seu código PIN para confirmar essa alteração no QuickPay.</string>
     <string name="security__pin_retype_header">Digite novamente o PIN de 4 dígitos</string>
     <string name="security__pin_retype_text">Digite novamente o PIN de 4 dígitos para concluir o processo de configuração.</string>
     <string name="security__pin_not_match">Tente novamente, este não é o mesmo PIN.</string>
@@ -846,6 +838,9 @@
     <string name="wallet__drawer__settings">Ajustes</string>
     <string name="wallet__drawer__status">Status do Aplicativo</string>
     <string name="wallet__drawer__support">Suporte</string>
+    <string name="wallet__receipt_failed">Falha ao enviar o recibo</string>
+    <string name="wallet__receipt_sending">A enviar recibo</string>
+    <string name="wallet__receipt_sent">Recibo enviado</string>
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Receber</string>
     <string name="wallet__send_bitcoin">Enviar Bitcoin</string>
@@ -899,6 +894,8 @@
     <string name="wallet__note">Nota</string>
     <string name="wallet__lnurl_pay_confirm__comment">Comentário</string>
     <string name="wallet__lnurl_pay_confirm__comment_placeholder">Comentário opcional para o receptor</string>
+    <string name="wallet__swap_route_restored_text">Um pagamento a um contacto que o restauro interrompeu voltou às tuas poupanças.</string>
+    <string name="wallet__swap_route_restored_title">Pagamento devolvido às Poupanças</string>
     <string name="wallet__tags">Tags</string>
     <string name="wallet__tags_add">Adicionar Tag</string>
     <string name="wallet__tags_add_button">Adicionar</string>
@@ -1478,17 +1475,10 @@
     <string name="profile__intro_description">Com o seu perfil portátil, os seus contactos podem encontrá-lo e pagar-lhe em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Use a Bitkit com os seus contactos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Não foi possível preparar os dados do endpoint de pagamento.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Não há nenhum endpoint de pagamento suportado disponível.</string>
-    <string name="profile__pay_contacts_error_retry">Não foi possível ativar os pagamentos com contactos. Os contactos guardados não foram alterados. Tente novamente.</string>
-    <string name="profile__pay_contacts_error_session">Volte a ligar o seu perfil Pubky para partilhar os dados de pagamento.</string>
-    <string name="profile__pay_contacts_error_wallet">A carteira ainda está a iniciar. Tente novamente daqui a pouco.</string>
     <string name="profile__pay_contacts_headline">Deixe os seus\ncontactos\n&lt;accent&gt;pagar-lhe&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar a contactos</string>
-    <string name="profile__private_payments_toggle">Pagamentos privados com contactos</string>
     <string name="profile__pubky_copied">pubky copiado para a área de transferência</string>
     <string name="profile__public_key">Chave pública</string>
-    <string name="profile__public_payments_toggle">Pagamentos públicos</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">A sessão do seu perfil expirou. Volte a ligar para restaurar o seu perfil.</string>
     <string name="profile__sign_out">Desligar</string>

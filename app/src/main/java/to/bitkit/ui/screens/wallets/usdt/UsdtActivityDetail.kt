@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,12 +48,12 @@ import to.bitkit.ext.uiDateStyleFor
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.ActivitySubtitleWithReceipt
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.LargeRow
 import to.bitkit.ui.components.PrimaryButton
@@ -73,19 +74,24 @@ import to.bitkit.ui.utils.uiDateText
 @Composable
 internal fun UsdtActivityRow(transfer: UsdtTransfer, hideBalance: Boolean, onClick: () -> Unit) {
     val contactName = paykitContactName(transfer.id)
+    val appViewModel = appViewModel
+    val receiptStatuses by appViewModel?.paykitReceiptStatuses?.collectAsStateWithLifecycle() ?: remember {
+        mutableStateOf(emptyMap())
+    }
+    val receiptStatus = receiptStatuses[transfer.id.lowercase()].takeIf { transfer.isIncoming }
     ActivityRowSurface(onClick = onClick, modifier = Modifier.testTag("UsdtActivity-" + transfer.id)) {
         UsdtActivityIcon(transfer)
         HorizontalSpacer(16.dp)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
             BodyMSB(contactName ?: stringResource(transfer.titleResource), maxLines = 1)
-            CaptionB(
-                if (transfer.status == UsdtTransferStatus.BRIDGING) {
+            ActivitySubtitleWithReceipt(
+                subtitle = if (transfer.status == UsdtTransferStatus.BRIDGING) {
                     stringResource(R.string.usdt__to_network).replace("{network}", transfer.destination.label)
                 } else {
                     uiDateText(transfer.timestamp, uiDateStyleFor(transfer.timestamp))
                 },
-                color = Colors.White64,
-                maxLines = 1
+                receiptStatus = receiptStatus,
+                onRetryClick = { appViewModel?.retryPaykitReceipt(transfer.id) },
             )
         }
         HorizontalSpacer(16.dp)

@@ -1,0 +1,312 @@
+package to.bitkit.repositories
+
+import com.synonym.paykit.BillingPeriod
+import com.synonym.paykit.PaymentProofRecord
+import com.synonym.paykit.PaymentRequestLifecycleState
+import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRecord
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.lightningdevkit.ldknode.Bolt11Invoice
+import org.lightningdevkit.ldknode.Network
+import to.bitkit.ext.fromHex
+import to.bitkit.ext.toHex
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PubkyPublicKeyFormat
+import java.security.MessageDigest
+import java.util.UUID
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
+
+/** A payment this wallet recorded as received, which a receipt can name. */
+internal data class PaykitRecordedReceive(
+    /** Lowercase payment hash for Lightning, transaction id for on-chain, verified transfer id for USDT. */
+    val paymentId: String,
+    val rail: PaykitReceiptRail,
+    val amount: PaykitAmount,
+    /** The receiving address of an on-chain receive. */
+    val address: String? = null,
+    /** What the activity row and received sheet know the payment by: its hash, txid or USDT transfer id. */
+    val statusKey: String = paymentId,
+    /** When the wallet recorded the receive, in seconds since the epoch. */
+    val receivedAt: ULong? = null,
+    /** The contact the wallet attributed the receive to. */
+    val contact: String? = null,
+    /** The transaction that carried the payment, for the receipt's metadata. */
+    val transactionId: String = paymentId,
+    /** Sats an on-chain receive paid to each of this wallet's addresses, keyed lowercase; null when unknown. */
+    val outputs: Map<String, ULong>? = null,
+    /** The addresses whose outputs this receive counts toward a request, once narrowed; empty for other rails. */
+    val countedAddresses: Set<String> = emptySet(),
+) {
+    /**
+     * An on-chain receive narrowed to what it paid to [addresses], so a batch paying other addresses of this wallet
+     * does not count toward the request; null when that amount is unknown or zero. Other rails come back unchanged.
+     */
+    fun paidTo(addresses: Collection<String>): PaykitRecordedReceive? {
+        if (rail != PaykitReceiptRail.Onchain) return this
+        val outputs = outputs ?: return null
+        val counted = addresses.map { it.lowercase() }.filter { (outputs[it] ?: 0uL) > 0uL }.toSet()
+        if (counted.isEmpty()) return null
+        return copy(
+            amount = PaykitAmount(PaykitAsset.BTC, counted.sumOf { outputs.getValue(it) }),
+            countedAddresses = counted,
+        )
+    }
+}
+
+enum class PaykitReceiptRail { Lightning, Onchain, Usdt }
+
+/** A request the wallet issued that a recorded receive paid, ready to receipt. */
+internal data class PaykitReceiptCandidate(
+    val counterparty: String,
+    val paymentRequestId: String,
+    val paymentReference: String,
+    val billingPeriod: BillingPeriod?,
+    val paymentEndpointIdentifier: String,
+    val receive: PaykitRecordedReceive,
+) {
+    /** Stable across launches, so a catch-up or retry finds the receipt it issued before. */
+    val receiptId: String
+        get() = paykitReceiptId(counterparty, paymentRequestId, billingPeriod?.startsAt, receive.paymentId)
+
+    /** The paid payment's hash or transaction id, for the Market to match. */
+    val metadataJson: String
+        get() = when (receive.rail) {
+            PaykitReceiptRail.Lightning -> """{"payment_hash":"${receive.paymentId}"}"""
+            PaykitReceiptRail.Onchain, PaykitReceiptRail.Usdt -> """{"txid":"${receive.transactionId}"}"""
+        }
+}
+
+/** A USDT payment the payee verified on chain for one of its requests. */
+internal data class PaykitVerifiedUsdtReceive(
+    val requestId: PaykitPaymentRequestId,
+    val proofEventId: String,
+    val transferId: String,
+    val amount: PaykitAmount,
+)
+
+/**
+ * Pairs the requests this wallet issued with the payments it recorded for them: the payer's proof names the request
+ * and the payment, or the request's own invoice or address received it. A proof alone is only the payer's claim, so
+ * nothing is receipted until the money is recorded here, after the request was proposed and, when the wallet knows
+ * the payer, from that counterparty. A txid is public, so an on-chain proof counts only for a receive the wallet
+ * attributed to that counterparty. A payment two requests still claim is left alone.
+ */
+internal object PaykitReceiptMatcher {
+    fun candidates(
+        records: List<PaymentRequestRecord>,
+        lightningReceives: Map<String, PaykitRecordedReceive>,
+        onchainReceives: List<PaykitRecordedReceive>,
+        usdtReceives: List<PaykitVerifiedUsdtReceive>,
+        network: Network,
+        parseInvoice: (String) -> Bolt11Invoice = Bolt11Invoice::fromStr,
+    ): List<PaykitReceiptCandidate> {
+        val onchainByTxid = onchainReceives.associateBy { it.paymentId }
+        val found = mutableListOf<PaykitReceiptCandidate>()
+        for (record in records.filter(::isReceiptable)) {
+            val reference = record.terms?.paymentReference?.exportText() ?: continue
+            fun candidate(endpoint: String, period: BillingPeriod?, receive: PaykitRecordedReceive) =
+                PaykitReceiptCandidate(
+                    record.counterparty,
+                    record.paymentRequestId,
+                    reference,
+                    period,
+                    endpoint,
+                    receive
+                )
+
+            // A proof's payment counts only toward the request's own addresses when it names any, else toward the
+            // address the wallet attributed to the payer.
+            val requestAddresses = onchainAddresses(record, network)
+            found += record.paymentProofs.mapNotNull { proof ->
+                val receive = proof.bitcoinPaymentId()?.let { (rail, id) ->
+                    if (rail == PaykitReceiptRail.Lightning) {
+                        lightningReceives[id]
+                    } else {
+                        onchainByTxid[id]
+                            ?.takeIf { PubkyPublicKeyFormat.matches(it.contact, record.counterparty) }
+                            ?.let { it.paidTo(requestAddresses.ifEmpty { listOfNotNull(it.address) }) }
+                    }
+                }
+                receive?.takeIf { record.couldBePaidBy(it) }
+                    ?.let { candidate(proof.paymentEndpointIdentifier, proof.billingPeriod, it) }
+            }
+            if (record.terms?.recurrence == null) {
+                found += embeddedEndpointReceives(record, lightningReceives, onchainReceives, network, parseInvoice)
+                    .filter { (_, receive) -> record.couldBePaidBy(receive) }
+                    .map { (endpoint, receive) -> candidate(endpoint, null, receive) }
+            }
+            found += usdtReceives.filter { it.matches(record) }.mapNotNull { usdt ->
+                val proof = record.paymentProofs.firstOrNull { it.eventId == usdt.proofEventId }
+                val hash = proof?.proofValue("transaction_hash")?.lowercase() ?: return@mapNotNull null
+                val receive = PaykitRecordedReceive(
+                    paymentId = usdt.transferId.lowercase(),
+                    rail = PaykitReceiptRail.Usdt,
+                    amount = usdt.amount,
+                    statusKey = usdt.transferId,
+                    transactionId = hash,
+                )
+                candidate(proof.paymentEndpointIdentifier, proof.billingPeriod, receive)
+            }
+        }
+        return found
+            .distinctBy {
+                listOf(
+                    it.counterparty,
+                    it.paymentRequestId,
+                    it.billingPeriod?.startsAt,
+                    it.receive.paymentId
+                )
+            }
+            .groupBy { it.receive.paymentId }
+            .values
+            // Requests that claim the same payment are left alone; one transaction paying separate outputs to each
+            // of several requests receipts each one.
+            .flatMap { claims ->
+                claims.filterIndexed { index, claim ->
+                    val counted = claim.receive.countedAddresses
+                    claims.indices.none { other ->
+                        val otherCounted = claims[other].receive.countedAddresses
+                        other != index && (counted.isEmpty() || counted.any(otherCounted::contains))
+                    }
+                }
+            }
+    }
+
+    private fun PaymentRequestRecord.couldBePaidBy(receive: PaykitRecordedReceive): Boolean {
+        if (receive.contact != null && !PubkyPublicKeyFormat.matches(receive.contact, counterparty)) return false
+        val receivedAt = receive.receivedAt ?: return true
+        val recordedAt = proposalRecordedAt ?: return true
+        val proposedAt = runCatching { Instant.parse(recordedAt) }.getOrNull() ?: return false
+        // Lightning receive and request times both come from this device's clock; only block time can lag.
+        val tolerance = if (receive.rail == PaykitReceiptRail.Lightning) Duration.ZERO else RECEIVE_TIME_TOLERANCE
+        // Receive times are whole seconds, so compare at that precision.
+        return receivedAt.toLong() >= (proposedAt - tolerance).epochSeconds
+    }
+
+    private fun isReceiptable(record: PaymentRequestRecord): Boolean =
+        record.localRole == PaymentRequestLocalRole.PAYEE &&
+            record.invalidReason == null &&
+            record.state != PaymentRequestLifecycleState.INVALID_CONFLICT &&
+            record.state != PaymentRequestLifecycleState.UNKNOWN
+
+    private fun embeddedEndpointReceives(
+        record: PaymentRequestRecord,
+        lightningReceives: Map<String, PaykitRecordedReceive>,
+        onchainReceives: List<PaykitRecordedReceive>,
+        network: Network,
+        parseInvoice: (String) -> Bolt11Invoice,
+    ): List<Pair<String, PaykitRecordedReceive>> {
+        val terms = record.terms ?: return emptyList()
+        val lightning = terms.paymentEndpoints.orEmpty()
+            .filterKeys(terms.acceptedPaymentEndpointIdentifiers::contains)
+            .mapNotNull { (identifier, payload) ->
+                val endpoint = PublicPaykitRepo.parseEndpoint(identifier, payload, network)
+                    ?.takeIf { it.methodId == MethodId.Bolt11 } ?: return@mapNotNull null
+                runCatching { parseInvoice(endpoint.value).paymentHash().lowercase() }.getOrNull()
+                    ?.let(lightningReceives::get)
+                    ?.let { identifier to it }
+            }
+        // One receive counts once toward the request, over every on-chain address it names, so a transaction paying
+        // two of them is receipted in full. A batch can pay them while the activity shows another address.
+        val endpoints = onchainEndpoints(record, network)
+        val onchain = onchainReceives.mapNotNull { receive ->
+            val paid = receive.paidTo(endpoints.map { it.second }) ?: return@mapNotNull null
+            val endpoint = endpoints.firstOrNull { it.second.lowercase() in paid.countedAddresses }
+                ?: return@mapNotNull null
+            endpoint.first to paid
+        }
+        return lightning + onchain
+    }
+
+    private fun onchainAddresses(record: PaymentRequestRecord, network: Network): List<String> =
+        onchainEndpoints(record, network).map { it.second }
+
+    private fun onchainEndpoints(record: PaymentRequestRecord, network: Network): List<Pair<String, String>> {
+        val terms = record.terms ?: return emptyList()
+        return terms.paymentEndpoints.orEmpty()
+            .filterKeys(terms.acceptedPaymentEndpointIdentifiers::contains)
+            .mapNotNull { (identifier, payload) ->
+                PublicPaykitRepo.parseEndpoint(identifier, payload, network)
+                    ?.takeIf { it.methodId.isOnchain }
+                    ?.let { identifier to it.value }
+            }
+            .sortedBy { it.first }
+    }
+
+    private fun PaykitVerifiedUsdtReceive.matches(record: PaymentRequestRecord): Boolean =
+        requestId.paymentRequestId == record.paymentRequestId && requestId.counterparty == record.counterparty
+
+    private fun PaymentProofRecord.proofValue(key: String): String? = runCatching {
+        Json.parseToJsonElement(proof.exportText()).jsonObject[key]?.jsonPrimitive?.contentOrNull
+    }.getOrNull()
+
+    private fun PaymentProofRecord.bitcoinPaymentId(): Pair<PaykitReceiptRail, String>? {
+        proofValue("txid")?.lowercase()?.takeIf { runCatching { it.fromHex() }.getOrNull()?.size == HASH_BYTES }?.let {
+            return PaykitReceiptRail.Onchain to it
+        }
+        val data = proofValue("data")?.lowercase() ?: return null
+        val bytes = runCatching { data.fromHex() }.getOrNull()?.takeIf { it.size == HASH_BYTES } ?: return null
+        return when (proofValue("type")) {
+            PaykitPaymentProofKind.Lightning.type ->
+                PaykitReceiptRail.Lightning to MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
+            PaykitPaymentProofKind.Onchain.type -> PaykitReceiptRail.Onchain to data
+            else -> null
+        }
+    }
+
+    /** Byte length of a Lightning preimage and of a Bitcoin transaction id. */
+    private const val HASH_BYTES = 32
+
+    /** How far a receive's recorded time may precede its request's proposal, for block-time and clock skew. */
+    internal val RECEIVE_TIME_TOLERANCE = 2.hours
+}
+
+internal fun bitcoinReceive(
+    paymentId: String,
+    rail: PaykitReceiptRail,
+    sats: ULong,
+    address: String? = null,
+    receivedAt: ULong? = null,
+    contact: String? = null,
+    outputs: Map<String, ULong>? = null,
+) = PaykitRecordedReceive(
+    paymentId = paymentId.lowercase(),
+    rail = rail,
+    amount = PaykitAmount(PaykitAsset.BTC, sats),
+    address = address,
+    receivedAt = receivedAt,
+    contact = contact,
+    outputs = outputs,
+)
+
+/** A UUID v4 derived from the receipt's request and payment, as Paykit requires a v4 Receipt ID. */
+internal fun paykitReceiptId(
+    counterparty: String,
+    paymentRequestId: String,
+    billingPeriodStartsAt: String?,
+    paymentId: String,
+): String {
+    val seed = listOf("bitkit-receipt", counterparty, paymentRequestId, billingPeriodStartsAt.orEmpty(), paymentId)
+        .joinToString("|")
+    val bytes = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray()).copyOf(UUID_BYTES)
+    bytes[VERSION_BYTE] = (bytes[VERSION_BYTE].toInt() and 0x0f or 0x40).toByte()
+    bytes[VARIANT_BYTE] = (bytes[VARIANT_BYTE].toInt() and 0x3f or 0x80).toByte()
+    val hex = bytes.toHex()
+    return "${hex.take(8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.drop(20)}"
+        .also { UUID.fromString(it) }
+}
+
+/** Bytes in a UUID. */
+private const val UUID_BYTES = 16
+
+/** Byte holding the UUID version nibble. */
+private const val VERSION_BYTE = 6
+
+/** Byte holding the UUID variant bits. */
+private const val VARIANT_BYTE = 8

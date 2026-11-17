@@ -741,6 +741,34 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a funding scan from past its ceiling still reads forward`() = runTest {
+        val from = SparkExitMath.FUNDING_SCAN_MAX_ADDRESSES.toUInt()
+        val reads = mutableListOf<UInt>()
+
+        val next = SparkExitMath.scanNextFundingIndex(from) {
+            reads += it
+            it == from
+        }
+
+        assertEquals(from + 1u, next)
+        assertEquals((from..(from + SparkExitMath.FUNDING_SCAN_GAP_LIMIT.toUInt())).toList(), reads)
+    }
+
+    @Test
+    fun `a funding scan from the top of the index range ends instead of wrapping around`() = runTest {
+        val from = UInt.MAX_VALUE - 5u
+        val reads = mutableListOf<UInt>()
+
+        val next = SparkExitMath.scanNextFundingIndex(from) {
+            reads += it
+            true
+        }
+
+        assertEquals(UInt.MAX_VALUE, next)
+        assertEquals((from until UInt.MAX_VALUE).toList(), reads)
+    }
+
+    @Test
     fun `a funding scan stops at its ceiling when every address reads as used`() = runTest {
         var reads = 0
 

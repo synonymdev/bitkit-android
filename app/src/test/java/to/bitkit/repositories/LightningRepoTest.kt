@@ -83,6 +83,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
@@ -98,6 +99,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
@@ -120,6 +122,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 
 @OptIn(kotlin.time.ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class LightningRepoTest : BaseUnitTest() {
@@ -1623,6 +1626,190 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `of two overlapping spark sends of one invoice only one reaches spark`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var sends = 0
+        var isOverlapped = false
+        var overlapping: Result<PaymentId>? = null
+        // A second send of the same invoice passes its checks while the first is being sent.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            runSuspendCatching {
+                check(authorizeSend())
+                sends++
+                if (!isOverlapped) {
+                    isOverlapped = true
+                    overlapping = sut.payInvoice("h", 1_000uL)
+                }
+                "h"
+            }
+        }
+
+        sut.payInvoice("h", 1_000uL).getOrThrow()
+
+        assertIs<PaymentPendingException>(overlapping?.exceptionOrNull(), "Spark sent an invoice it is sending")
+        assertEquals(1, sends)
+    }
+
+    @Test
+    fun `a spark send of an invoice spark recorded since its checks is refused at submission`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        // An earlier Spark send of the invoice was recorded after this send's checks passed, and is still pending.
+        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenReturn(true)
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.PENDING, null))
+        var isSent = false
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            runSuspendCatching {
+                isSent = authorizeSend()
+                "h"
+            }
+        }
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull(), "Spark sent an invoice it sent meanwhile")
+        assertFalse(isSent)
+    }
+
+    private var sparkRecords = 0L
+    private var sparkSendRecordedAt = 0L
+
+    /** Spark's send records, where [recordSparkSend] records a send of the invoice after the marks read so far. */
+    private fun stubSparkSendRecords() {
+        whenever(sparkRepo.sendRecordMark()).thenAnswer { sparkRecords }
+        whenever(sparkRepo.hasRecordedSendSince(any(), anyOrNull())).thenAnswer {
+            sparkSendRecordedAt > it.getArgument<Long>(0)
+        }
+    }
+
+    private fun recordSparkSend() {
+        sparkSendRecordedAt = ++sparkRecords
+    }
+
+    /** Spark's send, refused at admission as an earlier Spark send of the invoice was recorded since its checks. */
+    private suspend fun stubSparkSendRefusedForARecordedOne() {
+        stubSparkSendRecords()
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            recordSparkSend()
+            runSuspendCatching {
+                authorizeSend()
+                "h"
+            }
+        }
+    }
+
+    @Test
+    fun `a spark send refused for an earlier spark send that settled first returns its outcome`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        // The earlier Spark send of the invoice was recorded after this send's checks passed, and completed first.
+        stubSparkSendRefusedForARecordedOne()
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.COMPLETED, "p"))
+
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow(), "a paid send left its caller pending")
+
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
+    }
+
+    @Test
+    fun `a spark send refused over a failed spark row stays pending while a spark retry is in flight`() = test {
+        startNodeForTesting()
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        stubSparkSendRefusedForARecordedOne()
+        // A retry recorded since the checks is still inside its send call, over an earlier attempt's failed row.
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
+        whenever(sparkRepo.isSendInFlight("h")).thenReturn(true)
+
+        assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
+    }
+
+    @Test
+    fun `a spark send refused over a failed spark row stays pending when a send ends or starts during its read`() =
+        test {
+            startNodeForTesting()
+            whenever(lightningService.listPayments()).thenReturn(emptyList())
+            whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+            stubSparkSendRefusedForARecordedOne()
+            var isInFlight = true
+            whenever(sparkRepo.isSendInFlight("h")).thenAnswer { isInFlight }
+            // The competing retry completes and is released while the older attempt's failed row is read.
+            whenever(sparkRepo.lightningSend("h")).doSuspendableAnswer {
+                isInFlight = false
+                SparkLightningSend.Found(SparkPaymentStatus.FAILED, null)
+            }
+
+            assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull(), "a send that ended")
+
+            // Another retry starts and ends while the row is read.
+            whenever(sparkRepo.lightningSend("h")).doSuspendableAnswer {
+                recordSparkSend()
+                SparkLightningSend.Found(SparkPaymentStatus.FAILED, null)
+            }
+
+            assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull(), "a send that started")
+        }
+
+    @Test
+    fun `a spark send refused over a failed spark row stays pending when a send records as its mark is read`() =
+        test {
+            startNodeForTesting()
+            whenever(lightningService.listPayments()).thenReturn(emptyList())
+            whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+            stubSparkSendRefusedForARecordedOne()
+            var isInFlight = false
+            whenever(sparkRepo.isSendInFlight("h")).thenAnswer { isInFlight }
+            // The refused send's settling mark read is its second; a competing retry is admitted and records just then.
+            var marks = 0
+            whenever(sparkRepo.sendRecordMark()).thenAnswer {
+                if (++marks == 2) {
+                    isInFlight = true
+                    recordSparkSend()
+                }
+                sparkRecords
+            }
+            // The competing retry completes and is released while the older attempt's failed row is read.
+            whenever(sparkRepo.lightningSend("h")).doSuspendableAnswer {
+                isInFlight = false
+                SparkLightningSend.Found(SparkPaymentStatus.FAILED, null)
+            }
+
+            assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
+        }
+
+    @Test
+    fun `a spark send refused over a failed spark row stays pending once the node sent the invoice`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        stubSparkSendRecords()
+        // Refused for a failed Spark send recorded since the checks, while the node's retry of the invoice is sent.
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorizeSend = it.getArgument<suspend () -> Boolean>(4)
+            recordSparkSend()
+            runSuspendCatching {
+                authorizeSend()
+                "h"
+            }.also { sut.payInvoiceWithNode("h").getOrThrow() }
+        }
+        whenever(sparkRepo.lightningSend("h")).thenReturn(SparkLightningSend.Found(SparkPaymentStatus.FAILED, null))
+
+        assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
+        verify(lightningService).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `a spark send of an invoice the node already paid settles as paid`() = test {
         startNodeForTesting()
         whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.SUCCEEDED)))
@@ -2152,6 +2339,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hasPublicChannels should fail when node is not running`() = test {
+        val result = sut.hasPublicChannels("payee")
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `hasPublicChannels should report the graph lookup when node is running`() = test {
+        startNodeForTesting()
+        whenever(lightningService.hasPublicChannels("payee")).thenReturn(true)
+
+        val result = sut.hasPublicChannels("payee")
+        assertEquals(true, result.getOrNull())
+    }
+
+    @Test
     fun `openChannel should fail when node is not running`() = test {
         val testPeer = PeerDetails.of("nodeId", "host", "9735")
         val result = sut.openChannel(testPeer, 100000uL)
@@ -2469,16 +2671,24 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         val unavailable = cached.copy(isUsable = false)
         whenever(lightningService.channels).thenReturn(listOf(unavailable))
+        clearInvocations(lightningService)
 
         val wait = async { sut.waitForUsableChannels() }
         runCurrent()
 
         assertFalse(wait.isCompleted)
         assertEquals(listOf(unavailable), sut.lightningState.value.channels)
+        verify(lightningService, times(1)).channels
+        verify(lightningService, times(1)).peers
         whenever(lightningService.channels).thenReturn(listOf(cached))
-        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY)
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY - 1.milliseconds)
+        assertFalse(wait.isCompleted)
+        verify(lightningService, times(1)).channels
+        testScheduler.advanceTimeBy(1.milliseconds)
         runCurrent()
         assertTrue(wait.isCompleted)
+        verify(lightningService, times(2)).channels
+        verify(lightningService, never()).balances
     }
 
     @Test
@@ -2502,28 +2712,34 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `waitForUsableChannels rechecks lifecycle when the node stops during refresh`() = test {
+    fun `waitForUsableChannels rejects cached usable channels when a failed refresh races with stop`() = test {
         val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
         whenever(lightningService.channels).thenReturn(listOf(cached))
         startNodeForTesting()
-        var stopped = false
+        val finishStop = CompletableDeferred<Unit>()
+        whenever(lightningService.stop()).doSuspendableAnswer { finishStop.await() }
         whenever(lightningService.channels).thenAnswer {
-            if (!stopped) {
-                stopped = true
-                launch(start = CoroutineStart.UNDISPATCHED) { sut.stop() }
-            }
-            listOf(cached)
+            launch(start = CoroutineStart.UNDISPATCHED) { sut.stop() }
+            error("Channel read interrupted by node stop")
         }
 
-        val wait = async { sut.waitForUsableChannels() }
-        runCurrent()
+        try {
+            val wait = async { sut.waitForUsableChannels() }
+            runCurrent()
 
-        assertTrue(stopped)
-        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
-        assertFalse(wait.isCompleted)
-        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS)
+            assertEquals(NodeLifecycleState.Stopping, sut.lightningState.value.nodeLifecycleState)
+            assertEquals(listOf(cached), sut.lightningState.value.channels)
+            assertFalse(wait.isCompleted)
+            testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS - 1)
+            assertFalse(wait.isCompleted)
+            testScheduler.advanceTimeBy(1)
+            runCurrent()
+            assertTrue(wait.isCompleted)
+        } finally {
+            finishStop.complete(Unit)
+        }
         runCurrent()
-        assertTrue(wait.isCompleted)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
     }
 
     @Test
@@ -3143,8 +3359,8 @@ class LightningRepoTest : BaseUnitTest() {
         }
     }
 
-    private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
-        OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
+    private fun preparedOutcome(outcome: OnchainSendOutcome, amountSats: ULong = 1_000uL) = PreparedOnchainSend(
+        OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", amountSats),
     ) {
         it()
         outcome
@@ -4455,6 +4671,217 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertEquals(80_000uL, result)
     }
+
+    @Test
+    fun `estimateMaxSendOnchain should subtract the send-all fee for the given speed`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(
+            BalanceDetails(
+                totalOnchainBalanceSats = 100_000uL,
+                spendableOnchainBalanceSats = 80_000uL,
+                totalAnchorChannelsReserveSats = 0uL,
+                totalLightningBalanceSats = 0uL,
+                lightningBalances = emptyList(),
+                pendingBalancesFromChannelClosures = emptyList(),
+            ),
+        )
+        whenever { lightningService.estimateSendAllFee(any(), any()) }.thenReturn(2_000uL)
+
+        val result = sut.estimateMaxSendOnchain(
+            address = "bcrt1qtest",
+            speed = TransactionSpeed.Fast,
+            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        )
+
+        assertEquals(78_000uL, result.getOrNull())
+        verify(lightningService).estimateSendAllFee(address = "bcrt1qtest", satsPerVByte = 20uL)
+    }
+
+    @Test
+    fun `estimateMaxSendOnchain should return zero when nothing is spendable`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(
+            BalanceDetails(
+                totalOnchainBalanceSats = 100_000uL,
+                spendableOnchainBalanceSats = 0uL,
+                totalAnchorChannelsReserveSats = 0uL,
+                totalLightningBalanceSats = 0uL,
+                lightningBalances = emptyList(),
+                pendingBalancesFromChannelClosures = emptyList(),
+            ),
+        )
+
+        val result = sut.estimateMaxSendOnchain(
+            address = "bcrt1qtest",
+            speed = TransactionSpeed.Fast,
+            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        )
+
+        assertEquals(0uL, result.getOrNull())
+        verify(lightningService, never()).estimateSendAllFee(any(), any())
+    }
+
+    @Test
+    fun `estimateMaxSendOnchain should return zero when the send-all fee exceeds the spendable balance`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(
+            BalanceDetails(
+                totalOnchainBalanceSats = 1_000uL,
+                spendableOnchainBalanceSats = 1_000uL,
+                totalAnchorChannelsReserveSats = 0uL,
+                totalLightningBalanceSats = 0uL,
+                lightningBalances = emptyList(),
+                pendingBalancesFromChannelClosures = emptyList(),
+            ),
+        )
+        whenever { lightningService.estimateSendAllFee(any(), any()) }.thenReturn(2_000uL)
+
+        val result = sut.estimateMaxSendOnchain(
+            address = "bcrt1qtest",
+            speed = TransactionSpeed.Fast,
+            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        )
+
+        assertEquals(0uL, result.getOrNull())
+    }
+
+    @Test
+    fun `sendOnChain should drain when the amount is the max after sync`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenReturn(1_000uL)
+
+        val result = sendMaxOnChain(sats = 99_000uL)
+
+        assertTrue(result.isSuccess)
+        verifyPreparedSend(sats = 99_000uL, satsPerVByte = 20uL, isDrain = true)
+    }
+
+    @Test
+    fun `sendOnChain should not drain funds found by its own sync`() = test {
+        startNodeForTesting()
+        var spendableSats = 100_000uL
+        whenever(lightningService.balances).thenAnswer { spendableBalance(spendableSats) }
+        whenever(lightningService.sync()).thenAnswer { spendableSats = 150_000uL }
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenReturn(1_000uL)
+
+        val result = sendMaxOnChain(sats = 99_000uL)
+
+        assertTrue(result.isSuccess)
+        verifyPreparedSend(sats = 99_000uL, satsPerVByte = 20uL, isDrain = false)
+    }
+
+    @Test
+    fun `sendOnChain should not drain when the max cannot be estimated`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenAnswer { throw AppError("no estimate") }
+
+        val result = sendMaxOnChain(sats = 99_000uL)
+
+        assertTrue(result.isSuccess)
+        verifyPreparedSend(sats = 99_000uL, satsPerVByte = 20uL, isDrain = false)
+    }
+
+    @Test
+    fun `sendOnChain should reuse the send rate when fee rates are missing`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        val blocktank = coreService.blocktank
+        whenever(blocktank.getFees()).thenReturn(
+            Result.success(FeeRates(fast = 10u, mid = 5u, slow = 1u)),
+            Result.success(FeeRates(fast = 20u, mid = 10u, slow = 5u)),
+        )
+        whenever(lightningService.estimateSendAllFee("bcrt1qtest", 10uL)).thenReturn(1_100uL)
+        whenever(lightningService.estimateSendAllFee("bcrt1qtest", 20uL)).thenReturn(2_200uL)
+
+        val result = sendMaxOnChain(sats = 97_800uL, feeRates = null)
+
+        assertTrue(result.isSuccess)
+        verifyPreparedSend(sats = 97_800uL, satsPerVByte = 10uL, isDrain = false)
+        verify(blocktank, times(1)).getFees()
+    }
+
+    @Test
+    fun `sendOnChain should not broadcast a drain that sweeps more than the confirmed amount`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenReturn(1_000uL)
+
+        val result = sendMaxOnChain(sats = 99_000uL, preparedSats = 149_000uL)
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        verify(onchainSendAttemptStore).releaseBeforeDispatch(any(), any())
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
+    private suspend fun sendMaxOnChain(
+        sats: ULong,
+        feeRates: FeeRates? = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        preparedSats: ULong = sats,
+    ): Result<OnchainSendOutcome> {
+        val attempt = pendingSendAttempt().copy(address = "bcrt1qtest", amountSats = sats)
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(coreService.activity).thenReturn(mock())
+        whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
+            .doSuspendableAnswer { (it.getArgument<suspend (suspend () -> Unit) -> OnchainSendOutcome>(3))({}) }
+        whenever(
+            onchainSendAttemptStore.admit(
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        ).thenReturn(attempt)
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = "txid"))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted("txid"), preparedSats))
+        return sut.sendOnChain(
+            address = "bcrt1qtest",
+            sats = sats,
+            speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
+            isMaxAmount = true,
+        )
+    }
+
+    private suspend fun verifyPreparedSend(sats: ULong, satsPerVByte: ULong, isDrain: Boolean) {
+        verify(onchainSendAttemptStore).admit(
+            walletId = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            address = eq("bcrt1qtest"),
+            amountSats = eq(sats),
+            isMaxAmount = eq(isDrain),
+            feeRateSatsPerVByte = eq(satsPerVByte),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            tags = any(),
+            transferContext = anyOrNull(),
+            beforeSendAttempt = any(),
+            payerIdentity = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+        verify(lightningService).prepareOnchainSend(
+            address = eq("bcrt1qtest"),
+            sats = eq(sats),
+            satsPerVByte = eq(satsPerVByte),
+            utxosToSpend = isNull(),
+            isMaxAmount = eq(isDrain),
+            walletIndex = any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    private fun spendableBalance(sats: ULong) = BalanceDetails(
+        totalOnchainBalanceSats = sats,
+        spendableOnchainBalanceSats = sats,
+        totalAnchorChannelsReserveSats = 0uL,
+        totalLightningBalanceSats = 0uL,
+        lightningBalances = emptyList(),
+        pendingBalancesFromChannelClosures = emptyList(),
+    )
 
     @Test
     fun `updateAddressType should fail when already in progress`() = test {

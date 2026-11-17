@@ -21,7 +21,9 @@ import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.models.takeCodePoints
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyProfileChangedError
+import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -32,6 +34,7 @@ import javax.inject.Inject
 class CreateProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "CreateProfileViewModel"
@@ -197,10 +200,18 @@ class CreateProfileViewModel @Inject constructor(
                 avatarBytes = state.avatarBytes,
             ).onSuccess {
                 _uiState.update { it.copy(isSaving = false) }
-                _effects.emit(CreateProfileEffect.CreateSuccess)
+                completeCreate()
             }.onFailure {
-                Logger.error("Failed to create identity", it, context = TAG)
                 _uiState.update { it.copy(isSaving = false) }
+                if (it is PubkyProfileTagsNotSavedError) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__edit_tags_error),
+                    )
+                    completeCreate()
+                    return@onFailure
+                }
+                Logger.error("Failed to create identity", it, context = TAG)
                 val changed = it is PubkyProfileChangedError
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
@@ -210,6 +221,11 @@ class CreateProfileViewModel @Inject constructor(
                 if (changed) deriveAndCheckRemote()
             }
         }
+    }
+
+    private suspend fun completeCreate() {
+        contactPaymentSettingsRepo.enableForNewProfile()
+        _effects.emit(CreateProfileEffect.CreateSuccess)
     }
 }
 

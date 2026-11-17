@@ -126,13 +126,21 @@ class SparkExitDriver(
         /** The least time between two builds, so a divergence that persists does not rebuild every tick. */
         val REBUILD_INTERVAL = 10.minutes
 
+        /** Blocks a Redo rebuild waits for a skipped leaf the diverged generation recovers, about an hour. */
+        const val REDO_HOLD_BLOCKS = 6u
+
         const val LOST_REASON = "Claimed by an older state"
 
         const val NO_LEAF_REASON = "No leaf can be exited"
     }
 
     suspend fun tick(start: SparkExitRecord): SparkExitRecord {
-        var record = start
+        // A Redo's fee ask ended on an earlier tick, so its withdrawal was already seen.
+        var record = if (start.isRedoAsk && start.phase !is SparkExitRecord.Phase.NeedsFunding) {
+            start.copy(isRedoAsk = false)
+        } else {
+            start
+        }
         when (record.phase) {
             SparkExitRecord.Phase.Done, is SparkExitRecord.Phase.Failed -> {
                 if (!record.isLeftoverSweepPending && !record.isEndedPaymentPending) return record
@@ -143,7 +151,10 @@ class SparkExitDriver(
             }
             is SparkExitRecord.Phase.AwaitingFunding, is SparkExitRecord.Phase.NeedsFunding -> {
                 // A higher fee paid from savings: the generation out there keeps going while that payment confirms.
-                if (record.isDrivingWhileFunding) record = driveWhileFunding(record)
+                var isChecked = true
+                if (record.isDrivingWhileFunding) {
+                    record = driveWhileFunding(record) ?: broadcastWithoutSdk(record).also { isChecked = false }
+                }
                 record = lookForOwnPayment(record)
                 val sdk = recovering
                 val since = record.retrySince
@@ -154,7 +165,7 @@ class SparkExitDriver(
                     Logger.warn("Releasing Spark exit leaves '${record.waitingLeafIds}' unfunded", context = TAG)
                     record = end(record.ended(), record)
                 } else if (sdk != null && record.phase.requiredFundingSats != null) {
-                    record = buildOnceFunded(record, sdk)
+                    record = buildOnceFunded(record, sdk, stored = start.recovery, isChecked = isChecked)
                 }
             }
             SparkExitRecord.Phase.Running if record.isRebuilding -> {
@@ -178,8 +189,16 @@ class SparkExitDriver(
         return record
     }
 
-    /** Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild. */
-    private suspend fun buildOnceFunded(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+    /**
+     * Builds once the funding [record] waits for arrived, or from what it holds when that pays for a Redo rebuild.
+     * [stored] is the recovery from before this tick's check, and [isChecked] says whether that check ran.
+     */
+    private suspend fun buildOnceFunded(
+        record: SparkExitRecord,
+        sdk: SparkExitRecovering,
+        stored: RecoverFundsResponse?,
+        isChecked: Boolean,
+    ): SparkExitRecord {
         val shortfall = record.fundingShortfallSats
         // Nothing to fund when every leaf is recovered cooperatively.
         val funded = if (shortfall != null) adoptFunding(record, shortfall) else record
@@ -201,6 +220,28 @@ class SparkExitDriver(
             // Funding an unverified rebuild asked for resumes that rebuild, with its guards, once a block like the
             // check's rebuild: the valid generation's retry clock does not pace it.
             funded.isUnverifiedAsk && !funded.isRebuilding -> {
+                // A clean check while the payment came can read the unread step again, and it is then sent: a
+                // rebuild now would conflict with it at the same fee. The ask ends, and the funding it adopted stays
+                // for a later rebuild or the leftover sweep.
+                val unilateral = funded.recovery?.transactions.orEmpty()
+                    .filter { it.kind != RecoveryTxKind.COOPERATIVE }
+                if (unilateral.any { it.status == ExitTransactionStatus.Ready } ||
+                    unilateral.none { it.status == ExitTransactionStatus.Unverified }
+                ) {
+                    Logger.info("Spark exit steps read again: no funded unverified rebuild", context = TAG)
+                    return funded.copy(phase = SparkExitRecord.Phase.Running, isUnverifiedAsk = false)
+                }
+                // A step this check just turned unverified may have been sent on an earlier clean check: the resume
+                // waits for the next check, as the check's own rebuild does. A tick whose check failed never
+                // rebuilds, as on the check path.
+                if (!isChecked) return funded
+                val unreadBefore = stored?.transactions.orEmpty()
+                    .filter { it.status == ExitTransactionStatus.Unverified }
+                    .map { it.txid }
+                    .toSet()
+                if (unilateral.any { it.status == ExitTransactionStatus.Unverified && it.txid !in unreadBefore }) {
+                    return funded
+                }
                 if (tip != null && funded.unverifiedRebuiltAtHeight == tip) return funded
                 val resumed = funded.copy(unverifiedRebuiltAtHeight = tip)
                 build(resumed, sdk, isUnverifiedRebuild = true).let {
@@ -257,7 +298,9 @@ class SparkExitDriver(
         }
         if (prepared.leaves.isEmpty()) {
             // A leaf that may still move, such as one the chain could not be read for, is waited for, about a week at
-            // most; finished leaves are not listed.
+            // most; finished leaves are not listed. A Redo hold keeps its own pace and bound: the waiting leaf's retry
+            // clock would stretch it.
+            holdingRedo(record, waitingLeafIds(record, prepared.skipped, stopped))?.let { return it }
             if (isWaiting(record, prepared.skipped, stopped)) {
                 Logger.info("Waiting for Spark exit leaves that may still move", context = TAG)
                 return record.copy(retrySince = record.retrySince ?: tip, retriedAt = tip ?: record.retriedAt)
@@ -307,6 +350,7 @@ class SparkExitDriver(
                 // Adopted, it would drop the signed steps of the leaf it could not read for the week the failed
                 // leaves are retried, past the window in which they are ours to publish.
                 if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
+                holdingRedo(record, waiting, isBuilt = true)?.let { return it }
                 val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
                 save(adopted)
                 Logger.info("Built Spark exit of only '${built.failed.size}' failed cooperative leaves", context = TAG)
@@ -322,6 +366,9 @@ class SparkExitDriver(
         // A rebuild of other leaves would drop the signed steps of a waiting leaf the valid generation recovers, until
         // the other leaves' chains confirm: the valid generation stays, rebuilt over once a block.
         if (record.keepsValidGenerationOver(waiting)) return record.keepingValidGeneration()
+        // A diverged generation is never sent again, so a Redo rebuild that leaves out a waiting leaf it recovers would
+        // leave that leaf unsent until the rest of the exit is done: it tries again at its usual pace for a few blocks.
+        holdingRedo(record, waiting, isBuilt = true)?.let { return it }
         val adopted = record.adopt(built, nowMillis()).copy(waitingLeafIds = waiting)
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
@@ -330,6 +377,23 @@ class SparkExitDriver(
             context = TAG,
         )
         return broadcastReady(adopted)
+    }
+
+    private fun holdingRedo(
+        record: SparkExitRecord,
+        waiting: List<String>,
+        isBuilt: Boolean = false,
+    ): SparkExitRecord? {
+        if (!record.isRedoRebuild || record.recovery?.leaves?.none { it.leafId in waiting } != false) return null
+        // Without a tip the hold goes on uncounted: the failed read that skipped the leaf often fails the tip too.
+        val height = tip
+        val since = record.redoHeldSince ?: height
+        if (height != null && since != null && height >= since && height - since >= REDO_HOLD_BLOCKS) return null
+        Logger.info("Holding the Spark exit's Redo rebuild for waiting leaves '$waiting'", context = TAG)
+        // A build the held funding paid for, or funding a top-up already covered, runs the hold at the rebuild pace,
+        // with no fee ask on screen; a later build that is short asks again.
+        val phase = if (isBuilt || record.fundingShortfallSats == null) SparkExitRecord.Phase.Running else record.phase
+        return record.copy(redoHeldSince = since, lastBuildAt = nowMillis(), phase = phase)
     }
 
     private suspend fun withExitState(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
@@ -460,13 +524,14 @@ class SparkExitDriver(
         return record.withOwnPaymentLooked(height, isKnown)
     }
 
-    private suspend fun driveWhileFunding(record: SparkExitRecord): SparkExitRecord {
-        val sdk = recovering ?: return broadcastWithoutSdk(record)
+    /** Checks and sends the generation out there while its top-up confirms; null when no check ran this tick. */
+    private suspend fun driveWhileFunding(record: SparkExitRecord): SparkExitRecord? {
+        val sdk = recovering ?: return null
         val stored = requireNotNull(record.recovery)
         val checked = runSuspendCatching { sdk.check(withConfirmations(stored)) }
             .onFailure { Logger.warn("Failed to check the Spark exit, sending without the SDK", it, context = TAG) }
             .getOrNull()
-            ?: return broadcastWithoutSdk(record)
+            ?: return null
         val updated = record.copy(recovery = checked.recovery)
         return when (checked.verdict) {
             RecoveryVerdict.Valid -> {
@@ -488,7 +553,7 @@ class SparkExitDriver(
             // for.
             is RecoveryVerdict.Redo -> {
                 Logger.warn("Spark exit diverged on-chain while a top-up is awaited", context = TAG)
-                updated.copy(isRebuilding = true, isRedoRebuild = true, isUnverifiedAsk = false)
+                updated.copy(isRebuilding = true, isRedoRebuild = true, isUnverifiedAsk = false, isRedoAsk = true)
             }
         }
     }
@@ -532,8 +597,12 @@ class SparkExitDriver(
                 if (sent.isFeeBumpPending && tip != null && sent.feeBumpBuiltAtHeight != tip) {
                     return buildFeeBump(sent, sdk)
                 }
-                if (!needsUnverifiedRebuild(sent)) return sent
-                // A check cannot settle a step the SDK could not read; a fresh build reads the chain again.
+                // A check marks a step unverified when one chain read fails and clears it on the next clean check, so
+                // only steps that were all unverified before this check are rebuilt over: one this check just turned
+                // unverified may be in flight, and holds the rebuild as a ready one does. A step that stays unread is
+                // rebuilt at the first check, at most once a block, where no other step just turned unverified.
+                if (!needsUnverifiedRebuild(sent, stored)) return sent
+                // A step that stays unread past a check is settled by a fresh build, which reads the chain again.
                 Logger.info("Rebuilding Spark exit over steps the SDK could not read", context = TAG)
                 val rebuilding = sent.copy(isRebuilding = true, unverifiedRebuiltAtHeight = tip, isRedoRebuild = false)
                 // Saved as the valid generation: a run killed during the rebuild goes on sending it.
@@ -690,7 +759,11 @@ class SparkExitDriver(
         if (held == null && record.fundedSats > 0uL) return record
         val inputFee = SparkExitMath.inputFeeSats(record.feeRateSatPerVbyte)
         val needed = SparkExitMath.neededFunding(error.requiredSats, record.fundedSats, held, inputFee)
-        return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(needed))
+        // A Redo rebuild's ask ends once the funding it holds pays for a later build.
+        return record.copy(
+            phase = SparkExitRecord.Phase.NeedsFunding(needed),
+            isRedoAsk = record.isRedoAsk || record.isRedoRebuild,
+        )
     }
 
     /**
@@ -794,11 +867,16 @@ class SparkExitDriver(
         isRebuilding && phase == SparkExitRecord.Phase.Running && generation == before.generation &&
             lostLeaves == before.lostLeaves
 
-    private fun needsUnverifiedRebuild(record: SparkExitRecord): Boolean {
+    private fun needsUnverifiedRebuild(record: SparkExitRecord, stored: RecoverFundsResponse): Boolean {
         val height = tip ?: return false
         if (record.unverifiedRebuiltAtHeight == height) return false
+        val unreadBefore = stored.transactions
+            .filter { it.status == ExitTransactionStatus.Unverified }
+            .map { it.txid }
+            .toSet()
         val transactions = record.recovery?.transactions.orEmpty().filter { it.kind != RecoveryTxKind.COOPERATIVE }
-        return transactions.any { it.status == ExitTransactionStatus.Unverified } &&
+        val unread = transactions.filter { it.status == ExitTransactionStatus.Unverified }
+        return unread.isNotEmpty() && unread.all { it.txid in unreadBefore } &&
             transactions.none { it.status == ExitTransactionStatus.Ready }
     }
 
@@ -1174,7 +1252,7 @@ class SparkExitDriver(
         var current = record
         val recovery = current.recovery ?: return current
         // A cooperative step the SDK could not read goes out too: nodes refuse it if its funds already moved. A
-        // unilateral one waits for a rebuild.
+        // unilateral one waits for the next clean check, or a rebuild once it stays unread.
         recovery.transactions
             .filter { it.status == ExitTransactionStatus.Ready || it.isCooperativeUnverified }
             .filter { isDue(it.txid, current) }

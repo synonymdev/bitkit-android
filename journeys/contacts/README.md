@@ -9,8 +9,9 @@ below are still needed to verify that pending work resumes.
 `delete-newly-saved-contact.xml` checks deletion directly from Contact Saved and adding that
 contact again. It is mirrored on iOS. Deleted contact screens must not remain in Back history.
 
-`contact-payment-sharing.xml` checks disabling private sharing and keeping it off after returning to
-Settings. The same journey is available on iOS.
+Private contact payments have no setting: they stay on while a Pubky profile exists, and the app turns
+them back on when it comes to the foreground. Only sign-out, profile deletion and wallet wipe turn
+private sharing off. The same applies on iOS.
 
 `contact-pay-private-link-pending.xml` checks that a saved contact that supports private payments is
 only paid privately: while only one side has saved the other, Pay shows the private-connection toast
@@ -18,15 +19,10 @@ and opens no payment, and Pay works once both sides have saved each other. It re
 disposable, request-capable identities with contact payment sharing enabled.
 
 Network and storage fault injection are outside journey-runner capabilities. With private contact sharing
-on, make one private-list withdrawal fail and let the following app-registry update fail as well.
-Turn off private contact payments. The app must report the failure, keep the private toggle off,
-leave public sharing unchanged, and retain cleanup without republishing cleared private lists.
-Restore connectivity and foreground the app. Cleanup must finish while private sharing stays off.
-Repeat with only the trailing app-registry update failing.
-
-Hold withdrawal in progress and foreground the app. It must not start another cleanup. Request
-sharing on again before withdrawal finishes: publication must wait until the earlier cleanup ends,
-then leave sharing on. Repeat while a foreground cleanup is already running.
+on, delete the profile with one private-list withdrawal failing and the following app-registry update
+failing as well. The app must report the failure and retain cleanup without republishing cleared
+private lists. Restore connectivity and foreground the app. Cleanup must
+finish. Repeat with only the trailing app-registry update failing.
 
 Import journeys require a disposable identity with a known following list. They save local Bitkit contacts; payment sharing remains a separate step.
 

@@ -236,6 +236,45 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a landed sweep keeps the transfer while a cooperative step is still on its way`() = test {
+        val sweep = SparkExitFixtures.tx(
+            "s",
+            kind = RecoveryTxKind.SWEEP,
+            status = ExitTransactionStatus.Confirmed(50u),
+        )
+        fun cooperative(status: ExitTransactionStatus) =
+            SparkExitFixtures.tx("c", kind = RecoveryTxKind.COOPERATIVE, status = status)
+        val running = SparkExitFixtures.record(Phase.Running)
+        val activity = OnchainActivity.create(
+            walletId = "wallet0",
+            id = "sweep",
+            txType = PaymentType.RECEIVED,
+            txId = "s",
+            value = 90_000uL,
+            fee = 0uL,
+            address = "bcrt1qdestination",
+            timestamp = 0uL,
+            feeRate = 1uL,
+        ).copy(isTransfer = true)
+        val activityRepo = mock<ActivityRepo>()
+        whenever(activityRepo.getOnchainActivityByTxId(any(), any())).thenReturn(activity)
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.markSettled(any())).thenReturn(Result.success(Unit))
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+
+        val pending = SparkExitFixtures.recovery(listOf(sweep, cooperative(ExitTransactionStatus.Ready)))
+        store.save(running.adopt(pending, 0L))
+        createSut(activityRepo = activityRepo).load().getOrThrow()
+        verify(transferRepo, never()).markSettled(any())
+
+        val landed = SparkExitFixtures.recovery(listOf(sweep, cooperative(ExitTransactionStatus.Confirmed(51u))))
+        store.save(running.adopt(landed, 0L))
+        createSut(activityRepo = activityRepo).load().getOrThrow()
+        verify(transferRepo).markSettled("transfer-1")
+    }
+
+    @Test
     fun `a sweep seen before failed leaves are retried keeps the transfer`() = test {
         val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP)
         val failed = CooperativeRecoveryFailure(
@@ -904,6 +943,60 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a quote while a restore is pending scans past the restored funding index first`() = test {
+        // The backup carrying index 4 never landed: address 3 still holds the lost exit's coins.
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        val restored = AppCacheData(
+            sparkExitNextFundingIndexes = mapOf(key to 3),
+            sparkExitFundingRecoveryPending = setOf(key),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(restored))
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2, 3), reads = mutableListOf(), coins = mapOf(3 to 7_000)))
+
+        sut.loadQuote().getOrThrow()
+
+        assertEquals(4u, sut.state.value.pending?.fundingIndex, "the next exit funds from the lost exit's address")
+        assertEquals(listOf(keptCoins(3, 7_000uL)), sut.state.value.earlierAddresses)
+        assertTrue(keptCache(restored).sparkExitFundingRecoveryPending.isEmpty())
+    }
+
+    @Test
+    fun `a quote while a restore is pending fails when the scan fails`() = test {
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        val restored = AppCacheData(
+            sparkExitNextFundingIndexes = mapOf(key to 3),
+            sparkExitFundingRecoveryPending = setOf(key),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(restored))
+        val sut = scannedSut(scanChain(used = emptySet(), reads = mutableListOf(), isDown = true))
+
+        assertTrue(sut.loadQuote().isFailure, "a quote could fund from the address a lost exit used")
+
+        assertNull(sut.state.value.pending)
+        verify(cacheStore, never()).update(any())
+    }
+
+    @Test
+    fun `a restored funding index at a forgotten exit's address lists its late payment as kept change`() = test {
+        // The exit at address 3 was forgotten before funding, so the index went back to 3; a payment came late.
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        val restored = AppCacheData(
+            sparkExitNextFundingIndexes = mapOf(key to 3),
+            sparkExitFundingRecoveryPending = setOf(key),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(restored))
+        val earlier = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
+        earlier.add(keptCoins(3, 0uL).copy(kind = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING, sats = null))
+        val sut = scannedSut(scanChain(used = setOf(0, 1, 2, 3), reads = mutableListOf(), coins = mapOf(3 to 4_000)))
+        sut.load(0).getOrThrow()
+
+        sut.refreshEarlierAddresses()
+
+        assertEquals(listOf(keptCoins(3, 4_000uL)), earlier.load(), "watched only until its cancel expires")
+        assertEquals(mapOf(key to 4), keptCache(restored).sparkExitNextFundingIndexes)
+    }
+
+    @Test
     fun `a kept funding index with no restore pending reads no funding address`() = test {
         val key = "${Env.network.name.lowercase()}/wallet0"
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 3))))
@@ -928,6 +1021,30 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertEquals(3u, sut.state.value.pending?.fundingIndex)
         assertTrue(reads.isEmpty(), "a backed-up index needs no scan")
+    }
+
+    @Test
+    fun `a start never lowers a funding index a scan moved past its quote`() = test {
+        val key = "${Env.network.name.lowercase()}/wallet0"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 3))))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        assertEquals(3u, sut.state.value.pending?.fundingIndex)
+
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertEquals(
+            mapOf(key to 4),
+            keptCache(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 3))).sparkExitNextFundingIndexes,
+            "the next exit funds from this exit's address",
+        )
+        // A scan that kept index 9 between the quote and the start.
+        assertEquals(
+            mapOf(key to 9),
+            keptCache(AppCacheData(sparkExitNextFundingIndexes = mapOf(key to 9))).sparkExitNextFundingIndexes,
+            "the next exit funds from an address the scan found used",
+        )
     }
 
     @Test

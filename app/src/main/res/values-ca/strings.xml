@@ -214,12 +214,6 @@
     <string name="lightning__savings_progress__text">Si us plau, espera, la transferència de fons està en curs. Hauria de trigar &lt;accent&gt;±10 segons.&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__title">Fons\n&lt;accent&gt;en transferència&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Temps de sincronització de puntuacions de rutes</string>
-    <string name="lightning__setting_up__not_seen">Spark encara no ha vist la teva transferència. S\'afegeix després de 3 confirmacions; pots sortir d\'aquesta pantalla.</string>
-    <string name="lightning__setting_up__pay">Paga ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Instant ara costa &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Paga-ho o espera 3 confirmacions, uns 30 minuts, amb una comissió més baixa.</string>
-    <string name="lightning__setting_up__speed">Velocitat: {speed}</string>
-    <string name="lightning__setting_up__step_adding">Afegint a despesa</string>
-    <string name="lightning__setting_up__unavailable">Instant no està disponible per a aquesta transferència. Spark l\'afegeix al teu saldo de despesa després de 3 confirmacions, uns 30 minuts.</string>
     <string name="lightning__setting_up_button">Continua utilitzant Bitkit</string>
     <string name="lightning__setting_up_step1">Processant pagament</string>
     <string name="lightning__setting_up_step2">Pagament realitzat amb èxit</string>
@@ -227,9 +221,6 @@
     <string name="lightning__spark_claim_fee">Comissió de reclamació</string>
     <string name="lightning__spark_confirmations">%1$d/3 confirmacions</string>
     <string name="lightning__spark_deposit">Dipòsit</string>
-    <string name="lightning__spark_deposit__claimed">Spark ho està afegint al teu saldo de despeses.</string>
-    <string name="lightning__spark_deposit__looking">Esperant que Spark vegi la teva transferència.</string>
-    <string name="lightning__spark_deposit__standard">Spark ho afegeix al teu saldo de despeses després de {standard} confirmacions, d\'aquí a uns {minutes} minuts.</string>
     <string name="lightning__spark_deposit__wait_button">Espera</string>
     <string name="lightning__spark_deposits_claimed">Dipòsits reclamats</string>
     <string name="lightning__spark_deposits_pending">Dipòsits en curs</string>
@@ -613,6 +604,7 @@
     <string name="security__pin_forgot_title">Has oblidat el PIN?</string>
     <string name="security__pin_last_attempt">Darrer intent. Introduir el PIN incorrecte de nou reiniciarà la teva cartera.</string>
     <string name="security__pin_not_match">Torna a provar, això no és el mateix PIN.</string>
+    <string name="security__pin_quickpay">Si us plau, introdueix el teu codi PIN per confirmar aquest canvi a QuickPay.</string>
     <string name="security__pin_retype_header">Reescriu el PIN de 4 dígits</string>
     <string name="security__pin_retype_text">Si us plau, torna a escriure el teu PIN de 4 dígits per completar el procés de configuració.</string>
     <string name="security__pin_security_button">Cartera segura</string>
@@ -1089,6 +1081,9 @@
     <string name="wallet__note">Nota</string>
     <string name="wallet__payment_received">Rebut Bitcoin</string>
     <string name="wallet__peer_disconnected">Parell desconnectat.</string>
+    <string name="wallet__receipt_failed">No s\'ha pogut enviar el rebut</string>
+    <string name="wallet__receipt_sending">S\'està enviant el rebut</string>
+    <string name="wallet__receipt_sent">Rebut enviat</string>
     <string name="wallet__receive">Rebre</string>
     <string name="wallet__receive__cjit">Rebre fons Lightning</string>
     <string name="wallet__receive_bitcoin">Rebre Bitcoin</string>
@@ -1159,6 +1154,8 @@
     <string name="wallet__send_yes">Sí, Enviar</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Envia\nbitcoin&lt;/accent&gt;\nal teu\nsaldo de despesa</string>
     <string name="wallet__spending__title">Despesa</string>
+    <string name="wallet__swap_route_restored_text">Un pagament a un contacte que la restauració va interrompre ha tornat als teus estalvis.</string>
+    <string name="wallet__swap_route_restored_title">Pagament retornat a Estalvis</string>
     <string name="wallet__tags">Etiquetes</string>
     <string name="wallet__tags_add">Afegeix etiqueta</string>
     <string name="wallet__tags_add_button">Afegir</string>
@@ -1500,17 +1497,10 @@
     <string name="profile__intro_description">Amb el teu perfil portable, els teus contactes et poden trobar i pagar a qualsevol lloc.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTABLE&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Utilitza Bitkit amb els teus contactes per enviar pagaments directament, en qualsevol moment i a qualsevol lloc.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">No s\'han pogut preparar les dades del punt de pagament.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">No hi ha cap punt de pagament compatible disponible.</string>
-    <string name="profile__pay_contacts_error_retry">No s\'han pogut activar els pagaments amb contactes. Els teus contactes desats no han canviat. Torna-ho a provar.</string>
-    <string name="profile__pay_contacts_error_session">Torna a connectar el teu perfil de Pubky per compartir les dades de pagament.</string>
-    <string name="profile__pay_contacts_error_wallet">La cartera encara s\'està iniciant. Torna-ho a provar d\'aquí a un moment.</string>
     <string name="profile__pay_contacts_headline">Deixa que els\nteus contactes\n&lt;accent&gt;et paguin&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar contactes</string>
-    <string name="profile__private_payments_toggle">Pagaments privats amb contactes</string>
     <string name="profile__pubky_copied">pubky copiat al porta-retalls</string>
     <string name="profile__public_key">Clau pública</string>
-    <string name="profile__public_payments_toggle">Pagaments públics</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">La sessió del teu perfil ha caducat. Torna a connectar-te per restaurar el teu perfil.</string>
     <string name="profile__sign_out">Desconnectar</string>

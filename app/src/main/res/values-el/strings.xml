@@ -210,12 +210,6 @@
     <string name="lightning__savings_progress__text">Περίμενε, η μεταφορά κεφαλαίων σου είναι σε εξέλιξη. Αυτό θα διαρκέσει &lt;accent&gt;±10 δευτερόλεπτα.&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__title">Κεφάλαια\n&lt;accent&gt;σε μεταφορά&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Χρόνος συγχρονισμού βαθμολογιών εύρεσης διαδρομής</string>
-    <string name="lightning__setting_up__not_seen">Το Spark δεν έχει δει ακόμα τη μεταφορά σου. Προστίθεται μετά από 3 επιβεβαιώσεις· μπορείς να φύγεις από αυτή την οθόνη.</string>
-    <string name="lightning__setting_up__pay">Πλήρωσε ₿ {amount}</string>
-    <string name="lightning__setting_up__repriced">Το Άμεσα κοστίζει τώρα &lt;accent&gt;₿ {amount}&lt;/accent&gt;. Πλήρωσέ το ή περίμενε 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
-    <string name="lightning__setting_up__speed">Ταχύτητα: {speed}</string>
-    <string name="lightning__setting_up__step_adding">Προσθήκη στις δαπάνες</string>
-    <string name="lightning__setting_up__unavailable">Το Άμεσα δεν είναι διαθέσιμο για αυτή τη μεταφορά. Το Spark την προσθέτει στο υπόλοιπο δαπανών σου μετά από 3 επιβεβαιώσεις, περίπου 30 λεπτά.</string>
     <string name="lightning__setting_up_button">Συνέχισε να χρησιμοποιείς το Bitkit</string>
     <string name="lightning__setting_up_step1">Επεξεργασία πληρωμής</string>
     <string name="lightning__setting_up_step2">Επιτυχής πληρωμή</string>
@@ -223,9 +217,6 @@
     <string name="lightning__spark_claim_fee">Χρέωση εξαργύρωσης</string>
     <string name="lightning__spark_confirmations">%1$d/3 επιβεβαιώσεις</string>
     <string name="lightning__spark_deposit">Κατάθεση</string>
-    <string name="lightning__spark_deposit__claimed">Το Spark το προσθέτει στο υπόλοιπο δαπανών σας.</string>
-    <string name="lightning__spark_deposit__looking">Αναμονή για να δει το Spark τη μεταφορά σας.</string>
-    <string name="lightning__spark_deposit__standard">Το Spark το προσθέτει στο υπόλοιπο δαπανών σας μετά από {standard} επιβεβαιώσεις, σε περίπου {minutes} λεπτά.</string>
     <string name="lightning__spark_deposit__wait_button">Αναμονή</string>
     <string name="lightning__spark_deposits_claimed">Εξαργυρωμένες καταθέσεις</string>
     <string name="lightning__spark_deposits_pending">Καταθέσεις σε εξέλιξη</string>
@@ -598,6 +589,7 @@
     <string name="security__pin_forgot_title">Ξέχασες το PIN;</string>
     <string name="security__pin_last_attempt">Τελευταία προσπάθεια. Αν εισάγεις λάθος PIN ξανά, το πορτοφόλι σου θα επαναφερθεί.</string>
     <string name="security__pin_not_match">Δοκίμασε ξανά, δεν είναι το ίδιο PIN.</string>
+    <string name="security__pin_quickpay">Εισάγαγε τον κωδικό PIN για να επιβεβαιώσεις αυτή την αλλαγή στο QuickPay.</string>
     <string name="security__pin_retype_header">Επανάληψη 4ψήφιου PIN</string>
     <string name="security__pin_retype_text">Πληκτρολόγησε ξανά το 4ψήφιο PIN για να ολοκληρώσεις τη διαδικασία ρύθμισης.</string>
     <string name="security__pin_security_button">Ασφάλισε το πορτοφόλι</string>
@@ -1070,6 +1062,9 @@
     <string name="wallet__note">Σημείωση</string>
     <string name="wallet__payment_received">Ελήφθησαν Bitcoin</string>
     <string name="wallet__peer_disconnected">Ο ομότιμος αποσυνδέθηκε.</string>
+    <string name="wallet__receipt_failed">Η αποστολή της απόδειξης απέτυχε</string>
+    <string name="wallet__receipt_sending">Αποστολή απόδειξης</string>
+    <string name="wallet__receipt_sent">Η απόδειξη στάλθηκε</string>
     <string name="wallet__receive">Λήψη</string>
     <string name="wallet__receive__cjit">Λήψη κεφαλαίων Lightning</string>
     <string name="wallet__receive_bitcoin">Λήψη Bitcoin</string>
@@ -1138,6 +1133,8 @@
     <string name="wallet__send_yes">Ναι, Στείλε</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Στείλε\nbitcoin&lt;/accent&gt;\nστο υπόλοιπο\nδαπανών</string>
     <string name="wallet__spending__title">Δαπάνες</string>
+    <string name="wallet__swap_route_restored_text">Μια πληρωμή σε επαφή που διέκοψε η επαναφορά επέστρεψε στις αποταμιεύσεις σου.</string>
+    <string name="wallet__swap_route_restored_title">Η πληρωμή επέστρεψε στις Αποταμιεύσεις</string>
     <string name="wallet__tags">Ετικέτες</string>
     <string name="wallet__tags_add">Προσθήκη ετικέτας</string>
     <string name="wallet__tags_add_button">Προσθήκη</string>
@@ -1485,17 +1482,10 @@
     <string name="profile__intro_description">Με το φορητό προφίλ σου, οι επαφές σου μπορούν να σε βρουν και να σε πληρώσουν οπουδήποτε.</string>
     <string name="profile__intro_title">ΦΟΡΗΤΟ\n&lt;accent&gt;ΠΡΟΦΙΛ&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_description">Χρησιμοποίησε το Bitkit με τις επαφές σου για να στέλνεις πληρωμές απευθείας, οποτεδήποτε, οπουδήποτε.</string>
-    <string name="profile__pay_contacts_error_invalid_payload">Δεν ήταν δυνατή η προετοιμασία των δεδομένων του endpoint πληρωμής.</string>
-    <string name="profile__pay_contacts_error_no_endpoint">Δεν υπάρχει διαθέσιμο υποστηριζόμενο endpoint πληρωμής.</string>
-    <string name="profile__pay_contacts_error_retry">Δεν ήταν δυνατή η ενεργοποίηση των πληρωμών επαφών. Οι αποθηκευμένες επαφές σου δεν άλλαξαν. Δοκίμασε ξανά.</string>
-    <string name="profile__pay_contacts_error_session">Σύνδεσε ξανά το προφίλ Pubky σου για να κοινοποιήσεις δεδομένα πληρωμών.</string>
-    <string name="profile__pay_contacts_error_wallet">Το πορτοφόλι ξεκινά ακόμα. Δοκίμασε ξανά σε λίγο.</string>
     <string name="profile__pay_contacts_headline">Άφησε τις\nεπαφές σου\n&lt;accent&gt;να σε πληρώνουν&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Πληρωμή επαφών</string>
-    <string name="profile__private_payments_toggle">Ιδιωτικές πληρωμές επαφών</string>
     <string name="profile__pubky_copied">Το pubky αντιγράφηκε στο πρόχειρο</string>
     <string name="profile__public_key">Δημόσιο κλειδί</string>
-    <string name="profile__public_payments_toggle">Δημόσιες πληρωμές</string>
     <string name="profile__restore_nav_title">Επαναφορά προφίλ</string>
     <string name="profile__session_expired">Η συνεδρία του προφίλ σου έληξε. Σύνδεσε ξανά για να επαναφέρεις το προφίλ σου.</string>
     <string name="profile__sign_out">Αποσύνδεση</string>

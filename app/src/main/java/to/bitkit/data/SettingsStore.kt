@@ -304,8 +304,9 @@ fun SettingsData.resetPin() = this.copy(
     isBiometricEnabled = false,
 )
 
-fun SettingsData.areContactPaymentsEnabled(): Boolean =
-    sharesPrivatePaykitEndpoints
+/** Whether payments must pass the PIN or biometric check before they are sent. */
+val SettingsData.requiresPaymentAuth: Boolean
+    get() = isPinEnabled && isPinForPaymentsEnabled
 
 fun SettingsData.withIndependentPaykitSharing(): SettingsData {
     if (hasIndependentPaykitSharing) return this

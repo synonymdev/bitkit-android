@@ -4,6 +4,7 @@ import breez_sdk_spark.CpfpFundingKind
 import breez_sdk_spark.CpfpFundingStrategy
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitLeafSelection
+import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.singleKeyCpfpSigner
@@ -384,9 +385,12 @@ class SparkExitRepo @Inject constructor(
         }
         val transferId = record.transferId ?: return
         if (transferRepo.isSettled(transferId).getOrDefault(true)) return
-        // Leaves the operators could not co-sign are still on their way to savings, before and while they are retried:
-        // the transfer keeps counting them, less what already confirmed.
-        if (!record.isActive || (sweepActivity != null && !record.hasLeavesOutstanding)) {
+        // Leaves the operators could not co-sign are still on their way to savings, before and while they are retried,
+        // as are cooperative steps not yet in a block: the transfer keeps counting them, less what already confirmed.
+        val isCooperativePending = record.recovery?.transactions.orEmpty().any {
+            it.kind == RecoveryTxKind.COOPERATIVE && it.status !is ExitTransactionStatus.Confirmed
+        }
+        if (!record.isActive || (sweepActivity != null && !record.hasLeavesOutstanding && !isCooperativePending)) {
             transferRepo.markSettled(transferId)
         }
     }
@@ -811,7 +815,9 @@ class SparkExitRepo @Inject constructor(
         // Spark on Lightning with its leaf optimization on, and nothing would drive or fund it.
         withContext(NonCancellable) {
             cacheStore.update {
-                val next = it.sparkExitNextFundingIndexes + (fundingIndexKey to pending.fundingIndex.toInt() + 1)
+                // Never lowers an index a restore's scan moved past this quote's.
+                val past = maxOf(it.sparkExitNextFundingIndexes[fundingIndexKey] ?: 0, pending.fundingIndex.toInt() + 1)
+                val next = it.sparkExitNextFundingIndexes + (fundingIndexKey to past)
                 it.copy(sparkExitNextFundingIndexes = next)
             }
             // A cancelled exit's address this exit funds again is this exit's now, not an earlier exit's.
@@ -1128,14 +1134,15 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
-     * With no index kept and no record, as after a restore from the phrase or from a backup older than the index, the
-     * funding addresses are scanned first. A scan the chain fails keeps nothing.
+     * While a restore is pending, as after a restore from the phrase or from a backup, the funding addresses are
+     * scanned first: a restored index can predate the last exit's funding. A scan the chain fails throws and keeps
+     * nothing, so no quote reuses that funding address.
      */
     private suspend fun nextFundingIndex(): UInt {
+        val scanned = chain?.let { recoverFunding(it) }?.toInt()
         val kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey]
         val stored = runSuspendCatching { store.load() }.getOrNull()
-        if (kept != null || stored != null) return SparkExitMath.nextFundingIndex(kept, stored)
-        return chain?.let { recoverFunding(it) } ?: 0u
+        return SparkExitMath.nextFundingIndex(listOfNotNull(kept, scanned).maxOrNull(), stored)
     }
 
     /**
@@ -1162,7 +1169,11 @@ class SparkExitRepo @Inject constructor(
             chain.isAddressUsed(address(index)).also { if (it) used += index }
         }
         val candidates = if (kept == null) used else (0u until kept.toUInt()).toList() + used
-        val listed = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList()).map { it.address }
+        // A forgotten exit's funding address is no longer watched once the scan moves the index past it, so one that
+        // holds coins is listed again, as kept change.
+        val listed = runCatching { earlierAddressStore.load() }.getOrDefault(emptyList())
+            .filter { it.kind != SparkExitEarlierAddress.Kind.CANCELLED_FUNDING }
+            .map { it.address }
         val watched = listed + stored?.funding?.map { it.address }.orEmpty()
         for (index in candidates.filter { address(it) !in watched }) {
             val address = address(index)
