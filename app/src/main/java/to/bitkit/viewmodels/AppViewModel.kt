@@ -4069,7 +4069,8 @@ class AppViewModel @Inject constructor(
             suppressQuickPay = suppressQuickPay,
         )
         // Only a nearby read suppresses QuickPay here, so cancelling it never stops a payment in progress.
-        if (suppressQuickPay) nearbyAddressScanJob = job
+        // A duplicate read returns no job; keep the handle of the scan still running.
+        if (suppressQuickPay) job?.let { nearbyAddressScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {

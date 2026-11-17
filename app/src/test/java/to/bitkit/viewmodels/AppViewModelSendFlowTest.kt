@@ -9767,6 +9767,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `duplicate nearby read keeps the decoding read cancellable by enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `hardware send sheet onchain address with payable amount estimates its fee and opens confirm`() = test {
         val input = stubOnchainAmountScan(amountSats = 10_000u)
         stubHardwareFunding()
