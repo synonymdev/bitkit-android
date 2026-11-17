@@ -658,17 +658,40 @@ class SparkRepo @Inject constructor(
         when (send) {
             SparkLightningSend.NotFound -> {
                 cacheStore.removeSparkSendHash(paymentHash)
+                finishHeldActivity(paymentHash)
                 _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR))
             }
             // A pending send ends with its own payment event.
             is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> Unit
             is SparkLightningSend.Found -> {
-                if (send.status == PaymentStatus.FAILED) cacheStore.removeSparkSendHash(paymentHash)
+                if (send.status == PaymentStatus.FAILED) {
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    finishHeldActivity(paymentHash)
+                }
                 settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
             }
             SparkLightningSend.Unavailable -> Unit
         }
         return true
+    }
+
+    /**
+     * Ends the Activity row a held send kept pending, as an earlier attempt's failure is skipped while the hold lasts:
+     * from Spark's listed send, or as failed when Spark lists none.
+     */
+    private suspend fun finishHeldActivity(paymentHash: String) {
+        val listed = runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments for '$paymentHash'", it, context = TAG) }
+            .getOrNull()
+            ?.latestSend(paymentHash)
+        if (listed != null) {
+            recordActivity(listed)
+            return
+        }
+        val stored = activityRepo.get().getActivity(paymentHash).getOrNull() as? Activity.Lightning ?: return
+        if (stored.v1.txType != PaymentType.SENT || stored.v1.status != PaymentState.PENDING) return
+        activityRepo.get().upsertActivity(Activity.Lightning(stored.v1.copy(status = PaymentState.FAILED)))
+            .onFailure { Logger.warn("Failed to mark Spark send '$paymentHash' failed", it, context = TAG) }
     }
 
     /**
