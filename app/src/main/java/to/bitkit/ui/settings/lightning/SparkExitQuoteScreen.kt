@@ -67,7 +67,7 @@ private fun Content(
                 text = stringResource(R.string.lightning__spark_exit__quote_text).withAccentBoldBright(),
                 color = Colors.White64,
             )
-            VerticalSpacer(16.dp)
+            VerticalSpacer(32.dp)
             when {
                 uiState.quote != null -> {
                     SparkExitQuoteRows(uiState.quote)

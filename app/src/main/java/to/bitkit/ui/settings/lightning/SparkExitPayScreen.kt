@@ -79,10 +79,10 @@ private fun Content(
                 text = stringResource(R.string.lightning__spark_exit__pay_text).withAccentBoldBright(),
                 color = Colors.White64,
             )
-            VerticalSpacer(16.dp)
+            VerticalSpacer(32.dp)
             SparkExitFeesRow(stringResource(R.string.lightning__spark_exit__pay_amount), uiState.fundingSats)
             uiState.fundingAddress?.let {
-                VerticalSpacer(16.dp)
+                VerticalSpacer(32.dp)
                 SparkExitFundingAddress(
                     address = it,
                     requiredSats = uiState.fundingSats,

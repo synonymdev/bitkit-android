@@ -129,7 +129,17 @@ internal fun SparkExitFeesRow(label: String, sats: ULong, modifier: Modifier = M
 
 @Composable
 private fun SparkExitAmountRow(label: String, sats: ULong) {
-    SectionRow(name = label, valueContent = { MoneyCaptionB(sats = sats.toLong(), symbol = true) })
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+    ) {
+        CaptionB(text = label, modifier = Modifier.weight(1f))
+        MoneyCaptionB(sats = sats.toLong(), symbol = true)
+    }
+    HorizontalDivider()
 }
 
 /** The funding address to pay from another wallet, with its copy button and what arrived so far. */
@@ -145,6 +155,7 @@ internal fun SparkExitFundingAddress(
     val copied = stringResource(R.string.common__copied)
     Column(modifier = modifier.fillMaxWidth()) {
         SparkExitHeader(stringResource(R.string.lightning__spark_exit__send_to_address))
+        VerticalSpacer(16.dp)
         CaptionB(
             text = address,
             modifier = Modifier

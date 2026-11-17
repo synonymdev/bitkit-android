@@ -82,7 +82,7 @@ private fun Content(
                 text = stringResource(R.string.lightning__spark_exit__fees_text),
                 color = Colors.White64,
             )
-            VerticalSpacer(16.dp)
+            VerticalSpacer(32.dp)
             val savingsCost = uiState.savingsCostSats
             when {
                 uiState.paysExternally -> SparkExitFeesRow(
@@ -97,7 +97,7 @@ private fun Content(
                 )
             }
             if (uiState.paysExternally || savingsCost != null) {
-                VerticalSpacer(16.dp)
+                VerticalSpacer(32.dp)
                 BodyS(
                     text = stringResource(R.string.lightning__spark_exit__fees_unused),
                     color = Colors.White64,

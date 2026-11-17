@@ -500,7 +500,7 @@
     <string name="lightning__spark_exit__overview">Overview</string>
     <string name="lightning__spark_exit__partial_text">{count} small amounts stayed on Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Amount to pay</string>
-    <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Pay the fees to initiate the force transfer.&lt;/accent&gt; The force transfer starts once the payment confirms on the blockchain.</string>
+    <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Pay the fees to initiate the force transfer.&lt;/accent&gt;\nThe force transfer starts once the payment confirms on the blockchain.</string>
     <string name="lightning__spark_exit__pay_title">Pay to\n&lt;accent&gt;confirm&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__progress_nav_title">Transfer Funds</string>
     <string name="lightning__spark_exit__progress_overview">Progress overview</string>
