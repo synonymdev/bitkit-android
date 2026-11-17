@@ -196,6 +196,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
+import to.bitkit.repositories.OnchainSendReviewEndedError
 import to.bitkit.repositories.OnchainSendReviewInterruptedError
 import to.bitkit.repositories.PaykitAllowanceEntry
 import to.bitkit.repositories.PaykitAllowanceError
@@ -7244,11 +7245,7 @@ class AppViewModel @Inject constructor(
         if (cancelled != null || isInterrupted) {
             Logger.info("Cancelled on-chain send at its prepared fee review", context = TAG)
             if (cancelled?.isNotified == false) return
-            toast(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
-                description = context.getString(R.string.wallet__send_fee_changed_not_sent),
-            )
+            toastFeeChangedNotSent()
             if (cancelled?.closesSend == true || isInterrupted && currentSheet.value is Sheet.Send) hideSheet()
             return
         }
@@ -7336,6 +7333,21 @@ class AppViewModel @Inject constructor(
         if (isVisible) return
         preparedFeeReview?.isRouteLost = true
         cancelPreparedFeeReview()
+    }
+
+    private fun toastFeeChangedNotSent() {
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            // A review can end while the app is in the background, where its toast would expire unseen.
+            if (isPaymentRequestPollingStopped.value) {
+                isPaymentRequestPollingStopped.first { !it }
+                _isAuthenticated.first { it }
+            }
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+                description = context.getString(R.string.wallet__send_fee_changed_not_sent),
+            )
+        }
     }
 
     private fun cancelPreparedFeeReview() {
@@ -10677,7 +10689,7 @@ private class PreparedFeeReview(val feeSats: ULong) {
  * [closesSend] when that send is still the one on screen.
  */
 private class PreparedFeeReviewCancelledError(val isNotified: Boolean = false, val closesSend: Boolean = false) :
-    AppError("On-chain send was cancelled at its prepared fee review")
+    OnchainSendReviewEndedError("On-chain send was cancelled at its prepared fee review")
 
 /**
  * How long a prepared send waits for its higher fee to be approved. Its attempt blocks other on-chain sends, wallet

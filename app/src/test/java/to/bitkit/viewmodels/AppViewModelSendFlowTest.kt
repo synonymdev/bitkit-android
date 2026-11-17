@@ -12588,6 +12588,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a review ended in the background reports the send once the app is back and unlocked`() = test {
+        stubOnchainSend(
+            PREPARED_FEE_ADDRESS,
+            1_000uL,
+            Result.failure(OnchainSendNotDispatchedError(OnchainSendReviewInterruptedError())),
+        )
+        openOnchainConfirm(reviewedFeeSats = 203)
+        sut.stopPaykitPaymentRequestPolling()
+        clearInvocations(toastManager)
+
+        confirmPreparedPayment()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager, never()).enqueue(any())
+
+        // The app locked when it went to the background.
+        sut.setIsAuthenticated(false)
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            verify(toastManager, never()).enqueue(any())
+
+            sut.setIsAuthenticated(true)
+            runCurrent()
+            verifyFeeChangedNotSentToast()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
     fun `fee warnings of a max send use the drain fee it shows`() = test {
         sut.setIsAuthenticated(true)
         openOnchainConfirm(reviewedFeeSats = 600)

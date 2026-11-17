@@ -337,6 +337,8 @@ class LightningRepo @Inject constructor(
         if (it is CancellationException) throw it
         if (it is PaymentAbortedBeforeSend) {
             Logger.debug("Aborted '$operationName' before dispatch", context = TAG)
+        } else if (it.cause is OnchainSendReviewEndedError) {
+            Logger.info("Ended '$operationName' unsent at its fee review", context = TAG)
         } else {
             Logger.error("Error executing '$operationName'", it, context = TAG)
         }
