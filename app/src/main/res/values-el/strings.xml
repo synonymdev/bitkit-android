@@ -1108,6 +1108,7 @@
     <string name="wallet__send_error_support">Επικοινωνία με Υποστήριξη</string>
     <string name="wallet__send_error_tx_failed">Αποτυχία συναλλαγής</string>
     <string name="wallet__send_fee_and_speed">Ταχύτητα και τέλος</string>
+    <string name="wallet__send_fee_changed_not_sent">Το τέλος δικτύου είναι υψηλότερο από αυτό που επιβεβαίωσες, οπότε η πληρωμή δεν στάλθηκε. Δοκίμασε ξανά.</string>
     <string name="wallet__send_fee_custom">Ορισμός προσαρμοσμένου τέλους</string>
     <string name="wallet__send_fee_error">Μη έγκυρο τέλος</string>
     <string name="wallet__send_fee_error_max">Δεν είναι δυνατή η περαιτέρω αύξηση του τέλους. Διαφορετικά θα υπερβεί το μισό του τρέχοντος υπολοίπου εισόδου.</string>

@@ -1134,6 +1134,7 @@
     <string name="wallet__send_error_support">Suporte</string>
     <string name="wallet__send_error_tx_failed">Falha na Transação</string>
     <string name="wallet__send_fee_and_speed">Taxa e velocidade</string>
+    <string name="wallet__send_fee_changed_not_sent">A taxa de rede é maior do que a que você confirmou, então o pagamento não foi enviado. Por favor, tente novamente.</string>
     <string name="wallet__send_fee_custom">Definir Taxa Personalizada</string>
     <string name="wallet__send_fee_error">Taxa Inválida</string>
     <string name="wallet__send_fee_error_max">Não é possível aumentar mais a taxa. Caso contrário, excederá metade do saldo de entrada atual.</string>

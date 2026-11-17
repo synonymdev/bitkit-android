@@ -12305,7 +12305,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 203)
 
-        confirmCurrentPayment()
+        confirmPreparedPayment()
 
         assertEquals(0, broadcasts)
         val review = sut.sendUiState.value
@@ -12324,7 +12324,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         // A confirmation that no swipe on the actual fee asked for approves nothing.
         sut.setSendEvent(SendEvent.PayConfirmed)
-        advanceUntilIdle()
+        settlePreparedPayment()
         assertEquals(0, broadcasts)
         assertTrue(sut.sendUiState.value.isPreparedFeeReview)
     }
@@ -12334,14 +12334,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         var broadcasts = 0
         stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 203)
-        confirmCurrentPayment()
+        confirmPreparedPayment()
 
         sut.setSendEvent(SendEvent.SwipeToPay)
-        advanceUntilIdle()
+        settlePreparedPayment()
         assertEquals(0, broadcasts)
         assertTrue(sut.sendUiState.value.shouldConfirmPay)
         sut.setSendEvent(SendEvent.PayConfirmed)
-        advanceUntilIdle()
+        settlePreparedPayment()
 
         assertEquals(1, broadcasts)
         assertFalse(sut.sendUiState.value.isPreparedFeeReview)
@@ -12354,13 +12354,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         var broadcasts = 0
         stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 203)
-        confirmCurrentPayment()
+        confirmPreparedPayment()
         val review = sut.sendUiState.value
 
         for (event in listOf(SendEvent.SpeedAndFee, SendEvent.BackToAmount, SendEvent.PaymentMethodSwitch)) {
             sut.setSendEvent(event)
-            advanceUntilIdle()
+            settlePreparedPayment()
         }
+
+        sut.addTagToSelected("late")
 
         assertEquals(review, sut.sendUiState.value)
         assertEquals(0, broadcasts)
@@ -12371,11 +12373,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         var broadcasts = 0
         stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 203)
-        confirmCurrentPayment()
+        confirmPreparedPayment()
         clearInvocations(toastManager)
 
         sut.hideSheet()
-        advanceUntilIdle()
+        settlePreparedPayment()
 
         assertEquals(0, broadcasts)
         assertFalse(sut.sendUiState.value.isPreparedFeeReview)
@@ -12384,7 +12386,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 212)
-        confirmCurrentPayment()
+        confirmPreparedPayment()
 
         assertEquals(1, broadcasts)
         verifyOnchainSendCount(2)
@@ -12399,11 +12401,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 203, request = request, privateContext = privateContext)
-        confirmCurrentPayment()
+        confirmPreparedPayment()
         assertTrue(sut.sendUiState.value.isPreparedFeeReview)
 
         sut.hideSheet()
-        advanceUntilIdle()
+        settlePreparedPayment()
 
         assertEquals(0, broadcasts)
         verify(paykitPaymentProofRepo).failOnchainPayment(request)
@@ -12421,11 +12423,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 203, request = request, privateContext = privateContext)
-        confirmCurrentPayment()
+        confirmPreparedPayment()
         whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
 
-        confirmCurrentPayment()
+        confirmPreparedPayment()
 
         assertEquals(0, broadcasts)
         verify(paykitPaymentProofRepo).failOnchainPayment(request)
@@ -12439,7 +12441,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             stubPreparedOnchainSend(preparedFeeSats) { broadcasts++ }
             openOnchainConfirm(reviewedFeeSats = 203)
 
-            confirmCurrentPayment()
+            confirmPreparedPayment()
 
             assertEquals(1, broadcasts, "Fee $preparedFeeSats")
             assertFalse(sut.sendUiState.value.isPreparedFeeReview)
@@ -12453,26 +12455,124 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         stubPreparedOnchainSend(preparedFeeSats = 600uL) { broadcasts++ }
         openOnchainConfirm(reviewedFeeSats = 203)
-        confirmCurrentPayment()
+        confirmPreparedPayment()
         assertNull(sut.sendUiState.value.showSanityWarningDialog)
 
         sut.setSendEvent(SendEvent.SwipeToPay)
-        advanceUntilIdle()
+        settlePreparedPayment()
 
         // 600 of fee is over half the 1 000 sent, which the 203 first reviewed was not.
         assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
         assertFalse(sut.sendUiState.value.shouldConfirmPay)
         sut.setSendEvent(SendEvent.PayConfirmed)
-        advanceUntilIdle()
+        settlePreparedPayment()
         assertEquals(0, broadcasts)
 
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.FEE_OVER_HALF_VALUE))
-        advanceUntilIdle()
+        settlePreparedPayment()
         assertTrue(sut.sendUiState.value.shouldConfirmPay)
         sut.setSendEvent(SendEvent.PayConfirmed)
-        advanceUntilIdle()
+        settlePreparedPayment()
 
         assertEquals(1, broadcasts)
+    }
+
+    @Test
+    fun `starting another send during the review of a prepared fee sends nothing`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmPreparedPayment()
+        assertTrue(sut.sendUiState.value.isPreparedFeeReview)
+        clearInvocations(toastManager)
+
+        assertTrue(sut.resetSendState(hardwareWalletId = null))
+        settlePreparedPayment()
+
+        assertEquals(0, broadcasts)
+        assertFalse(sut.sendUiState.value.isPreparedFeeReview)
+        assertNull(sut.sendUiState.value.onchainFeeUi.sats)
+        verify(paykitPaymentProofRepo).reconcile()
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `a prepared fee left unapproved is cancelled with a notice`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmPreparedPayment()
+        clearInvocations(toastManager)
+
+        advanceTimeBy(100.seconds)
+        runCurrent()
+        assertTrue(sut.sendUiState.value.isPreparedFeeReview)
+        advanceTimeBy(20.seconds)
+        runCurrent()
+
+        assertEquals(0, broadcasts)
+        assertFalse(sut.sendUiState.value.isPreparedFeeReview)
+        assertNull(sut.currentSheet.value)
+        verify(paykitPaymentProofRepo).reconcile()
+        verifyFeeChangedNotSentToast()
+    }
+
+    @Test
+    fun `a send dismissed before its prepared fee could be reviewed is reported as not sent`() = test {
+        for (leave in listOf<() -> Unit>({ sut.hideSheet() }, { sut.onSendReviewVisible(false) })) {
+            var broadcasts = 0
+            stubPreparedOnchainSend(preparedFeeSats = 212uL, beforeReview = leave) { broadcasts++ }
+            openOnchainConfirm(reviewedFeeSats = 203)
+            sut.onSendReviewVisible(true)
+            clearInvocations(toastManager)
+
+            confirmPreparedPayment()
+
+            assertEquals(0, broadcasts)
+            assertFalse(sut.sendUiState.value.isPreparedFeeReview)
+            assertEquals(203L, sut.sendUiState.value.onchainFeeUi.sats)
+            verifyFeeChangedNotSentToast()
+        }
+    }
+
+    @Test
+    fun `approving a review that no longer shows the prepared send reports it as not sent`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        confirmPreparedPayment()
+        clearInvocations(toastManager)
+        setSendState(sut.sendUiState.value.copy(amount = 2_000uL))
+
+        confirmPreparedPayment()
+
+        assertEquals(0, broadcasts)
+        assertNull(sut.currentSheet.value)
+        verifyFeeChangedNotSentToast()
+    }
+
+    @Test
+    fun `a max send shows the fee of the drain it is prepared as`() = test {
+        val feeRates = FeeRates(fast = 5u, mid = 2u, slow = 1u)
+        whenever {
+            lightningRepo.estimateSendAllFee(PREPARED_FEE_ADDRESS, TransactionSpeed.Medium, feeRates)
+        }.thenReturn(Result.success(331uL))
+        whenever { lightningRepo.estimateSendAllFee(any(), eq(TransactionSpeed.Fast), anyOrNull()) }
+            .thenReturn(Result.failure(AppError("no drain")))
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()) }
+            .thenReturn(Result.success(203uL))
+        for (isMaxAmount in listOf(true, false)) {
+            openOnchainConfirm(reviewedFeeSats = 1)
+            setSendState(sut.sendUiState.value.copy(isMaxAmount = isMaxAmount, feeRates = feeRates))
+
+            sut.setSendEvent(SendEvent.SpeedAndFee)
+            advanceUntilIdle()
+
+            val feeUi = sut.sendUiState.value.onchainFeeUi
+            assertEquals(if (isMaxAmount) 331L else 203L, feeUi.sats, "Max $isMaxAmount")
+            // A drain that cannot be estimated falls back to the fixed-amount estimate.
+            assertEquals(203L, feeUi.estimates[FeeRate.FAST], "Max $isMaxAmount")
+        }
     }
 
     @Test
@@ -19303,6 +19403,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn("Fees changed")
         whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
             .thenReturn("Fees are {amount} higher")
+        whenever(context.getString(R.string.wallet__send_fee_changed_not_sent))
+            .thenReturn("Fee changed, payment not sent")
         sut.showSheet(Sheet.Send(SendRoute.Confirm))
         runCurrent()
         if (request != null) {
@@ -19326,7 +19428,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
      * Stands in for the repository's prepared send: a mining fee above the approved one is handed to the reviewer,
      * and only its return lets the same prepared transaction be broadcast.
      */
-    private suspend fun stubPreparedOnchainSend(preparedFeeSats: ULong, onBroadcast: () -> Unit) {
+    private fun TestScope.settlePreparedPayment() {
+        // Short of the review's own timeout, which advanceUntilIdle would run into.
+        advanceTimeBy(5.seconds)
+        runCurrent()
+    }
+
+    private fun TestScope.confirmPreparedPayment() {
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        settlePreparedPayment()
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        settlePreparedPayment()
+    }
+
+    private fun verifyFeeChangedNotSentToast() {
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.WARNING, it.type)
+                assertEquals("Fees changed", it.title)
+                assertEquals("Fee changed, payment not sent", it.description)
+            },
+        )
+    }
+
+    private suspend fun stubPreparedOnchainSend(
+        preparedFeeSats: ULong,
+        beforeReview: () -> Unit = {},
+        onBroadcast: () -> Unit,
+    ) {
         whenever {
             lightningRepo.sendOnChain(
                 address = any(),
@@ -19363,6 +19492,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                         miningFeeSats = preparedFeeSats,
                     )
                     val review = requireNotNull(invocation.getArgument<(suspend (OnchainPreparedReceipt) -> Unit)?>(18))
+                    beforeReview()
                     runSuspendCatching { review(receipt) }.getOrElse { throw OnchainSendNotDispatchedError(it) }
                 }
                 onBroadcast()

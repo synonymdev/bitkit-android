@@ -10,13 +10,15 @@
     change), and a second regtest wallet's address. The divergence depends on the wallet's outputs:
     when the prepared fee is not higher the send completes after the first swipe, which is the
     unchanged behaviour and does not exercise this journey. Record the fee shown before each swipe.
+    The second swipe must follow within two minutes: after that the review closes with a toast saying
+    the payment was not sent.
   </description>
   <actions>
     <action>Hand the receiving test wallet address to the app with adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;test recipient address&gt;?amount=0.00001" to.bitkit.dev</action>
     <action>Verify the Confirm screen opens with 1 000 sats (tag "ReviewAmount"), expand Show Details (tag "SendConfirmToggleDetails") if collapsed, and record the fee shown under Speed and Fee</action>
     <action>Swipe the send handle (tag "GRAB") fully to the right and enter the PIN if asked</action>
     <action>Verify the Confirm screen (tag "SendConfirmContent") is shown again instead of the success screen, the fee under Speed and Fee is higher than the recorded one, the amount (tag "ReviewAmount") is still 1 000 sats and the send handle (tag "GRAB") is back at its start; take a screenshot right after the swipe to capture the Fees changed toast</action>
-    <action>Tap the Speed and Fee value and the amount (tag "ReviewAmount") and verify neither opens another screen</action>
+    <action>Tap the Speed and Fee value, the amount (tag "ReviewAmount") and Add Tag (tag "TagsAddSend") and verify none opens another screen</action>
     <action>Swipe the send handle (tag "GRAB") fully to the right again and enter the PIN if asked</action>
     <action>Wait for the Bitcoin Sent success screen (tag "SendSuccess"), tap Details (tag "Details"), and verify the sent activity shows the higher fee, not the first recorded one</action>
     <action>Return to the wallet home screen, repeat the first three actions for another send that returns to the Confirm screen with a higher fee, then press system Back</action>

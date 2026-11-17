@@ -3426,6 +3426,68 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a request's higher prepared fee keeps its guard until the cancelled review's proof is removed`() = test {
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        stubFeeReviewPreparation("ab".repeat(32), feeSats = 212uL) { broadcasts++ }
+        val reviewed = mutableListOf<OnchainSendAttempt?>()
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = {
+                reviewed += store.current()
+                throw AppError("cancelled")
+            },
+        )
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(0, broadcasts)
+        assertTrue(reviewed.single()?.preparationPending == true)
+        // The request's guard outlives the cancelled review, so the same request is not admitted twice.
+        val guard = assertNotNull(store.current())
+        assertEquals(requestId, guard.requestId)
+        assertTrue(guard.preparationPending && guard.candidateTxids.isEmpty() && !guard.initialDispatchAttempted)
+        assertIs<OnchainSendBlockedError>(
+            repo.sendOnChain("address", 1_000uL, requestId = requestId, payerIdentity = "payer-identity")
+                .exceptionOrNull(),
+        )
+
+        // Removing its started proof, as the payment's failure cleanup does, releases the guard.
+        assertTrue(repo.releaseInterruptedShopPreparation { it.attemptId == guard.attemptId })
+        assertNull(store.current())
+    }
+
+    @Test
+    fun `a request's higher prepared fee is sent once after renewed approval`() = test {
+        val txid = "ab".repeat(32)
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        stubFeeReviewPreparation(txid, feeSats = 212uL) { broadcasts++ }
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { assertEquals(0, broadcasts) },
+        )
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), result.getOrThrow())
+        assertEquals(1, broadcasts)
+        val sent = assertNotNull(store.current())
+        assertEquals(requestId, sent.requestId)
+        assertEquals(mapOf(txid to 212uL), sent.candidateMiningFees)
+        assertFalse(sent.preparationPending)
+    }
+
+    @Test
     fun `a review that outlives the payment deadline sends nothing and releases the attempt`() = test {
         val (repo, store) = feeReviewRepo()
         val prepared = PreparedOnchainSend(

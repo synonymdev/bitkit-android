@@ -237,6 +237,7 @@ fun SendSheet(
                 if (!reviewing) return@LaunchedEffect
                 lifecycle.withPaymentReview(appViewModel::beginPaymentReview)
             }
+            LaunchedEffect(reviewing, appViewModel) { appViewModel.onSendReviewVisible(reviewing) }
             fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
                     details = NewTransactionSheetDetails(
@@ -550,7 +551,10 @@ fun SendSheet(
                             if (!didPop) appViewModel.hideSheet()
                         },
                         onEvent = { e -> appViewModel.setSendEvent(e) },
-                        onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
+                        onClickAddTag = {
+                            // The prepared send under review already saved its tags
+                            if (!uiState.isPreparedFeeReview) navController.navigateTo(SendRoute.AddTag)
+                        },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
                         autoPayContent = initialSubscription?.let { subscription ->
