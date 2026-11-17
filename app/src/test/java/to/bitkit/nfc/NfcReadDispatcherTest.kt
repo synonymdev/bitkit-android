@@ -11,8 +11,8 @@ class NfcReadDispatcherTest {
 
     @Test
     fun `delivers a read and reports an unreadable tag`() {
-        sut.deliver("lightning:lnbcrt1")
-        sut.deliver(null)
+        sut.deliver("lightning:lnbcrt1", sut.activation)
+        sut.deliver(null, sut.activation)
 
         assertEquals(listOf("lightning:lnbcrt1"), reads)
         assertEquals(1, unreadable)
@@ -20,23 +20,34 @@ class NfcReadDispatcherTest {
 
     @Test
     fun `drops a repeat of the same request within the window`() {
-        sut.deliver("lightning:lnbcrt1")
+        sut.deliver("lightning:lnbcrt1", sut.activation)
         time += 1_000
-        sut.deliver("lightning:lnbcrt1")
-        sut.deliver("lightning:lnbcrt2")
+        sut.deliver("lightning:lnbcrt1", sut.activation)
+        sut.deliver("lightning:lnbcrt2", sut.activation)
         time += NfcReadDispatcher.DUPLICATE_READ_WINDOW.inWholeMilliseconds
-        sut.deliver("lightning:lnbcrt2")
+        sut.deliver("lightning:lnbcrt2", sut.activation)
 
         assertEquals(listOf("lightning:lnbcrt1", "lightning:lnbcrt2", "lightning:lnbcrt2"), reads)
     }
 
     @Test
-    fun `drops a read that lands after the screen closed`() {
-        sut.close()
-        sut.deliver("lightning:lnbcrt1")
-        sut.deliver(null)
+    fun `drops a read that started before the reader paused`() {
+        val started = sut.activation
+        sut.invalidate()
+        sut.deliver("lightning:lnbcrt1", started)
+        sut.deliver(null, started)
 
         assertEquals(emptyList<String>(), reads)
         assertEquals(0, unreadable)
+    }
+
+    @Test
+    fun `drops an old read that lands after the reader resumed`() {
+        val started = sut.activation
+        sut.invalidate()
+        sut.deliver("lightning:lnbcrt1", started)
+        sut.deliver("lightning:lnbcrt2", sut.activation)
+
+        assertEquals(listOf("lightning:lnbcrt2"), reads)
     }
 }

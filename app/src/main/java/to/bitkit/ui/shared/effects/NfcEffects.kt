@@ -101,10 +101,11 @@ fun NfcReaderEffect(
         val mainHandler = Handler(Looper.getMainLooper())
         val dispatcher = NfcReadDispatcher(onRead = { currentOnRead(it) }, onUnreadable = { currentOnUnreadable() })
         val callback = NfcAdapter.ReaderCallback { tag ->
+            val activation = dispatcher.activation
             val text = readPaymentText(tag)
             // The tag stays in range after the read; hold reader mode so Android does not deliver it again.
             if (text != null) NfcRepeatGuard.engage(activity, tag)
-            mainHandler.post { dispatcher.deliver(text) }
+            mainHandler.post { dispatcher.deliver(text, activation) }
         }
 
         val owner = Any()
@@ -117,6 +118,8 @@ fun NfcReaderEffect(
         val resume: () -> Unit = { enable() }
 
         fun disable() {
+            // A read still in progress posts after this; the dispatcher drops it.
+            dispatcher.invalidate()
             if (ReaderModeOwner.resumeScanner === resume) ReaderModeOwner.resumeScanner = null
             if (ReaderModeOwner.current !== owner) return
             ReaderModeOwner.current = null
@@ -143,8 +146,6 @@ fun NfcReaderEffect(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             disable()
-            // A read still in progress posts after this; the closed dispatcher drops it.
-            dispatcher.close()
             mainHandler.removeCallbacksAndMessages(null)
         }
     }

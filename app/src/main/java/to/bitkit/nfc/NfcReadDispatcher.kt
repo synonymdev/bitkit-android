@@ -5,8 +5,9 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Hands NFC reads to a scanner screen. Call it on the main thread only. It drops a repeat of the same request within
- * [DUPLICATE_READ_WINDOW], and any read that lands after [close], since a tag read can finish after the screen left.
+ * Hands NFC reads to a scanner screen. Call [deliver] and [invalidate] on the main thread only. It drops a repeat of
+ * the same request within [DUPLICATE_READ_WINDOW], and any read that started before the last [invalidate], since a tag
+ * read can finish after the reader paused or the screen left.
  */
 internal class NfcReadDispatcher(
     private val onRead: (String) -> Unit,
@@ -14,10 +15,14 @@ internal class NfcReadDispatcher(
     private val now: () -> Long = { nowMillis() },
 ) {
     private var lastRead: Pair<String, Long>? = null
-    private var isClosed = false
 
-    fun deliver(text: String?) {
-        if (isClosed) return
+    /** The current reader activation. A read captures it when it starts, on the reader's binder thread. */
+    @Volatile
+    var activation = 0
+        private set
+
+    fun deliver(text: String?, readActivation: Int) {
+        if (readActivation != activation) return
         if (text == null) {
             onUnreadable()
             return
@@ -30,8 +35,8 @@ internal class NfcReadDispatcher(
         onRead(text)
     }
 
-    fun close() {
-        isClosed = true
+    fun invalidate() {
+        activation++
     }
 
     companion object {
