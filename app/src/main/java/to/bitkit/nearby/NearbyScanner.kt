@@ -31,8 +31,8 @@ import kotlin.time.Duration.Companion.seconds
  * While started it scans for the nearby service. Once an advertiser at or above
  * [NearbyProtocol.MIN_RSSI] is seen, it waits [CANDIDATE_WINDOW] for others, connects to the
  * strongest one and reads the request. Only payment requests ([nearbyPaymentRequest]) reach
- * [onRequest], on the main thread. A device whose read failed is skipped for [RETRY_AFTER]; a device
- * whose request was delivered is skipped until [stop], so the scanner keeps listening for others.
+ * [onRequest], on the main thread. A device is then skipped for [RETRY_AFTER], so the scanner keeps listening for
+ * others, and reads the device again if the screen stayed open after rejecting its request.
  */
 class NearbyScanner(
     private val context: Context,
@@ -125,11 +125,7 @@ class NearbyScanner(
         if (request != null && payment == null) {
             Logger.warn("Ignored nearby request that is not a payment", context = TAG)
         }
-        skippedUntil[device.address] = if (payment != null) {
-            Long.MAX_VALUE
-        } else {
-            nowMillis() + RETRY_AFTER.inWholeMilliseconds
-        }
+        skippedUntil[device.address] = nowMillis() + RETRY_AFTER.inWholeMilliseconds
         if (!isStarted) return
         if (payment != null) onRequest(payment)
         startScan()
