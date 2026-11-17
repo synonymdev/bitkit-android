@@ -237,7 +237,11 @@ fun SendSheet(
                 if (!reviewing) return@LaunchedEffect
                 lifecycle.withPaymentReview(appViewModel::beginPaymentReview)
             }
-            LaunchedEffect(reviewing, appViewModel) { appViewModel.onSendReviewVisible(reviewing) }
+            // The entry is null until navigation settles, also after the activity is recreated
+            val hasEntry = entry != null
+            LaunchedEffect(hasEntry, reviewing, appViewModel) {
+                if (hasEntry) appViewModel.onSendReviewVisible(reviewing)
+            }
             fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
                     details = NewTransactionSheetDetails(

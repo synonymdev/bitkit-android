@@ -198,6 +198,9 @@ class OnchainSendNotDispatchedError(cause: Throwable) : AppError("On-chain send 
 class OnchainSendChangedError(val preparedFeeSats: ULong? = null) :
     AppError("On-chain send changed after it was approved")
 
+/** A prepared send whose node stopped or changed while its higher mining fee waited for approval. */
+class OnchainSendReviewInterruptedError : AppError("The node stopped before the on-chain send was approved")
+
 class OnchainSendPendingError(cause: Throwable, val txid: String? = null) :
     AppError("On-chain send outcome is unknown; do not send again", cause)
 

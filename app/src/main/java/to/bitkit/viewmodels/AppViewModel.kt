@@ -196,6 +196,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
+import to.bitkit.repositories.OnchainSendReviewInterruptedError
 import to.bitkit.repositories.PaykitAllowanceEntry
 import to.bitkit.repositories.PaykitAllowanceError
 import to.bitkit.repositories.PaykitAllowanceEvent
@@ -6787,12 +6788,14 @@ class AppViewModel @Inject constructor(
         } else if (_sendUiState.value.hardwareWalletId != null) {
             _sendUiState.value.onchainFeeUi.sats?.toULong() ?: return
         } else {
-            lightningRepo.calculateTotalFee(
-                amountSats = amountSats,
-                address = _sendUiState.value.address,
-                speed = _sendUiState.value.speed,
-                utxosToSpend = _sendUiState.value.selectedUtxos,
-            ).getOrNull() ?: return
+            // A max send shows its drain's fee, which is the one it is approved at.
+            _sendUiState.value.onchainFeeUi.sats?.toULong()?.takeIf { _sendUiState.value.isMaxAmount }
+                ?: lightningRepo.calculateTotalFee(
+                    amountSats = amountSats,
+                    address = _sendUiState.value.address,
+                    speed = _sendUiState.value.speed,
+                    utxosToSpend = _sendUiState.value.selectedUtxos,
+                ).getOrNull() ?: return
         }
 
         if (
@@ -7237,15 +7240,16 @@ class AppViewModel @Inject constructor(
 
     private fun showOnchainPaymentFailure(error: Throwable, contactPaymentContext: ContactPaymentContext?) {
         val cancelled = error.cause as? PreparedFeeReviewCancelledError
-        if (cancelled != null) {
+        val isInterrupted = error.cause is OnchainSendReviewInterruptedError
+        if (cancelled != null || isInterrupted) {
             Logger.info("Cancelled on-chain send at its prepared fee review", context = TAG)
-            if (!cancelled.isNotified) return
+            if (cancelled?.isNotified == false) return
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
                 description = context.getString(R.string.wallet__send_fee_changed_not_sent),
             )
-            if (cancelled.closesSend) hideSheet()
+            if (cancelled?.closesSend == true || isInterrupted && currentSheet.value is Sheet.Send) hideSheet()
             return
         }
         Logger.error("Error sending onchain payment", error, context = TAG)
@@ -7313,7 +7317,7 @@ class AppViewModel @Inject constructor(
                 val isSameSend = session == sendSession && current.amount == receipt.amountSats &&
                     current.address == receipt.address && current.onchainFeeUi.sats == feeSats.toLong()
                 when {
-                    isApproved == false -> throw PreparedFeeReviewCancelledError()
+                    isApproved == false -> throw PreparedFeeReviewCancelledError(isNotified = review.isRouteLost)
                     isApproved == null || !isSameSend -> {
                         throw PreparedFeeReviewCancelledError(isNotified = true, closesSend = session == sendSession)
                     }
@@ -7329,7 +7333,9 @@ class AppViewModel @Inject constructor(
     /** Whether the send sheet shows the confirmation or its PIN check, the only screens a fee review can use. */
     fun onSendReviewVisible(isVisible: Boolean) {
         isSendReviewVisible = isVisible
-        if (!isVisible) cancelPreparedFeeReview()
+        if (isVisible) return
+        preparedFeeReview?.isRouteLost = true
+        cancelPreparedFeeReview()
     }
 
     private fun cancelPreparedFeeReview() {
@@ -10661,6 +10667,9 @@ private class PreparedFeeReview(val feeSats: ULong) {
 
     @Volatile
     var isSwiped = false
+
+    @Volatile
+    var isRouteLost = false
 }
 
 /**

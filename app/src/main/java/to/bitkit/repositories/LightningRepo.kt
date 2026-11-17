@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -196,6 +198,9 @@ class LightningRepo @Inject constructor(
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
     private val ordinaryFollowupRetryJob = AtomicReference<Job?>(null)
+
+    // The prepared send held while its higher mining fee is reviewed, released before its node stops.
+    private val reviewedPreparedSend = AtomicReference<PreparedOnchainSend?>(null)
     private val pendingStopJob = AtomicReference<Job?>(null)
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
@@ -765,6 +770,9 @@ class LightningRepo @Inject constructor(
 
         return runCatching {
             withContext(NonCancellable) {
+                // Its native handle cancels the unsent transaction through the wallet of the node about to stop,
+                // so it is dropped before the state change that ends its review.
+                reviewedPreparedSend.getAndSet(null)?.release()
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
                 lightningService.stop()
                 clearProbeOutcomes()
@@ -2003,8 +2011,7 @@ class LightningRepo @Inject constructor(
                     .also { prepared ->
                         checkPreparedSpend(prepared.receipt, sats, isDrain, isTransfer, utxosForSend)
                         if (approvedMiningFeeSats != null) {
-                            val receipt = prepared.receipt.copy(feeRateSatsPerVByte = satsPerVByte)
-                            checkApprovedSpend(receipt, sats, approvedMiningFeeSats, reviewHigherFee)
+                            checkApprovedSpend(prepared, sats, satsPerVByte, approvedMiningFeeSats, reviewHigherFee)
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(
                             attempt.attemptId,
@@ -2122,17 +2129,40 @@ class LightningRepo @Inject constructor(
     }.getOrNull()
 
     private suspend fun checkApprovedSpend(
-        receipt: OnchainPreparedReceipt,
+        prepared: PreparedOnchainSend,
         sats: ULong,
+        satsPerVByte: ULong,
         approvedMiningFeeSats: ULong,
         reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)?,
     ) {
+        val receipt = prepared.receipt.copy(feeRateSatsPerVByte = satsPerVByte)
         val miningFee = receipt.miningFeeSats
         if (receipt.amountSats != sats || miningFee == null) throw OnchainSendChangedError(miningFee)
         if (miningFee <= approvedMiningFeeSats) return
-        // Returns once this exact prepared send is approved again, throws to send nothing.
         reviewHigherFee ?: throw OnchainSendChangedError(miningFee)
-        reviewHigherFee(receipt)
+        reviewedPreparedSend.set(prepared)
+        try {
+            // Returns once this exact prepared send is approved again, throws to send nothing. A node that stops
+            // meanwhile can no longer submit it, so the review ends there.
+            val isApproved = coroutineScope {
+                val review = async { reviewHigherFee(receipt) }
+                val stop = async { _lightningState.first { !it.nodeLifecycleState.isRunning() } }
+                select {
+                    review.onAwait { true }
+                    stop.onAwait { false }
+                }.also {
+                    review.cancel()
+                    stop.cancel()
+                }
+            }
+            // Nothing of a send its node cannot submit is persisted.
+            if (!isApproved || !prepared.isUsable) {
+                if (reviewedPreparedSend.compareAndSet(prepared, null)) prepared.release()
+                throw OnchainSendReviewInterruptedError()
+            }
+        } finally {
+            reviewedPreparedSend.compareAndSet(prepared, null)
+        }
     }
 
     private fun checkPreparedSpend(

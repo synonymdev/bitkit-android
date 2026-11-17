@@ -182,6 +182,7 @@ import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendReviewInterruptedError
 import to.bitkit.repositories.PaykitAllowanceEvent
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitBillingPeriod
@@ -12549,6 +12550,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(0, broadcasts)
         assertNull(sut.currentSheet.value)
         verifyFeeChangedNotSentToast()
+    }
+
+    @Test
+    fun `leaving the confirmation during the review of a prepared fee reports the send as not sent`() = test {
+        var broadcasts = 0
+        stubPreparedOnchainSend(preparedFeeSats = 212uL) { broadcasts++ }
+        openOnchainConfirm(reviewedFeeSats = 203)
+        sut.onSendReviewVisible(true)
+        confirmPreparedPayment()
+        assertTrue(sut.sendUiState.value.isPreparedFeeReview)
+        clearInvocations(toastManager)
+
+        sut.onSendReviewVisible(false)
+        settlePreparedPayment()
+
+        assertEquals(0, broadcasts)
+        assertFalse(sut.sendUiState.value.isPreparedFeeReview)
+        verifyFeeChangedNotSentToast()
+    }
+
+    @Test
+    fun `a review ended by its node stopping reports the send as not sent`() = test {
+        stubOnchainSend(
+            PREPARED_FEE_ADDRESS,
+            1_000uL,
+            Result.failure(OnchainSendNotDispatchedError(OnchainSendReviewInterruptedError())),
+        )
+        openOnchainConfirm(reviewedFeeSats = 203)
+        clearInvocations(toastManager)
+
+        confirmPreparedPayment()
+
+        assertNull(sut.currentSheet.value)
+        verify(paykitPaymentProofRepo).reconcile()
+        verifyFeeChangedNotSentToast()
+    }
+
+    @Test
+    fun `fee warnings of a max send use the drain fee it shows`() = test {
+        sut.setIsAuthenticated(true)
+        openOnchainConfirm(reviewedFeeSats = 600)
+        setSendState(sut.sendUiState.value.copy(isMaxAmount = true))
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
+        verify(lightningRepo, never())
+            .calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any())
     }
 
     @Test
