@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Moves the balance of the user's Lightning channels to their own Spark wallet, paying a Spark invoice over the
@@ -52,6 +53,9 @@ class MoveToSparkRepo internal constructor(
 
         /** How long the move waits for the payment to settle before it reports it as still in flight. */
         private val PAYMENT_TIMEOUT = 2.minutes
+
+        /** How often a move waiting past its timeout reads the node's stored payment again, as the node may be down. */
+        private val STORED_PAYMENT_RECHECK = 30.seconds
 
         /** The failures that mean no route carried the amount, so a smaller one may route. */
         private val NO_ROUTE_REASONS =
@@ -189,7 +193,8 @@ class MoveToSparkRepo internal constructor(
 
     /**
      * Waits for the payment of a move still [inFlight] to settle after the move stopped waiting. It listens first, then
-     * reads the node's stored payment, so an outcome that arrived after the move stopped listening is not missed.
+     * reads the node's stored payment, so an outcome that arrived after the move stopped listening is not missed, and
+     * reads it again while it waits, as the node may be down for a read.
      */
     suspend fun awaitSettled(inFlight: MoveToSparkOutcome.InFlight): Result<MoveToSparkOutcome.Moved> =
         withContext(bgDispatcher) {
@@ -198,21 +203,21 @@ class MoveToSparkRepo internal constructor(
                     val settled = async(start = CoroutineStart.UNDISPATCHED) {
                         lightningRepo.nodeEvents.first { it.settles(inFlight.paymentHash, inFlight.paymentId) }
                     }
-                    val stored = lightningRepo.listPaymentsOrNull()?.firstOrNull { it.id == inFlight.paymentId }
-                    when (stored?.status) {
-                        PaymentStatus.SUCCEEDED -> {
-                            settled.cancel()
-                            MoveToSparkOutcome.Moved(inFlight.amountSats, (stored.feePaidMsat ?: 0uL) / 1000uL)
-                        }
-                        PaymentStatus.FAILED -> {
-                            settled.cancel()
-                            throw MoveToSparkError.PaymentFailed(null)
-                        }
-                        else -> when (val event = settled.await()) {
-                            is Event.PaymentSuccessful -> event.moved(inFlight.amountSats)
-                            else -> throw MoveToSparkError.PaymentFailed((event as? Event.PaymentFailed)?.reason)
+                    var moved: MoveToSparkOutcome.Moved? = null
+                    while (moved == null) {
+                        val stored = lightningRepo.listPaymentsOrNull()?.firstOrNull { it.id == inFlight.paymentId }
+                        moved = when (stored?.status) {
+                            PaymentStatus.SUCCEEDED ->
+                                MoveToSparkOutcome.Moved(inFlight.amountSats, (stored.feePaidMsat ?: 0uL) / 1000uL)
+                            PaymentStatus.FAILED -> throw MoveToSparkError.PaymentFailed(null)
+                            else -> withTimeoutOrNull(STORED_PAYMENT_RECHECK) { settled.await() }?.let {
+                                (it as? Event.PaymentSuccessful)?.moved(inFlight.amountSats)
+                                    ?: throw MoveToSparkError.PaymentFailed((it as? Event.PaymentFailed)?.reason)
+                            }
                         }
                     }
+                    settled.cancel()
+                    moved
                 }
             }.onFailure {
                 Logger.warn("Failed to move '${inFlight.amountSats}' sats to Spark after the wait", it, context = TAG)

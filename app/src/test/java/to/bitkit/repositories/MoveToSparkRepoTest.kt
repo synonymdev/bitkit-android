@@ -231,6 +231,15 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an in-flight move whose outcome was missed while the node was down reads it once the node is back`() = test {
+        // The node can't list its payments at first, and the settling event came before the listener started.
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(null, listOf(nodeSend(PaymentStatus.SUCCEEDED)))
+        val settled = async(start = CoroutineStart.UNDISPATCHED) { sut.awaitSettled(inFlight) }
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 7uL), settled.await().getOrThrow())
+    }
+
+    @Test
     fun `move pays over the channels capped at the quoted fee and reports the fee paid`() = test {
         whenever(
             lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
