@@ -8668,12 +8668,17 @@ class AppViewModel @Inject constructor(
         generation: Long,
         walletGeneration: Long?,
     ) {
-        val quote = moveToSparkRepo.quote().getOrNull()
-        val fee = moveToSparkRepo.estimateFeeAfterUpdate(bolt11, payAmount)
-        requireCurrentPaymentPreparation(walletGeneration)
-        _sendUiState.update {
-            if (generation != sendStateGeneration) return@update it
-            it.copy(lightningFeeSats = fee.toLong(), lastLightningFee = fee.toLong(), sparkUpdateQuote = quote)
+        _sendUiState.update { if (generation != sendStateGeneration) it else it.copy(isSparkUpdateQuoting = true) }
+        try {
+            val quote = moveToSparkRepo.quote().getOrNull()
+            val fee = moveToSparkRepo.estimateFeeAfterUpdate(bolt11, payAmount)
+            requireCurrentPaymentPreparation(walletGeneration)
+            _sendUiState.update {
+                if (generation != sendStateGeneration) return@update it
+                it.copy(lightningFeeSats = fee.toLong(), lastLightningFee = fee.toLong(), sparkUpdateQuote = quote)
+            }
+        } finally {
+            _sendUiState.update { if (generation != sendStateGeneration) it else it.copy(isSparkUpdateQuoting = false) }
         }
     }
 
@@ -10358,6 +10363,8 @@ data class SendUiState(
     val lightningFeeSats: Long? = null,
     /** The spending balance update a Lightning payment that fits only across the channels and Spark runs first. */
     val sparkUpdateQuote: MoveToSparkQuote? = null,
+    /** True while the update a Lightning payment needs is quoted, so no swipe pays an update fee not yet shown. */
+    val isSparkUpdateQuoting: Boolean = false,
     val estimatedRoutingFee: ULong = 0uL,
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,

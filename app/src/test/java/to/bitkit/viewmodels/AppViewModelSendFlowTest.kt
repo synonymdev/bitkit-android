@@ -20773,6 +20773,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment that needs the update is quoting until its update quote arrives`() = test {
+        val input = "lnurl1updatequoting"
+        val data =
+            LnurlPayData(input, "https://example.com/callback", 1_000_000uL, 1_000_000uL, "[]", null, false, null)
+        val quoted = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).thenReturn(Scanner.LnurlPay(data))
+        whenever(moveToSparkRepo.needsUpdateToSend(1_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer {
+            quoted.await()
+            Result.success(UPDATE_QUOTE)
+        }
+        whenever(moveToSparkRepo.estimateFeeAfterUpdate(null, 1_000uL)).thenReturn(3uL)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.isSparkUpdateQuoting)
+        assertNull(sut.sendUiState.value.sparkUpdateQuote)
+        quoted.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isSparkUpdateQuoting)
+        assertEquals(UPDATE_QUOTE, sut.sendUiState.value.sparkUpdateQuote)
+    }
+
+    @Test
     fun `an lnurl payment that needs the update shows its fee and pays on the first swipe`() = test {
         val input = "lnurl1updatefirstswipe"
         val bolt11 = "lnbcrt1lnurlupdate"

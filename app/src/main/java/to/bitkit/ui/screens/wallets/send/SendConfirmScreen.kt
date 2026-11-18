@@ -374,7 +374,7 @@ private fun ContentRunning(
     onSwipeToConfirm: () -> Unit = {},
 ) {
     var showDetails by rememberSaveable(initialShowDetails) { mutableStateOf(initialShowDetails) }
-    // The update fee sits in the details: each new quote opens them, so no swipe pays a fee the user has not seen.
+    // The update fee sits in the details: each new quote opens them, and the swipe waits for the quote.
     LaunchedEffect(uiState.sparkUpdateQuote) {
         if (uiState.sparkUpdateQuote != null) showDetails = true
     }
@@ -555,6 +555,7 @@ private fun ContentRunning(
 private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
     !isFundingSourceLoading &&
     isHardwareFeeReady &&
+    !isSparkUpdateQuoting &&
     !(payMethod == SendMethod.ONCHAIN && onchainFeeUi.isLoading)
 
 @Composable
