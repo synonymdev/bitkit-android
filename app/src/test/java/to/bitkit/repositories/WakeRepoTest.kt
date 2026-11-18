@@ -475,6 +475,38 @@ class WakeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a return to the foreground sends a registration that reached its max age while the app stayed alive`() = test {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        whenever(wakeConfig.optedIn).thenReturn(MutableStateFlow(true))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow<String?>(null))
+        whenever { wakeService.setPresence(any(), any(), any()) }.thenReturn(NOW_SECS + 90)
+        whenever { wakeService.clearPresence(any(), any()) }.thenReturn(Unit)
+        val sut = createSut(dispatcher)
+        val maxAgeSecs = WakeRepo.REGISTRATION_MAX_AGE.inWholeSeconds
+
+        sut.onAppForeground()
+        runCurrent()
+        assertEquals(listOf(NOW_SECS), preparedTimestamps)
+
+        // The node keeps running in the background, so none of the observed inputs change.
+        sut.onAppBackground()
+        nowSecs += maxAgeSecs
+        sut.onAppForeground()
+        runCurrent()
+        assertEquals(listOf(NOW_SECS, NOW_SECS + maxAgeSecs), preparedTimestamps)
+
+        sut.onAppBackground()
+        sut.onAppForeground()
+        runCurrent()
+        assertEquals(listOf(NOW_SECS, NOW_SECS + maxAgeSecs), preparedTimestamps, "A fresh one is not sent again")
+
+        sut.onAppBackground()
+        runCurrent()
+    }
+
+    @Test
     fun `presence is renewed and cleared while the answer to an update is lost`() = test {
         val dispatcher = StandardTestDispatcher(testScheduler)
         whenever(lightningRepo.lightningState)
