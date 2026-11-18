@@ -22,6 +22,7 @@ import kotlin.test.assertEquals
 class SparkDetailViewModelTest : BaseUnitTest() {
     private val healthState = MutableStateFlow(AppHealthState())
     private val exitState = MutableStateFlow(SparkExitState())
+    private val sparkState = MutableStateFlow(SparkState())
     private val lightningRepo = mock<LightningRepo>()
     private val sparkRepo = mock<SparkRepo>()
     private val sparkExitRepo = mock<SparkExitRepo>()
@@ -29,7 +30,7 @@ class SparkDetailViewModelTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
+        whenever(sparkRepo.state).thenReturn(sparkState)
         whenever(sparkExitRepo.state).thenReturn(exitState)
         whenever(healthRepo.healthState).thenReturn(healthState)
     }
@@ -79,6 +80,17 @@ class SparkDetailViewModelTest : BaseUnitTest() {
         assertEquals(ExitStep.RUNNING, sut.uiState.value.exitStep)
         exitState.value = SparkExitState()
         assertEquals(null, sut.uiState.value.exitStep)
+    }
+
+    @Test
+    fun `an empty connected spark still shows it receives`() = test {
+        whenever(sparkRepo.depositAddress()).thenReturn(Result.success("bcrt1qaddress"))
+        sparkState.value = SparkState(isReady = true)
+        healthState.value = AppHealthState(internet = HealthState.READY, spark = HealthState.READY)
+
+        val sut = createSut()
+
+        assertEquals(true, sut.uiState.value.spark?.isReceiving)
     }
 
     @Test

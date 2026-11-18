@@ -44,7 +44,9 @@ class SparkDetailViewModel @Inject constructor(
             }.collect { (state, exit, isOnline) ->
                 _uiState.update {
                     it.copy(
-                        spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline),
+                        // An empty Spark is left out of the connections list, yet still receives here.
+                        spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline)
+                            ?: SparkUi(balanceSats = 0uL, isReceiving = state.isReceiving(isOnline)),
                         exitStep = exit.record.exitStep(exit.fundingState),
                     )
                 }
