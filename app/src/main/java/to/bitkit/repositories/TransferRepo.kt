@@ -447,8 +447,12 @@ class TransferRepo @Inject constructor(
         /** Version, input and output counts and locktime (10 bytes), plus the 2 witness flag bytes. */
         private const val SWEEP_TX_OVERHEAD_WU = 42uL
 
-        /** One input (41 bytes) plus the heaviest witness LDK sweeps: a delayed to_local spend (154 WU). */
-        private const val SWEEP_INPUT_WU = 318uL
+        /**
+         * One input (41 bytes) plus the lightest witness LDK sweeps (108 WU, a key-only spend). The sweep balance
+         * does not say its input type, so the lower bound keeps a sweepable output from settling early; a dust
+         * to_local input, which is heavier, can keep its transfer waiting.
+         */
+        private const val SWEEP_INPUT_WU = 272uL
 
         /** LDK's fee floor; the sweeper never pays less. */
         private const val FEERATE_FLOOR_SAT_PER_KW = 253uL
@@ -457,7 +461,7 @@ class TransferRepo @Inject constructor(
          * Whether LDK can never give the channel's sweep an output, at any fee rate. Mirrors LDK's
          * `maybe_add_change_output`: the sweeper batches every unconfirmed pending sweep, across channels, into one
          * transaction paying a change output of the wallet's primary address type, and adds that output only when the
-         * change left after the fee is at least its dust limit. Each input is priced as the heaviest one, at the fee
+         * change left after the fee is at least its dust limit. Each input is priced as the lightest one, at the fee
          * floor. Keep in step with iOS `TransferService.isUnsweepable`.
          */
         internal fun isUnsweepable(

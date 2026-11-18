@@ -1362,14 +1362,22 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `isUnsweepable matches the P2TR bound of one heaviest input at the fee floor`() {
+    fun `isUnsweepable matches the P2TR bound of one lightest input at the fee floor`() {
         fun sweepOf(sats: ULong) = listOf(
             PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = sats),
         )
 
-        // 532 WU at 253 sat/kW is 134 sats, plus 330 sats of P2TR dust.
-        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(463u), AddressType.P2TR))
-        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(464u), AddressType.P2TR))
+        // 486 WU at 253 sat/kW is 122 sats, plus 330 sats of P2TR dust.
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(451u), AddressType.P2TR))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(452u), AddressType.P2TR))
+    }
+
+    @Test
+    fun `isUnsweepable keeps a sweepable counterparty close output waiting`() {
+        // 410 sats leave 299 sats of native SegWit change at the floor, above its 294-sat dust limit.
+        val sweep = listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 410u))
+
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2WPKH))
     }
 
     @Test
