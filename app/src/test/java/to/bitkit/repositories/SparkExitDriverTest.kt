@@ -1561,7 +1561,7 @@ class SparkExitDriverTest : BaseUnitTest() {
         var record = funded(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))))
             .applyFeeBump(rate = 9uL, extraSats = 6_612uL, paymentTxid = "bump")
         assertEquals(Phase.NeedsFunding(26_612uL), record.phase)
-        assertEquals(SparkExitFundingState.Paid("bump"), SparkExitMath.fundingState(record, utxos = null))
+        assertEquals(SparkExitFundingState.Paid, SparkExitMath.fundingState(record, utxos = null))
         // Savings' payment is on its way: nothing is asked for while it confirms.
         assertTrue(record.isAwaitingOwnPayment)
 

@@ -41,21 +41,20 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
 /** The running exit's steps and countdown, and its result once it ends. */
 @Composable
 fun SparkExitProgressScreen(
     viewModel: SparkExitViewModel,
-    onBack: () -> Unit,
     onDone: () -> Unit,
+    onWalletOverview: () -> Unit,
     onPayHigherFee: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(Unit) {
-        viewModel.refresh()
+        viewModel.refresh(showIndicator = false)
         viewModel.effects.collect { if (it == SparkExitEffect.Cancelled) onDone() }
     }
     val isEnded = uiState.record?.isActive == false
@@ -66,10 +65,10 @@ fun SparkExitProgressScreen(
     }
     Content(
         uiState = uiState,
-        onBack = onBack,
         onRefresh = viewModel::refresh,
         onCancel = viewModel::cancel,
         onDone = onDone,
+        onWalletOverview = onWalletOverview,
         onNotificationSettings = context::openNotificationSettings,
         onPayHigherFee = onPayHigherFee,
         onRetrySavingsPayment = viewModel::retrySavingsPayment,
@@ -80,10 +79,10 @@ fun SparkExitProgressScreen(
 @Composable
 private fun Content(
     uiState: SparkExitUiState,
-    onBack: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onCancel: () -> Unit = {},
     onDone: () -> Unit = {},
+    onWalletOverview: () -> Unit = {},
     onNotificationSettings: () -> Unit = {},
     onPayHigherFee: () -> Unit = {},
     onRetrySavingsPayment: () -> Unit = {},
@@ -91,8 +90,8 @@ private fun Content(
     val record = uiState.record
     ScreenColumn {
         AppTopBar(
-            titleText = stringResource(R.string.lightning__spark_exit__nav_title),
-            onBackClick = onBack,
+            titleText = stringResource(R.string.lightning__spark_exit__progress_nav_title),
+            onBackClick = null,
             actions = { DrawerNavIcon() },
         )
         PullToRefreshBox(
@@ -108,17 +107,16 @@ private fun Content(
                     .testTag("SparkExitProgress")
             ) {
                 VerticalSpacer(32.dp)
-                Display(text = progressTitle(record?.phase, uiState.progressFunding).withAccent())
+                Display(text = progressTitle(record?.phase, uiState.progressFunding).withExitAccent())
                 BodyM(
                     text = progressText(
                         record = record,
-                        receivedSats = uiState.receivedSats,
                         progressFunding = uiState.progressFunding,
                         staysOnSparkSats = uiState.staysOnSparkSats,
                     ).withAccentBoldBright(),
                     color = Colors.White64,
                 )
-                VerticalSpacer(24.dp)
+                VerticalSpacer(16.dp)
                 record?.let { ProgressDetails(it, uiState, onPayHigherFee) }
                 if (record?.isActive == true) BackgroundNotes(uiState.backgroundLimits)
                 VerticalSpacer(32.dp)
@@ -174,13 +172,28 @@ private fun Content(
                     )
                 }
             }
-            PrimaryButton(
-                text = stringResource(R.string.common__ok),
-                onClick = onDone,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("SparkExitProgressOk")
-            )
+            if (record?.phase == SparkExitRecord.Phase.Done) {
+                PrimaryButton(
+                    text = stringResource(R.string.lightning__spark_exit__done_button),
+                    onClick = onWalletOverview,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("SparkExitWalletOverview")
+                )
+            } else {
+                PrimaryButton(
+                    text = stringResource(
+                        when (record?.phase) {
+                            is SparkExitRecord.Phase.Failed, null -> R.string.common__ok
+                            else -> R.string.lightning__setting_up_button
+                        }
+                    ),
+                    onClick = onDone,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("SparkExitProgressOk")
+                )
+            }
             VerticalSpacer(16.dp)
         }
     }
@@ -188,16 +201,8 @@ private fun Content(
 
 @Composable
 private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onPayHigherFee: () -> Unit) {
-    SparkExitSteps(record = record, tipHeight = uiState.tipHeight)
-    uiState.sweepTxid?.let {
-        // With the cell's own 16 dp above its caption it sits as far below the steps as on iOS.
-        VerticalSpacer(9.dp)
-        SparkExitTxNote(
-            text = null,
-            txid = it,
-            testTag = "SparkExitSweepTxid",
-        )
-    }
+    SparkExitSteps(record = record)
+    uiState.returned?.let { ReturnedNote(receivedSats = it.spendingSats, feesSats = it.feesSats) }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
     if (uiState.isSavingsPaymentRefused) {
@@ -208,26 +213,20 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             modifier = Modifier.testTag("SparkExitSavingsRefused")
         )
     }
-    if (funding != null && address != null) {
+    if (funding is SparkExitFundingState.Ask && address != null) {
         VerticalSpacer(24.dp)
-        when (funding) {
-            is SparkExitFundingState.Ask -> SparkExitFundingAddress(
-                address = address,
-                requiredSats = funding.sats,
-                seenSats = 0uL,
-                partial = funding.partial,
-            )
-            is SparkExitFundingState.Paid -> SparkExitTxNote(
-                text = stringResource(R.string.lightning__spark_exit__fund_paid),
-                txid = funding.txid,
-                testTag = "SparkExitFundingPaid",
-            )
-            is SparkExitFundingState.Seen -> SparkExitTxNote(
-                text = stringResource(R.string.lightning__spark_exit__fund_pending),
-                txid = funding.txid,
-                testTag = "SparkExitFundingSeen",
-            )
-        }
+        SparkExitFeesRow(
+            label = stringResource(R.string.lightning__spark_exit__pay_amount),
+            sats = funding.sats,
+            modifier = Modifier.testTag("SparkExitProgressFundingAmount")
+        )
+        VerticalSpacer(32.dp)
+        SparkExitFundingAddress(
+            address = address,
+            requiredSats = funding.sats,
+            seenSats = 0uL,
+            partial = funding.partial,
+        )
     }
     if (record.isRebuiltFromChain && record.isActive) {
         VerticalSpacer(16.dp)
@@ -280,14 +279,6 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
                 .testTag("SparkExitFeeRose")
         )
     }
-    uiState.outsideExitSats?.let {
-        VerticalSpacer(16.dp)
-        BodyS(
-            text = stringResource(R.string.lightning__spark_exit__outside_exit)
-                .replace("{amount}", sparkExitAmountAccent(it)).withAccentBoldBright(),
-            color = Colors.White64,
-        )
-    }
     if (record.lostSats > 0uL) {
         VerticalSpacer(16.dp)
         BodyS(
@@ -306,25 +297,34 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             modifier = Modifier.testTag("SparkExitLeftBehindLeaves")
         )
     }
-    if (!record.isActive && address != null) LeftoverNote(record, address, uiState.fundingPath)
+    if (!record.isActive && address != null) {
+        val isSweptCounted = record.phase == SparkExitRecord.Phase.Done && (uiState.returned?.feesSats ?: 0uL) > 0uL
+        LeftoverNote(record, address, uiState.fundingPath, isSweptCounted)
+    }
 }
 
-/** Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. */
+/**
+ * Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. When
+ * the returned note already counts the confirmed sweeps as unused fees ([isSweptCounted]), they get no note here.
+ */
 @Composable
-private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?) {
+private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?, isSweptCounted: Boolean) {
     // Sweeps that already confirmed come first; funding that arrived after them has a note of its own below.
-    record.sweptLeftover.forEach {
-        VerticalSpacer(16.dp)
-        SparkExitTxNote(
-            text = stringResource(R.string.lightning__spark_exit__leftover_swept)
-                .replace("{amount}", sparkExitAmountAccent(it.valueSats)),
-            txid = it.txid,
-            testTag = "SparkExitLeftoverSweptEarlier",
-        )
+    if (!isSweptCounted) {
+        record.sweptLeftover.forEach {
+            VerticalSpacer(16.dp)
+            SparkExitTxNote(
+                text = stringResource(R.string.lightning__spark_exit__leftover_swept)
+                    .replace("{amount}", sparkExitAmountAccent(it.valueSats)),
+                txid = it.txid,
+                testTag = "SparkExitLeftoverSweptEarlier",
+            )
+        }
     }
     if (record.leftover.isEmpty()) return
     val total = record.leftover.fold(0uL) { sum, leftover -> sum + leftover.valueSats }
     val sweep = record.leftoverSweep
+    if (isSweptCounted && sweep?.txid != null && sweep.isConfirmed) return
     VerticalSpacer(16.dp)
     when {
         record.isLeftoverWaitingForFees -> BodyS(
@@ -382,15 +382,29 @@ private fun BackgroundNotes(limits: SparkExitBackgroundLimits) {
     val notes = listOfNotNull(
         R.string.lightning__spark_exit__note_restricted.takeIf { limits.isRestricted },
         R.string.lightning__spark_exit__note_battery_saver.takeIf { limits.isPowerSaveMode },
-        R.string.lightning__spark_exit__note_battery_optimized.takeIf {
-            limits.isOptimized && !limits.isRestricted && !limits.isPowerSaveMode
-        },
         R.string.lightning__spark_exit__note_notifications.takeIf { !limits.areNotificationsEnabled },
     )
     notes.forEach {
         VerticalSpacer(16.dp)
         BodyS(text = stringResource(it), color = Colors.White64)
     }
+}
+
+/** What the ended force transfer returned to savings: the spending balance and the emergency fees it did not spend. */
+@Composable
+private fun ReturnedNote(receivedSats: ULong, feesSats: ULong) {
+    VerticalSpacer(32.dp)
+    val text = if (feesSats > 0uL) {
+        stringResource(R.string.lightning__spark_exit__done_returned_fees)
+            .replace("{fees}", sparkExitAmountText(feesSats))
+    } else {
+        stringResource(R.string.lightning__spark_exit__done_returned)
+    }
+    BodyS(
+        text = text.replace("{amount}", sparkExitAmountText(receivedSats)).withAccentBoldBright(),
+        color = Colors.White64,
+        modifier = Modifier.testTag("SparkExitReturned")
+    )
 }
 
 @Composable
@@ -409,18 +423,11 @@ private fun progressTitle(phase: SparkExitRecord.Phase?, funding: SparkExitFundi
 @Composable
 private fun progressText(
     record: SparkExitRecord?,
-    receivedSats: ULong?,
     progressFunding: SparkExitFundingState?,
     staysOnSparkSats: ULong?,
 ): String = when (record?.phase) {
     SparkExitRecord.Phase.Done -> listOfNotNull(
-        // What reached savings when it is known, else only that it did.
-        receivedSats?.let {
-            stringResource(R.string.lightning__spark_exit__done_received).replace("{amount}", sparkExitAmountAccent(it))
-        } ?: stringResource(R.string.lightning__spark_exit__done_text),
-        record.skippedLeafCount.takeIf { it > 0 }?.let {
-            stringResource(R.string.lightning__spark_exit__partial_text).replace("{count}", "$it")
-        },
+        stringResource(R.string.lightning__spark_exit__done_text),
         record.failedLeafSats.takeIf { record.isFailedLeavesReleased && it > 0uL }?.let {
             stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{amount}", sparkExitAmountAccent(it))
         },
@@ -466,7 +473,7 @@ private fun Preview() {
                     claimableAtHeight = 2_100u,
                 ),
                 tipHeight = 1_900u,
-                backgroundLimits = SparkExitBackgroundLimits(isOptimized = true, areNotificationsEnabled = false),
+                backgroundLimits = SparkExitBackgroundLimits(areNotificationsEnabled = false),
             ),
         )
     }

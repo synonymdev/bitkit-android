@@ -32,7 +32,6 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.send.FeeItem
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
 /**
@@ -82,7 +81,7 @@ private fun Content(
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 VerticalSpacer(32.dp)
-                Display(text = stringResource(R.string.lightning__spark_exit__fee_bump_title).withAccent())
+                Display(text = stringResource(R.string.lightning__spark_exit__fee_bump_title).withExitAccent())
                 BodyM(
                     text = stringResource(R.string.lightning__spark_exit__fee_bump_text)
                         .replace("{rate}", "${uiState.record?.feeRateSatPerVbyte ?: 0uL}")
