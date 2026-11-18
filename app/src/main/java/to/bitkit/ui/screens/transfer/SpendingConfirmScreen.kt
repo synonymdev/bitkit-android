@@ -63,6 +63,7 @@ import to.bitkit.ui.screens.transfer.SparkFundingContract.Quote
 import to.bitkit.ui.screens.transfer.SparkFundingContract.SideEffect
 import to.bitkit.ui.screens.transfer.SparkFundingContract.UiState
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -252,7 +253,12 @@ internal fun SpendingFeeGrid(
             ) {
                 Caption13Up(text = stringResource(R.string.lightning__transfer_hw__address), color = Colors.White64)
                 VerticalSpacer(8.dp)
-                BodySSB(text = address, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                BodySSB(
+                    text = address,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = AppTextStyles.BodySSB.copy(fontFeatureSettings = NO_CONTEXTUAL_ALTERNATES),
+                )
                 VerticalSpacer(16.dp)
                 HorizontalDivider()
             }
@@ -381,3 +387,6 @@ private fun PreviewSmall() {
         Content(state = UiState(amountSats = 50_000, quote = previewQuote))
     }
 }
+
+/** Keeps the font from drawing an "x" between digits as "×", so an address reads exactly as the device shows it. */
+private const val NO_CONTEXTUAL_ALTERNATES = "calt 0"
