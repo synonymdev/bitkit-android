@@ -42,7 +42,6 @@ import to.bitkit.models.HealthState
 import to.bitkit.repositories.SparkDeposit
 import to.bitkit.repositories.SparkExitEarlierAddress
 import to.bitkit.repositories.SparkWithdrawal
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionB
@@ -247,7 +246,7 @@ private fun ProviderSection(depositAddress: String?, onCopyText: (String) -> Uni
             modifier = Modifier.testTag("SparkDepositAddress"),
         )
     }
-    BodyM(
+    BodyS(
         text = stringResource(R.string.lightning__spark_trust),
         color = Colors.White50,
         modifier = Modifier.padding(vertical = 16.dp)
