@@ -46,6 +46,9 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
+/** On every state's dismiss button, so tests can close the modal in whichever state it opened. */
+private const val DISMISS_TAG = "UpdateSpendingBalanceDismiss"
+
 /**
  * The Update Spending Balance modal: quotes moving the channels' balance to Spark when it opens, moves it on Update and
  * reports the outcome in place, from Spending Balance Updated to the states that need another step.
@@ -138,7 +141,11 @@ private fun Done(
             testTag = "MoveToSparkInFlight",
             modifier = modifier,
         ) {
-            PrimaryButton(stringResource(R.string.common__ok), onClick = onDismiss, modifier = Modifier.weight(1f))
+            PrimaryButton(
+                stringResource(R.string.common__ok),
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
+            )
         }
         return
     }
@@ -154,7 +161,7 @@ private fun Done(
             SecondaryButton(
                 stringResource(R.string.common__later),
                 onClick = onDismiss,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
             )
             PrimaryButton(
                 stringResource(R.string.lightning__move_to_spark__move_rest),
@@ -205,10 +212,18 @@ private fun TooLarge(
         modifier = modifier,
     ) {
         if (smallerSats == null) {
-            PrimaryButton(stringResource(R.string.common__ok), onClick = onDismiss, modifier = Modifier.weight(1f))
+            PrimaryButton(
+                stringResource(R.string.common__ok),
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
+            )
             return@Modal
         }
-        SecondaryButton(stringResource(R.string.common__cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
+        SecondaryButton(
+            stringResource(R.string.common__cancel),
+            onClick = onDismiss,
+            modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
+        )
         PrimaryButton(
             stringResource(R.string.lightning__move_to_spark__move_half),
             onClick = { onQuote(smallerSats) },
@@ -239,10 +254,18 @@ private fun Failed(
         modifier = modifier,
     ) {
         if (failure == MoveToSparkFailure.NOTHING_TO_MOVE) {
-            PrimaryButton(stringResource(R.string.common__ok), onClick = onDismiss, modifier = Modifier.weight(1f))
+            PrimaryButton(
+                stringResource(R.string.common__ok),
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
+            )
             return@Modal
         }
-        SecondaryButton(stringResource(R.string.common__cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
+        SecondaryButton(
+            stringResource(R.string.common__cancel),
+            onClick = onDismiss,
+            modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
+        )
         PrimaryButton(
             stringResource(R.string.common__try_again),
             onClick = { onQuote(null) },
