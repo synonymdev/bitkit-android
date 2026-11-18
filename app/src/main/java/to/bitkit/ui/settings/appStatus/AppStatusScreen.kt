@@ -32,7 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
-import to.bitkit.ext.toLocalizedTimestamp
+import to.bitkit.ext.toBackupTimestamp
 import to.bitkit.models.HealthState
 import to.bitkit.repositories.AppHealthState
 import to.bitkit.ui.Routes
@@ -338,8 +338,8 @@ private fun Preview() {
                     spark = HealthState.READY,
                     backups = HealthState.READY,
                 ),
-                backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
-                nodeSubtitle = "Running",
+                backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toBackupTimestamp(),
+                nodeSubtitle = "Synced",
                 exitStep = ExitStep.RUNNING,
                 appVersion = "3.2.0 (182)",
             ),

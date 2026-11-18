@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.env.Env
-import to.bitkit.ext.toLocalizedTimestamp
+import to.bitkit.ext.toBackupTimestamp
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.HealthState
@@ -54,6 +54,7 @@ class AppStatusViewModel @Inject constructor(
                 backupSubtitle = computeBackupSubtitle(healthState.backups, backupStatuses),
                 nodeSubtitle = when (healthState.node) {
                     HealthState.ERROR -> context.getString(R.string.settings__status__lightning_node__error)
+                    HealthState.READY -> context.getString(R.string.settings__status__lightning_node__ready)
                     else -> lightningState.nodeLifecycleState.uiText(context)
                 },
                 exitStep = exitState.record.exitStep(exitState.fundingState),
@@ -75,7 +76,7 @@ class AppStatusViewModel @Inject constructor(
 
             when (val maxSyncTime = syncTimes.max()) {
                 0L -> context.getString(R.string.settings__status__backup__ready)
-                else -> runCatching { maxSyncTime.toLocalizedTimestamp() }.getOrDefault(
+                else -> runCatching { maxSyncTime.toBackupTimestamp() }.getOrDefault(
                     context.getString(R.string.settings__status__backup__ready)
                 )
             }

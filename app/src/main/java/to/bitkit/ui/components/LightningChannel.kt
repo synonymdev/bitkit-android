@@ -41,6 +41,7 @@ fun LightningChannel(
     showLabels: Boolean = false,
     showReceiving: Boolean = true,
     receivingUnlimited: Boolean = false,
+    isSpark: Boolean = false,
 ) {
     val isEmptySpendingBar = (!showReceiving || receivingUnlimited) && localBalance == 0L
     val spendingColor = if (status == ChannelStatusUi.CLOSED || isEmptySpendingBar) Colors.Gray5 else Colors.Purple50
@@ -52,7 +53,7 @@ fun LightningChannel(
     }
     val receivingAvailableColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray3 else Colors.White
 
-    val spendingAvailableFraction = if (capacity > 0) localBalance.toFloat() / capacity else 0f
+    val spendingAvailableFraction = spendingFillFraction(capacity, localBalance, isSpark)
     val receivingAvailableFraction = when {
         receivingUnlimited -> 1f
         capacity > 0 -> remoteBalance.toFloat() / capacity
@@ -153,6 +154,20 @@ fun LightningChannel(
     }
 }
 
+/**
+ * The share of the spending track the balance fills. A channel fills it by its local balance over its capacity; Spark
+ * has no capacity, so a held balance fills half of it, as in the design.
+ */
+internal fun spendingFillFraction(capacity: Long, localBalance: Long, isSpark: Boolean = false): Float = when {
+    localBalance <= 0L -> 0f
+    isSpark -> SPARK_SPENDING_FILL
+    capacity > 0L -> localBalance.toFloat() / capacity
+    else -> 0f
+}
+
+/** The share of the spending track a Spark balance fills, as the design's Spark bar draws it. */
+private const val SPARK_SPENDING_FILL = 0.5f
+
 private val SpendingHalfShape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp)
 private val FullBarShape = RoundedCornerShape(8.dp)
 
@@ -228,6 +243,7 @@ private fun PreviewReceivingUnlimited() {
             remoteBalance = 0,
             status = ChannelStatusUi.OPEN,
             receivingUnlimited = true,
+            isSpark = true,
             modifier = Modifier.padding(16.dp)
         )
     }

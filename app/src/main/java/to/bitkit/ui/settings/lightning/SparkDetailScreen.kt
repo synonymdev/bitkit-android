@@ -120,6 +120,7 @@ private fun Content(
                     status = ChannelStatusUi.OPEN,
                     showReceiving = spark.isReceiving,
                     receivingUnlimited = spark.isReceiving,
+                    isSpark = true,
                 )
                 VerticalSpacer(16.dp)
                 HorizontalDivider()

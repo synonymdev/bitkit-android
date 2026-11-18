@@ -47,6 +47,7 @@ class AppStatusViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.other__node_running)).thenReturn("Running")
         whenever(context.getString(R.string.other__node_stopping)).thenReturn("Stopping")
         whenever(context.getString(R.string.other__node_initializing)).thenReturn("Setting up wallet…")
+        whenever(context.getString(R.string.settings__status__lightning_node__ready)).thenReturn("Synced")
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(cacheStore.backupStatuses).thenReturn(flowOf(emptyMap()))
@@ -151,25 +152,27 @@ class AppStatusViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `node subtitle shows NodeLifecycleState uiText`() = test {
+    fun `node subtitle shows synced when the node is healthy`() = test {
         val lightningState = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
 
+        whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState(node = HealthState.READY)))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
 
         sut = createSut()
 
         sut.uiState.test {
             val state = awaitItem()
-            assertEquals("Running", state.nodeSubtitle)
+            assertEquals("Synced", state.nodeSubtitle)
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun `node subtitle updates when NodeLifecycleState changes`() = test {
+    fun `node subtitle shows NodeLifecycleState uiText while the node is pending`() = test {
         val initialState = LightningState(nodeLifecycleState = NodeLifecycleState.Starting)
         val lightningStateFlow = MutableStateFlow(initialState)
 
+        whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState(node = HealthState.PENDING)))
         whenever(lightningRepo.lightningState).thenReturn(lightningStateFlow)
 
         sut = createSut()

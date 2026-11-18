@@ -29,6 +29,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
+import android.text.format.DateFormat as AndroidDateFormat
 import java.text.DateFormat as JavaDateFormat
 import java.time.LocalDate as JavaLocalDate
 import kotlin.time.Instant as KInstant
@@ -74,6 +75,14 @@ fun Long.toLocalizedTimestamp(locale: Locale = Locale.getDefault()): String {
     val formatter = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT, ULocale.forLocale(locale))
         ?: return JavaDateFormat.getDateTimeInstance(JavaDateFormat.LONG, JavaDateFormat.SHORT, locale).format(date)
     return formatter.format(date)
+}
+
+fun Long.toBackupTimestamp(
+    locale: Locale = Locale.getDefault(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): String {
+    val pattern = AndroidDateFormat.getBestDateTimePattern(locale, DatePattern.BACKUP_TIME_SKELETON)
+    return Instant.ofEpochMilli(this).formatted(pattern, locale, zone)
 }
 
 @OptIn(ExperimentalTime::class)
@@ -261,6 +270,9 @@ enum class UiDateStyle {
 object DatePattern {
     const val DATE_TIME = "dd/MM/yyyy, HH:mm"
     const val CHANNEL_DETAILS = "MMM d, yyyy, HH:mm"
+
+    /** Skeleton for a backup's time: short month, day, year and 24-hour time, ordered and joined per locale. */
+    const val BACKUP_TIME_SKELETON = "MMMdyyyyHHmm"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
     const val LOG_LINE = "yyyy-MM-dd HH:mm:ss.SSS"
 
