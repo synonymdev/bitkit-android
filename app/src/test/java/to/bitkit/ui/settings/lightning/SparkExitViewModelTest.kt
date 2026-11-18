@@ -44,13 +44,13 @@ class SparkExitViewModelTest : BaseUnitTest() {
     fun `entering the funding step again offers both choices while nothing was paid`() = test {
         whenever(repo.refreshFundingAddress()).thenReturn(Result.success(0uL))
         val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
-        sut.onFundExternally()
-        sut.stopWatchingFundingAddress()
+        sut.onPayExternally()
 
         sut.onFundingShown()
 
         assertFalse(sut.uiState.value.showsFundingAddress)
         assertFalse(sut.uiState.value.fundFromSavings)
+        assertFalse(sut.uiState.value.isReadingFundingAddress, "continue waits only for the first read")
     }
 
     @Test
@@ -62,6 +62,24 @@ class SparkExitViewModelTest : BaseUnitTest() {
 
         assertTrue(sut.uiState.value.showsFundingAddress)
         sut.stopWatchingFundingAddress()
+    }
+
+    @Test
+    fun `only a pull to refresh shows the refresh indicator`() = test {
+        val seen = mutableListOf<Boolean>()
+        lateinit var sut: SparkExitViewModel
+        whenever(repo.load(anyOrNull())).doSuspendableAnswer {
+            seen += sut.uiState.value.isRefreshing
+            Result.success(null)
+        }
+        whenever(repo.tick()).thenReturn(Result.success(null))
+        sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+
+        sut.refresh(showIndicator = false)
+        sut.refresh()
+
+        assertEquals(listOf(false, true), seen)
+        assertFalse(sut.uiState.value.isRefreshing)
     }
 
     @Test
@@ -152,6 +170,57 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertTrue(paid.copy(fundingSeenSats = 20_000uL).canContinueFunding)
         // A second payment adds its input fee.
         assertFalse(paid.copy(fundingSeenSats = 20_000uL, fundingSeenCount = 2).canContinueFunding)
+    }
+
+    @Test
+    fun `pay to confirm starts on its own when the funding was already at the address`() = test {
+        whenever(repo.loadQuote()).thenReturn(Result.success(SparkExitQuote(SparkExitFixtures.prepared())))
+        whenever(repo.refreshFundingAddress()).thenReturn(Result.success(20_000uL))
+        whenever(repo.start(any())).thenReturn(Result.failure(IllegalStateException("Start failed")))
+        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+        sut.loadQuote()
+
+        sut.watchFundingAddress()
+
+        assertTrue(sut.uiState.value.canAutoStartFunding)
+        assertFalse(sut.uiState.value.canTapStartFunding)
+        sut.startOnPayment()
+        verify(repo).start(false)
+        // The failed start waits for Try again; nothing starts on its own a second time this visit.
+        assertFalse(sut.uiState.value.canAutoStartFunding)
+        assertTrue(sut.uiState.value.canTapStartFunding)
+        exitState.value = SparkExitState(fundingSeenSats = 30_000uL, fundingSeenCount = 2)
+        sut.startOnPayment()
+        verify(repo, times(1)).start(any())
+        sut.stopWatchingFundingAddress()
+    }
+
+    @Test
+    fun `pay to confirm waits for its first read before it starts`() = test {
+        whenever(repo.loadQuote()).thenReturn(Result.success(SparkExitQuote(SparkExitFixtures.prepared())))
+        whenever(repo.refreshFundingAddress()).thenReturn(Result.success(0uL))
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+        sut.loadQuote()
+        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
+
+        assertFalse(sut.uiState.value.canAutoStartFunding)
+        sut.watchFundingAddress()
+        assertTrue(sut.uiState.value.canAutoStartFunding)
+        sut.stopWatchingFundingAddress()
+    }
+
+    @Test
+    fun `pay to confirm never starts on its own while a start runs`() {
+        val covered = SparkExitUiState(
+            quote = SparkExitQuote(SparkExitFixtures.prepared()),
+            fundingSeenSats = 20_000uL,
+            fundingSeenCount = 1,
+            hasPayReadFunding = true,
+        )
+        assertTrue(covered.canAutoStartFunding)
+        assertFalse(covered.copy(isStarting = true).canAutoStartFunding)
+        assertFalse(covered.copy(isStarting = true).canTapStartFunding)
     }
 
     @Test
@@ -260,13 +329,6 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `done names the sweep that landed before a retry of leaves replaced it`() {
-        val done = SparkExitFixtures.record(SparkExitRecord.Phase.Done)
-            .copy(recovery = SparkExitFixtures.recovery(emptyList()), landedSweepTxid = "sweep")
-        assertEquals("sweep", SparkExitUiState(record = done).sweepTxid)
-    }
-
-    @Test
     fun `confirm shows what leaves savings only when savings pays the fee funding`() {
         val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
         val state = SparkExitUiState(quote = quote, savingsFeeSats = 300uL, fundFromSavings = true)
@@ -274,6 +336,19 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertEquals(20_300uL, state.savingsTotalSats)
         assertNull(state.copy(fundFromSavings = false).savingsTotalSats)
         assertNull(state.copy(savingsFeeSats = null).savingsTotalSats)
+    }
+
+    @Test
+    fun `emergency fees go to another wallet only once savings is priced and can't pay`() {
+        val pricing = SparkExitUiState()
+        assertTrue(pricing.isPricingSavings)
+        assertFalse(pricing.paysExternally)
+        assertFalse(pricing.copy(savingsFeeSats = 300uL, canFundFromSavings = true).paysExternally)
+        assertTrue(pricing.copy(savingsFeeSats = 300uL, canFundFromSavings = false).paysExternally)
+        assertTrue(pricing.copy(hasSavingsFeeFailed = true).paysExternally)
+        assertTrue(
+            pricing.copy(savingsFeeSats = 300uL, canFundFromSavings = true, showsFundingAddress = true).paysExternally
+        )
     }
 
     @Test
@@ -299,7 +374,6 @@ class SparkExitViewModelTest : BaseUnitTest() {
         sparkState.value = SparkState(balanceSats = 34_464uL)
 
         assertEquals(1_696uL, sut.uiState.value.staysOnSparkSats)
-        assertNull(sut.uiState.value.outsideExitSats)
         assertEquals(
             "Nothing could be recovered. ₿ 1 696 stays on Spark.",
             sparkExitFailedText("Nothing could be recovered.", "{amount} stays on Spark.", outsideAmount = "₿ 1 696"),

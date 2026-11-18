@@ -1,6 +1,8 @@
 package to.bitkit.ui.settings.lightning
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -16,19 +18,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
-/** What the exit takes on-chain, what it costs, and what stays behind. */
+/** What the force transfer moves, what the network takes, and what reaches savings. */
 @Composable
 fun SparkExitQuoteScreen(
     viewModel: SparkExitViewModel,
@@ -60,13 +61,14 @@ private fun Content(
                 .verticalScroll(rememberScrollState())
         ) {
             VerticalSpacer(32.dp)
-            Display(text = stringResource(R.string.lightning__spark_exit__quote_title).withAccent())
-            VerticalSpacer(32.dp - SparkExitDisplayExtra)
+            Display(text = stringResource(R.string.lightning__spark_exit__quote_title).withExitAccent())
+            BodyM(
+                text = stringResource(R.string.lightning__spark_exit__quote_text).withAccentBoldBright(),
+                color = Colors.White64,
+            )
+            VerticalSpacer(32.dp)
             when {
-                uiState.quote != null -> {
-                    SparkExitQuoteRows(uiState.quote)
-                    uiState.quote.unexitableSats?.let { UnexitableNote(it) }
-                }
+                uiState.quote != null -> SparkExitQuoteRows(uiState.quote)
                 uiState.isQuoting && uiState.isSettling -> BodyM(
                     text = stringResource(R.string.lightning__spark_exit__quote_settling),
                     color = Colors.White64,
@@ -93,30 +95,28 @@ private fun Content(
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                onClick = onContinue,
-                isLoading = uiState.isQuoting,
-                enabled = uiState.quote != null && block == null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("SparkExitQuoteContinue")
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__cancel),
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f)
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.common__continue),
+                    onClick = onContinue,
+                    isLoading = uiState.isQuoting,
+                    enabled = uiState.quote != null && block == null,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("SparkExitQuoteContinue")
+                )
+            }
             VerticalSpacer(16.dp)
         }
     }
-}
-
-/** What the quote cannot exit: skipped leaves, and value still moving inside Spark. */
-@Composable
-private fun UnexitableNote(sats: ULong) {
-    VerticalSpacer(16.dp)
-    BodyS(
-        text = stringResource(R.string.lightning__spark_exit__quote_outside)
-            .replace("{amount}", sparkExitAmountAccent(sats)).withAccentBoldBright(),
-        color = Colors.White64,
-        modifier = Modifier.testTag("SparkExitQuoteOutside")
-    )
 }
 
 @Preview(showSystemUi = true)

@@ -138,6 +138,8 @@ data class SparkExitRecord(
     val feeBumpBuiltAtHeight: UInt? = null,
     /** What confirmed SWEEP and COOPERATIVE steps of replaced generations paid to [destination], by txid. */
     val earlierReceivedSats: Map<String, ULong> = emptyMap(),
+    /** The fee funding confirmed SWEEP steps of replaced generations returned to [destination], by txid. */
+    val earlierReturnedFundingSats: Map<String, ULong> = emptyMap(),
     /** Each quoted leaf's value, so a leaf the first build leaves behind before any recovery lists it keeps it. */
     val leafSats: Map<String, ULong> = emptyMap(),
     /**
@@ -443,6 +445,9 @@ data class SparkExitRecord(
         isFeeBumpPending = false,
         feeBumpBuiltAtHeight = null,
         earlierReceivedSats = earlierReceivedSats + recovery?.let { SparkExitMath.confirmedReceived(it, destination) }
+            .orEmpty(),
+        earlierReturnedFundingSats = earlierReturnedFundingSats + recovery
+            ?.let { SparkExitMath.sweepFunding(fundingInputs, it, confirmedOnly = true) }
             .orEmpty(),
         earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::fundingTxids).orEmpty()).distinct(),
         landedSweepTxid = recovery?.transactions
@@ -806,6 +811,9 @@ object SparkExitJson {
             earlierReceivedSats = read {
                 o.objectOrNull("earlierReceivedSats")?.mapValues { it.value.jsonPrimitive.content.toULong() }
             }.orEmpty(),
+            earlierReturnedFundingSats = read {
+                o.objectOrNull("earlierReturnedFundingSats")?.mapValues { it.value.jsonPrimitive.content.toULong() }
+            }.orEmpty(),
             leafSats = read { leafSatsFromJson(o) }.orEmpty(),
             landedSweepTxid = read { o.stringOrNull("landedSweepTxid") },
             sweptLeftover = read { sweptLeftoverFromJson(o) }.orEmpty(),
@@ -934,6 +942,11 @@ object SparkExitJson {
         }
     }
 
+    private fun JsonObjectBuilder.putSatsByTxid(key: String, sats: Map<String, ULong>) {
+        if (sats.isEmpty()) return
+        put(key, buildJsonObject { sats.forEach { (txid, value) -> put(txid, value.toLong()) } })
+    }
+
     private fun sweepToJson(sweep: SparkExitRecord.LeftoverSweep) = buildJsonObject {
         sweep.txid?.let { put("txid", it) }
         sweep.txHex?.let { put("txHex", it) }
@@ -1042,12 +1055,8 @@ object SparkExitJson {
         r.fundingPaymentSeenAtHeight?.let { put("fundingPaymentSeenAtHeight", it.toLong()) }
         r.fundingPaymentMissingSince?.let { put("fundingPaymentMissingSince", it.toLong()) }
         if (r.isCancelled) put("isCancelled", true)
-        if (r.earlierReceivedSats.isNotEmpty()) {
-            put(
-                "earlierReceivedSats",
-                buildJsonObject { r.earlierReceivedSats.forEach { (txid, sats) -> put(txid, sats.toLong()) } },
-            )
-        }
+        putSatsByTxid("earlierReceivedSats", r.earlierReceivedSats)
+        putSatsByTxid("earlierReturnedFundingSats", r.earlierReturnedFundingSats)
         if (r.leafSats.isNotEmpty()) {
             put("leafSats", buildJsonObject { r.leafSats.forEach { (leafId, sats) -> put(leafId, sats.toLong()) } })
         }
@@ -1150,6 +1159,9 @@ object SparkExitJson {
         fundingPaymentMissingSince = o.ulongOrNull("fundingPaymentMissingSince")?.toUInt(),
         isCancelled = o.booleanOrNull("isCancelled") ?: false,
         earlierReceivedSats = o.objectOrNull("earlierReceivedSats")
+            ?.mapValues { it.value.jsonPrimitive.content.toULong() }
+            .orEmpty(),
+        earlierReturnedFundingSats = o.objectOrNull("earlierReturnedFundingSats")
             ?.mapValues { it.value.jsonPrimitive.content.toULong() }
             .orEmpty(),
         leafSats = leafSatsFromJson(o),
