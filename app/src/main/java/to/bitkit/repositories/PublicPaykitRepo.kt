@@ -339,7 +339,9 @@ class PublicPaykitRepo @Inject constructor(
                 lightningRefresh = requestedRefresh,
             )
             if (!isAutomaticPublicationAllowed(ownsPublication)) return@runSuspendCatching
-            syncPaykitApp(priority = Priority.Background) { isAutomaticPublicationAllowed(ownsPublication) }.getOrThrow()
+            syncPaykitApp(priority = Priority.Background) {
+                isAutomaticPublicationAllowed(ownsPublication)
+            }.getOrThrow()
             val published = applyPublishedEndpoints(
                 desired,
                 beforePublish = { markPublicationPending(ownsPublication) },
