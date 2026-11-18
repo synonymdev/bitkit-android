@@ -57,11 +57,12 @@ import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.env.Env
-import to.bitkit.ext.DatePattern
+import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.resolveDisplayShortChannelId
 import to.bitkit.ext.setClipboardText
+import to.bitkit.ext.toEpochSecondsOrNull
 import to.bitkit.models.Toast
 import to.bitkit.models.msatFloorOf
 import to.bitkit.ui.Routes
@@ -84,10 +85,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.getBlockExplorerUrl
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import to.bitkit.ui.utils.uiDateText
 
 @Composable
 fun ChannelDetailScreen(
@@ -298,7 +296,7 @@ private fun ChannelDetailContent(
                     SectionRow(
                         name = stringResource(R.string.lightning__created_on),
                         valueContent = {
-                            CaptionB(text = formatDate(createdAt))
+                            CaptionB(text = channelDateText(createdAt))
                         }
                     )
 
@@ -308,7 +306,7 @@ private fun ChannelDetailContent(
                         SectionRow(
                             name = stringResource(R.string.lightning__order_expiry),
                             valueContent = {
-                                CaptionB(text = formatDate(blocktankOrder.orderExpiresAt))
+                                CaptionB(text = channelDateText(blocktankOrder.orderExpiresAt))
                             }
                         )
                     }
@@ -421,7 +419,7 @@ private fun ChannelDetailContent(
                     SectionRow(
                         name = stringResource(R.string.lightning__opened_on),
                         valueContent = {
-                            CaptionB(text = formatUnixTimestamp(txTime.toLong()))
+                            CaptionB(text = uiDateText(txTime, UiDateStyle.DATE_TIME_YEAR_SHORT))
                         }
                     )
                 }
@@ -435,7 +433,7 @@ private fun ChannelDetailContent(
                     SectionRow(
                         name = stringResource(R.string.lightning__closed_on),
                         valueContent = {
-                            CaptionB(text = formatDate(closedAt))
+                            CaptionB(text = channelDateText(closedAt))
                         }
                     )
                 }
@@ -585,22 +583,10 @@ private fun getChannelStatus(
     return if (channel.details.isChannelReady) ChannelStatusUi.OPEN else ChannelStatusUi.PENDING
 }
 
-private fun formatDate(dateString: String): String {
-    return runCatching {
-        val instant = Instant.parse(dateString)
-        val formatter = DateTimeFormatter.ofPattern(DatePattern.CHANNEL_DETAILS, Locale.getDefault())
-            .withZone(ZoneId.systemDefault())
-        formatter.format(instant)
-    }.getOrDefault(dateString)
-}
-
-private fun formatUnixTimestamp(timestamp: Long): String {
-    return runCatching {
-        val instant = Instant.ofEpochSecond(timestamp)
-        val formatter = DateTimeFormatter.ofPattern(DatePattern.CHANNEL_DETAILS, Locale.getDefault())
-            .withZone(ZoneId.systemDefault())
-        formatter.format(instant)
-    }.getOrDefault(timestamp.toString())
+@Composable
+private fun channelDateText(dateString: String): String {
+    val timestamp = remember(dateString) { dateString.toEpochSecondsOrNull() }
+    return if (timestamp != null) uiDateText(timestamp, UiDateStyle.DATE_TIME_YEAR_SHORT) else dateString
 }
 
 private fun contactSupport(
