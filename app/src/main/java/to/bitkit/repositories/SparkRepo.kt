@@ -777,7 +777,8 @@ class SparkRepo @Inject constructor(
     )
 
     /** Takes back the sends whose outcome Spark didn't report before a restart, so a sync can still settle them. */
-    private suspend fun restoreUncertainSends() {
+    private suspend fun restoreUncertainSends() = sendReleaseMutex.withLock {
+        // Read and installed under the lock a payment event's cleanup takes, so a hold it clears is never reloaded.
         val cache = cacheStore.data.first()
         cache.sparkUncertainSends.forEach { (hash, failedAt) ->
             val expiresAt = cache.sparkSendExpiries[hash]?.toULong() ?: ULong.MAX_VALUE
