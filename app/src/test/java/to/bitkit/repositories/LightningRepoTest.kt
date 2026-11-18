@@ -5241,6 +5241,34 @@ class LightningRepoTest : BaseUnitTest() {
     )
 
     @Test
+    fun `cancelling updateAddressType clears the change in progress`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(MutableSharedFlow(replay = 1))
+
+        val job = CoroutineScope(testDispatcher).async { sut.updateAddressType("taproot", listOf("taproot")) }
+        testScheduler.advanceUntilIdle()
+        assertTrue(sut.isChangingAddressType())
+        job.cancel()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(sut.isChangingAddressType())
+    }
+
+    @Test
+    fun `cancelling setMonitoring clears the change in progress`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(MutableSharedFlow(replay = 1))
+
+        val job = CoroutineScope(testDispatcher).async { sut.setMonitoring(AddressType.P2TR, enabled = true) }
+        testScheduler.advanceUntilIdle()
+        assertTrue(sut.isChangingAddressType())
+        job.cancel()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(sut.isChangingAddressType())
+    }
+
+    @Test
     fun `updateAddressType should fail when already in progress`() = test {
         startNodeForTesting()
         val settingsFlow = MutableSharedFlow<SettingsData>(replay = 1)

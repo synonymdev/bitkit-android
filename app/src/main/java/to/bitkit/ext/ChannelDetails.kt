@@ -1,9 +1,11 @@
 package to.bitkit.ext
 
+import com.synonym.bitkitcore.ClosedChannelDetails
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.MaxDustHtlcExposure
 import to.bitkit.models.msatFloorOf
+import to.bitkit.models.safe
 
 /**
  * Calculates our total balance in the channel (see `value_to_self_msat` in rust-lightning).
@@ -24,6 +26,10 @@ val ChannelDetails.amountOnClose: ULong
 
         return outboundCapacitySat + ourReserve
     }
+
+/** Our balance in a closed channel as recorded at close: outbound capacity plus our reserve, never the capacity. */
+val ClosedChannelDetails.amountOnClose: ULong
+    get() = msatFloorOf(this.outboundCapacityMsat).safe() + this.unspendablePunishmentReserve.safe()
 
 /** Returns only `open` channels, filtering out pending ones. */
 fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> = this.filter { it.isChannelReady }
