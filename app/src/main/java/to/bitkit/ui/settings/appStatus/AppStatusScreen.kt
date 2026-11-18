@@ -338,7 +338,7 @@ private fun Preview() {
                     spark = HealthState.READY,
                     backups = HealthState.READY,
                 ),
-                backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toBackupTimestamp(),
+                backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toBackupTimestamp(is24Hour = true),
                 nodeSubtitle = "Synced",
                 exitStep = ExitStep.RUNNING,
                 appVersion = "3.2.0 (182)",

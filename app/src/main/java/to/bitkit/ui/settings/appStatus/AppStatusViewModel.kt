@@ -25,6 +25,7 @@ import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import javax.inject.Inject
+import android.text.format.DateFormat as AndroidDateFormat
 
 @HiltViewModel
 class AppStatusViewModel @Inject constructor(
@@ -76,9 +77,9 @@ class AppStatusViewModel @Inject constructor(
 
             when (val maxSyncTime = syncTimes.max()) {
                 0L -> context.getString(R.string.settings__status__backup__ready)
-                else -> runCatching { maxSyncTime.toBackupTimestamp() }.getOrDefault(
-                    context.getString(R.string.settings__status__backup__ready)
-                )
+                else -> runCatching {
+                    maxSyncTime.toBackupTimestamp(is24Hour = AndroidDateFormat.is24HourFormat(context))
+                }.getOrDefault(context.getString(R.string.settings__status__backup__ready))
             }
         }
     }

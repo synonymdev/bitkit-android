@@ -78,10 +78,12 @@ fun Long.toLocalizedTimestamp(locale: Locale = Locale.getDefault()): String {
 }
 
 fun Long.toBackupTimestamp(
+    is24Hour: Boolean,
     locale: Locale = Locale.getDefault(),
     zone: ZoneId = ZoneId.systemDefault(),
 ): String {
-    val pattern = AndroidDateFormat.getBestDateTimePattern(locale, DatePattern.BACKUP_TIME_SKELETON)
+    val skeleton = DatePattern.BACKUP_DATE_SKELETON + if (is24Hour) "HHmm" else "hmm"
+    val pattern = AndroidDateFormat.getBestDateTimePattern(locale, skeleton)
     return Instant.ofEpochMilli(this).formatted(pattern, locale, zone)
 }
 
@@ -271,8 +273,8 @@ object DatePattern {
     const val DATE_TIME = "dd/MM/yyyy, HH:mm"
     const val CHANNEL_DETAILS = "MMM d, yyyy, HH:mm"
 
-    /** Skeleton for a backup's time: short month, day, year and 24-hour time, ordered and joined per locale. */
-    const val BACKUP_TIME_SKELETON = "MMMdyyyyHHmm"
+    /** Skeleton for a backup's date: short month, day and year, ordered and joined per locale. */
+    const val BACKUP_DATE_SKELETON = "MMMdyyyy"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
     const val LOG_LINE = "yyyy-MM-dd HH:mm:ss.SSS"
 
