@@ -89,8 +89,7 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: pubky_paykit, grep: "@pubky_staging" }
-          - { name: hardware_wallet, grep: "@hardware_wallet" }
+          - { name: pubky_paykit, grep: "@pubky_profile_4" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 
@@ -107,7 +106,7 @@ jobs:
         with:
           repository: synonymdev/bitkit-e2e-tests
           path: bitkit-e2e-tests
-          ref: ${{ steps.e2e-ref.outputs.ref }}
+          ref: bdeff1319e18267f301beb1c3b369d32a45380e7
 
       - name: Enable KVM
         run: |

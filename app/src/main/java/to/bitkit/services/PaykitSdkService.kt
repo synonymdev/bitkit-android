@@ -373,7 +373,7 @@ class PaykitSdkService @Inject constructor(
             try {
                 platformInitializer()
                 launch { republishIdentityIfNeeded() }
-                operationLock.withLock { activate() }
+                operationLock.withLock(traceName = "initialize") { activate() }
                 isSetup.complete(Unit)
             } catch (t: Throwable) {
                 setupFailed = true
@@ -462,7 +462,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun currentPublicKey(): String? {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "currentPublicKey") {
             withPaykitKey { handle ->
                 completeSdkCall { handle.identityStatus() }?.publicKey
                     ?: completeSdkCall { handle.initialize() }.publicKey
@@ -474,7 +474,7 @@ class PaykitSdkService @Inject constructor(
 
     internal suspend fun hasPrivatePaymentAccess(priority: Priority): Boolean {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "hasPrivatePaymentAccess") {
             checkRefreshAdmission(priority)
             withPaykitKey {
                 checkRefreshAdmission(priority)
@@ -485,7 +485,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun importSession(secret: String): PubkySessionBootstrapResult {
         isSetup.await()
-        return operationLock.withLock { importSessionLocked(secret) }
+        return operationLock.withLock(traceName = "importSession") { importSessionLocked(secret) }
     }
 
     private suspend fun importSessionLocked(secret: String): PubkySessionBootstrapResult {
@@ -506,7 +506,7 @@ class PaykitSdkService @Inject constructor(
         signupCode: String?,
     ): PubkySessionBootstrapResult {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "signUp") {
             val result = bootstrap().signUp(
                 localSecretKey = localSecretKey(secretKeyHex),
                 homeserverPublicKey = homeserverPublicKey,
@@ -529,7 +529,7 @@ class PaykitSdkService @Inject constructor(
         signupCode: String?,
     ): PubkySessionBootstrapResult {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "registerIdentity") {
             bootstrap().signUp(
                 localSecretKey = localSecretKey(secretKeyHex),
                 homeserverPublicKey = homeserverPublicKey,
@@ -541,7 +541,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "activateRegisteredIdentity") {
             var activated = false
             try {
                 activateBootstrapResult(
@@ -558,7 +558,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun signIn(secretKeyHex: String): PubkySessionBootstrapResult {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "signIn") {
             val result = bootstrap().signIn(
                 localSecretKey = localSecretKey(secretKeyHex),
                 requiredCapabilities = requiredCapabilities(),
@@ -580,7 +580,7 @@ class PaykitSdkService @Inject constructor(
         secretKeyHex: String,
     ) {
         ensurePlatformSetup()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "approveAuth") {
             approvalBootstrap(authUrl, approvedClientId).approveAuth(
                 authUrl = authUrl,
                 expectedCapabilities = expectedCapabilities,
@@ -599,7 +599,7 @@ class PaykitSdkService @Inject constructor(
         val requestedClaim = PubkyAuthRequest.parseBitkitClaim(authUrl, expectedCapabilities).getOrThrow()
             ?: throw PubkyAuthRequestError.MissingBitkitClaim
         if (requestedClaim.includesPaykitAccess) isSetup.await() else ensurePlatformSetup()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "approveAuthWithCompanionClaim") {
             require(
                 claim.queryParameter == PubkyAuthClaim.QUERY_PARAMETER && claim.claimType == requestedClaim.wireValue
             ) {
@@ -635,13 +635,15 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun publishPaykitProfile(profile: PaykitProfile, expectedIdentity: String): PaykitProfileRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "publishPaykitProfile") {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
                 requireProfileIdentity(publicKey, expectedIdentity)
-                val current = handle.fetchPaykitProfile(publicKey)
+                val current = traceSdkStage("copy.fetchRevision") { handle.fetchPaykitProfile(publicKey) }
                 completeSdkCall {
-                    handle.publishPaykitProfile(profile, current?.revision).also { notifyBackupStateChanged() }
+                    traceSdkStage("copy.write") {
+                        handle.publishPaykitProfile(profile, current?.revision).also { notifyBackupStateChanged() }
+                    }
                 }
             }
         }
@@ -649,7 +651,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun uploadProfileAvatar(bytes: ByteArray, contentType: String, expectedIdentity: String? = null): String {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "uploadProfileAvatar") {
             if (expectedIdentity != null) {
                 val identityStatus = completeSdkCall { handle().identityStatus() }
                 check(
@@ -665,7 +667,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun deletePaykitProfile() {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(traceName = "deletePaykitProfile") {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
                 val current = handle.fetchPaykitProfile(publicKey)
@@ -692,15 +694,15 @@ class PaykitSdkService @Inject constructor(
         expectedIdentity: String,
     ): PubkyProfileSnapshot {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "publishPubkyProfile") {
             requireProfileIdentity(currentIdentity(), expectedIdentity)
-            completeSdkCall { handle().publishPubkyProfile(update, expectedRevision) }
+            completeSdkCall { traceSdkStage("public.write") { handle().publishPubkyProfile(update, expectedRevision) } }
         }
     }
 
     suspend fun deletePubkyProfile(expectedRevision: String, expectedIdentity: String) {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(traceName = "deletePubkyProfile") {
             requireProfileIdentity(currentIdentity(), expectedIdentity)
             completeSdkCall { handle().deletePubkyProfile(expectedRevision) }
         }
@@ -708,7 +710,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun uploadPubkyAppAvatar(bytes: ByteArray, contentType: String, expectedIdentity: String): String {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "uploadPubkyAppAvatar") {
             requireProfileIdentity(currentIdentity(), expectedIdentity)
             completeSdkCall { handle().uploadPubkyAppAvatar(bytes, contentType) }
         }
@@ -725,14 +727,14 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun contactRecords(): List<ContactRecord> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "contactRecords") {
             withPaykitKey { completeSdkCall { it.contactRecords() } }
         }
     }
 
     suspend fun contactRecord(publicKey: String): ContactRecord? {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "contactRecord") {
             withPaykitKey { completeSdkCall { it.contactRecord(publicKey) } }
         }
     }
@@ -750,7 +752,7 @@ class PaykitSdkService @Inject constructor(
         isStillCurrent: (() -> Boolean)? = null,
     ): ContactRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "saveContact") {
             withStateRevisionTracking { handle ->
                 if (expectedIdentity != null) {
                     val identity = completeSdkCall { handle.identityStatus() }?.publicKey
@@ -782,7 +784,7 @@ class PaykitSdkService @Inject constructor(
     ): List<ContactRecord> {
         if (updates.isEmpty()) return emptyList()
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "saveContacts") {
             withStateRevisionTracking { handle ->
                 if (expectedIdentity != null) {
                     val identity = completeSdkCall { handle.identityStatus() }?.publicKey
@@ -807,7 +809,7 @@ class PaykitSdkService @Inject constructor(
         var imported: List<ContactRecord>?
         do {
             isPaymentSubmissionActive.first { !it }
-            imported = operationLock.withLock(Priority.Background) {
+            imported = operationLock.withLock(Priority.Background, traceName = "importShopContacts") {
                 if (runtimeGeneration != generation || !isStillCurrent()) throw PubkyContactError.SignInChanged
                 if (isPaymentSubmissionActive.value) return@withLock null
                 withStateRevisionTracking { handle ->
@@ -823,7 +825,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun removeContact(publicKey: String): ContactRecord? {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "removeContact") {
             withStateRevisionTracking { handle ->
                 val peers = completeSdkCall { handle.linkedPeers() }.filter {
                     PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
@@ -858,7 +860,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> {
         if (publicKeys.isEmpty()) return emptyList()
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "removeContacts") {
             withStateRevisionTracking { handle ->
                 val now = nowMillis()
                 val subscribedKeys = completeSdkCall { handle.paymentRequests() }.filter {
@@ -895,7 +897,7 @@ class PaykitSdkService @Inject constructor(
         canSync: suspend () -> Boolean,
     ): Boolean {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "syncPaykitApp") {
             withStateRevisionTracking { handle ->
                 if (!canSync()) return@withStateRevisionTracking false
                 val capabilities = appCapabilities(completeSdkCall { handle.identityStatus() })
@@ -935,7 +937,11 @@ class PaykitSdkService @Inject constructor(
         } else {
             PaykitSdkOperationLock.Priority.Background
         }
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "syncPublicEndpointsWithEpoch") {
+            profileTrace(
+                "endpoint sync admitted hasReusable=${reusable != null} " +
+                    "epochMatches=${reusable?.epoch == publicEndpointSyncEpoch()}"
+            )
             if (reusable != null && reusable.epoch == publicEndpointSyncEpoch()) {
                 if (!canPublish()) return@withLock null
                 Logger.debug("Reused overlapping public endpoint sync", context = TAG)
@@ -981,7 +987,7 @@ class PaykitSdkService @Inject constructor(
         } else {
             PaykitSdkOperationLock.Priority.Background
         }
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "syncPrivatePaymentListsWithReservations") {
             val admissionPriority = if (deferDuringPayment) priority else Priority.Ordered
             checkRefreshAdmission(admissionPriority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(admissionPriority) }) { handle ->
@@ -1001,7 +1007,7 @@ class PaykitSdkService @Inject constructor(
         priority: Priority = Priority.Ordered,
     ) = run {
         isSetup.await()
-        operationLock.withLock(priority) {
+        operationLock.withLock(priority, traceName = "ensureLinkWithPeer") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.ensureLinkWithPeer(counterparty, maxAdvanceSteps) }
             }
@@ -1014,7 +1020,7 @@ class PaykitSdkService @Inject constructor(
     ): PrivatePaymentListDeliveryReport? {
         if (counterparties.isEmpty()) return null
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "clearPrivatePaymentLists") {
             checkPaykitContactSync(isStillCurrent)
             withStateRevisionTracking { handle ->
                 val peers = completeSdkCall { handle.linkedPeers() }
@@ -1062,7 +1068,7 @@ class PaykitSdkService @Inject constructor(
         priority: Priority,
     ): List<PrivateStreamCounterpartyIntakeReport> {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "receivePrivateMessagesFromLinkedPeers") {
             checkRefreshAdmission(priority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall { handle.receivePrivateMessagesFromLinkedPeers() }
@@ -1076,7 +1082,7 @@ class PaykitSdkService @Inject constructor(
     ): PaykitStateObservation {
         isSetup.await()
         val generation = runtimeGeneration
-        return operationLock.withLock(Priority.Background) {
+        return operationLock.withLock(Priority.Background, traceName = "receiveAndObserveState") {
             check(runtimeGeneration == generation) { "Paykit runtime changed before inbox refresh" }
             checkRefreshAdmission(Priority.Background)
             withPaykitKey { handle ->
@@ -1118,7 +1124,7 @@ class PaykitSdkService @Inject constructor(
 
     internal suspend fun receivePrivateMessages(counterparty: String, priority: Priority) = run {
         isSetup.await()
-        operationLock.withLock(priority) {
+        operationLock.withLock(priority, traceName = "receivePrivateMessages") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.receivePrivateMessages(counterparty) }
             }
@@ -1171,7 +1177,7 @@ class PaykitSdkService @Inject constructor(
         priority: Priority,
     ): List<OutboundPrivateCounterpartySendReport> {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "processPendingPrivateMessages") {
             checkRefreshAdmission(priority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall { handle.processPendingPrivateMessages() }
@@ -1236,7 +1242,7 @@ class PaykitSdkService @Inject constructor(
     ): PaykitStateObservation {
         isSetup.await()
         val generation = runtimeGeneration
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "observeState") {
             check(runtimeGeneration == generation) { "Paykit runtime changed before observation" }
             checkRefreshAdmission(priority)
             withPaykitKey { handle ->
@@ -1324,7 +1330,10 @@ class PaykitSdkService @Inject constructor(
         expectedIdentity: String,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
+        return operationLock.withLock(
+            PaykitSdkOperationLock.Priority.Interactive,
+            traceName = "proposePaymentRequest",
+        ) {
             withStateRevisionTracking { handle ->
                 val identityStatus = completeSdkCall { handle.identityStatus() }
                 check(
@@ -1439,7 +1448,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun listAllowances(filter: AllowanceFilter): List<AllowanceRecord> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "listAllowances") {
             withPaykitKey { completeSdkCall { it.listAllowances(filter) } }
         }
     }
@@ -1450,7 +1459,7 @@ class PaykitSdkService @Inject constructor(
         terms: AllowanceTerms,
     ): AllowanceRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "proposeAllowance") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.proposeAllowance(counterparty, localRole, terms) }
             }
@@ -1464,7 +1473,7 @@ class PaykitSdkService @Inject constructor(
         admit: suspend () -> Unit,
     ): AllowanceRecord {
         isSetup.await()
-        return operationLock.withLock(Priority.Interactive) {
+        return operationLock.withLock(Priority.Interactive, traceName = "acceptAllowance") {
             withStateRevisionTracking(beforeOperation = admit) { handle ->
                 completeSdkCall { handle.acceptAllowance(counterparty, allowanceId, expectedProposalStreamItemId) }
             }
@@ -1476,7 +1485,7 @@ class PaykitSdkService @Inject constructor(
         allowanceId: String,
     ): AllowanceRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "rejectAllowance") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.rejectAllowance(counterparty, allowanceId) }
             }
@@ -1488,7 +1497,7 @@ class PaykitSdkService @Inject constructor(
         allowanceId: String,
     ): AllowanceRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "endAllowance") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.endAllowance(counterparty, allowanceId) }
             }
@@ -1497,7 +1506,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun allowanceAccountingState(): AllowanceAccountingState? {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "allowanceAccountingState") {
             withPaykitKey { completeSdkCall { it.allowanceAccountingState() } }
         }
     }
@@ -1506,7 +1515,7 @@ class PaykitSdkService @Inject constructor(
         reconciliation: AllowanceAccountingReconciliation,
     ): AllowanceAccountingState {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "reconcileAllowanceAccounting") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.reconcileAllowanceAccounting(reconciliation) }
             }
@@ -1518,7 +1527,7 @@ class PaykitSdkService @Inject constructor(
         trustedTime: String,
     ): List<AllowanceCandidate> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "evaluateAllowanceCandidates") {
             withPaykitKey { completeSdkCall { it.evaluateAllowanceCandidates(scope, trustedTime) } }
         }
     }
@@ -1531,7 +1540,7 @@ class PaykitSdkService @Inject constructor(
         admit: suspend () -> Unit = {},
     ): AllowanceAssociationRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "acceptPaymentRequestAutomatically") {
             admit()
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.acceptPaymentRequestAutomatically(scope, selection, checks) }
@@ -1545,7 +1554,7 @@ class PaykitSdkService @Inject constructor(
         checks: PaymentExecutionChecks,
     ): PaymentAttemptDecision {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "reserveAutomaticPayment") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.reserveAutomaticPayment(occurrence, expectedAssociationRevision, checks) }
             }
@@ -1557,7 +1566,7 @@ class PaykitSdkService @Inject constructor(
         checks: PaymentExecutionChecks,
     ): PaymentAttemptDecision {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "reserveManualPayment") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.reserveManualPayment(occurrence, checks) }
             }
@@ -1569,7 +1578,7 @@ class PaykitSdkService @Inject constructor(
         checks: PaymentExecutionChecks,
     ): PaymentAttemptDecision {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "beginPaymentExecution") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.beginPaymentExecution(attemptId, checks) }
             }
@@ -1578,7 +1587,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun recordPaymentOutcome(report: PaymentOutcomeReport): PaymentAttemptRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "recordPaymentOutcome") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.recordPaymentOutcome(report) }
             }
@@ -1587,7 +1596,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun markPaymentManualOnly(occurrence: PaymentOccurrence): PaymentOccurrenceRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "markPaymentManualOnly") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.markPaymentManualOnly(occurrence) }
             }
@@ -1600,7 +1609,7 @@ class PaykitSdkService @Inject constructor(
         reason: String? = null,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "rejectPaymentRequest") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.rejectPaymentRequest(counterparty, paymentRequestId, reason) }
             }
@@ -1613,7 +1622,7 @@ class PaykitSdkService @Inject constructor(
         reason: String? = null,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(traceName = "cancelPaymentRequest") {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.cancelPaymentRequest(counterparty, paymentRequestId, reason) }
             }
@@ -1624,7 +1633,7 @@ class PaykitSdkService @Inject constructor(
 
     internal suspend fun linkedPeers(priority: Priority): List<LinkedPeerRecord> {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "linkedPeers") {
             checkRefreshAdmission(priority)
             withPaykitKey { handle ->
                 retryContendedRead {
@@ -1639,7 +1648,7 @@ class PaykitSdkService @Inject constructor(
         priority: Priority = Priority.Ordered,
     ): PrivateMessageSchedulingSnapshot {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "privateMessageSchedulingSnapshot") {
             checkRefreshAdmission(priority)
             withPaykitKey { handle ->
                 retryContendedRead {
@@ -1655,7 +1664,7 @@ class PaykitSdkService @Inject constructor(
 
     internal suspend fun pendingOutboundPrivateCounterparties(priority: Priority): List<String> {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = "pendingOutboundPrivateCounterparties") {
             withPaykitKey { completeSdkCall { it.pendingOutboundPrivateCounterparties() } }
         }
     }
@@ -1666,7 +1675,10 @@ class PaykitSdkService @Inject constructor(
         amount: PaymentAmountContext? = null,
     ): PaykitPreparedPrivateContactPayment {
         isSetup.await()
-        val prepared = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
+        val prepared = operationLock.withLock(
+            PaykitSdkOperationLock.Priority.Interactive,
+            traceName = "prepareAndResolvePrivateContactPayment",
+        ) {
             withStateRevisionTracking { handle ->
                 completeSdkCall {
                     handle.prepareAndResolvePrivateContactPayment(
@@ -1690,7 +1702,10 @@ class PaykitSdkService @Inject constructor(
         afterPrivatePaymentListVersion: ULong?,
     ): PaykitPreparedPrivateContactPayment {
         isSetup.await()
-        val prepared = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
+        val prepared = operationLock.withLock(
+            PaykitSdkOperationLock.Priority.Interactive,
+            traceName = "prepareAndResolvePrivatePaymentRequest",
+        ) {
             withStateRevisionTracking { handle ->
                 completeSdkCall {
                     handle.prepareAndResolvePrivatePaymentRequest(
@@ -1763,7 +1778,7 @@ class PaykitSdkService @Inject constructor(
             var backup: PaykitSdkBackupExport?
             do {
                 if (priority == Priority.Background) isPaymentSubmissionActive.first { !it }
-                backup = operationLock.withLock(priority) {
+                backup = operationLock.withLock(priority, traceName = "exportBackupState") {
                     check(runtimeGeneration == generation) { "Paykit runtime changed before backup export" }
                     if (priority == Priority.Background && isPaymentSubmissionActive.value) return@withLock null
                     val state = withPaykitKey { completeSdkCall { it.exportBackupString() } }
@@ -1780,7 +1795,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun signOut() {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(traceName = "signOut") {
             try {
                 withStateRevisionTracking { handle ->
                     completeSdkCall { handle.signOut() }
@@ -1791,11 +1806,13 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun clearSessionAccess() = operationLock.withLock { clearRegisteredIdentityActivationLocked() }
+    suspend fun clearSessionAccess() = operationLock.withLock(traceName = "clearSessionAccess") {
+        clearRegisteredIdentityActivationLocked()
+    }
 
     suspend fun forgetSessionAccess() {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(traceName = "forgetSessionAccess") {
             try {
                 completeSdkCall {
                     handle().forgetSessionAccess()
@@ -1823,7 +1840,7 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun clearState() {
-        operationLock.withLock {
+        operationLock.withLock(traceName = "clearState") {
             resetRuntime()
             notifyBackupStateChanged()
         }
@@ -1853,7 +1870,9 @@ class PaykitSdkService @Inject constructor(
     @VisibleForTesting
     internal suspend fun paykitKeyForAuthorization(secretKeyHex: String): PaykitIdentitySecretKey {
         isSetup.await()
-        return operationLock.withLock { paykitKey(localSecretKey(secretKeyHex)) }
+        return operationLock.withLock(traceName = "paykitKeyForAuthorization") {
+            paykitKey(localSecretKey(secretKeyHex))
+        }
     }
 
     private suspend fun paykitKey(root: PubkyLocalSecretKey): PaykitIdentitySecretKey {
@@ -1933,6 +1952,20 @@ class PaykitSdkService @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
+    private fun profileTrace(message: String) {
+        if (BuildConfig.E2E) Logger.debug(message, context = "ProfileTrace")
+    }
+
+    private suspend fun <T> traceSdkStage(stage: String, work: suspend () -> T): T {
+        val started = System.nanoTime() / 1_000_000
+        profileTrace("sdk start stage=$stage")
+        return try {
+            work()
+        } finally {
+            profileTrace("sdk end stage=$stage durationMs=${(System.nanoTime() / 1_000_000) - started}")
+        }
+    }
+
     private suspend fun <T> measuredOperation(
         name: String,
         priority: Priority = Priority.Ordered,
@@ -1940,7 +1973,7 @@ class PaykitSdkService @Inject constructor(
     ): T {
         val trace = UUID.randomUUID()
         val started = TimeSource.Monotonic.markNow()
-        return operationLock.withLock(priority) {
+        return operationLock.withLock(priority, traceName = name) {
             val queue = started.elapsedNow()
             val admitted = TimeSource.Monotonic.markNow()
             try {
@@ -2057,7 +2090,7 @@ class PaykitSdkService @Inject constructor(
     ): T {
         isSetup.await()
         return operationLock.withoutLock {
-            val existing = sdk ?: operationLock.withLock { handle() }
+            val existing = sdk ?: operationLock.withLock(traceName = "publicRead") { handle() }
             val read: suspend () -> T = { withReadTimeout(timeout) { block(existing) } }
             when (lane) {
                 PaykitReadLane.Interactive -> publicReadSlots.withSlot(lane, read)

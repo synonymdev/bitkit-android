@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import to.bitkit.BuildConfig
 import to.bitkit.async.appScope
 import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.data.PubkyImageCacheEpoch
@@ -1199,9 +1200,10 @@ class PubkyRepo @Inject constructor(
             }
             // A session change while the save ran leaves the new session's profile alone.
             if (!installSavedProfile(saved, signIn)) return@withContext
-            cacheMetadata(saved.profile)
+            traceSaveStage("metadata.cache") { cacheMetadata(saved.profile) }
             notifyBackupStateChanged()
             saved.tagError?.let { throw it }
+            profileTrace("save repository completed successfully")
         }
     }
 
@@ -1302,6 +1304,20 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    private fun profileTrace(message: String) {
+        if (BuildConfig.E2E) Logger.debug(message, context = "ProfileTrace")
+    }
+
+    private suspend fun <T> traceSaveStage(stage: String, work: suspend () -> T): T {
+        val started = System.nanoTime() / 1_000_000
+        profileTrace("save start stage=$stage")
+        return try {
+            work()
+        } finally {
+            profileTrace("save end stage=$stage durationMs=${(System.nanoTime() / 1_000_000) - started}")
+        }
+    }
+
     private suspend fun writeProfileOnce(
         publicKey: String,
         name: String,
@@ -1341,12 +1357,14 @@ class PubkyRepo @Inject constructor(
             links = links.takeIf { base == null || it != base.links }
                 ?.map { SdkPubkyProfileLink(title = it.label, url = it.url) },
         )
-        val snapshot = profileWrite(generation) {
-            withPubkyAppScope { pubkyService.publishPubkyProfile(update, expectedRevision, publicKey) }
+        val snapshot = traceSaveStage("public.publish") {
+            profileWrite(generation) {
+                withPubkyAppScope { pubkyService.publishPubkyProfile(update, expectedRevision, publicKey) }
+            }
         }
         ownProfileRevision = snapshot.revision
         val baseTags = base?.tags.orEmpty()
-        val stored = storedCopy(publicKey, copyUnread)
+        val stored = traceSaveStage("copy.readPrior") { storedCopy(publicKey, copyUnread) }
         val wasPending = publicKey in pubkyStore.data.first().pubkyAppAvatarPending
         // The form could not show an avatar still to move while the copy was unread, so it stays pending.
         val keepPending = snapshot.profile.image == null && copyUnread && wasPending
@@ -1368,10 +1386,16 @@ class PubkyRepo @Inject constructor(
         }
         // Tags live only in the Paykit copy, so a changed tag that it does not take is reported.
         val copyData = profile.toProfileData().toPaykitProfile()
-        val copyError = writeProfileCopy(keptTags, baseTags) {
-            runSuspendCatching { profileWrite(generation) { pubkyService.publishPaykitProfile(copyData, publicKey) } }
-                .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
-                .exceptionOrNull()
+        val copyError = traceSaveStage("copy.awaitOrQueue") {
+            writeProfileCopy(keptTags, baseTags) {
+                traceSaveStage("copy.publish") {
+                    runSuspendCatching {
+                        profileWrite(generation) { pubkyService.publishPaykitProfile(copyData, publicKey) }
+                    }
+                        .onFailure { Logger.warn("Failed to update Bitkit profile copy", it, context = TAG) }
+                        .exceptionOrNull()
+                }
+            }
         }
         val copySaved = keptTags != null && copyError == null
         val saved = if (copySaved) profile else profile.copy(tags = baseTags)
@@ -1403,7 +1427,7 @@ class PubkyRepo @Inject constructor(
         if (tags == null) return null
         return copyWriteOrder.withLock {
             // A copy write left running by an earlier save lands first, so it never overwrites this one.
-            pendingCopyWrite?.join()
+            pendingCopyWrite?.let { traceSaveStage("copy.joinPrevious") { it.join() } }
             if (tags == baseTags) {
                 // With no tag change to report, the save does not wait for the copy; a deletion refuses or waits
                 // for it. Its outcome leaves the unread flag alone, which a load may have set since.

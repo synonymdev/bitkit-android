@@ -5,6 +5,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import to.bitkit.BuildConfig
+import to.bitkit.utils.Logger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
@@ -22,6 +25,11 @@ internal class PaykitSdkOperationLock {
         Background,
     }
 
+    private fun profileTrace(message: String) {
+        if (BuildConfig.E2E) Logger.debug(message, context = "ProfileTrace")
+    }
+
+    private val traceIds = AtomicLong()
     private val stateLock = Any()
     private var isLocked = false
     private val waiters = ArrayDeque<Waiter>()
@@ -29,15 +37,28 @@ internal class PaykitSdkOperationLock {
     private var generation = 0L
     private var isWiping = false
 
-    suspend fun <T> withLock(priority: Priority = Priority.Ordered, operation: suspend () -> T): T {
+    suspend fun <T> withLock(
+        priority: Priority = Priority.Ordered,
+        traceName: String = "unspecified",
+        operation: suspend () -> T,
+    ): T {
         if (ownsWipe()) return operation()
         val admittedGeneration = admit()
+        val traceId = traceIds.incrementAndGet()
+        val queuedAt = System.nanoTime() / 1_000_000
+        profileTrace("lock queued id=$traceId name=$traceName priority=$priority")
         acquire(priority)
+        val acquiredAt = System.nanoTime() / 1_000_000
+        profileTrace("lock acquired id=$traceId name=$traceName waitMs=${acquiredAt - queuedAt}")
         return try {
             currentCoroutineContext().ensureActive()
             checkAdmitted(admittedGeneration)
             operation()
         } finally {
+            profileTrace(
+                "lock releasing id=$traceId name=$traceName " +
+                    "heldMs=${(System.nanoTime() / 1_000_000) - acquiredAt}"
+            )
             release()
         }
     }

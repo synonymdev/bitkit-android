@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.BuildConfig
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -467,6 +468,18 @@ class PublicPaykitRepo @Inject constructor(
             if (!canPublish()) return@withLock false
             val previous = lastAcknowledgedPublication.get()
             val reusable = refresh?.reusableResult(previous, desiredEndpoints)
+            if (BuildConfig.E2E) {
+                Logger.debug(
+                    "endpoint reuse check matchingAllowed=${refresh?.reuseMatching} " +
+                        "hasPrior=${previous != null} " +
+                        "afterStart=${previous != null && previous !== refresh?.publicationAtStart} " +
+                        "sameEndpoints=${previous?.endpoints == desiredEndpoints} " +
+                        "sameKey=${previous?.signIn?.publicKey == refresh?.signIn?.publicKey} " +
+                        "sameGeneration=${previous?.signIn?.generation == refresh?.signIn?.generation} " +
+                        "reusable=${reusable != null}",
+                    context = "ProfileTrace",
+                )
+            }
             val result = paykitSdkService.syncPublicEndpointsWithEpoch(desiredEndpoints, canPublish, reusable)
                 ?: return@withLock false
             val report = result.report
