@@ -138,17 +138,20 @@ class MoveToSparkRepo internal constructor(
      * [knownQuote], or a new quote, and waits until Spark can pay the amount. A move still in flight, or a balance
      * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
      * own. [onMove] gets the move's outcome as soon as the move returns, before the wait. A quote whose amount, with
-     * Spark's balance, would not cover the payment fails with [MoveToSparkError.UpdateFallsShort] before any move.
+     * Spark's balance, would not cover the payment of [bolt11] and Spark's fee for it, or a fee nothing can price,
+     * fails with [MoveToSparkError.UpdateFallsShort] before any move.
      */
     suspend fun updateToSend(
         knownQuote: MoveToSparkQuote?,
+        bolt11: String,
         amountSats: ULong,
         onMove: (MoveToSparkOutcome) -> Unit = {},
     ): Result<MoveToSparkOutcome.Moved> =
         withContext(bgDispatcher) {
             runSuspendCatching {
                 val usedQuote = knownQuote ?: quote().getOrThrow()
-                if (!MoveToSparkMath.coversPayment(usedQuote, sparkRepo.state.value, amountSats)) {
+                val feeSats = feeAfterUpdateOrNull(bolt11, amountSats) ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
+                if (!MoveToSparkMath.coversPayment(usedQuote, sparkRepo.state.value, amountSats, feeSats)) {
                     throw MoveToSparkError.UpdateFallsShort(amountSats)
                 }
                 val outcome = move(usedQuote).getOrThrow().also(onMove)
@@ -168,14 +171,23 @@ class MoveToSparkRepo internal constructor(
 
     /**
      * The fee Spark charges for paying [bolt11] once the spending balance is updated; Spark's service fee alone when
-     * Spark cannot price it before the moved balance arrives.
+     * nothing can price it.
      */
     suspend fun estimateFeeAfterUpdate(bolt11: String, amountSats: ULong): ULong = withContext(bgDispatcher) {
-        sparkRepo.estimateFeeSats(bolt11, amountSats).getOrElse {
+        feeAfterUpdateOrNull(bolt11, amountSats) ?: SparkFees.serviceFeeSats(amountSats).also {
             Logger.debug("Fell back to Spark's service fee for an update payment", context = TAG)
-            SparkFees.serviceFeeSats(amountSats)
         }
     }
+
+    /**
+     * Spark's fee for paying [bolt11] once the spending balance is updated: its own quote, or, while Spark cannot price
+     * an amount above its balance, its service fee plus the routing fee the payment's route costs; null when neither
+     * prices it.
+     */
+    private suspend fun feeAfterUpdateOrNull(bolt11: String, amountSats: ULong): ULong? =
+        sparkRepo.estimateFeeSats(bolt11, amountSats).getOrNull()
+            ?: lightningRepo.estimateLdkRoutingFeesForAmount(bolt11, amountSats).getOrNull()
+                ?.let { SparkFees.serviceFeeSats(amountSats).safe() + it.safe() }
 
     /**
      * Quotes moving [targetSats], or everything the channels can send, to a new Spark invoice.
@@ -394,9 +406,9 @@ object MoveToSparkMath {
     fun needsUpdateToSend(amountSats: ULong, channels: List<ChannelDetails>?, spark: SparkState): Boolean =
         amountSats > singleRailSendableSats(channels, spark) && amountSats <= combinedSendableSats(channels, spark)
 
-    /** Whether Spark can pay [amountSats], its service fee included, once [quote] has moved to it. */
-    fun coversPayment(quote: MoveToSparkQuote, spark: SparkState, amountSats: ULong): Boolean =
-        spark.isUsable && SparkFees.sendableSats(spark.balanceSats.safe() + quote.amountSats.safe()) >= amountSats
+    /** Whether Spark can pay [amountSats] and its [feeSats] for the payment once [quote] has moved to it. */
+    fun coversPayment(quote: MoveToSparkQuote, spark: SparkState, amountSats: ULong, feeSats: ULong): Boolean =
+        spark.isUsable && spark.balanceSats.safe() + quote.amountSats.safe() >= amountSats.safe() + feeSats.safe()
 
     /** The open channels in [after] that could send at least [MIN_MOVE_SATS] in [before] and no longer can. */
     fun emptiedChannels(before: List<ChannelDetails>, after: List<ChannelDetails>?): List<ChannelDetails> {

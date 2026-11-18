@@ -20534,7 +20534,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
         val moved = MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL)
         whenever(moveToSparkRepo.quote()).thenReturn(Result.success(quote))
-        whenever(moveToSparkRepo.updateToSend(eq(quote), eq(60_000uL), any())).thenReturn(Result.success(moved))
+        whenever(moveToSparkRepo.updateToSend(eq(quote), any(), eq(60_000uL), any())).thenReturn(Result.success(moved))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success("010203"))
         setSendState(
             SendUiState(
@@ -20551,7 +20551,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         val onMove = argumentCaptor<(MoveToSparkOutcome) -> Unit>()
         inOrder(moveToSparkRepo, lightningRepo) {
-            verify(moveToSparkRepo).updateToSend(eq(quote), eq(60_000uL), onMove.capture())
+            verify(moveToSparkRepo).updateToSend(eq(quote), any(), eq(60_000uL), onMove.capture())
             verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
         }
         onMove.firstValue(moved)
@@ -20564,7 +20564,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val bolt11 = "lnbcrt1updatefails"
         whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
-        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), any(), eq(60_000uL), any()))
             .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
         setSendState(
             SendUiState(
@@ -20590,7 +20590,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val bolt11 = "lnbcrt1movedunsettled"
         whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
-        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), any(), eq(60_000uL), any()))
             .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
         setSendState(
             SendUiState(
@@ -20607,7 +20607,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
         val onMove = argumentCaptor<(MoveToSparkOutcome) -> Unit>()
-        verify(moveToSparkRepo).updateToSend(anyOrNull(), eq(60_000uL), onMove.capture())
+        verify(moveToSparkRepo).updateToSend(anyOrNull(), any(), eq(60_000uL), onMove.capture())
         onMove.firstValue(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL))
         advanceUntilIdle()
         verify(closeChannelUseCase).closeEmptiedByMove(any())
@@ -20619,7 +20619,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
         val inFlight = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash", paymentId = "id")
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
-        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(60_000uL), any()))
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), any(), eq(60_000uL), any()))
             .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
         whenever(moveToSparkRepo.awaitSettled(inFlight))
             .thenReturn(Result.success(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL)))
@@ -20637,7 +20637,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val onMove = argumentCaptor<(MoveToSparkOutcome) -> Unit>()
-        verify(moveToSparkRepo).updateToSend(anyOrNull(), eq(60_000uL), onMove.capture())
+        verify(moveToSparkRepo).updateToSend(anyOrNull(), any(), eq(60_000uL), onMove.capture())
         onMove.firstValue(inFlight)
         advanceUntilIdle()
         verify(moveToSparkRepo).awaitSettled(inFlight)
@@ -20687,7 +20687,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success("update-attempt"))
         whenever(moveToSparkRepo.needsUpdateToSend(request.amount.atomic)).thenReturn(true)
         whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
-        whenever(moveToSparkRepo.updateToSend(anyOrNull(), eq(request.amount.atomic), any()))
+        whenever(moveToSparkRepo.updateToSend(anyOrNull(), any(), eq(request.amount.atomic), any()))
             .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
@@ -20758,7 +20758,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
 
-        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any(), any())
         verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
         verify(pendingPaymentRepo, never()).track(any())
         verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
@@ -20789,7 +20789,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(SendEffect.ResetConfirm, awaitItem())
         }
         assertEquals(UPDATE_QUOTE, sut.sendUiState.value.sparkUpdateQuote)
-        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any(), any())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
     }
 
@@ -20816,7 +20816,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(SendEffect.ResetConfirm, awaitItem())
         }
         assertEquals(raised, sut.sendUiState.value.sparkUpdateQuote)
-        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any(), any())
     }
 
     @Test
@@ -20840,7 +20840,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             assertTrue(awaitItem() is SendEffect.NavigateToError)
         }
-        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any())
+        verify(moveToSparkRepo, never()).updateToSend(anyOrNull(), any(), any(), any())
     }
 
     @Test

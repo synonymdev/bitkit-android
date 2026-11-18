@@ -7803,7 +7803,7 @@ class AppViewModel @Inject constructor(
         val result = if (refusedBeforeUpdate != null) {
             Result.failure(refusedBeforeUpdate)
         } else {
-            updateSpendingBalanceIfNeeded(displayAmountSats)
+            updateSpendingBalanceIfNeeded(decodedInvoice.bolt11, displayAmountSats)
         }.fold(
             onSuccess = {
                 sendLightning(
@@ -7871,14 +7871,14 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * Before a payment of [amountSats] that fits only across the channels and Spark, moves the channels' balance to
+     * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels' balance to
      * Spark. Once the move settles, closes the channels it emptied in the background, even when the payment then fails.
      * A failure after the move leaves the funds in Spark.
      */
-    private suspend fun updateSpendingBalanceIfNeeded(amountSats: ULong): Result<Unit> {
+    private suspend fun updateSpendingBalanceIfNeeded(bolt11: String, amountSats: ULong): Result<Unit> {
         if (!moveToSparkRepo.needsUpdateToSend(amountSats)) return Result.success(Unit)
         val channelsBefore = lightningRepo.lightningState.value.channels.toList()
-        return moveToSparkRepo.updateToSend(_sendUiState.value.sparkUpdateQuote, amountSats) {
+        return moveToSparkRepo.updateToSend(_sendUiState.value.sparkUpdateQuote, bolt11, amountSats) {
             closeChannelsEmptiedBy(it, channelsBefore)
         }.map { }
     }

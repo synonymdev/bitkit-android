@@ -37,6 +37,7 @@ import kotlin.test.assertTrue
 class MoveToSparkRepoTest : BaseUnitTest() {
     companion object {
         private const val INVOICE = "lnbcrt1spark"
+        private const val SPARK_FEE = 200uL
     }
 
     private val lightningRepo = mock<LightningRepo>()
@@ -395,20 +396,45 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     fun `update to send moves nothing when the quote and Spark's balance fall short of the payment`() = test {
         sparkState.value = SparkState(isReady = true, balanceSats = 5_000uL)
 
-        val result = sut.updateToSend(quote, 60_000uL)
+        val result = sut.updateToSend(quote, INVOICE, 60_000uL)
 
         assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
         verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
-    fun `a quote covers a payment once Spark can pay it with its service fee`() {
-        val spark = SparkState(isReady = true, balanceSats = 10_000uL)
-        val sendable = SparkFees.sendableSats(10_000uL + quote.amountSats)
+    fun `update to send moves nothing when Spark's routing fee would leave the payment short`() = test {
+        sparkState.value = SparkState(isReady = true, balanceSats = 10_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 59_800uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 59_800uL)).thenReturn(Result.success(500uL))
 
-        assertTrue(MoveToSparkMath.coversPayment(quote, spark, sendable))
-        assertTrue(!MoveToSparkMath.coversPayment(quote, spark, sendable + 1uL))
-        assertTrue(!MoveToSparkMath.coversPayment(quote, spark.copy(isExiting = true), 1_000uL))
+        val result = sut.updateToSend(quote, INVOICE, 59_800uL)
+
+        assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
+        verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `update to send moves nothing when no fee for the payment can be priced`() = test {
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 60_000uL))
+            .thenReturn(Result.failure(SparkError.SendRefused("")))
+
+        val result = sut.updateToSend(quote, INVOICE, 60_000uL)
+
+        assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
+        verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a quote covers a payment once Spark can pay it with its fee`() {
+        val spark = SparkState(isReady = true, balanceSats = 10_000uL)
+        val total = 10_000uL + quote.amountSats
+
+        assertTrue(MoveToSparkMath.coversPayment(quote, spark, total - SPARK_FEE, SPARK_FEE))
+        assertTrue(!MoveToSparkMath.coversPayment(quote, spark, total - SPARK_FEE + 1uL, SPARK_FEE))
+        assertTrue(!MoveToSparkMath.coversPayment(quote, spark.copy(isExiting = true), 1_000uL, SPARK_FEE))
     }
 
     @Test
@@ -426,12 +452,13 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     @Test
     fun `update to send moves the balance, then waits until Spark can pay`() = test {
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
         whenever(
             lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
         ).thenReturn(Result.success("id"))
         whenever(sparkRepo.canSend(60_000uL)).thenReturn(false, false, true)
         whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
-        val updating = async { sut.updateToSend(quote, 60_000uL) }
+        val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) }
 
         nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
 
@@ -442,13 +469,14 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     @Test
     fun `update to send fails as unsettled while the move is in flight`() = test {
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
         whenever(
             lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
         ).thenReturn(Result.success("id"))
 
         var moved: MoveToSparkOutcome? = null
 
-        val result = sut.updateToSend(quote, 60_000uL) { moved = it }
+        val result = sut.updateToSend(quote, INVOICE, 60_000uL) { moved = it }
 
         assertIs<MoveToSparkError.UpdateUnsettled>(result.exceptionOrNull())
         assertIs<MoveToSparkOutcome.InFlight>(moved)
@@ -458,13 +486,14 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     @Test
     fun `update to send reports a settled move even when Spark never shows the balance`() = test {
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
         whenever(
             lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
         ).thenReturn(Result.success("id"))
         whenever(sparkRepo.canSend(60_000uL)).thenReturn(false)
         whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
         var moved: MoveToSparkOutcome? = null
-        val updating = async { sut.updateToSend(quote, 60_000uL) { moved = it } }
+        val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) { moved = it } }
 
         nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
 
@@ -473,8 +502,18 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `the fee after an update falls back to Spark's service fee when Spark cannot price it yet`() = test {
+    fun `the fee after an update adds the routing fee to Spark's service fee when Spark cannot price it yet`() = test {
         whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 60_000uL)).thenReturn(Result.success(40uL))
+
+        assertEquals(SparkFees.serviceFeeSats(60_000uL) + 40uL, sut.estimateFeeAfterUpdate(INVOICE, 60_000uL))
+    }
+
+    @Test
+    fun `the fee after an update falls back to Spark's service fee when nothing can price it`() = test {
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 60_000uL))
+            .thenReturn(Result.failure(SparkError.SendRefused("")))
 
         assertEquals(SparkFees.serviceFeeSats(60_000uL), sut.estimateFeeAfterUpdate(INVOICE, 60_000uL))
     }
