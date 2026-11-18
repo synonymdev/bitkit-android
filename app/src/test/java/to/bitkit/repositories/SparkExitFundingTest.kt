@@ -198,6 +198,37 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a replaced generation keeps the funding its confirmed sweep returned`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val destination = AddressScript.of(address)
+        val unspent = "aa".repeat(32)
+        val refund = "bb".repeat(32)
+        val sweep = SparkExitFixtures.tx(
+            "s",
+            kind = RecoveryTxKind.SWEEP,
+            status = ExitTransactionStatus.Confirmed(900u),
+        ).copy(txHex = rawTx(listOf(refund to 0, unspent to 0), listOf(54_000L to destination)))
+        val cooperative = SparkExitFixtures.tx("c", kind = RecoveryTxKind.COOPERATIVE).copy(
+            txHex = rawTx(listOf(refund to 1), listOf(10_000L to destination)),
+        )
+        val swept = SparkExitFixtures.record(SparkExitRecord.Phase.Done).copy(
+            destination = address,
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", unspent, 0u, 4_000uL)
+            ),
+            recovery = SparkExitFixtures.recovery(listOf(sweep)),
+        )
+
+        // A retry for leaves the sweep left behind recovers them cooperatively only.
+        val retried = swept.adopt(SparkExitFixtures.recovery(listOf(cooperative)), atMillis = 0L)
+
+        assertEquals(mapOf("s" to 4_000uL), retried.earlierReturnedFundingSats)
+        assertEquals(SparkExitReturned(spendingSats = 60_000uL, feesSats = 4_000uL), SparkExitMath.returned(retried))
+        val restored = SparkExitJson.decode(SparkExitJson.encode(retried))
+        assertEquals(retried.earlierReturnedFundingSats, restored.earlierReturnedFundingSats)
+    }
+
+    @Test
     fun `the returned split always adds up to what reached savings`() {
         val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
         val unspent = "aa".repeat(32)

@@ -180,14 +180,27 @@ object SparkExitMath {
     }
 
     /**
-     * The unspent fee funding the SWEEP steps of [record]'s recovery return to savings: the value of their inputs that
-     * spend the funding address, which are funding UTXOs and the outputs of a CPFP child or the fan-out. An input whose
-     * parent this recovery does not hold, such as an earlier generation's CPFP change, is not counted, nor is the sweep
-     * of a replaced generation: the record keeps only what it paid ([SparkExitRecord.earlierReceivedSats]).
+     * The unspent fee funding the SWEEP steps of [record]'s recovery return to savings, with what the confirmed sweeps
+     * of replaced generations returned ([SparkExitRecord.earlierReturnedFundingSats]).
      */
     fun returnedFundingSats(record: SparkExitRecord): ULong {
-        val recovery = record.recovery ?: return 0uL
-        val funding = (record.fundingInputs + recovery.fundingInputs)
+        val current = record.recovery?.let { sweepFunding(record.fundingInputs, it) }.orEmpty()
+        return (record.earlierReturnedFundingSats + current).values
+            .fold(0uL) { sum, sats -> sum.safe() + sats.safe() }
+    }
+
+    /**
+     * The fee funding each SWEEP step of [recovery] returns, by txid: the value of its inputs that spend the funding
+     * address, which are funding UTXOs ([fundingInputs] and the recovery's own) and the outputs of a CPFP child or the
+     * fan-out. An input whose parent this recovery does not hold, such as an earlier generation's CPFP change, is not
+     * counted. Only confirmed sweeps when [confirmedOnly].
+     */
+    fun sweepFunding(
+        fundingInputs: List<CpfpInput>,
+        recovery: RecoverFundsResponse,
+        confirmedOnly: Boolean = false,
+    ): Map<String, ULong> {
+        val funding = (fundingInputs + recovery.fundingInputs)
             .filterIsInstance<CpfpInput.P2wpkh>()
             .associate { "${it.txid}:${it.vout}" to it.valueSats }
         val children = recovery.transactions.mapNotNull { tx ->
@@ -196,18 +209,24 @@ object SparkExitMath {
         }
         val fanOuts = recovery.transactions.filter { it.kind == RecoveryTxKind.FAN_OUT }.map { it.txid to it.txHex }
         val parents = (children + fanOuts).toMap()
+        val counted = mutableSetOf<String>()
         return recovery.transactions
             .filter { it.kind == RecoveryTxKind.SWEEP }
-            .flatMap { SparkExitTxInputs.decode(it.txHex).orEmpty() }
-            .distinctBy { "${it.prevTxid}:${it.vout}" }
-            .mapNotNull { input ->
-                funding["${input.prevTxid}:${input.vout}"]
-                    ?: parents[input.prevTxid]
-                        ?.let { SparkExitTxOutputs.decode(it) }
-                        ?.getOrNull(input.vout.toInt())
-                        ?.valueSats
+            .filter { !confirmedOnly || it.status is ExitTransactionStatus.Confirmed }
+            .associate { tx ->
+                val sats = SparkExitTxInputs.decode(tx.txHex).orEmpty()
+                    .filter { counted.add("${it.prevTxid}:${it.vout}") }
+                    .mapNotNull { input ->
+                        funding["${input.prevTxid}:${input.vout}"]
+                            ?: parents[input.prevTxid]
+                                ?.let { SparkExitTxOutputs.decode(it) }
+                                ?.getOrNull(input.vout.toInt())
+                                ?.valueSats
+                    }
+                    .fold(0uL) { sum, value -> sum.safe() + value.safe() }
+                tx.txid to sats
             }
-            .fold(0uL) { sum, sats -> sum.safe() + sats.safe() }
+            .filterValues { it > 0uL }
     }
 
     /** The leftover fee funding the ended exit swept back on its own: earlier sweeps and the confirmed last one. */
