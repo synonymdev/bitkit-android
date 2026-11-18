@@ -432,7 +432,7 @@
     <string name="lightning__spark_exit__cancelled_title">Transfer\n&lt;accent&gt;cancelled&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__confirm_title">Please\n&lt;accent&gt;confirm&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__copy_address">Copy address</string>
-    <string name="lightning__spark_exit__done_button">Wallet overview</string>
+    <string name="lightning__spark_exit__done_button">Wallet Overview</string>
     <string name="lightning__spark_exit__done_returned">Your spending balance of &lt;accent&gt;{amount}&lt;/accent&gt; has been returned to your savings balance.</string>
     <string name="lightning__spark_exit__done_returned_fees">Your spending balance of &lt;accent&gt;{amount}&lt;/accent&gt; and the remaining emergency fee budget of &lt;accent&gt;{fees}&lt;/accent&gt; have been returned to your savings balance.</string>
     <string name="lightning__spark_exit__done_text">Your funds have been transferred to your savings balance.</string>
