@@ -56,6 +56,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settings.appStatus.ExitStep
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -126,7 +127,7 @@ private fun Content(
                 HorizontalDivider()
 
                 SectionTitle(stringResource(R.string.lightning__status))
-                SparkStatusRow(uiState.status)
+                SparkStatusRow(uiState.status, uiState.exitStep)
                 HorizontalDivider()
 
                 ProviderSection(depositAddress = uiState.depositAddress, onCopyText = onCopyText)
@@ -189,11 +190,14 @@ private fun Content(
 }
 
 @Composable
-private fun SparkStatusRow(status: HealthState) {
-    val (text, color, background) = when (status) {
-        HealthState.READY -> Triple(R.string.lightning__order_state__open, Colors.Green, Colors.Green16)
-        HealthState.PENDING -> Triple(R.string.settings__status__spark__pending, Colors.Yellow, Colors.Yellow16)
-        HealthState.ERROR -> Triple(R.string.settings__status__spark__error, Colors.Red, Colors.Red16)
+private fun SparkStatusRow(status: HealthState, exitStep: ExitStep?) {
+    val (text, color, background) = when {
+        exitStep == ExitStep.FUNDING -> Triple(R.string.settings__status__exit__funding, Colors.Yellow, Colors.Yellow16)
+        exitStep == ExitStep.RUNNING -> Triple(R.string.settings__status__spark__exit, Colors.Yellow, Colors.Yellow16)
+        status == HealthState.READY -> Triple(R.string.lightning__order_state__open, Colors.Green, Colors.Green16)
+        status == HealthState.PENDING ->
+            Triple(R.string.settings__status__spark__pending, Colors.Yellow, Colors.Yellow16)
+        else -> Triple(R.string.settings__status__spark__error, Colors.Red, Colors.Red16)
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,

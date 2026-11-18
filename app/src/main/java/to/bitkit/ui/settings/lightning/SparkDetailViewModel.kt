@@ -21,6 +21,8 @@ import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkRepo
+import to.bitkit.ui.settings.appStatus.ExitStep
+import to.bitkit.ui.settings.appStatus.exitStep
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -41,13 +43,21 @@ class SparkDetailViewModel @Inject constructor(
                 Triple(state, exit, isOnline)
             }.collect { (state, exit, isOnline) ->
                 _uiState.update {
-                    it.copy(spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline))
+                    it.copy(
+                        spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline),
+                        exitStep = exit.record.exitStep(exit.fundingState),
+                    )
                 }
             }
         }
         viewModelScope.launch(bgDispatcher) {
             healthRepo.healthState.collect { health ->
-                _uiState.update { it.copy(status = health.spark ?: HealthState.ERROR) }
+                _uiState.update {
+                    it.copy(
+                        status = health.spark?.let { s -> if (health.isSparkExiting) HealthState.PENDING else s }
+                            ?: HealthState.ERROR,
+                    )
+                }
             }
         }
         viewModelScope.launch(bgDispatcher) {
@@ -97,6 +107,8 @@ data class SparkDetailUiState(
     val isRefreshing: Boolean = false,
     /** Spark's connection, as App Status shows it. */
     val status: HealthState = HealthState.PENDING,
+    /** A running force transfer to savings: the status reads as App Status's Spark row does. */
+    val exitStep: ExitStep? = null,
     /** Spark's on-chain deposit address, shown on regtest to fund Spark from Lightspark's regtest faucet. */
     val depositAddress: String? = null,
 )
