@@ -704,7 +704,10 @@ class SparkRepo @Inject constructor(
         // lock a payment event's cleanup takes, so a send settled meanwhile keeps no attempt to report again at expiry.
         val isOwner = sendReleaseMutex.withLock {
             val isMarked = isTaken && takenAttempts.putIfAbsent(key, uncertain.attempt) == null
-            uncertainSends.remove(key, uncertain).also { if (!it && isMarked) takenAttempts.remove(key) }
+            // Only the attempt marked here is rolled back, as a retry may have replaced it meanwhile.
+            val isRemoved = uncertainSends.remove(key, uncertain)
+            if (!isRemoved && isMarked) takenAttempts.remove(key, uncertain.attempt)
+            isRemoved
         }
         if (!isOwner) return true
         if (isTaken) cacheStore.keepSparkSendAttempt(paymentHash) else cacheStore.removeSparkUncertainSend(paymentHash)
