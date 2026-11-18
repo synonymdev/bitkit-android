@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.models.safe
 import to.bitkit.repositories.CANCELLED_REASON
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitFundingState
@@ -203,7 +202,7 @@ private fun Content(
 @Composable
 private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onPayHigherFee: () -> Unit) {
     SparkExitSteps(record = record)
-    uiState.receivedSats?.let { ReturnedNote(receivedSats = it, feesSats = record.returnedFeeSats) }
+    uiState.returned?.let { ReturnedNote(receivedSats = it.spendingSats, feesSats = it.feesSats) }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
     if (uiState.isSavingsPaymentRefused) {
@@ -398,14 +397,6 @@ private fun ReturnedNote(receivedSats: ULong, feesSats: ULong) {
         modifier = Modifier.testTag("SparkExitReturned")
     )
 }
-
-/** The emergency fees the ended force transfer did not spend and sent back to savings. */
-private val SparkExitRecord.returnedFeeSats: ULong
-    get() {
-        val swept = sweptLeftover.fold(0uL) { sum, leftover -> sum.safe() + leftover.valueSats.safe() }
-        val sending = leftoverSweep?.takeIf { it.isConfirmed }?.valueSats ?: 0uL
-        return swept.safe() + sending.safe()
-    }
 
 @Composable
 private fun progressTitle(phase: SparkExitRecord.Phase?, funding: SparkExitFundingState?): String = stringResource(

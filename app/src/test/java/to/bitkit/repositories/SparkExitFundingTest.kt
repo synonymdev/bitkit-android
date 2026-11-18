@@ -11,11 +11,14 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.FeeRate
+import to.bitkit.utils.SignedTransactionId
+import kotlin.random.Random
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
@@ -166,6 +169,60 @@ class SparkExitFundingTest {
         // Listed again, it counts once.
         val relisted = SparkExitFixtures.recovery(listOf(cooperative) + rebuilt.transactions)
         assertEquals(95_000uL, SparkExitMath.receivedSats(record.copy(recovery = relisted)))
+    }
+
+    @Test
+    fun `the funding the sweep returns counts as fees, not spending balance`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val destination = AddressScript.of(address)
+        val unspent = "aa".repeat(32)
+        val refund = "bb".repeat(32)
+        val child = rawTx(listOf(unspent to 0), listOf(3_000L to byteArrayOf()))
+        val childTxid = SignedTransactionId.fromHex(child)
+        val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP).copy(
+            txHex = rawTx(listOf(refund to 0, unspent to 1, childTxid to 0), listOf(96_500L to destination)),
+        )
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.Done).copy(
+            destination = address,
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", unspent, 1u, 4_000uL)
+            ),
+            recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n", cpfp = child), sweep)),
+            earlierReceivedSats = mapOf("c" to 5_000uL),
+            sweptLeftover = listOf(SparkExitRecord.SweptLeftover("l", 1_000uL)),
+        )
+
+        // The unspent funding UTXO and the CPFP child's change; the refund's output is the exited value.
+        assertEquals(7_000uL, SparkExitMath.returnedFundingSats(record))
+        assertEquals(SparkExitReturned(spendingSats = 94_500uL, feesSats = 8_000uL), SparkExitMath.returned(record))
+    }
+
+    @Test
+    fun `the returned split always adds up to what reached savings`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val unspent = "aa".repeat(32)
+        val random = Random(7)
+        repeat(200) {
+            val received = random.nextLong(1L, 200_000L)
+            val funding = random.nextLong(0L, 300_000L).toULong()
+            val leftover = random.nextLong(0L, 50_000L).toULong()
+            val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP).copy(
+                txHex = rawTx(listOf(unspent to 0), listOf(received to AddressScript.of(address))),
+            )
+            val record = SparkExitFixtures.record(SparkExitRecord.Phase.Done).copy(
+                destination = address,
+                funding = listOf(
+                    SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", unspent, 0u, funding),
+                ),
+                recovery = SparkExitFixtures.recovery(listOf(sweep)),
+                sweptLeftover = listOf(SparkExitRecord.SweptLeftover("l", leftover)),
+            )
+
+            val returned = assertNotNull(SparkExitMath.returned(record))
+
+            assertEquals(received.toULong() + leftover, returned.spendingSats + returned.feesSats)
+            assertEquals(received.toULong() - minOf(funding, received.toULong()), returned.spendingSats)
+        }
     }
 
     @Test
@@ -758,5 +815,19 @@ class SparkExitFundingTest {
 
         assertEquals(SparkExitMath.FUNDING_SCAN_MAX_ADDRESSES.toUInt(), next)
         assertEquals(SparkExitMath.FUNDING_SCAN_MAX_ADDRESSES, reads)
+    }
+
+    private fun rawTx(inputs: List<Pair<String, Int>>, outputs: List<Pair<Long, ByteArray>>): String {
+        fun le(
+            value: Long,
+            size: Int
+        ) = (0 until size).joinToString("") { "%02x".format((value shr (8 * it)) and 0xff) }
+        val ins = inputs.joinToString("") { (txid, vout) ->
+            txid.chunked(2).reversed().joinToString("") + le(vout.toLong(), 4) + "00" + "ffffffff"
+        }
+        val outs = outputs.joinToString("") { (value, script) ->
+            le(value, 8) + "%02x".format(script.size) + script.toHexString()
+        }
+        return "02000000" + "%02x".format(inputs.size) + ins + "%02x".format(outputs.size) + outs + le(0, 4)
     }
 }

@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.CpfpInput
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.RecoverFundsResponse
@@ -11,6 +12,7 @@ import to.bitkit.models.FeeRate
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import to.bitkit.utils.BlockTimeHelpers
+import to.bitkit.utils.SignedTransactionId
 import java.math.BigInteger
 import java.security.MessageDigest
 import kotlin.time.Duration
@@ -175,6 +177,59 @@ object SparkExitMath {
         val script = runCatching { AddressScript.of(record.destination) }.getOrNull() ?: return null
         val current = record.recovery?.let { paidTo(it.transactions, script) }.orEmpty()
         return (record.earlierReceivedSats + current).values.fold(0uL) { sum, sats -> sum.safe() + sats.safe() }
+    }
+
+    /**
+     * The unspent fee funding the SWEEP steps of [record]'s recovery return to savings: the value of their inputs that
+     * spend the funding address, which are funding UTXOs and the outputs of a CPFP child or the fan-out. An input whose
+     * parent this recovery does not hold, such as an earlier generation's CPFP change, is not counted, nor is the sweep
+     * of a replaced generation: the record keeps only what it paid ([SparkExitRecord.earlierReceivedSats]).
+     */
+    fun returnedFundingSats(record: SparkExitRecord): ULong {
+        val recovery = record.recovery ?: return 0uL
+        val funding = (record.fundingInputs + recovery.fundingInputs)
+            .filterIsInstance<CpfpInput.P2wpkh>()
+            .associate { "${it.txid}:${it.vout}" to it.valueSats }
+        val children = recovery.transactions.mapNotNull { tx ->
+            val hex = tx.cpfpTxHex ?: return@mapNotNull null
+            runCatching { SignedTransactionId.fromHex(hex) }.getOrNull()?.let { it to hex }
+        }
+        val fanOuts = recovery.transactions.filter { it.kind == RecoveryTxKind.FAN_OUT }.map { it.txid to it.txHex }
+        val parents = (children + fanOuts).toMap()
+        return recovery.transactions
+            .filter { it.kind == RecoveryTxKind.SWEEP }
+            .flatMap { SparkExitTxInputs.decode(it.txHex).orEmpty() }
+            .distinctBy { "${it.prevTxid}:${it.vout}" }
+            .mapNotNull { input ->
+                funding["${input.prevTxid}:${input.vout}"]
+                    ?: parents[input.prevTxid]
+                        ?.let { SparkExitTxOutputs.decode(it) }
+                        ?.getOrNull(input.vout.toInt())
+                        ?.valueSats
+            }
+            .fold(0uL) { sum, sats -> sum.safe() + sats.safe() }
+    }
+
+    /** The leftover fee funding the ended exit swept back on its own: earlier sweeps and the confirmed last one. */
+    fun sweptLeftoverSats(record: SparkExitRecord): ULong {
+        val swept = record.sweptLeftover.fold(0uL) { sum, leftover -> sum.safe() + leftover.valueSats.safe() }
+        val sending = record.leftoverSweep?.takeIf { it.isConfirmed }?.valueSats ?: 0uL
+        return swept.safe() + sending.safe()
+    }
+
+    /**
+     * What the ended exit returned to savings, split as the done screen names it: [receivedSats] less the fee funding
+     * the main sweep returned is the spending balance, which bears the sweep's own fee; that funding and
+     * [sweptLeftoverSats] are the emergency fees it did not spend. Null when the destination cannot be read.
+     */
+    fun returned(record: SparkExitRecord): SparkExitReturned? {
+        val received = receivedSats(record) ?: return null
+        // Capped at what was received, so the two parts always add up to what reached savings.
+        val funding = minOf(returnedFundingSats(record), received)
+        return SparkExitReturned(
+            spendingSats = received - funding,
+            feesSats = sweptLeftoverSats(record).safe() + funding.safe(),
+        )
     }
 
     /** What the confirmed SWEEP and COOPERATIVE steps of [recovery] paid [destination], by txid. */
@@ -583,6 +638,9 @@ data class SparkExitFeeBumpOption(
         }
     }
 }
+
+/** What an ended exit returned to savings: [spendingSats] of spending balance, [feesSats] of unspent emergency fees. */
+data class SparkExitReturned(val spendingSats: ULong, val feesSats: ULong)
 
 /** Whether the funding address covers the quote before the exit starts, and the hint while it does not. */
 data class SparkExitPrestartFunding(val isCovered: Boolean, val partial: SparkExitPartialFunding?)

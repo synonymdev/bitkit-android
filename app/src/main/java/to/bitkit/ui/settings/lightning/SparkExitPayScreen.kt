@@ -8,9 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -32,8 +29,8 @@ import to.bitkit.ui.utils.rememberSubscriptionNotificationsRequest
 import to.bitkit.ui.utils.withAccentBoldBright
 
 /**
- * The emergency fees paid from another wallet to the funding address: the force transfer starts on its own once the
- * address holds them.
+ * The emergency fees paid from another wallet to the funding address: the force transfer starts on its own once a
+ * payment that covers them arrives here; fees already there wait for a tap on Continue.
  */
 @Composable
 fun SparkExitPayScreen(
@@ -47,18 +44,15 @@ fun SparkExitPayScreen(
     val requestNotifications = rememberSubscriptionNotificationsRequest()
     LaunchedEffect(Unit) { viewModel.watchFundingAddress() }
     DisposableEffect(Unit) { onDispose { viewModel.stopWatchingFundingAddress() } }
-    // Starts once per visit: a failed start shows its error and waits for the user, never retrying on its own.
-    var hasAutoStarted by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(uiState.canContinueFunding) {
-        if (!uiState.canContinueFunding || hasAutoStarted) return@LaunchedEffect
-        hasAutoStarted = true
+    // Starts once per visit for a payment that arrived here; a failed start shows its error and waits for a tap.
+    LaunchedEffect(uiState.canAutoStartFunding) {
+        if (!uiState.canAutoStartFunding) return@LaunchedEffect
         requestNotifications()
-        viewModel.start()
+        viewModel.startOnPayment()
     }
     Content(
         uiState = uiState,
-        canRetry = hasAutoStarted && uiState.canContinueFunding && !uiState.isStarting,
-        onRetry = {
+        onStart = {
             requestNotifications()
             viewModel.start()
         },
@@ -69,8 +63,7 @@ fun SparkExitPayScreen(
 @Composable
 private fun Content(
     uiState: SparkExitUiState,
-    canRetry: Boolean = false,
-    onRetry: () -> Unit = {},
+    onStart: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     ScreenColumn {
@@ -105,10 +98,12 @@ private fun Content(
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            if (canRetry) {
+            if (uiState.canTapStartFunding) {
                 PrimaryButton(
-                    text = stringResource(R.string.common__try_again),
-                    onClick = onRetry,
+                    text = stringResource(
+                        if (uiState.hasPayAutoStarted) R.string.common__try_again else R.string.common__continue
+                    ),
+                    onClick = onStart,
                     modifier = Modifier.testTag("SparkExitPayRetry")
                 )
                 VerticalSpacer(16.dp)
