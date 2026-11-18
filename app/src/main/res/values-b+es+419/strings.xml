@@ -801,6 +801,7 @@
     <string name="settings__security_title">Seguridad y Privacidad</string>
     <string name="settings__settings">Ajustes</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} a las {time}</string>
     <string name="settings__status__backup__error">No se ha podido completar una copia de seguridad completa</string>
     <string name="settings__status__backup__pending">Respaldando...</string>
     <string name="settings__status__backup__ready">Copia de seguridad</string>

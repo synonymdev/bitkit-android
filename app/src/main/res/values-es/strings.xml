@@ -780,6 +780,7 @@
     <string name="settings__status__backup__pending">Haciendo copia de seguridad...</string>
     <string name="settings__status__backup__ready">Copia de seguridad realizada</string>
     <string name="settings__status__backup__title">Último Backup de Datos Completo</string>
+    <string name="settings__status__backup__date">{date} a las {time}</string>
     <string name="settings__status__backup__error">Falló al hacer una copia de seguridad completa</string>
     <string name="settings__adv__section_payments">Pagos</string>
     <string name="settings__adv__section_networks">Redes</string>

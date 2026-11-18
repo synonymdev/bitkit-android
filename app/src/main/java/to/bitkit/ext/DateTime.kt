@@ -79,12 +79,15 @@ fun Long.toLocalizedTimestamp(locale: Locale = Locale.getDefault()): String {
 
 fun Long.toBackupTimestamp(
     is24Hour: Boolean,
+    template: String = DatePattern.BACKUP_DATE_TEMPLATE,
     locale: Locale = Locale.getDefault(),
     zone: ZoneId = ZoneId.systemDefault(),
 ): String {
-    val skeleton = DatePattern.BACKUP_DATE_SKELETON + if (is24Hour) "HHmm" else "hmm"
-    val pattern = AndroidDateFormat.getBestDateTimePattern(locale, skeleton)
-    return Instant.ofEpochMilli(this).formatted(pattern, locale, zone)
+    val instant = Instant.ofEpochMilli(this)
+    val datePattern = AndroidDateFormat.getBestDateTimePattern(locale, DatePattern.BACKUP_DATE_SKELETON)
+    val date = instant.formatted(datePattern, locale, zone)
+    val timePattern = AndroidDateFormat.getBestDateTimePattern(locale, if (is24Hour) "HHmm" else "hmm")
+    return template.replace("{date}", date).replace("{time}", instant.formatted(timePattern, locale, zone))
 }
 
 @OptIn(ExperimentalTime::class)
@@ -275,6 +278,9 @@ object DatePattern {
 
     /** Skeleton for a backup's date: short month, day and year, ordered and joined per locale. */
     const val BACKUP_DATE_SKELETON = "MMMdyyyy"
+
+    /** How the latest backup reads in English: its date, then "at" and its time. */
+    const val BACKUP_DATE_TEMPLATE = "{date} at {time}"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
     const val LOG_LINE = "yyyy-MM-dd HH:mm:ss.SSS"
 

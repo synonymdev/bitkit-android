@@ -814,6 +814,7 @@
     <string name="settings__security_title">Безопасность и Конфиденциальность</string>
     <string name="settings__settings">Настройки</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} в {time}</string>
     <string name="settings__status__backup__error">Не удалось выполнить полное резервное копирование</string>
     <string name="settings__status__backup__pending">Резервное копирование...</string>
     <string name="settings__status__backup__ready">Скопировано</string>

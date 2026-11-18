@@ -78,7 +78,10 @@ class AppStatusViewModel @Inject constructor(
             when (val maxSyncTime = syncTimes.max()) {
                 0L -> context.getString(R.string.settings__status__backup__ready)
                 else -> runCatching {
-                    maxSyncTime.toBackupTimestamp(is24Hour = AndroidDateFormat.is24HourFormat(context))
+                    maxSyncTime.toBackupTimestamp(
+                        is24Hour = AndroidDateFormat.is24HourFormat(context),
+                        template = context.getString(R.string.settings__status__backup__date),
+                    )
                 }.getOrDefault(context.getString(R.string.settings__status__backup__ready))
             }
         }

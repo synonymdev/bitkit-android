@@ -797,6 +797,7 @@
     <string name="settings__security_title">Sicurezza e Privacy</string>
     <string name="settings__settings">Impostazioni</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} alle {time}</string>
     <string name="settings__status__backup__error">Impossibile completare un backup completo</string>
     <string name="settings__status__backup__pending">Backup in esecuzione...</string>
     <string name="settings__status__backup__ready">Backup eseguito</string>

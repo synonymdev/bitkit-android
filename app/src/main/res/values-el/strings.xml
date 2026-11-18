@@ -780,6 +780,7 @@
     <string name="settings__security_title">Ασφάλεια και απόρρητο</string>
     <string name="settings__settings">Ρυθμίσεις</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} στις {time}</string>
     <string name="settings__status__backup__error">Αποτυχία ολοκλήρωσης πλήρους αντιγράφου ασφαλείας</string>
     <string name="settings__status__backup__pending">Δημιουργία αντιγράφου...</string>
     <string name="settings__status__backup__ready">Δημιουργήθηκε αντίγραφο</string>

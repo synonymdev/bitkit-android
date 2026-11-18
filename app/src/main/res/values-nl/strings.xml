@@ -795,6 +795,7 @@
     <string name="settings__security_title">Beveiliging en privacy</string>
     <string name="settings__settings">Instellingen</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} om {time}</string>
     <string name="settings__status__backup__error">Volledige backup niet voltooid</string>
     <string name="settings__status__backup__pending">Back-up maken...</string>
     <string name="settings__status__backup__ready">Geback-upt</string>

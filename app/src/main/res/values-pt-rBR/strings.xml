@@ -802,6 +802,7 @@
     <string name="settings__security_title">Segurança e Privacidade</string>
     <string name="settings__settings">Ajustes</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} às {time}</string>
     <string name="settings__status__backup__error">Falha ao concluir backup</string>
     <string name="settings__status__backup__pending">Fazendo o backup...</string>
     <string name="settings__status__backup__ready">Backup Feito</string>

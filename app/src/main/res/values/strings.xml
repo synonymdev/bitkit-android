@@ -1164,6 +1164,7 @@
     <string name="settings__security_title">Security</string>
     <string name="settings__settings">Settings</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} at {time}</string>
     <string name="settings__status__backup__error">Failed to complete a full backup</string>
     <string name="settings__status__backup__pending">Backing up...</string>
     <string name="settings__status__backup__ready">Backed up</string>

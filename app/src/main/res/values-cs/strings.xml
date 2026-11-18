@@ -800,6 +800,7 @@
     <string name="settings__security_title">Bezpečnost a soukromí</string>
     <string name="settings__settings">Nastavení</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} v {time}</string>
     <string name="settings__status__backup__error">Selhalo dokončení úplné zálohy</string>
     <string name="settings__status__backup__pending">Zálohování...</string>
     <string name="settings__status__backup__ready">Zálohováno</string>

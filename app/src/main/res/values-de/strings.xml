@@ -783,6 +783,7 @@
     <string name="settings__status__backup__title">Vollständiges Backup</string>
     <string name="settings__status__backup__ready">Abgeschlossen</string>
     <string name="settings__status__backup__pending">In Bearbeitung...</string>
+    <string name="settings__status__backup__date">{date} um {time}</string>
     <string name="settings__status__backup__error">Fehlgeschlagen</string>
     <string name="settings__adv__section_payments">Zahlungen</string>
     <string name="settings__adv__section_networks">Netzwerke</string>

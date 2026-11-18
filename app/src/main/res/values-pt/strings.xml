@@ -746,6 +746,7 @@
     <string name="settings__status__backup__title">Último Backup Completo</string>
     <string name="settings__status__backup__ready">Backup Feito</string>
     <string name="settings__status__backup__pending">Fazendo o backup...</string>
+    <string name="settings__status__backup__date">{date} às {time}</string>
     <string name="settings__status__backup__error">Falha ao concluir backup</string>
     <string name="settings__adv__section_payments">Pagamentos</string>
     <string name="settings__adv__section_networks">Redes</string>

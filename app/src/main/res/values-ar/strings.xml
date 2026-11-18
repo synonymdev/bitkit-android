@@ -780,6 +780,7 @@
     <string name="settings__security_title">الأمان والخصوصية</string>
     <string name="settings__settings">الإعدادات</string>
     <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} في {time}</string>
     <string name="settings__status__backup__error">فشل إكمال النسخة الاحتياطية الكاملة</string>
     <string name="settings__status__backup__pending">جارٍ النسخ الاحتياطي...</string>
     <string name="settings__status__backup__ready">تم النسخ الاحتياطي</string>

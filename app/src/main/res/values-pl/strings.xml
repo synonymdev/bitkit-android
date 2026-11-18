@@ -786,6 +786,7 @@
     <string name="settings__status__backup__title">Ostatnia kopia zapasowa</string>
     <string name="settings__status__backup__ready">Zapisano</string>
     <string name="settings__status__backup__pending">Zapisywanie...</string>
+    <string name="settings__status__backup__date">{date} o {time}</string>
     <string name="settings__status__backup__error">Nie udało się wykonać kopii zapasowej</string>
     <string name="settings__adv__section_payments">Płatności</string>
     <string name="settings__adv__section_networks">Sieci</string>

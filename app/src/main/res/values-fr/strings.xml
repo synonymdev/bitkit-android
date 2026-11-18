@@ -780,6 +780,7 @@
     <string name="settings__status__backup__title">Dernière sauvegarde complète</string>
     <string name="settings__status__backup__ready">Sauvegardé</string>
     <string name="settings__status__backup__pending">Sauvegarde...</string>
+    <string name="settings__status__backup__date">{date} à {time}</string>
     <string name="settings__status__backup__error">Échec de la sauvegarde</string>
     <string name="settings__adv__section_payments">Paiements</string>
     <string name="settings__adv__section_networks">Réseaux</string>
