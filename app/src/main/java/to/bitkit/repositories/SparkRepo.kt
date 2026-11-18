@@ -700,9 +700,13 @@ class SparkRepo @Inject constructor(
         if (send == SparkLightningSend.NotFound && !failHeldRow(paymentHash)) return false
         // A send Spark now runs keeps its earlier attempts' ids until it settles, taken over before the doubt ends.
         val isTaken = send is SparkLightningSend.Found && send.status == PaymentStatus.PENDING
-        if (isTaken) takenAttempts.putIfAbsent(key, uncertain.attempt)
-        // Only the caller that takes the hash off settles it, so its outcome is reported once.
-        if (!uncertainSends.remove(key, uncertain)) return true
+        // Only the caller that takes the hash off settles it, so its outcome is reported once. The hand-over shares the
+        // lock a payment event's cleanup takes, so a send settled meanwhile keeps no attempt to report again at expiry.
+        val isOwner = sendReleaseMutex.withLock {
+            val isMarked = isTaken && takenAttempts.putIfAbsent(key, uncertain.attempt) == null
+            uncertainSends.remove(key, uncertain).also { if (!it && isMarked) takenAttempts.remove(key) }
+        }
+        if (!isOwner) return true
         if (isTaken) cacheStore.keepSparkSendAttempt(paymentHash) else cacheStore.removeSparkUncertainSend(paymentHash)
         when (send) {
             SparkLightningSend.NotFound -> {
@@ -718,7 +722,8 @@ class SparkRepo @Inject constructor(
                     // next refresh.
                     listed?.let { recordActivity(it) }
                 }
-                settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                // The event comes from the read that settled it, so a failed later read can't leave the send pending.
+                listed?.toNodeEvent()?.let { _nodeEvents.emit(it) }
             }
             SparkLightningSend.Unavailable -> Unit
         }
@@ -1538,6 +1543,7 @@ class SparkRepo @Inject constructor(
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrNull()
             ?.latestSend(paymentHash)
+            ?.takeUnless { it.isEarlierFailureOfUncertainSend() }
             ?.toNodeEvent()
     }
 
@@ -1568,9 +1574,10 @@ class SparkRepo @Inject constructor(
             }
             .distinct()
             .associateWith { hash ->
-                val status = requireNotNull(payments.latestSend(hash)).status
-                // A failed row may be an earlier attempt's, while Spark may still finish the uncertain retry.
-                if (status == PaymentStatus.FAILED && hash.lowercase() in uncertain) PaymentStatus.PENDING else status
+                val latest = requireNotNull(payments.latestSend(hash))
+                // A failed row may be an earlier attempt's, while Spark may still finish the uncertain or taken retry.
+                val isHeld = hash.lowercase() in uncertain || latest.isEarlierFailureOfUncertainSend()
+                if (latest.status == PaymentStatus.FAILED && isHeld) PaymentStatus.PENDING else latest.status
             }
         val listedHashes = listed.keys.mapTo(mutableSetOf()) { it.lowercase() }
         listed + (unlisted + uncertain - listedHashes).associateWith { PaymentStatus.PENDING }
@@ -1586,11 +1593,14 @@ class SparkRepo @Inject constructor(
     suspend fun lightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
         val hash = paymentHash.lowercase()
         val isUnlistedHeld = hash in unexpiredStartedSends()
-        val send = listedLightningSend(paymentHash)
+        val (send, listed) = listedLightningSendPayment(paymentHash)
         val isUncertain = hash in uncertainSendHashes()
         val isHeld = when (send) {
             SparkLightningSend.NotFound, SparkLightningSend.Unavailable -> isUncertain || isUnlistedHeld
-            is SparkLightningSend.Found -> isUncertain && send.status == PaymentStatus.FAILED
+            // An earlier attempt's failure leaves a retry Spark took or still sends pending.
+            is SparkLightningSend.Found ->
+                send.status == PaymentStatus.FAILED &&
+                    (isUncertain || listed?.isEarlierFailureOfUncertainSend() == true)
         }
         if (isHeld) SparkLightningSend.Found(PaymentStatus.PENDING, null) else send
     }
@@ -1671,6 +1681,9 @@ class SparkRepo @Inject constructor(
             }
             if (send.status == PaymentStatus.FAILED) {
                 retried()?.let { return@withContext EarlierSend.Pending(it) }
+                // An earlier attempt's failure leaves a retry Spark took or still sends pending.
+                send.takeIf { it.isEarlierFailureOfUncertainSend() }?.sendHash()
+                    ?.let { return@withContext EarlierSend.Pending(it) }
                 refuseUnverifiedRestoredInvoice(bolt11, invoiceCreatedAt, invoiceExpiresAt)
             }
             val hash = (send.details as PaymentDetails.Lightning).htlcDetails.paymentHash
@@ -1778,7 +1791,7 @@ class SparkRepo @Inject constructor(
         val uncertain = uncertainSendHashes()
         val sends = lightningPaymentStatuses { it.paymentType == SparkPaymentType.SEND } ?: return null
         return sends.filterValues { it.any { status -> status != PaymentStatus.FAILED } }.keys +
-            (unlisted - sends.keys) + uncertain
+            (unlisted - sends.keys) + uncertain + takenAttempts.keys
     }
 
     /** The statuses of Spark's Lightning payments that match [filter], by lowercase payment hash. */
