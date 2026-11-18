@@ -7871,9 +7871,9 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels' balance to
-     * Spark. Once the move settles, closes the channels it emptied in the background, even when the payment then fails.
-     * A failure after the move leaves the funds in Spark.
+     * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels'
+     * balance to Spark. Once the move settles, closes the channels it emptied in the background, even when the payment
+     * then fails. A failure after the move leaves the funds in Spark.
      */
     private suspend fun updateSpendingBalanceIfNeeded(bolt11: String, amountSats: ULong): Result<Unit> {
         if (!moveToSparkRepo.needsUpdateToSend(amountSats)) return Result.success(Unit)

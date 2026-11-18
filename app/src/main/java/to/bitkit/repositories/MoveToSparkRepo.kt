@@ -150,7 +150,8 @@ class MoveToSparkRepo internal constructor(
         withContext(bgDispatcher) {
             runSuspendCatching {
                 val usedQuote = knownQuote ?: quote().getOrThrow()
-                val feeSats = feeAfterUpdateOrNull(bolt11, amountSats) ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
+                val feeSats = feeAfterUpdateOrNull(bolt11, amountSats)
+                    ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
                 if (!MoveToSparkMath.coversPayment(usedQuote, sparkRepo.state.value, amountSats, feeSats)) {
                     throw MoveToSparkError.UpdateFallsShort(amountSats)
                 }
