@@ -181,7 +181,6 @@
     <string name="lightning__spark_exit__notification_restricted">Android verhindert, dass Bitkit im Hintergrund läuft. Öffne Bitkit vor {time}, damit deine forcierte Übertragung auf Kurs bleibt.</string>
     <string name="lightning__spark_exit__notification_title">Forcierte Übertragung</string>
     <string name="lightning__spark_exit__overview">Übersicht</string>
-    <string name="lightning__spark_exit__partial_text">{count} kleine Beträge sind auf Spark geblieben.</string>
     <string name="lightning__spark_exit__pay_amount">Zu zahlender Betrag</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Zahle die Gebühren, um die forcierte Übertragung zu starten.&lt;/accent&gt;\nDie forcierte Übertragung beginnt, sobald die Zahlung auf der Blockchain bestätigt ist.</string>
     <string name="lightning__spark_exit__pay_title">Zahlen zum\n&lt;accent&gt;Bestätigen&lt;/accent&gt;</string>

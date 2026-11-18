@@ -300,7 +300,6 @@
     <string name="lightning__spark_exit__notification_restricted">O Android impede a Bitkit de rodar em segundo plano. Abra a Bitkit antes de {time} para manter sua transferência forçada no caminho certo.</string>
     <string name="lightning__spark_exit__notification_title">Transferência forçada</string>
     <string name="lightning__spark_exit__overview">Visão geral</string>
-    <string name="lightning__spark_exit__partial_text">{count} valores pequenos ficaram na Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Valor a pagar</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Pague as taxas para iniciar a transferência forçada.&lt;/accent&gt;\nA transferência forçada começa quando o pagamento for confirmado na blockchain.</string>
     <string name="lightning__spark_exit__pay_title">Pagar para\n&lt;accent&gt;confirmar&lt;/accent&gt;</string>

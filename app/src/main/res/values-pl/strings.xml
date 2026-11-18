@@ -182,7 +182,6 @@
     <string name="lightning__spark_exit__notification_restricted">Android uniemożliwia Bitkit działanie w tle. Otwórz Bitkit przed {time}, aby utrzymać Twój wymuszony transfer na właściwym torze.</string>
     <string name="lightning__spark_exit__notification_title">Wymuszony transfer</string>
     <string name="lightning__spark_exit__overview">Przegląd</string>
-    <string name="lightning__spark_exit__partial_text">{count} małych kwot pozostało na Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Kwota do zapłaty</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Zapłać opłaty, aby rozpocząć wymuszony transfer.&lt;/accent&gt;\nWymuszony transfer rozpocznie się po potwierdzeniu płatności w blockchainie.</string>
     <string name="lightning__spark_exit__pay_title">Zapłać, aby\n&lt;accent&gt;potwierdzić&lt;/accent&gt;</string>

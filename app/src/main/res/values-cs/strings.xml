@@ -299,7 +299,6 @@
     <string name="lightning__spark_exit__notification_restricted">Android brání Bitkitu běžet na pozadí. Otevřete Bitkit před {time}, aby váš vynucený převod zůstal v chodu.</string>
     <string name="lightning__spark_exit__notification_title">Vynucený převod</string>
     <string name="lightning__spark_exit__overview">Přehled</string>
-    <string name="lightning__spark_exit__partial_text">Malých částek, které zůstaly na Spark: {count}.</string>
     <string name="lightning__spark_exit__pay_amount">Částka k zaplacení</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Zaplaťte poplatky a zahajte vynucený převod.&lt;/accent&gt;\nVynucený převod začne, jakmile se platba potvrdí na blockchainu.</string>
     <string name="lightning__spark_exit__pay_title">Zaplatit\n&lt;accent&gt;a potvrdit&lt;/accent&gt;</string>

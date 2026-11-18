@@ -308,7 +308,6 @@
     <string name="lightning__spark_exit__notification_restricted">Android не даёт Bitkit работать в фоне. Откройте Bitkit до {time}, чтобы принудительный перевод шёл по плану.</string>
     <string name="lightning__spark_exit__notification_title">Принудительный перевод</string>
     <string name="lightning__spark_exit__overview">Обзор</string>
-    <string name="lightning__spark_exit__partial_text">Небольших сумм, оставшихся в Spark: {count}.</string>
     <string name="lightning__spark_exit__pay_amount">Сумма к оплате</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Оплатите комиссии, чтобы начать принудительный перевод.&lt;/accent&gt;\nОн начнётся, когда платёж подтвердится в блокчейне.</string>
     <string name="lightning__spark_exit__pay_title">Оплатите,\n&lt;accent&gt;чтобы подтвердить&lt;/accent&gt;</string>

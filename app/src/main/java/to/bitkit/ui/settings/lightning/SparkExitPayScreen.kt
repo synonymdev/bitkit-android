@@ -45,7 +45,7 @@ fun SparkExitPayScreen(
     val requestNotifications = rememberSubscriptionNotificationsRequest()
     LaunchedEffect(Unit) { viewModel.watchFundingAddress() }
     DisposableEffect(Unit) { onDispose { viewModel.stopWatchingFundingAddress() } }
-    // Starts once per visit for a payment that arrived here; a failed start shows its error and waits for a tap.
+    // Starts once per visit when the funding is covered; a failed start shows its error and waits for Try again.
     LaunchedEffect(uiState.canAutoStartFunding) {
         if (!uiState.canAutoStartFunding) return@LaunchedEffect
         requestNotifications()
@@ -104,9 +104,7 @@ private fun Content(
             // A start can wait minutes for Spark, so its button stays and spins until it ends.
             if (uiState.canTapStartFunding || uiState.isStarting) {
                 PrimaryButton(
-                    text = stringResource(
-                        if (uiState.hasPayAutoStarted) R.string.common__try_again else R.string.common__continue
-                    ),
+                    text = stringResource(R.string.common__try_again),
                     onClick = onStart,
                     isLoading = uiState.isStarting,
                     modifier = Modifier.testTag("SparkExitPayRetry")

@@ -9,7 +9,6 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -174,65 +173,40 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pay to confirm waits for a tap when the funding was already at the address`() = test {
+    fun `pay to confirm starts on its own when the funding was already at the address`() = test {
         whenever(repo.loadQuote()).thenReturn(Result.success(SparkExitQuote(SparkExitFixtures.prepared())))
         whenever(repo.refreshFundingAddress()).thenReturn(Result.success(20_000uL))
-        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
-        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
-        sut.loadQuote()
-
-        sut.watchFundingAddress()
-
-        assertEquals(1, sut.uiState.value.payEntrySeenCount)
-        assertFalse(sut.uiState.value.canAutoStartFunding)
-        assertTrue(sut.uiState.value.canTapStartFunding)
-        sut.startOnPayment()
-        verify(repo, never()).start(any())
-        sut.stopWatchingFundingAddress()
-    }
-
-    @Test
-    fun `pay to confirm starts on its own once for a payment that arrives while it shows`() = test {
-        whenever(repo.loadQuote()).thenReturn(Result.success(SparkExitQuote(SparkExitFixtures.prepared())))
-        whenever(repo.refreshFundingAddress()).thenReturn(Result.success(0uL))
         whenever(repo.start(any())).thenReturn(Result.failure(IllegalStateException("Start failed")))
+        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
         val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
         sut.loadQuote()
-        sut.watchFundingAddress()
-        assertEquals(0, sut.uiState.value.payEntrySeenCount)
 
-        // A later read finds the payment.
-        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
+        sut.watchFundingAddress()
 
         assertTrue(sut.uiState.value.canAutoStartFunding)
         assertFalse(sut.uiState.value.canTapStartFunding)
         sut.startOnPayment()
         verify(repo).start(false)
-        // The failed start waits for a tap on Try again.
+        // The failed start waits for Try again; nothing starts on its own a second time this visit.
         assertFalse(sut.uiState.value.canAutoStartFunding)
         assertTrue(sut.uiState.value.canTapStartFunding)
+        exitState.value = SparkExitState(fundingSeenSats = 30_000uL, fundingSeenCount = 2)
         sut.startOnPayment()
         verify(repo, times(1)).start(any())
         sut.stopWatchingFundingAddress()
     }
 
     @Test
-    fun `a tap on pay to confirm spends the visit's start, so a later payment waits for a tap`() = test {
+    fun `pay to confirm waits for its first read before it starts`() = test {
         whenever(repo.loadQuote()).thenReturn(Result.success(SparkExitQuote(SparkExitFixtures.prepared())))
-        whenever(repo.refreshFundingAddress()).thenReturn(Result.success(20_000uL))
-        whenever(repo.start(any())).thenReturn(Result.failure(IllegalStateException("Start failed")))
-        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
+        whenever(repo.refreshFundingAddress()).thenReturn(Result.success(0uL))
         val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
         sut.loadQuote()
-        sut.watchFundingAddress()
-
-        sut.startFromPay()
-        // Another payment after the failed start.
-        exitState.value = SparkExitState(fundingSeenSats = 30_000uL, fundingSeenCount = 2)
+        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
 
         assertFalse(sut.uiState.value.canAutoStartFunding)
-        assertTrue(sut.uiState.value.canTapStartFunding)
-        verify(repo, times(1)).start(any())
+        sut.watchFundingAddress()
+        assertTrue(sut.uiState.value.canAutoStartFunding)
         sut.stopWatchingFundingAddress()
     }
 
@@ -241,11 +215,12 @@ class SparkExitViewModelTest : BaseUnitTest() {
         val covered = SparkExitUiState(
             quote = SparkExitQuote(SparkExitFixtures.prepared()),
             fundingSeenSats = 20_000uL,
-            fundingSeenCount = 2,
-            payEntrySeenCount = 1,
+            fundingSeenCount = 1,
+            hasPayReadFunding = true,
         )
         assertTrue(covered.canAutoStartFunding)
         assertFalse(covered.copy(isStarting = true).canAutoStartFunding)
+        assertFalse(covered.copy(isStarting = true).canTapStartFunding)
     }
 
     @Test

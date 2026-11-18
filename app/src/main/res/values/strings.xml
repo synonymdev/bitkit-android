@@ -494,7 +494,6 @@
     <string name="lightning__spark_exit__notification_restricted">Android stops Bitkit from running in the background. Open Bitkit before {time} to keep your force transfer on track.</string>
     <string name="lightning__spark_exit__notification_title">Force transfer</string>
     <string name="lightning__spark_exit__overview">Overview</string>
-    <string name="lightning__spark_exit__partial_text">{count} small amounts stayed on Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Amount to pay</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Pay the fees to initiate the force transfer.&lt;/accent&gt;\nThe force transfer starts once the payment confirms on the blockchain.</string>
     <string name="lightning__spark_exit__pay_title">Pay to\n&lt;accent&gt;confirm&lt;/accent&gt;</string>

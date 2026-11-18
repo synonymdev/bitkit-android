@@ -164,17 +164,13 @@ class SparkExitViewModel @Inject constructor(
         _uiState.update { it.copy(fundFromSavings = false, showsFundingAddress = true) }
     }
 
-    /**
-     * Pay to confirm watches the funding address while it shows. The payments found by its first read are the baseline:
-     * only one arriving after it starts the exit on its own.
-     */
+    /** Pay to confirm watches the funding address while it shows, and starts the exit once a read finds it covered. */
     fun watchFundingAddress() {
         if (fundingWatch?.isActive == true) return
         fundingWatch = viewModelScope.launch {
             while (isActive) {
                 sparkExitRepo.refreshFundingAddress().onSuccess {
-                    val count = sparkExitRepo.state.value.fundingSeenCount
-                    _uiState.update { it.copy(payEntrySeenCount = it.payEntrySeenCount ?: count) }
+                    _uiState.update { it.copy(hasPayReadFunding = true) }
                 }
                 delay(FUNDING_POLL_INTERVAL)
             }
@@ -184,17 +180,17 @@ class SparkExitViewModel @Inject constructor(
     fun stopWatchingFundingAddress() {
         fundingWatch?.cancel()
         fundingWatch = null
-        _uiState.update { it.copy(payEntrySeenCount = null, hasPayAutoStarted = false) }
+        _uiState.update { it.copy(hasPayReadFunding = false, hasPayAutoStarted = false) }
     }
 
-    /** Starts the exit once for a payment that arrived while Pay to confirm shows; a failed start waits for a tap. */
+    /** Starts the exit once Pay to confirm finds its funding covered; a failed start waits for a tap on Try again. */
     fun startOnPayment() {
         if (!_uiState.value.canAutoStartFunding) return
         _uiState.update { it.copy(hasPayAutoStarted = true) }
         start()
     }
 
-    /** Starts from Pay to confirm's button, which spends the visit's one start: a later payment waits for a tap too. */
+    /** Starts again from Pay to confirm's Try again, after a start that failed. */
     fun startFromPay() {
         _uiState.update { it.copy(hasPayAutoStarted = true) }
         start()
@@ -362,8 +358,8 @@ data class SparkExitUiState(
     val tipHeight: UInt? = null,
     val fundingSeenSats: ULong = 0uL,
     val fundingSeenCount: Int = 0,
-    /** The payments Pay to confirm's first read of the funding address found; null until it read it. */
-    val payEntrySeenCount: Int? = null,
+    /** Pay to confirm read the funding address this visit, so what it holds is current. */
+    val hasPayReadFunding: Boolean = false,
     /** Pay to confirm started the exit on its own this visit, so a failed start waits for a tap. */
     val hasPayAutoStarted: Boolean = false,
     /** The quote's fee rate, which prices each extra payment to the funding address. */
@@ -437,16 +433,12 @@ data class SparkExitUiState(
      */
     val canContinueFunding: Boolean get() = prestartFunding.isCovered
 
-    /**
-     * A payment that arrived while Pay to confirm shows covers the funding: the exit starts on its own, once. Funding
-     * already there when it opened waits for a tap, so nothing starts unseen.
-     */
+    /** Pay to confirm finds the funding covered: the exit starts on its own, once a visit. */
     val canAutoStartFunding: Boolean
-        get() = canContinueFunding && !isStarting && !hasPayAutoStarted &&
-            payEntrySeenCount?.let { fundingSeenCount > it } == true
+        get() = canContinueFunding && !isStarting && !hasPayAutoStarted && hasPayReadFunding
 
-    /** Pay to confirm offers its button: covered funding that waits for a tap, or a start that failed. */
-    val canTapStartFunding: Boolean get() = canContinueFunding && !isStarting && !canAutoStartFunding
+    /** Pay to confirm offers Try again: its start this visit failed. */
+    val canTapStartFunding: Boolean get() = canContinueFunding && !isStarting && hasPayAutoStarted
 
     /** Why the quote cannot continue, or null when it can. */
     val quoteBlock: SparkExitQuoteBlock?

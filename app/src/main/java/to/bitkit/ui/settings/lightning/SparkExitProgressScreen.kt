@@ -300,22 +300,29 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
     if (!record.isActive && address != null) LeftoverNote(record, address, uiState.fundingPath)
 }
 
-/** Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. */
+/**
+ * Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. A
+ * completed exit counts what it sends back in its returned note, so it names only funding that stays at the address.
+ */
 @Composable
 private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?) {
+    val isDone = record.phase == SparkExitRecord.Phase.Done
     // Sweeps that already confirmed come first; funding that arrived after them has a note of its own below.
-    record.sweptLeftover.forEach {
-        VerticalSpacer(16.dp)
-        SparkExitTxNote(
-            text = stringResource(R.string.lightning__spark_exit__leftover_swept)
-                .replace("{amount}", sparkExitAmountAccent(it.valueSats)),
-            txid = it.txid,
-            testTag = "SparkExitLeftoverSweptEarlier",
-        )
+    if (!isDone) {
+        record.sweptLeftover.forEach {
+            VerticalSpacer(16.dp)
+            SparkExitTxNote(
+                text = stringResource(R.string.lightning__spark_exit__leftover_swept)
+                    .replace("{amount}", sparkExitAmountAccent(it.valueSats)),
+                txid = it.txid,
+                testTag = "SparkExitLeftoverSweptEarlier",
+            )
+        }
     }
     if (record.leftover.isEmpty()) return
     val total = record.leftover.fold(0uL) { sum, leftover -> sum + leftover.valueSats }
     val sweep = record.leftoverSweep
+    if (isDone && sweep?.txid != null && sweep.rejection == null) return
     VerticalSpacer(16.dp)
     when {
         record.isLeftoverWaitingForFees -> BodyS(
@@ -419,9 +426,6 @@ private fun progressText(
 ): String = when (record?.phase) {
     SparkExitRecord.Phase.Done -> listOfNotNull(
         stringResource(R.string.lightning__spark_exit__done_text),
-        record.skippedLeafCount.takeIf { it > 0 }?.let {
-            stringResource(R.string.lightning__spark_exit__partial_text).replace("{count}", "$it")
-        },
         record.failedLeafSats.takeIf { record.isFailedLeavesReleased && it > 0uL }?.let {
             stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{amount}", sparkExitAmountAccent(it))
         },

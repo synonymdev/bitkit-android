@@ -292,7 +292,6 @@
     <string name="lightning__spark_exit__notification_restricted">Το Android εμποδίζει το Bitkit να τρέχει στο παρασκήνιο. Ανοίξτε το Bitkit πριν από τις {time} για να συνεχίσει κανονικά η αναγκαστική μεταφορά σας.</string>
     <string name="lightning__spark_exit__notification_title">Αναγκαστική μεταφορά</string>
     <string name="lightning__spark_exit__overview">Επισκόπηση</string>
-    <string name="lightning__spark_exit__partial_text">{count} μικρά ποσά έμειναν στο Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Ποσό πληρωμής</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Πληρώστε τα τέλη για να ξεκινήσει η αναγκαστική μεταφορά.&lt;/accent&gt;\nΗ αναγκαστική μεταφορά ξεκινά μόλις η πληρωμή επιβεβαιωθεί στο blockchain.</string>
     <string name="lightning__spark_exit__pay_title">Πληρωμή για\n&lt;accent&gt;επιβεβαίωση&lt;/accent&gt;</string>

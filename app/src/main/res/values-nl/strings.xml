@@ -296,7 +296,6 @@
     <string name="lightning__spark_exit__notification_restricted">Android houdt Bitkit tegen op de achtergrond. Open Bitkit vóór {time} om je geforceerde overboeking op koers te houden.</string>
     <string name="lightning__spark_exit__notification_title">Geforceerde overboeking</string>
     <string name="lightning__spark_exit__overview">Overzicht</string>
-    <string name="lightning__spark_exit__partial_text">{count} kleine bedragen zijn op Spark gebleven.</string>
     <string name="lightning__spark_exit__pay_amount">Te betalen bedrag</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Betaal de kosten om de geforceerde overboeking te starten.&lt;/accent&gt;\nDe geforceerde overboeking begint zodra de betaling op de blockchain is bevestigd.</string>
     <string name="lightning__spark_exit__pay_title">Betaal om te\n&lt;accent&gt;bevestigen&lt;/accent&gt;</string>

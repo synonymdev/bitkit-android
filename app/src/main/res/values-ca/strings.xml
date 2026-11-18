@@ -296,7 +296,6 @@
     <string name="lightning__spark_exit__notification_restricted">Android impedeix que Bitkit s\'executi en segon pla. Obre Bitkit abans de {time} per mantenir al dia la teva transferència forçosa.</string>
     <string name="lightning__spark_exit__notification_title">Transferència forçosa</string>
     <string name="lightning__spark_exit__overview">Resum</string>
-    <string name="lightning__spark_exit__partial_text">{count} imports petits s\'han quedat a Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Import a pagar</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;Paga les comissions per iniciar la transferència forçosa.&lt;/accent&gt;\nLa transferència forçosa comença quan el pagament es confirma a la blockchain.</string>
     <string name="lightning__spark_exit__pay_title">Paga per\n&lt;accent&gt;confirmar&lt;/accent&gt;</string>

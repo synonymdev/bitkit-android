@@ -292,7 +292,6 @@
     <string name="lightning__spark_exit__notification_restricted">يمنع Android تشغيل Bitkit في الخلفية. افتح Bitkit قبل {time} ليبقى التحويل القسري على المسار.</string>
     <string name="lightning__spark_exit__notification_title">تحويل قسري</string>
     <string name="lightning__spark_exit__overview">نظرة عامة</string>
-    <string name="lightning__spark_exit__partial_text">بقيت {count} مبالغ صغيرة على Spark.</string>
     <string name="lightning__spark_exit__pay_amount">المبلغ المطلوب دفعه</string>
     <string name="lightning__spark_exit__pay_text">&lt;accent&gt;ادفع الرسوم لبدء التحويل القسري.&lt;/accent&gt;\nيبدأ التحويل القسري بمجرد تأكيد الدفعة على البلوكتشين.</string>
     <string name="lightning__spark_exit__pay_title">ادفع\n&lt;accent&gt;للتأكيد&lt;/accent&gt;</string>
