@@ -513,7 +513,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any<() -> Collection<String>>(), any())
-        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Background), any())
     }
 
     @Test
@@ -529,7 +529,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
     @Test
     fun `enableForNewProfile rolls back public payments when publishing fails`() = test {
-        whenever { publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any()) }
+        whenever { publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Background), any()) }
             .thenReturn(Result.failure(AppError("publish failed")))
 
         createSut().enableForNewProfile()
@@ -543,7 +543,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     @Test
     fun `enableForNewProfile turns both settings on before either sync completes`() = test {
         val appSync = CompletableDeferred<Unit>()
-        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
             appSync.await()
             Result.success(Unit)
         }
@@ -559,12 +559,12 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         appSync.complete(Unit)
         runCurrent()
 
-        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Background), any())
     }
 
     @Test
     fun `enableForNewProfile rolls back only private payments when private setup fails`() = test {
-        whenever { publicPaykitRepo.syncPaykitApp(isNull(), canSync = any()) }
+        whenever { publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any()) }
             .thenReturn(Result.failure(AppError("registry failed")))
 
         createSut().enableForNewProfile()
@@ -572,7 +572,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
-        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Background), any())
     }
 
     @Test
@@ -590,7 +590,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     @Test
     fun `enableForNewProfile ignores a call while one is running`() = test {
         val publication = CompletableDeferred<Unit>()
-        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
             publication.await()
             Result.success(Unit)
         }
@@ -602,7 +602,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         publication.complete(Unit)
         runCurrent()
 
-        verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
+        verify(publicPaykitRepo).syncPaykitApp(isNull(), eq(Priority.Background), any())
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any<() -> Collection<String>>(), any())
     }
 

@@ -635,7 +635,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun publishPaykitProfile(profile: PaykitProfile, expectedIdentity: String): PaykitProfileRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Interactive) {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
                 requireProfileIdentity(publicKey, expectedIdentity)
@@ -692,7 +692,7 @@ class PaykitSdkService @Inject constructor(
         expectedIdentity: String,
     ): PubkyProfileSnapshot {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Interactive) {
             requireProfileIdentity(currentIdentity(), expectedIdentity)
             completeSdkCall { handle().publishPubkyProfile(update, expectedRevision) }
         }
@@ -1439,7 +1439,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun listAllowances(filter: AllowanceFilter): List<AllowanceRecord> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Background) {
             withPaykitKey { completeSdkCall { it.listAllowances(filter) } }
         }
     }
