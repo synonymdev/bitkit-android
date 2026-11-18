@@ -3801,7 +3801,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a taken spark retry without earlier ids ends its row once its invoice expires`() = test {
+    fun `a taken spark retry without earlier ids ends its row and send once its invoice expires`() = test {
         val sentAt = now.epochSeconds
         // Spark took the retry before a restart, while its earlier attempts' ids couldn't be read.
         val store = CacheStore(
@@ -3827,6 +3827,8 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.listPayments()).thenReturn(listOf(ownFailure))
         val sut = createSut(store)
         sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
         // Its own failure, dated within the 10 s a clock difference may account for, can't be told from an earlier one.
         sparkEvents.emit(SdkEvent.PaymentFailed(ownFailure))
         advanceUntilIdle()
@@ -3843,6 +3845,7 @@ class SparkRepoTest : BaseUnitTest() {
             argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
         )
         assertFalse("hash" in store.data.first().sparkUncertainSendStarts)
+        assertTrue(events.any { it is Event.PaymentFailed }, "the send screen never learned the send failed")
     }
 
     private suspend fun TestScope.assertTakenRetryKeptPastEarlierFailure(restart: Boolean) {

@@ -788,11 +788,16 @@ class SparkRepo @Inject constructor(
                 is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@forEach
                 is SparkLightningSend.Found -> Unit
             }
-            takenAttempts.remove(hash)
+            takenAttempts.remove(hash) ?: return@forEach
             cacheStore.removeSparkUncertainSend(hash)
+            if (listed?.status != PaymentStatus.COMPLETED) cacheStore.removeSparkSendHash(hash)
             // Written once the attempt is gone, so it no longer holds the row back; a failed write is retried at the
             // next refresh.
             listed?.let { recordActivity(it) }
+            // The send's own outcome event may have been held back with the attempt, so the send screen learns it here.
+            val event = listed?.toNodeEvent()
+                ?: Event.PaymentFailed(hash, hash, PaymentFailureReason.UNEXPECTED_ERROR)
+            _nodeEvents.emit(event)
         }
     }
 
