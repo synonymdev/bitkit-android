@@ -1362,14 +1362,17 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `isUnsweepable matches the P2TR bound of one lightest input at the fee floor`() {
+    fun `isUnsweepable matches the bounds of one anchor input at the fee floor`() {
         fun sweepOf(sats: ULong) = listOf(
             PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = sats),
         )
 
-        // 486 WU at 253 sat/kW is 122 sats, plus 330 sats of P2TR dust.
-        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(451u), AddressType.P2TR))
-        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(452u), AddressType.P2TR))
+        // 442 WU at 253 sat/kW is 111 sats, plus 294 sats of P2WPKH dust.
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(404u), AddressType.P2WPKH))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(405u), AddressType.P2WPKH))
+        // 490 WU at 253 sat/kW is 123 sats, plus 330 sats of P2TR dust.
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(452u), AddressType.P2TR))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(453u), AddressType.P2TR))
     }
 
     @Test
