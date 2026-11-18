@@ -65,6 +65,24 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `only a pull to refresh shows the refresh indicator`() = test {
+        val seen = mutableListOf<Boolean>()
+        lateinit var sut: SparkExitViewModel
+        whenever(repo.load(anyOrNull())).doSuspendableAnswer {
+            seen += sut.uiState.value.isRefreshing
+            Result.success(null)
+        }
+        whenever(repo.tick()).thenReturn(Result.success(null))
+        sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+
+        sut.refresh(showIndicator = false)
+        sut.refresh()
+
+        assertEquals(listOf(false, true), seen)
+        assertFalse(sut.uiState.value.isRefreshing)
+    }
+
+    @Test
     fun `a started exit stays started until a screen opens its progress`() = test {
         whenever(repo.start(any())).thenReturn(Result.success(Unit))
         exitState.value = SparkExitState(record = SparkExitFixtures.record())

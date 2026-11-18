@@ -55,7 +55,7 @@ fun SparkExitProgressScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(Unit) {
-        viewModel.refresh()
+        viewModel.refresh(showIndicator = false)
         viewModel.effects.collect { if (it == SparkExitEffect.Cancelled) onDone() }
     }
     val isEnded = uiState.record?.isActive == false

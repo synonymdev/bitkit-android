@@ -278,9 +278,10 @@ class SparkExitViewModel @Inject constructor(
         viewModelScope.launch { sparkExitRepo.markResultSeen() }
     }
 
-    fun refresh() {
+    /** Reloads the exit; only a user's pull shows the refresh indicator. */
+    fun refresh(showIndicator: Boolean = true) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
+            if (showIndicator) _uiState.update { it.copy(isRefreshing = true) }
             sparkExitRepo.load()
             sparkExitRepo.tick()
             _uiState.update { it.copy(isRefreshing = false, canCancel = sparkExitRepo.canCancel) }
