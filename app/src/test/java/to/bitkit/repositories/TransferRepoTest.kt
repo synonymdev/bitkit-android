@@ -1386,7 +1386,7 @@ class TransferRepoTest : BaseUnitTest() {
             transfer,
             listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 388u)),
         )
-        whenever(lightningRepo.isAddressTypeChanging).thenReturn(true)
+        whenever(lightningRepo.isChangingAddressType()).thenReturn(true)
 
         val result = sut.syncTransferStates()
 

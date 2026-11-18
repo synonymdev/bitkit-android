@@ -387,7 +387,7 @@ class TransferRepo @Inject constructor(
      * change type is now.
      */
     private suspend fun canJudgeSweepAsDust(sweepTxid: String?): Boolean {
-        if (lightningRepo.isAddressTypeChanging) return false
+        if (lightningRepo.isChangingAddressType()) return false
         if (sweepTxid == null) return true
         val payments = lightningRepo.listPaymentsOrNull() ?: return false
         return payments.none { (it.kind as? PaymentKind.Onchain)?.txid.equals(sweepTxid, ignoreCase = true) }
