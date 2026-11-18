@@ -114,6 +114,18 @@ private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val PROVIDER_KEY_LENGTH = 12
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
+/**
+ * Calls [onReset] for each reset [SEND_CONFIRM_RESET_RESULT_KEY] carries. The key goes back to false rather than
+ * away, since removing it detaches this collector from any later reset.
+ */
+internal suspend fun SavedStateHandle.collectConfirmResets(onReset: () -> Unit) {
+    getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false).collect {
+        if (!it) return@collect
+        onReset()
+        set(SEND_CONFIRM_RESET_RESULT_KEY, false)
+    }
+}
+
 @Composable
 fun SendConfirmScreen(
     savedStateHandle: SavedStateHandle,
@@ -154,12 +166,7 @@ fun SendConfirmScreen(
     }
 
     LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false)
-            .collect {
-                if (!it) return@collect
-                isLoading = false
-                savedStateHandle.remove<Boolean>(SEND_CONFIRM_RESET_RESULT_KEY)
-            }
+        savedStateHandle.collectConfirmResets { isLoading = false }
     }
 
     // Confirm with pin or bio if required

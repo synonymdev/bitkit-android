@@ -518,6 +518,13 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         assertEquals(SparkFees.serviceFeeSats(60_000uL), sut.estimateFeeAfterUpdate(INVOICE, 60_000uL))
     }
 
+    @Test
+    fun `the fee after an update is Spark's service fee before there is an invoice`() = test {
+        assertEquals(SparkFees.serviceFeeSats(60_000uL), sut.estimateFeeAfterUpdate(null, 60_000uL))
+        verify(sparkRepo, never()).estimateFeeSats(any(), any())
+        verify(lightningRepo, never()).estimateLdkRoutingFeesForAmount(any(), any())
+    }
+
     private fun channel(id: String, sendableSats: ULong) = createChannelDetails().copy(
         channelId = id,
         isUsable = true,

@@ -135,27 +135,26 @@ class MoveToSparkRepo internal constructor(
 
     /**
      * Updates the spending balance for a payment of [amountSats]: moves the channels' balance to Spark with
-     * [knownQuote], or a new quote, and waits until Spark can pay the amount. A move still in flight, or a balance
+     * [quote], whose fee the user saw, and waits until Spark can pay the amount. A move still in flight, or a balance
      * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
      * own. [onMove] gets the move's outcome as soon as the move returns, before the wait. A quote whose amount, with
      * Spark's balance, would not cover the payment of [bolt11] and Spark's fee for it, or a fee nothing can price,
      * fails with [MoveToSparkError.UpdateFallsShort] before any move.
      */
     suspend fun updateToSend(
-        knownQuote: MoveToSparkQuote?,
+        quote: MoveToSparkQuote,
         bolt11: String,
         amountSats: ULong,
         onMove: (MoveToSparkOutcome) -> Unit = {},
     ): Result<MoveToSparkOutcome.Moved> =
         withContext(bgDispatcher) {
             runSuspendCatching {
-                val usedQuote = knownQuote ?: quote().getOrThrow()
                 val feeSats = feeAfterUpdateOrNull(bolt11, amountSats)
                     ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
-                if (!MoveToSparkMath.coversPayment(usedQuote, sparkRepo.state.value, amountSats, feeSats)) {
+                if (!MoveToSparkMath.coversPayment(quote, sparkRepo.state.value, amountSats, feeSats)) {
                     throw MoveToSparkError.UpdateFallsShort(amountSats)
                 }
-                val outcome = move(usedQuote).getOrThrow().also(onMove)
+                val outcome = move(quote).getOrThrow().also(onMove)
                 val moved = outcome as? MoveToSparkOutcome.Moved ?: throw MoveToSparkError.UpdateUnsettled()
                 val shown = withTimeoutOrNull(SPARK_BALANCE_WAIT) {
                     while (!sparkRepo.canSend(amountSats)) {
@@ -172,10 +171,10 @@ class MoveToSparkRepo internal constructor(
 
     /**
      * The fee Spark charges for paying [bolt11] once the spending balance is updated; Spark's service fee alone when
-     * nothing can price it.
+     * nothing can price it, or when there is no invoice yet, as for an LNURL before its callback.
      */
-    suspend fun estimateFeeAfterUpdate(bolt11: String, amountSats: ULong): ULong = withContext(bgDispatcher) {
-        feeAfterUpdateOrNull(bolt11, amountSats) ?: SparkFees.serviceFeeSats(amountSats).also {
+    suspend fun estimateFeeAfterUpdate(bolt11: String?, amountSats: ULong): ULong = withContext(bgDispatcher) {
+        bolt11?.let { feeAfterUpdateOrNull(it, amountSats) } ?: SparkFees.serviceFeeSats(amountSats).also {
             Logger.debug("Fell back to Spark's service fee for an update payment", context = TAG)
         }
     }
@@ -454,6 +453,9 @@ sealed class MoveToSparkError(message: String, cause: Throwable? = null) : AppEr
     /** The quoted move, with Spark's balance, would not cover a payment of [amountSats], so nothing moved. */
     class UpdateFallsShort(val amountSats: ULong) :
         MoveToSparkError("An update would not cover a payment of '$amountSats' sats")
+
+    /** The update's fee is new or above the one the user saw, so nothing moved until they see it. */
+    class UpdateFeeUnseen : MoveToSparkError("The update fee changed since the user saw it")
 
     /** The update moved the balance, but Spark cannot pay with it yet: the move or Spark's balance has not settled. */
     class UpdateUnsettled : MoveToSparkError("The update to Spark has not settled yet")

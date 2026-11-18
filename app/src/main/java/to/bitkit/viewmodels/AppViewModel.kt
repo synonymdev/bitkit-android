@@ -6458,6 +6458,7 @@ class AppViewModel @Inject constructor(
             if (quickPayHandled) return
 
             navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm, walletGeneration)
+            estimateLightningRoutingFeesIfNeeded(walletGeneration)
             return
         }
 
@@ -7800,10 +7801,11 @@ class AppViewModel @Inject constructor(
             ?.takeIf { moveToSparkRepo.needsUpdateToSend(displayAmountSats) }
             ?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull() }
         var authorizationError: Throwable? = refusedBeforeUpdate
+        var updateFailed = false
         val result = if (refusedBeforeUpdate != null) {
             Result.failure(refusedBeforeUpdate)
         } else {
-            updateSpendingBalanceIfNeeded(decodedInvoice.bolt11, displayAmountSats)
+            updateSpendingBalanceIfNeeded(decodedInvoice.bolt11, displayAmountSats).onFailure { updateFailed = true }
         }.fold(
             onSuccess = {
                 sendLightning(
@@ -7842,7 +7844,7 @@ class AppViewModel @Inject constructor(
             )
             lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
-            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null)) {
+            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null, updateFailed)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
                 proofRequest = null
                 Logger.info("Lightning payment pending", context = TAG)
@@ -7858,6 +7860,11 @@ class AppViewModel @Inject constructor(
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
+            if (error is MoveToSparkError.UpdateFeeUnseen) {
+                Logger.info("Stopped a payment to show the update fee", context = TAG)
+                setSendEffect(SendEffect.ResetConfirm)
+                return@onFailure
+            }
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
@@ -7873,12 +7880,20 @@ class AppViewModel @Inject constructor(
     /**
      * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels'
      * balance to Spark. Once the move settles, closes the channels it emptied in the background, even when the payment
-     * then fails. A failure after the move leaves the funds in Spark.
+     * then fails. A failure after the move leaves the funds in Spark. Moves nothing and fails with
+     * [MoveToSparkError.UpdateFeeUnseen] when no update fee was shown, or a fresh quote's fee is above it, keeping the
+     * fresh quote to show.
      */
     private suspend fun updateSpendingBalanceIfNeeded(bolt11: String, amountSats: ULong): Result<Unit> {
         if (!moveToSparkRepo.needsUpdateToSend(amountSats)) return Result.success(Unit)
+        val shown = _sendUiState.value.sparkUpdateQuote
+        val fresh = moveToSparkRepo.quote().getOrElse { return Result.failure(it) }
+        if (shown == null || fresh.feeSats > shown.feeSats) {
+            _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
+            return Result.failure(MoveToSparkError.UpdateFeeUnseen())
+        }
         val channelsBefore = lightningRepo.lightningState.value.channels.toList()
-        return moveToSparkRepo.updateToSend(_sendUiState.value.sparkUpdateQuote, bolt11, amountSats) {
+        return moveToSparkRepo.updateToSend(fresh, bolt11, amountSats) {
             closeChannelsEmptiedBy(it, channelsBefore)
         }.map { }
     }
@@ -7927,11 +7942,12 @@ class AppViewModel @Inject constructor(
         paymentHash: String,
         error: Throwable,
         isPaymentRequest: Boolean,
+        updateFailed: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
         else if !isPaymentRequest -> true
-        // A failed spending balance update happens before the invoice is paid, so nothing was sent.
-        is LightningPaymentFailedError, is MoveToSparkError -> {
+        // Any failed spending balance update happens before the invoice is paid, so nothing was sent.
+        else if updateFailed || error is LightningPaymentFailedError -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }
@@ -8611,7 +8627,16 @@ class AppViewModel @Inject constructor(
         if (currentState.payMethod != SendMethod.LIGHTNING) return
         // A Spark leg pays the contact's other endpoint, so its fee is the leg's, never the retained invoice's.
         if (currentState.routedPaykitRoute?.serviceLeg != null) return
-        val decodedInvoice = currentState.decodedInvoice ?: return
+        val decodedInvoice = currentState.decodedInvoice
+        if (decodedInvoice == null) {
+            // An LNURL's invoice comes only with the swipe, so its update is quoted before the callback.
+            if (currentState.lnurl is LnurlParams.LnurlPay && currentState.activePaykitSwapRoute == null &&
+                moveToSparkRepo.needsUpdateToSend(currentState.amount)
+            ) {
+                estimateSparkUpdateFees(null, currentState.amount, generation, walletGeneration)
+            }
+            return
+        }
         val payAmount = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: currentState.amount
         if (moveToSparkRepo.needsUpdateToSend(payAmount)) {
             estimateSparkUpdateFees(decodedInvoice.bolt11, payAmount, generation, walletGeneration)
@@ -8638,7 +8663,7 @@ class AppViewModel @Inject constructor(
 
     /** Quotes the spending balance update a payment of [payAmount] needs, and Spark's fee for the payment after it. */
     private suspend fun estimateSparkUpdateFees(
-        bolt11: String,
+        bolt11: String?,
         payAmount: ULong,
         generation: Long,
         walletGeneration: Long?,
