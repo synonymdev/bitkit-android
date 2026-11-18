@@ -370,11 +370,9 @@ class TransferRepo @Inject constructor(
 
         // LDK only adds the sweep's output when more than dust is left after fees. A dust-only
         // sweep has no outputs, every broadcast fails with `bad-txns-vout-empty` and the sweep never
-        // resolves, so settle the transfer: those sats can't be claimed. A sweep the wallet already holds is real,
-        // whatever the change type is now, so it waits for its activity instead.
+        // resolves, so settle the transfer: those sats can't be claimed.
         val changeType = settingsStore.data.first().selectedAddressType.toAddressType() ?: DEFAULT_ADDRESS_TYPE
-        val walletHasSweep = sweepTxid != null && walletHasTransaction(sweepTxid)
-        if (!walletHasSweep && isUnsweepable(channelId, pendingSweeps.orEmpty(), changeType)) {
+        if (canJudgeSweepAsDust(sweepTxid) && isUnsweepable(channelId, pendingSweeps.orEmpty(), changeType)) {
             markSettled(transfer.id)
             Logger.info("Settled force close transfer '${transfer.id}' with an unsweepable sweep", context = TAG)
             return
@@ -383,8 +381,17 @@ class TransferRepo @Inject constructor(
         Logger.debug("Force close awaiting sweep detection for transfer: ${transfer.id}", context = TAG)
     }
 
-    private suspend fun walletHasTransaction(txid: String): Boolean = lightningRepo.listPaymentsOrNull().orEmpty()
-        .any { (it.kind as? PaymentKind.Onchain)?.txid.equals(txid, ignoreCase = true) }
+    /**
+     * Dust is judged only on complete evidence: no address type change is staged but not yet applied to the node, the
+     * wallet's payments are readable, and the wallet does not already hold the sweep, which is then real whatever the
+     * change type is now.
+     */
+    private suspend fun canJudgeSweepAsDust(sweepTxid: String?): Boolean {
+        if (lightningRepo.isAddressTypeChanging) return false
+        if (sweepTxid == null) return true
+        val payments = lightningRepo.listPaymentsOrNull() ?: return false
+        return payments.none { (it.kind as? PaymentKind.Onchain)?.txid.equals(sweepTxid, ignoreCase = true) }
+    }
 
     private suspend fun persistResolvedChannel(transfer: TransferEntity, channelId: String) {
         if (transfer.channelId == null) {

@@ -1362,6 +1362,39 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE as dust when the wallet payments are unreadable`() = test {
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
+            channelId = ID_CHANNEL,
+            latestBroadcastHeight = 800000u,
+            latestSpendingTxid = "rejected-sweep-txid",
+            amountSatoshis = 388u,
+        )
+        givenForceCloseSweeps(transfer, listOf(pendingSweep))
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(null)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE as dust while the address type is changing`() = test {
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        givenForceCloseSweeps(
+            transfer,
+            listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 388u)),
+        )
+        whenever(lightningRepo.isAddressTypeChanging).thenReturn(true)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
     fun `syncTransferStates does not settle FORCE_CLOSE when its dust sweep is batched into a sweepable one`() = test {
         val transfer = forceCloseTransfer(amountSats = 20_000L)
         val sweeps = listOf(
@@ -1454,6 +1487,7 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
         whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
         whenever(activityService.hasOnchainActivityForTxid(any())).thenReturn(false)
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList())
     }
 
     @Test

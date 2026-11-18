@@ -214,6 +214,9 @@ class LightningRepo @Inject constructor(
      */
     private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
+
+    /** Whether an address type change is in progress, staged in settings before the node applies it. */
+    val isAddressTypeChanging: Boolean get() = isChangingAddressType.get()
     private val refreshFailureLogged = AtomicBoolean(false)
 
     init {
