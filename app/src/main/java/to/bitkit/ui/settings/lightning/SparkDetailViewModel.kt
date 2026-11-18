@@ -20,7 +20,9 @@ import to.bitkit.models.HealthState
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.ui.settings.appStatus.ExitStep
 import to.bitkit.ui.settings.appStatus.exitStep
 import javax.inject.Inject
@@ -44,9 +46,7 @@ class SparkDetailViewModel @Inject constructor(
             }.collect { (state, exit, isOnline) ->
                 _uiState.update {
                     it.copy(
-                        // An empty Spark is left out of the connections list, yet still receives here.
-                        spark = state.toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline)
-                            ?: SparkUi(balanceSats = 0uL, isReceiving = state.isReceiving(isOnline)),
+                        spark = state.toDetailUi(exit, isOnline),
                         exitStep = exit.record.exitStep(exit.fundingState),
                     )
                 }
@@ -89,10 +89,8 @@ class SparkDetailViewModel @Inject constructor(
             val exit = sparkExitRepo.state.value
             _uiState.update {
                 it.copy(
-                    spark = sparkRepo.state.value.toUi(
-                        lightningRepo,
-                        exit.showsResult,
-                        exit.earlierAddresses,
+                    spark = sparkRepo.state.value.toDetailUi(
+                        exit,
                         healthRepo.healthState.value.internet == HealthState.READY,
                     )
                 )
@@ -101,6 +99,11 @@ class SparkDetailViewModel @Inject constructor(
             _uiState.update { it.copy(isRefreshing = false) }
         }
     }
+
+    /** An empty Spark is left out of the connections list, yet still receives here. */
+    private suspend fun SparkState.toDetailUi(exit: SparkExitState, isOnline: Boolean) =
+        toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline)
+            ?: SparkUi(balanceSats = 0uL, isReceiving = isReceiving(isOnline))
 }
 
 @Immutable

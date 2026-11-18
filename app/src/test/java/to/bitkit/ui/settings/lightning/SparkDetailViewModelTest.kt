@@ -91,6 +91,8 @@ class SparkDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
 
         assertEquals(true, sut.uiState.value.spark?.isReceiving)
+        sut.onPullToRefresh()
+        assertEquals(true, sut.uiState.value.spark?.isReceiving)
     }
 
     @Test
