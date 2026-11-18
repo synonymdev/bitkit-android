@@ -218,8 +218,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 επιβεβαιώσεις</string>
     <string name="lightning__spark_deposit">Κατάθεση</string>
     <string name="lightning__spark_deposit__wait_button">Αναμονή</string>
+    <string name="lightning__spark_deposit_tx">Συναλλαγή κατάθεσης</string>
+    <string name="lightning__spark_deposits">Καταθέσεις</string>
     <string name="lightning__spark_exit__amount">Ποσό εξόδου</string>
-    <string name="lightning__spark_exit__button">Έξοδος έκτακτης ανάγκης</string>
+    <string name="lightning__spark_exit__button">Αναγκαστική μεταφορά σε αποταμιεύσεις</string>
     <string name="lightning__spark_exit__cancel">Ακύρωση εξόδου</string>
     <string name="lightning__spark_exit__cancel_failed">Δεν ήταν δυνατός ο έλεγχος της διεύθυνσης χρηματοδότησης. Δοκιμάστε ξανά.</string>
     <string name="lightning__spark_exit__cancel_text">Το Spark επιστρέφει όπως ήταν. Αν μια πληρωμή έφτασε στη διεύθυνση χρηματοδότησης τελών της εξόδου, το Bitkit την επιστρέφει στις αποταμιεύσεις.</string>
@@ -311,10 +313,11 @@
     <string name="lightning__spark_exit__uneconomic">Τα τέλη είναι υψηλότερα από όσα θα λαμβάνατε.</string>
     <string name="lightning__spark_exit__waiting_leaves">Μέρος αυτής της εξόδου δεν μπορεί να διαβαστεί on-chain αυτή τη στιγμή. Το Bitkit προσπαθεί ξανά για έως μία εβδομάδα.</string>
     <string name="lightning__spark_exit__waiting_operators">{amount} που μετέφεραν on-chain οι διαχειριστές του Spark περιμένουν να τα αποδεσμεύσουν. Το Bitkit ζητά ξανά για έως μία εβδομάδα.</string>
+    <string name="lightning__spark_operators">Lightspark, Breez και Flashnet</string>
     <string name="lightning__spark_provider">Πάροχος</string>
     <string name="lightning__spark_provider_value">Spark μέσω Breez</string>
-    <string name="lightning__spark_receiving_unlimited">Χωρίς όριο</string>
-    <string name="lightning__spark_trust">Αυτό το υπόλοιπο φυλάσσεται στο Spark, που λειτουργούν οι Lightspark, Breez και Flashnet. Είναι ασφαλές όσο τουλάχιστον ένας από αυτούς ενεργεί έντιμα. Μπορούν να αναστείλουν την πρόσβαση, και η έξοδος χωρίς αυτούς απαιτεί έξοδο on-chain.</string>
+    <string name="lightning__spark_receiving_unlimited">χωρίς όριο</string>
+    <string name="lightning__spark_trust">Το υπόλοιπο δαπανών σου χρησιμοποιεί το Spark, που λειτουργούν οι Lightspark, Breez και Flashnet. Η ασφάλειά του εξαρτάται από το να ενεργεί έντιμα τουλάχιστον ένας διαχειριστής. Οι διαχειριστές μπορούν να αναστείλουν την πρόσβαση, και η ανάληψη χωρίς τη συνεργασία τους απαιτεί να ξεκινήσεις έξοδο on-chain.</string>
     <string name="lightning__spendable_onchain">Διαθέσιμα onchain</string>
     <string name="lightning__spending">Δαπάνες</string>
     <string name="lightning__spending_amount__error_balance__description">Οι αποταμιεύσεις σου δεν επαρκούν για αυτή τη μεταφορά και τα τέλη της. Δοκίμασε μικρότερο ποσό.</string>
@@ -776,6 +779,7 @@
     <string name="settings__security__section_safety">Ασφάλεια</string>
     <string name="settings__security_title">Ασφάλεια και απόρρητο</string>
     <string name="settings__settings">Ρυθμίσεις</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
     <string name="settings__status__backup__error">Αποτυχία ολοκλήρωσης πλήρους αντιγράφου ασφαλείας</string>
     <string name="settings__status__backup__pending">Δημιουργία αντιγράφου...</string>
     <string name="settings__status__backup__ready">Δημιουργήθηκε αντίγραφο</string>
@@ -796,6 +800,7 @@
     <string name="settings__status__lightning_node__pending">Συγχρονισμός...</string>
     <string name="settings__status__lightning_node__ready">Συγχρονισμένο</string>
     <string name="settings__status__lightning_node__title">Κόμβος Lightning</string>
+    <string name="settings__status__spark__exit">Αναγκαστική μεταφορά σε αποταμιεύσεις σε εξέλιξη...</string>
     <string name="settings__status__title">Κατάσταση εφαρμογής</string>
     <string name="settings__support__help">Κέντρο βοήθειας</string>
     <string name="settings__support__label_address">Διεύθυνση email</string>
@@ -1811,8 +1816,8 @@
     <string name="wallet__balance_updating">Ενημέρωση υπολοίπου…</string>
     <string name="settings__status__exit__funding">Απαιτείται χρηματοδότηση τελών</string>
     <string name="settings__status__lightning_connection__spark">Χρήση Spark</string>
-    <string name="settings__status__spark__error">Εκτός σύνδεσης</string>
+    <string name="settings__status__spark__error">Εκτός σύνδεσης...</string>
     <string name="settings__status__spark__pending">Σύνδεση...</string>
     <string name="settings__status__spark__ready">Συνδεδεμένο</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">Πάροχος Lightning (Spark)</string>
 </resources>

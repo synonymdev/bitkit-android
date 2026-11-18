@@ -222,8 +222,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 confirmacions</string>
     <string name="lightning__spark_deposit">Dipòsit</string>
     <string name="lightning__spark_deposit__wait_button">Espera</string>
+    <string name="lightning__spark_deposit_tx">Tx del dipòsit</string>
+    <string name="lightning__spark_deposits">Dipòsits</string>
     <string name="lightning__spark_exit__amount">Import a retirar</string>
-    <string name="lightning__spark_exit__button">Sortida d\'emergència</string>
+    <string name="lightning__spark_exit__button">Transferència forçosa a estalvis</string>
     <string name="lightning__spark_exit__cancel">Cancel·lar la sortida</string>
     <string name="lightning__spark_exit__cancel_failed">No s\'ha pogut comprovar l\'adreça de finançament. Torna-ho a intentar.</string>
     <string name="lightning__spark_exit__cancel_text">Spark torna a l\'estat anterior. Si un pagament ha arribat a l\'adreça de finançament de comissions de la sortida, Bitkit el retorna als estalvis.</string>
@@ -315,10 +317,11 @@
     <string name="lightning__spark_exit__uneconomic">Les comissions són més altes del que rebries.</string>
     <string name="lightning__spark_exit__waiting_leaves">Ara mateix no es pot llegir on-chain part d\'aquesta sortida. Bitkit ho torna a intentar durant un màxim d\'una setmana.</string>
     <string name="lightning__spark_exit__waiting_operators">{amount} que els operadors de Spark han mogut on-chain espera que l\'alliberin. Bitkit els ho torna a demanar durant un màxim d\'una setmana.</string>
+    <string name="lightning__spark_operators">Lightspark, Breez i Flashnet</string>
     <string name="lightning__spark_provider">Proveïdor</string>
     <string name="lightning__spark_provider_value">Spark mitjançant Breez</string>
-    <string name="lightning__spark_receiving_unlimited">Sense límit</string>
-    <string name="lightning__spark_trust">Aquest saldo es guarda a Spark, gestionat per Lightspark, Breez i Flashnet. Està segur mentre almenys un d’ells actuï amb honestedat. Poden pausar l’accés, i sortir-ne sense ells requereix una sortida on-chain.</string>
+    <string name="lightning__spark_receiving_unlimited">sense límit</string>
+    <string name="lightning__spark_trust">El teu saldo de despesa utilitza Spark, gestionat per Lightspark, Breez i Flashnet. La seva seguretat depèn que almenys un operador actuï amb honestedat. Els operadors poden pausar l\'accés, i retirar sense la seva cooperació requereix que iniciïs una sortida on-chain.</string>
     <string name="lightning__spendable_onchain">Gastable Onchain</string>
     <string name="lightning__spending">Despesa</string>
     <string name="lightning__spending_amount__error_balance__description">Els teus estalvis no poden cobrir aquesta transferència i les seves tarifes. Prova un import més petit.</string>
@@ -791,6 +794,7 @@
     <string name="settings__security__section_safety">Seguretat</string>
     <string name="settings__security_title">Seguretat i privacitat</string>
     <string name="settings__settings">Configuracions</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
     <string name="settings__status__backup__error">No s\'ha pogut completar una còpia de seguretat completa</string>
     <string name="settings__status__backup__pending">Fent còpia de seguretat...</string>
     <string name="settings__status__backup__ready">Còpia de seguretat feta</string>
@@ -811,6 +815,7 @@
     <string name="settings__status__lightning_node__pending">Sincronitzant...</string>
     <string name="settings__status__lightning_node__ready">Sincronitzat</string>
     <string name="settings__status__lightning_node__title">Node de Lightning</string>
+    <string name="settings__status__spark__exit">Transferència forçosa a estalvis en curs...</string>
     <string name="settings__status__title">Estat de l\'aplicació</string>
     <string name="settings__support__help">Centre d\'ajuda</string>
     <string name="settings__support__label_address">Adreça de correu electrònic</string>
@@ -1812,8 +1817,8 @@
     <string name="wallet__balance_updating">S’està actualitzant el saldo…</string>
     <string name="settings__status__exit__funding">Cal finançament de comissions</string>
     <string name="settings__status__lightning_connection__spark">Utilitzant Spark</string>
-    <string name="settings__status__spark__error">Fora de línia</string>
+    <string name="settings__status__spark__error">Fora de línia...</string>
     <string name="settings__status__spark__pending">Connectant...</string>
     <string name="settings__status__spark__ready">Connectat</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">Proveïdor Lightning (Spark)</string>
 </resources>
