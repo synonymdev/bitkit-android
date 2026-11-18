@@ -3762,16 +3762,64 @@ class SparkRepoTest : BaseUnitTest() {
             assertFalse(retryHeldAfter(null, failure.copy(timestamp = now.epochSeconds.toULong() + 10uL)))
         }
 
-    /**
-     * Sends a retry whose outcome stays unknown, with Spark listing [listedBeforeSend] before it goes out (null while
-     * it never synced, so it can't list), then delivers [failure]; true when the retry stays held.
-     */
-    private suspend fun TestScope.retryHeldAfter(listedBeforeSend: List<Payment>?, failure: Payment): Boolean {
+    @Test
+    fun `a taken retry's own failure within the clock skew ends its hold while its earlier attempts are unknown`() =
+        test {
+            val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+            val failure = taken.copy(status = PaymentStatus.FAILED, timestamp = now.epochSeconds.toULong())
+            assertFalse(retryHeldAfter(null, failure, taken = taken))
+        }
+
+    @Test
+    fun `a taken retry's own failure within the clock skew ends its hold after a restart without earlier ids`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = prepared(feeSats = 0uL)
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
-        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.Generic("timeout") }
+        val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(taken)
+        // Spark that never synced can't list every earlier attempt.
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncError = SyncError.Network("down")))
+        val before = createSut(store)
+        before.start(0).getOrThrow()
+        val sentAt = now.epochSeconds.toULong()
+        before.payInvoice("lnbc1", 100uL).getOrThrow()
+        runCurrent()
+
+        val restartedEvents = MutableSharedFlow<SdkEvent>()
+        whenever(sparkService.events).thenReturn(restartedEvents)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever(sparkService.listPayments()).thenReturn(listOf(taken))
+        val after = createSut(store)
+        after.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { after.nodeEvents.collect { events += it } }
+        runCurrent()
+
+        val failure = taken.copy(status = PaymentStatus.FAILED, timestamp = sentAt)
+        whenever(sparkService.listPayments()).thenReturn(listOf(failure))
+        restartedEvents.emit(SdkEvent.PaymentFailed(failure))
+        advanceUntilIdle()
+
+        assertTrue(events.any { it is Event.PaymentFailed }, "the retry's own failure stayed held after the restart")
+    }
+
+    /**
+     * Sends a retry whose outcome stays unknown, or that Spark [taken] and still runs, with Spark listing
+     * [listedBeforeSend] before it goes out (null while it never synced, so it can't list), then delivers [failure];
+     * true when the retry stays held.
+     */
+    private suspend fun TestScope.retryHeldAfter(
+        listedBeforeSend: List<Payment>?,
+        failure: Payment,
+        taken: Payment? = null,
+    ): Boolean {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { taken ?: throw SdkException.Generic("timeout") }
         // Spark that never synced can't list every earlier attempt.
         if (listedBeforeSend == null) {
             whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncError = SyncError.Network("down")))
@@ -3785,7 +3833,8 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.getInfo()).thenReturn(
             info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"), lastSyncedAt = 1uL)
         )
-        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        val result = sut.payInvoice("lnbc1", 100uL)
+        if (taken == null) assertIs<PaymentPendingException>(result.exceptionOrNull()) else result.getOrThrow()
         runCurrent()
 
         whenever(sparkService.listPayments()).thenReturn(listOf(failure))
