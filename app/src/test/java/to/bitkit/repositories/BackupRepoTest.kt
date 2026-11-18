@@ -553,11 +553,41 @@ class BackupRepoTest : BaseUnitTest() {
             )
         )
         // A merge already ran in this session, before another device stored newer exit data.
-        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(true)
+        mergeFlagFollowsDiscard(hasMerged = true)
         whenever(sparkRepo.importStagedExitState()).thenReturn(StagedExitImport.Rejected("v9", "regtest"))
         whenever(sparkRepo.exitBackup()).thenReturn(
             Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
         )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(sparkRepo).mergeRemoteExitBackup(newer)
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+    }
+
+    @Test
+    fun `a rejected staged copy dropped before a failed merge still merges on the next upload`() = test {
+        val newer = SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "other device")
+        val stored = VssItem(
+            key = BackupCategory.SPARK_EXIT.name,
+            value = json.encodeToString(newer).toByteArray(),
+            version = 2
+        )
+        mergeFlagFollowsDiscard(hasMerged = true)
+        whenever(sparkRepo.importStagedExitState())
+            .thenReturn(StagedExitImport.Rejected("v9", "regtest"), StagedExitImport.NothingStaged)
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+        // The copy is set aside and dropped, then the read for the merge fails.
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(stored),
+            Result.failure(IllegalStateException("offline")),
+            Result.success(stored),
+        )
+        assertTrue(sut.triggerBackup(BackupCategory.SPARK_EXIT).isFailure)
 
         sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
 
@@ -3863,4 +3893,14 @@ class BackupRepoTest : BaseUnitTest() {
         isTrackingEnabled = true,
         setupState = WatchOnlyAccountSetupState.Authorizing,
     )
+
+    private fun mergeFlagFollowsDiscard(hasMerged: Boolean) {
+        var merged = hasMerged
+        whenever(sparkRepo.hasMergedRemoteExitState).thenAnswer { merged }
+        whenever(sparkRepo.discardStagedExitState(any())).thenAnswer { merged = false }
+        whenever { sparkRepo.mergeRemoteExitBackup(anyOrNull()) }.thenAnswer {
+            merged = true
+            Result.success(Unit)
+        }
+    }
 }

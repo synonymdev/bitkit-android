@@ -589,8 +589,15 @@ class SparkRepo @Inject constructor(
                     runSuspendCatching { sparkService.send(prepared) }.also { result ->
                         hasReturned = true
                         // Taken before the in-flight attempt is dropped, so an earlier failure never finds neither.
+                        val attempt = SendAttempt(sentAt.toULong(), earlierIds)
                         if (result.getOrNull()?.status == PaymentStatus.PENDING) {
-                            takenAttempts[paymentHash.lowercase()] = SendAttempt(sentAt.toULong(), earlierIds)
+                            takenAttempts[paymentHash.lowercase()] = attempt
+                        }
+                        // A send whose call failed may still have gone out, so it is in doubt before the in-flight
+                        // attempt is dropped.
+                        if (result.isFailure) {
+                            uncertainSends[paymentHash.lowercase()] =
+                                UncertainSend(clock.now().epochSeconds.toULong(), expiresAt, attempt)
                         }
                     }
                 }
@@ -609,6 +616,7 @@ class SparkRepo @Inject constructor(
             val payment = sent.getOrElse {
                 // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
                 if (it.isInvoiceExpired()) {
+                    uncertainSends.remove(paymentHash.lowercase())
                     cacheStore.removeSparkUncertainSend(paymentHash)
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw SparkError.InvoiceExpired(it)
@@ -616,6 +624,7 @@ class SparkRepo @Inject constructor(
                 // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                 // nothing, for instance when an earlier send spent it after the balance was read.
                 if (it is SdkException.InsufficientFunds) {
+                    uncertainSends.remove(paymentHash.lowercase())
                     cacheStore.removeSparkUncertainSend(paymentHash)
                     cacheStore.removeSparkSendHash(paymentHash)
                     throw SparkError.SendRefused("Spark balance can't cover the payment", it)
@@ -764,13 +773,31 @@ class SparkRepo @Inject constructor(
             }
     }
 
-    /** Drops the attempts of sends Spark took whose invoice expired, as nothing of them can settle any more. */
+    /**
+     * Drops the attempts of sends Spark took whose invoice expired, once their row is written from Spark's list, as a
+     * failure the attempt held back may be the send's own. A send Spark still runs, or a list it can't read, keeps it.
+     */
     private suspend fun dropExpiredTakenAttempts() {
         val expiries = cacheStore.data.first().sparkSendExpiries
         val now = clock.now().epochSeconds
-        takenAttempts.keys.filter { (expiries[it] ?: Long.MAX_VALUE) <= now }.forEach {
-            takenAttempts.remove(it)
-            cacheStore.removeSparkUncertainSend(it)
+        takenAttempts.keys.filter { (expiries[it] ?: Long.MAX_VALUE) <= now }.forEach { hash ->
+            val (send, listed) = listedLightningSendPayment(hash)
+            when (send) {
+                SparkLightningSend.Unavailable -> return@forEach
+                SparkLightningSend.NotFound -> if (!failHeldRow(hash)) return@forEach
+                is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@forEach
+                is SparkLightningSend.Found -> Unit
+            }
+            takenAttempts.remove(hash) ?: return@forEach
+            cacheStore.removeSparkUncertainSend(hash)
+            if (listed?.status != PaymentStatus.COMPLETED) cacheStore.removeSparkSendHash(hash)
+            // Written once the attempt is gone, so it no longer holds the row back; a failed write is retried at the
+            // next refresh.
+            listed?.let { recordActivity(it) }
+            // The send's own outcome event may have been held back with the attempt, so the send screen learns it here.
+            val event = listed?.toNodeEvent()
+                ?: Event.PaymentFailed(hash, hash, PaymentFailureReason.UNEXPECTED_ERROR)
+            _nodeEvents.emit(event)
         }
     }
 
@@ -1296,8 +1323,12 @@ class SparkRepo @Inject constructor(
         )
     }
 
-    /** Drops restored exit data Spark rejected, once the backup set a copy of it aside, unless newer data came. */
+    /**
+     * Drops restored exit data Spark rejected, once the backup set a copy of it aside, unless newer data came. The
+     * stored backup is merged again before the next upload, as that copy may be older than it.
+     */
     fun discardStagedExitState(exitState: String) {
+        hasMergedRemoteExitState = false
         val staged = File(Env.sparkExitRestorePath(walletIndex))
         if (staged.exists() && staged.readText() == exitState) staged.delete()
     }
@@ -1343,6 +1374,8 @@ class SparkRepo @Inject constructor(
         val info = sparkService.getInfo()
         info.lastSyncError?.let { Logger.warn("Failed to sync Spark, balances may be stale: '$it'", context = TAG) }
         val unclaimed = sparkService.listUnclaimedDeposits()
+        // Read before the list, so a retry recorded after it keeps its row from a failure the list still shows.
+        val records = sendRecords.get()
         val payments = sparkService.listPayments()
         val claimedPayments = payments
             .filter { it.method == PaymentMethod.DEPOSIT && it.status == PaymentStatus.COMPLETED }
@@ -1395,7 +1428,7 @@ class SparkRepo @Inject constructor(
         markClaimedDeposits(claimed)
         payments
             .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
-            .forEach { recordActivity(it) }
+            .forEach { recordActivity(it, records = records) }
         // Off the refresh, so a slow Electrum server never holds a send that waits for it.
         scope.launch { confirmMinedPayouts(payments) }
         markTransfers(payments)
@@ -1807,7 +1840,7 @@ class SparkRepo @Inject constructor(
         val isSynced = canListPayments()
         val payments = sparkService.listPayments()
         if (isSynced) seedSendHashes(payments)
-        val isSaved = payments.map { recordActivity(it) }.all { it }
+        val isSaved = payments.map { recordActivity(it, records = recordsBefore) }.all { it }
         releaseFailedSends(payments, recordsBefore, inFlightBefore)
         if (!settleJournal || wasWithdrawing || isWithdrawing || withdrawalSendsEnded.get() != sendsEndedBefore) {
             return isSaved
@@ -1862,9 +1895,10 @@ class SparkRepo @Inject constructor(
         }
         // A send in flight, also one that ended while this list was read, or recorded after it was read while the
         // activities were recorded, may be missing from it or show only its earlier failed attempt, so it stays, as
-        // does one whose outcome Spark didn't report, also from before a restart.
+        // does one whose outcome Spark didn't report, also from before a restart, and one Spark took that keeps its
+        // attempt, until the expiry rule writes its row.
         val live = sendHashes(PaymentStatus.PENDING) + sendsInFlight.keys + inFlightBefore +
-            recordedSince(recordsBefore) + uncertainSendHashes()
+            recordedSince(recordsBefore) + uncertainSendHashes() + takenAttempts.keys
         val paid = sendHashes(PaymentStatus.COMPLETED) - live
         cacheStore.trimSparkSendHashes(
             paid = paid,
@@ -1882,7 +1916,7 @@ class SparkRepo @Inject constructor(
         val inFlightBeforeCurrent = sendsInFlight.keys.toSet()
         val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return
         val liveCurrent = sendsInFlight.keys + inFlightBeforeCurrent + recordedSince(recordsBeforeCurrent) +
-            uncertainSendHashes()
+            uncertainSendHashes() + takenAttempts.keys
         failed
             .filter { it.lowercase() !in liveCurrent }
             .filter { current.latestSend(it)?.status == PaymentStatus.FAILED }

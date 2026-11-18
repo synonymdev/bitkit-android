@@ -722,9 +722,8 @@ class BackupRepo @Inject constructor(
             setAsideRejectedExitBackup(rejectedStagedExitCopy(staged))
             sparkRepo.discardStagedExitState(staged.exitState)
         }
-        // A rejected staged copy may be older than the stored backup, which another device can have replaced, so the
-        // stored one is merged before anything replaces it.
-        if (!sparkRepo.hasMergedRemoteExitState || staged is StagedExitImport.Rejected) {
+        // Dropping a rejected staged copy asks for the stored backup to be merged again, until a merge succeeds.
+        if (!sparkRepo.hasMergedRemoteExitState) {
             sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
             mergeStoredExitBackup()
         }
