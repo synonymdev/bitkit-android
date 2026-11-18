@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PendingSweepBalance
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.dao.TransferDao
@@ -369,9 +370,11 @@ class TransferRepo @Inject constructor(
 
         // LDK only adds the sweep's output when more than dust is left after fees. A dust-only
         // sweep has no outputs, every broadcast fails with `bad-txns-vout-empty` and the sweep never
-        // resolves, so settle the transfer: those sats can't be claimed.
+        // resolves, so settle the transfer: those sats can't be claimed. A sweep the wallet already holds is real,
+        // whatever the change type is now, so it waits for its activity instead.
         val changeType = settingsStore.data.first().selectedAddressType.toAddressType() ?: DEFAULT_ADDRESS_TYPE
-        if (isUnsweepable(channelId, pendingSweeps.orEmpty(), changeType)) {
+        val walletHasSweep = sweepTxid != null && walletHasTransaction(sweepTxid)
+        if (!walletHasSweep && isUnsweepable(channelId, pendingSweeps.orEmpty(), changeType)) {
             markSettled(transfer.id)
             Logger.info("Settled force close transfer '${transfer.id}' with an unsweepable sweep", context = TAG)
             return
@@ -379,6 +382,9 @@ class TransferRepo @Inject constructor(
 
         Logger.debug("Force close awaiting sweep detection for transfer: ${transfer.id}", context = TAG)
     }
+
+    private suspend fun walletHasTransaction(txid: String): Boolean = lightningRepo.listPaymentsOrNull().orEmpty()
+        .any { (it.kind as? PaymentKind.Onchain)?.txid.equals(txid, ignoreCase = true) }
 
     private suspend fun persistResolvedChannel(transfer: TransferEntity, channelId: String) {
         if (transfer.channelId == null) {

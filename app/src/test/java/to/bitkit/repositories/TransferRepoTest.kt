@@ -21,9 +21,14 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -1325,6 +1330,35 @@ class TransferRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE as dust when the wallet holds its sweep`() = test {
+        // Swept to native SegWit change, then the user switched to Taproot, whose dust limit the sweep misses.
+        val transfer = forceCloseTransfer(amountSats = 420L)
+        val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
+            channelId = ID_CHANNEL,
+            latestBroadcastHeight = 800000u,
+            latestSpendingTxid = "valid-sweep-txid",
+            amountSatoshis = 420u,
+        )
+        givenForceCloseSweeps(transfer, listOf(pendingSweep))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedAddressType = "taproot")))
+        val sweepPayment = PaymentDetails(
+            id = "valid-sweep-txid",
+            kind = PaymentKind.Onchain(txid = "valid-sweep-txid", status = ConfirmationStatus.Unconfirmed),
+            amountMsat = 309_000uL,
+            feePaidMsat = null,
+            direction = PaymentDirection.INBOUND,
+            status = PaymentStatus.PENDING,
+            latestUpdateTimestamp = 0uL,
+        )
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(sweepPayment))
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
     }
 
     @Test
