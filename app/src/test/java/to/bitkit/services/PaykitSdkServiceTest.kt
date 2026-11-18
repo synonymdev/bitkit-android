@@ -1101,7 +1101,7 @@ class PaykitSdkServiceTest {
         whenever(sdk.publishPaykitApp(any(), any())).doSuspendableAnswer {
             events += "registration"
             finishRegistration.await()
-            mock<PaykitApp>()
+            mock<PaykitAppRegistry>()
         }
         whenever(sdk.listAllowances(any())).thenAnswer {
             events += "allowances"
@@ -1128,12 +1128,14 @@ class PaykitSdkServiceTest {
             service.publishPaykitProfile(mock<PaykitProfile>(), RING_PUBKY)
         }
         runCurrent()
-        assertTrue(events.isEmpty())
+        val beforeRelease = events.toList()
         release.complete(Unit)
         runCurrent()
-        assertEquals(listOf("active completed", "profile", "registration"), events)
+        val duringRegistration = events.toList()
         finishRegistration.complete(Unit)
         awaitAll(active, registration, allowances, setup, save)
+        assertTrue(beforeRelease.isEmpty())
+        assertEquals(listOf("active completed", "profile", "registration"), duringRegistration)
         assertTrue(setup.await())
         assertEquals(listOf("active completed", "profile", "registration", "tags", "allowances"), events)
     }
