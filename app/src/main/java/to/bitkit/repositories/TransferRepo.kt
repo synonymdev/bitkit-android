@@ -27,6 +27,7 @@ import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
+import to.bitkit.models.safe
 import to.bitkit.services.CoreService
 import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
@@ -364,11 +365,12 @@ class TransferRepo @Inject constructor(
         // LDK only adds the sweep's output when more than dust is left after fees. A dust-only
         // sweep has no outputs, every broadcast fails with `bad-txns-vout-empty` and the sweep never
         // resolves, so settle the transfer: those sats can't be claimed.
-        val channelSweepSats = pendingSweeps.orEmpty().filter { it.channelId() == channelId }.sumOf { it.amountSats() }
+        val channelSweepSats = pendingSweeps.orEmpty().filter { it.channelId() == channelId }
+            .fold(0uL) { total, sweep -> total.safe() + sweep.amountSats().safe() }
         if (channelSweepSats <= MAX_UNSWEEPABLE_SATS) {
             markSettled(transfer.id)
             Logger.info(
-                "Force close sweep of $channelSweepSats sats is dust, settled transfer: ${transfer.id}",
+                "Settled force close transfer '${transfer.id}' with an unsweepable '$channelSweepSats' sat sweep",
                 context = TAG,
             )
             return
