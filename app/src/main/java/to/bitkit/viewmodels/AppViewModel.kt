@@ -113,6 +113,7 @@ import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.channelId
@@ -2693,7 +2694,7 @@ class AppViewModel @Inject constructor(
             }.getOrNull()
             channelBalance = closedChannels
                 ?.firstOrNull { it.channelId == channelId }
-                ?.channelValueSats ?: 0uL
+                ?.amountOnClose ?: 0uL
         }
 
         if (channelBalance > 0uL) {

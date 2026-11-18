@@ -21,6 +21,7 @@ import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
@@ -360,6 +361,19 @@ class TransferRepo @Inject constructor(
             return
         }
 
+        // LDK only adds the sweep's output when more than dust is left after fees. A dust-only
+        // sweep has no outputs, every broadcast fails with `bad-txns-vout-empty` and the sweep never
+        // resolves, so settle the transfer: those sats can't be claimed.
+        val channelSweepSats = pendingSweeps.orEmpty().filter { it.channelId() == channelId }.sumOf { it.amountSats() }
+        if (channelSweepSats <= MAX_UNSWEEPABLE_SATS) {
+            markSettled(transfer.id)
+            Logger.info(
+                "Force close sweep of $channelSweepSats sats is dust, settled transfer: ${transfer.id}",
+                context = TAG,
+            )
+            return
+        }
+
         Logger.debug("Force close awaiting sweep detection for transfer: ${transfer.id}", context = TAG)
     }
 
@@ -426,6 +440,14 @@ class TransferRepo @Inject constructor(
 
     companion object {
         private const val TAG = "TransferRepo"
+
+        /**
+         * Largest sweep treated as dust. One sweep input plus a P2TR output weighs up to about 530 WU, so at
+         * ldk-node's 1000 sat/kW fallback rate for sweeps the fee is about 530 sats; add the P2TR dust limit of
+         * 330 sats and round up. A sweepable output under it settles early and later shows as an on-chain
+         * receive. Keep in step with iOS `TransferService.maxUnsweepableSats`.
+         */
+        internal const val MAX_UNSWEEPABLE_SATS = 1_000uL
     }
 }
 

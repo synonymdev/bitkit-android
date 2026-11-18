@@ -1300,6 +1300,67 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncTransferStates settles FORCE_CLOSE when its sweep is dust`() = test {
+        val settledAt = setupClockNowMock()
+        // Stored with the channel capacity, as transfers created before the amount fix were.
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
+            channelId = ID_CHANNEL,
+            latestBroadcastHeight = 800000u,
+            latestSpendingTxid = "rejected-sweep-txid",
+            amountSatoshis = 388u,
+        )
+        givenForceCloseSweeps(transfer, listOf(pendingSweep))
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE when its sweeps add up to more than dust`() = test {
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        val sweeps = listOf(
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 600u),
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 401u),
+            PendingSweepBalance.PendingBroadcast(channelId = "other-channel", amountSatoshis = 1u),
+        )
+        givenForceCloseSweeps(transfer, sweeps)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    private fun forceCloseTransfer(amountSats: Long) = TransferEntity(
+        id = ID_TRANSFER,
+        type = TransferType.FORCE_CLOSE,
+        amountSats = amountSats,
+        channelId = ID_CHANNEL,
+        isSettled = false,
+        createdAt = 1000L,
+    )
+
+    private suspend fun givenForceCloseSweeps(transfer: TransferEntity, sweeps: List<PendingSweepBalance>) {
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 0u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = sweeps,
+        )
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
+        whenever(activityService.hasOnchainActivityForTxid(any())).thenReturn(false)
+    }
+
+    @Test
     fun `syncTransferStates settles FORCE_CLOSE via batched sweep txid`() = test {
         val settledAt = setupClockNowMock()
         val sweepTxid = "batched-sweep-txid"
