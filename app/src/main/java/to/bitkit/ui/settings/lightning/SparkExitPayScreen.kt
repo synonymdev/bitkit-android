@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
@@ -33,6 +34,26 @@ import to.bitkit.ui.utils.withAccentBoldBright
  * The emergency fees paid from another wallet to the funding address: the force transfer starts on its own once a
  * payment that covers them arrives here; fees already there wait for a tap on Continue.
  */
+/**
+ * Watches the funding address while Pay to confirm shows and starts the exit once the funding is covered. The watch
+ * restarts on each resume: a cancelled back swipe composes Funding underneath, which stops it.
+ */
+@Composable
+internal fun SparkExitPayEffects(viewModel: SparkExitViewModel, onAutoStart: () -> Unit) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(Unit) {
+        viewModel.watchFundingAddress()
+        onPauseOrDispose {}
+    }
+    DisposableEffect(Unit) { onDispose { viewModel.stopWatchingFundingAddress() } }
+    // Starts once per visit when the funding is covered; a failed start shows its error and waits for Try again.
+    LaunchedEffect(uiState.canAutoStartFunding) {
+        if (!uiState.canAutoStartFunding) return@LaunchedEffect
+        onAutoStart()
+        viewModel.startOnPayment()
+    }
+}
+
 @Composable
 fun SparkExitPayScreen(
     viewModel: SparkExitViewModel,
@@ -43,14 +64,7 @@ fun SparkExitPayScreen(
     SparkExitStartedEffect(viewModel, onStart)
     // Asked as the exit starts: the notifications are how a stalled background run reaches the user.
     val requestNotifications = rememberSubscriptionNotificationsRequest()
-    LaunchedEffect(Unit) { viewModel.watchFundingAddress() }
-    DisposableEffect(Unit) { onDispose { viewModel.stopWatchingFundingAddress() } }
-    // Starts once per visit when the funding is covered; a failed start shows its error and waits for Try again.
-    LaunchedEffect(uiState.canAutoStartFunding) {
-        if (!uiState.canAutoStartFunding) return@LaunchedEffect
-        requestNotifications()
-        viewModel.startOnPayment()
-    }
+    SparkExitPayEffects(viewModel, onAutoStart = requestNotifications)
     Content(
         uiState = uiState,
         onStart = {
