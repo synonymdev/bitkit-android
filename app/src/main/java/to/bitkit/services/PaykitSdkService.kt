@@ -470,14 +470,18 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun hasPrivatePaymentAccess(): Boolean = hasPrivatePaymentAccess(Priority.Ordered)
+    // Setup must determine capability even during payment review, but can yield its queue position.
+    suspend fun hasPrivatePaymentAccess(): Boolean = readPrivatePaymentAccess(Priority.Background) {}
 
-    internal suspend fun hasPrivatePaymentAccess(priority: Priority): Boolean {
+    internal suspend fun hasPrivatePaymentAccess(priority: Priority): Boolean =
+        readPrivatePaymentAccess(priority) { checkRefreshAdmission(priority) }
+
+    private suspend fun readPrivatePaymentAccess(priority: Priority, checkAdmission: () -> Unit): Boolean {
         isSetup.await()
         return operationLock.withLock(priority) {
-            checkRefreshAdmission(priority)
+            checkAdmission()
             withPaykitKey {
-                checkRefreshAdmission(priority)
+                checkAdmission()
                 completeSdkCall { it.identityStatus() }?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
             }
         }
@@ -635,7 +639,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun publishPaykitProfile(profile: PaykitProfile, expectedIdentity: String): PaykitProfileRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Interactive) {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
                 requireProfileIdentity(publicKey, expectedIdentity)
@@ -692,7 +696,7 @@ class PaykitSdkService @Inject constructor(
         expectedIdentity: String,
     ): PubkyProfileSnapshot {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Interactive) {
             requireProfileIdentity(currentIdentity(), expectedIdentity)
             completeSdkCall { handle().publishPubkyProfile(update, expectedRevision) }
         }
@@ -1439,7 +1443,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun listAllowances(filter: AllowanceFilter): List<AllowanceRecord> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Background) {
             withPaykitKey { completeSdkCall { it.listAllowances(filter) } }
         }
     }

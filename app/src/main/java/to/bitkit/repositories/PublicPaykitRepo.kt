@@ -300,7 +300,7 @@ class PublicPaykitRepo @Inject constructor(
             val refresh = EndpointRefresh(signIn, lastAcknowledgedPublication.get())
             val desired = buildWalletEndpoints(signIn.publicKey, canPublish, refresh = true)
             if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
-            syncPaykitApp(canSync = { isAutomaticPublicationAllowed(canPublish) }).getOrThrow()
+            syncPaykitApp(priority = appSyncPriority) { isAutomaticPublicationAllowed(canPublish) }.getOrThrow()
             applyPublishedEndpoints(
                 desired,
                 beforePublish = { markPublicationPending(canPublish) },
@@ -339,7 +339,9 @@ class PublicPaykitRepo @Inject constructor(
                 lightningRefresh = requestedRefresh,
             )
             if (!isAutomaticPublicationAllowed(ownsPublication)) return@runSuspendCatching
-            syncPaykitApp(canSync = { isAutomaticPublicationAllowed(ownsPublication) }).getOrThrow()
+            syncPaykitApp(priority = Priority.Background) {
+                isAutomaticPublicationAllowed(ownsPublication)
+            }.getOrThrow()
             val published = applyPublishedEndpoints(
                 desired,
                 beforePublish = { markPublicationPending(ownsPublication) },
