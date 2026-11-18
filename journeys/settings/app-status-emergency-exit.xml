@@ -1,7 +1,7 @@
 <journey name="app status emergency exit">
   <description>
     While a Spark force transfer (emergency exit) is active, App Status shows an "Emergency Exit" row under Lightning Connection.
-    It reads "Fee funding needed" while the exit asks for fee funding and "In progress" otherwise, including
+    It reads "Emergency fees needed" while the exit asks for fee funding and "In progress" otherwise, including
     while a payment that covers the funding waits to confirm. The row opens the exit's progress screen, and
     leaving that screen returns to App Status. With no active exit the row is absent. An exit paid from savings cannot be
     cancelled and runs for days, so the row's removal once an exit ends is covered by unit tests, not here. An exit takes Spark off the Lightning rail, so with no usable channel

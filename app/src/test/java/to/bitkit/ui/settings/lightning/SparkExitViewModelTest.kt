@@ -217,6 +217,38 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a tap on pay to confirm spends the visit's start, so a later payment waits for a tap`() = test {
+        whenever(repo.loadQuote()).thenReturn(Result.success(SparkExitQuote(SparkExitFixtures.prepared())))
+        whenever(repo.refreshFundingAddress()).thenReturn(Result.success(20_000uL))
+        whenever(repo.start(any())).thenReturn(Result.failure(IllegalStateException("Start failed")))
+        exitState.value = SparkExitState(fundingSeenSats = 20_000uL, fundingSeenCount = 1)
+        val sut = SparkExitViewModel(mock<Context>(), repo, sparkRepo)
+        sut.loadQuote()
+        sut.watchFundingAddress()
+
+        sut.startFromPay()
+        // Another payment after the failed start.
+        exitState.value = SparkExitState(fundingSeenSats = 30_000uL, fundingSeenCount = 2)
+
+        assertFalse(sut.uiState.value.canAutoStartFunding)
+        assertTrue(sut.uiState.value.canTapStartFunding)
+        verify(repo, times(1)).start(any())
+        sut.stopWatchingFundingAddress()
+    }
+
+    @Test
+    fun `pay to confirm never starts on its own while a start runs`() {
+        val covered = SparkExitUiState(
+            quote = SparkExitQuote(SparkExitFixtures.prepared()),
+            fundingSeenSats = 20_000uL,
+            fundingSeenCount = 2,
+            payEntrySeenCount = 1,
+        )
+        assertTrue(covered.canAutoStartFunding)
+        assertFalse(covered.copy(isStarting = true).canAutoStartFunding)
+    }
+
+    @Test
     fun `progress hints at rising fees and offers a higher fee savings can pay for`() {
         val running = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
             .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)

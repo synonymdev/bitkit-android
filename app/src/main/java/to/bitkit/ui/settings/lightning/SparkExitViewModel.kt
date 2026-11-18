@@ -194,6 +194,12 @@ class SparkExitViewModel @Inject constructor(
         start()
     }
 
+    /** Starts from Pay to confirm's button, which spends the visit's one start: a later payment waits for a tap too. */
+    fun startFromPay() {
+        _uiState.update { it.copy(hasPayAutoStarted = true) }
+        start()
+    }
+
     fun start() {
         if (_uiState.value.isStarting) return
         viewModelScope.launch {
@@ -436,7 +442,7 @@ data class SparkExitUiState(
      * already there when it opened waits for a tap, so nothing starts unseen.
      */
     val canAutoStartFunding: Boolean
-        get() = canContinueFunding && !hasPayAutoStarted &&
+        get() = canContinueFunding && !isStarting && !hasPayAutoStarted &&
             payEntrySeenCount?.let { fundingSeenCount > it } == true
 
     /** Pay to confirm offers its button: covered funding that waits for a tap, or a start that failed. */

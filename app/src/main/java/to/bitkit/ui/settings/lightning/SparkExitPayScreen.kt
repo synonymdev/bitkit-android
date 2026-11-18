@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -54,7 +55,7 @@ fun SparkExitPayScreen(
         uiState = uiState,
         onStart = {
             requestNotifications()
-            viewModel.start()
+            viewModel.startFromPay()
         },
         onBack = onBack,
     )
@@ -66,11 +67,13 @@ private fun Content(
     onStart: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
+    // A start in flight finishes here, so nothing leaves the screen until it ends.
+    BackHandler(enabled = uiState.isStarting) {}
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
+            onBackClick = onBack.takeUnless { uiState.isStarting },
+            actions = { if (!uiState.isStarting) DrawerNavIcon() },
         )
         Column(
             modifier = Modifier
@@ -111,6 +114,7 @@ private fun Content(
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
                 onClick = onBack,
+                enabled = !uiState.isStarting,
                 testTag = "SparkExitPayCancel",
             )
             VerticalSpacer(16.dp)
