@@ -1089,6 +1089,7 @@ class PaykitSdkServiceTest {
     fun `profile and tag writes overtake queued registration and allowance reads`() = runTest {
         val sdk = mock<PaykitSdk>()
         val release = CompletableDeferred<Unit>()
+        val finishRegistration = CompletableDeferred<Unit>()
         val events = mutableListOf<String>()
         whenever(sdk.contactRecords()).doSuspendableAnswer {
             release.await()
@@ -1097,8 +1098,9 @@ class PaykitSdkServiceTest {
         }
         whenever(sdk.identityStatus())
             .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
-        whenever(sdk.publishPaykitApp(any(), any())).thenAnswer {
+        whenever(sdk.publishPaykitApp(any(), any())).doSuspendableAnswer {
             events += "registration"
+            finishRegistration.await()
             mock<PaykitApp>()
         }
         whenever(sdk.listAllowances(any())).thenAnswer {
@@ -1119,13 +1121,21 @@ class PaykitSdkServiceTest {
         runCurrent()
         val registration = async { service.syncPaykitApp(true, Priority.Background) }
         val allowances = async { service.listAllowances(AllowanceFilter(null, null, emptyList())) }
-        val profile = async { service.publishPubkyProfile(mock<PubkyProfileUpdate>(), "revision", RING_PUBKY) }
-        val tags = async { service.publishPaykitProfile(mock<PaykitProfile>(), RING_PUBKY) }
+        service.setPaymentSubmissionActive(true)
+        val setup = async { service.hasPrivatePaymentAccessForSetup() }
+        val save = async {
+            service.publishPubkyProfile(mock<PubkyProfileUpdate>(), "revision", RING_PUBKY)
+            service.publishPaykitProfile(mock<PaykitProfile>(), RING_PUBKY)
+        }
         runCurrent()
         assertTrue(events.isEmpty())
         release.complete(Unit)
-        awaitAll(active, registration, allowances, profile, tags)
-        assertEquals(listOf("active completed", "profile", "tags", "registration", "allowances"), events)
+        runCurrent()
+        assertEquals(listOf("active completed", "profile", "registration"), events)
+        finishRegistration.complete(Unit)
+        awaitAll(active, registration, allowances, setup, save)
+        assertTrue(setup.await())
+        assertEquals(listOf("active completed", "profile", "registration", "tags", "allowances"), events)
     }
 
     @Test

@@ -110,7 +110,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
         contacts: List<String>,
         canSync: () -> Boolean,
     ): Result<Unit> = runSuspendCatching {
-        if (!privatePaykitRepo.hasPrivatePaymentAccess()) throw PrivatePaykitError.PrivateUnavailable
+        if (!privatePaykitRepo.hasPrivatePaymentAccessForSetup()) throw PrivatePaykitError.PrivateUnavailable
         publicPaykitRepo.syncPaykitApp(priority = Priority.Background, canSync = { canSync() }).getOrThrow()
         prepareCurrentSavedContacts(canSync).getOrThrow()
     }.onFailure {

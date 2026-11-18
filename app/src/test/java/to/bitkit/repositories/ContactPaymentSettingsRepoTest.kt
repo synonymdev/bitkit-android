@@ -61,6 +61,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("identity", 0L))
         whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
         whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(true)
+        whenever { privatePaykitRepo.hasPrivatePaymentAccessForSetup() }.thenReturn(true)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -518,7 +519,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
     @Test
     fun `enableForNewProfile still enables public payments when private payments are unavailable`() = test {
-        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(false)
+        whenever { privatePaykitRepo.hasPrivatePaymentAccessForSetup() }.thenReturn(false)
 
         createSut().enableForNewProfile()
         runCurrent()

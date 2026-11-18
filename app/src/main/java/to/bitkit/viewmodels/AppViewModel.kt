@@ -2541,7 +2541,7 @@ class AppViewModel @Inject constructor(
             val current = settingsStore.data.first()
             isStillCurrent() && current.sharesPrivatePaykitEndpoints && !current.sharesPublicPaykitEndpoints
         }
-        publicPaykitRepo.syncPaykitApp(canSync = canSync)
+        publicPaykitRepo.syncPaykitApp(priority = Priority.Background, canSync = canSync)
             .onSuccess {
                 if (canSync()) {
                     privatePaykitAppRegistrationIdentity = identity

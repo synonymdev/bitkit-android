@@ -228,6 +228,8 @@ class PrivatePaykitRepo @Inject constructor(
 
     suspend fun hasPrivatePaymentAccess(): Boolean = paykitSdkService.hasPrivatePaymentAccess()
 
+    internal suspend fun hasPrivatePaymentAccessForSetup(): Boolean = paykitSdkService.hasPrivatePaymentAccessForSetup()
+
     suspend fun prepareSavedContacts(
         publicKeys: Collection<String>,
         requireImmediatePublication: Boolean = false,
