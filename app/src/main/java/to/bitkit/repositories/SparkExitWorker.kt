@@ -304,7 +304,6 @@ class SparkExitWork @Inject constructor(
         return SparkExitBackgroundLimits(
             isRestricted = battery.isBackgroundRestricted == true,
             isPowerSaveMode = battery.isPowerSaveMode == true,
-            isOptimized = battery.isIgnoringBatteryOptimizations == false,
             areNotificationsEnabled = context.areNotificationsEnabled(),
         )
     }
@@ -344,8 +343,6 @@ data class SparkExitBackgroundLimits(
     /** The user restricted Bitkit's background use: no work or alarm runs while it is closed. */
     val isRestricted: Boolean = false,
     val isPowerSaveMode: Boolean = false,
-    /** Battery optimization is on, Android's default, so background runs wait for Doze's windows. */
-    val isOptimized: Boolean = false,
     val areNotificationsEnabled: Boolean = true,
 )
 

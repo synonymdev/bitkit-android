@@ -267,9 +267,7 @@
     <string name="lightning__spark_exit__fees_title">Comisiones de\n&lt;accent&gt;emergencia&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Las comisiones sin usar volverán a tus ahorros</string>
     <string name="lightning__spark_exit__fund_insufficient">Tus ahorros no alcanzan para las comisiones de emergencia.</string>
-    <string name="lightning__spark_exit__fund_paid">Pagado desde ahorros, esperando confirmación.</string>
     <string name="lightning__spark_exit__fund_partial">{received} de {required} recibidos, envía {missing} más.</string>
-    <string name="lightning__spark_exit__fund_pending">Pago detectado, esperando confirmación.</string>
     <string name="lightning__spark_exit__fund_savings">Pagar desde ahorros</string>
     <string name="lightning__spark_exit__intro_text">¿Quieres transferir a la fuerza tu saldo de gastos a tus ahorros? &lt;accent&gt;Tus fondos pueden no estar disponibles hasta por 4 semanas.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Transferencia&lt;/accent&gt;\nforzada</string>
@@ -285,7 +283,6 @@
     <string name="lightning__spark_exit__needs_funding_text">La transferencia forzada necesita &lt;accent&gt;{amount}&lt;/accent&gt; más para pagar sus comisiones. Págalo para continuar.</string>
     <string name="lightning__spark_exit__needs_funding_title">Se necesitan\n&lt;accent&gt;más comisiones&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">La transferencia forzada no avanza: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">La optimización de batería de Android puede retrasar la transferencia forzada con Bitkit cerrado. Bitkit te avisa si se retrasa.</string>
     <string name="lightning__spark_exit__note_battery_saver">El ahorro de batería está activado, así que Android puede frenar la transferencia forzada con Bitkit cerrado.</string>
     <string name="lightning__spark_exit__note_notifications">Las notificaciones están desactivadas, así que Bitkit no puede avisarte si la transferencia forzada te necesita. Sin ellas, abre Bitkit cada pocas horas hasta que termine la transferencia.</string>
     <string name="lightning__spark_exit__note_notifications_button">Activar notificaciones</string>
@@ -301,7 +298,6 @@
     <string name="lightning__spark_exit__notification_rejected">Algunas transacciones de tu transferencia forzada fueron rechazadas. Abre Bitkit antes de {time} para ver por qué.</string>
     <string name="lightning__spark_exit__notification_restricted">Android impide que Bitkit se ejecute en segundo plano. Abre Bitkit antes de {time} para mantener al día tu transferencia forzada.</string>
     <string name="lightning__spark_exit__notification_title">Transferencia forzada</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} en Spark no forma parte de esta transferencia y se queda en Spark.</string>
     <string name="lightning__spark_exit__overview">Resumen</string>
     <string name="lightning__spark_exit__partial_text">{count} montos pequeños se quedaron en Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Monto a pagar</string>
@@ -313,7 +309,6 @@
     <string name="lightning__spark_exit__progress_title">Transferencia\n&lt;accent&gt;en curso&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">No se pudieron obtener los costos de la transferencia. Intenta de nuevo.</string>
     <string name="lightning__spark_exit__quote_loading">Obteniendo los costos…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} de tu saldo de Spark no se puede transferir ahora: montos demasiado pequeños para pagar sus propias comisiones, o que aún se están moviendo dentro de Spark. Se queda en Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Esperando a que Spark termine de mover tu saldo. Esto puede tardar hasta 5 minutos.</string>
     <string name="lightning__spark_exit__quote_text">Inicia una transferencia forzada solo si tu saldo de gastos ya no funciona. &lt;accent&gt;Tus fondos pueden no estar disponibles hasta por 4 semanas.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Resumen de la\n&lt;accent&gt;transferencia&lt;/accent&gt;</string>

@@ -260,9 +260,7 @@
     <string name="lightning__spark_exit__fees_title">رسوم\n&lt;accent&gt;الطوارئ&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*أي رسوم غير مستخدمة تعود إلى مدخراتك</string>
     <string name="lightning__spark_exit__fund_insufficient">مدخراتك لا تكفي لتغطية رسوم الطوارئ.</string>
-    <string name="lightning__spark_exit__fund_paid">دُفع من المدخرات، بانتظار التأكيد.</string>
     <string name="lightning__spark_exit__fund_partial">تم استلام {received} من {required}، أرسل {missing} إضافية.</string>
-    <string name="lightning__spark_exit__fund_pending">تم رصد الدفعة، بانتظار التأكيد.</string>
     <string name="lightning__spark_exit__fund_savings">ادفع من المدخرات</string>
     <string name="lightning__spark_exit__intro_text">هل تريد تحويل رصيد الإنفاق إلى المدخرات تحويلًا قسريًا؟ &lt;accent&gt;قد لا تتوفر أموالك لمدة تصل إلى 4 أسابيع.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;تحويل&lt;/accent&gt;\nقسري</string>
@@ -278,7 +276,6 @@
     <string name="lightning__spark_exit__needs_funding_text">يحتاج التحويل القسري إلى &lt;accent&gt;{amount}&lt;/accent&gt; إضافية لدفع رسومه. ادفعها للمتابعة.</string>
     <string name="lightning__spark_exit__needs_funding_title">يلزم المزيد\n&lt;accent&gt;من الرسوم&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">التحويل القسري لا يتقدم: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">قد يؤخر تحسين البطارية في Android التحويل القسري أثناء إغلاق Bitkit. يُعلمك Bitkit إذا تأخر.</string>
     <string name="lightning__spark_exit__note_battery_saver">وضع توفير البطارية مفعّل، لذا قد يوقف Android التحويل القسري أثناء إغلاق Bitkit.</string>
     <string name="lightning__spark_exit__note_notifications">الإشعارات متوقفة، لذا لا يستطيع Bitkit إخبارك إذا احتاج التحويل القسري إليك. بدونها، افتح Bitkit كل بضع ساعات حتى ينتهي التحويل.</string>
     <string name="lightning__spark_exit__note_notifications_button">تفعيل الإشعارات</string>
@@ -294,7 +291,6 @@
     <string name="lightning__spark_exit__notification_rejected">رُفضت بعض معاملات التحويل القسري. افتح Bitkit قبل {time} لمعرفة السبب.</string>
     <string name="lightning__spark_exit__notification_restricted">يمنع Android تشغيل Bitkit في الخلفية. افتح Bitkit قبل {time} ليبقى التحويل القسري على المسار.</string>
     <string name="lightning__spark_exit__notification_title">تحويل قسري</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} على Spark ليس جزءًا من هذا التحويل ويبقى على Spark.</string>
     <string name="lightning__spark_exit__overview">نظرة عامة</string>
     <string name="lightning__spark_exit__partial_text">بقيت {count} مبالغ صغيرة على Spark.</string>
     <string name="lightning__spark_exit__pay_amount">المبلغ المطلوب دفعه</string>
@@ -306,7 +302,6 @@
     <string name="lightning__spark_exit__progress_title">التحويل\n&lt;accent&gt;قيد التنفيذ&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">تعذّر الحصول على تكاليف التحويل. حاول مرة أخرى.</string>
     <string name="lightning__spark_exit__quote_loading">جارٍ الحصول على التكاليف…</string>
-    <string name="lightning__spark_exit__quote_outside">لا يمكن تحويل {amount} من رصيدك على Spark الآن: مبالغ أصغر من أن تغطي رسومها، أو لا تزال تتحرك داخل Spark. يبقى على Spark.</string>
     <string name="lightning__spark_exit__quote_settling">بانتظار أن ينتهي Spark من نقل رصيدك. قد يستغرق ذلك حتى 5 دقائق.</string>
     <string name="lightning__spark_exit__quote_text">ابدأ التحويل القسري فقط إذا لم يعد رصيد الإنفاق يعمل. &lt;accent&gt;قد لا تتوفر أموالك لمدة تصل إلى 4 أسابيع.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">نظرة عامة\n&lt;accent&gt;على التحويل&lt;/accent&gt;</string>

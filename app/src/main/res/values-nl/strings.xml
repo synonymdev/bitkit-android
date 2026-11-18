@@ -264,9 +264,7 @@
     <string name="lightning__spark_exit__fees_title">Nood-\n&lt;accent&gt;kosten&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Ongebruikte kosten gaan terug naar je spaargeld</string>
     <string name="lightning__spark_exit__fund_insufficient">Je spaargeld kan de noodkosten niet dekken.</string>
-    <string name="lightning__spark_exit__fund_paid">Betaald uit spaargeld, wachten op bevestiging.</string>
     <string name="lightning__spark_exit__fund_partial">{received} van {required} ontvangen, stuur nog {missing}.</string>
-    <string name="lightning__spark_exit__fund_pending">Betaling gezien, wachten op bevestiging.</string>
     <string name="lightning__spark_exit__fund_savings">Betalen uit spaargeld</string>
     <string name="lightning__spark_exit__intro_text">Wil je je bestedingssaldo geforceerd overboeken naar spaargeld? &lt;accent&gt;Je geld is mogelijk tot 4 weken niet beschikbaar.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Geforceerde&lt;/accent&gt;\nOverboeking</string>
@@ -282,7 +280,6 @@
     <string name="lightning__spark_exit__needs_funding_text">De geforceerde overboeking heeft nog &lt;accent&gt;{amount}&lt;/accent&gt; nodig om de kosten te betalen. Betaal dit bedrag om door te gaan.</string>
     <string name="lightning__spark_exit__needs_funding_title">Meer kosten\n&lt;accent&gt;nodig&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">De geforceerde overboeking komt niet vooruit: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">De batterij-optimalisatie van Android kan de geforceerde overboeking vertragen terwijl Bitkit gesloten is. Bitkit laat het je weten als de overboeking achterloopt.</string>
     <string name="lightning__spark_exit__note_battery_saver">Batterijbesparing staat aan, dus Android kan de geforceerde overboeking tegenhouden terwijl Bitkit gesloten is.</string>
     <string name="lightning__spark_exit__note_notifications">Meldingen staan uit, dus Bitkit kan je niet laten weten als de geforceerde overboeking je nodig heeft. Open zonder meldingen Bitkit om de paar uur totdat de overboeking klaar is.</string>
     <string name="lightning__spark_exit__note_notifications_button">Meldingen inschakelen</string>
@@ -298,7 +295,6 @@
     <string name="lightning__spark_exit__notification_rejected">Sommige transacties van je geforceerde overboeking zijn geweigerd. Open Bitkit vóór {time} om te zien waarom.</string>
     <string name="lightning__spark_exit__notification_restricted">Android houdt Bitkit tegen op de achtergrond. Open Bitkit vóór {time} om je geforceerde overboeking op koers te houden.</string>
     <string name="lightning__spark_exit__notification_title">Geforceerde overboeking</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} op Spark hoort niet bij deze overboeking en blijft op Spark.</string>
     <string name="lightning__spark_exit__overview">Overzicht</string>
     <string name="lightning__spark_exit__partial_text">{count} kleine bedragen zijn op Spark gebleven.</string>
     <string name="lightning__spark_exit__pay_amount">Te betalen bedrag</string>
@@ -310,7 +306,6 @@
     <string name="lightning__spark_exit__progress_title">Overboeking\n&lt;accent&gt;bezig&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Kon de kosten van de overboeking niet ophalen. Probeer opnieuw.</string>
     <string name="lightning__spark_exit__quote_loading">Kosten ophalen…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} van je Spark-saldo kan nu niet worden overgeboekt: bedragen die te klein zijn om hun eigen kosten te betalen, of die nog binnen Spark bewegen. Het blijft op Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Wachten tot Spark klaar is met het verplaatsen van je saldo. Dit kan tot 5 minuten duren.</string>
     <string name="lightning__spark_exit__quote_text">Start alleen een geforceerde overboeking als je bestedingssaldo niet meer werkt. &lt;accent&gt;Je geld is mogelijk tot 4 weken niet beschikbaar.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Overboeking\n&lt;accent&gt;overzicht&lt;/accent&gt;</string>

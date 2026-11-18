@@ -260,9 +260,7 @@
     <string name="lightning__spark_exit__fees_title">Έκτακτα\n&lt;accent&gt;τέλη&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Τα αχρησιμοποίητα τέλη θα επιστραφούν στις αποταμιεύσεις σας</string>
     <string name="lightning__spark_exit__fund_insufficient">Οι αποταμιεύσεις σας δεν επαρκούν για τα έκτακτα τέλη.</string>
-    <string name="lightning__spark_exit__fund_paid">Πληρώθηκε από τις αποταμιεύσεις, αναμονή επιβεβαίωσης.</string>
     <string name="lightning__spark_exit__fund_partial">Λήφθηκαν {received} από {required}, στείλτε άλλα {missing}.</string>
-    <string name="lightning__spark_exit__fund_pending">Η πληρωμή εντοπίστηκε, αναμονή επιβεβαίωσης.</string>
     <string name="lightning__spark_exit__fund_savings">Πληρωμή από αποταμιεύσεις</string>
     <string name="lightning__spark_exit__intro_text">Θέλετε να μεταφέρετε αναγκαστικά το υπόλοιπο δαπανών σας στις αποταμιεύσεις; &lt;accent&gt;Τα κεφάλαιά σας μπορεί να μην είναι διαθέσιμα έως και 4 εβδομάδες.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Αναγκαστική&lt;/accent&gt;\nμεταφορά</string>
@@ -278,7 +276,6 @@
     <string name="lightning__spark_exit__needs_funding_text">Η αναγκαστική μεταφορά χρειάζεται άλλα &lt;accent&gt;{amount}&lt;/accent&gt; για να πληρώσει τα τέλη της. Πληρώστε τα για να συνεχίσει.</string>
     <string name="lightning__spark_exit__needs_funding_title">Απαιτούνται\n&lt;accent&gt;περισσότερα τέλη&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">Η αναγκαστική μεταφορά δεν προχωρά: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">Η βελτιστοποίηση μπαταρίας του Android μπορεί να καθυστερήσει την αναγκαστική μεταφορά όσο το Bitkit είναι κλειστό. Το Bitkit σας ειδοποιεί αν μείνει πίσω.</string>
     <string name="lightning__spark_exit__note_battery_saver">Η εξοικονόμηση μπαταρίας είναι ενεργή, οπότε το Android μπορεί να καθυστερήσει την αναγκαστική μεταφορά όσο το Bitkit είναι κλειστό.</string>
     <string name="lightning__spark_exit__note_notifications">Οι ειδοποιήσεις είναι απενεργοποιημένες, οπότε το Bitkit δεν μπορεί να σας ενημερώσει αν η αναγκαστική μεταφορά σας χρειάζεται. Χωρίς αυτές, ανοίγετε το Bitkit κάθε λίγες ώρες μέχρι να ολοκληρωθεί η μεταφορά.</string>
     <string name="lightning__spark_exit__note_notifications_button">Ενεργοποίηση ειδοποιήσεων</string>
@@ -294,7 +291,6 @@
     <string name="lightning__spark_exit__notification_rejected">Ορισμένες συναλλαγές της αναγκαστικής μεταφοράς σας απορρίφθηκαν. Ανοίξτε το Bitkit πριν από τις {time} για να δείτε γιατί.</string>
     <string name="lightning__spark_exit__notification_restricted">Το Android εμποδίζει το Bitkit να τρέχει στο παρασκήνιο. Ανοίξτε το Bitkit πριν από τις {time} για να συνεχίσει κανονικά η αναγκαστική μεταφορά σας.</string>
     <string name="lightning__spark_exit__notification_title">Αναγκαστική μεταφορά</string>
-    <string name="lightning__spark_exit__outside_exit">Τα {amount} στο Spark δεν αποτελούν μέρος αυτής της μεταφοράς και παραμένουν στο Spark.</string>
     <string name="lightning__spark_exit__overview">Επισκόπηση</string>
     <string name="lightning__spark_exit__partial_text">{count} μικρά ποσά έμειναν στο Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Ποσό πληρωμής</string>
@@ -306,7 +302,6 @@
     <string name="lightning__spark_exit__progress_title">Η μεταφορά\n&lt;accent&gt;βρίσκεται σε εξέλιξη&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Δεν ήταν δυνατή η λήψη του κόστους μεταφοράς. Δοκιμάστε ξανά.</string>
     <string name="lightning__spark_exit__quote_loading">Λήψη κόστους…</string>
-    <string name="lightning__spark_exit__quote_outside">Τα {amount} του υπολοίπου σας στο Spark δεν μπορούν να μεταφερθούν αυτή τη στιγμή: ποσά πολύ μικρά για να πληρώσουν τα δικά τους τέλη, ή που ακόμα μετακινούνται μέσα στο Spark. Παραμένουν στο Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Αναμονή για να ολοκληρώσει το Spark τη μετακίνηση του υπολοίπου σας. Αυτό μπορεί να διαρκέσει έως 5 λεπτά.</string>
     <string name="lightning__spark_exit__quote_text">Ξεκινήστε αναγκαστική μεταφορά μόνο αν το υπόλοιπο δαπανών σας δεν λειτουργεί πια. &lt;accent&gt;Τα κεφάλαιά σας μπορεί να μην είναι διαθέσιμα έως και 4 εβδομάδες.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Επισκόπηση\n&lt;accent&gt;μεταφοράς&lt;/accent&gt;</string>

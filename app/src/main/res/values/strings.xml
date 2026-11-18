@@ -462,9 +462,7 @@
     <string name="lightning__spark_exit__fees_title">Emergency\n&lt;accent&gt;fees&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Any unused fees will return to your savings</string>
     <string name="lightning__spark_exit__fund_insufficient">Your savings can\'t cover the emergency fees.</string>
-    <string name="lightning__spark_exit__fund_paid">Paid from savings, waiting for confirmation.</string>
     <string name="lightning__spark_exit__fund_partial">{received} of {required} received, send {missing} more.</string>
-    <string name="lightning__spark_exit__fund_pending">Payment seen, waiting for confirmation.</string>
     <string name="lightning__spark_exit__fund_savings">Pay from savings</string>
     <string name="lightning__spark_exit__intro_text">Do you want to force transfer your spending balance to savings? &lt;accent&gt;Your funds may be unavailable for up to 4 weeks.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Force&lt;/accent&gt;\nTransfer</string>
@@ -480,7 +478,6 @@
     <string name="lightning__spark_exit__needs_funding_text">The force transfer needs &lt;accent&gt;{amount}&lt;/accent&gt; more to pay its fees. Pay it to continue.</string>
     <string name="lightning__spark_exit__needs_funding_title">More fees\n&lt;accent&gt;needed&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">The force transfer is not moving: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">Android\'s battery optimization can delay the force transfer while Bitkit is closed. Bitkit notifies you if it falls behind.</string>
     <string name="lightning__spark_exit__note_battery_saver">Battery saver is on, so Android may hold back the force transfer while Bitkit is closed.</string>
     <string name="lightning__spark_exit__note_notifications">Notifications are off, so Bitkit can\'t tell you if the force transfer needs you. Without them, open Bitkit every few hours until the transfer finishes.</string>
     <string name="lightning__spark_exit__note_notifications_button">Turn on notifications</string>
@@ -496,7 +493,6 @@
     <string name="lightning__spark_exit__notification_rejected">Some of your force transfer\'s transactions were refused. Open Bitkit before {time} to see why.</string>
     <string name="lightning__spark_exit__notification_restricted">Android stops Bitkit from running in the background. Open Bitkit before {time} to keep your force transfer on track.</string>
     <string name="lightning__spark_exit__notification_title">Force transfer</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} on Spark is not part of this transfer and stays on Spark.</string>
     <string name="lightning__spark_exit__overview">Overview</string>
     <string name="lightning__spark_exit__partial_text">{count} small amounts stayed on Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Amount to pay</string>
@@ -508,7 +504,6 @@
     <string name="lightning__spark_exit__progress_title">Transfer\n&lt;accent&gt;in progress&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Could not get the transfer costs. Try again.</string>
     <string name="lightning__spark_exit__quote_loading">Getting the costs…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} of your Spark balance can\'t be transferred right now: amounts too small to pay their own fees, or still moving inside Spark. It stays on Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Waiting for Spark to finish moving your balance. This can take up to 5 minutes.</string>
     <string name="lightning__spark_exit__quote_text">Only start a force transfer if your spending balance is no longer working. &lt;accent&gt;Your funds may be unavailable for up to 4 weeks.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Transfer\n&lt;accent&gt;overview&lt;/accent&gt;</string>

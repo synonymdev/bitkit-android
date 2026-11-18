@@ -204,15 +204,6 @@ private fun Content(
 private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onPayHigherFee: () -> Unit) {
     SparkExitSteps(record = record)
     uiState.receivedSats?.let { ReturnedNote(receivedSats = it, feesSats = record.returnedFeeSats) }
-    uiState.sweepTxid?.let {
-        // With the cell's own 16 dp above its caption it sits as far below the steps as on iOS.
-        VerticalSpacer(9.dp)
-        SparkExitTxNote(
-            text = null,
-            txid = it,
-            testTag = "SparkExitSweepTxid",
-        )
-    }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
     if (uiState.isSavingsPaymentRefused) {
@@ -223,34 +214,20 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             modifier = Modifier.testTag("SparkExitSavingsRefused")
         )
     }
-    if (funding != null && address != null) {
+    if (funding is SparkExitFundingState.Ask && address != null) {
         VerticalSpacer(24.dp)
-        when (funding) {
-            is SparkExitFundingState.Ask -> {
-                SparkExitFeesRow(
-                    label = stringResource(R.string.lightning__spark_exit__pay_amount),
-                    sats = funding.sats,
-                    modifier = Modifier.testTag("SparkExitProgressFundingAmount")
-                )
-                VerticalSpacer(32.dp)
-                SparkExitFundingAddress(
-                    address = address,
-                    requiredSats = funding.sats,
-                    seenSats = 0uL,
-                    partial = funding.partial,
-                )
-            }
-            is SparkExitFundingState.Paid -> SparkExitTxNote(
-                text = stringResource(R.string.lightning__spark_exit__fund_paid),
-                txid = funding.txid,
-                testTag = "SparkExitFundingPaid",
-            )
-            is SparkExitFundingState.Seen -> SparkExitTxNote(
-                text = stringResource(R.string.lightning__spark_exit__fund_pending),
-                txid = funding.txid,
-                testTag = "SparkExitFundingSeen",
-            )
-        }
+        SparkExitFeesRow(
+            label = stringResource(R.string.lightning__spark_exit__pay_amount),
+            sats = funding.sats,
+            modifier = Modifier.testTag("SparkExitProgressFundingAmount")
+        )
+        VerticalSpacer(32.dp)
+        SparkExitFundingAddress(
+            address = address,
+            requiredSats = funding.sats,
+            seenSats = 0uL,
+            partial = funding.partial,
+        )
     }
     if (record.isRebuiltFromChain && record.isActive) {
         VerticalSpacer(16.dp)
@@ -301,14 +278,6 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             modifier = Modifier
                 .clickableAlpha(onClick = onPayHigherFee)
                 .testTag("SparkExitFeeRose")
-        )
-    }
-    uiState.outsideExitSats?.let {
-        VerticalSpacer(16.dp)
-        BodyS(
-            text = stringResource(R.string.lightning__spark_exit__outside_exit)
-                .replace("{amount}", sparkExitAmountAccent(it)).withAccentBoldBright(),
-            color = Colors.White64,
         )
     }
     if (record.lostSats > 0uL) {
@@ -405,9 +374,6 @@ private fun BackgroundNotes(limits: SparkExitBackgroundLimits) {
     val notes = listOfNotNull(
         R.string.lightning__spark_exit__note_restricted.takeIf { limits.isRestricted },
         R.string.lightning__spark_exit__note_battery_saver.takeIf { limits.isPowerSaveMode },
-        R.string.lightning__spark_exit__note_battery_optimized.takeIf {
-            limits.isOptimized && !limits.isRestricted && !limits.isPowerSaveMode
-        },
         R.string.lightning__spark_exit__note_notifications.takeIf { !limits.areNotificationsEnabled },
     )
     notes.forEach {
@@ -510,7 +476,7 @@ private fun Preview() {
                     claimableAtHeight = 2_100u,
                 ),
                 tipHeight = 1_900u,
-                backgroundLimits = SparkExitBackgroundLimits(isOptimized = true, areNotificationsEnabled = false),
+                backgroundLimits = SparkExitBackgroundLimits(areNotificationsEnabled = false),
             ),
         )
     }

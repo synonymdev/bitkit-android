@@ -267,9 +267,7 @@
     <string name="lightning__spark_exit__fees_title">Nouzové\n&lt;accent&gt;poplatky&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Nepoužité poplatky se vrátí do vašich úspor</string>
     <string name="lightning__spark_exit__fund_insufficient">Vaše úspory nepokryjí nouzové poplatky.</string>
-    <string name="lightning__spark_exit__fund_paid">Zaplaceno z úspor, čeká na potvrzení.</string>
     <string name="lightning__spark_exit__fund_partial">Přijato {received} z {required}, pošlete ještě {missing}.</string>
-    <string name="lightning__spark_exit__fund_pending">Platba zachycena, čeká na potvrzení.</string>
     <string name="lightning__spark_exit__fund_savings">Zaplatit z úspor</string>
     <string name="lightning__spark_exit__intro_text">Chcete vynutit převod svého výdajového zůstatku do úspor? &lt;accent&gt;Vaše prostředky mohou být nedostupné až 4 týdny.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Vynutit&lt;/accent&gt;\nPřevod</string>
@@ -285,7 +283,6 @@
     <string name="lightning__spark_exit__needs_funding_text">Vynucený převod potřebuje ještě &lt;accent&gt;{amount}&lt;/accent&gt; na zaplacení poplatků. Zaplaťte je a pokračujte.</string>
     <string name="lightning__spark_exit__needs_funding_title">Je potřeba\n&lt;accent&gt;více poplatků&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">Vynucený převod se nehýbe: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">Optimalizace baterie v Androidu může vynucený převod zpozdit, když je Bitkit zavřený. Bitkit vás upozorní, pokud se zpozdí.</string>
     <string name="lightning__spark_exit__note_battery_saver">Spořič baterie je zapnutý, takže Android může vynucený převod zdržet, když je Bitkit zavřený.</string>
     <string name="lightning__spark_exit__note_notifications">Oznámení jsou vypnutá, takže vás Bitkit nemůže upozornit, pokud vás vynucený převod potřebuje. Bez nich otevírejte Bitkit každých pár hodin, dokud se převod nedokončí.</string>
     <string name="lightning__spark_exit__note_notifications_button">Zapnout oznámení</string>
@@ -301,7 +298,6 @@
     <string name="lightning__spark_exit__notification_rejected">Některé transakce vašeho vynuceného převodu byly odmítnuty. Otevřete Bitkit před {time} a zjistěte proč.</string>
     <string name="lightning__spark_exit__notification_restricted">Android brání Bitkitu běžet na pozadí. Otevřete Bitkit před {time}, aby váš vynucený převod zůstal v chodu.</string>
     <string name="lightning__spark_exit__notification_title">Vynucený převod</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} na Spark není součástí tohoto převodu a zůstává na Spark.</string>
     <string name="lightning__spark_exit__overview">Přehled</string>
     <string name="lightning__spark_exit__partial_text">Malých částek, které zůstaly na Spark: {count}.</string>
     <string name="lightning__spark_exit__pay_amount">Částka k zaplacení</string>
@@ -313,7 +309,6 @@
     <string name="lightning__spark_exit__progress_title">Převod\n&lt;accent&gt;probíhá&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Náklady na převod se nepodařilo zjistit. Zkuste to znovu.</string>
     <string name="lightning__spark_exit__quote_loading">Zjišťuji náklady…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} z vašeho zůstatku Spark nelze nyní převést: částky příliš malé na zaplacení vlastních poplatků nebo ještě v pohybu uvnitř Spark. Zůstává na Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Čekáme, až Spark dokončí přesun vašeho zůstatku. Může to trvat až 5 minut.</string>
     <string name="lightning__spark_exit__quote_text">Vynucený převod zahajte, jen pokud váš výdajový zůstatek přestal fungovat. &lt;accent&gt;Vaše prostředky mohou být nedostupné až 4 týdny.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Přehled\n&lt;accent&gt;převodu&lt;/accent&gt;</string>

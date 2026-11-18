@@ -41,16 +41,11 @@ class SparkExitAlertsTest {
         assertEquals(SparkExitAlert.Funding, SparkExitAlerts.reason(awaiting, isOnline = false, unlimited))
         assertEquals(
             SparkExitAlert.Restricted,
-            SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isRestricted = true, isOptimized = true)),
+            SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isRestricted = true)),
         )
         assertEquals(
             SparkExitAlert.Battery,
             SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isPowerSaveMode = true)),
-        )
-        // Battery optimization is Android's default, so alone it is no cause to name.
-        assertEquals(
-            SparkExitAlert.Behind,
-            SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isOptimized = true)),
         )
         assertEquals(SparkExitAlert.Behind, SparkExitAlerts.reason(running, isOnline = true, unlimited))
         // An underpriced exit names its fee, which no background run fixes, before any cause of a missed run.

@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import breez_sdk_spark.RecoveryTxKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
@@ -98,7 +97,6 @@ class SparkExitViewModel @Inject constructor(
                 fundingAddress = exit.fundingAddress,
                 canCancel = sparkExitRepo.canCancel,
                 isSavingsPaymentRefused = exit.isSavingsPaymentRefused,
-                outsideExitSats = exit.outsideExitSats,
                 staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
                 isSettling = exit.isSettling,
                 networkFees = exit.networkFees,
@@ -353,7 +351,6 @@ data class SparkExitUiState(
     val isSavingsPaymentRefused: Boolean = false,
     val isRetryingSavingsPayment: Boolean = false,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
-    val outsideExitSats: ULong? = null,
     /** Spark's balance beyond the exit's leaves in any phase: what a stopped exit leaves on Spark. */
     val staysOnSparkSats: ULong? = null,
     /** The quote waits for Spark to finish moving leaves first. */
@@ -431,14 +428,6 @@ data class SparkExitUiState(
             val running = record?.takeIf { it.phase == SparkExitRecord.Phase.Running && !it.isRebuilding }
                 ?: return null
             return running.feeRateSatPerVbyte.takeIf { running.underpricedStep(tipHeight) != null }
-        }
-
-    /** The SWEEP transaction of a finished exit, or the one that landed before a retry of leaves replaced it. */
-    val sweepTxid: String?
-        get() {
-            val done = record?.takeIf { it.phase == SparkExitRecord.Phase.Done } ?: return null
-            return done.recovery?.transactions?.firstOrNull { it.kind == RecoveryTxKind.SWEEP }?.txid
-                ?: done.landedSweepTxid
         }
 
     /**

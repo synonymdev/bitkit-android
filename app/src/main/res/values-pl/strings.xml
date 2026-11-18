@@ -150,9 +150,7 @@
     <string name="lightning__spark_exit__fees_title">Opłaty\n&lt;accent&gt;awaryjne&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Niewykorzystane opłaty wrócą na Twoje oszczędności</string>
     <string name="lightning__spark_exit__fund_insufficient">Twoje oszczędności nie pokryją opłat awaryjnych.</string>
-    <string name="lightning__spark_exit__fund_paid">Zapłacono z Oszczędności, czekamy na potwierdzenie.</string>
     <string name="lightning__spark_exit__fund_partial">Otrzymano {received} z {required}, wyślij jeszcze {missing}.</string>
-    <string name="lightning__spark_exit__fund_pending">Płatność widoczna, czekamy na potwierdzenie.</string>
     <string name="lightning__spark_exit__fund_savings">Zapłać z Oszczędności</string>
     <string name="lightning__spark_exit__intro_text">Czy chcesz wymusić transfer salda wydatków do oszczędności? &lt;accent&gt;Twoje środki mogą być niedostępne nawet do 4 tygodni.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Wymuszony&lt;/accent&gt;\nTransfer</string>
@@ -168,7 +166,6 @@
     <string name="lightning__spark_exit__needs_funding_text">Wymuszony transfer potrzebuje jeszcze &lt;accent&gt;{amount}&lt;/accent&gt; na pokrycie opłat. Zapłać tę kwotę, aby kontynuować.</string>
     <string name="lightning__spark_exit__needs_funding_title">Potrzebne\n&lt;accent&gt;więcej opłat&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">Wymuszony transfer nie postępuje: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">Optymalizacja baterii w Androidzie może opóźnić wymuszony transfer, gdy Bitkit jest zamknięty. Bitkit powiadomi Cię, jeśli transfer zacznie się opóźniać.</string>
     <string name="lightning__spark_exit__note_battery_saver">Oszczędzanie baterii jest włączone, więc Android może wstrzymać wymuszony transfer, gdy Bitkit jest zamknięty.</string>
     <string name="lightning__spark_exit__note_notifications">Powiadomienia są wyłączone, więc Bitkit nie może Cię poinformować, gdy wymuszony transfer będzie Cię potrzebować. Bez nich otwieraj Bitkit co kilka godzin, aż transfer się zakończy.</string>
     <string name="lightning__spark_exit__note_notifications_button">Włącz powiadomienia</string>
@@ -184,7 +181,6 @@
     <string name="lightning__spark_exit__notification_rejected">Niektóre transakcje Twojego wymuszonego transferu zostały odrzucone. Otwórz Bitkit przed {time}, aby zobaczyć powód.</string>
     <string name="lightning__spark_exit__notification_restricted">Android uniemożliwia Bitkit działanie w tle. Otwórz Bitkit przed {time}, aby utrzymać Twój wymuszony transfer na właściwym torze.</string>
     <string name="lightning__spark_exit__notification_title">Wymuszony transfer</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} na Spark nie jest częścią tego transferu i pozostaje na Spark.</string>
     <string name="lightning__spark_exit__overview">Przegląd</string>
     <string name="lightning__spark_exit__partial_text">{count} małych kwot pozostało na Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Kwota do zapłaty</string>
@@ -196,7 +192,6 @@
     <string name="lightning__spark_exit__progress_title">Transfer\n&lt;accent&gt;w toku&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Nie udało się pobrać kosztów transferu. Spróbuj ponownie.</string>
     <string name="lightning__spark_exit__quote_loading">Pobieranie kosztów…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} Twojego salda Spark nie może być teraz przesłane: kwoty zbyt małe, by pokryć własne opłaty, lub wciąż przemieszczające się w Spark. Pozostaje na Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Czekamy, aż Spark zakończy przenoszenie Twojego salda. Może to potrwać do 5 minut.</string>
     <string name="lightning__spark_exit__quote_text">Rozpocznij wymuszony transfer tylko wtedy, gdy saldo wydatków przestało działać. &lt;accent&gt;Twoje środki mogą być niedostępne nawet do 4 tygodni.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Przegląd\n&lt;accent&gt;transferu&lt;/accent&gt;</string>

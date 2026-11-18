@@ -7,8 +7,6 @@ import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PerBranchFunding
 import breez_sdk_spark.RecoveryFunding
 import breez_sdk_spark.RecoveryTxKind
-import breez_sdk_spark.SkippedLeaf
-import breez_sdk_spark.SkippedLeafReason
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
@@ -35,7 +33,6 @@ class SparkExitFundingTest {
         assertEquals(91_000uL, quote.receiveSats)
         assertEquals(20_000uL, quote.fundingSats)
         assertEquals(111_000uL, quote.incomingSats)
-        assertEquals(300uL, quote.leftBehindSats)
         assertEquals(listOf("leaf-1"), quote.leafIds)
         assertTrue(quote.isWorthExiting)
     }
@@ -420,8 +417,8 @@ class SparkExitFundingTest {
     fun `progress waits for a payment from savings and asks only for what is still missing`() {
         val record = SparkExitFixtures.record().copy(fundingPaymentTxid = "paid")
         val paidPending = listOf(SparkExitFixtures.utxo("paid", value = 20_000uL, confirmed = false))
-        assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, paidPending))
-        assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, utxos = null))
+        assertEquals(SparkExitFundingState.Paid, SparkExitMath.fundingState(record, paidPending))
+        assertEquals(SparkExitFundingState.Paid, SparkExitMath.fundingState(record, utxos = null))
         // Confirmed but short: only the rest is asked for, with the input fee of the coin that pays it.
         val paidShort = listOf(SparkExitFixtures.utxo("paid", value = 15_000uL))
         assertEquals(
@@ -440,7 +437,7 @@ class SparkExitFundingTest {
     fun `progress waits for an external payment seen in the mempool`() {
         val record = SparkExitFixtures.record()
         val seen = listOf(SparkExitFixtures.utxo("ext", value = 20_000uL, confirmed = false))
-        assertEquals(SparkExitFundingState.Seen("ext"), SparkExitMath.fundingState(record, seen))
+        assertEquals(SparkExitFundingState.Seen, SparkExitMath.fundingState(record, seen))
         val partial = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
         assertEquals(
             SparkExitFundingState.Ask(12_136uL, 8_000uL, 20_136uL),
@@ -472,12 +469,6 @@ class SparkExitFundingTest {
         )
         assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(68_928uL, older))
         assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(3_392uL, older))
-
-        val small = SkippedLeaf("small", 3_392uL, SkippedLeafReason.FeeExceedsValue)
-        val prepared = SparkExitFixtures.prepared(leaves = emptyList(), skipped = listOf(small))
-        val quote = SparkExitQuote(prepared, lostLeafSats = listOf(65_536uL, 65_536uL))
-        assertEquals(3_392uL, quote.copy(sparkBalanceSats = 68_928uL).unexitableSats)
-        assertEquals(3_392uL, quote.copy(sparkBalanceSats = 3_392uL).unexitableSats)
     }
 
     @Test
@@ -493,17 +484,6 @@ class SparkExitFundingTest {
         // Another wallet sent 8,000: savings sends the rest, plus the input fee its own payment adds.
         assertEquals(12_136uL, SparkExitMath.savingsFundingSats(20_000uL, 1, 8_000uL, 2uL), "savings pays it again")
         assertEquals(0uL, SparkExitMath.savingsFundingSats(20_000uL, 1, 20_000uL, 2uL))
-    }
-
-    @Test
-    fun `quote names what it skips and spark's balance beyond every leaf it lists`() {
-        val prepared = SparkExitFixtures.prepared()
-        val beyond = SparkExitQuote(prepared, sparkBalanceSats = 150_000uL)
-        assertEquals(50_000uL, beyond.unexitableSats)
-        assertEquals(49_700uL, beyond.beyondLeavesSats)
-        assertEquals(300uL, SparkExitQuote(prepared, sparkBalanceSats = 100_300uL).unexitableSats)
-        assertEquals(300uL, SparkExitQuote(prepared).unexitableSats)
-        assertNull(SparkExitQuote(SparkExitFixtures.prepared(skipped = emptyList())).unexitableSats)
     }
 
     @Test

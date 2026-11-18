@@ -71,8 +71,8 @@ object SparkExitFundingKey {
 
 /**
  * What an exit costs and returns, from a `prepareRecoverFunds` quote, next to Spark's balance when it was taken
- * ([sparkBalanceSats]), so value the quote cannot exit is named rather than silently left out. [lostLeafSats] are the
- * values of the leaves an older state claimed that the operators still list, which the quote leaves out.
+ * ([sparkBalanceSats]), so value the quote cannot exit is counted as staying on Spark. [lostLeafSats] are the values of
+ * the leaves an older state claimed that the operators still list, which the quote leaves out.
  */
 data class SparkExitQuote(
     val prepared: PrepareRecoverFundsResponse,
@@ -96,8 +96,6 @@ data class SparkExitQuote(
      */
     val incomingSats: ULong get() = receiveSats.safe() + fundingSats.safe()
 
-    val leftBehindSats: ULong get() = prepared.skipped.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
-
     val leafIds: List<String> get() = prepared.leaves.map { it.leafId }
 
     /** Each listed leaf's value, kept with the exit for a leaf its first build leaves behind. */
@@ -107,12 +105,6 @@ data class SparkExitQuote(
     val leafTotalSats: ULong get() = prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
 
     /**
-     * What the quote cannot exit now: the leaves it skips, and Spark's balance beyond every leaf it lists, such as a
-     * counter-swap still unclaimed. Null when nothing.
-     */
-    val unexitableSats: ULong? get() = SparkExitMath.unexitableSats(sparkBalanceSats, this)
-
-    /**
      * What stays on Spark once the exit took its leaves: Spark's balance beyond them, skipped leaves included, less the
      * lost leaves it still counts until a sync drops them. Null when nothing.
      */
@@ -120,14 +112,6 @@ data class SparkExitQuote(
         get() = SparkExitMath.outsideExitSats(leafTotalSats, sparkBalanceSats)
             ?.let { SparkExitMath.beyondLostLeaves(it, lostLeafSats) }
             ?.takeIf { it > 0uL }
-
-    /** Spark's balance beyond every leaf the quote lists, skipped ones included, less the lost leaves it holds. */
-    val beyondLeavesSats: ULong?
-        get() {
-            val leaves = prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
-            val beyond = SparkExitMath.outsideExitSats(leaves.safe() + leftBehindSats.safe(), sparkBalanceSats)
-            return beyond?.let { SparkExitMath.beyondLostLeaves(it, lostLeafSats) }?.takeIf { it > 0uL }
-        }
 
     /** Breez's rule: only exit when the value is more than its fees. */
     val isWorthExiting: Boolean get() = prepared.leaves.isNotEmpty() && exitSats > networkFeeSats
@@ -294,12 +278,6 @@ object SparkExitMath {
         return fundedSats.safe() + maxOf(missing, 1uL).safe()
     }
 
-    /** The skipped leaves of [quote] plus Spark's [balanceSats] beyond every leaf it lists, or null when nothing. */
-    fun unexitableSats(balanceSats: ULong?, quote: SparkExitQuote): ULong? {
-        val beyond = quote.copy(sparkBalanceSats = balanceSats).beyondLeavesSats ?: 0uL
-        return (quote.leftBehindSats.safe() + beyond.safe()).takeIf { it > 0uL }
-    }
-
     /**
      * What Spark's [balanceSats] holds beyond [record]'s leaves, in any phase: what a stopped exit leaves on Spark,
      * such as value it could not exit. Lost leaves count only while the balance still holds them ([beyondLostLeaves]).
@@ -345,7 +323,7 @@ object SparkExitMath {
         record.fundingPaymentTxid?.let { txid ->
             val isAdopted = record.funding.any { it.txid == txid }
             val isConfirmed = utxos?.any { it.txid == txid && it.status.confirmed } == true
-            if (!isAdopted && !isConfirmed) return SparkExitFundingState.Paid(txid)
+            if (!isAdopted && !isConfirmed) return SparkExitFundingState.Paid
         }
         val fresh = utxos?.let { newFunding(it, record) }.orEmpty()
         val seen = fresh.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
@@ -354,8 +332,7 @@ object SparkExitMath {
         val shortfall = needed.safe() + (inputFee.safe() * maxOf(fresh.size - 1, 0).toULong().safe()).safe()
         if (fresh.isNotEmpty() && seen >= shortfall) {
             // Covered: waiting for it to confirm, or for the next tick to take it once it has.
-            val txid = (fresh.firstOrNull { !it.status.confirmed } ?: fresh.first()).txid
-            return SparkExitFundingState.Seen(txid)
+            return SparkExitFundingState.Seen
         }
         // A partial payment leaves another coin to send, with its own input fee. Nodes refuse an output under its dust
         // limit, so a smaller remainder is asked as the funding output's dust.
@@ -559,11 +536,11 @@ object SparkExitMath {
 
 /** The fee funding an exit still needs, as progress shows it. */
 sealed interface SparkExitFundingState {
-    /** Savings paid it in [txid], which has not confirmed yet. */
-    data class Paid(val txid: String) : SparkExitFundingState
+    /** Savings paid it, and the payment has not confirmed yet. */
+    data object Paid : SparkExitFundingState
 
-    /** A payment covering it, [txid] among them, was seen and waits to confirm. */
-    data class Seen(val txid: String) : SparkExitFundingState
+    /** A payment covering it was seen and waits to confirm. */
+    data object Seen : SparkExitFundingState
 
     /**
      * [sats] are still missing at the funding address, at least dust, after [receivedSats] of new funding seen there

@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -69,10 +68,7 @@ private fun Content(
             )
             VerticalSpacer(32.dp)
             when {
-                uiState.quote != null -> {
-                    SparkExitQuoteRows(uiState.quote)
-                    uiState.quote.unexitableSats?.let { UnexitableNote(it) }
-                }
+                uiState.quote != null -> SparkExitQuoteRows(uiState.quote)
                 uiState.isQuoting && uiState.isSettling -> BodyM(
                     text = stringResource(R.string.lightning__spark_exit__quote_settling),
                     color = Colors.White64,
@@ -121,18 +117,6 @@ private fun Content(
             VerticalSpacer(16.dp)
         }
     }
-}
-
-/** What the quote cannot exit: skipped leaves, and value still moving inside Spark. */
-@Composable
-private fun UnexitableNote(sats: ULong) {
-    VerticalSpacer(16.dp)
-    BodyS(
-        text = stringResource(R.string.lightning__spark_exit__quote_outside)
-            .replace("{amount}", sparkExitAmountAccent(sats)).withAccentBoldBright(),
-        color = Colors.White64,
-        modifier = Modifier.testTag("SparkExitQuoteOutside")
-    )
 }
 
 @Preview(showSystemUi = true)

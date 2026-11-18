@@ -276,9 +276,7 @@
     <string name="lightning__spark_exit__fees_title">Экстренные\n&lt;accent&gt;комиссии&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Неиспользованные комиссии вернутся в сбережения</string>
     <string name="lightning__spark_exit__fund_insufficient">Ваших сбережений не хватает на экстренные комиссии.</string>
-    <string name="lightning__spark_exit__fund_paid">Оплачено из сбережений, ожидает подтверждения.</string>
     <string name="lightning__spark_exit__fund_partial">Получено {received} из {required}, отправьте ещё {missing}.</string>
-    <string name="lightning__spark_exit__fund_pending">Платёж обнаружен, ожидает подтверждения.</string>
     <string name="lightning__spark_exit__fund_savings">Оплатить из сбережений</string>
     <string name="lightning__spark_exit__intro_text">Хотите принудительно перевести баланс расходов в сбережения? &lt;accent&gt;Ваши средства могут быть недоступны до 4 недель.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Принудительный&lt;/accent&gt;\nперевод</string>
@@ -294,7 +292,6 @@
     <string name="lightning__spark_exit__needs_funding_text">Для оплаты комиссий принудительному переводу нужно ещё &lt;accent&gt;{amount}&lt;/accent&gt;. Оплатите, чтобы продолжить.</string>
     <string name="lightning__spark_exit__needs_funding_title">Нужно больше\n&lt;accent&gt;комиссий&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">Принудительный перевод не продвигается: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">Оптимизация батареи Android может задерживать принудительный перевод, пока Bitkit закрыт. Bitkit сообщит, если перевод отстанет.</string>
     <string name="lightning__spark_exit__note_battery_saver">Включён режим энергосбережения, поэтому Android может задерживать принудительный перевод, пока Bitkit закрыт.</string>
     <string name="lightning__spark_exit__note_notifications">Уведомления выключены, поэтому Bitkit не сможет сообщить, если принудительному переводу понадобится ваше участие. Без них открывайте Bitkit каждые несколько часов, пока перевод не завершится.</string>
     <string name="lightning__spark_exit__note_notifications_button">Включить уведомления</string>
@@ -310,7 +307,6 @@
     <string name="lightning__spark_exit__notification_rejected">Часть транзакций вашего принудительного перевода была отклонена. Откройте Bitkit до {time}, чтобы узнать причину.</string>
     <string name="lightning__spark_exit__notification_restricted">Android не даёт Bitkit работать в фоне. Откройте Bitkit до {time}, чтобы принудительный перевод шёл по плану.</string>
     <string name="lightning__spark_exit__notification_title">Принудительный перевод</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} в Spark не входят в этот перевод и остаются в Spark.</string>
     <string name="lightning__spark_exit__overview">Обзор</string>
     <string name="lightning__spark_exit__partial_text">Небольших сумм, оставшихся в Spark: {count}.</string>
     <string name="lightning__spark_exit__pay_amount">Сумма к оплате</string>
@@ -322,7 +318,6 @@
     <string name="lightning__spark_exit__progress_title">Перевод\n&lt;accent&gt;выполняется&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Не удалось получить стоимость перевода. Попробуйте ещё раз.</string>
     <string name="lightning__spark_exit__quote_loading">Получение стоимости…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} вашего баланса Spark сейчас нельзя перевести: суммы слишком малы, чтобы оплатить собственные комиссии, или ещё перемещаются внутри Spark. Они остаются в Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Ждём, пока Spark закончит перемещать ваш баланс. Это может занять до 5 минут.</string>
     <string name="lightning__spark_exit__quote_text">Начинайте принудительный перевод, только если баланс расходов перестал работать. &lt;accent&gt;Ваши средства могут быть недоступны до 4 недель.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Обзор\n&lt;accent&gt;перевода&lt;/accent&gt;</string>

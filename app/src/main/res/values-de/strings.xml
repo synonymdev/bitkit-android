@@ -149,9 +149,7 @@
     <string name="lightning__spark_exit__fees_title">Notfall-\n&lt;accent&gt;gebühren&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Nicht verbrauchte Gebühren gehen zurück auf dein Sparkonto</string>
     <string name="lightning__spark_exit__fund_insufficient">Dein Sparkonto reicht für die Notfallgebühren nicht aus.</string>
-    <string name="lightning__spark_exit__fund_paid">Vom Sparkonto bezahlt, warte auf Bestätigung.</string>
     <string name="lightning__spark_exit__fund_partial">{received} von {required} erhalten, sende noch {missing}.</string>
-    <string name="lightning__spark_exit__fund_pending">Zahlung erkannt, warte auf Bestätigung.</string>
     <string name="lightning__spark_exit__fund_savings">Vom Sparkonto zahlen</string>
     <string name="lightning__spark_exit__intro_text">Möchtest du dein Ausgabenguthaben forciert auf dein Sparkonto übertragen? &lt;accent&gt;Deine Mittel können bis zu 4 Wochen nicht verfügbar sein.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Forcierte&lt;/accent&gt;\nÜbertragung</string>
@@ -167,7 +165,6 @@
     <string name="lightning__spark_exit__needs_funding_text">Die forcierte Übertragung braucht noch &lt;accent&gt;{amount}&lt;/accent&gt;, um ihre Gebühren zu zahlen. Zahle sie, um fortzufahren.</string>
     <string name="lightning__spark_exit__needs_funding_title">Mehr Gebühren\n&lt;accent&gt;nötig&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">Die forcierte Übertragung kommt nicht voran: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">Die Akku-Optimierung von Android kann die forcierte Übertragung verzögern, während Bitkit geschlossen ist. Bitkit benachrichtigt dich, wenn sie in Verzug gerät.</string>
     <string name="lightning__spark_exit__note_battery_saver">Der Energiesparmodus ist aktiv, daher kann Android die forcierte Übertragung aufhalten, während Bitkit geschlossen ist.</string>
     <string name="lightning__spark_exit__note_notifications">Benachrichtigungen sind deaktiviert, daher kann Bitkit dir nicht mitteilen, wenn die forcierte Übertragung dich braucht. Öffne Bitkit ohne sie alle paar Stunden, bis die Übertragung abgeschlossen ist.</string>
     <string name="lightning__spark_exit__note_notifications_button">Benachrichtigungen aktivieren</string>
@@ -183,7 +180,6 @@
     <string name="lightning__spark_exit__notification_rejected">Einige Transaktionen deiner forcierten Übertragung wurden abgelehnt. Öffne Bitkit vor {time}, um den Grund zu sehen.</string>
     <string name="lightning__spark_exit__notification_restricted">Android verhindert, dass Bitkit im Hintergrund läuft. Öffne Bitkit vor {time}, damit deine forcierte Übertragung auf Kurs bleibt.</string>
     <string name="lightning__spark_exit__notification_title">Forcierte Übertragung</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} auf Spark gehört nicht zu dieser Übertragung und bleibt auf Spark.</string>
     <string name="lightning__spark_exit__overview">Übersicht</string>
     <string name="lightning__spark_exit__partial_text">{count} kleine Beträge sind auf Spark geblieben.</string>
     <string name="lightning__spark_exit__pay_amount">Zu zahlender Betrag</string>
@@ -195,7 +191,6 @@
     <string name="lightning__spark_exit__progress_title">Übertragung\n&lt;accent&gt;läuft&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Die Übertragungskosten konnten nicht abgerufen werden. Versuche es erneut.</string>
     <string name="lightning__spark_exit__quote_loading">Kosten werden abgerufen…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} deines Spark-Guthabens kann derzeit nicht übertragen werden: Beträge, die zu klein sind, um ihre eigenen Gebühren zu zahlen, oder die sich noch innerhalb von Spark bewegen. Sie bleiben auf Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Warte, bis Spark dein Guthaben fertig verschoben hat. Das kann bis zu 5 Minuten dauern.</string>
     <string name="lightning__spark_exit__quote_text">Starte eine forcierte Übertragung nur, wenn dein Ausgabenguthaben nicht mehr funktioniert. &lt;accent&gt;Deine Mittel können bis zu 4 Wochen nicht verfügbar sein.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Übertragungs-\n&lt;accent&gt;übersicht&lt;/accent&gt;</string>

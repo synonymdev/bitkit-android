@@ -278,13 +278,6 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `done names the sweep that landed before a retry of leaves replaced it`() {
-        val done = SparkExitFixtures.record(SparkExitRecord.Phase.Done)
-            .copy(recovery = SparkExitFixtures.recovery(emptyList()), landedSweepTxid = "sweep")
-        assertEquals("sweep", SparkExitUiState(record = done).sweepTxid)
-    }
-
-    @Test
     fun `confirm shows what leaves savings only when savings pays the fee funding`() {
         val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
         val state = SparkExitUiState(quote = quote, savingsFeeSats = 300uL, fundFromSavings = true)
@@ -330,7 +323,6 @@ class SparkExitViewModelTest : BaseUnitTest() {
         sparkState.value = SparkState(balanceSats = 34_464uL)
 
         assertEquals(1_696uL, sut.uiState.value.staysOnSparkSats)
-        assertNull(sut.uiState.value.outsideExitSats)
         assertEquals(
             "Nothing could be recovered. ₿ 1 696 stays on Spark.",
             sparkExitFailedText("Nothing could be recovered.", "{amount} stays on Spark.", outsideAmount = "₿ 1 696"),

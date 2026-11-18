@@ -264,9 +264,7 @@
     <string name="lightning__spark_exit__fees_title">Comissions\n&lt;accent&gt;d\'emergència&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Les comissions no utilitzades tornaran als teus estalvis</string>
     <string name="lightning__spark_exit__fund_insufficient">Els teus estalvis no poden cobrir les comissions d\'emergència.</string>
-    <string name="lightning__spark_exit__fund_paid">Pagat dels estalvis, esperant confirmació.</string>
     <string name="lightning__spark_exit__fund_partial">{received} de {required} rebuts, envia\'n {missing} més.</string>
-    <string name="lightning__spark_exit__fund_pending">Pagament detectat, esperant confirmació.</string>
     <string name="lightning__spark_exit__fund_savings">Paga dels estalvis</string>
     <string name="lightning__spark_exit__intro_text">Vols transferir a la força el teu saldo de despesa als estalvis? &lt;accent&gt;Els teus fons poden no estar disponibles fins a 4 setmanes.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Transferència&lt;/accent&gt;\nforçosa</string>
@@ -282,7 +280,6 @@
     <string name="lightning__spark_exit__needs_funding_text">La transferència forçosa necessita &lt;accent&gt;{amount}&lt;/accent&gt; més per pagar les seves comissions. Paga-ho per continuar.</string>
     <string name="lightning__spark_exit__needs_funding_title">Calen més\n&lt;accent&gt;comissions&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">La transferència forçosa no avança: {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">L\'optimització de bateria d\'Android pot endarrerir la transferència forçosa mentre Bitkit està tancat. Bitkit t\'avisa si es retarda.</string>
     <string name="lightning__spark_exit__note_battery_saver">L\'estalvi de bateria està activat, així que Android pot frenar la transferència forçosa mentre Bitkit està tancat.</string>
     <string name="lightning__spark_exit__note_notifications">Les notificacions estan desactivades, així que Bitkit no et pot avisar si la transferència forçosa et necessita. Sense elles, obre Bitkit cada poques hores fins que acabi la transferència.</string>
     <string name="lightning__spark_exit__note_notifications_button">Activa les notificacions</string>
@@ -298,7 +295,6 @@
     <string name="lightning__spark_exit__notification_rejected">Algunes transaccions de la teva transferència forçosa s\'han rebutjat. Obre Bitkit abans de {time} per veure\'n el motiu.</string>
     <string name="lightning__spark_exit__notification_restricted">Android impedeix que Bitkit s\'executi en segon pla. Obre Bitkit abans de {time} per mantenir al dia la teva transferència forçosa.</string>
     <string name="lightning__spark_exit__notification_title">Transferència forçosa</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} a Spark no forma part d\'aquesta transferència i es queda a Spark.</string>
     <string name="lightning__spark_exit__overview">Resum</string>
     <string name="lightning__spark_exit__partial_text">{count} imports petits s\'han quedat a Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Import a pagar</string>
@@ -310,7 +306,6 @@
     <string name="lightning__spark_exit__progress_title">Transferència\n&lt;accent&gt;en curs&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">No s\'han pogut obtenir els costos de la transferència. Torna-ho a intentar.</string>
     <string name="lightning__spark_exit__quote_loading">Obtenint els costos…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} del teu saldo de Spark no es pot transferir ara mateix: imports massa petits per pagar les seves pròpies comissions, o que encara s\'estan movent dins de Spark. Es queda a Spark.</string>
     <string name="lightning__spark_exit__quote_settling">Esperant que Spark acabi de moure el teu saldo. Pot trigar fins a 5 minuts.</string>
     <string name="lightning__spark_exit__quote_text">Inicia una transferència forçosa només si el teu saldo de despesa ja no funciona. &lt;accent&gt;Els teus fons poden no estar disponibles fins a 4 setmanes.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Resum de la\n&lt;accent&gt;transferència&lt;/accent&gt;</string>

@@ -148,9 +148,7 @@
     <string name="lightning__spark_exit__fees_title">Frais\n&lt;accent&gt;d\'urgence&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees_unused">*Les frais inutilisés reviendront à votre épargne</string>
     <string name="lightning__spark_exit__fund_insufficient">Votre épargne ne peut pas couvrir les frais d\'urgence.</string>
-    <string name="lightning__spark_exit__fund_paid">Payé depuis l\'épargne, en attente de confirmation.</string>
     <string name="lightning__spark_exit__fund_partial">{received} sur {required} reçus, envoyez encore {missing}.</string>
-    <string name="lightning__spark_exit__fund_pending">Paiement détecté, en attente de confirmation.</string>
     <string name="lightning__spark_exit__fund_savings">Payer depuis l\'épargne</string>
     <string name="lightning__spark_exit__intro_text">Voulez-vous forcer le transfert de votre solde de dépenses vers l\'épargne ? &lt;accent&gt;Vos fonds peuvent être indisponibles jusqu\'à 4 semaines.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__intro_title">&lt;accent&gt;Forcer&lt;/accent&gt;\nle transfert</string>
@@ -166,7 +164,6 @@
     <string name="lightning__spark_exit__needs_funding_text">Le transfert forcé a besoin de &lt;accent&gt;{amount}&lt;/accent&gt; de plus pour payer ses frais. Payez-les pour continuer.</string>
     <string name="lightning__spark_exit__needs_funding_title">Plus de frais\n&lt;accent&gt;requis&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__not_moving">Le transfert forcé n\'avance pas : {error}</string>
-    <string name="lightning__spark_exit__note_battery_optimized">L\'optimisation de la batterie d\'Android peut retarder le transfert forcé quand Bitkit est fermé. Bitkit vous prévient s\'il prend du retard.</string>
     <string name="lightning__spark_exit__note_battery_saver">L\'économiseur de batterie est activé, Android peut donc freiner le transfert forcé quand Bitkit est fermé.</string>
     <string name="lightning__spark_exit__note_notifications">Les notifications sont désactivées, Bitkit ne peut donc pas vous prévenir si le transfert forcé a besoin de vous. Sans elles, ouvrez Bitkit toutes les quelques heures jusqu\'à la fin du transfert.</string>
     <string name="lightning__spark_exit__note_notifications_button">Activer les notifications</string>
@@ -182,7 +179,6 @@
     <string name="lightning__spark_exit__notification_rejected">Certaines transactions de votre transfert forcé ont été refusées. Ouvrez Bitkit avant {time} pour savoir pourquoi.</string>
     <string name="lightning__spark_exit__notification_restricted">Android empêche Bitkit de fonctionner en arrière-plan. Ouvrez Bitkit avant {time} pour que votre transfert forcé reste sur la bonne voie.</string>
     <string name="lightning__spark_exit__notification_title">Transfert forcé</string>
-    <string name="lightning__spark_exit__outside_exit">{amount} sur Spark ne fait pas partie de ce transfert et reste sur Spark.</string>
     <string name="lightning__spark_exit__overview">Aperçu</string>
     <string name="lightning__spark_exit__partial_text">{count} petits montants sont restés sur Spark.</string>
     <string name="lightning__spark_exit__pay_amount">Montant à payer</string>
@@ -194,7 +190,6 @@
     <string name="lightning__spark_exit__progress_title">Transfert\n&lt;accent&gt;en cours&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Impossible d\'obtenir les coûts du transfert. Réessayez.</string>
     <string name="lightning__spark_exit__quote_loading">Obtention des coûts…</string>
-    <string name="lightning__spark_exit__quote_outside">{amount} de votre solde Spark ne peut pas être transféré pour le moment : des montants trop faibles pour payer leurs propres frais, ou encore en mouvement dans Spark. Il reste sur Spark.</string>
     <string name="lightning__spark_exit__quote_settling">En attente que Spark finisse de déplacer votre solde. Cela peut prendre jusqu\'à 5 minutes.</string>
     <string name="lightning__spark_exit__quote_text">Ne lancez un transfert forcé que si votre solde de dépenses ne fonctionne plus. &lt;accent&gt;Vos fonds peuvent être indisponibles jusqu\'à 4 semaines.&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_title">Aperçu du\n&lt;accent&gt;transfert&lt;/accent&gt;</string>
