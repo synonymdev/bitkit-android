@@ -297,18 +297,20 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             modifier = Modifier.testTag("SparkExitLeftBehindLeaves")
         )
     }
-    if (!record.isActive && address != null) LeftoverNote(record, address, uiState.fundingPath)
+    if (!record.isActive && address != null) {
+        val isSweptCounted = record.phase == SparkExitRecord.Phase.Done && (uiState.returned?.feesSats ?: 0uL) > 0uL
+        LeftoverNote(record, address, uiState.fundingPath, isSweptCounted)
+    }
 }
 
 /**
- * Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. A
- * completed exit counts what it sends back in its returned note, so it names only funding that stays at the address.
+ * Where the leftover fee funding of an ended exit is: being sent, sent, kept as dust, or still at its address. When
+ * the returned note already counts the confirmed sweeps as unused fees ([isSweptCounted]), they get no note here.
  */
 @Composable
-private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?) {
-    val isDone = record.phase == SparkExitRecord.Phase.Done
+private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?, isSweptCounted: Boolean) {
     // Sweeps that already confirmed come first; funding that arrived after them has a note of its own below.
-    if (!isDone) {
+    if (!isSweptCounted) {
         record.sweptLeftover.forEach {
             VerticalSpacer(16.dp)
             SparkExitTxNote(
@@ -322,7 +324,7 @@ private fun LeftoverNote(record: SparkExitRecord, address: String, path: String?
     if (record.leftover.isEmpty()) return
     val total = record.leftover.fold(0uL) { sum, leftover -> sum + leftover.valueSats }
     val sweep = record.leftoverSweep
-    if (isDone && sweep?.txid != null && sweep.rejection == null) return
+    if (isSweptCounted && sweep?.txid != null && sweep.isConfirmed) return
     VerticalSpacer(16.dp)
     when {
         record.isLeftoverWaitingForFees -> BodyS(
