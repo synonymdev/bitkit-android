@@ -374,6 +374,10 @@ private fun ContentRunning(
     onSwipeToConfirm: () -> Unit = {},
 ) {
     var showDetails by rememberSaveable(initialShowDetails) { mutableStateOf(initialShowDetails) }
+    // The update fee sits in the details: each new quote opens them, so no swipe pays a fee the user has not seen.
+    LaunchedEffect(uiState.sparkUpdateQuote) {
+        if (uiState.sparkUpdateQuote != null) showDetails = true
+    }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val isPreparing = preparingRequest != null
     val isLnurlPay = !isPreparing && uiState.paysLnurl

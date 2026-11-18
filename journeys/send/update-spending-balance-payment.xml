@@ -14,7 +14,7 @@
   </description>
   <actions>
     <action>On the receiving side, create a 50 000-sat Lightning invoice and open it on the sending wallet with a lightning: deep link</action>
-    <action>Verify the Confirm screen (testTag "SendConfirm") shows 50 000 sats, then tap Show Details (testTag "SendConfirmToggleDetails")</action>
+    <action>Verify the Confirm screen (testTag "SendConfirm") shows 50 000 sats with its details open on their own (Hide Details, testTag "SendConfirmToggleDetails")</action>
     <action>Verify the fee row shows the payment's own fee and the "Update fee" row (testTag "ReviewUpdateFee") shows an amount, without "up to", and that no "Route" row shows</action>
     <action>Swipe to pay (testTag "GRAB"); the payment is over half of the Spending balance, so verify the "Are You Sure?" dialog warns about sending over 50% of the balance and tap "Yes, Send"</action>
     <action>Verify the Bitcoin Sent screen (testTag "SendSuccess") shows 50 000</action>

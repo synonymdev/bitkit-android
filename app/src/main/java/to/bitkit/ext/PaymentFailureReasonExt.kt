@@ -5,6 +5,7 @@ import breez_sdk_spark.SdkException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import to.bitkit.R
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.repositories.MoveToSparkError
 import to.bitkit.services.SparkError
 import to.bitkit.utils.LdkError
 
@@ -55,8 +56,10 @@ fun Throwable.toSendFailureMessage(context: Context): String {
         return context.getString(R.string.wallet__payment_restored_invoice)
     }
 
-    // Spark and its SDK speak in English developer messages; they go to the log, the user gets the existing copy.
-    if (this is LdkError || this is SparkError || this is SdkException || rawMessage.isBlank() ||
+    // Spark, its SDK and the spending balance update speak in English developer messages; they go to the log, the
+    // user gets the existing copy.
+    if (this is LdkError || this is SparkError || this is SdkException || this is MoveToSparkError ||
+        rawMessage.isBlank() ||
         rawMessage.looksInternalPaymentError()
     ) {
         return fallbackMessage
