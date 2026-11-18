@@ -2682,8 +2682,29 @@ class SparkRepoTest : BaseUnitTest() {
         val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
 
         assertTrue(result.isSuccess)
+        verify(sparkService).connect(0, false)
         verify(sparkService, never()).importExitState(any())
         assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a restore that connects spark handles its events before the wallet starts`() = test {
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }.thenAnswer {
+            isConnected = true
+            true
+        }
+        whenever { sparkService.importExitState(any()) }.thenReturn(ImportUnilateralExitStateResponse(2u, 0u, 0u, 0u))
+        val sut = createSut()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(sentPayment(fees = 0)))
+        advanceUntilIdle()
+
+        assertEquals("hash", assertIs<Event.PaymentSuccessful>(events.single()).paymentHash)
     }
 
     @Test

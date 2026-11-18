@@ -25,6 +25,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -279,9 +280,7 @@ class SparkRepo @Inject constructor(
         // A retry reads as connecting until it fails again.
         _state.update { it.copy(hasStartFailed = false) }
         runSuspendCatching {
-            if (isCollectingEvents.compareAndSet(false, true)) {
-                scope.launch { sparkService.events.collect { onSdkEvent(it) } }
-            }
+            collectEvents()
             restoreUncertainSends()
             val isExiting = exitStore(walletIndex).isActive()
             _state.update { it.copy(isExiting = isExiting) }
@@ -1369,7 +1368,15 @@ class SparkRepo @Inject constructor(
             }
         }
 
+    /** Collects Spark's events once, subscribed before it returns, so no event of a connect made after it is lost. */
+    private fun collectEvents() {
+        if (!isCollectingEvents.compareAndSet(false, true)) return
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { sparkService.events.collect { onSdkEvent(it) } }
+    }
+
     private suspend fun connectForRestore(walletIndex: Int) {
+        // Spark's listener drops events no one collects, and the wallet's start collects them only after the restore.
+        collectEvents()
         runSuspendCatching { sparkService.connect(walletIndex, exitStore(walletIndex).isActive()) }
             .onSuccess { if (it) _exitStateGeneration.update { generation -> generation + 1 } }
             .onFailure { Logger.warn("Failed to connect Spark to import restored exit data", it, context = TAG) }
