@@ -197,6 +197,9 @@ class SparkRepo @Inject constructor(
     /** Sends Spark took and still runs, by payment hash, until they settle or their invoice expires. */
     private val takenAttempts = ConcurrentHashMap<String, SendAttempt>()
 
+    /** Taken attempts restored after a restart whose outcome no event held back, so their expiry reports none. */
+    private val restoredTakenAttempts = ConcurrentHashMap.newKeySet<String>()
+
     @Volatile
     private var hasSyncedActivities = false
 
@@ -322,6 +325,7 @@ class SparkRepo @Inject constructor(
         sendsInFlight.clear()
         uncertainSends.clear()
         takenAttempts.clear()
+        restoredTakenAttempts.clear()
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
         _depositClaims.update { emptyMap() }
@@ -592,6 +596,7 @@ class SparkRepo @Inject constructor(
                         val attempt = SendAttempt(sentAt.toULong(), earlierIds)
                         if (result.getOrNull()?.status == PaymentStatus.PENDING) {
                             takenAttempts[paymentHash.lowercase()] = attempt
+                            restoredTakenAttempts.remove(paymentHash.lowercase())
                         }
                         // A send whose call failed may still have gone out, so it is in doubt before the in-flight
                         // attempt is dropped.
@@ -638,6 +643,7 @@ class SparkRepo @Inject constructor(
                 cacheStore.keepSparkSendAttempt(paymentHash)
             } else {
                 takenAttempts.remove(paymentHash.lowercase())
+                restoredTakenAttempts.remove(paymentHash.lowercase())
                 cacheStore.removeSparkUncertainSend(paymentHash)
             }
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
@@ -769,7 +775,7 @@ class SparkRepo @Inject constructor(
                     sentAt = cache.sparkUncertainSendStarts[hash]?.toULong(),
                     earlierIds = cache.sparkUncertainSendEarlierIds[hash]?.toSet(),
                 )
-                takenAttempts.putIfAbsent(hash, attempt)
+                if (takenAttempts.putIfAbsent(hash, attempt) == null) restoredTakenAttempts.add(hash)
             }
     }
 
@@ -789,11 +795,14 @@ class SparkRepo @Inject constructor(
                 is SparkLightningSend.Found -> Unit
             }
             takenAttempts.remove(hash) ?: return@forEach
+            // A restored attempt's outcome came while the app was closed and no event held it back, so none is sent.
+            val isRestored = restoredTakenAttempts.remove(hash)
             cacheStore.removeSparkUncertainSend(hash)
             if (listed?.status != PaymentStatus.COMPLETED) cacheStore.removeSparkSendHash(hash)
             // Written once the attempt is gone, so it no longer holds the row back; a failed write is retried at the
             // next refresh.
             listed?.let { recordActivity(it) }
+            if (isRestored) return@forEach
             // The send's own outcome event may have been held back with the attempt, so the send screen learns it here.
             val event = listed?.toNodeEvent()
                 ?: Event.PaymentFailed(hash, hash, PaymentFailureReason.UNEXPECTED_ERROR)
@@ -2009,6 +2018,7 @@ class SparkRepo @Inject constructor(
         // retry's: Spark may still finish it, so its hold and its Activity row stay until the expiry rule of
         // trySettleUncertainSend.
         if (payment.isOutrunByRetry(records)) {
+            payment.heldBackOutcome()
             Logger.info("Kept uncertain Spark send '${payment.sendHash()}' held past an older failure", context = TAG)
             return
         }
@@ -2021,6 +2031,7 @@ class SparkRepo @Inject constructor(
             payment.sendHash()?.let {
                 uncertainSends.remove(it.lowercase())
                 takenAttempts.remove(it.lowercase())
+                restoredTakenAttempts.remove(it.lowercase())
                 cacheStore.removeSparkUncertainSend(it)
             }
             val isReleased = latest == SparkLightningSend.NotFound ||
@@ -2029,11 +2040,14 @@ class SparkRepo @Inject constructor(
             true
         }
         if (!isSettled) {
+            payment.heldBackOutcome()
             Logger.info("Kept Spark send '${payment.sendHash()}' held for a retry sent meanwhile", context = TAG)
             return
         }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
+
+    private fun Payment.heldBackOutcome() = sendHash()?.let { restoredTakenAttempts.remove(it.lowercase()) }
 
     /**
      * Records [payment] as activity and returns whether it is saved; a failed write is kept in [unsavedPayments]. Only

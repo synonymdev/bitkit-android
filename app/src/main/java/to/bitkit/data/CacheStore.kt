@@ -176,7 +176,8 @@ class CacheStore internal constructor(
 
     /**
      * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds,
-     * with when it was sent, [sentAt], and Spark's ids of the invoice's earlier attempts, [earlierIds], once known.
+     * with when it was sent, [sentAt], and Spark's ids of the invoice's earlier attempts, [earlierIds], once known;
+     * either left out drops an older attempt's.
      */
     suspend fun addSparkUncertainSend(
         paymentHash: String,
@@ -188,11 +189,12 @@ class CacheStore internal constructor(
         store.updateData {
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt),
+                // Each write is one attempt's, so a value it lacks drops an older attempt's.
                 sparkUncertainSendStarts = sentAt?.let { start -> it.sparkUncertainSendStarts + (hash to start) }
-                    ?: it.sparkUncertainSendStarts,
+                    ?: (it.sparkUncertainSendStarts - hash),
                 sparkUncertainSendEarlierIds = earlierIds
                     ?.let { ids -> it.sparkUncertainSendEarlierIds + (hash to ids.sorted()) }
-                    ?: it.sparkUncertainSendEarlierIds,
+                    ?: (it.sparkUncertainSendEarlierIds - hash),
             )
         }
     }
