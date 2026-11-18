@@ -442,12 +442,13 @@ class TransferRepo @Inject constructor(
         private const val TAG = "TransferRepo"
 
         /**
-         * Largest sweep treated as dust. One sweep input plus a P2TR output weighs up to about 530 WU, so at
-         * ldk-node's 1000 sat/kW fallback rate for sweeps the fee is about 530 sats; add the P2TR dust limit of
-         * 330 sats and round up. A sweepable output under it settles early and later shows as an on-chain
-         * receive. Keep in step with iOS `TransferService.maxUnsweepableSats`.
+         * Largest sweep that can never get an output, mirroring LDK's `maybe_add_change_output`: the change must
+         * be at least the P2TR dust limit (330 sats) after the fee of the heaviest single-input sweep (a delayed
+         * to_local input plus a P2TR change output, 532 WU) at the 253 sat/kW fee floor (134 sats). A larger
+         * sweep gets swept once fees allow, so its transfer keeps waiting for it.
+         * Keep in step with iOS `TransferService.maxUnsweepableSats`.
          */
-        internal const val MAX_UNSWEEPABLE_SATS = 1_000uL
+        internal const val MAX_UNSWEEPABLE_SATS = 463uL
     }
 }
 

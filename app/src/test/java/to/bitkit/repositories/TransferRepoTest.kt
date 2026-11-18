@@ -1320,11 +1320,11 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncTransferStates does not settle FORCE_CLOSE when its sweeps add up to more than dust`() = test {
+    fun `syncTransferStates does not settle FORCE_CLOSE when its sweeps add up to a sweepable amount`() = test {
         val transfer = forceCloseTransfer(amountSats = 20_000L)
         val sweeps = listOf(
-            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 600u),
-            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 401u),
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 400u),
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 64u),
             PendingSweepBalance.PendingBroadcast(channelId = "other-channel", amountSatoshis = 1u),
         )
         givenForceCloseSweeps(transfer, sweeps)
