@@ -1,7 +1,7 @@
 <journey name="app status emergency exit">
   <description>
-    While an emergency exit is active, App Status shows the force transfer on the "Lightning Provider (Spark)"
-    row under Lightning Connection, with a yellow warning icon. It reads "Fee funding needed" while the exit asks for fee funding and "Force transfer to savings in progress..." otherwise, including
+    While a Spark force transfer (emergency exit) is active, App Status shows it on the "Lightning Provider (Spark)"
+    row under Lightning Connection, with a yellow warning icon. It reads "Emergency fees needed" while the exit asks for fee funding and "Force transfer to savings in progress..." otherwise, including
     while a payment that covers the funding waits to confirm. The row opens the exit's progress screen, and
     leaving that screen returns to App Status. With no active exit the row shows Spark's connection again. An exit paid from savings cannot be
     cancelled and runs for days, so the row's return to the connection once an exit ends is covered by unit tests, not here. An exit takes Spark off the Lightning rail, so with no usable channel
@@ -9,8 +9,8 @@
 
     Precondition: dev build on regtest with Spark connected, a Spark balance (send from Lightspark's regtest faucet (https://app.lightspark.com/regtest-faucet) to
     the Spark connection screen's deposit address, testTag "SparkDepositAddress") and savings that can pay the exit's
-    fee funding. The wallet has no Lightning channel. Start an emergency exit from Spark (spark emergency exit journey), pick "Pay from savings" and
-    swipe to start it. Starting an exit takes the Spark balance out of Spending for days, so use a throwaway
+    fee funding. The wallet has no Lightning channel. Start a force transfer from Spark (spark emergency exit journey), paid from savings, and
+    swipe to start it. Starting a force transfer takes the Spark balance out of Spending for days, so use a throwaway
     wallet. Start on the wallet home screen.
   </description>
   <actions>
@@ -18,6 +18,6 @@
     <action>Verify the "Lightning Provider (Spark)" row (testTag "Status-spark_exit") sits under Lightning Connection (testTag "Status-lightning_connection") and reads "Force transfer to savings in progress...", since savings paid the funding</action>
     <action>Verify Lightning Connection (testTag "Status-lightning_connection") reads "No open connections", not "Using Spark"</action>
     <action>Tap the row and verify the exit's progress screen (testTag "SparkExitProgress") opens</action>
-    <action>Tap "OK" (testTag "SparkExitProgressOk") and verify App Status shows again with the row (testTag "Status-spark_exit") still reading "Force transfer to savings in progress..."</action>
+    <action>Tap "Continue Using Bitkit" (testTag "SparkExitProgressOk") and verify App Status shows again with the row (testTag "Status-spark_exit") still reading "Force transfer to savings in progress..."</action>
   </actions>
 </journey>

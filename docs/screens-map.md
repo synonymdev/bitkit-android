@@ -130,11 +130,11 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | Android | Figma |
 | - | - |
 | FundingScreen.kt | `todo` |
-| SavingsAdvancedScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings select funds |
-| SavingsAvailabilityScreen.kt | Transfer to Savings (Channel Closure) › Transfer warning |
-| SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure) › Transfer all funds to savings review |
-| SavingsIntroScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings |
-| SavingsProgressScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings progress 2 |
+| SavingsAdvancedScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Advanced |
+| SavingsAvailabilityScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Network Fee & Availability |
+| SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Review Transfer to Savings |
+| SavingsIntroScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Transfer to Savings Intro |
+| SavingsProgressScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Funds In Transfer |
 | SettingUpScreen.kt | Funds In Transfer (spark) › Transfer - Processing Payment |
 | SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
 | SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm |
@@ -318,12 +318,13 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | LightningConnectionsScreen.kt | Settings > Advanced › Lightning Connections overview |
 | MoveToSparkScreen.kt | `todo` |
 | SparkDetailScreen.kt | Settings > Advanced › Connection details Spark |
-| SparkExitConfirmScreen.kt | `todo` |
+| SparkExitConfirmScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Confirm |
 | SparkExitFeeBumpScreen.kt | `todo` |
-| SparkExitFundingScreen.kt | `todo` |
-| SparkExitIntroScreen.kt | `todo` |
-| SparkExitProgressScreen.kt | `todo` |
-| SparkExitQuoteScreen.kt | `todo` |
+| SparkExitFundingScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Emercency fees / Force Transfer to Savings Emercency fees External |
+| SparkExitIntroScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings |
+| SparkExitPayScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Confirm External |
+| SparkExitProgressScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Progress |
+| SparkExitQuoteScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Costs |
 
 ## ui/settings/pin
 

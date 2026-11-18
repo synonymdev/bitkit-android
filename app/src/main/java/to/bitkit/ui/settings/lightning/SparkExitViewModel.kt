@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import breez_sdk_spark.RecoveryTxKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
@@ -39,6 +38,7 @@ import to.bitkit.repositories.SparkExitPrestartFunding
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkExitReturned
 import to.bitkit.repositories.SparkExitStartCancelled
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
@@ -98,11 +98,10 @@ class SparkExitViewModel @Inject constructor(
                 fundingAddress = exit.fundingAddress,
                 canCancel = sparkExitRepo.canCancel,
                 isSavingsPaymentRefused = exit.isSavingsPaymentRefused,
-                outsideExitSats = exit.outsideExitSats,
                 staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
                 isSettling = exit.isSettling,
                 networkFees = exit.networkFees,
-                receivedSats = exit.record?.let(::receivedSats),
+                returned = exit.record?.let(::returned),
                 fundingPath = exit.record?.let { record ->
                     SparkExitFundingKey.path(record.fundingIndex.toInt(), Env.network)
                 },
@@ -110,10 +109,9 @@ class SparkExitViewModel @Inject constructor(
         }
     }
 
-    /** What the ended exit paid to savings, read from its sweep and cooperative transactions. */
-    private fun receivedSats(record: SparkExitRecord): ULong? {
+    private fun returned(record: SparkExitRecord): SparkExitReturned? {
         if (record.phase != SparkExitRecord.Phase.Done) return null
-        return SparkExitMath.receivedSats(record)?.takeIf { it > 0uL }
+        return SparkExitMath.returned(record)?.takeIf { it.spendingSats > 0uL }
     }
 
     fun loadQuote() {
@@ -146,10 +144,14 @@ class SparkExitViewModel @Inject constructor(
      */
     fun onFundingShown() {
         stopWatchingFundingAddress()
-        _uiState.update { it.copy(fundFromSavings = false, showsFundingAddress = false) }
+        _uiState.update {
+            it.copy(fundFromSavings = false, showsFundingAddress = false, isReadingFundingAddress = true)
+        }
         viewModelScope.launch {
-            val seen = sparkExitRepo.refreshFundingAddress().getOrNull() ?: return@launch
-            if (seen > 0uL) onFundExternally()
+            val seen = sparkExitRepo.refreshFundingAddress().getOrNull()
+            _uiState.update {
+                it.copy(showsFundingAddress = seen != null && seen > 0uL, isReadingFundingAddress = false)
+            }
         }
     }
 
@@ -157,16 +159,19 @@ class SparkExitViewModel @Inject constructor(
         _uiState.update { it.copy(fundFromSavings = true) }
     }
 
-    fun onFundExternally() {
+    /** Another wallet pays: Pay to confirm watches the funding address from here on. */
+    fun onPayExternally() {
         _uiState.update { it.copy(fundFromSavings = false, showsFundingAddress = true) }
-        watchFundingAddress()
     }
 
+    /** Pay to confirm watches the funding address while it shows, and starts the exit once a read finds it covered. */
     fun watchFundingAddress() {
         if (fundingWatch?.isActive == true) return
         fundingWatch = viewModelScope.launch {
             while (isActive) {
-                sparkExitRepo.refreshFundingAddress()
+                sparkExitRepo.refreshFundingAddress().onSuccess {
+                    _uiState.update { it.copy(hasPayReadFunding = true) }
+                }
                 delay(FUNDING_POLL_INTERVAL)
             }
         }
@@ -175,9 +180,24 @@ class SparkExitViewModel @Inject constructor(
     fun stopWatchingFundingAddress() {
         fundingWatch?.cancel()
         fundingWatch = null
+        _uiState.update { it.copy(hasPayReadFunding = false, hasPayAutoStarted = false) }
+    }
+
+    /** Starts the exit once Pay to confirm finds its funding covered; a failed start waits for a tap on Try again. */
+    fun startOnPayment() {
+        if (!_uiState.value.canAutoStartFunding) return
+        _uiState.update { it.copy(hasPayAutoStarted = true) }
+        start()
+    }
+
+    /** Starts again from Pay to confirm's Try again, after a start that failed. */
+    fun startFromPay() {
+        _uiState.update { it.copy(hasPayAutoStarted = true) }
+        start()
     }
 
     fun start() {
+        if (_uiState.value.isStarting) return
         viewModelScope.launch {
             _uiState.update { it.copy(isStarting = true) }
             sparkExitRepo.start(_uiState.value.fundFromSavings)
@@ -273,9 +293,10 @@ class SparkExitViewModel @Inject constructor(
         viewModelScope.launch { sparkExitRepo.markResultSeen() }
     }
 
-    fun refresh() {
+    /** Reloads the exit; only a user's pull shows the refresh indicator. */
+    fun refresh(showIndicator: Boolean = true) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
+            if (showIndicator) _uiState.update { it.copy(isRefreshing = true) }
             sparkExitRepo.load()
             sparkExitRepo.tick()
             _uiState.update { it.copy(isRefreshing = false, canCancel = sparkExitRepo.canCancel) }
@@ -327,6 +348,8 @@ data class SparkExitUiState(
     val canFundFromSavings: Boolean = false,
     val fundFromSavings: Boolean = false,
     val showsFundingAddress: Boolean = false,
+    /** The funding step reads its address once on entry: a payment found there means another wallet pays. */
+    val isReadingFundingAddress: Boolean = false,
     val isStarting: Boolean = false,
     /** The exit started: whichever exit screen shows, also one the user went back to meanwhile, opens its progress. */
     val isStarted: Boolean = false,
@@ -335,6 +358,10 @@ data class SparkExitUiState(
     val tipHeight: UInt? = null,
     val fundingSeenSats: ULong = 0uL,
     val fundingSeenCount: Int = 0,
+    /** Pay to confirm read the funding address this visit, so what it holds is current. */
+    val hasPayReadFunding: Boolean = false,
+    /** Pay to confirm started the exit on its own this visit, so a failed start waits for a tap. */
+    val hasPayAutoStarted: Boolean = false,
     /** The quote's fee rate, which prices each extra payment to the funding address. */
     val fundingFeeRate: ULong? = null,
     /** What progress shows while the exit needs fee funding. */
@@ -345,13 +372,15 @@ data class SparkExitUiState(
     val isSavingsPaymentRefused: Boolean = false,
     val isRetryingSavingsPayment: Boolean = false,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
-    val outsideExitSats: ULong? = null,
     /** Spark's balance beyond the exit's leaves in any phase: what a stopped exit leaves on Spark. */
     val staysOnSparkSats: ULong? = null,
     /** The quote waits for Spark to finish moving leaves first. */
     val isSettling: Boolean = false,
-    /** What a finished exit paid to savings. */
-    val receivedSats: ULong? = null,
+    /**
+     * What a finished exit returned to savings, as spending balance and unspent emergency fees; null when no spending
+     * balance came back, as the note names it first.
+     */
+    val returned: SparkExitReturned? = null,
     /** The derivation path of the exit's funding key, where a leftover that could not be sent stays. */
     val fundingPath: String? = null,
     /** What the network asks now, for the fee bump and its hint. */
@@ -362,13 +391,28 @@ data class SparkExitUiState(
     val savingsFundingSats: ULong
         get() = SparkExitMath.savingsFundingSats(fundingSats, fundingSeenCount, fundingSeenSats, fundingFeeRate ?: 0uL)
 
-    /** What leaves savings when it pays the fee funding: the funding and the fee of the payment that sends it. */
-    val savingsTotalSats: ULong?
+    /** What would leave savings to pay the fee funding: the funding and the fee of the payment that sends it. */
+    val savingsCostSats: ULong?
         get() {
-            val fundingSats = savingsFundingSats.takeIf { fundFromSavings && it > 0uL } ?: return null
+            val fundingSats = savingsFundingSats.takeIf { it > 0uL } ?: return null
             val feeSats = savingsFeeSats ?: return null
             return fundingSats.safe() + feeSats.safe()
         }
+
+    /** What leaves savings once the user goes on with savings paying the fee funding. */
+    val savingsTotalSats: ULong? get() = savingsCostSats.takeIf { fundFromSavings }
+
+    /** The fees screen waits to know who pays: the address read on entry, then savings' price. */
+    val isLoadingFees: Boolean get() = isReadingFundingAddress || (isPricingSavings && !showsFundingAddress)
+
+    /** Savings is still being priced for the fee funding. */
+    val isPricingSavings: Boolean get() = savingsFeeSats == null && !hasSavingsFeeFailed
+
+    /**
+     * Another wallet pays the emergency fees: once a payment reached the funding address, or when savings cannot
+     * cover them.
+     */
+    val paysExternally: Boolean get() = showsFundingAddress || (!isPricingSavings && !canFundFromSavings)
 
     /** Progress offers Pay a higher fee. */
     val canPayHigherFee: Boolean get() = record?.canPayHigherFee(tipHeight, networkFees) == true
@@ -389,6 +433,13 @@ data class SparkExitUiState(
      */
     val canContinueFunding: Boolean get() = prestartFunding.isCovered
 
+    /** Pay to confirm finds the funding covered: the exit starts on its own, once a visit. */
+    val canAutoStartFunding: Boolean
+        get() = canContinueFunding && !isStarting && !hasPayAutoStarted && hasPayReadFunding
+
+    /** Pay to confirm offers Try again: its start this visit failed. */
+    val canTapStartFunding: Boolean get() = canContinueFunding && !isStarting && hasPayAutoStarted
+
     /** Why the quote cannot continue, or null when it can. */
     val quoteBlock: SparkExitQuoteBlock?
         get() {
@@ -408,14 +459,6 @@ data class SparkExitUiState(
             val running = record?.takeIf { it.phase == SparkExitRecord.Phase.Running && !it.isRebuilding }
                 ?: return null
             return running.feeRateSatPerVbyte.takeIf { running.underpricedStep(tipHeight) != null }
-        }
-
-    /** The SWEEP transaction of a finished exit, or the one that landed before a retry of leaves replaced it. */
-    val sweepTxid: String?
-        get() {
-            val done = record?.takeIf { it.phase == SparkExitRecord.Phase.Done } ?: return null
-            return done.recovery?.transactions?.firstOrNull { it.kind == RecoveryTxKind.SWEEP }?.txid
-                ?: done.landedSweepTxid
         }
 
     /**

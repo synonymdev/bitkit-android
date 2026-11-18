@@ -209,8 +209,8 @@ class AppStatusViewModelTest : BaseUnitTest() {
     fun `exit step is running once a payment covers the funding`() {
         val awaiting = exitRecord(SparkExitRecord.Phase.AwaitingFunding(1_000uL), 1_000uL)
         val needs = exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL), 1_000uL)
-        assertEquals(ExitStep.RUNNING, awaiting.exitStep(SparkExitFundingState.Paid("txid")))
-        assertEquals(ExitStep.RUNNING, needs.exitStep(SparkExitFundingState.Seen("txid")))
+        assertEquals(ExitStep.RUNNING, awaiting.exitStep(SparkExitFundingState.Paid))
+        assertEquals(ExitStep.RUNNING, needs.exitStep(SparkExitFundingState.Seen))
         assertEquals(ExitStep.RUNNING, exitRecord(SparkExitRecord.Phase.NeedsFunding(1_000uL)).exitStep())
     }
 
