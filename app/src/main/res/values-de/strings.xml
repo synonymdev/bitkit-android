@@ -203,7 +203,7 @@
     <string name="lightning__spark_exit__waiting_leaves">Ein Teil dieses Ausstiegs kann gerade nicht on-chain gelesen werden. Bitkit versucht es bis zu einer Woche lang erneut.</string>
     <string name="lightning__spark_exit__waiting_operators">{amount}, das die Spark-Betreiber on-chain verschoben haben, wartet auf deren Freigabe. Bitkit fragt bis zu einer Woche lang erneut nach.</string>
     <string name="lightning__spark_learn__about_text">Dein Ausgabenguthaben nutzt Spark, betrieben von Lightspark, Breez und Flashnet.\n\nSeine Sicherheit hängt davon ab, dass mindestens ein Betreiber ehrlich handelt. Betreiber können den Zugang sperren, und eine Auszahlung ohne ihre Mitwirkung erfordert, dass du einen On-Chain-Exit startest.</string>
-    <string name="lightning__spark_learn__about_title">Über dein\n&lt;accent&gt;Ausgabenguthaben&lt;/accent&gt;</string>
+    <string name="lightning__spark_learn__about_title">Über dein\n&lt;accent&gt;Ausgaben-Guthaben&lt;/accent&gt;</string>
     <string name="lightning__spark_learn__fast_text">Deine Mittel sind meist innerhalb weniger Minuten verfügbar, ohne auf Bestätigungen zu warten.</string>
     <string name="lightning__spark_learn__later_text">Deine Mittel sind nach 3 Bestätigungen verfügbar, meist nach etwa 30 Minuten.</string>
     <string name="lightning__spark_provider">Anbieter</string>
