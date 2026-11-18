@@ -2688,6 +2688,15 @@ class AppViewModel @Inject constructor(
         val lightningBalance = balances?.lightningBalances?.find { it.channelId() == channelId }
         var channelBalance = lightningBalance?.amountSats() ?: 0uL
 
+        // The sweep holds what the close actually paid us.
+        if (channelBalance == 0uL) {
+            channelBalance = balances?.pendingBalancesFromChannelClosures.orEmpty()
+                .filter { it.channelId() == channelId }
+                .fold(0uL) { total, sweep -> total.safe() + sweep.amountSats().safe() }
+        }
+
+        // Last resort, from the record kept at close: outbound capacity plus our reserve, which overstates a balance
+        // below the reserve, but never the channel capacity.
         if (channelBalance == 0uL) {
             val closedChannels = runCatching {
                 coreService.activity.closedChannels(SortDirection.DESC)

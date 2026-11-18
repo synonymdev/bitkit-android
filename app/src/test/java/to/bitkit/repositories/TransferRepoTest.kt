@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BtOpenChannelState
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
@@ -34,6 +35,8 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.env.Env
@@ -46,6 +49,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -65,6 +69,9 @@ class TransferRepoTest : BaseUnitTest() {
         on { activity } doReturn activityService
     }
     private val clock = mock<Clock>()
+    private val settingsStore = mock<SettingsStore> {
+        on { data } doReturn flowOf(SettingsData())
+    }
     private val nodeEvents = MutableSharedFlow<Event>()
 
     companion object Fixtures {
@@ -86,6 +93,7 @@ class TransferRepoTest : BaseUnitTest() {
             blocktankRepo = blocktankRepo,
             coreService = coreService,
             transferDao = transferDao,
+            settingsStore = settingsStore,
             clock = clock,
         )
     }
@@ -1320,12 +1328,11 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncTransferStates does not settle FORCE_CLOSE when its sweeps add up to a sweepable amount`() = test {
+    fun `syncTransferStates does not settle FORCE_CLOSE when its dust sweep is batched into a sweepable one`() = test {
         val transfer = forceCloseTransfer(amountSats = 20_000L)
         val sweeps = listOf(
-            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 400u),
-            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 64u),
-            PendingSweepBalance.PendingBroadcast(channelId = "other-channel", amountSatoshis = 1u),
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 388u),
+            PendingSweepBalance.PendingBroadcast(channelId = "other-channel", amountSatoshis = 388u),
         )
         givenForceCloseSweeps(transfer, sweeps)
 
@@ -1333,6 +1340,50 @@ class TransferRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `isUnsweepable is true when change after the floor fee is below the change dust limit`() {
+        val sweep = listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 388u))
+
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2WPKH))
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2TR))
+    }
+
+    @Test
+    fun `isUnsweepable follows the change address type`() {
+        val sweep = listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 500u))
+
+        // 500 sats leave a P2WPKH or P2TR output but are below the legacy and nested SegWit dust limits.
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2WPKH))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2TR))
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2SH))
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2PKH))
+    }
+
+    @Test
+    fun `isUnsweepable matches the P2TR bound of one heaviest input at the fee floor`() {
+        fun sweepOf(sats: ULong) = listOf(
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = sats),
+        )
+
+        // 532 WU at 253 sat/kW is 134 sats, plus 330 sats of P2TR dust.
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(463u), AddressType.P2TR))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(464u), AddressType.P2TR))
+    }
+
+    @Test
+    fun `isUnsweepable is false without an unconfirmed sweep for the channel`() {
+        val confirmed = PendingSweepBalance.AwaitingThresholdConfirmations(
+            channelId = ID_CHANNEL,
+            latestSpendingTxid = "sweep-txid",
+            confirmationHash = "block-hash",
+            confirmationHeight = 800000u,
+            amountSatoshis = 388u,
+        )
+
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, emptyList(), AddressType.P2TR))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, listOf(confirmed), AddressType.P2TR))
     }
 
     private fun forceCloseTransfer(amountSats: Long) = TransferEntity(
@@ -1634,6 +1685,7 @@ class TransferRepoTest : BaseUnitTest() {
             blocktankRepo = blocktankRepo,
             coreService = coreService,
             transferDao = transferDao,
+            settingsStore = settingsStore,
             clock = clock,
         )
 
