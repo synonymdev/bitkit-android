@@ -101,12 +101,14 @@ private fun Content(
             VerticalSpacer(32.dp)
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            if (uiState.canTapStartFunding) {
+            // A start can wait minutes for Spark, so its button stays and spins until it ends.
+            if (uiState.canTapStartFunding || uiState.isStarting) {
                 PrimaryButton(
                     text = stringResource(
                         if (uiState.hasPayAutoStarted) R.string.common__try_again else R.string.common__continue
                     ),
                     onClick = onStart,
+                    isLoading = uiState.isStarting,
                     modifier = Modifier.testTag("SparkExitPayRetry")
                 )
                 VerticalSpacer(16.dp)
