@@ -110,7 +110,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
         contacts: List<String>,
         canSync: () -> Boolean,
     ): Result<Unit> = runSuspendCatching {
-        if (!privatePaykitRepo.hasPrivatePaymentAccessForSetup()) throw PrivatePaykitError.PrivateUnavailable
+        if (!privatePaykitRepo.hasPrivatePaymentAccess()) throw PrivatePaykitError.PrivateUnavailable
         publicPaykitRepo.syncPaykitApp(priority = Priority.Background, canSync = { canSync() }).getOrThrow()
         prepareCurrentSavedContacts(canSync).getOrThrow()
     }.onFailure {
@@ -164,7 +164,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                     }
                     currentCoroutineContext().ensureActive()
                     if (isEnabled) {
-                        publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canPublish).getOrThrow()
+                        publicPaykitRepo.syncPublishedEndpoints(true, Priority.Background, canPublish).getOrThrow()
                     } else {
                         publicPaykitRepo.syncPublishedEndpoints(false, Priority.Interactive, canPublish).getOrThrow()
                     }
@@ -271,7 +271,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                     sharesPrivatePaykitEndpoints = true,
                 )
             }
-            publicPaykitRepo.syncPaykitApp(canSync = { canSync() }).getOrThrow()
+            publicPaykitRepo.syncPaykitApp(priority = Priority.Background, canSync = { canSync() }).getOrThrow()
 
             prepareCurrentSavedContacts(canSync).getOrThrow()
         }.onFailure { rollbackEnabled(previous, contacts, canSync, it) }

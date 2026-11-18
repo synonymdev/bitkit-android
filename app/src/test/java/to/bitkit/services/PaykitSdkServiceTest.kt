@@ -1122,7 +1122,7 @@ class PaykitSdkServiceTest {
         val registration = async { service.syncPaykitApp(true, Priority.Background) }
         val allowances = async { service.listAllowances(AllowanceFilter(null, null, emptyList())) }
         service.setPaymentSubmissionActive(true)
-        val setup = async { service.hasPrivatePaymentAccessForSetup() }
+        val setup = async { service.hasPrivatePaymentAccess() }
         val save = async {
             service.publishPubkyProfile(mock<PubkyProfileUpdate>(), "revision", RING_PUBKY)
             service.publishPaykitProfile(mock<PaykitProfile>(), RING_PUBKY)

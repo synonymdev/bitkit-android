@@ -470,13 +470,11 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun hasPrivatePaymentAccess(): Boolean = hasPrivatePaymentAccess(Priority.Ordered)
+    // Setup must determine capability even during payment review, but can yield its queue position.
+    suspend fun hasPrivatePaymentAccess(): Boolean = readPrivatePaymentAccess(Priority.Background) {}
 
     internal suspend fun hasPrivatePaymentAccess(priority: Priority): Boolean =
         readPrivatePaymentAccess(priority) { checkRefreshAdmission(priority) }
-
-    // Setup must determine capability even during payment review, but can yield its queue position.
-    internal suspend fun hasPrivatePaymentAccessForSetup(): Boolean = readPrivatePaymentAccess(Priority.Background) {}
 
     private suspend fun readPrivatePaymentAccess(priority: Priority, checkAdmission: () -> Unit): Boolean {
         isSetup.await()
