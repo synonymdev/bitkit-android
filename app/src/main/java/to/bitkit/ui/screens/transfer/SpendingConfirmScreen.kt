@@ -68,7 +68,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-/** Gap above each fee grid row after the first, as the Review and HW sign frames draw it. */
+/** Gap above each fee grid row after the first, as the Review frame draws it. */
 private val FEE_GRID_ROW_GAP = 24.dp
 
 @Composable

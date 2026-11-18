@@ -223,16 +223,17 @@ private fun Content(
                             ).withAccent(accentColor = Colors.Purple),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        VerticalSpacer(8.dp)
+                        VerticalSpacer(16.dp)
 
                         SpendingFeeGrid(
                             quote = quote,
                             speed = state.speed,
                             address = quote?.address,
                             onClick = onFeesClick,
+                            rowGap = 10.dp,
                         )
 
-                        VerticalSpacer(24.dp)
+                        VerticalSpacer(10.dp)
 
                         SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
 
