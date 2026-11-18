@@ -165,7 +165,7 @@
     <string name="lightning__funding__nav_title">Conto di Spesa</string>
     <string name="lightning__funding__text">Il modo più semplice è usare i tuoi risparmi Bitkit o inviare bitcoin da un portafoglio diverso.</string>
     <string name="lightning__funding__title">Manda fondi al tuo &lt;accent&gt;conto di spesa&lt;/accent&gt;</string>
-    <string name="lightning__funding_advanced__button2">Configurazione Manuale</string>
+    <string name="lightning__funding_advanced__button2">Configurazione manuale</string>
     <string name="lightning__inbound_capacity">Capacita\' in Entrata</string>
     <string name="lightning__inbound_htlc_max">HTLC Max in Entrata</string>
     <string name="lightning__inbound_htlc_min">HTLC Min in Entrata</string>
@@ -318,6 +318,10 @@
     <string name="lightning__spark_exit__uneconomic">Le commissioni sono più alte di quanto riceveresti.</string>
     <string name="lightning__spark_exit__waiting_leaves">Al momento una parte di questa uscita non può essere letta on-chain. Bitkit riprova per un massimo di una settimana.</string>
     <string name="lightning__spark_exit__waiting_operators">{amount} che gli operatori Spark hanno spostato on-chain attende che lo sblocchino. Bitkit lo richiede di nuovo per un massimo di una settimana.</string>
+    <string name="lightning__spark_learn__about_text">Il tuo saldo di spesa usa Spark, gestito da Lightspark, Breez e Flashnet.\n\nLa sua sicurezza dipende dal fatto che almeno un operatore agisca onestamente. Gli operatori possono sospendere l\'accesso, e prelevare senza la loro collaborazione richiede di avviare un\'uscita on-chain.</string>
+    <string name="lightning__spark_learn__about_title">Info sul tuo\n&lt;accent&gt;saldo di spesa&lt;/accent&gt;</string>
+    <string name="lightning__spark_learn__fast_text">I tuoi fondi sono di solito pronti da spendere in pochi minuti, senza attendere conferme.</string>
+    <string name="lightning__spark_learn__later_text">I tuoi fondi diventano disponibili dopo 3 conferme, di solito circa 30 minuti.</string>
     <string name="lightning__spark_provider">Fornitore</string>
     <string name="lightning__spark_provider_value">Spark tramite Breez</string>
     <string name="lightning__spark_receiving_unlimited">Nessun limite</string>
@@ -333,11 +337,14 @@
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__title">Trasferisci\n&lt;accent&gt;alle spese&lt;/accent&gt;</string>
     <string name="lightning__spending_confirm__amount">Alle spese</string>
+    <string name="lightning__spending_confirm__fee_est">stim.</string>
+    <string name="lightning__spending_confirm__fee_max">max</string>
     <string name="lightning__spending_confirm__fees_changed_network">Le commissioni sono aumentate di {amount} perché i tassi di commissione o il saldo dei tuoi risparmi sono cambiati mentre eri su questa schermata. Scorri di nuovo per confermare.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Commissioni cambiate</string>
     <string name="lightning__spending_confirm__instant_text">Pronto in pochi minuti</string>
     <string name="lightning__spending_confirm__lsp_fee">Commissioni servizio</string>
     <string name="lightning__spending_confirm__network_fee">Commissioni rete</string>
+    <string name="lightning__spending_confirm__normal_text">Pronto in circa 30 minuti</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit non è riuscito a ottenere le commissioni attuali per questo trasferimento. Controlla la connessione e riprova.</string>
     <string name="lightning__spending_confirm__quote_error_title">Commissioni non disponibili</string>
     <string name="lightning__spending_confirm__total">Totale</string>
@@ -356,9 +363,12 @@
     <string name="lightning__transfer__confirm">Per favore\n&lt;accent&gt;conferma&lt;/accent&gt;</string>
     <string name="lightning__transfer__nav_title">Trasferimento Fondi</string>
     <string name="lightning__transfer__swipe">Swipe Per Trasferire</string>
+    <string name="lightning__transfer_from_savings_button">Trasferimento da risparmio</string>
+    <string name="lightning__transfer_hw__address">Indirizzo (conferma sul dispositivo)</string>
     <string name="lightning__transfer_hw__open_connect">Apri Trezor Connect</string>
     <string name="lightning__transfer_in_progress">TRASFERIMENTO IN CORSO</string>
     <string name="lightning__transfer_intro__button">Inizia</string>
+    <string name="lightning__transfer_intro__text_spark">Ricarica il tuo saldo di spesa per pagamenti Lightning istantanei ed economici.</string>
     <string name="lightning__transfer_intro__title">Conto\n&lt;accent&gt;di Spesa&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">Trasferimento Riuscito</string>
     <string name="lightning__transfer_success__text_savings">I tuoi fondi sono stati trasferiti. Puoi utilizzare questi fondi immediatamente.</string>

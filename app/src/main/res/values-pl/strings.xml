@@ -203,6 +203,10 @@
     <string name="lightning__spark_exit__uneconomic">Opłaty są wyższe niż kwota, którą otrzymasz.</string>
     <string name="lightning__spark_exit__waiting_leaves">Części tego wyjścia nie można teraz odczytać on-chain. Bitkit będzie próbować ponownie przez maksymalnie tydzień.</string>
     <string name="lightning__spark_exit__waiting_operators">{amount} przeniesione on-chain przez operatorów Spark czeka, aż je zwolnią. Bitkit będzie pytać ponownie przez maksymalnie tydzień.</string>
+    <string name="lightning__spark_learn__about_text">Twoje saldo wydatków korzysta ze Spark, prowadzonego przez Lightspark, Breez i Flashnet.\n\nJego bezpieczeństwo zależy od tego, czy co najmniej jeden operator działa uczciwie. Operatorzy mogą wstrzymać dostęp, a wypłata bez ich współpracy wymaga rozpoczęcia wyjścia on-chain.</string>
+    <string name="lightning__spark_learn__about_title">O Twoim\n&lt;accent&gt;saldzie wydatków&lt;/accent&gt;</string>
+    <string name="lightning__spark_learn__fast_text">Twoje środki są zwykle gotowe do wydania w ciągu kilku minut, bez czekania na potwierdzenia.</string>
+    <string name="lightning__spark_learn__later_text">Twoje środki będą dostępne po 3 potwierdzeniach, zwykle po około 30 minutach.</string>
     <string name="lightning__spark_provider">Dostawca</string>
     <string name="lightning__spark_provider_value">Spark przez Breez</string>
     <string name="lightning__spark_receiving_unlimited">Bez limitu</string>
@@ -212,9 +216,14 @@
     <string name="lightning__funding__button1">Prześlij z Oszczędności</string>
     <string name="lightning__funding_advanced__button2">Konfiguracja ręczna</string>
     <string name="lightning__spending_amount__title">Prześlij \n&lt;accent&gt;na saldo wydatków&lt;/accent&gt;</string>
+    <string name="lightning__spending_confirm__fee_est">szac.</string>
+    <string name="lightning__spending_confirm__fee_max">maks.</string>
+    <string name="lightning__spending_confirm__normal_text">Gotowe za około 30 minut</string>
     <string name="lightning__transfer__nav_title">Prześlij środki</string>
     <string name="lightning__transfer__confirm">Proszę \n&lt;accent&gt;potwierdzić&lt;/accent&gt;</string>
     <string name="lightning__transfer__swipe">Przesuń, aby przesłać</string>
+    <string name="lightning__transfer_from_savings_button">Prześlij z Oszczędności</string>
+    <string name="lightning__transfer_hw__address">Adres (potwierdź na urządzeniu)</string>
     <string name="lightning__transfer_hw__open_connect">Otwórz Trezor Connect</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__error_max__title">Maksymalne saldo wydatków</string>
@@ -248,6 +257,7 @@
     <string name="lightning__savings_interrupted__nav_title">Transfer środków\n&lt;accent&gt;przerwany&lt;/accent&gt;</string>
     <string name="lightning__savings_interrupted__title">Pozostaw Bitkit\n&lt;accent&gt;otwarty&lt;/accent&gt;</string>
     <string name="lightning__savings_interrupted__text">Środki nie zostały jeszcze przelane. Bitkit spróbuje zainicjować transfer w ciągu najbliższych &lt;accent&gt;30 minut&lt;/accent&gt;. Proszę pozostawić aplikację otwartą.</string>
+    <string name="lightning__transfer_intro__text_spark">Zasil saldo wydatków, aby korzystać z natychmiastowych i tanich płatności Lightning.</string>
     <string name="lightning__transfer_success__nav_title">Transfer środków powiódł się</string>
     <string name="lightning__transfer_success__title_savings">Środki przeniesione\n&lt;accent&gt;na saldo oszczędności&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__title_spending">Środki przeniesione\n&lt;accent&gt;na saldo wydatków&lt;/accent&gt;</string>
