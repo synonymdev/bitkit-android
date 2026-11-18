@@ -252,7 +252,7 @@ internal fun SpendingFeeGrid(
             ) {
                 Caption13Up(text = stringResource(R.string.lightning__transfer_hw__address), color = Colors.White64)
                 VerticalSpacer(8.dp)
-                BodySSB(text = address, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                BodySSB(text = address, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 VerticalSpacer(16.dp)
                 HorizontalDivider()
             }

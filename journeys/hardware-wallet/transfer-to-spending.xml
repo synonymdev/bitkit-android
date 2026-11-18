@@ -34,7 +34,7 @@
       Tap "Continue" (testTag "HardwareTransferAmountContinue") and wait for the fee estimate
     </action>
     <action>
-      Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", showing the NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL cells, the deposit address under "ADDRESS (CONFIRM ON DEVICE)" (testTag "SpendingConfirmAddress"), the Fast and Normal rows with Fast selected, and the Trezor illustration
+      Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", showing the NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL cells, the deposit address on one line under "ADDRESS (CONFIRM ON DEVICE)" (testTag "SpendingConfirmAddress"), cut with an ellipsis at its end, the Fast and Normal rows with Fast selected, and the angled Trezor illustration running behind the "Open Trezor Connect" button
     </action>
     <action>
       Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect"). If the fees rose since they were shown, verify a "Fees changed" toast, the fee cells refresh, and tap "Open Trezor Connect" again; otherwise signing starts immediately
