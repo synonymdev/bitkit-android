@@ -195,28 +195,42 @@ class CacheStore internal constructor(
                 sparkUncertainSendEarlierIds = earlierIds
                     ?.let { ids -> it.sparkUncertainSendEarlierIds + (hash to ids.sorted()) }
                     ?: (it.sparkUncertainSendEarlierIds - hash),
+                sparkTakenSendIds = it.sparkTakenSendIds - hash,
             )
         }
     }
 
-    /** Ends the doubt over a send Spark took and still runs, keeping its start time and earlier attempts' ids. */
-    suspend fun keepSparkSendAttempt(paymentHash: String) {
+    /**
+     * Ends the doubt over a send Spark took and still runs, keeping its start time and earlier attempts' ids, with
+     * Spark's id of the payment it took, [paymentId], so its own failure is told apart after a restart.
+     */
+    suspend fun keepSparkSendAttempt(paymentHash: String, paymentId: String?) {
         val hash = paymentHash.lowercase()
-        if (hash !in store.data.first().sparkUncertainSends) return
-        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
+        val data = store.data.first()
+        val isIdKept = paymentId == null || data.sparkTakenSendIds[hash] == paymentId
+        if (hash !in data.sparkUncertainSends && isIdKept) return
+        store.updateData {
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends - hash,
+                sparkTakenSendIds = paymentId
+                    ?.let { id -> it.sparkTakenSendIds + (hash to id) }
+                    ?: it.sparkTakenSendIds,
+            )
+        }
     }
 
     suspend fun removeSparkUncertainSend(paymentHash: String) {
         val hash = paymentHash.lowercase()
         val data = store.data.first()
         val isKept = hash in data.sparkUncertainSends || hash in data.sparkUncertainSendStarts ||
-            hash in data.sparkUncertainSendEarlierIds
+            hash in data.sparkUncertainSendEarlierIds || hash in data.sparkTakenSendIds
         if (!isKept) return
         store.updateData {
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends - hash,
                 sparkUncertainSendStarts = it.sparkUncertainSendStarts - hash,
                 sparkUncertainSendEarlierIds = it.sparkUncertainSendEarlierIds - hash,
+                sparkTakenSendIds = it.sparkTakenSendIds - hash,
             )
         }
     }
@@ -420,6 +434,8 @@ data class AppCacheData(
      * failures read as earlier ones. Absent where Spark couldn't list them.
      */
     val sparkUncertainSendEarlierIds: Map<String, List<String>> = mapOf(),
+    /** Spark's id of the payment each send Spark took is, so its own failure never reads as an earlier attempt's. */
+    val sparkTakenSendIds: Map<String, String> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.

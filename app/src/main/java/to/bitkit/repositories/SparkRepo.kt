@@ -641,7 +641,7 @@ class SparkRepo @Inject constructor(
             }
             // A send Spark still runs keeps its earlier attempts' ids, so their late failures leave it alone.
             if (payment.status == PaymentStatus.PENDING) {
-                cacheStore.keepSparkSendAttempt(paymentHash)
+                cacheStore.keepSparkSendAttempt(paymentHash, payment.id)
             } else {
                 takenAttempts.remove(paymentHash.lowercase())
                 restoredTakenAttempts.remove(paymentHash.lowercase())
@@ -713,7 +713,11 @@ class SparkRepo @Inject constructor(
             isRemoved
         }
         if (!isOwner) return true
-        if (isTaken) cacheStore.keepSparkSendAttempt(paymentHash) else cacheStore.removeSparkUncertainSend(paymentHash)
+        if (isTaken) {
+            cacheStore.keepSparkSendAttempt(paymentHash, taken.ownId)
+        } else {
+            cacheStore.removeSparkUncertainSend(paymentHash)
+        }
         when (send) {
             SparkLightningSend.NotFound -> {
                 cacheStore.removeSparkSendHash(paymentHash)
@@ -783,12 +787,13 @@ class SparkRepo @Inject constructor(
             )
             uncertainSends.putIfAbsent(hash, UncertainSend(failedAt.toULong(), expiresAt, attempt))
         }
-        (cache.sparkUncertainSendStarts.keys + cache.sparkUncertainSendEarlierIds.keys)
+        (cache.sparkUncertainSendStarts.keys + cache.sparkUncertainSendEarlierIds.keys + cache.sparkTakenSendIds.keys)
             .filter { it !in cache.sparkUncertainSends }
             .forEach { hash ->
                 val attempt = SendAttempt(
                     sentAt = cache.sparkUncertainSendStarts[hash]?.toULong(),
                     earlierIds = cache.sparkUncertainSendEarlierIds[hash]?.toSet(),
+                    ownId = cache.sparkTakenSendIds[hash],
                 )
                 if (takenAttempts.putIfAbsent(hash, attempt) == null) restoredTakenAttempts.add(hash)
             }
