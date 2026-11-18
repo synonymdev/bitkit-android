@@ -186,6 +186,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Puoi spostarlo in parti più piccole.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s è troppo grande per essere instradato su Spark in un solo pagamento.</string>
     <string name="lightning__move_to_spark__too_large_title">Importo\n&lt;accent&gt;troppo grande&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Aggiorna</string>
+    <string name="lightning__move_to_spark__update_fee">Commissione di aggiornamento: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Aggiorna saldo di spesa</string>
+    <string name="lightning__move_to_spark__update_text">Bitkit sta cambiando fornitore Lightning. Aggiorna il tuo saldo di spesa per continuare a fare pagamenti istantanei ed economici.</string>
+    <string name="lightning__move_to_spark__update_title">Aggiorna\n&lt;accent&gt;saldo di spesa&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Saldo di spesa aggiornato</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Parte del tuo saldo di spesa ora è su Spark. Sposta il resto allo stesso modo.</string>
+    <string name="lightning__move_to_spark__updated_text">Il tuo saldo di spesa è stato migrato con successo su Spark, il nuovo fornitore di servizi Lightning di Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Saldo di spesa\n&lt;accent&gt;aggiornato&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">Limite HTLC in Uscita Successivo</string>
     <string name="lightning__next_outbound_htlc_min">HTLC Min in Uscita Successivo</string>
     <string name="lightning__no_funds__description">Prima di poter trasferire fondi dal tuo conto di risparmio, devi inviare bitcoin al tuo portafoglio Bitkit.</string>
@@ -1185,6 +1194,7 @@
     <string name="wallet__send_swap_route">Percorso</string>
     <string name="wallet__send_swipe">Scorri per Pagare</string>
     <string name="wallet__send_to">A</string>
+    <string name="wallet__send_update_fee">Commissione di aggiornamento</string>
     <string name="wallet__send_yes">Si, Invia</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Invia\nbitcoin&lt;/accent&gt;\nal tuo\nconto di spesa</string>
     <string name="wallet__spending__title">Spesa</string>

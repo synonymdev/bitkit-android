@@ -112,6 +112,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Pode movê-lo em partes mais pequenas.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s é demasiado grande para ser encaminhado para a Spark num único pagamento.</string>
     <string name="lightning__move_to_spark__too_large_title">Montante\n&lt;accent&gt;demasiado grande&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Atualizar</string>
+    <string name="lightning__move_to_spark__update_fee">Taxa de atualização: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Atualizar saldo de gastos</string>
+    <string name="lightning__move_to_spark__update_text">A Bitkit está a mudar de fornecedor Lightning. Atualize o seu saldo de gastos para continuar a fazer pagamentos instantâneos e baratos.</string>
+    <string name="lightning__move_to_spark__update_title">Atualizar\n&lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Saldo de gastos atualizado</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Parte do seu saldo de gastos já está na Spark. Mova o resto da mesma forma.</string>
+    <string name="lightning__move_to_spark__updated_text">O seu saldo de gastos foi migrado com sucesso para a Spark, o novo fornecedor de serviços Lightning da Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Saldo de gastos\n&lt;accent&gt;atualizado&lt;/accent&gt;</string>
     <string name="lightning__savings_spark_failed__title">Transferência\n&lt;accent&gt;falhada&lt;/accent&gt;</string>
     <string name="lightning__setting_up__approve_button">Aprovar</string>
     <string name="lightning__setting_up__fee_changed_text">&lt;accent&gt;A taxa da transferência rápida é agora ₿ {amount}.&lt;/accent&gt; Aprove para aceder rapidamente aos seus fundos ou aguarde ±30 min.</string>
@@ -901,6 +910,7 @@
     <string name="wallet__send_invoice_expiration">Vencimento do invoice</string>
     <string name="wallet__send_swap_route">Rota</string>
     <string name="wallet__send_swipe">Deslize para Pagar</string>
+    <string name="wallet__send_update_fee">Taxa de atualização</string>
     <string name="wallet__send_yes">Sim, Enviar</string>
     <string name="wallet__send_dialog1">Parece que você está enviando mais de US$ 100. Deseja continuar?</string>
     <string name="wallet__send_dialog2">Parece que você está enviando mais de 50% do seu saldo total. Deseja continuar?</string>

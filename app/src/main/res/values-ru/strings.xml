@@ -197,6 +197,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Вы можете перенести его меньшими частями.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s слишком много для маршрутизации в Spark одним платежом.</string>
     <string name="lightning__move_to_spark__too_large_title">Сумма\n&lt;accent&gt;слишком велика&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Обновить</string>
+    <string name="lightning__move_to_spark__update_fee">Комиссия за обновление: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Обновить баланс расходов</string>
+    <string name="lightning__move_to_spark__update_text">Bitkit меняет Lightning-провайдера. Обновите баланс расходов, чтобы и дальше платить мгновенно и дёшево.</string>
+    <string name="lightning__move_to_spark__update_title">Обновить\n&lt;accent&gt;баланс расходов&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Баланс расходов обновлён</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Часть вашего баланса расходов уже в Spark. Перенесите остаток тем же способом.</string>
+    <string name="lightning__move_to_spark__updated_text">Ваш баланс расходов успешно перенесён в Spark, нового поставщика Lightning-услуг Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Баланс расходов\n&lt;accent&gt;обновлён&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">Лимит след. исходящего HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Мин. след. исходящего HTLC</string>
     <string name="lightning__no_funds__description">Прежде чем вы сможете перевести средства со своего баланса сбережений, вам нужно отправить биткойны в ваш кошелёк Bitkit.</string>
@@ -1203,6 +1212,7 @@
     <string name="wallet__send_swap_route">Маршрут</string>
     <string name="wallet__send_swipe">Отправить</string>
     <string name="wallet__send_to">Кому</string>
+    <string name="wallet__send_update_fee">Комиссия за обновление</string>
     <string name="wallet__send_yes">Да, Отправить</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Отправьте\nбиткоин&lt;/accent&gt;\nна ваш\nБаланс Расходов</string>
     <string name="wallet__spending__title">Расходы</string>

@@ -188,6 +188,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Můžete ho přesunout po menších částech.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s je příliš velká částka na směrování do Spark jednou platbou.</string>
     <string name="lightning__move_to_spark__too_large_title">Částka je\n&lt;accent&gt;příliš velká&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Aktualizovat</string>
+    <string name="lightning__move_to_spark__update_fee">Poplatek za aktualizaci: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Aktualizovat výdajový zůstatek</string>
+    <string name="lightning__move_to_spark__update_text">Bitkit mění poskytovatele Lightning. Aktualizujte svůj výdajový zůstatek, abyste mohli dál platit okamžitě a levně.</string>
+    <string name="lightning__move_to_spark__update_title">Aktualizovat\n&lt;accent&gt;výdajový zůstatek&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Výdajový zůstatek aktualizován</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Část vašeho výdajového zůstatku je nyní na Spark. Zbytek přesuňte stejným způsobem.</string>
+    <string name="lightning__move_to_spark__updated_text">Váš výdajový zůstatek byl úspěšně převeden na Spark, nového poskytovatele služeb Lightning pro Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Výdajový zůstatek\n&lt;accent&gt;aktualizován&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">Limit dalšího odchozího HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Min dalšího odchozího HTLC</string>
     <string name="lightning__no_funds__description">Než budete moci převést prostředky ze svého zůstatku na spořicím účtu, musíte poslat bitcoiny do peněženky Bitkit.</string>
@@ -1187,6 +1196,7 @@
     <string name="wallet__send_swap_route">Trasa</string>
     <string name="wallet__send_swipe">Zaplatit přejetím prstem</string>
     <string name="wallet__send_to">Komu</string>
+    <string name="wallet__send_update_fee">Poplatek za aktualizaci</string>
     <string name="wallet__send_yes">Ano, odeslat</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Odeslat\nbitcoin&lt;/accent&gt;\ndo vašeho\ndisponibilního zůstatku</string>
     <string name="wallet__spending__title">Útraty</string>

@@ -189,6 +189,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Você pode movê-lo em partes menores.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s é grande demais para ser roteado para a Spark num único pagamento.</string>
     <string name="lightning__move_to_spark__too_large_title">Valor\n&lt;accent&gt;grande demais&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Atualizar</string>
+    <string name="lightning__move_to_spark__update_fee">Taxa de atualização: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Atualizar saldo de gastos</string>
+    <string name="lightning__move_to_spark__update_text">A Bitkit está mudando de provedor Lightning. Atualize seu saldo de gastos para continuar fazendo pagamentos instantâneos e baratos.</string>
+    <string name="lightning__move_to_spark__update_title">Atualizar\n&lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Saldo de gastos atualizado</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Parte do seu saldo de gastos já está na Spark. Mova o restante da mesma forma.</string>
+    <string name="lightning__move_to_spark__updated_text">Seu saldo de gastos foi migrado com sucesso para a Spark, o novo provedor de serviços Lightning da Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Saldo de gastos\n&lt;accent&gt;atualizado&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">Limite do Próximo HTLC de Saída</string>
     <string name="lightning__next_outbound_htlc_min">HTLC de Saída Mín Próximo</string>
     <string name="lightning__no_funds__description">Antes de transferir fundos de seu saldo de poupança, receba bitcoin na sua carteira Bitkit.</string>
@@ -1189,6 +1198,7 @@
     <string name="wallet__send_swap_route">Rota</string>
     <string name="wallet__send_swipe">Deslize para Pagar</string>
     <string name="wallet__send_to">Para</string>
+    <string name="wallet__send_update_fee">Taxa de atualização</string>
     <string name="wallet__send_yes">Sim, Enviar</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Transfira\nbitcoin&lt;/accent&gt;\npara seu\nsaldo de gastos</string>
     <string name="wallet__spending__title">Gastos</string>

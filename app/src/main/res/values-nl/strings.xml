@@ -185,6 +185,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Je kunt het in kleinere delen verplaatsen.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s is te groot om in één betaling naar Spark te routeren.</string>
     <string name="lightning__move_to_spark__too_large_title">Bedrag\n&lt;accent&gt;te groot&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Bijwerken</string>
+    <string name="lightning__move_to_spark__update_fee">Kosten bijwerking: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Bestedingssaldo bijwerken</string>
+    <string name="lightning__move_to_spark__update_text">Bitkit stapt over op een andere Lightning-provider. Werk je bestedingssaldo bij om snelle, goedkope betalingen te blijven doen.</string>
+    <string name="lightning__move_to_spark__update_title">Bestedingssaldo\n&lt;accent&gt;bijwerken&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Bestedingssaldo bijgewerkt</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Een deel van je bestedingssaldo staat nu op Spark. Verplaats de rest op dezelfde manier.</string>
+    <string name="lightning__move_to_spark__updated_text">Je bestedingssaldo is overgezet naar Spark, de nieuwe Lightning-dienstverlener van Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Bestedingssaldo\n&lt;accent&gt;bijgewerkt&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">Volgende uitgaande HTLC-limiet</string>
     <string name="lightning__next_outbound_htlc_min">Volgende uitgaande HTLC min</string>
     <string name="lightning__no_funds__description">Voordat je geld van je spaargeld kunt overboeken, moet je bitcoin naar je Bitkit-wallet sturen.</string>
@@ -1180,6 +1189,7 @@
     <string name="wallet__send_swap_route">Route</string>
     <string name="wallet__send_swipe">Veeg om te betalen</string>
     <string name="wallet__send_to">Naar</string>
+    <string name="wallet__send_update_fee">Kosten bijwerking</string>
     <string name="wallet__send_yes">Ja, verzenden</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Stuur\nbitcoin&lt;/accent&gt;\nnaar je\nbestedingssaldo</string>
     <string name="wallet__spending__title">Bestedingssaldo</string>

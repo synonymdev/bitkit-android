@@ -185,6 +185,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Pots moure\'l en parts més petites.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s és massa gran per encaminar-se a Spark en un sol pagament.</string>
     <string name="lightning__move_to_spark__too_large_title">Import\n&lt;accent&gt;massa gran&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Actualitzar</string>
+    <string name="lightning__move_to_spark__update_fee">Comissió d’actualització: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Actualitzar el saldo de despesa</string>
+    <string name="lightning__move_to_spark__update_text">Bitkit està canviant de proveïdor Lightning. Actualitza el teu saldo de despesa per continuar fent pagaments instantanis i barats.</string>
+    <string name="lightning__move_to_spark__update_title">Actualitzar\n&lt;accent&gt;saldo de despesa&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Saldo de despesa actualitzat</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Part del teu saldo de despesa ja és a Spark. Mou la resta de la mateixa manera.</string>
+    <string name="lightning__move_to_spark__updated_text">El teu saldo de despesa s’ha migrat correctament a Spark, el nou proveïdor de serveis Lightning de Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Saldo de despesa\n&lt;accent&gt;actualitzat&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">Límit del pròxim HTLC de sortida</string>
     <string name="lightning__next_outbound_htlc_min">Mínim del pròxim HTLC de sortida</string>
     <string name="lightning__no_funds__description">Abans de poder transferir fons del teu saldo d\'estalvis, has d\'enviar bitcoin a la teva cartera Bitkit.</string>
@@ -1182,6 +1191,7 @@
     <string name="wallet__send_swap_route">Ruta</string>
     <string name="wallet__send_swipe">Desplaça per pagar</string>
     <string name="wallet__send_to">A</string>
+    <string name="wallet__send_update_fee">Comissió d’actualització</string>
     <string name="wallet__send_yes">Sí, Enviar</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Envia\nbitcoin&lt;/accent&gt;\nal teu\nsaldo de despesa</string>
     <string name="wallet__spending__title">Despesa</string>

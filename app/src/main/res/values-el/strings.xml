@@ -181,6 +181,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">Μπορείς να το μεταφέρεις σε μικρότερα μέρη.</string>
     <string name="lightning__move_to_spark__too_large_text">Το %1$s είναι πολύ μεγάλο για να δρομολογηθεί στο Spark με μία πληρωμή.</string>
     <string name="lightning__move_to_spark__too_large_title">Πολύ μεγάλο\n&lt;accent&gt;ποσό&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">Ενημέρωση</string>
+    <string name="lightning__move_to_spark__update_fee">Χρέωση ενημέρωσης: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">Ενημέρωση υπολοίπου δαπανών</string>
+    <string name="lightning__move_to_spark__update_text">Το Bitkit αλλάζει πάροχο Lightning. Ενημερώστε το υπόλοιπο δαπανών σας για να συνεχίσετε να κάνετε άμεσες, φθηνές πληρωμές.</string>
+    <string name="lightning__move_to_spark__update_title">Ενημέρωση\n&lt;accent&gt;υπολοίπου δαπανών&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">Το υπόλοιπο δαπανών ενημερώθηκε</string>
+    <string name="lightning__move_to_spark__updated_rest_text">Μέρος του υπολοίπου δαπανών σας βρίσκεται τώρα στο Spark. Μεταφέρετε το υπόλοιπο με τον ίδιο τρόπο.</string>
+    <string name="lightning__move_to_spark__updated_text">Το υπόλοιπο δαπανών σας μεταφέρθηκε με επιτυχία στο Spark, τον νέο πάροχο υπηρεσιών Lightning του Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">Υπόλοιπο δαπανών\n&lt;accent&gt;ενημερώθηκε&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">Όριο επόμενου εξερχόμενου HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Ελάχιστο επόμενο εξερχόμενο HTLC</string>
     <string name="lightning__no_funds__description">Πριν μπορέσεις να μεταφέρεις κεφάλαια από το υπόλοιπο αποταμιεύσεων, πρέπει να στείλεις bitcoin στο πορτοφόλι Bitkit.</string>
@@ -1161,6 +1170,7 @@
     <string name="wallet__send_swap_route">Διαδρομή</string>
     <string name="wallet__send_swipe">Σύρε για πληρωμή</string>
     <string name="wallet__send_to">Προς</string>
+    <string name="wallet__send_update_fee">Χρέωση ενημέρωσης</string>
     <string name="wallet__send_yes">Ναι, Στείλε</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Στείλε\nbitcoin&lt;/accent&gt;\nστο υπόλοιπο\nδαπανών</string>
     <string name="wallet__spending__title">Δαπάνες</string>

@@ -181,6 +181,15 @@
     <string name="lightning__move_to_spark__too_large_smaller">يمكنك نقله على أجزاء أصغر.</string>
     <string name="lightning__move_to_spark__too_large_text">%1$s كبير جدًا بحيث لا يمكن توجيهه إلى Spark في دفعة واحدة.</string>
     <string name="lightning__move_to_spark__too_large_title">المبلغ\n&lt;accent&gt;كبير جدًا&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__update">تحديث</string>
+    <string name="lightning__move_to_spark__update_fee">رسوم التحديث: %1$s</string>
+    <string name="lightning__move_to_spark__update_nav_title">تحديث رصيد الإنفاق</string>
+    <string name="lightning__move_to_spark__update_text">يغيّر Bitkit مزوّد Lightning. حدّث رصيد الإنفاق لمواصلة الدفعات الفورية والرخيصة.</string>
+    <string name="lightning__move_to_spark__update_title">تحديث\n&lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
+    <string name="lightning__move_to_spark__updated_nav_title">تم تحديث رصيد الإنفاق</string>
+    <string name="lightning__move_to_spark__updated_rest_text">جزء من رصيد الإنفاق موجود الآن على Spark. انقل الباقي بالطريقة نفسها.</string>
+    <string name="lightning__move_to_spark__updated_text">تم نقل رصيد الإنفاق بنجاح إلى Spark، مزوّد خدمة Lightning الجديد في Bitkit.</string>
+    <string name="lightning__move_to_spark__updated_title">رصيد الإنفاق\n&lt;accent&gt;محدَّث&lt;/accent&gt;</string>
     <string name="lightning__next_outbound_htlc_limit">حد HTLC الصادر التالي</string>
     <string name="lightning__next_outbound_htlc_min">الحد الأدنى لـ HTLC الصادر التالي</string>
     <string name="lightning__no_funds__description">قبل أن تتمكن من تحويل الأموال من رصيد مدخراتك، تحتاج إلى إرسال Bitcoin إلى محفظة Bitkit الخاصة بك.</string>
@@ -1156,6 +1165,7 @@
     <string name="wallet__send_swap_route">المسار</string>
     <string name="wallet__send_swipe">اسحب للدفع</string>
     <string name="wallet__send_to">إلى</string>
+    <string name="wallet__send_update_fee">رسوم التحديث</string>
     <string name="wallet__send_yes">نعم، أرسل</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;أرسل\nBitcoin&lt;/accent&gt;\nإلى\nرصيد إنفاقك</string>
     <string name="wallet__spending__title">الإنفاق</string>
