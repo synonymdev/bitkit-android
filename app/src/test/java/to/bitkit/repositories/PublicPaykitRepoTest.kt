@@ -727,7 +727,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         isRestoringSession.value = false
 
         publication.await().getOrThrow()
-        verifyBlocking(paykitSdkService) { syncPaykitApp(isNull(), eq(Priority.Ordered), any()) }
+        verifyBlocking(paykitSdkService) { syncPaykitApp(isNull(), eq(Priority.Background), any()) }
         verifyBlocking(paykitSdkService) { syncPublicEndpointsWithEpoch(any(), any(), anyOrNull()) }
         verifyBlocking(pubkyRepo, never()) { currentPublicKey() }
         verifyBlocking(pubkyRepo, never()) { awaitInitialization() }
