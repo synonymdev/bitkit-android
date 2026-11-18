@@ -405,8 +405,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     @Test
     fun `update to send moves nothing when Spark's routing fee would leave the payment short`() = test {
         sparkState.value = SparkState(isReady = true, balanceSats = 10_000uL)
-        whenever(sparkRepo.estimateFeeSats(INVOICE, 59_800uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
-        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 59_800uL)).thenReturn(Result.success(500uL))
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 59_800uL)).thenReturn(Result.success(500uL))
 
         val result = sut.updateToSend(quote, INVOICE, 59_800uL)
 
@@ -418,8 +417,6 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     fun `update to send moves nothing when no fee for the payment can be priced`() = test {
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
-        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 60_000uL))
-            .thenReturn(Result.failure(SparkError.SendRefused("")))
 
         val result = sut.updateToSend(quote, INVOICE, 60_000uL)
 
@@ -502,18 +499,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `the fee after an update adds the routing fee to Spark's service fee when Spark cannot price it yet`() = test {
+    fun `the fee after an update falls back to Spark's service fee when Spark cannot price it`() = test {
         whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
-        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 60_000uL)).thenReturn(Result.success(40uL))
-
-        assertEquals(SparkFees.serviceFeeSats(60_000uL) + 40uL, sut.estimateFeeAfterUpdate(INVOICE, 60_000uL))
-    }
-
-    @Test
-    fun `the fee after an update falls back to Spark's service fee when nothing can price it`() = test {
-        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.failure(SparkError.SendRefused("")))
-        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(INVOICE, 60_000uL))
-            .thenReturn(Result.failure(SparkError.SendRefused("")))
 
         assertEquals(SparkFees.serviceFeeSats(60_000uL), sut.estimateFeeAfterUpdate(INVOICE, 60_000uL))
     }
@@ -522,7 +509,6 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     fun `the fee after an update is Spark's service fee before there is an invoice`() = test {
         assertEquals(SparkFees.serviceFeeSats(60_000uL), sut.estimateFeeAfterUpdate(null, 60_000uL))
         verify(sparkRepo, never()).estimateFeeSats(any(), any())
-        verify(lightningRepo, never()).estimateLdkRoutingFeesForAmount(any(), any())
     }
 
     private fun channel(id: String, sendableSats: ULong) = createChannelDetails().copy(

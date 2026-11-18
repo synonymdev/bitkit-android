@@ -180,14 +180,11 @@ class MoveToSparkRepo internal constructor(
     }
 
     /**
-     * Spark's fee for paying [bolt11] once the spending balance is updated: its own quote, or, while Spark cannot price
-     * an amount above its balance, its service fee plus the routing fee the payment's route costs; null when neither
-     * prices it.
+     * Spark's fee for paying [bolt11] once the spending balance is updated, from Spark's own quote, which prices the
+     * amount whatever its balance; null when Spark cannot price it.
      */
     private suspend fun feeAfterUpdateOrNull(bolt11: String, amountSats: ULong): ULong? =
         sparkRepo.estimateFeeSats(bolt11, amountSats).getOrNull()
-            ?: lightningRepo.estimateLdkRoutingFeesForAmount(bolt11, amountSats).getOrNull()
-                ?.let { SparkFees.serviceFeeSats(amountSats).safe() + it.safe() }
 
     /**
      * Quotes moving [targetSats], or everything the channels can send, to a new Spark invoice.
