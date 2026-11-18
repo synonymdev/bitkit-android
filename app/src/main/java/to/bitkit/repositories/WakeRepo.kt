@@ -36,6 +36,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -82,6 +83,13 @@ class WakeRepo @Inject constructor(
 
         /** The longest a gateway's `Retry-After` is followed, as on iOS. */
         val SYNC_RETRY_AFTER_MAX = 1.hours
+
+        /**
+         * How long an unchanged registration stands before it is sent again. The gateway retires a device that had no
+         * accepted push or registration for 270 days (`retention.idle_device_days`), and presence does not count, so
+         * an install that rarely gets a wake registers again long before that.
+         */
+        val REGISTRATION_MAX_AGE = 30.days
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -179,7 +187,9 @@ class WakeRepo @Inject constructor(
             pubkyIdentity = pubkyIdentity,
         )
         val fingerprint = registration.fingerprint()
-        if (!force && credentialStore.registrationState().fingerprint == fingerprint) return WakeSync.UpToDate
+        val state = credentialStore.registrationState()
+        val isFresh = !isRegistrationDue(nowSecs = clock.now().epochSeconds, lastSecs = state.lastTimestampSecs)
+        if (!force && state.fingerprint == fingerprint && isFresh) return WakeSync.UpToDate
 
         val accepted = register(registration)
         credentialStore.updateRegistrationState { it.copy(fingerprint = fingerprint) }
@@ -377,6 +387,13 @@ private const val HTTP_SERVER_ERROR = 500
 /** `max(now, last + 1)`: the gateway refuses a registration older than the install's last one with a 409. */
 internal fun nextRegistrationTimestamp(nowSecs: Long, lastSecs: Long?): Long =
     if (lastSecs == null) nowSecs else maxOf(nowSecs, lastSecs + 1)
+
+/**
+ * Whether an unchanged registration last sent at [lastSecs] is sent again, so the gateway never retires the device as
+ * idle (see [WakeRepo.REGISTRATION_MAX_AGE]). One with no recorded time is sent again once.
+ */
+internal fun isRegistrationDue(nowSecs: Long, lastSecs: Long?): Boolean =
+    lastSecs == null || nowSecs - lastSecs >= WakeRepo.REGISTRATION_MAX_AGE.inWholeSeconds
 
 internal fun lightningWakeIdentity(nodeId: String): String = "ln:$nodeId"
 
