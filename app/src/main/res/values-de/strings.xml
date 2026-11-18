@@ -1029,6 +1029,7 @@
     <string name="wallet__min_possible_fee_rate">Gebühr unterschreitet das Mindestlimit</string>
     <string name="wallet__min_possible_fee_rate_msg">Erhöhe die benutzerdefinierte Gebühr und versuche es erneut.</string>
     <string name="wallet__send_fee_error_min">Gebühr kann nicht weiter reduziert werden.</string>
+    <string name="wallet__send_fee_changed_not_sent">Die Netzwerkgebühr ist höher als die von dir bestätigte, daher wurde die Zahlung nicht gesendet. Bitte versuche es erneut.</string>
     <string name="wallet__send_fee_custom">Benutzerdefinierte Gebühr festlegen</string>
     <string name="wallet__send_fee_total">₿ {feeSats} für diese Transaktion</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} für diese Transaktion ({fiatSymbol}{fiatFormatted})</string>

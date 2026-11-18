@@ -3359,6 +3359,363 @@ class LightningRepoTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `a prepared fee above the approved one is not broadcast before it is approved again`() = test {
+        val txid = "ab".repeat(32)
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        stubFeeReviewPreparation(txid, feeSats = 212uL) { broadcasts++ }
+        val approval = CompletableDeferred<Unit>()
+        val reviewed = mutableListOf<OnchainPreparedReceipt>()
+
+        val send = async {
+            repo.sendOnChain(
+                "address",
+                1_000uL,
+                approvedMiningFeeSats = 203uL,
+                reviewHigherFee = {
+                    reviewed += it
+                    approval.await()
+                },
+            )
+        }
+
+        assertEquals(0, broadcasts)
+        assertFalse(send.isCompleted)
+        assertEquals(listOf<ULong?>(212uL), reviewed.map { it.miningFeeSats })
+        assertEquals(1_000uL, reviewed.single().amountSats)
+        // The attempt owner is held without a candidate, so no other send starts and nothing can be recovered.
+        val held = assertNotNull(store.current())
+        assertTrue(held.candidateTxids.isEmpty() && !held.initialDispatchAttempted)
+
+        approval.complete(Unit)
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), send.await().getOrThrow())
+        assertEquals(1, broadcasts)
+        val sent = assertNotNull(store.current())
+        assertEquals(listOf(txid), sent.candidateTxids)
+        assertEquals(mapOf(txid to 212uL), sent.candidateMiningFees)
+        assertEquals(OnchainSendEvidence.Accepted, sent.evidence)
+        verify(lightningService, times(1))
+            .prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `cancelling the review of a higher prepared fee sends nothing and releases the attempt`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        stubFeeReviewPreparation("ab".repeat(32), feeSats = 212uL) { broadcasts++ }
+        val cancelled = AppError("cancelled")
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { throw cancelled },
+        )
+
+        val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(cancelled, error.cause)
+        assertEquals(0, broadcasts)
+        assertNull(store.current())
+
+        // The released owner blocks no later send.
+        stubFeeReviewPreparation("cd".repeat(32), feeSats = 203uL) { broadcasts++ }
+        assertTrue(repo.sendOnChain("address", 1_000uL, approvedMiningFeeSats = 203uL).isSuccess)
+        assertEquals(1, broadcasts)
+    }
+
+    @Test
+    fun `a request's higher prepared fee keeps its guard until the cancelled review's proof is removed`() = test {
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        stubFeeReviewPreparation("ab".repeat(32), feeSats = 212uL) { broadcasts++ }
+        val reviewed = mutableListOf<OnchainSendAttempt?>()
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = {
+                reviewed += store.current()
+                throw AppError("cancelled")
+            },
+        )
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(0, broadcasts)
+        assertTrue(reviewed.single()?.preparationPending == true)
+        // The request's guard outlives the cancelled review, so the same request is not admitted twice.
+        val guard = assertNotNull(store.current())
+        assertEquals(requestId, guard.requestId)
+        assertTrue(guard.preparationPending && guard.candidateTxids.isEmpty() && !guard.initialDispatchAttempted)
+        assertIs<OnchainSendBlockedError>(
+            repo.sendOnChain("address", 1_000uL, requestId = requestId, payerIdentity = "payer-identity")
+                .exceptionOrNull(),
+        )
+
+        // Removing its started proof, as the payment's failure cleanup does, releases the guard.
+        assertTrue(repo.releaseInterruptedShopPreparation { it.attemptId == guard.attemptId })
+        assertNull(store.current())
+    }
+
+    @Test
+    fun `a request's higher prepared fee is sent once after renewed approval`() = test {
+        val txid = "ab".repeat(32)
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        stubFeeReviewPreparation(txid, feeSats = 212uL) { broadcasts++ }
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { assertEquals(0, broadcasts) },
+        )
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), result.getOrThrow())
+        assertEquals(1, broadcasts)
+        val sent = assertNotNull(store.current())
+        assertEquals(requestId, sent.requestId)
+        assertEquals(mapOf(txid to 212uL), sent.candidateMiningFees)
+        assertFalse(sent.preparationPending)
+    }
+
+    @Test
+    fun `a node stopping during the review of a higher prepared fee releases the send unsent`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        var releases = 0
+        var reviewEnded = false
+        val prepared = feeReviewPrepared(discard = { releases++ }) { broadcasts++ }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+
+        val send = async {
+            repo.sendOnChain(
+                "address",
+                1_000uL,
+                approvedMiningFeeSats = 203uL,
+                reviewHigherFee = {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        reviewEnded = true
+                    }
+                },
+            )
+        }
+        assertFalse(send.isCompleted)
+        repo.stop()
+
+        val error = assertIs<OnchainSendNotDispatchedError>(send.await().exceptionOrNull())
+        assertIs<OnchainSendReviewInterruptedError>(error.cause)
+        assertTrue(reviewEnded)
+        assertEquals(1, releases)
+        assertFalse(prepared.isUsable)
+        assertEquals(0, broadcasts)
+        assertNull(store.current())
+        inOrder(lightningService) {
+            verify(lightningService).prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull())
+            verify(lightningService).stop()
+        }
+    }
+
+    @Test
+    fun `a review that ends without approval releases the prepared send at once`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        var releases = 0
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(feeReviewPrepared(discard = { releases++ }) { broadcasts++ })
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { throw AppError("cancelled") },
+        )
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(1, releases)
+        assertEquals(0, broadcasts)
+        assertNull(store.current())
+        // The node stopping later finds nothing left to release.
+        repo.stop()
+        assertEquals(1, releases)
+    }
+
+    @Test
+    fun `an approved review keeps the prepared send for its broadcast`() = test {
+        val (repo, _) = feeReviewRepo()
+        var releases = 0
+        var releasesAtBroadcast = -1
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(feeReviewPrepared(discard = { releases++ }) { releasesAtBroadcast = releases })
+
+        val result = repo.sendOnChain("address", 1_000uL, approvedMiningFeeSats = 203uL, reviewHigherFee = {})
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, releasesAtBroadcast)
+        assertEquals(0, releases)
+    }
+
+    @Test
+    fun `a request approved on a replaced node is refused before its candidate is saved`() = test {
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        var isCurrent = true
+        val prepared = feeReviewPrepared(isCurrent = { isCurrent }) { broadcasts++ }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { isCurrent = false },
+        )
+
+        // Never dispatched and never saved, so it is not reported as a pending payment.
+        val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertIs<OnchainSendReviewInterruptedError>(error.cause)
+        assertEquals(0, broadcasts)
+        val guard = assertNotNull(store.current())
+        assertTrue(guard.preparationPending && guard.candidateTxids.isEmpty() && guard.txid == null)
+        assertTrue(repo.releaseInterruptedShopPreparation { it.attemptId == guard.attemptId })
+        assertNull(store.current())
+    }
+
+    private fun feeReviewPrepared(
+        isCurrent: () -> Boolean = { true },
+        discard: () -> Unit = {},
+        onBroadcast: () -> Unit,
+    ): PreparedOnchainSend {
+        val txid = "ab".repeat(32)
+        return PreparedOnchainSend(
+            OnchainPreparedReceipt(
+                txid = txid,
+                inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                address = "address",
+                amountSats = 1_000uL,
+                miningFeeSats = 212uL,
+            ),
+            isCurrent = isCurrent,
+            discard = discard,
+        ) { beforeDispatch ->
+            beforeDispatch()
+            onBroadcast()
+            OnchainSendOutcome.Accepted(txid)
+        }
+    }
+
+    @Test
+    fun `a review that outlives the payment deadline sends nothing and releases the attempt`() = test {
+        val (repo, store) = feeReviewRepo()
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(
+                txid = "ab".repeat(32),
+                inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                address = "address",
+                amountSats = 1_000uL,
+                miningFeeSats = 212uL,
+            ),
+        ) { throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired() }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+
+        val result = repo.sendOnChain("address", 1_000uL, approvedMiningFeeSats = 203uL, reviewHigherFee = {})
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertNull(store.current())
+    }
+
+    @Test
+    fun `an equal or lower prepared fee sends without another review`() = test {
+        for (feeSats in listOf(203uL, 190uL)) {
+            val txid = "ab".repeat(32)
+            val (repo, _) = feeReviewRepo()
+            var broadcasts = 0
+            var reviews = 0
+            stubFeeReviewPreparation(txid, feeSats) { broadcasts++ }
+
+            val result = repo.sendOnChain(
+                "address",
+                1_000uL,
+                approvedMiningFeeSats = 203uL,
+                reviewHigherFee = { reviews++ },
+            )
+
+            assertEquals(OnchainSendOutcome.Accepted(txid), result.getOrThrow())
+            assertEquals(1, broadcasts, "Fee $feeSats")
+            assertEquals(0, reviews, "Fee $feeSats")
+        }
+    }
+
+    private suspend fun stubFeeReviewPreparation(txid: String, feeSats: ULong, onBroadcast: () -> Unit) {
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(
+                txid = txid,
+                inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                address = "address",
+                amountSats = 1_000uL,
+                miningFeeSats = feeSats,
+            ),
+        ) { beforeDispatch ->
+            beforeDispatch()
+            onBroadcast()
+            OnchainSendOutcome.Accepted(txid)
+        }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+    }
+
+    /** The repository over a real attempt store, so admission, retention, dispatch and release are the app's own. */
+    private suspend fun feeReviewRepo(): Pair<LightningRepo, OnchainSendAttemptStore> {
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer {
+            saved = null
+            Unit
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(any(), any())).thenReturn(mock())
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+        return repo to store
+    }
+
     private fun preparedOutcome(outcome: OnchainSendOutcome, amountSats: ULong = 1_000uL) = PreparedOnchainSend(
         OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", amountSats),
     ) {

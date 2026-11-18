@@ -267,29 +267,6 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `payment-list sync sends queued messages first so their outcomes are recorded`() = runTest {
-        val sdk = mock<PaykitSdk>()
-        whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
-        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
-        whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
-        val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
-        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-
-        service.syncPrivatePaymentListsWithReservations(updates, false)
-
-        inOrder(sdk) {
-            verify(sdk).processPendingPrivateMessages()
-            verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
-        }
-
-        // A withdrawal supersedes a queued list instead of sending it first.
-        val withdrawal = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, emptyList()))
-        service.syncPrivatePaymentListsWithReservations(withdrawal, false)
-        service.syncPrivatePaymentListsWithReservations(emptyList(), true)
-        verify(sdk, times(1)).processPendingPrivateMessages()
-    }
-
-    @Test
     fun `payment review defers only passive refresh until every review ends`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
@@ -454,6 +431,53 @@ class PaykitSdkServiceTest {
         caller.join()
         assertTrue(finished.isCompleted)
         verify(sdk).importContacts(any(), any())
+    }
+
+    @Test
+    fun `a current endpoint publication is reusable while another write has not started`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+            val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+            assertNull(service.syncPublicEndpointsWithEpoch(endpoints, { false }, published))
+            assertSame(published, service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+            verify(sdk).syncPublicEndpointsWithReceivingDetails(any())
+        }
+    }
+
+    @Test
+    fun `a direct public withdrawal invalidates overlapping refresh reuse even if it fails`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            for (withdrawalFails in listOf(false, true)) {
+                val sdk = mock<PaykitSdk>()
+                val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+                whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).doSuspendableAnswer {
+                    if (withdrawalFails && it.getArgument<List<Any>>(0).isEmpty()) {
+                        error("offline")
+                    }
+                    report
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+                val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+                if (withdrawalFails) {
+                    assertFailsWith<IllegalStateException> { service.syncPublicEndpoints(emptyList()) }
+                } else {
+                    service.syncPublicEndpoints(emptyList())
+                }
+                assertTrue(service.publicEndpointSyncEpoch() > published.epoch)
+                val repeated = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+
+                assertTrue(repeated.epoch > published.epoch)
+                verify(sdk).syncPublicEndpointsWithReceivingDetails(emptyList())
+                verify(sdk, times(3)).syncPublicEndpointsWithReceivingDetails(any())
+            }
+        }
     }
 
     @Test

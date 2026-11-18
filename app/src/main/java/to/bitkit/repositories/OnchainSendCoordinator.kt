@@ -26,13 +26,28 @@ internal class PreparedOnchainSendRefused(cause: Throwable) : AppError(cause)
 /** One native prepared transaction; its direct submission is cached even if it fails. */
 class PreparedOnchainSend(
     val receipt: OnchainPreparedReceipt,
+    private val isCurrent: () -> Boolean = { true },
+    private val discard: () -> Unit = {},
     private val submit: suspend (beforeDispatch: suspend () -> Unit) -> OnchainSendOutcome,
 ) {
     private val mutex = Mutex()
     private var result: Result<OnchainSendOutcome>? = null
 
+    @Volatile
+    private var isReleased = false
+
+    /** Whether the node and wallet that signed this transaction can still submit it. */
+    val isUsable: Boolean get() = !isReleased && isCurrent()
+
+    /** Drops the native transaction of a send that was never submitted, while its node can still cancel it. */
+    fun release() {
+        isReleased = true
+        discard()
+    }
+
     suspend fun broadcast(beforeDispatch: suspend () -> Unit = {}): OnchainSendOutcome = withContext(NonCancellable) {
         mutex.withLock {
+            if (isReleased) throw PreparedOnchainSendRefused(OnchainSendReviewInterruptedError())
             val cached = result ?: runSuspendCatching { submit(beforeDispatch) }.also { result = it }
             cached.getOrThrow()
         }

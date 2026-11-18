@@ -1103,6 +1103,7 @@
     <string name="wallet__send_error_support">الدعم</string>
     <string name="wallet__send_error_tx_failed">فشلت المعاملة</string>
     <string name="wallet__send_fee_and_speed">السرعة والرسوم</string>
+    <string name="wallet__send_fee_changed_not_sent">رسوم الشبكة أعلى من الرسوم التي أكدتها، لذلك لم يتم إرسال الدفعة. يرجى المحاولة مرة أخرى.</string>
     <string name="wallet__send_fee_custom">تعيين رسوم مخصصة</string>
     <string name="wallet__send_fee_error">الرسوم غير صالحة</string>
     <string name="wallet__send_fee_error_max">تعذر زيادة الرسوم أكثر. وإلا ستتجاوز نصف رصيد الإدخال الحالي.</string>

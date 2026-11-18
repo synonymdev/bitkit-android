@@ -1149,6 +1149,7 @@
     <string name="wallet__send_error_support">Связаться с Поддержкой</string>
     <string name="wallet__send_error_tx_failed">Транзакция не удалась</string>
     <string name="wallet__send_fee_and_speed">Скорость и комиссия</string>
+    <string name="wallet__send_fee_changed_not_sent">Комиссия сети выше подтверждённой вами, поэтому платёж не был отправлен. Пожалуйста, попробуйте снова.</string>
     <string name="wallet__send_fee_custom">Установить Пользовательскую Комиссию</string>
     <string name="wallet__send_fee_error">Неверная комиссия</string>
     <string name="wallet__send_fee_error_max">Невозможно увеличить комиссию дальше. Иначе она превысит половину текущего входного баланса.</string>

@@ -1026,6 +1026,7 @@
     <string name="wallet__min_possible_fee_rate_msg">Augmentez les frais et réessayez.</string>
     <string name="wallet__send_fee_error_min">Impossible de réduire davantage le montant des frais de réseaux</string>
     <string name="wallet__send_fee_error_max">Impossible d\'augmenter davantage les frais. Sinon, cela dépasserait la moitié du solde d\'entrée actuel.</string>
+    <string name="wallet__send_fee_changed_not_sent">Les frais de réseau sont plus élevés que ceux que vous avez confirmés, le paiement n\'a donc pas été envoyé. Veuillez réessayer.</string>
     <string name="wallet__send_fee_custom">Fixer des frais personnalisés</string>
     <string name="wallet__send_fee_total">₿ {feeSats} pour cette transaction</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} pour cette transaction ({fiatSymbol}{fiatFormatted} )</string>

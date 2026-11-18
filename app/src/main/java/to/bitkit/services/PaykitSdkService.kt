@@ -117,7 +117,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.async.BaseCoroutineScope
-import to.bitkit.data.PaykitOutboundDeliveryStore
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -144,6 +143,7 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -169,6 +169,8 @@ data class PaykitPrivateContactPaymentResolution(
 data class PaykitPublicContactPaymentResolution(
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
 )
+
+internal class PublicEndpointSync(val report: EndpointSyncReport, val epoch: Long)
 
 data class PaykitResolvedPaymentEndpoint(
     val appId: String,
@@ -266,7 +268,6 @@ class PaykitSdkService @Inject constructor(
     sharedPubky: SharedPubkyClient,
     @IoDispatcher ioDispatcher: CoroutineDispatcher,
     private val settingsStore: SettingsStore,
-    private val outboundDeliveryStore: PaykitOutboundDeliveryStore,
 ) : BaseCoroutineScope(ioDispatcher, TAG) {
     private val sessionProvider = PaykitSdkSessionProvider(keychain, sharedPubky)
     private val paymentAdapter = PaykitSdkPaymentAdapter()
@@ -287,6 +288,7 @@ class PaykitSdkService @Inject constructor(
     private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationLock = PaykitSdkOperationLock()
+    private val publicEndpointEpoch = AtomicLong()
     private val publicReadSlots = PaykitPublicReadSlots(PUBLIC_READ_PERMITS)
     private val bulkReadPermits = Semaphore(BULK_READ_PERMITS)
     private val setupMutex = Mutex()
@@ -327,9 +329,8 @@ class PaykitSdkService @Inject constructor(
         sharedPubky: SharedPubkyClient = SharedPubkyClient(context, ioDispatcher),
         platformInitializer: (() -> Unit)? = null,
         settingsStore: SettingsStore,
-        outboundDeliveryStore: PaykitOutboundDeliveryStore = PaykitOutboundDeliveryStore(context),
         sdkFactory: () -> PaykitSdk,
-    ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher, settingsStore, outboundDeliveryStore) {
+    ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher, settingsStore) {
         this.sdkFactory = sdkFactory
         if (bootstrapFactory != null) this.bootstrapFactory = bootstrapFactory
         if (platformInitializer == null) {
@@ -919,7 +920,15 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun syncPublicEndpoints(
         endpoints: List<Endpoint>,
         canPublish: suspend () -> Boolean,
-    ): EndpointSyncReport? {
+    ): EndpointSyncReport? = syncPublicEndpointsWithEpoch(endpoints, canPublish, reusable = null)?.report
+
+    internal fun publicEndpointSyncEpoch(): Long = publicEndpointEpoch.get()
+
+    internal suspend fun syncPublicEndpointsWithEpoch(
+        endpoints: List<Endpoint>,
+        canPublish: suspend () -> Boolean,
+        reusable: PublicEndpointSync?,
+    ): PublicEndpointSync? {
         isSetup.await()
         val priority = if (endpoints.isEmpty()) {
             PaykitSdkOperationLock.Priority.Ordered
@@ -927,11 +936,19 @@ class PaykitSdkService @Inject constructor(
             PaykitSdkOperationLock.Priority.Background
         }
         return operationLock.withLock(priority) {
+            if (reusable != null && reusable.epoch == publicEndpointSyncEpoch()) {
+                if (!canPublish()) return@withLock null
+                Logger.debug("Reused overlapping public endpoint sync", context = TAG)
+                return@withLock reusable
+            }
             withStateRevisionTracking { handle ->
                 if (!canPublish()) return@withStateRevisionTracking null
-                completeSdkCall {
+                // Direct withdrawals use this same lock. An uncertain write invalidates earlier success too.
+                val epoch = publicEndpointEpoch.incrementAndGet()
+                val report = completeSdkCall {
                     handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
                 }
+                PublicEndpointSync(report, epoch)
             }
         }
     }
@@ -968,8 +985,6 @@ class PaykitSdkService @Inject constructor(
             val admissionPriority = if (deferDuringPayment) priority else Priority.Ordered
             checkRefreshAdmission(admissionPriority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(admissionPriority) }) { handle ->
-                // A withdrawal must supersede any list still queued, so it never sends one first.
-                if (!withdraws) sendPendingMessages(handle)
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -1141,9 +1156,7 @@ class PaykitSdkService @Inject constructor(
                     }
                     if (deferDuringPayment && isPaymentSubmissionActive.value) return@withStateRevisionTracking null
                     completeSdkCall {
-                        handle.processOutboundPrivateMessages(counterparty).also {
-                            recordDelivery(expectedIdentity ?: cachedPaykitKey?.publicKey, listOf(it))
-                        }
+                        handle.processOutboundPrivateMessages(counterparty)
                     }
                 }
             }
@@ -1161,39 +1174,8 @@ class PaykitSdkService @Inject constructor(
         return operationLock.withLock(priority) {
             checkRefreshAdmission(priority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
-                completeSdkCall {
-                    handle.processPendingPrivateMessages().also { reports ->
-                        recordDelivery(cachedPaykitKey?.publicKey, reports.mapNotNull { it.report })
-                    }
-                }
+                completeSdkCall { handle.processPendingPrivateMessages() }
             }
-        }
-    }
-
-    /**
-     * Sends and records what is already queued, receipts included, before a payment-list publication whose own drain
-     * would send them unreported. Withdrawals skip it; a receipt they send stays unrecorded until the SDK reports
-     * delivery per receipt.
-     */
-    private suspend fun sendPendingMessages(handle: PaykitSdk) {
-        runSuspendCatching {
-            completeSdkCall {
-                handle.processPendingPrivateMessages().also { reports ->
-                    recordDelivery(cachedPaykitKey?.publicKey, reports.mapNotNull { it.report })
-                }
-            }
-        }.onFailure {
-            Logger.warn("Failed to send queued Paykit messages before a payment-list sync", it, context = TAG)
-        }
-    }
-
-    /**
-     * Records under [identity]: the drain's checked identity, or the key `withPaykitKey` refreshed for that drain.
-     */
-    private suspend fun recordDelivery(identity: String?, reports: List<OutboundPrivateSendReport>) {
-        if (identity == null) return
-        runSuspendCatching { reports.forEach { outboundDeliveryStore.record(identity, it) } }.onFailure {
-            Logger.warn("Failed to record Paykit message delivery", it, context = TAG)
         }
     }
 
@@ -1692,7 +1674,7 @@ class PaykitSdkService @Inject constructor(
                         amount = amount,
                         afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
                         maxAdvanceSteps = 1u,
-                    ).also { recordDelivery(cachedPaykitKey?.publicKey, listOfNotNull(it.outboundReport)) }
+                    )
                 }
             }
         }
@@ -1716,7 +1698,7 @@ class PaykitSdkService @Inject constructor(
                         paymentRequestId,
                         afterPrivatePaymentListVersion,
                         1u,
-                    ).also { recordDelivery(cachedPaykitKey?.publicKey, listOfNotNull(it.outboundReport)) }
+                    )
                 }
             }
         }
@@ -2106,6 +2088,7 @@ class PaykitSdkService @Inject constructor(
 
     private fun resetRuntime() {
         runtimeGeneration++
+        publicEndpointEpoch.incrementAndGet()
         sdk = null
         cachedPaykitKey = null
         cachedBackupState = null

@@ -187,6 +187,11 @@ fun SendConfirmScreen(
         if (uiState.initialSubscriptionPaymentNeedsConfirmation) isLoading = false
     }
 
+    // The prepared send costs more than the fee approved, so the swipe is offered again on its actual fee
+    LaunchedEffect(uiState.isPreparedFeeReview) {
+        if (uiState.isPreparedFeeReview) isLoading = false
+    }
+
     SendConfirmContent(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
