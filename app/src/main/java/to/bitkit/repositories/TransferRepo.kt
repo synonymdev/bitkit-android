@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BtOpenChannelState
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
@@ -16,16 +17,22 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PendingSweepBalance
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
+import to.bitkit.models.safe
+import to.bitkit.models.toAddressType
 import to.bitkit.services.CoreService
 import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
@@ -44,6 +51,7 @@ class TransferRepo @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val coreService: CoreService,
     private val transferDao: TransferDao,
+    private val settingsStore: SettingsStore,
     private val clock: Clock,
     private val sparkExitTip: SparkExitTip = SparkExitTip(),
 ) {
@@ -360,7 +368,29 @@ class TransferRepo @Inject constructor(
             return
         }
 
+        // LDK only adds the sweep's output when more than dust is left after fees. A dust-only
+        // sweep has no outputs, every broadcast fails with `bad-txns-vout-empty` and the sweep never
+        // resolves, so settle the transfer: those sats can't be claimed.
+        val changeType = settingsStore.data.first().selectedAddressType.toAddressType() ?: DEFAULT_ADDRESS_TYPE
+        if (canJudgeSweepAsDust(sweepTxid) && isUnsweepable(channelId, pendingSweeps.orEmpty(), changeType)) {
+            markSettled(transfer.id)
+            Logger.info("Settled force close transfer '${transfer.id}' with an unsweepable sweep", context = TAG)
+            return
+        }
+
         Logger.debug("Force close awaiting sweep detection for transfer: ${transfer.id}", context = TAG)
+    }
+
+    /**
+     * Dust is judged only on complete evidence: no address type change is staged but not yet applied to the node, the
+     * wallet's payments are readable, and the wallet does not already hold the sweep, which is then real whatever the
+     * change type is now.
+     */
+    private suspend fun canJudgeSweepAsDust(sweepTxid: String?): Boolean {
+        if (lightningRepo.isChangingAddressType()) return false
+        if (sweepTxid == null) return true
+        val payments = lightningRepo.listPaymentsOrNull() ?: return false
+        return payments.none { (it.kind as? PaymentKind.Onchain)?.txid.equals(sweepTxid, ignoreCase = true) }
     }
 
     private suspend fun persistResolvedChannel(transfer: TransferEntity, channelId: String) {
@@ -426,6 +456,61 @@ class TransferRepo @Inject constructor(
 
     companion object {
         private const val TAG = "TransferRepo"
+
+        /** Version, input and output counts and locktime (10 bytes), plus the 2 witness flag bytes. */
+        private const val SWEEP_TX_OVERHEAD_WU = 42uL
+
+        /**
+         * One input (41 bytes) plus the lightest witness LDK sweeps from an anchor channel (112 WU, the CSV 1 spend of
+         * our output from a counterparty close). The sweep balance does not say its input type, so the lower bound
+         * keeps a sweepable output from settling early; a dust to_local input, which is heavier, can keep its transfer
+         * waiting.
+         */
+        private const val SWEEP_INPUT_WU = 276uL
+
+        /** LDK's fee floor; the sweeper never pays less. */
+        private const val FEERATE_FLOOR_SAT_PER_KW = 253uL
+
+        /**
+         * Whether LDK can never give the channel's sweep an output, at any fee rate. Mirrors LDK's
+         * `maybe_add_change_output`: the sweeper batches every unconfirmed pending sweep, across channels, into one
+         * transaction paying a change output of the wallet's primary address type, and adds that output only when the
+         * change left after the fee is at least its dust limit. Each input is priced as the lightest one, at the fee
+         * floor. Keep in step with iOS `TransferService.isUnsweepable`.
+         */
+        internal fun isUnsweepable(
+            channelId: String,
+            pendingSweeps: List<PendingSweepBalance>,
+            changeType: AddressType,
+        ): Boolean {
+            val ownSweeps = pendingSweeps.filter { it.channelId() == channelId }
+            if (ownSweeps.isEmpty() || ownSweeps.any { it is PendingSweepBalance.AwaitingThresholdConfirmations }) {
+                return false
+            }
+            val batch = pendingSweeps.filterNot { it is PendingSweepBalance.AwaitingThresholdConfirmations }
+            val totalSats = batch.fold(0uL) { total, sweep -> total.safe() + sweep.amountSats().safe() }
+            val inputsWu = batch.size.toULong().safe() * SWEEP_INPUT_WU.safe()
+            val changeWu = changeType.outputBytes().safe() * 4uL.safe()
+            val weightWu = (SWEEP_TX_OVERHEAD_WU.safe() + inputsWu.safe()).safe() + changeWu.safe()
+            val feeSats = (weightWu.safe() * FEERATE_FLOOR_SAT_PER_KW.safe()) / 1000uL
+            return totalSats < changeType.dustLimitSats().safe() + feeSats.safe()
+        }
+
+        private fun AddressType.outputBytes(): ULong = when (this) {
+            AddressType.P2TR -> 43uL
+            AddressType.P2WPKH -> 31uL
+            AddressType.P2SH -> 32uL
+            AddressType.P2WSH -> 43uL
+            else -> 34uL
+        }
+
+        private fun AddressType.dustLimitSats(): ULong = when (this) {
+            AddressType.P2TR -> 330uL
+            AddressType.P2WPKH -> 294uL
+            AddressType.P2SH -> 540uL
+            AddressType.P2WSH -> 330uL
+            else -> 546uL
+        }
     }
 }
 

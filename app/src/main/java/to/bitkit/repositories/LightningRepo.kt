@@ -1133,7 +1133,14 @@ class LightningRepo @Inject constructor(
         if (!isChangingAddressType.compareAndSet(false, true)) {
             return@withContext Result.failure(AppError("Address type change already in progress"))
         }
+        try {
+            changeAddressType(selectedType, monitoredTypes)
+        } finally {
+            isChangingAddressType.set(false)
+        }
+    }
 
+    private suspend fun changeAddressType(selectedType: String, monitoredTypes: List<String>): Result<Unit> {
         val previousSettings = settingsStore.data.first()
         val oldSelected = previousSettings.selectedAddressType
         val oldMonitored = previousSettings.addressTypesToMonitor
@@ -1143,7 +1150,7 @@ class LightningRepo @Inject constructor(
         suspend fun rollback() =
             settingsStore.update { it.copy(selectedAddressType = oldSelected, addressTypesToMonitor = oldMonitored) }
 
-        runCatching {
+        return runCatching {
             settingsStore.update {
                 it.copy(selectedAddressType = selectedType, addressTypesToMonitor = requiredMonitoredTypes)
             }
@@ -1154,8 +1161,6 @@ class LightningRepo @Inject constructor(
         }.onFailure {
             rollback()
             Logger.error("updateAddressType failed", it, context = TAG)
-        }.also {
-            isChangingAddressType.set(false)
         }
     }
 
@@ -1163,16 +1168,20 @@ class LightningRepo @Inject constructor(
         if (!isChangingAddressType.compareAndSet(false, true)) {
             return@withContext Result.failure(AppError("Address type change already in progress"))
         }
+        try {
+            changeMonitoring(addressType, enabled)
+        } finally {
+            isChangingAddressType.set(false)
+        }
+    }
 
+    private suspend fun changeMonitoring(addressType: AddressType, enabled: Boolean): Result<Unit> {
         val previousSettings = settingsStore.data.first()
         val oldMonitored = previousSettings.addressTypesToMonitor.toList()
 
         if (!enabled) {
             val validationError = validateDisableMonitoring(addressType, previousSettings, oldMonitored)
-            if (validationError != null) {
-                isChangingAddressType.set(false)
-                return@withContext Result.failure(validationError)
-            }
+            if (validationError != null) return Result.failure(validationError)
         }
 
         val typeStr = addressType.toSettingsString()
@@ -1180,7 +1189,7 @@ class LightningRepo @Inject constructor(
 
         suspend fun rollback() = settingsStore.update { it.copy(addressTypesToMonitor = oldMonitored) }
 
-        runCatching {
+        return runCatching {
             settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
             if (enabled) {
                 lightningService.addAddressTypeToMonitor(addressType)
@@ -1192,8 +1201,6 @@ class LightningRepo @Inject constructor(
         }.onFailure {
             rollback()
             Logger.error("setMonitoring failed", it, context = TAG)
-        }.also {
-            isChangingAddressType.set(false)
         }
     }
 
