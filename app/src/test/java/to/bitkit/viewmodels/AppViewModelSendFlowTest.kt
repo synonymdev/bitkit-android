@@ -20799,6 +20799,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an edit during the update quote does not keep the swipe disabled`() = test {
+        val input = "lnurl1updatequotingedit"
+        val data =
+            LnurlPayData(input, "https://example.com/callback", 1_000_000uL, 1_000_000uL, "[]", null, false, null)
+        val quoted = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).thenReturn(Scanner.LnurlPay(data))
+        whenever(moveToSparkRepo.needsUpdateToSend(1_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer {
+            quoted.await()
+            Result.success(UPDATE_QUOTE)
+        }
+        whenever(moveToSparkRepo.estimateFeeAfterUpdate(null, 1_000uL)).thenReturn(3uL)
+        sut.setIsAuthenticated(true)
+        sut.onScanResult(input)
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isSparkUpdateQuoting)
+
+        // a funding switch bumps the generation and quotes nothing again
+        val field = AppViewModel::class.java.getDeclaredField("sendStateGeneration")
+        field.isAccessible = true
+        field.setLong(sut, field.getLong(sut) + 1)
+        quoted.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isSparkUpdateQuoting)
+    }
+
+    @Test
     fun `an lnurl payment that needs the update shows its fee and pays on the first swipe`() = test {
         val input = "lnurl1updatefirstswipe"
         val bolt11 = "lnbcrt1lnurlupdate"

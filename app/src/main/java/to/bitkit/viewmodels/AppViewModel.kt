@@ -433,6 +433,9 @@ class AppViewModel @Inject constructor(
     private var onchainSendRefreshJob: Job? = null
     private var sendStateGeneration = 0L
 
+    /** Bumped by each update quote, so only the latest one clears [SendUiState.isSparkUpdateQuoting]. */
+    private var sparkUpdateQuoteRun = 0L
+
     /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
     private var sendSession = 0L
 
@@ -8668,6 +8671,7 @@ class AppViewModel @Inject constructor(
         generation: Long,
         walletGeneration: Long?,
     ) {
+        val run = ++sparkUpdateQuoteRun
         _sendUiState.update { if (generation != sendStateGeneration) it else it.copy(isSparkUpdateQuoting = true) }
         try {
             val quote = moveToSparkRepo.quote().getOrNull()
@@ -8678,7 +8682,8 @@ class AppViewModel @Inject constructor(
                 it.copy(lightningFeeSats = fee.toLong(), lastLightningFee = fee.toLong(), sparkUpdateQuote = quote)
             }
         } finally {
-            _sendUiState.update { if (generation != sendStateGeneration) it else it.copy(isSparkUpdateQuoting = false) }
+            // An edit such as a funding switch bumps the generation without quoting again, so the run owns the flag.
+            if (run == sparkUpdateQuoteRun) _sendUiState.update { it.copy(isSparkUpdateQuoting = false) }
         }
     }
 
