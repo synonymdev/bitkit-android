@@ -24,8 +24,8 @@ import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -176,6 +177,7 @@ class SparkRepo @Inject constructor(
     private val unsavedPayments = ConcurrentHashMap.newKeySet<String>()
 
     private val isCollectingEvents = AtomicBoolean(false)
+    private val eventsSubscribed = CompletableDeferred<Unit>()
 
     private val refreshMutex = Mutex()
 
@@ -1383,14 +1385,20 @@ class SparkRepo @Inject constructor(
             }
         }
 
-    /** Collects Spark's events once, subscribed before it returns, so no event of a connect made after it is lost. */
-    private fun collectEvents() {
-        if (!isCollectingEvents.compareAndSet(false, true)) return
-        scope.launch(start = CoroutineStart.UNDISPATCHED) { sparkService.events.collect { onSdkEvent(it) } }
+    /** Collects Spark's events once and returns once subscribed, so no event of a connect made after it is lost. */
+    private suspend fun collectEvents() {
+        if (isCollectingEvents.compareAndSet(false, true)) {
+            scope.launch {
+                sparkService.events.onSubscription { eventsSubscribed.complete(Unit) }.collect { onSdkEvent(it) }
+            }
+        }
+        eventsSubscribed.await()
     }
 
     private suspend fun connectForRestore(walletIndex: Int) {
         // Spark's listener drops events no one collects, and the wallet's start collects them only after the restore.
+        // The sends held before the restore are taken back first, so its events read their earlier attempts.
+        restoreUncertainSends()
         collectEvents()
         runSuspendCatching { sparkService.connect(walletIndex, exitStore(walletIndex).isActive()) }
             .onSuccess { if (it) _exitStateGeneration.update { generation -> generation + 1 } }
