@@ -2639,6 +2639,54 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a restore made before spark connects connects it and fails when spark rejects its exit data`() = test {
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }.thenAnswer {
+            isConnected = true
+            true
+        }
+        whenever { sparkService.importExitState(any()) }.thenAnswer { throw SdkException.InvalidInput("bad") }
+        val sut = createSut()
+
+        val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertIs<SdkException.InvalidInput>(result.exceptionOrNull())
+        verify(sparkService, times(1)).importExitState("s")
+        assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a restore made before spark connects connects it and imports its exit data`() = test {
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }.thenAnswer {
+            isConnected = true
+            true
+        }
+        whenever { sparkService.importExitState(any()) }.thenReturn(ImportUnilateralExitStateResponse(2u, 0u, 0u, 0u))
+        val sut = createSut()
+
+        val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertTrue(result.isSuccess)
+        verify(sparkService, times(1)).importExitState("s")
+        assertFalse(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a restore spark can't connect for keeps its exit data staged for spark's start`() = test {
+        whenever { sparkService.connect(any(), any()) }.thenAnswer { throw SdkException.Generic("offline") }
+        val sut = createSut()
+
+        val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertTrue(result.isSuccess)
+        verify(sparkService, never()).importExitState(any())
+        assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
     fun `a restore whose exit data spark rejects fails and keeps it staged`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.importExitState(any()) }.thenAnswer { throw SdkException.Generic("bad state") }

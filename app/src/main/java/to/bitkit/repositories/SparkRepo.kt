@@ -194,6 +194,9 @@ class SparkRepo @Inject constructor(
     /** Sends whose outcome Spark didn't report, by payment hash. */
     private val uncertainSends = ConcurrentHashMap<String, UncertainSend>()
 
+    /** Serialises the imports of staged exit data, so a restore and Spark's start never import it at once. */
+    private val exitImportMutex = Mutex()
+
     /** Sends Spark took and still runs, by payment hash, until they settle or their invoice expires. */
     private val takenAttempts = ConcurrentHashMap<String, SendAttempt>()
 
@@ -1349,7 +1352,9 @@ class SparkRepo @Inject constructor(
 
     /**
      * Puts a restored exit data backup back: at once while Spark is connected, otherwise right after it connects,
-     * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable.
+     * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable. The
+     * wallet's start waits for the restore, so the restore connects Spark itself and fails when Spark can't import the
+     * data; one that can't connect keeps the data staged for Spark's start.
      */
     suspend fun restoreExitBackup(backup: SparkExitBackupV1, walletIndex: Int): Result<Unit> =
         withContext(bgDispatcher) {
@@ -1358,15 +1363,22 @@ class SparkRepo @Inject constructor(
                     Logger.warn("Skipped Spark exit data from network '${backup.network}'", context = TAG)
                     return@runSuspendCatching
                 }
-                File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState)
+                exitImportMutex.withLock { File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState) }
+                if (sparkService.isSupported && !sparkService.isConnected) connectForRestore(walletIndex)
                 if (sparkService.isConnected) importRestoredExitState(walletIndex).getOrThrow()
             }
         }
 
-    private suspend fun importRestoredExitState(walletIndex: Int): Result<Unit> {
+    private suspend fun connectForRestore(walletIndex: Int) {
+        runSuspendCatching { sparkService.connect(walletIndex, exitStore(walletIndex).isActive()) }
+            .onSuccess { if (it) _exitStateGeneration.update { generation -> generation + 1 } }
+            .onFailure { Logger.warn("Failed to connect Spark to import restored exit data", it, context = TAG) }
+    }
+
+    private suspend fun importRestoredExitState(walletIndex: Int): Result<Unit> = exitImportMutex.withLock {
         val file = File(Env.sparkExitRestorePath(walletIndex))
-        if (!file.exists()) return Result.success(Unit)
-        return runSuspendCatching { sparkService.importExitState(file.readText()) }
+        if (!file.exists()) return@withLock Result.success(Unit)
+        runSuspendCatching { sparkService.importExitState(file.readText()) }
             .onSuccess {
                 file.delete()
                 Logger.info(
