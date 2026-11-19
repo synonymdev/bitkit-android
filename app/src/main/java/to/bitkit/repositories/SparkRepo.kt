@@ -27,6 +27,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -613,11 +614,14 @@ class SparkRepo @Inject constructor(
                         // A payment Spark took carries its own id, so its failure is never read as an earlier one's.
                         val attempt = SendAttempt(sentAt.toULong(), earlierIds, result.getOrNull()?.id, attemptId)
                         if (result.getOrNull()?.status == PaymentStatus.PENDING) {
-                            // Taken only while its own outcome wasn't handled meanwhile, as its journal write is.
-                            sendReleaseMutex.withLock {
-                                if (inFlightAttempts[paymentHash.lowercase()]?.attemptId == attemptId) {
-                                    takenAttempts[paymentHash.lowercase()] = attempt
-                                    restoredTakenAttempts.remove(paymentHash.lowercase())
+                            // Taken only while its own outcome wasn't handled meanwhile, as its journal write is. Taken
+                            // also when the caller is cancelled meanwhile, as the send already went out.
+                            withContext(NonCancellable) {
+                                sendReleaseMutex.withLock {
+                                    if (inFlightAttempts[paymentHash.lowercase()]?.attemptId == attemptId) {
+                                        takenAttempts[paymentHash.lowercase()] = attempt
+                                        restoredTakenAttempts.remove(paymentHash.lowercase())
+                                    }
                                 }
                             }
                         }
