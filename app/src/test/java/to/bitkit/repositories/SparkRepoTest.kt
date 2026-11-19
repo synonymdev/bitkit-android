@@ -4006,6 +4006,59 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an uncertain spark retry fails its own row at expiry when only an earlier failure is listed`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        var row = pendingSendRow()
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        runCurrent()
+        // The earlier attempt paid the amountless invoice at another amount and fee, and failed.
+        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        whenever(sparkService.listPayments()).thenReturn(listOf(older))
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        runCurrent()
+
+        // The invoice has expired, and Spark syncs after the retry went uncertain.
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertEquals(PaymentState.FAILED, row.v1.status)
+        assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "the retry's row took the earlier attempt's payment")
+    }
+
+    @Test
+    fun `a failed spark send row keeps its amount when a later launch lists an earlier attempt's failure`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED))
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
+        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        whenever(sparkService.listPayments()).thenReturn(listOf(older))
+
+        createSut().start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "an earlier attempt's failure replaced the retry's row")
+    }
+
+    @Test
     fun `a taken spark retry with only an earlier failure listed stays held until the grace past expiry`() = test {
         // The earlier attempt paid the amountless invoice at another amount and fee.
         val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())

@@ -735,6 +735,10 @@ class SparkRepo @Inject constructor(
         if (!isSettled) return false
         // A missing send's row is ended here, as no listed payment revisits it, so the hold stays until it is written.
         if (send == SparkLightningSend.NotFound && !failHeldRow(paymentHash)) return false
+        // A listed failure may be an earlier attempt's, so the send's own row is failed in place instead of taking
+        // that attempt's amount, fee and time.
+        val isFailed = send is SparkLightningSend.Found && send.status == PaymentStatus.FAILED
+        if (isFailed && !failHeldRow(paymentHash)) return false
         // A send Spark now runs keeps its earlier attempts' ids until it settles, taken over before the doubt ends.
         val isTaken = send is SparkLightningSend.Found && send.status == PaymentStatus.PENDING
         // Only the caller that takes the hash off settles it, so its outcome is reported once. The hand-over shares the
@@ -764,8 +768,8 @@ class SparkRepo @Inject constructor(
             is SparkLightningSend.Found -> {
                 if (send.status == PaymentStatus.FAILED) {
                     cacheStore.removeSparkSendHash(paymentHash)
-                    // An earlier attempt's failure was skipped while the hold lasted; a failed write is retried at the
-                    // next refresh.
+                    // Writes the row only when there was none to fail, as a failed row keeps its own payment; a
+                    // failed write is retried at the next refresh.
                     listed?.let { recordActivity(it) }
                 }
                 // The event comes from the read that settled it, so a failed later read can't leave the send pending.
@@ -2222,6 +2226,13 @@ class SparkRepo @Inject constructor(
         }
         // Another attempt of the same invoice, on either rail, already paid it.
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
+        // A failed send keeps its own attempt's amount, fee and time, as another failure of its invoice may be an
+        // earlier attempt's, listed again on a later launch once nothing holds the invoice.
+        if (existing?.status == PaymentState.FAILED && existing.txType == PaymentType.SENT &&
+            payment.status == PaymentStatus.FAILED
+        ) {
+            return true
+        }
         val activity = LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
