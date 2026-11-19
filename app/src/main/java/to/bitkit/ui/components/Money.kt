@@ -196,27 +196,18 @@ fun MoneyCaptionB(
         return
     }
 
-    val currency = currencyViewModel ?: return
     val currencies = LocalCurrencies.current
-
-    val displayText = remember(currencies, sats, symbol) {
-        currency.convert(sats)?.let { converted ->
-            val btc = converted.bitcoinDisplay(currencies.displayUnit)
-            if (symbol) {
-                "<accent>${btc.symbol}</accent> ${btc.value}"
-            } else {
-                btc.value
-            }
-        }
+    // A bitcoin amount needs no exchange rate, so it shows also while the selected currency has none.
+    val text = remember(currencies.displayUnit, sats, symbol) {
+        val value = sats.formatMoney(currencies.displayUnit)
+        if (symbol) "<accent>$BITCOIN_SYMBOL</accent> $value" else value
     }
 
-    displayText?.let { text ->
-        CaptionB(
-            text = text.withAccent(accentColor = symbolColor),
-            color = color,
-            modifier = modifier.testTag("MoneyText")
-        )
-    }
+    CaptionB(
+        text = text.withAccent(accentColor = symbolColor),
+        color = color,
+        modifier = modifier.testTag("MoneyText")
+    )
 }
 
 @Composable
