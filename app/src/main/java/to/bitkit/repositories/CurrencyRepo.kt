@@ -278,6 +278,10 @@ data class CurrencyState(
     val isRefreshing: Boolean = false,
 )
 
+/** Switching to fiat needs a rate for the selected currency, or every fiat amount would be missing. */
+val CurrencyState.canSwitchUnit: Boolean
+    get() = primaryDisplay == PrimaryDisplay.FIAT || rates.any { it.quote == selectedCurrency }
+
 val CurrencyState.paykitRate: PaykitExchangeRate?
     get() = rates.firstOrNull {
         it.quote == "USD"

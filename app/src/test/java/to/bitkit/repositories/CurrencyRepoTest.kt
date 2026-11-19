@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -293,6 +294,14 @@ class CurrencyRepoTest : BaseUnitTest() {
         } finally {
             releaseCollector.countDown()
         }
+    }
+
+    @Test
+    fun `switching to fiat needs a rate for the selected currency, switching back does not`() {
+        val rated = CurrencyState(rates = testRates.toImmutableList(), selectedCurrency = "EUR")
+        assertTrue(rated.canSwitchUnit)
+        assertFalse(rated.copy(selectedCurrency = "JPY").canSwitchUnit, "switched to fiat with no rate")
+        assertTrue(CurrencyState(primaryDisplay = PrimaryDisplay.FIAT).canSwitchUnit, "kept in fiat with no rate")
     }
 }
 

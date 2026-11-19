@@ -43,6 +43,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.SparkClaimSpeed
+import to.bitkit.repositories.canSwitchUnit
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
@@ -82,6 +84,7 @@ fun SpendingConfirmScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val currency = currencyViewModel
+    val currencies = LocalCurrencies.current
 
     BackHandler(enabled = state.isSending) {}
 
@@ -105,7 +108,8 @@ fun SpendingConfirmScreen(
             onBackClick = { if (!state.isSending) onBackClick() },
             onLearnMoreClick = { if (!state.isSending) onLearnMoreClick() },
             onSpeedChange = viewModel::onSpeedChange,
-            onFeesClick = { currency?.switchUnit() },
+            // Without a rate the fees stay in bitcoin.
+            onFeesClick = { if (currencies.canSwitchUnit) currency?.switchUnit() },
             onConfirm = viewModel::onConfirm,
         )
         AnimatedVisibility(
