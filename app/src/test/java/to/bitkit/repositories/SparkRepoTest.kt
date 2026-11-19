@@ -2371,7 +2371,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `instant stops quoting once spark waits for the early claim, capped at the ceiling`() = test {
+    fun `instant stops quoting once spark waits for the early claim, and clears its cap at the normal speed`() = test {
         listDeposit()
         // Spark keeps the ceiling as the cap, so it claims a later offer within it by itself.
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
@@ -2386,6 +2386,8 @@ class SparkRepoTest : BaseUnitTest() {
         verify(sparkService, times(1)).claimDeposit(any(), any(), any())
         verify(sparkService).claimDeposit("txid", 0u, 500uL)
         assertEquals(SparkDepositClaim.Unavailable, sut.depositClaims.value["txid"])
+        // Shown at the normal speed, so Spark no longer claims it early within the ceiling.
+        verify(sparkService).releaseDepositClaimFee("txid", 0u)
     }
 
     @Test
@@ -2404,6 +2406,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         verify(sparkService, times(1)).claimDeposit("txid", 0u, 500uL)
         assertEquals(SparkDepositClaim.Adding, sut.depositClaims.value["txid"])
+        verify(sparkService, never()).releaseDepositClaimFee(any(), any())
     }
 
     @Test
@@ -3990,6 +3993,65 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `an earlier attempt's late failure after a restart leaves a spark retry spark still runs`() = test {
         assertTakenRetryKeptPastEarlierFailure(restart = true)
+    }
+
+    @Test
+    fun `an earlier attempt's failure at expiry leaves a taken spark retry spark still runs`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val older = sentPayment(fees = 0).copy(id = "older", status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever(sparkService.listPayments()).thenReturn(listOf(older))
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(retry)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+        runCurrent()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+
+        // The invoice expires while Spark's list still shows only the earlier attempt's failure.
+        now += 2.hours
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "the expiry ended a retry Spark still runs")
+        assertTrue("hash" in store.data.first().sparkSendHashes)
+    }
+
+    @Test
+    fun `a taken spark retry's own failure listed after a restart frees its invoice for paykit`() = test {
+        val sentAt = now.epochSeconds
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to sentAt + 3_600),
+                    sparkUncertainSendStarts = mapOf("hash" to sentAt),
+                    sparkTakenSendIds = mapOf("hash" to "retry"),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val older = sentPayment(fees = 0).copy(id = "older", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(older))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        assertEquals(setOf("hash"), sut.attemptedLightningPaymentHashes(), "an earlier failure freed a taken retry")
+
+        // The retry failed while the app was closed, so Spark lists its own failure.
+        val ownFailure = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(older, ownFailure))
+
+        assertEquals(emptySet(), sut.attemptedLightningPaymentHashes())
     }
 
     @Test

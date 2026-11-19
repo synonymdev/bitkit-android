@@ -827,14 +827,20 @@ class SparkRepo @Inject constructor(
         val expiries = cacheStore.data.first().sparkSendExpiries
         val now = clock.now().epochSeconds
         takenAttempts.keys.filter { (expiries[it] ?: Long.MAX_VALUE) <= now }.forEach { hash ->
+            val attempt = takenAttempts[hash] ?: return@forEach
             val (send, listed) = listedLightningSendPayment(hash)
             when (send) {
                 SparkLightningSend.Unavailable -> return@forEach
                 SparkLightningSend.NotFound -> if (!failHeldRow(hash)) return@forEach
                 is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@forEach
+                // A failure with another id than the attempt's own is an earlier attempt's, listed before the attempt.
+                is SparkLightningSend.Found if send.status == PaymentStatus.FAILED && attempt.ownId != null &&
+                    listed?.id != attempt.ownId -> return@forEach
+
                 is SparkLightningSend.Found -> Unit
             }
-            takenAttempts.remove(hash) ?: return@forEach
+            // Only the attempt read here is dropped, as a retry may have replaced it meanwhile.
+            if (!takenAttempts.remove(hash, attempt)) return@forEach
             // A restored attempt's outcome came while the app was closed and no event held it back, so none is sent.
             val isRestored = restoredTakenAttempts.remove(hash)
             cacheStore.removeSparkUncertainSend(hash)
@@ -914,6 +920,10 @@ class SparkRepo @Inject constructor(
         }
         claimJobs.remove(txid)?.cancel()
         setDepositClaim(txid, SparkDepositClaim.Later)
+        releaseEarlyClaimCap(txid)
+    }
+
+    private fun releaseEarlyClaimCap(txid: String) {
         val vout = earlyClaimVouts.remove(txid) ?: return
         // Tried again while another claim of the deposit, such as Spark's own sync, leaves the cap in place.
         scope.launch {
@@ -964,6 +974,8 @@ class SparkRepo @Inject constructor(
         }
         if (_depositClaims.value[txid] == SparkDepositClaim.Adding) return
         Logger.warn("Stopped looking for the Instant claim of Spark deposit '$txid'", context = TAG)
+        // Shown at the normal speed from here, so Spark no longer claims it early within the user's ceiling.
+        releaseEarlyClaimCap(txid)
         setDepositClaim(txid, if (isSeen) SparkDepositClaim.Unavailable else SparkDepositClaim.NotSeen)
     }
 
@@ -1847,26 +1859,20 @@ class SparkRepo @Inject constructor(
         if (!sparkService.isSupported) return emptySet()
         val unlisted = unexpiredStartedSends()
         val uncertain = uncertainSendHashes()
-        val sends = lightningPaymentStatuses { it.paymentType == SparkPaymentType.SEND } ?: return null
-        return sends.filterValues { it.any { status -> status != PaymentStatus.FAILED } }.keys +
-            (unlisted - sends.keys) + uncertain + takenAttempts.keys
+        if (!sparkService.isConnected) return null
+        val payments = withContext(bgDispatcher) { runSuspendCatching { sparkService.listPayments() } }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+            .getOrNull() ?: return null
+        val sends = payments.mapNotNull { payment -> payment.sendHash()?.lowercase()?.let { it to payment } }
+            .groupBy({ it.first }, { it.second })
+        // A retained attempt Spark lists as failed itself no longer holds its invoice; an earlier attempt's failure
+        // leaves it held.
+        val taken = takenAttempts.filter { (hash, attempt) ->
+            sends[hash].orEmpty().none { it.status == PaymentStatus.FAILED && it.id == attempt.ownId }
+        }.keys
+        return sends.filterValues { it.any { payment -> payment.status != PaymentStatus.FAILED } }.keys +
+            (unlisted - sends.keys) + uncertain + taken
     }
-
-    /** The statuses of Spark's Lightning payments that match [filter], by lowercase payment hash. */
-    private suspend fun lightningPaymentStatuses(filter: (Payment) -> Boolean): Map<String, Set<PaymentStatus>>? =
-        withContext(bgDispatcher) {
-            if (!sparkService.isConnected) return@withContext null
-            runSuspendCatching { sparkService.listPayments() }
-                .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
-                .getOrNull()
-                ?.filter(filter)
-                ?.mapNotNull { payment ->
-                    (payment.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash?.lowercase()
-                        ?.let { it to payment.status }
-                }
-                ?.groupBy({ it.first }, { it.second })
-                ?.mapValues { it.value.toSet() }
-        }
 
     private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String>? = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext null
