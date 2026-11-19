@@ -580,6 +580,11 @@ class SparkRepo @Inject constructor(
             val sent = try {
                 inFlightAttempts[paymentHash.lowercase()] =
                     SendAttempt(sentAt.toULong(), earlierIds, attemptId = attemptId)
+                // Its journal entry replaces an earlier attempt's, which only goes out once that one failed, so the
+                // earlier attempt no longer holds the invoice; dropped after this one holds it, so a reader never
+                // finds neither.
+                takenAttempts.remove(paymentHash.lowercase())
+                restoredTakenAttempts.remove(paymentHash.lowercase())
                 sendReleaseMutex.withLock { sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet() }
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
                 spending {
@@ -602,8 +607,13 @@ class SparkRepo @Inject constructor(
                         // A payment Spark took carries its own id, so its failure is never read as an earlier one's.
                         val attempt = SendAttempt(sentAt.toULong(), earlierIds, result.getOrNull()?.id, attemptId)
                         if (result.getOrNull()?.status == PaymentStatus.PENDING) {
-                            takenAttempts[paymentHash.lowercase()] = attempt
-                            restoredTakenAttempts.remove(paymentHash.lowercase())
+                            // Taken only while its own outcome wasn't handled meanwhile, as its journal write is.
+                            sendReleaseMutex.withLock {
+                                if (inFlightAttempts[paymentHash.lowercase()]?.attemptId == attemptId) {
+                                    takenAttempts[paymentHash.lowercase()] = attempt
+                                    restoredTakenAttempts.remove(paymentHash.lowercase())
+                                }
+                            }
                         }
                         // A send whose call failed may still have gone out, so it is in doubt before the in-flight
                         // attempt is dropped.
@@ -1739,7 +1749,7 @@ class SparkRepo @Inject constructor(
             }
             seedSendHashes(payments)
             val send = payments
-                .latestSend {
+                .latestSend(paymentHash?.let { heldAttempt(it)?.ownId }) {
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
@@ -1837,14 +1847,27 @@ class SparkRepo @Inject constructor(
     }
 
     private fun List<Payment>.latestSend(paymentHash: String): Payment? =
-        latestSend { it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true) }
+        latestSend(
+            heldAttempt(paymentHash)?.ownId
+        ) { it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true) }
 
-    private fun List<Payment>.latestSend(matches: (PaymentDetails.Lightning) -> Boolean): Payment? = filter {
+    /**
+     * The send that settles the invoice [matches] picks: a retry of a failed send shares its hash, so the outcome that
+     * settles it wins, and between equal outcomes the held attempt's own payment, [ownId].
+     */
+    private fun List<Payment>.latestSend(
+        ownId: String? = null,
+        matches: (PaymentDetails.Lightning) -> Boolean,
+    ): Payment? = filter {
         val details = it.details as? PaymentDetails.Lightning
         it.paymentType == SparkPaymentType.SEND && details != null && matches(details)
+    }.minWithOrNull(compareBy({ SEND_STATUS_PRIORITY.indexOf(it.status) }, { it.id != ownId }))
+
+    /** The attempt that holds [paymentHash]: one in doubt, one in Spark's send call, or one Spark took. */
+    private fun heldAttempt(paymentHash: String): SendAttempt? {
+        val key = paymentHash.lowercase()
+        return uncertainSends[key]?.attempt ?: inFlightAttempts[key] ?: takenAttempts[key]
     }
-        // A retry of a failed send shares its hash, so the outcome that settles it wins.
-        .minByOrNull { SEND_STATUS_PRIORITY.indexOf(it.status) }
 
     /** Payment hashes of the Lightning payments Spark received. */
     suspend fun receivedLightningPaymentHashes(): Set<String> =
@@ -2022,8 +2045,7 @@ class SparkRepo @Inject constructor(
      */
     private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
-        val key = hash.lowercase()
-        val attempt = uncertainSends[key]?.attempt ?: inFlightAttempts[key] ?: takenAttempts[key] ?: return false
+        val attempt = heldAttempt(hash) ?: return false
         // A payment Spark took fails with its own id, so a failure with another id is an earlier attempt's.
         attempt.ownId?.let { return id != it }
         attempt.earlierIds?.let { return id in it }
@@ -2109,6 +2131,8 @@ class SparkRepo @Inject constructor(
             // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
             payment.sendHash()?.let {
                 uncertainSends.remove(it.lowercase())
+                // A send call that returns after this keeps no hold for the outcome handled here.
+                inFlightAttempts.remove(it.lowercase())
                 takenAttempts.remove(it.lowercase())
                 restoredTakenAttempts.remove(it.lowercase())
                 cacheStore.removeSparkUncertainSend(it)
