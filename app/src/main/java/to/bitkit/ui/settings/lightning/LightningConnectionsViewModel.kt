@@ -271,6 +271,8 @@ data class SparkUi(
     val earlierAddresses: ImmutableList<SparkExitEarlierAddress> = persistentListOf(),
     /** Spark is connected with no exit running, so it receives with no limit. */
     val isReceiving: Boolean = false,
+    /** Spark is connected with no exit running, so it can send, Transfer To Savings included. */
+    val isUsable: Boolean = false,
 ) {
     /**
      * The emergency exit is offered while Spark holds funds, also a kept balance while it reads 0, and leads to its
@@ -316,6 +318,7 @@ internal suspend fun SparkState.toUi(
         showsExitResult = showsExit,
         earlierAddresses = earlierAddresses.toImmutableList(),
         isReceiving = isReceiving(isOnline),
+        isUsable = isUsable,
     )
 }
 

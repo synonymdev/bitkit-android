@@ -334,7 +334,7 @@ private fun Buttons(
         PrimaryButton(
             text = stringResource(R.string.wallet__transfer_to_savings),
             onClick = onTransferToSavings,
-            enabled = spark.balanceSats > 0uL && !spark.isExiting,
+            enabled = spark.balanceSats > 0uL && spark.isUsable,
             icon = {
                 Icon(
                     painter = painterResource(R.drawable.ic_transfer),
@@ -409,6 +409,7 @@ private fun Preview() {
                 spark = SparkUi(
                     balanceSats = 35_000uL,
                     isReceiving = true,
+                    isUsable = true,
                     deposits = persistentListOf(
                         SparkDepositUi(SparkDeposit("6c8706b8a9cbd18f", 15_000uL, isClaimed = false), 1u),
                         SparkDepositUi(SparkDeposit("d0067b2497c7b905", 35_000uL, isClaimed = true, feeSats = 312uL)),

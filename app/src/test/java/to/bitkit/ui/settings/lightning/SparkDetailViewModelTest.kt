@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
@@ -15,6 +16,7 @@ import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
+import to.bitkit.repositories.SparkWithdrawal
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.settings.appStatus.ExitStep
 import kotlin.test.assertEquals
@@ -103,5 +105,15 @@ class SparkDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
 
         assertEquals(HealthState.ERROR, sut.uiState.value.status)
+    }
+
+    @Test
+    fun `the detail keeps spark's withdrawals when the connections list leaves spark out`() = test {
+        val withdrawal = SparkWithdrawal("4f1d0c55e2a9b713", 4_917uL, feeSats = 1_470uL)
+        sparkState.value = SparkState(isReady = false, withdrawals = persistentListOf(withdrawal))
+
+        val sut = createSut()
+
+        assertEquals<List<SparkWithdrawal>?>(listOf(withdrawal), sut.uiState.value.spark?.withdrawals)
     }
 }

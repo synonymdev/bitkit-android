@@ -100,10 +100,10 @@ class SparkDetailViewModel @Inject constructor(
         }
     }
 
-    /** An empty Spark is left out of the connections list, yet still receives here. */
+    /** An empty Spark is left out of the connections list, yet still receives here and keeps its withdrawals. */
     private suspend fun SparkState.toDetailUi(exit: SparkExitState, isOnline: Boolean) =
         toUi(lightningRepo, exit.showsResult, exit.earlierAddresses, isOnline)
-            ?: SparkUi(balanceSats = 0uL, isReceiving = isReceiving(isOnline))
+            ?: SparkUi(balanceSats = 0uL, withdrawals = withdrawals, isReceiving = isReceiving(isOnline))
 }
 
 @Immutable
