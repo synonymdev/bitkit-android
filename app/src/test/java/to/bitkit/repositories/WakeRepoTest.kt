@@ -507,6 +507,41 @@ class WakeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a return to the foreground leaves a retry to wait as long as the gateway asked`() = test {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        whenever(wakeConfig.optedIn).thenReturn(MutableStateFlow(true))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow<String?>(null))
+        whenever { wakeService.setPresence(any(), any(), any()) }.thenReturn(NOW_SECS + 90)
+        whenever { wakeService.clearPresence(any(), any()) }.thenReturn(Unit)
+        var attempts = 0
+        whenever(wakeService.register(any(), any(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError(WakeException.GatewayRejected(429u, "rate_limited", "later", null, 120uL))
+            ACCEPTED
+        }
+        val sut = createSut(dispatcher)
+
+        sut.onAppForeground()
+        runCurrent()
+        assertEquals(1, attempts)
+
+        advanceTimeBy(60.seconds)
+        sut.onAppBackground()
+        sut.onAppForeground()
+        runCurrent()
+        assertEquals(1, attempts, "The gateway asked for 120 s")
+
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        assertEquals(2, attempts)
+
+        sut.onAppBackground()
+        runCurrent()
+    }
+
+    @Test
     fun `presence is renewed and cleared while the answer to an update is lost`() = test {
         val dispatcher = StandardTestDispatcher(testScheduler)
         whenever(lightningRepo.lightningState)

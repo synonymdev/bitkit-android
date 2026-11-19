@@ -112,6 +112,10 @@ class WakeRepo @Inject constructor(
     /** Counts the returns to the foreground, each of which has the registration observer sync again. */
     private val foregroundReturns = MutableStateFlow(0)
 
+    /** Whether the registration observer's sync is still under way, its retry waits included. */
+    @Volatile
+    private var isRegistrationSyncing = false
+
     /**
      * Keeps the registration in step with the node, the opt-in and the Pubky identity from now on, checks again on
      * each later return whether it reached [REGISTRATION_MAX_AGE], and holds a presence lease until [onAppBackground],
@@ -120,7 +124,8 @@ class WakeRepo @Inject constructor(
     fun onAppForeground() {
         if (wakeConfig.gatewayUrl == null) return
         if (registrationJob?.isActive == true) {
-            foregroundReturns.update { it + 1 }
+            // A sync still under way checks the max age itself when it sends, and restarting it would cut its wait.
+            if (!isRegistrationSyncing) foregroundReturns.update { it + 1 }
         } else {
             registrationJob = scope.launch { observeRegistration() }
         }
@@ -267,8 +272,9 @@ class WakeRepo @Inject constructor(
     }
 
     /**
-     * Syncs on each change of the inputs and on each return to the foreground. A process the foreground service keeps
-     * alive can see no change for longer than [REGISTRATION_MAX_AGE], and a sync with nothing to send makes no request.
+     * Syncs on each change of the inputs and on each return to the foreground while no sync is under way. A process
+     * the foreground service keeps alive can see no change for longer than [REGISTRATION_MAX_AGE], and a sync with
+     * nothing to send makes no request.
      */
     private suspend fun observeRegistration() {
         val inputs = combine(
@@ -278,7 +284,14 @@ class WakeRepo @Inject constructor(
         ) { isNodeRunning, isOptedIn, publicKey -> Triple(isNodeRunning, isOptedIn, publicKey) }
             .distinctUntilChanged()
         combine(inputs, foregroundReturns) { _, _ -> }
-            .collectLatest { syncUntilSettled() }
+            .collectLatest {
+                isRegistrationSyncing = true
+                try {
+                    syncUntilSettled()
+                } finally {
+                    isRegistrationSyncing = false
+                }
+            }
     }
 
     /**
