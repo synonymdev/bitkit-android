@@ -89,6 +89,31 @@ class AmountInputViewModelTest : BaseUnitTest() {
         displayUnit = displayUnit
     )
 
+    @Test
+    fun `fiat typed before a switch elsewhere is redrawn in bitcoin, never read as bitcoin digits`() = test {
+        val fiat = mockCurrency(PrimaryDisplay.FIAT)
+        val bitcoin = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+        "12".forEach { viewModel.handleNumberPadInput(it.toString(), fiat) }
+        val sats = viewModel.uiState.value.sats
+        assertTrue(sats > 0L)
+
+        viewModel.syncUnit(bitcoin)
+        assertEquals(sats, viewModel.uiState.value.sats)
+
+        viewModel.handleNumberPadInput("0", bitcoin)
+        assertEquals("the typed fiat digits were read as sats", sats * 10, viewModel.uiState.value.sats)
+    }
+
+    @Test
+    fun `a key typed after a switch elsewhere reads the amount in the unit shown`() = test {
+        "12".forEach { viewModel.handleNumberPadInput(it.toString(), mockCurrency(PrimaryDisplay.FIAT)) }
+        val sats = viewModel.uiState.value.sats
+
+        viewModel.handleNumberPadInput("0", mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN))
+
+        assertEquals(sats * 10, viewModel.uiState.value.sats)
+    }
+
     // MARK: - Modern Bitcoin Tests
 
     @Test

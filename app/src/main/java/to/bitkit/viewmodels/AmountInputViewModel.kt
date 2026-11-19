@@ -60,6 +60,9 @@ class AmountInputViewModel @Inject constructor(
     private var maxAmount: Long = MAX_AMOUNT
     private var rawInputText: String = ""
 
+    /** The unit, and for bitcoin whether modern, [rawInputText] was typed or drawn in. */
+    private var inputUnit: Pair<PrimaryDisplay, Boolean>? = null
+
     fun setMaxAmount(amount: Long) {
         maxAmount = if (amount > 0) amount.coerceAtMost(MAX_AMOUNT) else MAX_AMOUNT
     }
@@ -68,6 +71,7 @@ class AmountInputViewModel @Inject constructor(
         key: String,
         currencyState: CurrencyState,
     ) {
+        syncUnit(currencyState)
         val primaryDisplay = currencyState.primaryDisplay
         val isModern = currencyState.displayUnit.isModern()
         val maxLength = getMaxLength(currencyState)
@@ -79,6 +83,7 @@ class AmountInputViewModel @Inject constructor(
             triggerErrorState(key)
             return
         }
+        inputUnit = primaryDisplay to isModern
 
         // For modern Bitcoin (integer input), format the final amount
         if (primaryDisplay == PrimaryDisplay.BITCOIN && isModern) {
@@ -148,6 +153,23 @@ class AmountInputViewModel @Inject constructor(
             PrimaryDisplay.FIAT -> _uiState.value.text.replace(",", "")
             else -> _uiState.value.text.stripSatsGrouping()
         }
+        inputUnit = primaryDisplay to isModern
+    }
+
+    /**
+     * Redraws the amount from its sats once the unit it was typed in no longer shows, as after a switch on another
+     * screen, so the next key never reads its digits in the other unit.
+     */
+    fun syncUnit(currencyState: CurrencyState) {
+        val shown = currencyState.primaryDisplay to currencyState.displayUnit.isModern()
+        if (inputUnit == null || inputUnit == shown) return
+        if (_uiState.value.sats > 0) {
+            setSats(_uiState.value.sats, currencyState)
+        } else {
+            rawInputText = ""
+            inputUnit = shown
+            _uiState.update { it.copy(text = "", sats = 0) }
+        }
     }
 
     /**
@@ -158,6 +180,7 @@ class AmountInputViewModel @Inject constructor(
             val currentRawInput = rawInputText
             val isModern = currencies.displayUnit.isModern()
             val newPrimaryDisplay = amountInputHandler.switchUnit(currencies.primaryDisplay)
+            inputUnit = newPrimaryDisplay to isModern
 
             // Update display text when currency changes
             val amountSats = _uiState.value.sats
@@ -261,6 +284,7 @@ class AmountInputViewModel @Inject constructor(
 
     fun clearInput() {
         rawInputText = ""
+        inputUnit = null
         maxAmount = MAX_AMOUNT
         _uiState.update { AmountInputUiState() }
     }
