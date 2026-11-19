@@ -53,7 +53,7 @@ fun SpendingIntroScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp)
+                .padding(horizontal = 16.dp)
                 .align(Alignment.BottomCenter)
         ) {
             Display(stringResource(R.string.lightning__spending_intro__title).withAccent(accentColor = Colors.Purple))

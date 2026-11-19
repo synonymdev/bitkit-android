@@ -24,7 +24,7 @@
     <action>Tap the received activity row (testTag "ActivityShort-0") and verify its detail screen opens</action>
     <action>Tap "Tag" (testTag "ActivityTag"), enter the tag restoretag in the tag input (testTag "AddTagInput") and save it (testTag "AddTagSave")</action>
     <action>Verify the tag restoretag is listed on the activity detail screen (testTag "ActivityTags"), then go back to Home</action>
-    <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Lightning Connections" (testTag "Channels"), tap add connection (testTag "add_connection_button") and then "Manual Setup" (testTag "FundManual")</action>
+    <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Lightning Connections" (testTag "Channels"), tap add connection (testTag "add_connection_button") and then "Manual setup" (testTag "FundManual")</action>
     <action>Enter the staging LSP node from `./lsp GET /info` into the node id (testTag "NodeIdInput"), host (testTag "HostInput") and port (testTag "PortInput") fields, continue, fund the connection with 100 000 sats and confirm it</action>
     <action>Mine confirmations with `./lsp POST /regtest/chain/mine '{"count":3}'` and wait for the connection to open</action>
     <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Lightning Connections" (testTag "Channels")</action>

@@ -1210,7 +1210,6 @@ private fun RootNavHost(
                         walletId = walletId,
                         viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
                         onBackClick = { navController.popBackStack() },
-                        onLearnMoreClick = { navController.navigateTo(Routes.TransferLearnMore) },
                         onSent = {
                             navController.navigateTo(Routes.SpendingHwSigned) {
                                 popUpTo<Routes.SpendingHwSign> { inclusive = true }
@@ -1243,11 +1242,7 @@ private fun RootNavHost(
                     )
                 }
                 composableWithDefaultTransitions<Routes.TransferLearnMore> {
-                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
-                    val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
                     TransferLearnMoreScreen(
-                        viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
-                        spendingBalanceSats = sparkState.spendingSats.toLong(),
                         onBackClick = { navController.popBackStack() },
                         onContinueClick = { navController.popBackStack() },
                     )

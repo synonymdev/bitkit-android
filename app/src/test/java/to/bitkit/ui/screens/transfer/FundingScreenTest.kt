@@ -1,7 +1,11 @@
 package to.bitkit.ui.screens.transfer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -14,6 +18,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSystemClock
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
@@ -58,5 +63,31 @@ class FundingScreenTest {
         composeRule.onNodeWithTag("FundTransfer").performScrollTo().assertIsNotEnabled()
         composeRule.onNodeWithTag("FundHardware").performScrollTo().assertIsNotEnabled()
         composeRule.onNodeWithTag("FundReceive").performScrollTo().assertIsEnabled()
+    }
+
+    @Test
+    fun `spark lists savings, hardware, other wallet and manual setup in that order`() {
+        composeRule.setContent {
+            AppThemeSurface { FundingScreen(canFundWithSpark = true) }
+        }
+
+        val tops = listOf("FundTransfer", "FundHardware", "FundReceive", "FundManual")
+            .map { composeRule.onNodeWithTag(it).getUnclippedBoundsInRoot().top }
+
+        assertTrue(tops.zipWithNext().all { (above, below) -> above < below }, "tops are $tops")
+    }
+
+    @Test
+    fun `learn more shows only while spark is not ready`() {
+        var isSparkReady by mutableStateOf(true)
+        composeRule.setContent {
+            AppThemeSurface { FundingScreen(canFundWithSpark = isSparkReady) }
+        }
+
+        composeRule.onNodeWithTag("FundLearnMore").assertDoesNotExist()
+
+        isSparkReady = false
+
+        composeRule.onNodeWithTag("FundLearnMore").assertExists()
     }
 }
