@@ -403,9 +403,15 @@ object MoveToSparkMath {
     fun needsUpdateToSend(amountSats: ULong, channels: List<ChannelDetails>?, spark: SparkState): Boolean =
         amountSats > singleRailSendableSats(channels, spark) && amountSats <= combinedSendableSats(channels, spark)
 
-    /** Whether Spark can pay [amountSats] and its [feeSats] for the payment once [quote] has moved to it. */
-    fun coversPayment(quote: MoveToSparkQuote, spark: SparkState, amountSats: ULong, feeSats: ULong): Boolean =
-        spark.isUsable && spark.balanceSats.safe() + quote.amountSats.safe() >= amountSats.safe() + feeSats.safe()
+    /**
+     * Whether Spark can pay [amountSats] and its [feeSats] for the payment once [quote] has moved to it, also by the
+     * rule the wait after the move applies, which keeps Spark's service fee aside.
+     */
+    fun coversPayment(quote: MoveToSparkQuote, spark: SparkState, amountSats: ULong, feeSats: ULong): Boolean {
+        val have = spark.balanceSats.safe() + quote.amountSats.safe()
+        if (!spark.isUsable || have < amountSats.safe() + feeSats.safe()) return false
+        return SparkFees.sendableSats(have) >= amountSats
+    }
 
     /** The open channels in [after] that could send at least [MIN_MOVE_SATS] in [before] and no longer can. */
     fun emptiedChannels(before: List<ChannelDetails>, after: List<ChannelDetails>?): List<ChannelDetails> {

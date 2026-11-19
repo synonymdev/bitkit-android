@@ -5313,6 +5313,10 @@ class AppViewModel @Inject constructor(
             SendMethod.LIGHTNING -> {
                 sparkWithdrawalValidity(amount)?.let { return it }
                 val maxSendable = maxSendableLightningSats()
+                // A swap's hold payment goes out over one rail, never after a spending balance update.
+                if (_sendUiState.value.activePaykitSwapRoute != null) {
+                    return amount <= minOf(maxSendable, moveToSparkRepo.singleRailSendableSats())
+                }
                 when (val lnurl = _sendUiState.value.lnurl) {
                     null -> amount <= maxSendable && canSendLightning(amount)
                     is LnurlParams.LnurlWithdraw -> amount <= lnurl.data.maxWithdrawableSat()
@@ -6619,7 +6623,9 @@ class AppViewModel @Inject constructor(
         if (hasActiveContactPaymentContext()) return false
         val invoiceHash = invoice?.paymentHash?.toHex()?.takeIf { it.isNotBlank() }
         val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
-        // QuickPay has no confirm screen to show the update fee, so a payment that needs the update is reviewed.
+        // QuickPay has no confirm screen to show the update fee, so a payment that needs the update is reviewed. While
+        // the node starts or its channels reconnect their balance is unknown, so that is decided once they are usable.
+        if (!open && channelsAreSettling()) waitForUsableChannels(walletGeneration)
         if (!open && moveToSparkRepo.needsUpdateToSend(amountSats)) return false
         val canApply = open || canApplyQuickPay(amountSats)
         requireCurrentPaymentPreparation(walletGeneration)
@@ -6671,6 +6677,13 @@ class AppViewModel @Inject constructor(
         return true
     }
 
+    private fun channelsAreSettling(): Boolean {
+        val state = lightningRepo.lightningState.value
+        if (!state.nodeLifecycleState.canRun()) return false
+        if (!state.nodeLifecycleState.isRunning()) return true
+        return state.channels.isNotEmpty() && state.channels.none { it.isUsable }
+    }
+
     private suspend fun canApplyQuickPay(amountSats: ULong): Boolean {
         if (hasActiveContactPaymentContext()) return false
         return quickPayRepo.canApply(amountSats).getOrDefault(false)
@@ -6689,6 +6702,7 @@ class AppViewModel @Inject constructor(
     private fun onSwipeToPay() {
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
         if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
+        _sendUiState.update { it.copy(approvedSparkUpdateQuote = it.sparkUpdateQuote) }
         viewModelScope.launch {
             if (!prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
@@ -7894,7 +7908,7 @@ class AppViewModel @Inject constructor(
      */
     private suspend fun updateSpendingBalanceIfNeeded(bolt11: String, amountSats: ULong): Result<Unit> {
         if (!moveToSparkRepo.needsUpdateToSend(amountSats)) return Result.success(Unit)
-        val shown = _sendUiState.value.sparkUpdateQuote
+        val shown = _sendUiState.value.approvedSparkUpdateQuote
         val fresh = moveToSparkRepo.quote().getOrElse { return Result.failure(it) }
         if (shown == null || fresh.feeSats > shown.feeSats) {
             _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
@@ -7920,7 +7934,7 @@ class AppViewModel @Inject constructor(
             return false
         }
         if (generation != sendStateGeneration) return false
-        val shown = state.sparkUpdateQuote
+        val shown = state.approvedSparkUpdateQuote
         _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
         if (shown != null && fresh.feeSats <= shown.feeSats) return true
         Logger.info("Stopped a payment to show the update fee '${fresh.feeSats}'", context = TAG)
@@ -10378,6 +10392,8 @@ data class SendUiState(
     val lightningFeeSats: Long? = null,
     /** The spending balance update a Lightning payment that fits only across the channels and Spark runs first. */
     val sparkUpdateQuote: MoveToSparkQuote? = null,
+    /** The update quote shown at the swipe, whose fee caps the one paid; a later re-quote never raises it. */
+    val approvedSparkUpdateQuote: MoveToSparkQuote? = null,
     /** True while the update a Lightning payment needs is quoted, so no swipe pays an update fee not yet shown. */
     val isSparkUpdateQuoting: Boolean = false,
     val estimatedRoutingFee: ULong = 0uL,

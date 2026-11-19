@@ -3,6 +3,8 @@ package to.bitkit.usecases
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.runSuspendCatching
@@ -44,11 +46,19 @@ class CloseChannelUseCase @Inject constructor(
     /**
      * Closes each channel a move to Spark emptied: one that could send at least the move minimum in [before] and can
      * no longer, read from the node after a sync. A close that fails leaves its channel listed for a manual close.
+     * While another payment is in flight its funds lower each channel's limit without leaving it, so nothing closes
+     * and the channels stay listed for a manual close.
      */
     suspend fun closeEmptiedByMove(before: List<ChannelDetails>) = withContext(ioDispatcher) {
         walletRepo.syncNodeAndWallet()
         // A sync already running returns at once, so the channels are read from the node directly.
         lightningRepo.syncState()
+        val inFlight = lightningRepo.listPaymentsOrNull().orEmpty()
+            .any { it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.PENDING }
+        if (inFlight) {
+            Logger.info("Kept the channels a move may have emptied open while a payment is in flight", context = TAG)
+            return@withContext
+        }
         val emptied = MoveToSparkMath.emptiedChannels(before, lightningRepo.lightningState.value.channels)
         emptied.forEach { channel ->
             invoke(channel)

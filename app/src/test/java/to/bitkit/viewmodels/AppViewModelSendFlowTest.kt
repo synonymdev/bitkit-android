@@ -20329,12 +20329,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(swapRouteQuote().totalFeeSat.toLong(), sut.sendUiState.value.lightningFeeSats)
     }
 
+    @Test
+    fun `a swap route accepts only an amount one rail can send`() = test {
+        openSwapRoutedContactPayment()
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        whenever(moveToSparkRepo.singleRailSendableSats()).thenReturn(SWAP_DELIVERED_SATS - 1uL)
+        whenever(moveToSparkRepo.needsUpdateToSend(SWAP_DELIVERED_SATS)).thenReturn(true)
+
+        sut.setSendEvent(SendEvent.AmountChange(SWAP_DELIVERED_SATS))
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isAmountInputValid, "a swap took an amount only an update funds")
+    }
+
     private suspend fun TestScope.openSwapRoutedContactPayment(
         quote: Result<PaykitRoute> = Result.success(PaykitRoute.Swap(swapRouteQuote())),
         endpoints: List<Endpoint> = listOf(Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = "")),
         // `advanceUntilIdle` fires the hold watch's timer, which ends a swap payment still awaiting its claim.
         settle: TestScope.() -> Unit = { advanceUntilIdle() },
         privatePaymentContext: PrivatePaykitPaymentContext? = null,
+        singleRailSats: ULong = 100_000uL,
     ) {
         whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
         whenever(pubkySwapsRouteRepo.route(any(), any(), any(), any(), any())).thenReturn(quote)
@@ -20348,6 +20362,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             Scanner.Lightning(lightningInvoice(SWAP_HOLD_INVOICE, amountSats = SWAP_DEBIT_SATS)),
         )
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(moveToSparkRepo.singleRailSendableSats()).thenReturn(singleRailSats)
         sut.openContactPayment(
             paymentRequest = REGTEST_ADDRESS,
             publicKey = testPublicKey,
@@ -20565,6 +20580,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
                 sparkUpdateQuote = quote,
+                approvedSparkUpdateQuote = quote,
             ),
         )
 
@@ -20595,6 +20611,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20621,6 +20638,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20652,6 +20670,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20719,6 +20738,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20774,6 +20794,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20783,7 +20804,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(SendEffect.ResetConfirm, awaitItem())
 
             // The placeholder invoice fails the request's amount check, which a real one passes.
-            setSendState(sut.sendUiState.value.copy(decodedInvoice = null))
+            // The next swipe approves the raised fee now shown.
+            setSendState(
+                sut.sendUiState.value.let {
+                    it.copy(decodedInvoice = null, approvedSparkUpdateQuote = it.sparkUpdateQuote)
+                }
+            )
             sut.setSendEvent(SendEvent.PayConfirmed)
             advanceUntilIdle()
             cancelAndIgnoreRemainingEvents()
@@ -20834,6 +20860,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -20928,6 +20955,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(UPDATE_QUOTE, sut.sendUiState.value.sparkUpdateQuote)
         assertEquals(3L, sut.sendUiState.value.lightningFeeSats)
+        // The swipe approves the update fee shown.
+        setSendState(sut.sendUiState.value.let { it.copy(approvedSparkUpdateQuote = it.sparkUpdateQuote) })
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.PayConfirmed)
             advanceUntilIdle()
@@ -20977,6 +21006,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 isPaymentRequest = true,
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -21031,6 +21061,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -21042,6 +21073,62 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         assertEquals(raised, sut.sendUiState.value.sparkUpdateQuote)
         verify(moveToSparkRepo, never()).updateToSend(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `a re-quote after the swipe never raises the update fee the swipe approved`() = test {
+        val bolt11 = "lnbcrt1requoted"
+        val raised = UPDATE_QUOTE.copy(feeSats = UPDATE_QUOTE.feeSats + 1uL)
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(raised))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                isAmountInputValid = true,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            // A re-quote while the PIN shows replaces the quote on screen with a higher fee.
+            setSendState(sut.sendUiState.value.copy(sparkUpdateQuote = raised))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.ResetConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(UPDATE_QUOTE, sut.sendUiState.value.approvedSparkUpdateQuote)
+        verify(moveToSparkRepo, never()).updateToSend(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `a scan while the node starts decides on QuickPay once the channels are usable`() = test {
+        val bolt11 = "lnbcrt1quickpaystarting"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 60_000u)
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        var channelsUsable = false
+        whenever(lightningRepo.waitForUsableChannels()).thenAnswer {
+            nodeState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+            channelsUsable = true
+            Unit
+        }
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenAnswer { channelsUsable }
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE))
+        whenever(moveToSparkRepo.estimateFeeAfterUpdate(any(), eq(60_000uL))).thenReturn(3uL)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(lightningRepo, atLeastOnce()).waitForUsableChannels()
+        assertNull(sut.quickPayData.value, "QuickPay paid a payment that needs the update")
     }
 
     @Test
@@ -21090,6 +21177,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -21119,6 +21207,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = lightningInvoice(bolt11, 60_000uL),
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -21139,6 +21228,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 isAmountInputValid = true,
                 payMethod = SendMethod.LIGHTNING,
                 sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
             ),
         )
 
@@ -21150,8 +21240,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `a swap route is quoted with what one rail can pay, never the update's combined amount`() = test {
-        whenever(moveToSparkRepo.singleRailSendableSats()).thenReturn(20_000uL)
-        openSwapRoutedContactPayment()
+        openSwapRoutedContactPayment(singleRailSats = 20_000uL)
 
         sut.setSendEvent(SendEvent.AmountContinue)
         advanceUntilIdle()

@@ -435,6 +435,17 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a quote covers a payment only if the wait after the move would accept it`() {
+        val spark = SparkState(isReady = true, balanceSats = 20_000uL)
+        val have = 20_000uL + quote.amountSats
+        val priced = 2uL
+
+        // A fee priced below Spark's service fee passes the plain sum, yet Spark keeps the service fee aside.
+        assertTrue(!MoveToSparkMath.coversPayment(quote, spark, have - priced, priced))
+        assertTrue(MoveToSparkMath.coversPayment(quote, spark, SparkFees.sendableSats(have), priced))
+    }
+
+    @Test
     fun `single rail sendable is the larger of the channels and a ready Spark`() {
         val channels = listOf(channel("a", 30_000uL))
 

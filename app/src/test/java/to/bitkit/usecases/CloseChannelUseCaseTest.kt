@@ -4,6 +4,10 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
@@ -81,6 +85,25 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
 
         verify(lightningRepo).closeChannel(eq(channel("channel_1", 0uL)), any(), anyOrNull())
         verify(lightningRepo, never()).closeChannel(eq(kept), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a move's close keeps a channel open whose limit only a payment in flight lowered`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL)))
+        val inFlight = PaymentDetails(
+            id = "hash",
+            kind = PaymentKind.Bolt11(hash = "hash", preimage = null, secret = null, description = null, bolt11 = "ln"),
+            amountMsat = 49_500_000uL,
+            feePaidMsat = null,
+            direction = PaymentDirection.OUTBOUND,
+            status = PaymentStatus.PENDING,
+            latestUpdateTimestamp = 0uL,
+        )
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(inFlight))
+
+        sut.closeEmptiedByMove(listOf(channel))
+
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
     }
 
     @Test
