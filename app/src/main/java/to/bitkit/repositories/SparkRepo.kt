@@ -132,6 +132,12 @@ class SparkRepo @Inject constructor(
         /** How long a journaled withdrawal Spark doesn't list stays open before a sync closes it as never sent. */
         private val UNLISTED_WITHDRAWAL_GRACE = 10.minutes
 
+        /**
+         * How long past its invoice's expiry a send Spark took stays held while Spark lists none of its own outcome,
+         * as with an unlisted withdrawal, before its row fails.
+         */
+        private val UNLISTED_TAKEN_SEND_GRACE = 10.minutes
+
         /** How many sent contact withdrawals stay recorded for a request proof to complete from. */
         private const val MAX_SENT_WITHDRAWALS = 20
 
@@ -832,20 +838,25 @@ class SparkRepo @Inject constructor(
     /**
      * Drops the attempts of sends Spark took whose invoice expired, once their row is written from Spark's list, as a
      * failure the attempt held back may be the send's own. A send Spark still runs, or a list it can't read, keeps it.
+     * One Spark lists no outcome of, or only an earlier attempt's failure, fails its row once
+     * [UNLISTED_TAKEN_SEND_GRACE] past the expiry.
      */
     private suspend fun dropExpiredTakenAttempts() {
         val expiries = cacheStore.data.first().sparkSendExpiries
         val now = clock.now().epochSeconds
         takenAttempts.keys.filter { (expiries[it] ?: Long.MAX_VALUE) <= now }.forEach { hash ->
             val attempt = takenAttempts[hash] ?: return@forEach
+            val expiresAt = expiries[hash] ?: return@forEach
+            // Spark may list a send it took only on a later sync, so an unlisted one stays held for a while.
+            val isPastGrace = now >= expiresAt + UNLISTED_TAKEN_SEND_GRACE.inWholeSeconds
             val (send, listed) = listedLightningSendPayment(hash)
             when (send) {
                 SparkLightningSend.Unavailable -> return@forEach
-                SparkLightningSend.NotFound -> if (!failHeldRow(hash)) return@forEach
+                SparkLightningSend.NotFound -> if (!isPastGrace || !failHeldRow(hash)) return@forEach
                 is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@forEach
                 // A failure with another id than the attempt's own is an earlier attempt's, listed before the attempt.
                 is SparkLightningSend.Found if send.status == PaymentStatus.FAILED && attempt.ownId != null &&
-                    listed?.id != attempt.ownId -> return@forEach
+                    listed?.id != attempt.ownId -> if (!isPastGrace || !failHeldRow(hash)) return@forEach
 
                 is SparkLightningSend.Found -> Unit
             }
