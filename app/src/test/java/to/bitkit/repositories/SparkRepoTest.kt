@@ -3717,7 +3717,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
         val deadline = now + 1.seconds
-        whenever { cacheStore.addSparkUncertainSend(any(), any(), anyOrNull(), anyOrNull()) }.thenAnswer {
+        whenever { cacheStore.addSparkUncertainSend(any(), any(), anyOrNull(), anyOrNull(), anyOrNull()) }.thenAnswer {
             now = deadline + 1.seconds
             Unit
         }

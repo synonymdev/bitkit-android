@@ -250,9 +250,9 @@ class CacheStoreTest : BaseUnitTest() {
 
     @Test
     fun `keepSparkSendAttempt keeps the taken id of the attempt that still has its entry`() = test {
-        sut.addSparkUncertainSend("hash", failedAt = 100, sentAt = 100)
+        sut.addSparkUncertainSend("hash", failedAt = 100, sentAt = 100, attemptId = "a")
 
-        sut.keepSparkSendAttempt("hash", "retry", sentAt = 100)
+        sut.keepSparkSendAttempt("hash", "retry", attemptId = "a")
 
         val data = sut.data.first()
         assertEquals("retry", data.sparkTakenSendIds["hash"])
@@ -261,19 +261,19 @@ class CacheStoreTest : BaseUnitTest() {
 
     @Test
     fun `keepSparkSendAttempt writes nothing for a send settled before it`() = test {
-        sut.addSparkUncertainSend("hash", failedAt = 100, sentAt = 100)
+        sut.addSparkUncertainSend("hash", failedAt = 100, sentAt = 100, attemptId = "a")
         sut.removeSparkUncertainSend("hash")
 
-        sut.keepSparkSendAttempt("hash", "retry", sentAt = 100)
+        sut.keepSparkSendAttempt("hash", "retry", attemptId = "a")
 
         assertFalse("hash" in sut.data.first().sparkTakenSendIds)
     }
 
     @Test
-    fun `keepSparkSendAttempt leaves a later attempt's entry alone`() = test {
-        sut.addSparkUncertainSend("hash", failedAt = 200, sentAt = 200)
+    fun `keepSparkSendAttempt leaves a later attempt's entry from the same second alone`() = test {
+        sut.addSparkUncertainSend("hash", failedAt = 100, sentAt = 100, attemptId = "b")
 
-        sut.keepSparkSendAttempt("hash", "retry", sentAt = 100)
+        sut.keepSparkSendAttempt("hash", "retry", attemptId = "a")
 
         val data = sut.data.first()
         assertFalse("hash" in data.sparkTakenSendIds)

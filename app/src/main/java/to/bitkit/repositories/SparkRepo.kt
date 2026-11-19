@@ -574,15 +574,17 @@ class SparkRepo @Inject constructor(
                 throw PaymentPendingException(paymentHash)
             }
             val sentAt = clock.now().epochSeconds
+            val attemptId = UUID.randomUUID().toString()
             var isDispatched = false
             var hasReturned = false
             val sent = try {
-                inFlightAttempts[paymentHash.lowercase()] = SendAttempt(sentAt.toULong(), earlierIds)
+                inFlightAttempts[paymentHash.lowercase()] =
+                    SendAttempt(sentAt.toULong(), earlierIds, attemptId = attemptId)
                 sendReleaseMutex.withLock { sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet() }
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
                 spending {
                     // Kept until the call returns, so a send cut off by process death or cancellation stays held.
-                    cacheStore.addSparkUncertainSend(paymentHash, sentAt, sentAt, earlierIds)
+                    cacheStore.addSparkUncertainSend(paymentHash, sentAt, sentAt, earlierIds, attemptId)
                     // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
                     // are checked last, before the send.
                     runCatching {
@@ -598,7 +600,7 @@ class SparkRepo @Inject constructor(
                         hasReturned = true
                         // Taken before the in-flight attempt is dropped, so an earlier failure never finds neither.
                         // A payment Spark took carries its own id, so its failure is never read as an earlier one's.
-                        val attempt = SendAttempt(sentAt.toULong(), earlierIds, result.getOrNull()?.id)
+                        val attempt = SendAttempt(sentAt.toULong(), earlierIds, result.getOrNull()?.id, attemptId)
                         if (result.getOrNull()?.status == PaymentStatus.PENDING) {
                             takenAttempts[paymentHash.lowercase()] = attempt
                             restoredTakenAttempts.remove(paymentHash.lowercase())
@@ -614,7 +616,7 @@ class SparkRepo @Inject constructor(
             } finally {
                 // A send cancelled inside Spark's call stays in doubt, as its journal entry does, so a sync settles it.
                 if (isDispatched && !hasReturned) {
-                    val attempt = SendAttempt(sentAt.toULong(), earlierIds)
+                    val attempt = SendAttempt(sentAt.toULong(), earlierIds, attemptId = attemptId)
                     uncertainSends.putIfAbsent(
                         paymentHash.lowercase(),
                         UncertainSend(clock.now().epochSeconds.toULong(), expiresAt, attempt),
@@ -640,12 +642,16 @@ class SparkRepo @Inject constructor(
                     throw SparkError.SendRefused("Spark balance can't cover the payment", it)
                 }
                 Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
-                settleUncertainSend(paymentHash, SendAttempt(sentAt.toULong(), earlierIds), expiresAt)
+                settleUncertainSend(
+                    paymentHash,
+                    SendAttempt(sentAt.toULong(), earlierIds, attemptId = attemptId),
+                    expiresAt
+                )
                 throw PaymentPendingException(paymentHash)
             }
             // A send Spark still runs keeps its earlier attempts' ids, so their late failures leave it alone.
             if (payment.status == PaymentStatus.PENDING) {
-                cacheStore.keepSparkSendAttempt(paymentHash, payment.id, sentAt)
+                cacheStore.keepSparkSendAttempt(paymentHash, payment.id, attemptId)
             } else {
                 takenAttempts.remove(paymentHash.lowercase())
                 restoredTakenAttempts.remove(paymentHash.lowercase())
@@ -665,7 +671,13 @@ class SparkRepo @Inject constructor(
     private suspend fun settleUncertainSend(paymentHash: String, attempt: SendAttempt, expiresAt: ULong) {
         val failedAt = clock.now().epochSeconds
         uncertainSends[paymentHash.lowercase()] = UncertainSend(failedAt.toULong(), expiresAt, attempt)
-        cacheStore.addSparkUncertainSend(paymentHash, failedAt, attempt.sentAt?.toLong(), attempt.earlierIds)
+        cacheStore.addSparkUncertainSend(
+            paymentHash,
+            failedAt,
+            attempt.sentAt?.toLong(),
+            attempt.earlierIds,
+            attempt.attemptId,
+        )
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
@@ -718,7 +730,7 @@ class SparkRepo @Inject constructor(
         }
         if (!isOwner) return true
         if (isTaken) {
-            cacheStore.keepSparkSendAttempt(paymentHash, taken.ownId, taken.sentAt?.toLong())
+            cacheStore.keepSparkSendAttempt(paymentHash, taken.ownId, taken.attemptId)
         } else {
             cacheStore.removeSparkUncertainSend(paymentHash)
         }
@@ -778,6 +790,7 @@ class SparkRepo @Inject constructor(
         val sentAt: ULong? = null,
         val earlierIds: Set<String>? = null,
         val ownId: String? = null,
+        val attemptId: String? = null,
     )
 
     /** Takes back the sends whose outcome Spark didn't report before a restart, so a sync can still settle them. */
@@ -789,6 +802,7 @@ class SparkRepo @Inject constructor(
             val attempt = SendAttempt(
                 sentAt = cache.sparkUncertainSendStarts[hash]?.toULong(),
                 earlierIds = cache.sparkUncertainSendEarlierIds[hash]?.toSet(),
+                attemptId = cache.sparkUncertainSendAttemptIds[hash],
             )
             uncertainSends.putIfAbsent(hash, UncertainSend(failedAt.toULong(), expiresAt, attempt))
         }
@@ -799,6 +813,7 @@ class SparkRepo @Inject constructor(
                     sentAt = cache.sparkUncertainSendStarts[hash]?.toULong(),
                     earlierIds = cache.sparkUncertainSendEarlierIds[hash]?.toSet(),
                     ownId = cache.sparkTakenSendIds[hash],
+                    attemptId = cache.sparkUncertainSendAttemptIds[hash],
                 )
                 if (takenAttempts.putIfAbsent(hash, attempt) == null) restoredTakenAttempts.add(hash)
             }

@@ -184,6 +184,7 @@ class CacheStore internal constructor(
         failedAt: Long,
         sentAt: Long? = null,
         earlierIds: Set<String>? = null,
+        attemptId: String? = null,
     ) {
         val hash = paymentHash.lowercase()
         store.updateData {
@@ -195,6 +196,8 @@ class CacheStore internal constructor(
                 sparkUncertainSendEarlierIds = earlierIds
                     ?.let { ids -> it.sparkUncertainSendEarlierIds + (hash to ids.sorted()) }
                     ?: (it.sparkUncertainSendEarlierIds - hash),
+                sparkUncertainSendAttemptIds = attemptId?.let { id -> it.sparkUncertainSendAttemptIds + (hash to id) }
+                    ?: (it.sparkUncertainSendAttemptIds - hash),
                 sparkTakenSendIds = it.sparkTakenSendIds - hash,
             )
         }
@@ -203,16 +206,17 @@ class CacheStore internal constructor(
     /**
      * Ends the doubt over a send Spark took and still runs, keeping its start time and earlier attempts' ids, with
      * Spark's id of the payment it took, [paymentId], so its own failure is told apart after a restart. Only the
-     * attempt sent at [sentAt] that still has its entry changes it, so a send settled meanwhile is never kept again.
+     * attempt [attemptId] that still has its entry changes it, so a send settled meanwhile is never kept again.
      */
-    suspend fun keepSparkSendAttempt(paymentHash: String, paymentId: String?, sentAt: Long?) {
+    suspend fun keepSparkSendAttempt(paymentHash: String, paymentId: String?, attemptId: String?) {
         val hash = paymentHash.lowercase()
         val data = store.data.first()
         val isIdKept = paymentId == null || data.sparkTakenSendIds[hash] == paymentId
         if (hash !in data.sparkUncertainSends && isIdKept) return
         store.updateData {
-            val isOwn = sentAt?.let { start -> it.sparkUncertainSendStarts[hash] == start }
-                ?: (hash in it.sparkUncertainSends)
+            // An entry kept before attempts had ids is one only an attempt without an id still owns.
+            val isOwn = attemptId?.let { id -> it.sparkUncertainSendAttemptIds[hash] == id }
+                ?: (hash in it.sparkUncertainSends && hash !in it.sparkUncertainSendAttemptIds)
             if (!isOwn) return@updateData it
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends - hash,
@@ -227,13 +231,15 @@ class CacheStore internal constructor(
         val hash = paymentHash.lowercase()
         val data = store.data.first()
         val isKept = hash in data.sparkUncertainSends || hash in data.sparkUncertainSendStarts ||
-            hash in data.sparkUncertainSendEarlierIds || hash in data.sparkTakenSendIds
+            hash in data.sparkUncertainSendEarlierIds || hash in data.sparkTakenSendIds ||
+            hash in data.sparkUncertainSendAttemptIds
         if (!isKept) return
         store.updateData {
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends - hash,
                 sparkUncertainSendStarts = it.sparkUncertainSendStarts - hash,
                 sparkUncertainSendEarlierIds = it.sparkUncertainSendEarlierIds - hash,
+                sparkUncertainSendAttemptIds = it.sparkUncertainSendAttemptIds - hash,
                 sparkTakenSendIds = it.sparkTakenSendIds - hash,
             )
         }
@@ -440,6 +446,8 @@ data class AppCacheData(
     val sparkUncertainSendEarlierIds: Map<String, List<String>> = mapOf(),
     /** Spark's id of the payment each send Spark took is, so its own failure never reads as an earlier attempt's. */
     val sparkTakenSendIds: Map<String, String> = mapOf(),
+    /** A random id of the attempt each of those sends' entries belongs to, so a stale attempt never writes over it. */
+    val sparkUncertainSendAttemptIds: Map<String, String> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.
