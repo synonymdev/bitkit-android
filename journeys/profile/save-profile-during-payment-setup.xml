@@ -1,6 +1,6 @@
 <journey name="save profile edits during payment setup">
   <description>
-    Android regression for duplicate Paykit endpoint publication after profile creation.
+    Android regression for profile Save while Paykit registers payment details and refreshes allowances.
     Use a disposable unfunded wallet with Paykit enabled, no Pubky identity, PIN off,
     an English device, and reachable staging signup and homeserver services.
   </description>

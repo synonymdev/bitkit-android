@@ -31,12 +31,6 @@ import to.bitkit.ui.theme.Colors
 /** Illustration width as a fraction of the sheet width — the 256-wide Visual in the 375-wide Figma frame. */
 internal const val HW_ILLUSTRATION_SIZE_RATIO = 256f / 375f
 
-/** Figma top ratio for the signed check visual within the content area below navigation. */
-internal const val SIGNED_VISUAL_TOP_RATIO = (481f - 92f) / (812f - 92f - 34f)
-
-/** Figma top ratio for the Trezor visual within the content area below navigation. */
-internal const val SIGN_VISUAL_TOP_RATIO = (488f - 92f) / (812f - 92f - 34f)
-
 /** Trezor illustration left bleed past the frame, as a fraction of the sheet width; keeps its screen text in view. */
 private const val HW_DEVICE_TREZOR_BLEED_RATIO = 71f / 375f
 
