@@ -16,7 +16,9 @@ import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.AppHealthState
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.LogsRepo
@@ -94,5 +96,6 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
         sparkRepo = sparkRepo,
         sparkExitRepo = mock<SparkExitRepo> { on { state } doReturn MutableStateFlow(SparkExitState()) },
         moveToSparkManager = mock<MoveToSparkManager> { on { hasRetainedMove } doReturn hasRetainedMove },
+        healthRepo = mock<HealthRepo> { on { healthState } doReturn MutableStateFlow(AppHealthState()) },
     )
 }

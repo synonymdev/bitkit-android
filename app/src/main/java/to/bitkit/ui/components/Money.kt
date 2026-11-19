@@ -21,6 +21,7 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.STUB_RATE
 import to.bitkit.models.asBtc
 import to.bitkit.models.formatCurrency
+import to.bitkit.models.formatMoney
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
@@ -195,27 +196,18 @@ fun MoneyCaptionB(
         return
     }
 
-    val currency = currencyViewModel ?: return
     val currencies = LocalCurrencies.current
-
-    val displayText = remember(currencies, sats, symbol) {
-        currency.convert(sats)?.let { converted ->
-            val btc = converted.bitcoinDisplay(currencies.displayUnit)
-            if (symbol) {
-                "<accent>${btc.symbol}</accent> ${btc.value}"
-            } else {
-                btc.value
-            }
-        }
+    // A bitcoin amount needs no exchange rate, so it shows also while the selected currency has none.
+    val text = remember(currencies.displayUnit, sats, symbol) {
+        val value = sats.formatMoney(currencies.displayUnit)
+        if (symbol) "<accent>$BITCOIN_SYMBOL</accent> $value" else value
     }
 
-    displayText?.let { text ->
-        CaptionB(
-            text = text.withAccent(accentColor = symbolColor),
-            color = color,
-            modifier = modifier.testTag("MoneyText")
-        )
-    }
+    CaptionB(
+        text = text.withAccent(accentColor = symbolColor),
+        color = color,
+        modifier = modifier.testTag("MoneyText")
+    )
 }
 
 @Composable
@@ -243,15 +235,14 @@ fun rememberMoneyText(
     val currency = currencyViewModel ?: return null
 
     return remember(currencies, sats, unit) {
-        val converted = currency.convert(sats) ?: return@remember null
-
+        // Bitcoin amounts need no exchange rate, so they show also while the selected currency has none.
         if (unit == PrimaryDisplay.BITCOIN) {
-            val btcComponents = converted.bitcoinDisplay(currencies.displayUnit)
             buildString {
-                if (showSymbol) append("<accent>${btcComponents.symbol}</accent> ")
-                append(btcComponents.value)
+                if (showSymbol) append("<accent>$BITCOIN_SYMBOL</accent> ")
+                append(sats.formatMoney(currencies.displayUnit))
             }
         } else {
+            val converted = currency.convert(sats) ?: return@remember null
             buildString {
                 if (showSymbol && !converted.isSymbolSuffix) append("<accent>${converted.symbol}</accent> ")
                 append(converted.formatted)

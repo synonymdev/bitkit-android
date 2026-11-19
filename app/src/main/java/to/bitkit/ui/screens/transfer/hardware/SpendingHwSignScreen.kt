@@ -43,6 +43,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.repositories.SparkClaimSpeed
+import to.bitkit.repositories.canSwitchUnit
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -82,6 +84,7 @@ fun SpendingHwSignScreen(
     var request by remember { mutableStateOf<HwSendRequest?>(null) }
     val isBusy = state.isSending || hwState.isSigning
     val currency = currencyViewModel
+    val currencies = LocalCurrencies.current
 
     BackHandler(enabled = !hwState.canLeave || state.isSending) {}
 
@@ -123,7 +126,8 @@ fun SpendingHwSignScreen(
         hasPendingBroadcast = hwState.hasPendingBroadcast,
         onBackClick = { if (hwState.canLeave && !state.isSending) onBackClick() },
         onSpeedChange = { if (!isBusy) viewModel.onSpeedChange(it) },
-        onFeesClick = { currency?.switchUnit() },
+        // Without a rate the fees stay in bitcoin.
+        onFeesClick = { if (currencies.canSwitchUnit) currency?.switchUnit() },
         onOpenConnect = {
             // A pending broadcast resumes only for the exact request it was signed for.
             val pending = request?.takeIf { hwState.hasPendingBroadcast }

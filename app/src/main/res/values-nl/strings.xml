@@ -257,10 +257,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 bevestigingen</string>
     <string name="lightning__spark_deposit">Storting</string>
     <string name="lightning__spark_deposit__wait_button">Wachten</string>
-    <string name="lightning__spark_deposits_claimed">Geclaimde stortingen</string>
-    <string name="lightning__spark_deposits_pending">Lopende stortingen</string>
+    <string name="lightning__spark_deposit_tx">Stortings-tx</string>
+    <string name="lightning__spark_deposits">Stortingen</string>
     <string name="lightning__spark_exit__amount">Bedrag om over te boeken</string>
-    <string name="lightning__spark_exit__button">Overboeking forceren</string>
+    <string name="lightning__spark_exit__button">Overboeking naar spaargeld forceren</string>
     <string name="lightning__spark_exit__cancel">Overboeking annuleren</string>
     <string name="lightning__spark_exit__cancel_failed">Kon het financieringsadres niet controleren. Probeer opnieuw.</string>
     <string name="lightning__spark_exit__cancel_text">Spark keert terug naar hoe het was. Als er een betaling op het adres voor de noodkosten is aangekomen, stuurt Bitkit die terug naar spaargeld.</string>
@@ -359,10 +359,11 @@
     <string name="lightning__spark_learn__about_title">Over je\n&lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>
     <string name="lightning__spark_learn__fast_text">Je geld is meestal binnen een paar minuten klaar om te besteden, zonder op bevestigingen te wachten.</string>
     <string name="lightning__spark_learn__later_text">Je geld is beschikbaar na 3 bevestigingen, meestal na ongeveer 30 minuten.</string>
+    <string name="lightning__spark_operators">Lightspark, Breez en Flashnet</string>
     <string name="lightning__spark_provider">Aanbieder</string>
     <string name="lightning__spark_provider_value">Spark via Breez</string>
-    <string name="lightning__spark_receiving_unlimited">Geen limiet</string>
-    <string name="lightning__spark_trust">Dit saldo staat op Spark, beheerd door Lightspark, Breez en Flashnet. Het is veilig zolang ten minste één van hen eerlijk handelt. Zij kunnen de toegang pauzeren, en vertrekken zonder hen vereist een on-chain exit.</string>
+    <string name="lightning__spark_receiving_unlimited">geen limiet</string>
+    <string name="lightning__spark_trust">Je bestedingssaldo gebruikt Spark, beheerd door Lightspark, Breez en Flashnet. De veiligheid hangt ervan af dat ten minste één operator eerlijk handelt. Operators kunnen de toegang pauzeren, en opnemen zonder hun medewerking vereist dat je een on-chain exit start.</string>
     <string name="lightning__spendable_onchain">Besteedbaar onchain</string>
     <string name="lightning__spending">Bestedingssaldo</string>
     <string name="lightning__spending_amount__error_balance__description">Uw spaargeld is niet voldoende voor deze overboeking en de vergoedingen. Probeer een kleiner bedrag.</string>
@@ -840,6 +841,8 @@
     <string name="settings__security__section_safety">Veiligheid</string>
     <string name="settings__security_title">Beveiliging en privacy</string>
     <string name="settings__settings">Instellingen</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} om {time}</string>
     <string name="settings__status__backup__error">Volledige backup niet voltooid</string>
     <string name="settings__status__backup__pending">Back-up maken...</string>
     <string name="settings__status__backup__ready">Geback-upt</string>
@@ -860,6 +863,7 @@
     <string name="settings__status__lightning_node__pending">Synchroniseren...</string>
     <string name="settings__status__lightning_node__ready">Gesynchroniseerd</string>
     <string name="settings__status__lightning_node__title">Lightning Node</string>
+    <string name="settings__status__spark__exit">Geforceerde overboeking naar spaargeld bezig...</string>
     <string name="settings__status__title">App-status</string>
     <string name="settings__support__help">Helpcentrum</string>
     <string name="settings__support__label_address">E-mailadres</string>
@@ -1860,11 +1864,9 @@
     <string name="widgets__widget__size_wide">Breed</string>
     <string name="wallet__balance_updating">Saldo bijwerken…</string>
     <string name="settings__status__exit__funding">Noodkosten nodig</string>
-    <string name="settings__status__exit__pending">Bezig</string>
-    <string name="settings__status__exit__title">Noodexit</string>
     <string name="settings__status__lightning_connection__spark">Via Spark</string>
-    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__error">Offline...</string>
     <string name="settings__status__spark__pending">Verbinden...</string>
     <string name="settings__status__spark__ready">Verbonden</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">Lightning-provider (Spark)</string>
 </resources>

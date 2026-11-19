@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +49,7 @@ fun NumberPadTextField(
     currencies: CurrencyState = LocalCurrencies.current,
     onClick: (() -> Unit)? = { viewModel.switchUnit(currencies) },
 ) {
+    LaunchedEffect(currencies.primaryDisplay, currencies.displayUnit) { viewModel.syncUnit(currencies) }
     MoneyAmount(
         modifier = modifier.then(Modifier.clickableAlpha(onClick = onClick)),
         value = uiState.value.text,

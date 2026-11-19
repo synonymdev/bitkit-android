@@ -26,7 +26,10 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BalanceState
+import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
@@ -53,6 +56,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.SparkFundingContract.SideEffect
 import to.bitkit.ui.shared.toast.ToastEventBus
+import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -197,6 +201,36 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
         )
+    }
+
+    @Test
+    fun `a fee rise reads in bitcoin while fiat has no usable rate`() = test {
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn("rose {amount}")
+        whenever(
+            currencyRepo.currencyState
+        ).thenReturn(MutableStateFlow(CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)))
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.success(ConvertedAmount(BigDecimal.ZERO, "0.00", "$", "USD", "", 200L)))
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 700uL))))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("rose $BITCOIN_SYMBOL 200", toasts.single().description)
     }
 
     @Test
