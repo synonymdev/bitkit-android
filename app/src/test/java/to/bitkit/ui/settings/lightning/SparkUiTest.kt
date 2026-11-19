@@ -9,6 +9,7 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SparkUiTest : BaseUnitTest() {
@@ -39,6 +40,18 @@ class SparkUiTest : BaseUnitTest() {
         assertEquals(listOf(earlier), ui.earlierAddresses)
         assertFalse(ui.showsExit, "an empty spark offers no exit")
         assertFalse(ui.isReceiving, "an offline spark receives nothing")
+    }
+
+    @Test
+    fun `a spark that read its state stays listed with its balance while it cannot connect`() = test {
+        val offline = SparkState(isReady = false, hasReadState = true, balanceSats = 10_000uL)
+
+        val ui = assertNotNull(offline.toUi(mock()))
+
+        assertEquals(10_000uL, ui.balanceSats)
+        assertFalse(ui.isReceiving, "an offline spark receives nothing")
+        val unread = SparkState(isReady = false, balanceSats = 10_000uL)
+        assertNull(unread.toUi(mock()), "listed before Spark read anything")
     }
 
     @Test

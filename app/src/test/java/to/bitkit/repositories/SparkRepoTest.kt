@@ -2768,6 +2768,8 @@ class SparkRepoTest : BaseUnitTest() {
         sut.refreshState().getOrThrow()
 
         assertFalse(sut.state.value.isReady, "a stale refresh marked Spark ready without a connection")
+        assertTrue(sut.state.value.hasReadState, "a lost connection hid the state Spark read")
+        assertEquals(10_000uL, sut.state.value.balanceSats)
     }
 
     @Test

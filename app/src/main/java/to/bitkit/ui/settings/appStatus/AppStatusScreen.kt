@@ -173,6 +173,7 @@ private fun Content(
             SparkStatusItem(
                 sparkHealth = uiState.health.spark,
                 exitStep = uiState.exitStep,
+                hasSparkState = uiState.hasSparkState,
                 onSparkClick = onSparkClick,
                 onExitClick = onExitClick,
             )
@@ -215,6 +216,7 @@ private fun Content(
 private fun SparkStatusItem(
     sparkHealth: HealthState?,
     exitStep: ExitStep?,
+    hasSparkState: Boolean,
     onSparkClick: () -> Unit,
     onExitClick: () -> Unit,
 ) {
@@ -247,8 +249,8 @@ private fun SparkStatusItem(
             iconRes = R.drawable.ic_asterisk,
             state = sparkHealth,
         ),
-        // Spark's detail shows a zero balance until Spark has read its state.
-        onClick = onSparkClick.takeIf { sparkHealth == HealthState.READY },
+        // Spark's detail shows a zero balance until Spark has read its state, then its last known one while offline.
+        onClick = onSparkClick.takeIf { sparkHealth == HealthState.READY || hasSparkState },
     )
 }
 

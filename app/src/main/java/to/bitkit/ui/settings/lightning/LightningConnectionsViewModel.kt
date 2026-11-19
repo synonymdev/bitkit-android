@@ -296,10 +296,10 @@ internal suspend fun SparkState.toUi(
     isOnline: Boolean = true,
 ): SparkUi? {
     val showsExit = isExiting || showsExitResult
-    // An emergency exit keeps Spark listed, also while it cannot connect, so its progress stays reachable. So do an
-    // earlier exit's addresses, once Spark is empty.
+    // A Spark that read its state stays listed while it cannot connect, with its last known balance and payments, and
+    // so does an emergency exit, so its progress stays reachable, and an earlier exit's addresses, once Spark is empty.
     val hasEarlier = earlierAddresses.isNotEmpty()
-    if (!isReady && !showsExit && !hasEarlier) return null
+    if (!isReady && !hasReadState && !showsExit && !hasEarlier) return null
     // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
     val hasExit = showsExit || recoverableFundsSats > 0uL
     if (shownBalanceSats == 0uL && deposits.isEmpty() && !hasExit && !hasEarlier && Env.network != Network.REGTEST) {

@@ -24,6 +24,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
+import to.bitkit.repositories.SparkRepo
 import javax.inject.Inject
 import android.text.format.DateFormat as AndroidDateFormat
 
@@ -33,6 +34,7 @@ class AppStatusViewModel @Inject constructor(
     private val healthRepo: HealthRepo,
     private val lightningRepo: LightningRepo,
     private val sparkExitRepo: SparkExitRepo,
+    private val sparkRepo: SparkRepo,
     private val cacheStore: CacheStore,
 ) : ViewModel() {
 
@@ -49,7 +51,8 @@ class AppStatusViewModel @Inject constructor(
             cacheStore.backupStatuses,
             lightningRepo.lightningState,
             sparkExitRepo.state,
-        ) { healthState, backupStatuses, lightningState, exitState ->
+            sparkRepo.state,
+        ) { healthState, backupStatuses, lightningState, exitState, sparkState ->
             AppStatusUiState(
                 health = healthState,
                 backupSubtitle = computeBackupSubtitle(healthState.backups, backupStatuses),
@@ -59,6 +62,7 @@ class AppStatusViewModel @Inject constructor(
                     else -> lightningState.nodeLifecycleState.uiText(context)
                 },
                 exitStep = exitState.record.exitStep(exitState.fundingState),
+                hasSparkState = sparkState.hasReadState,
             )
         }.collect { newState ->
             _uiState.update { newState }
@@ -94,6 +98,8 @@ data class AppStatusUiState(
     val nodeSubtitle: String = "",
     /** Null while no emergency exit runs. */
     val exitStep: ExitStep? = null,
+    /** Spark read its state, so its detail shows the last known balance and payments, also while it is offline. */
+    val hasSparkState: Boolean = false,
     /** The app's version and build, as "3.2.0 (182)". */
     val appVersion: String = Env.version,
 )

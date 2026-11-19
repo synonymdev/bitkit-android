@@ -1232,6 +1232,7 @@ class SparkRepo @Inject constructor(
             it.copy(
                 // A refresh that read an SDK disconnected meanwhile leaves the readiness its reconnect set.
                 isReady = sparkService.isConnected || it.isReady,
+                hasReadState = true,
                 balanceSats = info.balanceSats,
                 // An exit moves the balance to savings, so a zero read during one keeps nothing.
                 keptBalanceSats = it.shownBalanceSats.takeIf { kept ->
@@ -2020,6 +2021,8 @@ data class SparkState(
     val isReady: Boolean = false,
     /** Spark synced its payments at least once since it connected, so its payment list is complete. */
     val hasSynced: Boolean = false,
+    /** Spark read its balance and payments at least once, so they stay shown while it cannot connect. */
+    val hasReadState: Boolean = false,
     /** The last start failed; the next start clears it when it begins. */
     val hasStartFailed: Boolean = false,
     /** What Spark read, which sends and withdrawals use. */
