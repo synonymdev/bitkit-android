@@ -23,14 +23,18 @@ import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitState
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class AppStatusViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val healthRepo: HealthRepo = mock()
     private val lightningRepo: LightningRepo = mock()
     private val sparkExitRepo: SparkExitRepo = mock()
+    private val sparkRepo: SparkRepo = mock()
     private val cacheStore: CacheStore = mock()
 
     private lateinit var sut: AppStatusViewModel
@@ -47,10 +51,12 @@ class AppStatusViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.other__node_running)).thenReturn("Running")
         whenever(context.getString(R.string.other__node_stopping)).thenReturn("Stopping")
         whenever(context.getString(R.string.other__node_initializing)).thenReturn("Setting up wallet…")
+        whenever(context.getString(R.string.settings__status__lightning_node__ready)).thenReturn("Synced")
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(cacheStore.backupStatuses).thenReturn(flowOf(emptyMap()))
         whenever(sparkExitRepo.state).thenReturn(MutableStateFlow(SparkExitState()))
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
     }
 
     private fun createSut(): AppStatusViewModel {
@@ -59,6 +65,7 @@ class AppStatusViewModelTest : BaseUnitTest() {
             healthRepo = healthRepo,
             lightningRepo = lightningRepo,
             sparkExitRepo = sparkExitRepo,
+            sparkRepo = sparkRepo,
             cacheStore = cacheStore,
         )
     }
@@ -151,25 +158,27 @@ class AppStatusViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `node subtitle shows NodeLifecycleState uiText`() = test {
+    fun `node subtitle shows synced when the node is healthy`() = test {
         val lightningState = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
 
+        whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState(node = HealthState.READY)))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
 
         sut = createSut()
 
         sut.uiState.test {
             val state = awaitItem()
-            assertEquals("Running", state.nodeSubtitle)
+            assertEquals("Synced", state.nodeSubtitle)
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun `node subtitle updates when NodeLifecycleState changes`() = test {
+    fun `node subtitle shows NodeLifecycleState uiText while the node is pending`() = test {
         val initialState = LightningState(nodeLifecycleState = NodeLifecycleState.Starting)
         val lightningStateFlow = MutableStateFlow(initialState)
 
+        whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState(node = HealthState.PENDING)))
         whenever(lightningRepo.lightningState).thenReturn(lightningStateFlow)
 
         sut = createSut()
@@ -233,6 +242,19 @@ class AppStatusViewModelTest : BaseUnitTest() {
 
         sut.uiState.test {
             assertEquals(ExitStep.RUNNING, awaitItem().exitStep)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `ui state keeps spark's detail reachable once spark read its state`() = test {
+        val offline = SparkState(isReady = false, hasStartFailed = true, hasReadState = true, balanceSats = 10_000uL)
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(offline))
+
+        sut = createSut()
+
+        sut.uiState.test {
+            assertTrue(awaitItem().hasSparkState)
             cancelAndIgnoreRemainingEvents()
         }
     }

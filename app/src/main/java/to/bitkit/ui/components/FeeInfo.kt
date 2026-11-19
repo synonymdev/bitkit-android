@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import to.bitkit.repositories.shownUnit
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -45,7 +47,7 @@ fun RowScope.FeeInfo(
                         .size(16.dp),
                 )
             } else {
-                MoneySSB(sats = amount, showSymbol = true)
+                MoneySSB(sats = amount, unit = LocalCurrencies.current.shownUnit, showSymbol = true)
             }
         }
         Spacer(modifier = Modifier.weight(1f))

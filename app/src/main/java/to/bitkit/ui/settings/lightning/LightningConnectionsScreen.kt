@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings.lightning
 
-import android.content.Intent
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -39,7 +38,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.collections.immutable.ImmutableList
@@ -74,7 +72,6 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareZipFile
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.withAccent
 
 private const val CLOSED_CHANNEL_ALPHA = 0.64f
@@ -109,7 +106,6 @@ fun LightningConnectionsScreen(
         },
         onClickSpark = { navController.navigateTo(Routes.SparkDetail) },
         onClickMoveToSpark = { navController.navigateTo(Routes.MoveToSpark) },
-        onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
         onRefresh = {
             viewModel.onPullToRefresh()
         },
@@ -126,7 +122,6 @@ private fun Content(
     onClickChannel: (ChannelUi) -> Unit = {},
     onClickSpark: () -> Unit = {},
     onClickMoveToSpark: () -> Unit = {},
-    onOpenTx: (String) -> Unit = {},
     onRefresh: () -> Unit = {},
 ) {
     var showClosed by remember { mutableStateOf(false) }
@@ -178,7 +173,7 @@ private fun Content(
                         uiState.remoteBalance,
                         isReceivingUnlimited = uiState.isSparkReceiving
                     )
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+                    HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
                     EmptyStateContent(modifier = Modifier.weight(1f))
 
@@ -204,17 +199,11 @@ private fun Content(
                         uiState.remoteBalance,
                         isReceivingUnlimited = uiState.isSparkReceiving
                     )
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+                    HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
                     if (!uiState.isNodeRunning) {
                         VerticalSpacer(16.dp)
                         SyncingRow()
-                    }
-
-                    uiState.spark?.let { spark ->
-                        VerticalSpacer(16.dp)
-                        Caption13Up(stringResource(R.string.lightning__spark), color = Colors.White64)
-                        SparkItem(spark = spark, onClick = onClickSpark, onOpenTx = onOpenTx)
                     }
 
                     // Pending Channels Section
@@ -228,8 +217,8 @@ private fun Content(
                         )
                     }
 
-                    // Open Channels Section
-                    if (uiState.openChannels.isNotEmpty()) {
+                    // Open Channels Section, with Spark after the channels
+                    if (uiState.openChannels.isNotEmpty() || uiState.spark != null) {
                         VerticalSpacer(16.dp)
                         Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
                         ChannelList(
@@ -237,6 +226,7 @@ private fun Content(
                             channels = uiState.openChannels,
                             onClickChannel = onClickChannel,
                         )
+                        uiState.spark?.let { SparkItem(spark = it, onClick = onClickSpark) }
                     }
 
                     if (uiState.canMoveToSpark) {
@@ -340,7 +330,7 @@ private fun BalanceColumn(
 ) {
     Column {
         Caption13Up(text = label, color = Colors.White64)
-        VerticalSpacer(8.dp)
+        VerticalSpacer(12.dp)
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -425,7 +415,6 @@ private fun ChannelItem(
 private fun SparkItem(
     spark: SparkUi,
     onClick: () -> Unit,
-    onOpenTx: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -456,28 +445,13 @@ private fun SparkItem(
             localBalance = spark.balanceSats.toLong(),
             remoteBalance = 0L,
             status = ChannelStatusUi.OPEN,
-            showReceiving = false,
+            showReceiving = spark.isReceiving,
+            receivingUnlimited = spark.isReceiving,
+            isSpark = true,
         )
-        spark.pendingDeposits.forEach { SparkDepositRow(it, onOpenTx) }
         VerticalSpacer(16.dp)
         HorizontalDivider()
     }
-}
-
-@Composable
-internal fun SparkDepositRow(
-    depositUi: SparkDepositUi,
-    onOpenTx: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    SparkTransactionRow(
-        title = stringResource(R.string.lightning__spark_deposit),
-        txid = depositUi.deposit.txid,
-        amountSats = depositUi.deposit.amountSats,
-        confirmations = depositUi.confirmations,
-        onOpenTx = onOpenTx,
-        modifier = modifier.testTag("SparkDeposit")
-    )
 }
 
 @Composable
@@ -487,7 +461,6 @@ internal fun SparkTransactionRow(
     amountSats: ULong,
     onOpenTx: (String) -> Unit,
     modifier: Modifier = Modifier,
-    confirmations: UInt? = null,
 ) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -506,18 +479,11 @@ internal fun SparkTransactionRow(
                 overflow = TextOverflow.MiddleEllipsis,
             )
         }
-        Column(
-            horizontalAlignment = Alignment.End,
+        MoneyCaptionB(
+            sats = amountSats.toLong(),
+            symbol = true,
             modifier = Modifier.padding(start = 16.dp)
-        ) {
-            MoneyCaptionB(sats = amountSats.toLong(), symbol = true)
-            confirmations?.let {
-                CaptionB(
-                    text = stringResource(R.string.lightning__spark_confirmations, minOf(it.toInt(), 3)),
-                    color = Colors.Purple,
-                )
-            }
-        }
+        )
     }
 }
 
@@ -607,7 +573,9 @@ private fun Preview() {
                             inboundCapacityMsat = 700_000_000u,
                         ),
                     ),
-                ).toImmutableList()
+                ).toImmutableList(),
+                spark = SparkUi(balanceSats = 580_000uL, isReceiving = true),
+                isSparkReceiving = true,
             )
         )
     }

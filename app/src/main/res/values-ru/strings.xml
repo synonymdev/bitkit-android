@@ -235,10 +235,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 подтверждений</string>
     <string name="lightning__spark_deposit">Депозит</string>
     <string name="lightning__spark_deposit__wait_button">Ждать</string>
-    <string name="lightning__spark_deposits_claimed">Зачисленные депозиты</string>
-    <string name="lightning__spark_deposits_pending">Депозиты в обработке</string>
+    <string name="lightning__spark_deposit_tx">Транзакция депозита</string>
+    <string name="lightning__spark_deposits">Депозиты</string>
     <string name="lightning__spark_exit__amount">Сумма перевода</string>
-    <string name="lightning__spark_exit__button">Принудительный перевод</string>
+    <string name="lightning__spark_exit__button">Принудительный перевод в сбережения</string>
     <string name="lightning__spark_exit__cancel">Отменить перевод</string>
     <string name="lightning__spark_exit__cancel_failed">Не удалось проверить адрес пополнения. Попробуйте ещё раз.</string>
     <string name="lightning__spark_exit__cancel_text">Spark вернётся в прежнее состояние. Если на адрес экстренных комиссий пришёл платёж, Bitkit вернёт его в сбережения.</string>
@@ -336,10 +336,11 @@
     <string name="lightning__spark_learn__about_title">О вашем\n&lt;accent&gt;балансе расходов&lt;/accent&gt;</string>
     <string name="lightning__spark_learn__fast_text">Ваши средства обычно готовы к использованию через несколько минут, без ожидания подтверждений.</string>
     <string name="lightning__spark_learn__later_text">Ваши средства станут доступны после 3 подтверждений, обычно примерно через 30 минут.</string>
+    <string name="lightning__spark_operators">Lightspark, Breez и Flashnet</string>
     <string name="lightning__spark_provider">Провайдер</string>
     <string name="lightning__spark_provider_value">Spark через Breez</string>
-    <string name="lightning__spark_receiving_unlimited">Без ограничений</string>
-    <string name="lightning__spark_trust">Этот баланс хранится в Spark, которым управляют Lightspark, Breez и Flashnet. Он в безопасности, пока хотя бы один из них действует честно. Они могут приостановить доступ, а выход без них требует ончейн-вывода.</string>
+    <string name="lightning__spark_receiving_unlimited">без ограничений</string>
+    <string name="lightning__spark_trust">Ваш баланс расходов использует Spark, которым управляют Lightspark, Breez и Flashnet. Его безопасность зависит от того, что хотя бы один оператор действует честно. Операторы могут приостановить доступ, а чтобы вывести средства без их участия, вам придётся запустить ончейн-вывод.</string>
     <string name="lightning__spendable_onchain">Доступно Onchain</string>
     <string name="lightning__spending">Расходы</string>
     <string name="lightning__spending_amount__error_balance__description">Ваших сбережений не хватает на этот перевод и его комиссии. Попробуйте меньшую сумму.</string>
@@ -821,6 +822,8 @@
     <string name="settings__security__section_safety">Безопасность</string>
     <string name="settings__security_title">Безопасность и Конфиденциальность</string>
     <string name="settings__settings">Настройки</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__backup__date">{date} в {time}</string>
     <string name="settings__status__backup__error">Не удалось выполнить полное резервное копирование</string>
     <string name="settings__status__backup__pending">Резервное копирование...</string>
     <string name="settings__status__backup__ready">Скопировано</string>
@@ -841,6 +844,7 @@
     <string name="settings__status__lightning_node__pending">Синхронизация...</string>
     <string name="settings__status__lightning_node__ready">Синхронизировано</string>
     <string name="settings__status__lightning_node__title">Лайтнинг-нода</string>
+    <string name="settings__status__spark__exit">Идёт принудительный перевод в сбережения...</string>
     <string name="settings__status__title">Статус Приложения</string>
     <string name="settings__support__help">Центр Помощи</string>
     <string name="settings__support__label_address">Электронная Почта</string>
@@ -1837,11 +1841,9 @@
     <string name="widgets__widget__size_wide">Широкий</string>
     <string name="wallet__balance_updating">Обновление баланса…</string>
     <string name="settings__status__exit__funding">Нужны экстренные комиссии</string>
-    <string name="settings__status__exit__pending">Выполняется</string>
-    <string name="settings__status__exit__title">Экстренный Выход</string>
     <string name="settings__status__lightning_connection__spark">Через Spark</string>
-    <string name="settings__status__spark__error">Не в сети</string>
+    <string name="settings__status__spark__error">Не в сети...</string>
     <string name="settings__status__spark__pending">Подключение...</string>
     <string name="settings__status__spark__ready">Подключено</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">Провайдер Lightning (Spark)</string>
 </resources>

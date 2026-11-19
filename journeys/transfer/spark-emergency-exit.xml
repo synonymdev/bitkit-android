@@ -1,7 +1,7 @@
 <journey name="spark emergency exit">
   <description>
     Verifies the Spark force transfer (the emergency exit) up to the swipe. With a Spark balance, the Spark connection
-    screen shows "Force transfer" (testTag "SparkEmergencyExit") under "Transfer to Savings". It opens the "Force
+    screen shows "Force Transfer To Savings" (testTag "SparkEmergencyExit") under "Transfer To Savings". It opens the "Force
     Transfer" intro, then the "Transfer overview", which asks the SDK's prepareRecoverFunds for every leaf and lists
     "Amount to transfer", "Network fees" and "You receive (estimate)" under "Overview". When the transfer needs
     emergency fees, Continue leads to the "Emergency fees" screen: one row, "Deducted from your Savings balance*" when
@@ -21,12 +21,12 @@
     <action>Tap the Advanced tab (testTag "Tab-advanced")</action>
     <action>Tap Lightning Connections (testTag "Channels")</action>
     <action>Tap the Spark connection (testTag "SparkConnection")</action>
-    <action>Scroll down and verify "Transfer to Savings" (testTag "SparkTransferToSavings") is enabled and "Force transfer" (testTag "SparkEmergencyExit") shows under it</action>
-    <action>Tap "Force transfer" and verify the "Force Transfer" intro says your funds may be unavailable for up to 4 weeks</action>
+    <action>Scroll down and verify "Transfer To Savings" (testTag "SparkTransferToSavings") is enabled and "Force Transfer To Savings" (testTag "SparkEmergencyExit") shows under it</action>
+    <action>Tap "Force Transfer To Savings" and verify the "Force Transfer" intro says your funds may be unavailable for up to 4 weeks</action>
     <action>Tap "Continue" (testTag "SparkExitIntroContinue") and verify the "Transfer overview" screen shows "Getting the costs…" and then "Amount to transfer", "Network fees" and "You receive (estimate)"</action>
     <action>Verify no reason shows in red (testTag "SparkExitQuoteBlocked") and "Continue" (testTag "SparkExitQuoteContinue") is enabled</action>
     <action>Tap "Continue" and verify the "Emergency fees" screen shows one amount, "Deducted from your Savings balance*" (testTag "SparkExitFeesSavings"), and the note that unused fees return to savings</action>
     <action>Tap "Continue" (testTag "SparkExitFundingContinue") and verify "Please confirm" lists the overview and the emergency fees, with a yellow swipe</action>
-    <action>Go back to the Spark connection screen and verify "Transfer to Savings" is still enabled: nothing started</action>
+    <action>Go back to the Spark connection screen and verify "Transfer To Savings" is still enabled: nothing started</action>
   </actions>
 </journey>

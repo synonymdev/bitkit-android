@@ -104,10 +104,10 @@
     <string name="lightning__spark_confirmations">%1$d/3 confirmações</string>
     <string name="lightning__spark_deposit">Depósito</string>
     <string name="lightning__spark_deposit__wait_button">Esperar</string>
-    <string name="lightning__spark_deposits_claimed">Depósitos resgatados</string>
-    <string name="lightning__spark_deposits_pending">Depósitos em curso</string>
+    <string name="lightning__spark_deposit_tx">Tx de depósito</string>
+    <string name="lightning__spark_deposits">Depósitos</string>
     <string name="lightning__spark_exit__amount">Montante a transferir</string>
-    <string name="lightning__spark_exit__button">Forçar transferência</string>
+    <string name="lightning__spark_exit__button">Forçar Transferência Para Poupança</string>
     <string name="lightning__spark_exit__cancel">Cancelar transferência</string>
     <string name="lightning__spark_exit__cancel_failed">Não foi possível verificar o endereço de financiamento. Tente novamente.</string>
     <string name="lightning__spark_exit__cancel_text">A Spark volta ao estado anterior. Se um pagamento chegou ao endereço das taxas de emergência, a Bitkit devolve-o à poupança.</string>
@@ -205,10 +205,11 @@
     <string name="lightning__spark_learn__about_title">Sobre o seu\n&lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
     <string name="lightning__spark_learn__fast_text">Os seus fundos ficam normalmente prontos a gastar em poucos minutos, sem esperar por confirmações.</string>
     <string name="lightning__spark_learn__later_text">Os seus fundos ficam disponíveis após 3 confirmações, normalmente cerca de 30 minutos.</string>
+    <string name="lightning__spark_operators">Lightspark, Breez e Flashnet</string>
     <string name="lightning__spark_provider">Fornecedor</string>
     <string name="lightning__spark_provider_value">Spark via Breez</string>
-    <string name="lightning__spark_receiving_unlimited">Sem limite</string>
-    <string name="lightning__spark_trust">Este saldo é mantido na Spark, operada pela Lightspark, Breez e Flashnet. Está seguro enquanto pelo menos um deles agir com honestidade. Podem suspender o acesso, e sair sem eles exige uma saída on-chain.</string>
+    <string name="lightning__spark_receiving_unlimited">sem limite</string>
+    <string name="lightning__spark_trust">O seu saldo de gastos usa a Spark, operada pela Lightspark, Breez e Flashnet. A sua segurança depende de pelo menos um operador agir com honestidade. Os operadores podem suspender o acesso, e levantar sem a cooperação deles exige que inicie uma saída on-chain.</string>
     <string name="lightning__funding__nav_title">Saldo de Gastos</string>
     <string name="lightning__funding__title">Transfira para seu &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Transferir do Saldo de Poupança</string>
@@ -635,6 +636,8 @@
     <string name="settings__general_title">Geral</string>
     <string name="settings__security_title">Segurança e Privacidade</string>
     <string name="settings__advanced_title">Avançado</string>
+    <string name="settings__status__app_version">Bitkit v{version}</string>
+    <string name="settings__status__spark__exit">Transferência forçada para a poupança em curso...</string>
     <string name="settings__support_title">Suporte</string>
     <string name="settings__about__legal">Legal</string>
     <string name="settings__about__share">Compartilhar</string>
@@ -752,6 +755,7 @@
     <string name="settings__status__backup__title">Último Backup Completo</string>
     <string name="settings__status__backup__ready">Backup Feito</string>
     <string name="settings__status__backup__pending">Fazendo o backup...</string>
+    <string name="settings__status__backup__date">{date} às {time}</string>
     <string name="settings__status__backup__error">Falha ao concluir backup</string>
     <string name="settings__adv__section_payments">Pagamentos</string>
     <string name="settings__adv__section_networks">Redes</string>
@@ -1822,11 +1826,9 @@
     <string name="widgets__widget__size_wide">Largo</string>
     <string name="wallet__balance_updating">A atualizar o saldo…</string>
     <string name="settings__status__exit__funding">Taxas de emergência necessárias</string>
-    <string name="settings__status__exit__pending">Em curso</string>
-    <string name="settings__status__exit__title">Saída de Emergência</string>
     <string name="settings__status__lightning_connection__spark">Usando o Spark</string>
-    <string name="settings__status__spark__error">Offline</string>
+    <string name="settings__status__spark__error">Offline...</string>
     <string name="settings__status__spark__pending">Conectando...</string>
     <string name="settings__status__spark__ready">Conectado</string>
-    <string name="settings__status__spark__title">Spark</string>
+    <string name="settings__status__spark__title">Fornecedor Lightning (Spark)</string>
 </resources>
