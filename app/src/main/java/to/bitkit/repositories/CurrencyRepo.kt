@@ -279,9 +279,9 @@ data class CurrencyState(
     val isRefreshing: Boolean = false,
 )
 
-/** The selected currency has a rate that converts, so fiat amounts can show. */
+/** The rate conversions use for the selected currency, its first, is finite and positive, so fiat amounts can show. */
 val CurrencyState.hasUsableRate: Boolean
-    get() = rates.any { it.quote == selectedCurrency && it.rate > 0.0 }
+    get() = rates.firstOrNull { it.quote == selectedCurrency }?.rate?.let { it.isFinite() && it > 0.0 } == true
 
 /** Switching to fiat needs a usable rate, or every fiat amount would be missing. */
 val CurrencyState.canSwitchUnit: Boolean

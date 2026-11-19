@@ -68,11 +68,11 @@ class SparkDetailViewModel @Inject constructor(
         }
         if (Env.network == Network.REGTEST) {
             viewModelScope.launch(bgDispatcher) {
-                sparkRepo.depositAddress().onSuccess { address ->
-                    _uiState.update {
-                        it.copy(
-                            depositAddress = address
-                        )
+                // Details also open from Spark's last known state, so the address loads again once Spark connects.
+                sparkRepo.state.map { it.isReady }.distinctUntilChanged().collect {
+                    if (_uiState.value.depositAddress != null) return@collect
+                    sparkRepo.depositAddress().onSuccess { address ->
+                        _uiState.update { it.copy(depositAddress = address) }
                     }
                 }
             }

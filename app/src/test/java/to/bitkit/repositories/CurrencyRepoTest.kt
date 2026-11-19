@@ -339,6 +339,11 @@ class CurrencyRepoTest : BaseUnitTest() {
         val zeroPrice = testRates.map { it.copy(lastPrice = "0") }.toImmutableList()
         assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(rates = zeroPrice).shownUnit, "blank fiat with a zero rate")
         assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(primaryDisplay = PrimaryDisplay.BITCOIN).shownUnit)
+        val eur = testRates.first { it.quote == "EUR" }
+        val zeroFirst = (listOf(eur.copy(lastPrice = "0")) + testRates).toImmutableList()
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(rates = zeroFirst).shownUnit, "fiat from a later ticker")
+        val infinite = testRates.map { if (it.quote == "EUR") it.copy(lastPrice = "1e400") else it }.toImmutableList()
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(rates = infinite).shownUnit, "fiat at an infinite rate")
     }
 }
 

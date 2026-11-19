@@ -150,8 +150,8 @@ class AmountInputViewModel @Inject constructor(
         }
         // Update raw input text based on the formatted display
         rawInputText = when (primaryDisplay) {
-            PrimaryDisplay.FIAT -> _uiState.value.text.replace(",", "")
-            else -> _uiState.value.text.stripSatsGrouping()
+            PrimaryDisplay.FIAT -> _uiState.value.text.replace(",", "").asciiDigits()
+            else -> _uiState.value.text.stripSatsGrouping().asciiDigits()
         }
         inputUnit = primaryDisplay to isModern
     }
@@ -192,8 +192,8 @@ class AmountInputViewModel @Inject constructor(
                 }
                 // Update raw input text based on the new display
                 rawInputText = when (newPrimaryDisplay) {
-                    PrimaryDisplay.FIAT -> _uiState.value.text.replace(",", "")
-                    else -> _uiState.value.text.stripSatsGrouping()
+                    PrimaryDisplay.FIAT -> _uiState.value.text.replace(",", "").asciiDigits()
+                    else -> _uiState.value.text.stripSatsGrouping().asciiDigits()
                 }
             } else if (currentRawInput.isNotEmpty()) {
                 // Convert the raw input from the old currency to the new currency
@@ -358,6 +358,10 @@ class AmountInputViewModel @Inject constructor(
     }
 
     private fun String.stripSatsGrouping(): String = replace("$SATS_GROUPING_SEPARATOR", "")
+
+    /** The keypad reads ASCII digits, while a redrawn amount shows the locale's, as Arabic-Indic in Arabic. */
+    private fun String.asciiDigits(): String = map { if (it.isDigit()) '0' + Character.digit(it, 10) else it }
+        .joinToString("")
 
     private fun convertToSats(
         text: String,

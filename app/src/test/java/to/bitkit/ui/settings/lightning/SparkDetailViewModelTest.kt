@@ -98,6 +98,19 @@ class SparkDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the deposit address loads once a spark opened offline connects`() = test {
+        whenever(sparkRepo.depositAddress())
+            .thenReturn(Result.failure(IllegalStateException("not connected")), Result.success("bcrt1qaddress"))
+        sparkState.value = SparkState(isReady = false, hasReadState = true)
+
+        val sut = createSut()
+
+        assertEquals(null, sut.uiState.value.depositAddress)
+        sparkState.value = SparkState(isReady = true, hasReadState = true)
+        assertEquals("bcrt1qaddress", sut.uiState.value.depositAddress)
+    }
+
+    @Test
     fun `status is offline while spark's health is unknown`() = test {
         whenever(sparkRepo.depositAddress()).thenReturn(Result.success("bcrt1qaddress"))
         healthState.value = AppHealthState(spark = null)
