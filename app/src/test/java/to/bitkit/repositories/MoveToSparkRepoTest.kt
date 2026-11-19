@@ -30,6 +30,7 @@ import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.LdkError
 import kotlin.random.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -381,13 +382,39 @@ class MoveToSparkRepoTest : BaseUnitTest() {
             isOutbound = true,
             feerateSatPer1000Weight = 253u,
         )
-        val before = listOf(channel("funded", 50_000uL), channel("inbound", 50_000uL))
+        val anchorBefore = channel("funded", 50_000uL).copy(
+            outboundCapacityMsat = 50_371_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 253u,
+        )
+        val before = listOf(anchorBefore, channel("inbound", 50_000uL))
         val after = listOf(funded, funded.copy(channelId = "inbound", isOutbound = false))
 
-        assertEquals(1_529uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(funded))
+        assertFalse(MoveToSparkMath.reservesLegacyFee(anchorBefore))
+        assertEquals(1_529uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(funded, isLegacy = false))
         assertEquals(emptyList<String>(), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
         val nearlyEmpty = after.map { it.copy(outboundCapacityMsat = 1_300_000uL) }
         assertEquals(listOf("funded"), MoveToSparkMath.emptiedChannels(before, nearlyEmpty).map { it.channelId })
+    }
+
+    @Test
+    fun `a move closes a legacy channel at its reserve`() {
+        // 2 500 sat/kW: a legacy commitment keeps back 4 480 sats, so 5 342 sats of capacity send only 862.
+        val legacyBefore = channel("legacy", 50_000uL).copy(
+            outboundCapacityMsat = 54_480_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 2_500u,
+        )
+        val after = channel("legacy", 0uL).copy(
+            outboundCapacityMsat = 5_342_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 2_500u,
+        )
+
+        assertTrue(MoveToSparkMath.reservesLegacyFee(legacyBefore))
+        assertEquals(862uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(after, isLegacy = true))
+        val emptied = MoveToSparkMath.emptiedChannels(listOf(legacyBefore), listOf(after))
+        assertEquals(listOf("legacy"), emptied.map { it.channelId })
     }
 
     @Test
