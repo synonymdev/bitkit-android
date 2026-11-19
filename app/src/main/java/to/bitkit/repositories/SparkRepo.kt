@@ -308,6 +308,7 @@ class SparkRepo @Inject constructor(
         uncertainSends.clear()
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
+        isLostForExit = false
         _depositClaims.update { emptyMap() }
         _claimChoices.update { emptyMap() }
         _state.update { SparkState(isSupported = sparkService.isSupported) }
@@ -319,6 +320,10 @@ class SparkRepo @Inject constructor(
         _walletWiped.emit(walletIndex)
         storage.mapCatching { exitRecords.getOrThrow() }
     }
+
+    /** Set when a reconnect for an exit disconnected Spark and then failed, so [reconnectForExit] connects it again. */
+    @Volatile
+    private var isLostForExit = false
 
     /**
      * Takes Spark off the Lightning rail while an emergency exit runs, so no payment moves leaves the exit is
@@ -334,20 +339,29 @@ class SparkRepo @Inject constructor(
             onOptimizationCutShort()
             sparkService.disconnect()
             sparkService.connect(walletIndex, isExiting)
+            isLostForExit = false
             refresh()
         }.onFailure {
             Logger.error("Failed to reconnect Spark with exit '$isExiting'", it, context = TAG)
+            // Without an SDK Spark neither sends nor receives, so it reads as not ready until it connects again.
+            if (!sparkService.isConnected) {
+                isLostForExit = true
+                _state.update { it.copy(isReady = false) }
+            }
         }
     }
 
     /**
-     * Connects Spark again when a reconnect for an exit disconnected it and then failed: Spark was ready but has no
-     * SDK, so neither the exit's builds nor its leaf optimization would run until a background run or a restart.
+     * Connects Spark again when a reconnect for an exit disconnected it and then failed: Spark has no SDK, so neither
+     * the exit's builds nor its leaf optimization would run, and it reads as not ready, until a background run or a
+     * restart.
      */
     suspend fun reconnectForExit() = withContext(bgDispatcher) {
-        if (!_state.value.isReady || sparkService.isConnected) return@withContext
+        if (!isLostForExit || sparkService.isConnected) return@withContext
         runSuspendCatching {
-            if (sparkService.connect(walletIndex, _state.value.isExiting)) refresh()
+            sparkService.connect(walletIndex, _state.value.isExiting)
+            isLostForExit = false
+            refresh()
         }.onFailure { Logger.warn("Failed to connect Spark again for the exit", it, context = TAG) }
     }
 

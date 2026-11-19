@@ -2735,11 +2735,29 @@ class SparkRepoTest : BaseUnitTest() {
         sut.holdForExit()
         // The exit's reconnect disconnected Spark, then failed to connect it.
         whenever(sparkService.isConnected).thenReturn(false)
-        whenever { sparkService.connect(any(), any()) }.thenReturn(true)
+        whenever { sparkService.connect(any(), any()) }
+            .thenThrow(RuntimeException("operators unreachable"))
+            .thenReturn(true)
+        sut.setExiting(true, reconnect = true)
+        assertFalse(sut.state.value.isReady, "Spark read as ready without a connection")
 
         sut.reconnectForExit()
 
-        verify(sparkService).connect(0, true)
+        verify(sparkService, times(2)).connect(0, true)
+        assertTrue(sut.state.value.isReady, "Spark read as not ready once it connected again")
+    }
+
+    @Test
+    fun `an exit's tick leaves a connected spark alone`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        sut.reconnectForExit()
+
+        verify(sparkService, never()).connect(any(), any())
     }
 
     @Test
