@@ -343,10 +343,10 @@ class SparkRepo @Inject constructor(
             refresh()
         }.onFailure {
             Logger.error("Failed to reconnect Spark with exit '$isExiting'", it, context = TAG)
-            // Without an SDK Spark neither sends nor receives, so it reads as not ready until it connects again.
+            // Without an SDK Spark neither sends nor receives, so it reads as failed until it connects again.
             if (!sparkService.isConnected) {
                 isLostForExit = true
-                _state.update { it.copy(isReady = false) }
+                _state.update { it.copy(isReady = false, hasStartFailed = true) }
             }
         }
     }
@@ -1230,7 +1230,8 @@ class SparkRepo @Inject constructor(
         val isStale = withdrawalFailedAtSecs != null || info.lastSyncError != null
         _state.update {
             it.copy(
-                isReady = true,
+                // A refresh that read an SDK disconnected meanwhile leaves the readiness its reconnect set.
+                isReady = sparkService.isConnected || it.isReady,
                 balanceSats = info.balanceSats,
                 // An exit moves the balance to savings, so a zero read during one keeps nothing.
                 keptBalanceSats = it.shownBalanceSats.takeIf { kept ->
