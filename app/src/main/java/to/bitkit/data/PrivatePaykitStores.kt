@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
-import com.synonym.paykit.OutboundPrivateSendReport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,65 +36,31 @@ private val Context.paykitOutboundDeliveryDataStore: DataStore<PaykitOutboundDel
 )
 
 /**
- * What drains reported for queued Paykit private messages, kept across launches and per identity: the SDK reports a
- * message's delivery only to the call that drained it, so a receipt counts as sent only once some drain saw its
- * message go out. Message ids are local to one identity's Paykit state, so each identity keeps its own records.
+ * Receipt ids seen sent, per identity. The SDK reports Receipt Access delivery on each issuance, but a restored SDK
+ * does not send a delivered message again, so the wallet backup carries these ids to keep such receipts sent.
  */
 @Singleton
 class PaykitOutboundDeliveryStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    companion object {
-        /** Most message outcomes kept per identity besides the latest report's; the oldest ids are dropped first. */
-        private const val MAX_ENTRIES = 1000
-    }
-
     private val store by lazy { context.paykitOutboundDeliveryDataStore }
     private val _backupStateVersion = MutableStateFlow(0L)
 
-    /** Moves when a receipt is first seen sent, the only part of these records the wallet backup keeps. */
+    /** Moves when a receipt is first seen sent. */
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
-    suspend fun record(identity: String, report: OutboundPrivateSendReport) {
-        if (report.sent.isEmpty() && report.failed.isEmpty()) return
-        val reported = report.failed.associate { it.outboundMessageId.toString() to false } +
-            report.sent.associate { it.toString() to true }
-        updateRecords(identity) { records ->
-            val older = (records.outcomes - reported.keys).keys
-                .mapNotNull { it.toULongOrNull() }.sorted().takeLast(MAX_ENTRIES).map { it.toString() }.toSet()
-            records.copy(outcomes = records.outcomes.filterKeys(older::contains) + reported)
-        }
-    }
+    suspend fun isSent(identity: String, receiptId: String): Boolean =
+        store.data.first().identities[key(identity)]?.sentReceiptIds?.contains(receiptId) == true
 
-    /**
-     * True once the receipt or its access message was seen sent, false when the message's latest drain failed, null
-     * when no drain reported it. A sent message marks the receipt sent in the same write, so it stays sent whatever
-     * later pruning drops, and a reset that lands first leaves nothing to restore.
-     */
-    suspend fun deliveryOf(identity: String, receiptId: String, messageId: ULong?): Boolean? {
-        var delivery: Boolean? = null
-        updateRecords(identity) { records ->
-            delivery = when (receiptId) {
-                in records.sentReceiptIds -> true
-                else -> messageId?.let { records.outcomes[it.toString()] }
-            }
-            if (delivery == true && receiptId !in records.sentReceiptIds) {
-                records.copy(sentReceiptIds = records.sentReceiptIds + receiptId)
-            } else {
-                records
-            }
-        }
-        return delivery
+    suspend fun markSent(identity: String, receiptId: String) {
+        updateRecords(identity) { it.copy(sentReceiptIds = it.sentReceiptIds + receiptId) }
     }
 
     suspend fun reset() {
         store.updateData { PaykitOutboundDeliveryData() }
     }
 
-    /**
-     * Receipt ids seen sent, by identity, for the wallet backup: a restored SDK does not drain a sent message again,
-     * so only these records show the receipt as sent.
-     */
+    /** Receipt ids seen sent, by identity, for the wallet backup. */
     suspend fun backupSnapshot(): Map<String, Set<String>> =
         store.data.first().identities.mapValues { it.value.sentReceiptIds }.filterValues { it.isNotEmpty() }
 
@@ -131,7 +96,6 @@ data class PaykitOutboundDeliveryData(
 
 @Serializable
 data class PaykitOutboundDeliveryRecords(
-    val outcomes: Map<String, Boolean> = emptyMap(),
     val sentReceiptIds: Set<String> = emptySet(),
 )
 

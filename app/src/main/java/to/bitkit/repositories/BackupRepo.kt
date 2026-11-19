@@ -1339,7 +1339,15 @@ class BackupRepo @Inject constructor(
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
             .onFailure { Logger.warn("Failed to restore the earlier Spark exit addresses", it, context = TAG) }
-        Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
+        // Payment history stays out of the log, as support requests attach it.
+        val logged = parsed.cache.copy(
+            cachedRates = emptyList(),
+            moveToSparkHashes = emptyList(),
+            sparkUncertainSendStarts = emptyMap(),
+            sparkUncertainSendEarlierIds = emptyMap(),
+            sparkTakenSendIds = emptyMap(),
+        )
+        Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
             .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }

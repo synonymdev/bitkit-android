@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BtOpenChannelState
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
@@ -20,9 +21,14 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -34,6 +40,8 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.env.Env
@@ -46,6 +54,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -65,6 +74,9 @@ class TransferRepoTest : BaseUnitTest() {
         on { activity } doReturn activityService
     }
     private val clock = mock<Clock>()
+    private val settingsStore = mock<SettingsStore> {
+        on { data } doReturn flowOf(SettingsData())
+    }
     private val nodeEvents = MutableSharedFlow<Event>()
 
     companion object Fixtures {
@@ -86,6 +98,7 @@ class TransferRepoTest : BaseUnitTest() {
             blocktankRepo = blocktankRepo,
             coreService = coreService,
             transferDao = transferDao,
+            settingsStore = settingsStore,
             clock = clock,
         )
     }
@@ -1300,6 +1313,184 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncTransferStates settles FORCE_CLOSE when its sweep is dust`() = test {
+        val settledAt = setupClockNowMock()
+        // Stored with the channel capacity, as transfers created before the amount fix were.
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
+            channelId = ID_CHANNEL,
+            latestBroadcastHeight = 800000u,
+            latestSpendingTxid = "rejected-sweep-txid",
+            amountSatoshis = 388u,
+        )
+        givenForceCloseSweeps(transfer, listOf(pendingSweep))
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE as dust when the wallet holds its sweep`() = test {
+        // Swept to native SegWit change, then the user switched to Taproot, whose dust limit the sweep misses.
+        val transfer = forceCloseTransfer(amountSats = 420L)
+        val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
+            channelId = ID_CHANNEL,
+            latestBroadcastHeight = 800000u,
+            latestSpendingTxid = "valid-sweep-txid",
+            amountSatoshis = 420u,
+        )
+        givenForceCloseSweeps(transfer, listOf(pendingSweep))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedAddressType = "taproot")))
+        val sweepPayment = PaymentDetails(
+            id = "valid-sweep-txid",
+            kind = PaymentKind.Onchain(txid = "valid-sweep-txid", status = ConfirmationStatus.Unconfirmed),
+            amountMsat = 309_000uL,
+            feePaidMsat = null,
+            direction = PaymentDirection.INBOUND,
+            status = PaymentStatus.PENDING,
+            latestUpdateTimestamp = 0uL,
+        )
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(sweepPayment))
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE as dust when the wallet payments are unreadable`() = test {
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
+            channelId = ID_CHANNEL,
+            latestBroadcastHeight = 800000u,
+            latestSpendingTxid = "rejected-sweep-txid",
+            amountSatoshis = 388u,
+        )
+        givenForceCloseSweeps(transfer, listOf(pendingSweep))
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(null)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE as dust while the address type is changing`() = test {
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        givenForceCloseSweeps(
+            transfer,
+            listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 388u)),
+        )
+        whenever(lightningRepo.isChangingAddressType()).thenReturn(true)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE when its dust sweep is batched into a sweepable one`() = test {
+        val transfer = forceCloseTransfer(amountSats = 20_000L)
+        val sweeps = listOf(
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 388u),
+            PendingSweepBalance.PendingBroadcast(channelId = "other-channel", amountSatoshis = 388u),
+        )
+        givenForceCloseSweeps(transfer, sweeps)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `isUnsweepable is true when change after the floor fee is below the change dust limit`() {
+        val sweep = listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 388u))
+
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2WPKH))
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2TR))
+    }
+
+    @Test
+    fun `isUnsweepable follows the change address type`() {
+        val sweep = listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 500u))
+
+        // 500 sats leave a P2WPKH or P2TR output but are below the legacy and nested SegWit dust limits.
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2WPKH))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2TR))
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2SH))
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2PKH))
+    }
+
+    @Test
+    fun `isUnsweepable matches the bounds of one anchor input at the fee floor`() {
+        fun sweepOf(sats: ULong) = listOf(
+            PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = sats),
+        )
+
+        // 442 WU at 253 sat/kW is 111 sats, plus 294 sats of P2WPKH dust.
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(404u), AddressType.P2WPKH))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(405u), AddressType.P2WPKH))
+        // 490 WU at 253 sat/kW is 123 sats, plus 330 sats of P2TR dust.
+        assertTrue(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(452u), AddressType.P2TR))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweepOf(453u), AddressType.P2TR))
+    }
+
+    @Test
+    fun `isUnsweepable keeps a sweepable counterparty close output waiting`() {
+        // 410 sats leave 299 sats of native SegWit change at the floor, above its 294-sat dust limit.
+        val sweep = listOf(PendingSweepBalance.PendingBroadcast(channelId = ID_CHANNEL, amountSatoshis = 410u))
+
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, sweep, AddressType.P2WPKH))
+    }
+
+    @Test
+    fun `isUnsweepable is false without an unconfirmed sweep for the channel`() {
+        val confirmed = PendingSweepBalance.AwaitingThresholdConfirmations(
+            channelId = ID_CHANNEL,
+            latestSpendingTxid = "sweep-txid",
+            confirmationHash = "block-hash",
+            confirmationHeight = 800000u,
+            amountSatoshis = 388u,
+        )
+
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, emptyList(), AddressType.P2TR))
+        assertFalse(TransferRepo.isUnsweepable(ID_CHANNEL, listOf(confirmed), AddressType.P2TR))
+    }
+
+    private fun forceCloseTransfer(amountSats: Long) = TransferEntity(
+        id = ID_TRANSFER,
+        type = TransferType.FORCE_CLOSE,
+        amountSats = amountSats,
+        channelId = ID_CHANNEL,
+        isSettled = false,
+        createdAt = 1000L,
+    )
+
+    private suspend fun givenForceCloseSweeps(transfer: TransferEntity, sweeps: List<PendingSweepBalance>) {
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 0u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = sweeps,
+        )
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
+        whenever(activityService.hasOnchainActivityForTxid(any())).thenReturn(false)
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList())
+    }
+
+    @Test
     fun `syncTransferStates settles FORCE_CLOSE via batched sweep txid`() = test {
         val settledAt = setupClockNowMock()
         val sweepTxid = "batched-sweep-txid"
@@ -1573,6 +1764,7 @@ class TransferRepoTest : BaseUnitTest() {
             blocktankRepo = blocktankRepo,
             coreService = coreService,
             transferDao = transferDao,
+            settingsStore = settingsStore,
             clock = clock,
         )
 

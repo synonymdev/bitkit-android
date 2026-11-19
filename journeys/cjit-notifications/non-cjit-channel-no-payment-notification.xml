@@ -9,7 +9,7 @@
   </description>
   <actions>
     <action>Keep the app in the foreground on the wallet home screen</action>
-    <action>Open a regular spending channel through Settings › Advanced › Lightning Connections › add connection › Manual Setup (testTag "FundManual") to the staging LSP node from `./lsp GET /info`, funding it with some sats</action>
+    <action>Open a regular spending channel through Settings › Advanced › Lightning Connections › add connection › Manual setup (testTag "FundManual") to the staging LSP node from `./lsp GET /info`, funding it with some sats</action>
     <action>Mine confirmations if required: ./lsp POST /regtest/chain/mine '{"count":3}'</action>
     <action>Wait for the ChannelReady event (~5-10s)</action>
     <action>Verify an in-app "Spending balance ready" toast appears (testTag "SpendingBalanceReadyToast")</action>

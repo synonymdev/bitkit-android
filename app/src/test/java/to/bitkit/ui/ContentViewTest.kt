@@ -9,6 +9,7 @@ import androidx.navigation.createGraph
 import androidx.navigation.navigation
 import androidx.navigation.toRoute
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -16,16 +17,22 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.HwWalletBalance
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.repositories.LightningState
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.navigateIfNotCurrent
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.ConnectionStartupFailure
 import to.bitkit.viewmodels.RestoreState
+import to.bitkit.viewmodels.TransferViewModel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -220,10 +227,46 @@ class ContentViewTest {
     }
 
     @Test
+    fun `savings transfer with only spark skips availability`() {
+        val navController = transferNavController()
+        val transferViewModel = mock<TransferViewModel>()
+
+        navController.navigateToTransferSavings(isSparkOnly = true, transferViewModel = transferViewModel)
+
+        verify(transferViewModel).beginSavingsTransfer()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SavingsConfirm>() == true)
+        assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.SavingsAvailability>() })
+    }
+
+    @Test
+    fun `savings transfer with a channel opens availability`() {
+        val navController = transferNavController()
+        val transferViewModel = mock<TransferViewModel>()
+
+        navController.navigateToTransferSavings(isSparkOnly = false, transferViewModel = transferViewModel)
+
+        verify(transferViewModel, never()).beginSavingsTransfer()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SavingsAvailability>() == true)
+    }
+
+    @Test
+    fun `spark only needs a running node with no open channel and a spark balance`() {
+        val running = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        val pending = createChannelDetails().copy(channelId = "pending", isChannelReady = false)
+        val open = createChannelDetails().copy(channelId = "open", isChannelReady = true)
+
+        assertTrue(isSparkOnly(running, 1_000uL))
+        assertTrue(isSparkOnly(running.copy(channels = persistentListOf(pending)), 1_000uL))
+        assertFalse(isSparkOnly(running.copy(channels = persistentListOf(open)), 1_000uL))
+        assertFalse(isSparkOnly(running, 0uL))
+        assertFalse(isSparkOnly(LightningState(), 1_000uL), "channels are unknown until the node runs")
+    }
+
+    @Test
     fun `savings transfer completion returns home and drops spending from back stack`() {
         val navController = transferNavController()
         navController.navigateTo(Routes.Spending)
-        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsAvailability)
         navController.navigateTo(Routes.SavingsProgress)
 
         navController.navigateOnSavingsTransferExit()
@@ -235,7 +278,7 @@ class ContentViewTest {
     @Test
     fun `savings transfer exit leaves a screen opened on top of the flow alone`() {
         val navController = transferNavController()
-        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsAvailability)
         navController.navigateTo(Routes.SavingsProgress)
         navController.navigateTo(Routes.Settings)
 
@@ -248,7 +291,7 @@ class ContentViewTest {
     fun `savings transfer exit does nothing once the transfer flow is gone`() {
         val navController = transferNavController()
         navController.navigateTo(Routes.Spending)
-        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsAvailability)
         navController.navigateTo(Routes.SavingsProgress)
         navController.navigateOnSavingsTransferExit()
         navController.navigateTo(Routes.Settings)
@@ -261,7 +304,7 @@ class ContentViewTest {
     @Test
     fun `savings transfer exit leaves a later transfer screen alone`() {
         val navController = transferNavController()
-        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsAvailability)
         navController.navigateTo(Routes.SavingsProgress)
         navController.navigateOnSavingsTransferExit()
         navController.navigateTo(Routes.Spending)
@@ -332,6 +375,7 @@ class ContentViewTest {
                 composable<Routes.Settings> {}
                 navigation<Routes.TransferRoot>(startDestination = Routes.SavingsAvailability) {
                     composable<Routes.SavingsAvailability> {}
+                    composable<Routes.SavingsConfirm> {}
                     composable<Routes.SavingsProgress> {}
                     composable<Routes.Funding> {}
                 }

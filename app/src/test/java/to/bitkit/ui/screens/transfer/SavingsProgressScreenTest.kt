@@ -25,7 +25,7 @@ class SavingsProgressScreenTest {
 
         composeRule.onNodeWithTag("SavingsSparkFailed").assertExists()
         composeRule.onNodeWithText("failed", substring = true, ignoreCase = true).assertExists()
-        composeRule.onNodeWithText("Your Spark balance could not move to savings", substring = true).assertExists()
+        composeRule.onNodeWithText("powered by Spark couldn't move to savings", substring = true).assertExists()
         composeRule.onNodeWithTag("SavingsSparkFailed-button").assertExists()
     }
 
