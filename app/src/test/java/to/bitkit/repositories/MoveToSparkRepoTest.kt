@@ -367,6 +367,37 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a channel whose limit an in-flight htlc lowered still holds its capacity and stays open`() {
+        val before = listOf(channel("held", 50_000uL))
+        val after = listOf(channel("held", 0uL).copy(outboundCapacityMsat = 20_000_000uL))
+
+        assertEquals(emptyList<String>(), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
+    }
+
+    @Test
+    fun `a funded channel's capacity counts without the commitment fee it keeps back`() {
+        val funded = channel("funded", 0uL).copy(
+            outboundCapacityMsat = 1_500_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 1_000u,
+        )
+        val before = listOf(channel("funded", 50_000uL), channel("inbound", 50_000uL))
+        val after = listOf(funded, funded.copy(channelId = "inbound", isOutbound = false))
+
+        assertEquals(0uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(funded))
+        assertEquals(listOf("funded"), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
+    }
+
+    @Test
+    fun `payments around the channels read are unclear when one changed or could not be read`() {
+        val sent = nodeSend(PaymentStatus.FAILED)
+        assertEquals(null, MoveToSparkMath.paymentsAround(null, emptyList()))
+        assertEquals(null, MoveToSparkMath.paymentsAround(emptyList(), null))
+        assertEquals(null, MoveToSparkMath.paymentsAround(emptyList(), listOf(sent)), "a payment appeared")
+        assertEquals(listOf(sent, sent), MoveToSparkMath.paymentsAround(listOf(sent), listOf(sent)))
+    }
+
+    @Test
     fun `combined amounts keep their invariants for generated balances`() {
         val random = Random(seed = 64)
         repeat(1_000) {

@@ -51,10 +51,15 @@ class CloseChannelUseCase @Inject constructor(
      */
     suspend fun closeEmptiedByMove(before: List<ChannelDetails>) = withContext(ioDispatcher) {
         walletRepo.syncNodeAndWallet()
+        val paymentsBefore = lightningRepo.listPaymentsOrNull()
         // A sync already running returns at once, so the channels are read from the node directly.
         lightningRepo.syncState()
-        val inFlight = lightningRepo.listPaymentsOrNull().orEmpty()
-            .any { it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.PENDING }
+        val payments = MoveToSparkMath.paymentsAround(paymentsBefore, lightningRepo.listPaymentsOrNull())
+        if (payments == null) {
+            Logger.info("Kept the channels a move may have emptied open while its payments are unclear", context = TAG)
+            return@withContext
+        }
+        val inFlight = payments.any { it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.PENDING }
         if (inFlight) {
             Logger.info("Kept the channels a move may have emptied open while a payment is in flight", context = TAG)
             return@withContext

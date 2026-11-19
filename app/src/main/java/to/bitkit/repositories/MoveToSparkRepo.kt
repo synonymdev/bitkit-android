@@ -18,7 +18,10 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentFailureReason
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
@@ -340,6 +343,10 @@ class MoveToSparkRepo internal constructor(
 object MoveToSparkMath {
     /** Below this a move is not offered: what is left is about the routing fee. */
     const val MIN_MOVE_SATS = 1_000uL
+    private const val ANCHOR_COMMITMENT_WEIGHT = 1_124uL
+    private const val LEGACY_COMMITMENT_WEIGHT = 724uL
+    private const val HTLC_OUTPUT_WEIGHT = 172uL
+    private const val ANCHOR_OUTPUT_SATS = 330uL
 
     /** The fee guessed for the first quote of a full move, as a share of the amount in parts per million. */
     private const val FIRST_FEE_GUESS_PPM = 5_000uL
@@ -418,9 +425,41 @@ object MoveToSparkMath {
         val beforeSats = before.associate { it.channelId to msatFloorOf(it.nextOutboundHtlcLimitMsat) }
         return after.orEmpty().filterOpen().filter {
             val wasSats = beforeSats[it.channelId] ?: return@filter false
-            wasSats >= MIN_MOVE_SATS && msatFloorOf(it.nextOutboundHtlcLimitMsat) < MIN_MOVE_SATS
+            // The outbound capacity too: an HTLC still counting against the peer's in-flight limit lowers only the
+            // send limit.
+            wasSats >= MIN_MOVE_SATS && msatFloorOf(it.nextOutboundHtlcLimitMsat) < MIN_MOVE_SATS &&
+                sendableAfterCommitmentFeeSats(it) < MIN_MOVE_SATS
         }
     }
+
+    /**
+     * The outbound capacity less the commitment fee the funder keeps back, which LDK's capacity does not count: the
+     * higher of an anchor commitment (two 330-sat anchors) and a legacy one at twice the feerate, each with one HTLC.
+     */
+    fun sendableAfterCommitmentFeeSats(channel: ChannelDetails): ULong {
+        val capacitySats = msatFloorOf(channel.outboundCapacityMsat)
+        if (!channel.isOutbound) return capacitySats
+        val feerate = channel.feerateSatPer1000Weight.toULong()
+        val anchorFeeSats =
+            feerate * (ANCHOR_COMMITMENT_WEIGHT + HTLC_OUTPUT_WEIGHT) / 1000uL + 2uL * ANCHOR_OUTPUT_SATS
+        val legacyFeeSats = 2uL * feerate * (LEGACY_COMMITMENT_WEIGHT + HTLC_OUTPUT_WEIGHT) / 1000uL
+        val feeSats = maxOf(anchorFeeSats, legacyFeeSats)
+        return if (capacitySats > feeSats) capacitySats - feeSats else 0uL
+    }
+
+    /**
+     * The payments read before and after a read of the channels, or null when either could not be read or an outbound
+     * Lightning payment appeared or changed between them: it may have held an HTLC while the channels were read.
+     */
+    fun paymentsAround(before: List<PaymentDetails>?, after: List<PaymentDetails>?): List<PaymentDetails>? {
+        if (before == null || after == null || outboundLightning(before) != outboundLightning(after)) return null
+        return before + after
+    }
+
+    private fun outboundLightning(payments: List<PaymentDetails>) = payments
+        .filter { it.direction == PaymentDirection.OUTBOUND && it.kind !is PaymentKind.Onchain }
+        .map { Triple(it.id, it.status, it.latestUpdateTimestamp) }
+        .toSet()
 }
 
 data class MoveToSparkQuote(

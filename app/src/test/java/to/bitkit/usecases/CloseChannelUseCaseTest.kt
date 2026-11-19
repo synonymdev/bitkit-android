@@ -51,6 +51,7 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
             )
         }.thenReturn(Result.success("transfer"))
         whenever { walletRepo.syncNodeAndWallet(anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { lightningRepo.listPaymentsOrNull() }.thenReturn(emptyList())
         sut = CloseChannelUseCase(testDispatcher, lightningRepo, transferRepo, walletRepo)
     }
 
@@ -100,6 +101,35 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
             latestUpdateTimestamp = 0uL,
         )
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(inFlight))
+
+        sut.closeEmptiedByMove(listOf(channel))
+
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a move's close keeps channels open while its payments cannot be read`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL)))
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList(), null)
+
+        sut.closeEmptiedByMove(listOf(channel))
+
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a move's close keeps channels open when a payment changed while the channels were read`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL)))
+        val failed = PaymentDetails(
+            id = "late",
+            kind = PaymentKind.Bolt11(hash = "late", preimage = null, secret = null, description = null, bolt11 = "ln"),
+            amountMsat = 1_000_000uL,
+            feePaidMsat = null,
+            direction = PaymentDirection.OUTBOUND,
+            status = PaymentStatus.FAILED,
+            latestUpdateTimestamp = 1uL,
+        )
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList(), listOf(failed))
 
         sut.closeEmptiedByMove(listOf(channel))
 
