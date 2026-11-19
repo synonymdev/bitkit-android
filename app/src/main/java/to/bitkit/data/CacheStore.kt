@@ -176,6 +176,20 @@ class CacheStore internal constructor(
         }
     }
 
+    /**
+     * Keeps Spark's ids of the earlier attempts of the send of [paymentHash], [ids], with those kept before, past its
+     * hold and for the latest [MAX_SPARK_SEND_HASHES] sends, so their failures never write over a later attempt's row.
+     */
+    suspend fun keepSparkSendEarlierIds(paymentHash: String, ids: Set<String>) {
+        val hash = paymentHash.lowercase()
+        if (store.data.first().sparkSendEarlierIds[hash].orEmpty().containsAll(ids)) return
+        store.updateData {
+            val kept = (it.sparkSendEarlierIds[hash].orEmpty() + ids).distinct().sorted()
+            val all = (it.sparkSendEarlierIds - hash + (hash to kept)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
+            it.copy(sparkSendEarlierIds = all.associate { (key, value) -> key to value })
+        }
+    }
+
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendHashes) return
@@ -463,6 +477,11 @@ data class AppCacheData(
      * an earlier attempt's failure dated the same second as the row never writes over it.
      */
     val sparkSendRowIds: Map<String, String> = mapOf(),
+    /**
+     * Spark's payment ids of each Spark send's earlier attempts, kept past its hold for the latest
+     * [MAX_SPARK_SEND_HASHES], so a failure of one never writes over a later attempt's Activity row after a restart.
+     */
+    val sparkSendEarlierIds: Map<String, List<String>> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.

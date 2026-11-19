@@ -4050,6 +4050,7 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `an uncertain spark retry fails its own row at expiry when only an earlier failure is listed`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
@@ -4063,7 +4064,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
         whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
         whenever(sparkService.listPayments()).thenReturn(emptyList())
-        val sut = createSut()
+        val sut = createSut(store)
         sut.start(0).getOrThrow()
         runCurrent()
         // The earlier attempt paid the amountless invoice at another amount and fee, and failed; Spark dates it after
@@ -4081,7 +4082,52 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertEquals(PaymentState.FAILED, row.v1.status)
         assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "the retry's row took the earlier attempt's payment")
+
+        // The next launch lists the same earlier failure once nothing holds the invoice.
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+        assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "a relaunch wrote the earlier attempt over the row")
     }
+
+    @Test
+    fun `an expired uncertain spark retry's own failure replaces an earlier attempt's row from the same second`() =
+        test {
+            val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+            whenever(sparkService.isSupported).thenReturn(true)
+            whenever(sparkService.isConnected).thenReturn(true)
+            whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+            val sentAt = now.epochSeconds.toULong()
+            // The earlier attempt failed the second the retry starts, and its failure wrote the row.
+            store.keepSparkSendRowId("hash", "older")
+            var row = Activity.Lightning(
+                pendingSendRow().v1.copy(status = PaymentState.FAILED, value = 999uL, fee = 7uL, timestamp = sentAt)
+            )
+            whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+            whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+                row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+                Result.success(Unit)
+            }
+            val older = sentPayment(fees = 7)
+                .copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger(), timestamp = sentAt)
+            whenever(sparkService.listPayments()).thenReturn(listOf(older))
+            val prepared = prepared(feeSats = 0uL)
+            whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+            whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
+            val sut = createSut(store)
+            sut.start(0).getOrThrow()
+            runCurrent()
+            assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+            runCurrent()
+
+            // The send call timed out, so the retry's own id is known only from the list at its invoice's expiry.
+            val ownFailure = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.FAILED, timestamp = sentAt)
+            whenever(sparkService.listPayments()).thenReturn(listOf(older, ownFailure))
+            whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = sentAt + 1uL))
+            sparkEvents.emit(SdkEvent.Synced)
+            advanceUntilIdle()
+
+            assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "the retry's own failure kept the earlier row")
+        }
 
     @Test
     fun `a taken spark retry's own failure after a restart replaces an earlier attempt's failed row`() = test {

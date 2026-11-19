@@ -608,6 +608,7 @@ class SparkRepo @Inject constructor(
                 restoredTakenAttempts.remove(paymentHash.lowercase())
                 sendReleaseMutex.withLock { sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet() }
                 cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
+                earlierIds?.let { cacheStore.keepSparkSendEarlierIds(paymentHash, it) }
                 spending {
                     // Kept until the call returns, so a send cut off by process death or cancellation stays held.
                     cacheStore.addSparkUncertainSend(paymentHash, sentAt, sentAt, earlierIds, attemptId)
@@ -747,7 +748,7 @@ class SparkRepo @Inject constructor(
         val isFinal = clock.now().epochSeconds.toULong() >= uncertain.expiresAt &&
             hasSyncedSince(maxOf(uncertain.failedAt, uncertain.expiresAt))
         // The outcome and the payment its row is written from come from one read, so a later read can't miss it.
-        val (send, listed) = listedLightningSendPayment(paymentHash)
+        val (send, listed) = listedLightningSendPayment(paymentHash, uncertain.attempt.earlierIds)
         val isSettled = when (send) {
             SparkLightningSend.NotFound -> isFinal
             // A failed row may be an earlier attempt's, so it is final only when a missing one would be.
@@ -795,8 +796,11 @@ class SparkRepo @Inject constructor(
                     cacheStore.removeSparkSendHash(paymentHash)
                     // Writes the row only when there was none to fail or the failure is the send's own, as a failed row
                     // keeps its own payment; a failed write is retried at the next refresh.
-                    listed?.takeUnless { isEarlierListed && hasStoredRow(paymentHash) }
-                        ?.let { recordActivity(it, ownId = uncertain.attempt.ownId) }
+                    // A failure the attempt didn't read as earlier is its own, also when its send call never
+                    // returned its id.
+                    listed?.takeUnless { isEarlierListed && hasStoredRow(paymentHash) }?.let {
+                        recordActivity(it, ownId = uncertain.attempt.ownId ?: it.id.takeUnless { isEarlierListed })
+                    }
                 }
                 // The event comes from the read that settled it, so a failed later read can't leave the send pending.
                 listed?.toNodeEvent()?.let { _nodeEvents.emit(it) }
@@ -900,7 +904,7 @@ class SparkRepo @Inject constructor(
             // Read before the list, so a sync that ends between the two reads can't vouch for an older list.
             val isPastGrace = now >= graceEndsAt && hasSyncedSince(graceEndsAt.toULong())
             val holds = { takenAttempts[hash] === attempt }
-            val (send, listedSend) = listedLightningSendPayment(hash)
+            val (send, listedSend) = listedLightningSendPayment(hash, attempt.earlierIds)
             var listed = listedSend
             when (send) {
                 SparkLightningSend.Unavailable -> return@forEach
@@ -924,7 +928,11 @@ class SparkRepo @Inject constructor(
             if (listed?.status != PaymentStatus.COMPLETED) cacheStore.removeSparkSendHash(hash)
             // Written once the attempt is gone, so it no longer holds the row back, with the own id the attempt
             // matched; a failed write is retried at the next refresh.
-            listed?.let { recordActivity(it, ownId = attempt.ownId) }
+            // Without its own id, a failure its earlier ids leave out is the attempt's own.
+            listed?.let {
+                val ownId = attempt.ownId ?: it.id.takeIf { id -> attempt.earlierIds?.contains(id) == false }
+                recordActivity(it, ownId = ownId)
+            }
             if (isRestored) return@forEach
             // The send's own outcome event may have been held back with the attempt, so the send screen learns it here.
             val event = listed?.toNodeEvent()
@@ -1762,15 +1770,22 @@ class SparkRepo @Inject constructor(
     private suspend fun listedLightningSend(paymentHash: String): SparkLightningSend =
         listedLightningSendPayment(paymentHash).first
 
-    /** Spark's listed record of the Lightning send with [paymentHash] and the payment it was read from, in one read. */
-    private suspend fun listedLightningSendPayment(paymentHash: String): Pair<SparkLightningSend, Payment?> =
+    /**
+     * Spark's listed record of the Lightning send with [paymentHash] and the payment it was read from, in one read,
+     * preferring a payment that is not one of the attempt's [earlierIds], as Spark can date both in the same second.
+     */
+    private suspend fun listedLightningSendPayment(
+        paymentHash: String,
+        earlierIds: Set<String>? = null,
+    ): Pair<SparkLightningSend, Payment?> =
         withContext(bgDispatcher) {
             if (!sparkService.isSupported) return@withContext SparkLightningSend.NotFound to null
             if (!canListPayments()) return@withContext SparkLightningSend.Unavailable to null
             val payments = runSuspendCatching { sparkService.listPayments() }
                 .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
                 .getOrElse { return@withContext SparkLightningSend.Unavailable to null }
-            val latest = payments.latestSend(paymentHash)
+            val latest = earlierIds?.let { ids -> payments.filterNot { it.id in ids }.latestSend(paymentHash) }
+                ?: payments.latestSend(paymentHash)
                 ?: return@withContext SparkLightningSend.NotFound to null
             val preimage = (latest.details as PaymentDetails.Lightning).htlcDetails.preimage
             SparkLightningSend.Found(latest.status, preimage) to latest
@@ -2116,14 +2131,19 @@ class SparkRepo @Inject constructor(
             id != (ownId ?: heldAttempt(paymentHash)?.ownId) && isEarlierThan(row, paymentHash)
 
     /**
-     * Whether Spark dates this payment before the [row] of [paymentHash], or ties it as another payment than the one
-     * that wrote the row, unless the row is an earlier attempt of the send held now and this payment is not.
+     * Whether this payment is of an attempt a later one read as earlier before it went out, kept past its hold and a
+     * restart, or Spark dates it before the [row] of [paymentHash] or ties it as another payment than the one that
+     * wrote the row, unless that one is such an earlier attempt.
      */
     private suspend fun Payment.isEarlierThan(row: LightningActivity, paymentHash: String): Boolean {
+        val cache = cacheStore.data.first()
+        val hash = paymentHash.lowercase()
+        val earlierIds = heldAttempt(paymentHash)?.earlierIds.orEmpty() + cache.sparkSendEarlierIds[hash].orEmpty()
+        // Spark's dates can put an earlier attempt's failure after the retry's row.
+        if (id in earlierIds) return true
         if (timestamp != row.timestamp) return timestamp < row.timestamp
-        val rowId = cacheStore.data.first().sparkSendRowIds[paymentHash.lowercase()] ?: return false
-        val earlierIds = heldAttempt(paymentHash)?.earlierIds.orEmpty()
-        return rowId != id && !(rowId in earlierIds && id !in earlierIds)
+        val rowId = cache.sparkSendRowIds[hash] ?: return false
+        return rowId != id && rowId !in earlierIds
     }
 
     private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
