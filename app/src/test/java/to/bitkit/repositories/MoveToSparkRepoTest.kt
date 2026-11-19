@@ -377,24 +377,32 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     @Test
     fun `a funded channel's capacity counts without the commitment fee it keeps back`() {
         val funded = channel("funded", 0uL).copy(
-            outboundCapacityMsat = 1_500_000uL,
+            outboundCapacityMsat = 1_900_000uL,
             isOutbound = true,
-            feerateSatPer1000Weight = 1_000u,
+            feerateSatPer1000Weight = 253u,
         )
         val before = listOf(channel("funded", 50_000uL), channel("inbound", 50_000uL))
         val after = listOf(funded, funded.copy(channelId = "inbound", isOutbound = false))
 
-        assertEquals(0uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(funded))
-        assertEquals(listOf("funded"), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
+        assertEquals(1_529uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(funded))
+        assertEquals(emptyList<String>(), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
+        val nearlyEmpty = after.map { it.copy(outboundCapacityMsat = 1_300_000uL) }
+        assertEquals(listOf("funded"), MoveToSparkMath.emptiedChannels(before, nearlyEmpty).map { it.channelId })
     }
 
     @Test
     fun `payments around the channels read are unclear when one changed or could not be read`() {
         val sent = nodeSend(PaymentStatus.FAILED)
-        assertEquals(null, MoveToSparkMath.paymentsAround(null, emptyList()))
-        assertEquals(null, MoveToSparkMath.paymentsAround(emptyList(), null))
-        assertEquals(null, MoveToSparkMath.paymentsAround(emptyList(), listOf(sent)), "a payment appeared")
-        assertEquals(listOf(sent, sent), MoveToSparkMath.paymentsAround(listOf(sent), listOf(sent)))
+        fun around(start: List<PaymentDetails>?, before: List<PaymentDetails>?, after: List<PaymentDetails>?) =
+            MoveToSparkMath.paymentsAround(start, before, after) { it == "move" }
+        assertEquals(null, around(emptyList(), null, emptyList()))
+        assertEquals(null, around(emptyList(), emptyList(), null))
+        assertEquals(null, around(null, emptyList(), emptyList()))
+        assertEquals(null, around(listOf(sent), emptyList(), listOf(sent)), "a payment appeared")
+        assertEquals(null, around(emptyList(), listOf(sent), listOf(sent)), "another send since the move started")
+        val move = sent.copy(id = "move")
+        assertEquals(listOf(move, move), around(emptyList(), listOf(move), listOf(move)), "the move's own send")
+        assertEquals(listOf(sent, sent), around(listOf(sent), listOf(sent), listOf(sent)))
     }
 
     @Test

@@ -344,9 +344,7 @@ object MoveToSparkMath {
     /** Below this a move is not offered: what is left is about the routing fee. */
     const val MIN_MOVE_SATS = 1_000uL
     private const val ANCHOR_COMMITMENT_WEIGHT = 1_124uL
-    private const val LEGACY_COMMITMENT_WEIGHT = 724uL
     private const val HTLC_OUTPUT_WEIGHT = 172uL
-    private const val ANCHOR_OUTPUT_SATS = 330uL
 
     /** The fee guessed for the first quote of a full move, as a share of the amount in parts per million. */
     private const val FIRST_FEE_GUESS_PPM = 5_000uL
@@ -433,26 +431,32 @@ object MoveToSparkMath {
     }
 
     /**
-     * The outbound capacity less the commitment fee the funder keeps back, which LDK's capacity does not count: the
-     * higher of an anchor commitment (two 330-sat anchors) and a legacy one at twice the feerate, each with one HTLC.
+     * The outbound capacity less the commitment fee the funder keeps back for its next HTLC, which LDK's capacity does
+     * not count; LDK already took the anchors off. An anchor commitment with two HTLCs, as LDK reserves.
      */
     fun sendableAfterCommitmentFeeSats(channel: ChannelDetails): ULong {
         val capacitySats = msatFloorOf(channel.outboundCapacityMsat)
         if (!channel.isOutbound) return capacitySats
-        val feerate = channel.feerateSatPer1000Weight.toULong()
-        val anchorFeeSats =
-            feerate * (ANCHOR_COMMITMENT_WEIGHT + HTLC_OUTPUT_WEIGHT) / 1000uL + 2uL * ANCHOR_OUTPUT_SATS
-        val legacyFeeSats = 2uL * feerate * (LEGACY_COMMITMENT_WEIGHT + HTLC_OUTPUT_WEIGHT) / 1000uL
-        val feeSats = maxOf(anchorFeeSats, legacyFeeSats)
+        val weight = ANCHOR_COMMITMENT_WEIGHT + 2uL * HTLC_OUTPUT_WEIGHT
+        val feeSats = channel.feerateSatPer1000Weight.toULong() * weight / 1000uL
         return if (capacitySats > feeSats) capacitySats - feeSats else 0uL
     }
 
     /**
-     * The payments read before and after a read of the channels, or null when either could not be read or an outbound
-     * Lightning payment appeared or changed between them: it may have held an HTLC while the channels were read.
+     * The payments read before and after a read of the channels, or null when a read failed or an outbound Lightning
+     * payment appeared or changed between them: it may have held an HTLC while the channels were read. Also null when a
+     * payment other than a move's changed since the move started ([moveStart]): it may have emptied another channel.
      */
-    fun paymentsAround(before: List<PaymentDetails>?, after: List<PaymentDetails>?): List<PaymentDetails>? {
-        if (before == null || after == null || outboundLightning(before) != outboundLightning(after)) return null
+    fun paymentsAround(
+        moveStart: List<PaymentDetails>?,
+        before: List<PaymentDetails>?,
+        after: List<PaymentDetails>?,
+        isMovePayment: (id: String) -> Boolean,
+    ): List<PaymentDetails>? {
+        if (moveStart == null || before == null || after == null) return null
+        if (outboundLightning(before) != outboundLightning(after)) return null
+        val othersAtStart = outboundLightning(moveStart).filterNot { isMovePayment(it.first) }.toSet()
+        if (othersAtStart != outboundLightning(before).filterNot { isMovePayment(it.first) }.toSet()) return null
         return before + after
     }
 

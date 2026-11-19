@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.PaymentDetails
 import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
 import to.bitkit.repositories.LightningRepo
@@ -124,6 +125,7 @@ class MoveToSparkManager @Inject constructor(
         isMoveInFlight = true
         _uiState.update { MoveToSparkUiState.Confirm(quote, isMoving = true) }
         moveJob = scope.launch {
+            val paymentsBefore = lightningRepo.listPaymentsOrNull()
             try {
                 moveToSparkRepo.move(quote).fold(
                     onSuccess = { outcome ->
@@ -132,10 +134,10 @@ class MoveToSparkManager @Inject constructor(
                         }
                         val done = done(outcome)
                         if (generation.get() == moveGeneration) _uiState.update { done }
-                        if (outcome is MoveToSparkOutcome.Moved) closeEmptied(channelsBefore)
+                        if (outcome is MoveToSparkOutcome.Moved) closeEmptied(channelsBefore, paymentsBefore)
                         settled?.await()?.let {
                             showLateOutcome(it, moveGeneration)
-                            if (it.isSuccess) closeEmptied(channelsBefore)
+                            if (it.isSuccess) closeEmptied(channelsBefore, paymentsBefore)
                         }
                     },
                     onFailure = { error ->
@@ -154,8 +156,8 @@ class MoveToSparkManager @Inject constructor(
         return MoveToSparkUiState.Done(outcome, hasRest)
     }
 
-    private fun closeEmptied(channelsBefore: List<ChannelDetails>) {
-        scope.launch { closeChannelUseCase.closeEmptiedByMove(channelsBefore) }
+    private fun closeEmptied(channelsBefore: List<ChannelDetails>, paymentsBefore: List<PaymentDetails>?) {
+        scope.launch { closeChannelUseCase.closeEmptiedByMove(channelsBefore, paymentsBefore) }
     }
 
     private suspend fun showLateOutcome(settled: Result<MoveToSparkOutcome.Moved>, moveGeneration: Int) {

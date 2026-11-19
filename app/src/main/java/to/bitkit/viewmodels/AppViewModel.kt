@@ -93,6 +93,7 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -8079,8 +8080,9 @@ class AppViewModel @Inject constructor(
             return Result.failure(MoveToSparkError.UpdateFeeUnseen())
         }
         val channelsBefore = lightningRepo.lightningState.value.channels.toList()
+        val paymentsBefore = lightningRepo.listPaymentsOrNull()
         return moveToSparkRepo.updateToSend(fresh, bolt11, amountSats) {
-            closeChannelsEmptiedBy(it, channelsBefore)
+            closeChannelsEmptiedBy(it, channelsBefore, paymentsBefore)
         }.map { }
     }
 
@@ -8114,10 +8116,14 @@ class AppViewModel @Inject constructor(
         return moveToSparkRepo.needsUpdateToSend(payAmount)
     }
 
-    private fun closeChannelsEmptiedBy(outcome: MoveToSparkOutcome, channelsBefore: List<ChannelDetails>) {
+    private fun closeChannelsEmptiedBy(
+        outcome: MoveToSparkOutcome,
+        channelsBefore: List<ChannelDetails>,
+        paymentsBefore: List<PaymentDetails>?,
+    ) {
         viewModelScope.launch(bgDispatcher) {
             if (outcome is MoveToSparkOutcome.InFlight && moveToSparkRepo.awaitSettled(outcome).isFailure) return@launch
-            closeChannelUseCase.closeEmptiedByMove(channelsBefore)
+            closeChannelUseCase.closeEmptiedByMove(channelsBefore, paymentsBefore)
         }
     }
 

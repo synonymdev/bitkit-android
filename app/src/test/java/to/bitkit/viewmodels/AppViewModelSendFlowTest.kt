@@ -21128,7 +21128,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         onMove.firstValue(moved)
         advanceUntilIdle()
-        verify(closeChannelUseCase).closeEmptiedByMove(any())
+        verify(closeChannelUseCase).closeEmptiedByMove(any(), anyOrNull())
     }
 
     @Test
@@ -21155,7 +21155,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertTrue(awaitItem() is SendEffect.NavigateToError)
         }
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
-        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any(), anyOrNull())
     }
 
     @Test
@@ -21184,7 +21184,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(moveToSparkRepo).updateToSend(any(), any(), eq(60_000uL), onMove.capture())
         onMove.firstValue(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL))
         advanceUntilIdle()
-        verify(closeChannelUseCase).closeEmptiedByMove(any())
+        verify(closeChannelUseCase).closeEmptiedByMove(any(), anyOrNull())
     }
 
     @Test
@@ -21216,7 +21216,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         onMove.firstValue(inFlight)
         advanceUntilIdle()
         verify(moveToSparkRepo).awaitSettled(inFlight)
-        verify(closeChannelUseCase).closeEmptiedByMove(any())
+        verify(closeChannelUseCase).closeEmptiedByMove(any(), anyOrNull())
     }
 
     @Test
@@ -21548,7 +21548,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(moveToSparkRepo, never()).updateToSend(any(), any(), any(), any())
-        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any(), anyOrNull())
         verify(pendingPaymentRepo, never()).track(any())
         verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
         verify(paykitPaymentProofRepo).cancelPreparation(request)

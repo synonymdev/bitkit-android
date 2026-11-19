@@ -182,18 +182,18 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         createViewModel().move()
 
-        verify(closeChannelUseCase).closeEmptiedByMove(listOf(openChannel))
+        verify(closeChannelUseCase).closeEmptiedByMove(eq(listOf(openChannel)), anyOrNull())
     }
 
     @Test
     fun `an in-flight move closes nothing until it settles`() = test {
         lightningState.value = LightningState(channels = persistentListOf(openChannel))
         createViewModel().move()
-        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any(), anyOrNull())
 
         firstSettled.complete(Result.success(moved))
 
-        verify(closeChannelUseCase).closeEmptiedByMove(listOf(openChannel))
+        verify(closeChannelUseCase).closeEmptiedByMove(eq(listOf(openChannel)), anyOrNull())
     }
 
     @Test
@@ -202,7 +202,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
 
-        verify(closeChannelUseCase, never()).closeEmptiedByMove(any())
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any(), anyOrNull())
     }
 
     @Test

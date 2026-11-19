@@ -2,6 +2,7 @@ package to.bitkit.usecases
 
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -21,6 +22,7 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.TransferType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
@@ -30,6 +32,7 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
     private val lightningRepo = mock<LightningRepo>()
     private val transferRepo = mock<TransferRepo>()
     private val walletRepo = mock<WalletRepo>()
+    private val moveToSparkRepo = mock<MoveToSparkRepo>()
     private val lightningState = MutableStateFlow(LightningState())
     private val channel = channel("channel_1", 50_000uL)
     private lateinit var sut: CloseChannelUseCase
@@ -52,7 +55,8 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
         }.thenReturn(Result.success("transfer"))
         whenever { walletRepo.syncNodeAndWallet(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { lightningRepo.listPaymentsOrNull() }.thenReturn(emptyList())
-        sut = CloseChannelUseCase(testDispatcher, lightningRepo, transferRepo, walletRepo)
+        whenever(moveToSparkRepo.moveHashes).thenReturn(flowOf(setOf("move")))
+        sut = CloseChannelUseCase(testDispatcher, lightningRepo, transferRepo, walletRepo, moveToSparkRepo)
     }
 
     @Test
@@ -82,7 +86,7 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
         val kept = channel("channel_2", 20_000uL)
         lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL), kept))
 
-        sut.closeEmptiedByMove(listOf(channel, kept))
+        sut.closeEmptiedByMove(listOf(channel, kept), emptyList())
 
         verify(lightningRepo).closeChannel(eq(channel("channel_1", 0uL)), any(), anyOrNull())
         verify(lightningRepo, never()).closeChannel(eq(kept), any(), anyOrNull())
@@ -102,7 +106,7 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
         )
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(inFlight))
 
-        sut.closeEmptiedByMove(listOf(channel))
+        sut.closeEmptiedByMove(listOf(channel), emptyList())
 
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
     }
@@ -112,7 +116,7 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
         lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL)))
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList(), null)
 
-        sut.closeEmptiedByMove(listOf(channel))
+        sut.closeEmptiedByMove(listOf(channel), emptyList())
 
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
     }
@@ -131,10 +135,35 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
         )
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList(), listOf(failed))
 
-        sut.closeEmptiedByMove(listOf(channel))
+        sut.closeEmptiedByMove(listOf(channel), emptyList())
 
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
     }
+
+    @Test
+    fun `a move's close keeps channels open after another send since the move started, not after the move's own`() =
+        test {
+            lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL)))
+            val other = send("other")
+            whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(other))
+
+            sut.closeEmptiedByMove(listOf(channel), emptyList())
+            verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+
+            whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(send("move")))
+            sut.closeEmptiedByMove(listOf(channel), emptyList())
+            verify(lightningRepo).closeChannel(eq(channel("channel_1", 0uL)), any(), anyOrNull())
+        }
+
+    private fun send(id: String) = PaymentDetails(
+        id = id,
+        kind = PaymentKind.Bolt11(hash = id, preimage = null, secret = null, description = null, bolt11 = "ln"),
+        amountMsat = 1_000_000uL,
+        feePaidMsat = null,
+        direction = PaymentDirection.OUTBOUND,
+        status = PaymentStatus.SUCCEEDED,
+        latestUpdateTimestamp = 1uL,
+    )
 
     @Test
     fun `a move's close reads the channels from the node after a sync, not the stale state`() = test {
@@ -144,7 +173,7 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
             Unit
         }
 
-        sut.closeEmptiedByMove(listOf(channel))
+        sut.closeEmptiedByMove(listOf(channel), emptyList())
 
         inOrder(walletRepo, lightningRepo) {
             verify(walletRepo).syncNodeAndWallet(anyOrNull())
