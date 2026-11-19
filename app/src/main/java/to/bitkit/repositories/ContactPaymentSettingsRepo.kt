@@ -92,7 +92,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
             runSuspendCatching {
                 currentCoroutineContext().ensureActive()
-                publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canSync).getOrThrow()
+                publicPaykitRepo.syncPublishedEndpoints(true, Priority.Background, canSync).getOrThrow()
             }.onFailure {
                 rollbackPublicEnabled(previous, canSync, it)
                 Logger.error("Failed to enable public payments for new profile", it, context = TAG)
@@ -111,7 +111,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
         canSync: () -> Boolean,
     ): Result<Unit> = runSuspendCatching {
         if (!privatePaykitRepo.hasPrivatePaymentAccess()) throw PrivatePaykitError.PrivateUnavailable
-        publicPaykitRepo.syncPaykitApp(canSync = { canSync() }).getOrThrow()
+        publicPaykitRepo.syncPaykitApp(priority = Priority.Background, canSync = { canSync() }).getOrThrow()
         prepareCurrentSavedContacts(canSync).getOrThrow()
     }.onFailure {
         if (it is PrivatePaykitError.PrivateUnavailable) {
@@ -164,7 +164,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                     }
                     currentCoroutineContext().ensureActive()
                     if (isEnabled) {
-                        publicPaykitRepo.syncPublishedEndpoints(true, Priority.Ordered, canPublish).getOrThrow()
+                        publicPaykitRepo.syncPublishedEndpoints(true, Priority.Background, canPublish).getOrThrow()
                     } else {
                         publicPaykitRepo.syncPublishedEndpoints(false, Priority.Interactive, canPublish).getOrThrow()
                     }
@@ -271,7 +271,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                     sharesPrivatePaykitEndpoints = true,
                 )
             }
-            publicPaykitRepo.syncPaykitApp(canSync = { canSync() }).getOrThrow()
+            publicPaykitRepo.syncPaykitApp(priority = Priority.Background, canSync = { canSync() }).getOrThrow()
 
             prepareCurrentSavedContacts(canSync).getOrThrow()
         }.onFailure { rollbackEnabled(previous, contacts, canSync, it) }

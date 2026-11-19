@@ -1,0 +1,17 @@
+<journey name="save profile edits during payment setup">
+  <description>
+    Android regression for profile Save while Paykit registers payment details and refreshes allowances.
+    Use a disposable unfunded wallet with Paykit enabled, no Pubky identity, PIN off,
+    an English device, and reachable staging signup and homeserver services.
+  </description>
+  <actions>
+    <action>Open Profile, continue through its introduction if shown, and tap "PubkyChoiceCreate"</action>
+    <action>Wait for "CreateProfileUsername", enter "Alice", dismiss the keyboard, and tap "CreateProfileSave"</action>
+    <action>Wait for and tap "PayContactsContinue"</action>
+    <action>Open "ProfileEdit" as soon as the profile is visible</action>
+    <action>Change the name to "Bob" and the bio to "Notes for E2E"</action>
+    <action>Add a Website link to "https://example.org" and the tag "cypherpunk"</action>
+    <action>Tap "ProfileEditSave" and verify "ProfileUpdatedToast" appears within 30 seconds</action>
+    <action>Verify the profile shows the edited name, bio, link, and tag</action>
+  </actions>
+</journey>

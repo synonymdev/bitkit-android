@@ -237,6 +237,11 @@ fun SendSheet(
                 if (!reviewing) return@LaunchedEffect
                 lifecycle.withPaymentReview(appViewModel::beginPaymentReview)
             }
+            // The entry is null until navigation settles, also after the activity is recreated
+            val hasEntry = entry != null
+            LaunchedEffect(hasEntry, reviewing, appViewModel) {
+                if (hasEntry) appViewModel.onSendReviewVisible(reviewing)
+            }
             fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
                     details = NewTransactionSheetDetails(
@@ -529,6 +534,8 @@ fun SendSheet(
                         initialSubscriptionId?.let(appViewModel::subscription)
                     }
 
+                    // Leaving the review of a prepared fee cancels that send instead of editing it
+                    BackHandler(enabled = uiState.isPreparedFeeReview) { appViewModel.hideSheet() }
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
                         uiState = uiState,
@@ -541,13 +548,17 @@ fun SendSheet(
                         syncNodeVariant = syncNodeVariant,
                         canGoBack = navController.previousBackStackEntry != null,
                         onBack = {
-                            val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
-                            if (!didPopToAmount && !navController.popBackStack()) {
-                                appViewModel.hideSheet()
-                            }
+                            val didPop = !uiState.isPreparedFeeReview && (
+                                navController.popBackStack(SendRoute.Amount, inclusive = false) ||
+                                    navController.popBackStack()
+                                )
+                            if (!didPop) appViewModel.hideSheet()
                         },
                         onEvent = { e -> appViewModel.setSendEvent(e) },
-                        onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
+                        onClickAddTag = {
+                            // The prepared send under review already saved its tags
+                            if (!uiState.isPreparedFeeReview) navController.navigateTo(SendRoute.AddTag)
+                        },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
                         autoPayContent = initialSubscription?.let { subscription ->

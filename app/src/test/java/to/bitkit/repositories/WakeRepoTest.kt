@@ -37,10 +37,12 @@ import to.bitkit.services.WakeService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -90,8 +92,9 @@ class WakeRepoTest : BaseUnitTest() {
     private val preparedIdentities = mutableListOf<List<String>>()
     private val preparedTokens = mutableListOf<String>()
     private val sentProofs = mutableListOf<List<WakeIdentityProof>>()
+    private var nowSecs = NOW_SECS
     private val clock = object : Clock {
-        override fun now(): Instant = Instant.fromEpochSeconds(NOW_SECS)
+        override fun now(): Instant = Instant.fromEpochSeconds(nowSecs)
     }
 
     private lateinit var sut: WakeRepo
@@ -215,6 +218,41 @@ class WakeRepoTest : BaseUnitTest() {
         assertEquals(WakeSync.UpToDate, createSut().syncRegistration().getOrThrow(), "Across launches")
         assertIs<WakeSync.Registered>(sut.syncRegistration(pushToken = "rotated-token").getOrThrow())
         assertEquals(2, sentProofs.size)
+    }
+
+    @Test
+    fun `a registration is sent again before the gateway retires the device as idle`() = test {
+        sut.syncRegistration().getOrThrow()
+        // synonymdev/wake retires a device with no accepted push or registration for retention.idle_device_days (270)
+        // and then answers 401 to its secret; presence does not count as activity.
+        nowSecs += 271.days.inWholeSeconds
+
+        val result = sut.syncRegistration().getOrThrow()
+
+        assertIs<WakeSync.Registered>(result, "Got '$result' 271 days after the only registration")
+    }
+
+    @Test
+    fun `an unchanged registration is sent again once it reaches its max age, and not before`() = test {
+        sut.syncRegistration().getOrThrow()
+
+        nowSecs += WakeRepo.REGISTRATION_MAX_AGE.inWholeSeconds - 1
+        assertEquals(WakeSync.UpToDate, sut.syncRegistration().getOrThrow())
+
+        nowSecs += 1
+        assertIs<WakeSync.Registered>(sut.syncRegistration().getOrThrow())
+        assertEquals(WakeSync.UpToDate, sut.syncRegistration().getOrThrow(), "The age restarts from the new one")
+        assertEquals(listOf(NOW_SECS, NOW_SECS + WakeRepo.REGISTRATION_MAX_AGE.inWholeSeconds), preparedTimestamps)
+    }
+
+    @Test
+    fun `isRegistrationDue sends again from the max age, and once when no time is recorded`() {
+        val maxAgeSecs = WakeRepo.REGISTRATION_MAX_AGE.inWholeSeconds
+        assertTrue(isRegistrationDue(nowSecs = NOW_SECS, lastSecs = null))
+        assertFalse(isRegistrationDue(nowSecs = NOW_SECS, lastSecs = NOW_SECS))
+        assertFalse(isRegistrationDue(nowSecs = NOW_SECS, lastSecs = NOW_SECS - maxAgeSecs + 1))
+        assertTrue(isRegistrationDue(nowSecs = NOW_SECS, lastSecs = NOW_SECS - maxAgeSecs))
+        assertFalse(isRegistrationDue(nowSecs = NOW_SECS, lastSecs = NOW_SECS + 5), "A clock stepped back waits")
     }
 
     @Test

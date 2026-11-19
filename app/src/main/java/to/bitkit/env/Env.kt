@@ -236,13 +236,18 @@ internal object Env {
         }
 
     /**
-     * The wake gateway this build registers with for background pushes, or null to leave wakes off. No gateway is
-     * deployed yet (synonymdev/wake#2), so only a debug build with `WAKE_GATEWAY_URL` set has one, for local testing.
+     * The wake gateway this build registers with for background pushes, or null to leave wakes off. A debug build with
+     * `WAKE_GATEWAY_URL` set uses that one instead, for local testing.
      */
     val wakeGatewayUrl: String?
-        get() = BuildConfig.WAKE_GATEWAY_URL.takeIf { isDebug && it.isNotBlank() } ?: when (network) {
-            Network.BITCOIN, Network.TESTNET, Network.SIGNET, Network.REGTEST -> null
-        }
+        get() = BuildConfig.WAKE_GATEWAY_URL.takeIf { isDebug && it.isNotBlank() } ?: wakeGatewayUrl(network)
+
+    /** The deployed gateway for [network], or null where none runs. */
+    fun wakeGatewayUrl(network: Network): String? = when (network) {
+        Network.BITCOIN -> "https://wake.bitkit.to"
+        Network.REGTEST -> "https://wake.staging.bitkit.to"
+        Network.TESTNET, Network.SIGNET -> null
+    }
 
     fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {
         val isE2eLocal = isE2eTest && e2eBackend == "local"

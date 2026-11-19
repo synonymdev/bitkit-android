@@ -195,6 +195,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -209,6 +210,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 700uL))))
         val sut = createSut()
@@ -225,6 +227,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = eq(500uL),
+            reviewHigherFee = anyOrNull(),
         )
         assertEquals("Changed", toasts.single().title)
         assertTrue(toasts.single().description.orEmpty().startsWith("rose "), "${toasts.single().description}")
@@ -240,6 +243,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = eq(700uL),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -301,6 +305,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Accepted("txid", 50_000uL)))
         whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf("txid" to SparkDepositClaim.Later)))
@@ -321,6 +326,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
         verify(sparkRepo).onDepositBroadcast("txid", 50_000uL)
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Later, 1_350uL)
@@ -374,6 +380,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Accepted("TXID", 50_000uL)))
         val sut = createSut()
@@ -418,6 +425,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -451,6 +459,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -498,6 +507,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.failure(OnchainSendBlockedError(older)))
         whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(older)
@@ -526,6 +536,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -566,6 +577,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.failure(OnchainSendPendingError(IllegalStateException("timeout"), "txid")))
         val retained = OnchainSendAttempt(
@@ -598,6 +610,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -633,6 +646,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -645,6 +659,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -678,6 +693,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
         assertEquals(SideEffect.Sent, effects.lastOrNull())
     }

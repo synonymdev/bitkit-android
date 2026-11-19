@@ -65,12 +65,14 @@ import to.bitkit.R
 import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
+import to.bitkit.ext.filterOpen
 import to.bitkit.ext.rawId
 import to.bitkit.ext.walletId
 import to.bitkit.models.HwWalletBalance
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitSubscriptionId
@@ -213,6 +215,7 @@ import to.bitkit.ui.settings.lightning.SparkExitConfirmScreen
 import to.bitkit.ui.settings.lightning.SparkExitFeeBumpScreen
 import to.bitkit.ui.settings.lightning.SparkExitFundingScreen
 import to.bitkit.ui.settings.lightning.SparkExitIntroScreen
+import to.bitkit.ui.settings.lightning.SparkExitPayScreen
 import to.bitkit.ui.settings.lightning.SparkExitProgressScreen
 import to.bitkit.ui.settings.lightning.SparkExitQuoteScreen
 import to.bitkit.ui.settings.lightning.SparkExitStartedEffect
@@ -975,6 +978,7 @@ private fun RootNavHost(
             onConsumeHomeWalletPageRequest = onConsumeHomeWalletPageRequest,
             onConsumeHomeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
             onCalculatorInputActiveChanged = onHomeCalculatorInputActiveChanged,
+            transferViewModel = transferViewModel,
         )
         allActivity(
             activityListViewModel = activityListViewModel,
@@ -1055,7 +1059,7 @@ private fun RootNavHost(
         cjitDetailSettings(navController)
         swapsSettings(navController)
         swapDetailSettings(navController)
-        lightningConnections(navController)
+        lightningConnections(navController, walletViewModel, transferViewModel)
         activityItem(activityListViewModel, navController, settingsViewModel)
         authCheck(navController)
         logs(navController)
@@ -1102,9 +1106,14 @@ private fun RootNavHost(
                 )
             }
             deepLinkableComposable<Routes.SavingsIntro> {
+                val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+                val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
                 SavingsIntroScreen(
                     onContinueClick = {
-                        navController.navigateTo(Routes.SavingsAvailability)
+                        navController.navigateToTransferSavings(
+                            isSparkOnly = isSparkOnly(lightningState, sparkState.spendingSats),
+                            transferViewModel = transferViewModel,
+                        )
                         settingsViewModel.setHasSeenSavingsIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
@@ -1201,7 +1210,6 @@ private fun RootNavHost(
                         walletId = walletId,
                         viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
                         onBackClick = { navController.popBackStack() },
-                        onLearnMoreClick = { navController.navigateTo(Routes.TransferLearnMore) },
                         onSent = {
                             navController.navigateTo(Routes.SpendingHwSigned) {
                                 popUpTo<Routes.SpendingHwSign> { inclusive = true }
@@ -1234,11 +1242,7 @@ private fun RootNavHost(
                     )
                 }
                 composableWithDefaultTransitions<Routes.TransferLearnMore> {
-                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
-                    val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
                     TransferLearnMoreScreen(
-                        viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
-                        spendingBalanceSats = sparkState.spendingSats.toLong(),
                         onBackClick = { navController.popBackStack() },
                         onContinueClick = { navController.popBackStack() },
                     )
@@ -1329,6 +1333,7 @@ private fun NavGraphBuilder.home(
     onConsumeHomeWalletPageRequest: () -> Unit,
     onConsumeHomeWidgetsPageRequest: () -> Unit,
     onCalculatorInputActiveChanged: (Boolean) -> Unit,
+    transferViewModel: TransferViewModel,
 ) {
     composable<Routes.Home>(deepLinks = ScreenDeepLinks.linksFor(Routes.Home::class)) {
         val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -1436,7 +1441,10 @@ private fun NavGraphBuilder.home(
                 if (!hasSeenSavingsIntro) {
                     navController.navigateToTransferSavingsIntro()
                 } else {
-                    navController.navigateToTransferSavingsAvailability()
+                    navController.navigateToTransferSavings(
+                        isSparkOnly = isSparkOnly(lightningState, sparkState.spendingSats),
+                        transferViewModel = transferViewModel,
+                    )
                 }
             },
             onTransferFromSavingsClick = {
@@ -2053,6 +2061,8 @@ private fun NavGraphBuilder.swapDetailSettings(
 
 private fun NavGraphBuilder.lightningConnections(
     navController: NavHostController,
+    walletViewModel: WalletViewModel,
+    transferViewModel: TransferViewModel,
 ) {
     navigationWithDefaultTransitions<Routes.ConnectionsNav>(
         startDestination = Routes.LightningConnections,
@@ -2070,13 +2080,18 @@ private fun NavGraphBuilder.lightningConnections(
             )
         }
         deepLinkableComposable<Routes.SparkDetail> {
+            val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+            val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
             val hasSeenSavingsIntro = settingsViewModel?.hasSeenSavingsIntro
                 ?.collectAsStateWithLifecycle()?.value == true
             SparkDetailScreen(
                 onBack = { navController.popBackStack() },
                 onTransferToSavings = {
                     if (hasSeenSavingsIntro) {
-                        navController.navigateToTransferSavingsAvailability()
+                        navController.navigateToTransferSavings(
+                            isSparkOnly = isSparkOnly(lightningState, sparkState.spendingSats),
+                            transferViewModel = transferViewModel,
+                        )
                     } else {
                         navController.navigateToTransferSavingsIntro()
                     }
@@ -2145,7 +2160,15 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
         SparkExitFundingScreen(
             viewModel = viewModel,
             onBack = { navController.popBackStack() },
-            onContinue = { navController.navigateTo(Routes.SparkExitConfirm) },
+            onPayFromSavings = { navController.navigateTo(Routes.SparkExitConfirm) },
+            onPayExternally = { navController.navigateTo(Routes.SparkExitPay) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SparkExitPay> {
+        SparkExitPayScreen(
+            viewModel = exitViewModel(it),
+            onBack = { navController.popBackStack() },
+            onStart = openProgress,
         )
     }
     composableWithDefaultTransitions<Routes.SparkExitConfirm> {
@@ -2158,8 +2181,8 @@ private fun NavGraphBuilder.sparkExit(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.SparkExitProgress> {
         SparkExitProgressScreen(
             viewModel = exitViewModel(it),
-            onBack = { navController.popBackStack() },
             onDone = { leaveExit() },
+            onWalletOverview = { navController.navigateToHome() },
             onPayHigherFee = { navController.navigateTo(Routes.SparkExitFeeBump) },
         )
     }
@@ -2423,7 +2446,21 @@ fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 
 fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
 
-fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
+/** Opens Transfer to Savings, past the availability note when only Spark's balance moves: it lands at once. */
+fun NavController.navigateToTransferSavings(isSparkOnly: Boolean, transferViewModel: TransferViewModel) {
+    if (!isSparkOnly) {
+        navigateTo(Routes.SavingsAvailability)
+        return
+    }
+    transferViewModel.beginSavingsTransfer()
+    navigateTo(Routes.SavingsConfirm)
+}
+
+/** Spark holds the whole spending balance: the node runs, so its channel list is loaded, and none is open. */
+internal fun isSparkOnly(lightningState: LightningState, sparkSpendingSats: ULong) =
+    lightningState.nodeLifecycleState.isRunning() &&
+        lightningState.channels.filterOpen().isEmpty() &&
+        sparkSpendingSats > 0uL
 
 /**
  * Exits the savings transfer to home. The coop close retry job holds on to this callback for up to
@@ -2650,6 +2687,9 @@ sealed interface Routes {
 
     @Serializable
     data object SparkExitFunding : Routes.InternalOnly
+
+    @Serializable
+    data object SparkExitPay : Routes.InternalOnly
 
     @Serializable
     data object SparkExitConfirm : Routes.InternalOnly

@@ -128,10 +128,10 @@ internal fun Content(
                     .fillMaxWidth()
                     .testTag("SettingUpText")
             )
-            VerticalSpacer(28.dp)
             if (isSuccess) {
+                VerticalSpacer(44.dp)
                 Box(
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.TopCenter,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -147,19 +147,20 @@ internal fun Content(
                     )
                 }
             } else {
+                VerticalSpacer(32.dp)
                 Illustration(
                     hasCoins = frame.hasCoins,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                 )
-                VerticalSpacer(16.dp)
+                VerticalSpacer(14.dp)
                 ProgressSteps(
                     steps = steps(frame),
                     activeStepIndex = frame.stepIndex,
                     modifier = Modifier.align(alignment = Alignment.CenterHorizontally)
                 )
-                VerticalSpacer(16.dp)
+                VerticalSpacer(32.dp)
             }
             Buttons(
                 frame = frame,

@@ -168,7 +168,7 @@ private fun Content(
                 onAddTag = onAddTag,
                 onSave = onSave,
                 onCancel = onBackClick,
-                isSaveEnabled = isValidProfileName(uiState.name) && !uiState.isBusy,
+                isSaveEnabled = isValidProfileName(uiState.name) && uiState.hasOnlyWebLinks && !uiState.isBusy,
                 topBar = topBar,
                 isSaving = uiState.isSaving,
                 isDeleting = uiState.isDeleting,
@@ -219,6 +219,7 @@ private fun Content(
         AddLinkSheet(
             onDismiss = onDismissAddLinkSheet,
             onSave = onSaveLink,
+            webLinksOnly = true,
         )
     }
 
