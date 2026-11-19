@@ -61,8 +61,16 @@ jobs:
         working-directory: bitkit-e2e-tests
         run: npm ci
 
+      - name: Cache pinned Spark images
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/bitkit-spark-images.tar
+          key: spark-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bitkit-e2e-tests/BITKIT_DOCKER_REVISION') }}
+
       - name: Start pinned Spark fixture
         working-directory: bitkit-e2e-tests
+        env:
+          SPARK_IMAGE_CACHE: ${{ runner.temp }}/bitkit-spark-images.tar
         run: |
           ./scripts/local-backend spark-up
           ./scripts/local-backend spark-env >> "$GITHUB_ENV"
