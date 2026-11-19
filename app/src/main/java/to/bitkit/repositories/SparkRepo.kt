@@ -613,9 +613,9 @@ class SparkRepo @Inject constructor(
                         // Taken before the in-flight attempt is dropped, so an earlier failure never finds neither.
                         // A payment Spark took carries its own id, so its failure is never read as an earlier one's.
                         val attempt = SendAttempt(sentAt.toULong(), earlierIds, result.getOrNull()?.id, attemptId)
-                        if (result.getOrNull()?.status == PaymentStatus.PENDING) {
+                        result.getOrNull()?.takeIf { it.status == PaymentStatus.PENDING }?.let { payment ->
                             // Taken only while its own outcome wasn't handled meanwhile, as its journal write is. Taken
-                            // also when the caller is cancelled meanwhile, as the send already went out.
+                            // and journaled also when the caller is cancelled meanwhile, as the send already went out.
                             withContext(NonCancellable) {
                                 sendReleaseMutex.withLock {
                                     if (inFlightAttempts[paymentHash.lowercase()]?.attemptId == attemptId) {
@@ -623,6 +623,9 @@ class SparkRepo @Inject constructor(
                                         restoredTakenAttempts.remove(paymentHash.lowercase())
                                     }
                                 }
+                                // A send Spark still runs keeps its earlier attempts' ids, so their late failures
+                                // leave it alone.
+                                cacheStore.keepSparkSendAttempt(paymentHash, payment.id, attemptId)
                             }
                         }
                         // A send whose call failed may still have gone out, so it is in doubt before the in-flight
@@ -669,10 +672,7 @@ class SparkRepo @Inject constructor(
                 )
                 throw PaymentPendingException(paymentHash)
             }
-            // A send Spark still runs keeps its earlier attempts' ids, so their late failures leave it alone.
-            if (payment.status == PaymentStatus.PENDING) {
-                cacheStore.keepSparkSendAttempt(paymentHash, payment.id, attemptId)
-            } else {
+            if (payment.status != PaymentStatus.PENDING) {
                 takenAttempts.remove(paymentHash.lowercase())
                 restoredTakenAttempts.remove(paymentHash.lowercase())
                 cacheStore.removeSparkUncertainSend(paymentHash)

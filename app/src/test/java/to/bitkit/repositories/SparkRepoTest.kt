@@ -33,8 +33,10 @@ import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -4079,6 +4081,34 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.listPayments()).thenReturn(listOf(older, ownFailure))
 
         assertEquals(emptySet(), sut.attemptedLightningPaymentHashes())
+    }
+
+    @Test
+    fun `a spark send whose caller is cancelled as spark takes it keeps its payment id`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        runCurrent()
+        lateinit var caller: Job
+        // The caller is cancelled while Spark's send call returns the payment it took.
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer {
+            caller.cancel()
+            sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        }
+
+        caller = backgroundScope.launch(start = CoroutineStart.LAZY) { sut.payInvoice("lnbc1", 100uL) }
+        caller.start()
+        advanceUntilIdle()
+
+        val cache = store.data.first()
+        assertEquals("retry", cache.sparkTakenSendIds["hash"], "a restart would read the send as in doubt")
+        assertTrue("hash" !in cache.sparkUncertainSends)
     }
 
     @Test
