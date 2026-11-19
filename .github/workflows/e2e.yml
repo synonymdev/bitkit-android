@@ -19,7 +19,7 @@ env:
   FORCE_COLOR: 1
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ inputs.spark_only && '-spark' || '' }}
   cancel-in-progress: true
 
 jobs:
