@@ -2639,6 +2639,133 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a restore made before spark connects connects it and fails when spark rejects its exit data`() = test {
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }.thenAnswer {
+            isConnected = true
+            true
+        }
+        whenever { sparkService.importExitState(any()) }.thenAnswer { throw SdkException.InvalidInput("bad") }
+        val sut = createSut()
+
+        val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertIs<SdkException.InvalidInput>(result.exceptionOrNull())
+        verify(sparkService, times(1)).importExitState("s")
+        assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a restore made before spark connects connects it and imports its exit data`() = test {
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }.thenAnswer {
+            isConnected = true
+            true
+        }
+        whenever { sparkService.importExitState(any()) }.thenReturn(ImportUnilateralExitStateResponse(2u, 0u, 0u, 0u))
+        val sut = createSut()
+
+        val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertTrue(result.isSuccess)
+        verify(sparkService, times(1)).importExitState("s")
+        assertFalse(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a restore spark can't connect for keeps its exit data staged for spark's start`() = test {
+        whenever { sparkService.connect(any(), any()) }.thenAnswer { throw SdkException.Generic("offline") }
+        val sut = createSut()
+
+        val result = sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0)
+
+        assertTrue(result.isSuccess)
+        verify(sparkService).connect(0, false)
+        verify(sparkService, never()).importExitState(any())
+        assertTrue(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `a restore staged while spark's start imports older data keeps and imports its own`() = test {
+        File(Env.sparkExitRestorePath(0)).apply { parentFile?.mkdirs() }.writeText("old")
+        val importing = CompletableDeferred<Unit>()
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.importExitState(any()) }.doSuspendableAnswer {
+            if (it.getArgument<String>(0) == "old") importing.await()
+            ImportUnilateralExitStateResponse(1u, 0u, 0u, 0u)
+        }
+        val sut = createSut()
+        val start = async { sut.start(0) }
+        runCurrent()
+        val restore = async {
+            sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "new"), 0)
+        }
+        runCurrent()
+
+        importing.complete(Unit)
+
+        assertTrue(restore.await().isSuccess)
+        start.await().getOrThrow()
+        verify(sparkService).importExitState("new")
+    }
+
+    @Test
+    fun `a restore that connects spark keeps a held retry past an earlier attempt's failure`() = test {
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to now.epochSeconds + 3_600),
+                    sparkUncertainSendStarts = mapOf("hash" to now.epochSeconds),
+                    sparkUncertainSendEarlierIds = mapOf("hash" to listOf("older")),
+                )
+            ),
+            clock,
+        )
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }.thenAnswer {
+            isConnected = true
+            true
+        }
+        whenever { sparkService.importExitState(any()) }.thenReturn(ImportUnilateralExitStateResponse(2u, 0u, 0u, 0u))
+        val sut = createSut(store)
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0).getOrThrow()
+
+        val older = sentPayment(fees = 0).copy(id = "older", status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(older))
+        sparkEvents.emit(SdkEvent.PaymentFailed(older))
+        advanceUntilIdle()
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "an earlier attempt's failure ended the held retry")
+        assertTrue("hash" in store.data.first().sparkUncertainSendStarts)
+    }
+
+    @Test
+    fun `a restore that connects spark handles its events before the wallet starts`() = test {
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }.thenAnswer {
+            isConnected = true
+            true
+        }
+        whenever { sparkService.importExitState(any()) }.thenReturn(ImportUnilateralExitStateResponse(2u, 0u, 0u, 0u))
+        val sut = createSut()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sut.restoreExitBackup(SparkExitBackupV1(createdAt = 1, network = "regtest", exitState = "s"), 0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(sentPayment(fees = 0)))
+        advanceUntilIdle()
+
+        assertEquals("hash", assertIs<Event.PaymentSuccessful>(events.single()).paymentHash)
+    }
+
+    @Test
     fun `a restore whose exit data spark rejects fails and keeps it staged`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever { sparkService.importExitState(any()) }.thenAnswer { throw SdkException.Generic("bad state") }

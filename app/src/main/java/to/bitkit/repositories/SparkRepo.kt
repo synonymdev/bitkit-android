@@ -24,6 +24,7 @@ import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -175,6 +177,7 @@ class SparkRepo @Inject constructor(
     private val unsavedPayments = ConcurrentHashMap.newKeySet<String>()
 
     private val isCollectingEvents = AtomicBoolean(false)
+    private val eventsSubscribed = CompletableDeferred<Unit>()
 
     private val refreshMutex = Mutex()
 
@@ -193,6 +196,9 @@ class SparkRepo @Inject constructor(
 
     /** Sends whose outcome Spark didn't report, by payment hash. */
     private val uncertainSends = ConcurrentHashMap<String, UncertainSend>()
+
+    /** Serialises the imports of staged exit data, so a restore and Spark's start never import it at once. */
+    private val exitImportMutex = Mutex()
 
     /** Sends Spark took and still runs, by payment hash, until they settle or their invoice expires. */
     private val takenAttempts = ConcurrentHashMap<String, SendAttempt>()
@@ -276,9 +282,7 @@ class SparkRepo @Inject constructor(
         // A retry reads as connecting until it fails again.
         _state.update { it.copy(hasStartFailed = false) }
         runSuspendCatching {
-            if (isCollectingEvents.compareAndSet(false, true)) {
-                scope.launch { sparkService.events.collect { onSdkEvent(it) } }
-            }
+            collectEvents()
             restoreUncertainSends()
             val isExiting = exitStore(walletIndex).isActive()
             _state.update { it.copy(isExiting = isExiting) }
@@ -1365,7 +1369,9 @@ class SparkRepo @Inject constructor(
 
     /**
      * Puts a restored exit data backup back: at once while Spark is connected, otherwise right after it connects,
-     * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable.
+     * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable. The
+     * wallet's start waits for the restore, so the restore connects Spark itself and fails when Spark can't import the
+     * data; one that can't connect keeps the data staged for Spark's start.
      */
     suspend fun restoreExitBackup(backup: SparkExitBackupV1, walletIndex: Int): Result<Unit> =
         withContext(bgDispatcher) {
@@ -1374,15 +1380,36 @@ class SparkRepo @Inject constructor(
                     Logger.warn("Skipped Spark exit data from network '${backup.network}'", context = TAG)
                     return@runSuspendCatching
                 }
-                File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState)
+                exitImportMutex.withLock { File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState) }
+                if (sparkService.isSupported && !sparkService.isConnected) connectForRestore(walletIndex)
                 if (sparkService.isConnected) importRestoredExitState(walletIndex).getOrThrow()
             }
         }
 
-    private suspend fun importRestoredExitState(walletIndex: Int): Result<Unit> {
+    /** Collects Spark's events once and returns once subscribed, so no event of a connect made after it is lost. */
+    private suspend fun collectEvents() {
+        if (isCollectingEvents.compareAndSet(false, true)) {
+            scope.launch {
+                sparkService.events.onSubscription { eventsSubscribed.complete(Unit) }.collect { onSdkEvent(it) }
+            }
+        }
+        eventsSubscribed.await()
+    }
+
+    private suspend fun connectForRestore(walletIndex: Int) {
+        // Spark's listener drops events no one collects, and the wallet's start collects them only after the restore.
+        // The sends held before the restore are taken back first, so its events read their earlier attempts.
+        restoreUncertainSends()
+        collectEvents()
+        runSuspendCatching { sparkService.connect(walletIndex, exitStore(walletIndex).isActive()) }
+            .onSuccess { if (it) _exitStateGeneration.update { generation -> generation + 1 } }
+            .onFailure { Logger.warn("Failed to connect Spark to import restored exit data", it, context = TAG) }
+    }
+
+    private suspend fun importRestoredExitState(walletIndex: Int): Result<Unit> = exitImportMutex.withLock {
         val file = File(Env.sparkExitRestorePath(walletIndex))
-        if (!file.exists()) return Result.success(Unit)
-        return runSuspendCatching { sparkService.importExitState(file.readText()) }
+        if (!file.exists()) return@withLock Result.success(Unit)
+        runSuspendCatching { sparkService.importExitState(file.readText()) }
             .onSuccess {
                 file.delete()
                 Logger.info(
