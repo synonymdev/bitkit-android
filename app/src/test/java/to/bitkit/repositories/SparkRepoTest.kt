@@ -4067,7 +4067,8 @@ class SparkRepoTest : BaseUnitTest() {
         sut.start(0).getOrThrow()
         runCurrent()
         // The earlier attempt paid the amountless invoice at another amount and fee, and failed.
-        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        val older = sentPayment(fees = 7)
+            .copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger(), timestamp = 0uL)
         whenever(sparkService.listPayments()).thenReturn(listOf(older))
         assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
         runCurrent()
@@ -4098,13 +4099,16 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
-        var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, value = 999uL, fee = 7uL))
+        var row = Activity.Lightning(
+            pendingSendRow().v1.copy(status = PaymentState.FAILED, value = 999uL, fee = 7uL, timestamp = 0uL)
+        )
         whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
         whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
             row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
             Result.success(Unit)
         }
-        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        val older = sentPayment(fees = 7)
+            .copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger(), timestamp = 0uL)
         val ownFailure = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.FAILED)
         whenever(sparkService.listPayments()).thenReturn(listOf(older, ownFailure))
 
@@ -4112,6 +4116,37 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "the retry's own failure left the earlier attempt's row")
+    }
+
+    @Test
+    fun `a failed spark send row takes its own attempt's fee correction`() = test {
+        val corrected = sentPayment(fees = 3).copy(id = "retry", status = PaymentStatus.FAILED)
+        assertEquals(128uL to 3uL, failedRowAfterListing(corrected).let { it.v1.value to it.v1.fee })
+    }
+
+    @Test
+    fun `a failed spark send row takes a later attempt's failure`() = test {
+        val later = sentPayment(fees = 0)
+            .copy(id = "later", status = PaymentStatus.FAILED, amount = 200.toBigInteger(), timestamp = 9uL)
+        assertEquals(200uL, failedRowAfterListing(later).v1.value)
+    }
+
+    /** The row of a send that failed, after a launch lists [payment] of its invoice. */
+    private suspend fun TestScope.failedRowAfterListing(payment: Payment): Activity.Lightning {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED))
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
+        whenever(sparkService.listPayments()).thenReturn(listOf(payment))
+
+        createSut().start(0).getOrThrow()
+        advanceUntilIdle()
+        return row
     }
 
     @Test
@@ -4125,7 +4160,8 @@ class SparkRepoTest : BaseUnitTest() {
             row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
             Result.success(Unit)
         }
-        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        val older = sentPayment(fees = 7)
+            .copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger(), timestamp = 0uL)
         whenever(sparkService.listPayments()).thenReturn(listOf(older))
 
         createSut().start(0).getOrThrow()
@@ -4137,7 +4173,8 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `a taken spark retry with only an earlier failure listed stays held until the grace past expiry`() = test {
         // The earlier attempt paid the amountless invoice at another amount and fee.
-        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        val older = sentPayment(fees = 7)
+            .copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger(), timestamp = 0uL)
         val row = assertTakenRetryHeldUntilGrace(listed = listOf(older))
         assertEquals(PaymentState.FAILED, row.v1.status)
         assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "the retry's row took the earlier attempt's payment")

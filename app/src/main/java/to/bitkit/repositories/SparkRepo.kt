@@ -2251,11 +2251,11 @@ class SparkRepo @Inject constructor(
         }
         // Another attempt of the same invoice, on either rail, already paid it.
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
-        // A failed send keeps its own attempt's amount, fee and time, as another failure of its invoice may be an
-        // earlier attempt's, listed again on a later launch once nothing holds the invoice. The held attempt's own
-        // failure still writes it, as the row may show an earlier attempt when the retry's own row was never saved.
+        // A failed send keeps its own attempt's amount, fee and time against an earlier attempt's failure, listed again
+        // on a later launch once nothing holds the invoice; Spark dates an attempt at its start, so a failure dated
+        // before the row is that earlier attempt's, while the row's own or a later attempt's failure still writes it.
         if (existing?.status == PaymentState.FAILED && existing.txType == PaymentType.SENT &&
-            payment.status == PaymentStatus.FAILED && payment.id != heldAttempt(id)?.ownId
+            payment.status == PaymentStatus.FAILED && payment.timestamp < existing.timestamp
         ) {
             return true
         }
