@@ -2056,14 +2056,22 @@ class SparkRepo @Inject constructor(
     /**
      * Whether this failure is an earlier attempt's, of a retry still in Spark's send call or in doubt: one of the
      * attempts Spark listed before the retry went out, or, with none listed, one Spark dates before the retry plus its
-     * clock skew, so a failure that may be either never ends the retry's hold.
+     * clock skew, so a failure that may be either never ends the retry's hold. A retry in doubt also counts a failure
+     * that list doesn't name as earlier when Spark dates it before the retry minus that skew.
      */
     private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
         val attempt = heldAttempt(hash) ?: return false
         // A payment Spark took fails with its own id, so a failure with another id is an earlier attempt's.
         attempt.ownId?.let { return id != it }
-        attempt.earlierIds?.let { return id in it }
+        attempt.earlierIds?.let { ids ->
+            if (id in ids) return true
+            // Only a send in doubt has no id of its own, and the list read before it went out can lack an older
+            // attempt, so a failure that list doesn't name is earlier when Spark dates it clearly before the send.
+            val sentAt = attempt.sentAt
+            return sentAt != null && uncertainSends.containsKey(hash.lowercase()) &&
+                timestamp + RAIL_CLOCK_SKEW_SECONDS <= sentAt
+        }
         // A send kept before start times were stored can't tell its own failure from an earlier one, so it stays held
         // until its invoice expires, when the expiry rule settles it and its row.
         val sentAt = attempt.sentAt ?: return true

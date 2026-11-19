@@ -3813,6 +3813,13 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an older failure the pre-send list left out keeps an uncertain retry held`() = test {
+        // Spark may leave an older attempt out of the list it gives before the retry goes out.
+        val omitted = sentPayment(fees = 0).copy(id = "omitted", status = PaymentStatus.FAILED)
+        assertTrue(retryHeldAfter(emptyList(), omitted.copy(timestamp = now.epochSeconds.toULong() - 10uL)))
+    }
+
+    @Test
     fun `a failure within the clock skew keeps an uncertain retry held while its earlier attempts are unknown`() =
         test {
             val failure = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.FAILED)
