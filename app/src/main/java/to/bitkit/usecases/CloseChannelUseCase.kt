@@ -66,14 +66,16 @@ class CloseChannelUseCase @Inject constructor(
     ) = withContext(ioDispatcher) {
         walletRepo.syncNodeAndWallet()
         var emptied = readEmptied(before, paymentsAtStart)
-        // A channel whose limit rises once the move's HTLC clears drops out. One that may still hold it after the wait
+        var previous: List<ChannelDetails>? = null
+        // A channel whose limit rises once the move's HTLC clears drops out. One not emptied for good after the wait
         // stays open for a manual close, so a close never starts on a reading the HTLC may have lowered.
         repeat(HTLC_CLEAR_RECHECKS) {
-            if (emptied.none(MoveToSparkMath::mayHoldTheMoveHtlc)) return@repeat
+            if (emptied.all { MoveToSparkMath.isEmptiedForGood(it, previous) }) return@repeat
             delay(HTLC_CLEAR_RECHECK)
+            previous = emptied
             emptied = readEmptied(before, paymentsAtStart)
         }
-        emptied.filterNot(MoveToSparkMath::mayHoldTheMoveHtlc).forEach { channel ->
+        emptied.filter { MoveToSparkMath.isEmptiedForGood(it, previous) }.forEach { channel ->
             invoke(channel)
                 .onSuccess { Logger.info("Closed channel '${channel.channelId}' emptied by a move", context = TAG) }
                 .onFailure { Logger.warn("Failed to close channel '${channel.channelId}'", it, context = TAG) }

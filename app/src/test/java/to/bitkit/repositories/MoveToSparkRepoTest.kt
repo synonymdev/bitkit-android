@@ -386,6 +386,23 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a channel with capacity left is emptied for good only on two unchanged reads at its reserve`() {
+        // 4 000 sat/kW: a peer-capped 2-sat limit on 7 170 sats matches the 7 168-sat legacy reserve by chance.
+        val capped = channel("capped", 2uL).copy(
+            outboundCapacityMsat = 7_170_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 4_000u,
+        )
+
+        assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(capped))
+        assertFalse(MoveToSparkMath.isEmptiedForGood(capped, previous = null), "closed on a single read")
+        val risen = capped.copy(nextOutboundHtlcLimitMsat = 1_332_000uL)
+        assertFalse(MoveToSparkMath.isEmptiedForGood(capped, previous = listOf(risen)), "closed on a changed read")
+        assertTrue(MoveToSparkMath.isEmptiedForGood(capped, previous = listOf(capped)))
+        assertTrue(MoveToSparkMath.isEmptiedForGood(channel("small", 0uL), previous = null))
+    }
+
+    @Test
     fun `payments around the channels read are unclear when one changed or could not be read`() {
         val sent = nodeSend(PaymentStatus.FAILED)
         fun around(start: List<PaymentDetails>?, before: List<PaymentDetails>?, after: List<PaymentDetails>?) =

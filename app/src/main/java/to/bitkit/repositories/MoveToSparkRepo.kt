@@ -451,6 +451,20 @@ object MoveToSparkMath {
     }
 
     /**
+     * Whether [channel] can close: its capacity is under the minimum, or its reserve explains its limit in this read
+     * and in the one before ([previous]), unchanged. One read can match a reserve by chance while the move's HTLC still
+     * counts against the peer's cap; the HTLC clears within the recheck, so a reading that holds across it is what
+     * stays.
+     */
+    fun isEmptiedForGood(channel: ChannelDetails, previous: List<ChannelDetails>?): Boolean {
+        if (msatFloorOf(channel.outboundCapacityMsat) < MIN_MOVE_SATS) return true
+        if (mayHoldTheMoveHtlc(channel)) return false
+        val was = previous?.firstOrNull { it.channelId == channel.channelId } ?: return false
+        return was.outboundCapacityMsat == channel.outboundCapacityMsat &&
+            was.nextOutboundHtlcLimitMsat == channel.nextOutboundHtlcLimitMsat
+    }
+
+    /**
      * The payments read before and after a read of the channels, or null when a read failed or an outbound Lightning
      * payment appeared or changed between them: it may have held an HTLC while the channels were read. Also null when a
      * payment other than a move's changed since the move started ([moveStart]): it may have emptied another channel.

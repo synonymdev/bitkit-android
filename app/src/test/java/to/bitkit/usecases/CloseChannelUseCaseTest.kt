@@ -201,6 +201,21 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a move's close reads a channel at its reserve twice before taking it`() = test {
+        val reserved = channel("channel_1", 862uL).copy(
+            outboundCapacityMsat = 5_342_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 2_500u,
+        )
+        lightningState.value = LightningState(channels = persistentListOf(reserved))
+
+        sut.closeEmptiedByMove(listOf(channel), emptyList())
+
+        verify(lightningRepo, times(2)).syncState()
+        verify(lightningRepo).closeChannel(eq(reserved), any(), anyOrNull())
+    }
+
+    @Test
     fun `a move's close reads the channels from the node after a sync, not the stale state`() = test {
         lightningState.value = LightningState(channels = persistentListOf(channel))
         whenever(lightningRepo.syncState()).thenAnswer {
