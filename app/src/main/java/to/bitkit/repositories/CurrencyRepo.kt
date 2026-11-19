@@ -194,7 +194,8 @@ class CurrencyRepo @Inject constructor(
 
     fun getCurrentRate(currency: String): FxRate {
         val rates = _currencyState.value.rates
-        val rate = rates.firstOrNull { it.quote == currency }
+        // A price of zero or one that does not parse converts nothing, so it counts as no rate.
+        val rate = rates.firstOrNull { it.quote == currency && it.rate > 0.0 }
 
         return checkNotNull(rate) {
             "Rate not found for currency: $currency in: ${rates.joinToString { it.quote }}"
@@ -246,7 +247,8 @@ class CurrencyRepo @Inject constructor(
         val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), BTC_SCALE, RoundingMode.HALF_UP)
         val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
         val roundedSats = satsDecimal.setScale(0, RoundingMode.HALF_UP)
-        roundedSats.toLong().toULong()
+        require(roundedSats.signum() >= 0) { "Negative sats for fiat '$fiatValue'" }
+        roundedSats.longValueExact().toULong()
     }
 
     fun convertFiatToSats(fiat: Double, currency: String?) = convertFiatToSats(BigDecimal.valueOf(fiat), currency)
@@ -280,7 +282,7 @@ data class CurrencyState(
 
 /** Switching to fiat needs a rate for the selected currency, or every fiat amount would be missing. */
 val CurrencyState.canSwitchUnit: Boolean
-    get() = primaryDisplay == PrimaryDisplay.FIAT || rates.any { it.quote == selectedCurrency }
+    get() = primaryDisplay == PrimaryDisplay.FIAT || rates.any { it.quote == selectedCurrency && it.rate > 0.0 }
 
 val CurrencyState.paykitRate: PaykitExchangeRate?
     get() = rates.firstOrNull {

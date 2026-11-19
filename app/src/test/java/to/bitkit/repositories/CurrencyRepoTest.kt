@@ -156,6 +156,27 @@ class CurrencyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `convertFiatToSats refuses a zero, negative or out of range result`() = test {
+        val usd = testRates.first { it.quote == "USD" }
+        val rates = testRates.map { if (it.quote == "EUR") it.copy(lastPrice = "0") else it } +
+            usd.copy(quote = "GBP", lastPrice = "-50000")
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = rates)))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "EUR")))
+
+        sut = createSut()
+
+        sut.currencyState.take(1).test(timeout = 1000.milliseconds) {
+            awaitItem()
+
+            assertTrue(sut.convertFiatToSats(BigDecimal("45.00"), "EUR").isFailure, "converted at a zero rate")
+            assertTrue(sut.convertFiatToSats(BigDecimal("45.00"), "GBP").isFailure, "converted at a negative rate")
+            assertTrue(sut.convertFiatToSats(BigDecimal("-45.00"), "USD").isFailure, "wrapped negative sats")
+            assertTrue(sut.convertFiatToSats(BigDecimal("1e30"), "USD").isFailure, "wrapped an out of range amount")
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `getCurrentRate should match by quote currency`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = testRates)))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "EUR")))
@@ -302,6 +323,8 @@ class CurrencyRepoTest : BaseUnitTest() {
         assertTrue(rated.canSwitchUnit)
         assertFalse(rated.copy(selectedCurrency = "JPY").canSwitchUnit, "switched to fiat with no rate")
         assertTrue(CurrencyState(primaryDisplay = PrimaryDisplay.FIAT).canSwitchUnit, "kept in fiat with no rate")
+        val zeroPrice = testRates.map { it.copy(lastPrice = "0") }.toImmutableList()
+        assertFalse(rated.copy(rates = zeroPrice).canSwitchUnit, "switched to fiat with a zero rate")
     }
 }
 
