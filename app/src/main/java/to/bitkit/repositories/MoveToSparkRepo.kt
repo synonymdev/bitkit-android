@@ -343,9 +343,6 @@ class MoveToSparkRepo internal constructor(
 object MoveToSparkMath {
     /** Below this a move is not offered: what is left is about the routing fee. */
     const val MIN_MOVE_SATS = 1_000uL
-    private const val ANCHOR_COMMITMENT_WEIGHT = 1_124uL
-    private const val LEGACY_COMMITMENT_WEIGHT = 724uL
-    private const val HTLC_OUTPUT_WEIGHT = 172uL
 
     /** The fee guessed for the first quote of a full move, as a share of the amount in parts per million. */
     private const val FIRST_FEE_GUESS_PPM = 5_000uL
@@ -424,44 +421,19 @@ object MoveToSparkMath {
         val beforeById = before.associateBy { it.channelId }
         return after.orEmpty().filterOpen().filter {
             val was = beforeById[it.channelId] ?: return@filter false
-            // The outbound capacity too: an HTLC still counting against the peer's in-flight limit lowers only the
-            // send limit.
             msatFloorOf(was.nextOutboundHtlcLimitMsat) >= MIN_MOVE_SATS &&
-                msatFloorOf(it.nextOutboundHtlcLimitMsat) < MIN_MOVE_SATS &&
-                sendableAfterCommitmentFeeSats(it, isLegacy = reservesLegacyFee(was)) < MIN_MOVE_SATS
+                msatFloorOf(it.nextOutboundHtlcLimitMsat) < MIN_MOVE_SATS
         }
     }
 
     /**
-     * The outbound capacity less the commitment fee the funder keeps back for its next HTLC, which LDK's capacity does
-     * not count, as LDK reserves it: an anchor commitment with two HTLCs (LDK already took the anchors off), or a
-     * legacy one with one HTLC at twice the feerate.
+     * Whether an emptied channel still holds the move minimum in outbound capacity. Its send limit is then under the
+     * minimum for one of two reasons ldk-node does not tell apart: the commitment fee its funder keeps back, which
+     * stays, or the move's settled HTLC still counting against the peer's in-flight cap, which clears. Such a channel
+     * is read again before it closes.
      */
-    fun sendableAfterCommitmentFeeSats(channel: ChannelDetails, isLegacy: Boolean): ULong {
-        val capacitySats = msatFloorOf(channel.outboundCapacityMsat)
-        if (!channel.isOutbound) return capacitySats
-        val feeSats = commitmentFeeSats(channel.feerateSatPer1000Weight, isLegacy)
-        return if (capacitySats > feeSats) capacitySats - feeSats else 0uL
-    }
-
-    /**
-     * ldk-node does not expose a channel's type, so it is read from the channel before the move, with no move HTLC in
-     * flight: a legacy channel's send limit sits at least the legacy reserve under its capacity, an anchor one's less.
-     * A limit capped lower by the peer also reads as legacy, which only takes a little more off.
-     */
-    fun reservesLegacyFee(channel: ChannelDetails): Boolean {
-        if (!channel.isOutbound) return false
-        val capacityMsat = channel.outboundCapacityMsat
-        val limitMsat = channel.nextOutboundHtlcLimitMsat
-        val gapSats = if (capacityMsat > limitMsat) (capacityMsat - limitMsat) / 1000uL else 0uL
-        return gapSats + 1uL >= commitmentFeeSats(channel.feerateSatPer1000Weight, isLegacy = true)
-    }
-
-    private fun commitmentFeeSats(feerate: UInt, isLegacy: Boolean): ULong = if (isLegacy) {
-        2uL * feerate.toULong() * (LEGACY_COMMITMENT_WEIGHT + HTLC_OUTPUT_WEIGHT) / 1000uL
-    } else {
-        feerate.toULong() * (ANCHOR_COMMITMENT_WEIGHT + 2uL * HTLC_OUTPUT_WEIGHT) / 1000uL
-    }
+    fun mayHoldTheMoveHtlc(emptied: List<ChannelDetails>): Boolean =
+        emptied.any { msatFloorOf(it.outboundCapacityMsat) >= MIN_MOVE_SATS }
 
     /**
      * The payments read before and after a read of the channels, or null when a read failed or an outbound Lightning

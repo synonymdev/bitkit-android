@@ -368,53 +368,15 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a channel whose limit an in-flight htlc lowered still holds its capacity and stays open`() {
+    fun `an emptied channel that still holds the minimum in capacity may hold the move's htlc`() {
         val before = listOf(channel("held", 50_000uL))
-        val after = listOf(channel("held", 0uL).copy(outboundCapacityMsat = 20_000_000uL))
+        val held = channel("held", 0uL).copy(outboundCapacityMsat = 5_002_000uL)
 
-        assertEquals(emptyList<String>(), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
-    }
+        val emptied = MoveToSparkMath.emptiedChannels(before, listOf(held))
 
-    @Test
-    fun `a funded channel's capacity counts without the commitment fee it keeps back`() {
-        val funded = channel("funded", 0uL).copy(
-            outboundCapacityMsat = 1_900_000uL,
-            isOutbound = true,
-            feerateSatPer1000Weight = 253u,
-        )
-        val anchorBefore = channel("funded", 50_000uL).copy(
-            outboundCapacityMsat = 50_371_000uL,
-            isOutbound = true,
-            feerateSatPer1000Weight = 253u,
-        )
-        val before = listOf(anchorBefore, channel("inbound", 50_000uL))
-        val after = listOf(funded, funded.copy(channelId = "inbound", isOutbound = false))
-
-        assertFalse(MoveToSparkMath.reservesLegacyFee(anchorBefore))
-        assertEquals(1_529uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(funded, isLegacy = false))
-        assertEquals(emptyList<String>(), MoveToSparkMath.emptiedChannels(before, after).map { it.channelId })
-        val nearlyEmpty = after.map { it.copy(outboundCapacityMsat = 1_300_000uL) }
-        assertEquals(listOf("funded"), MoveToSparkMath.emptiedChannels(before, nearlyEmpty).map { it.channelId })
-    }
-
-    @Test
-    fun `a move closes a legacy channel at its reserve`() {
-        // 2 500 sat/kW: a legacy commitment keeps back 4 480 sats, so 5 342 sats of capacity send only 862.
-        val legacyBefore = channel("legacy", 50_000uL).copy(
-            outboundCapacityMsat = 54_480_000uL,
-            isOutbound = true,
-            feerateSatPer1000Weight = 2_500u,
-        )
-        val after = channel("legacy", 0uL).copy(
-            outboundCapacityMsat = 5_342_000uL,
-            isOutbound = true,
-            feerateSatPer1000Weight = 2_500u,
-        )
-
-        assertTrue(MoveToSparkMath.reservesLegacyFee(legacyBefore))
-        assertEquals(862uL, MoveToSparkMath.sendableAfterCommitmentFeeSats(after, isLegacy = true))
-        val emptied = MoveToSparkMath.emptiedChannels(listOf(legacyBefore), listOf(after))
-        assertEquals(listOf("legacy"), emptied.map { it.channelId })
+        assertEquals(listOf("held"), emptied.map { it.channelId })
+        assertTrue(MoveToSparkMath.mayHoldTheMoveHtlc(emptied))
+        assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(listOf(held.copy(outboundCapacityMsat = 999_000uL))))
     }
 
     @Test

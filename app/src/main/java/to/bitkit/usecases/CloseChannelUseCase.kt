@@ -1,6 +1,7 @@
 package to.bitkit.usecases
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -19,6 +20,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 /** Closes a channel cooperatively and records its transfer to Savings, so the close shows in Activity. */
 @Singleton
@@ -31,6 +33,10 @@ class CloseChannelUseCase @Inject constructor(
 ) {
     companion object {
         private const val TAG = "CloseChannelUseCase"
+
+        /** How long a close waits for a move's HTLC to stop counting against the peer's in-flight cap. */
+        private const val HTLC_CLEAR_RECHECKS = 15
+        private val HTLC_CLEAR_RECHECK = 2.seconds
     }
 
     suspend operator fun invoke(channel: ChannelDetails): Result<Unit> = withContext(ioDispatcher) {
@@ -49,16 +55,35 @@ class CloseChannelUseCase @Inject constructor(
 
     /**
      * Closes each channel a move to Spark emptied: one that could send at least the move minimum in [before] and can
-     * no longer, read from the node after a sync. A close that fails leaves its channel listed for a manual close.
-     * While another payment is in flight its funds lower each channel's limit without leaving it, so nothing closes
-     * and the channels stay listed for a manual close.
+     * no longer, read from the node after a sync. Nothing closes while the payments are unclear or another is in
+     * flight, or when a payment other than a move's changed since [paymentsAtStart]. A channel that still holds the
+     * minimum in capacity is read again until its limit rises or the wait ends. A close that fails leaves its channel
+     * listed for a manual close.
      */
-    /** Closes the channels a move emptied, from the channels and payments read when it started. */
     suspend fun closeEmptiedByMove(
         before: List<ChannelDetails>,
         paymentsAtStart: List<PaymentDetails>?,
     ) = withContext(ioDispatcher) {
         walletRepo.syncNodeAndWallet()
+        var emptied = readEmptied(before, paymentsAtStart)
+        // A channel whose limit rises once the move's HTLC clears drops out; one still under it is its reserve.
+        repeat(HTLC_CLEAR_RECHECKS) {
+            if (!MoveToSparkMath.mayHoldTheMoveHtlc(emptied)) return@repeat
+            delay(HTLC_CLEAR_RECHECK)
+            emptied = readEmptied(before, paymentsAtStart)
+        }
+        emptied.forEach { channel ->
+            invoke(channel)
+                .onSuccess { Logger.info("Closed channel '${channel.channelId}' emptied by a move", context = TAG) }
+                .onFailure { Logger.warn("Failed to close channel '${channel.channelId}'", it, context = TAG) }
+        }
+    }
+
+    /** The channels a move emptied, read between two reads of the payments; none while those are unclear. */
+    private suspend fun readEmptied(
+        before: List<ChannelDetails>,
+        paymentsAtStart: List<PaymentDetails>?,
+    ): List<ChannelDetails> {
         val paymentsBefore = lightningRepo.listPaymentsOrNull()
         // A sync already running returns at once, so the channels are read from the node directly.
         lightningRepo.syncState()
@@ -70,18 +95,12 @@ class CloseChannelUseCase @Inject constructor(
         ) { it.lowercase() in moveHashes }
         if (payments == null) {
             Logger.info("Kept the channels a move may have emptied open while its payments are unclear", context = TAG)
-            return@withContext
+            return emptyList()
         }
-        val inFlight = payments.any { it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.PENDING }
-        if (inFlight) {
+        if (payments.any { it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.PENDING }) {
             Logger.info("Kept the channels a move may have emptied open while a payment is in flight", context = TAG)
-            return@withContext
+            return emptyList()
         }
-        val emptied = MoveToSparkMath.emptiedChannels(before, lightningRepo.lightningState.value.channels)
-        emptied.forEach { channel ->
-            invoke(channel)
-                .onSuccess { Logger.info("Closed channel '${channel.channelId}' emptied by a move", context = TAG) }
-                .onFailure { Logger.warn("Failed to close channel '${channel.channelId}'", it, context = TAG) }
-        }
+        return MoveToSparkMath.emptiedChannels(before, lightningRepo.lightningState.value.channels)
     }
 }

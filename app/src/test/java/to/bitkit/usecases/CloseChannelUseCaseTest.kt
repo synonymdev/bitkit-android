@@ -15,6 +15,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.ext.amountOnClose
@@ -164,6 +165,34 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
         status = PaymentStatus.SUCCEEDED,
         latestUpdateTimestamp = 1uL,
     )
+
+    @Test
+    fun `a move's close keeps a channel whose limit rises once the move's htlc clears`() = test {
+        val held = channel("channel_1", 0uL).copy(outboundCapacityMsat = 5_002_000uL)
+        lightningState.value = LightningState(channels = persistentListOf(held))
+        var reads = 0
+        whenever(lightningRepo.syncState()).thenAnswer {
+            if (++reads == 3) {
+                lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 1_332uL)))
+            }
+            Unit
+        }
+
+        sut.closeEmptiedByMove(listOf(channel), emptyList())
+
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a move's close takes a channel whose limit stays under the minimum through the wait`() = test {
+        val reserved = channel("channel_1", 0uL).copy(outboundCapacityMsat = 5_002_000uL)
+        lightningState.value = LightningState(channels = persistentListOf(reserved))
+
+        sut.closeEmptiedByMove(listOf(channel), emptyList())
+
+        verify(lightningRepo, times(16)).syncState()
+        verify(lightningRepo).closeChannel(eq(reserved), any(), anyOrNull())
+    }
 
     @Test
     fun `a move's close reads the channels from the node after a sync, not the stale state`() = test {
