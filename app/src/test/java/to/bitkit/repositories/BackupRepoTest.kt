@@ -670,6 +670,7 @@ class BackupRepoTest : BaseUnitTest() {
         assertTrue(BackupCategory.SPARK_EXIT in failed)
         verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(stored), stored)
         verify(sparkRepo, never()).restoreExitBackup(any(), any())
+        verify(cacheStore, never()).updateBackupStatus(eq(BackupCategory.SPARK_EXIT), any())
     }
 
     @Test

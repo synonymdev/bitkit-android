@@ -645,7 +645,7 @@ class SparkRepo @Inject constructor(
             }
             // A send Spark still runs keeps its earlier attempts' ids, so their late failures leave it alone.
             if (payment.status == PaymentStatus.PENDING) {
-                cacheStore.keepSparkSendAttempt(paymentHash, payment.id)
+                cacheStore.keepSparkSendAttempt(paymentHash, payment.id, sentAt)
             } else {
                 takenAttempts.remove(paymentHash.lowercase())
                 restoredTakenAttempts.remove(paymentHash.lowercase())
@@ -718,7 +718,7 @@ class SparkRepo @Inject constructor(
         }
         if (!isOwner) return true
         if (isTaken) {
-            cacheStore.keepSparkSendAttempt(paymentHash, taken.ownId)
+            cacheStore.keepSparkSendAttempt(paymentHash, taken.ownId, taken.sentAt?.toLong())
         } else {
             cacheStore.removeSparkUncertainSend(paymentHash)
         }
@@ -2003,7 +2003,8 @@ class SparkRepo @Inject constructor(
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
         val key = hash.lowercase()
         val attempt = uncertainSends[key]?.attempt ?: inFlightAttempts[key] ?: takenAttempts[key] ?: return false
-        if (id == attempt.ownId) return false
+        // A payment Spark took fails with its own id, so a failure with another id is an earlier attempt's.
+        attempt.ownId?.let { return id != it }
         attempt.earlierIds?.let { return id in it }
         // A send kept before start times were stored can't tell its own failure from an earlier one, so it stays held
         // until its invoice expires, when the expiry rule settles it and its row.

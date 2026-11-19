@@ -3829,6 +3829,18 @@ class SparkRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `an earlier failure past the clock skew keeps a taken retry held while its earlier ids are unknown`() =
+        test {
+            val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+            val older = sentPayment(fees = 0).copy(
+                id = "older",
+                status = PaymentStatus.FAILED,
+                timestamp = now.epochSeconds.toULong() + 60uL,
+            )
+            assertTrue(retryHeldAfter(null, older, taken = taken))
+        }
+
+    @Test
     fun `a taken retry's own failure within the clock skew ends its hold after a restart without earlier ids`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)
