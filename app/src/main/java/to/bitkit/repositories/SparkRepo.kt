@@ -851,16 +851,23 @@ class SparkRepo @Inject constructor(
         takenAttempts.keys.filter { (expiries[it] ?: Long.MAX_VALUE) <= now }.forEach { hash ->
             val attempt = takenAttempts[hash] ?: return@forEach
             val expiresAt = expiries[hash] ?: return@forEach
-            // Spark may list a send it took only on a later sync, so an unlisted one stays held for a while.
-            val isPastGrace = now >= expiresAt + UNLISTED_TAKEN_SEND_GRACE.inWholeSeconds
-            val (send, listed) = listedLightningSendPayment(hash)
+            // Spark may list a send it took only on a later sync, so an unlisted one stays held for a while, and its
+            // absence counts only in a list from a sync made after that.
+            val graceEndsAt = expiresAt + UNLISTED_TAKEN_SEND_GRACE.inWholeSeconds
+            val isPastGrace = suspend { now >= graceEndsAt && hasSyncedSince(graceEndsAt.toULong()) }
+            val (send, listedSend) = listedLightningSendPayment(hash)
+            var listed = listedSend
             when (send) {
                 SparkLightningSend.Unavailable -> return@forEach
-                SparkLightningSend.NotFound -> if (!isPastGrace || !failHeldRow(hash)) return@forEach
+                SparkLightningSend.NotFound -> if (!isPastGrace() || !failHeldRow(hash)) return@forEach
                 is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@forEach
-                // A failure with another id than the attempt's own is an earlier attempt's, listed before the attempt.
+                // A failure with another id than the attempt's own is an earlier attempt's, listed before the attempt,
+                // so the retry's own row is failed instead of taking that attempt's amount, fee and time.
                 is SparkLightningSend.Found if send.status == PaymentStatus.FAILED && attempt.ownId != null &&
-                    listed?.id != attempt.ownId -> if (!isPastGrace || !failHeldRow(hash)) return@forEach
+                    listed?.id != attempt.ownId -> {
+                    if (!isPastGrace() || !failHeldRow(hash)) return@forEach
+                    listed = null
+                }
 
                 is SparkLightningSend.Found -> Unit
             }

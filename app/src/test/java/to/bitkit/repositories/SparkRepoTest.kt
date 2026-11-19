@@ -4007,9 +4007,11 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a taken spark retry with only an earlier failure listed stays held until the grace past expiry`() = test {
-        assertTakenRetryHeldUntilGrace(
-            listed = listOf(sentPayment(fees = 0).copy(id = "older", status = PaymentStatus.FAILED))
-        )
+        // The earlier attempt paid the amountless invoice at another amount and fee.
+        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        val row = assertTakenRetryHeldUntilGrace(listed = listOf(older))
+        assertEquals(PaymentState.FAILED, row.v1.status)
+        assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "the retry's row took the earlier attempt's payment")
     }
 
     @Test
@@ -4021,13 +4023,17 @@ class SparkRepoTest : BaseUnitTest() {
      * Spark takes a retry while it lists [listed], and keeps listing only that: the retry stays held past its invoice's
      * expiry until the grace for an unlisted send ends, then its row fails.
      */
-    private suspend fun TestScope.assertTakenRetryHeldUntilGrace(listed: List<Payment>) {
+    private suspend fun TestScope.assertTakenRetryHeldUntilGrace(listed: List<Payment>): Activity.Lightning {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
-        whenever(activityRepo.getActivity(eq("hash"), any())).thenReturn(Result.success(pendingSendRow()))
-        whenever(activityRepo.upsertActivity(any())).thenReturn(Result.success(Unit))
+        var row = pendingSendRow()
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
         val prepared = unexpiredPrepared()
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
         val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
@@ -4036,6 +4042,8 @@ class SparkRepoTest : BaseUnitTest() {
         val sut = createSut(store)
         sut.start(0).getOrThrow()
         assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+        // Spark reports the retry it took, which writes its row.
+        sparkEvents.emit(SdkEvent.PaymentPending(retry))
         runCurrent()
         val events = mutableListOf<Event>()
         backgroundScope.launch { sut.nodeEvents.collect { events += it } }
@@ -4051,13 +4059,24 @@ class SparkRepoTest : BaseUnitTest() {
         assertTrue(events.none { it is Event.PaymentFailed }, "the expiry ended a retry Spark may still list")
         assertTrue("hash" in store.data.first().sparkSendHashes)
 
+        // Past the grace, while Spark's latest sync was made before it ended.
         now += 10.minutes
+        whenever(
+            sparkService.getInfo()
+        ).thenReturn(info(0uL).copy(lastSyncedAt = (now - 6.minutes).epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+        assertTrue(events.none { it is Event.PaymentFailed }, "a list from before the grace ended failed the retry")
+
         sync()
         assertTrue(events.any { it is Event.PaymentFailed }, "a retry Spark never listed stayed held past the grace")
         verify(activityRepo, atLeastOnce()).upsertActivity(
             argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
         )
         assertFalse("hash" in store.data.first().sparkSendHashes)
+        // Later syncs list the same payments.
+        sync()
+        return row
     }
 
     @Test
