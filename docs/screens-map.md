@@ -129,18 +129,18 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| FundingScreen.kt | `todo` |
+| FundingScreen.kt | Lightning Onboarding From Suggestion Card › Fund Spending Balance / No Bitkit Savings |
 | SavingsAdvancedScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Advanced |
 | SavingsAvailabilityScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Network Fee & Availability |
 | SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Review Transfer to Savings |
 | SavingsIntroScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Transfer to Savings Intro |
 | SavingsProgressScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Funds In Transfer |
 | SettingUpScreen.kt | Funds In Transfer (spark) › Transfer - Processing Payment |
-| SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
-| SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm |
-| SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Intro |
-| TransferIntroScreen.kt | Lightning Onboarding From Suggestion Card › Lightning onboarding Intro |
-| TransferLearnMoreScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Receiving Capacity |
+| SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Spark) › Transfer to Spending / Transfer to Spending Balance From HW Device (spark) › Transfer to Spending |
+| SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Spark) › Review |
+| SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Spark) › Introduction |
+| TransferIntroScreen.kt | Lightning Onboarding From Suggestion Card › Introduction |
+| TransferLearnMoreScreen.kt | Transfer to Spending Balance From Savings (Spark) › Learn More |
 
 ## ui/screens/transfer/external
 
@@ -156,8 +156,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| SpendingHwSignScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirm HW |
-| SpendingHwSignedScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirmed HW |
+| SpendingHwSignScreen.kt | Transfer to Spending Balance From HW Device (spark) › Review & Sign |
+| SpendingHwSignedScreen.kt | Transfer to Spending Balance From HW Device (spark) › Transfer Confirmed (TX  signed) |
 
 ## ui/screens/trezor
 

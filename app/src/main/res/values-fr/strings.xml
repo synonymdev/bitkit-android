@@ -204,6 +204,10 @@
     <string name="lightning__spark_exit__uneconomic">Les frais sont supérieurs à ce que vous recevriez.</string>
     <string name="lightning__spark_exit__waiting_leaves">Une partie de ce transfert ne peut pas être lue on-chain pour le moment. Bitkit réessaie jusqu\'à une semaine.</string>
     <string name="lightning__spark_exit__waiting_operators">{amount} que les opérateurs Spark ont déplacé on-chain attend qu\'ils le libèrent. Bitkit le leur redemande pendant une semaine au maximum.</string>
+    <string name="lightning__spark_learn__about_text">Votre solde de dépenses utilise Spark, géré par Lightspark, Breez et Flashnet.\n\nSa sécurité repose sur au moins un opérateur agissant honnêtement. Les opérateurs peuvent suspendre l\'accès, et retirer sans leur coopération vous oblige à lancer une sortie on-chain.</string>
+    <string name="lightning__spark_learn__about_title">À propos de votre\n&lt;accent&gt;solde de dépenses&lt;/accent&gt;</string>
+    <string name="lightning__spark_learn__fast_text">Vos fonds sont généralement disponibles en quelques minutes, sans attendre de confirmations.</string>
+    <string name="lightning__spark_learn__later_text">Vos fonds deviennent disponibles après 3 confirmations, généralement environ 30 minutes.</string>
     <string name="lightning__spark_provider">Fournisseur</string>
     <string name="lightning__spark_provider_value">Spark via Breez</string>
     <string name="lightning__spark_receiving_unlimited">Sans limite</string>
@@ -213,9 +217,14 @@
     <string name="lightning__funding__button1">Transfert depuis l\'épargne</string>
     <string name="lightning__funding_advanced__button2">Configuration manuelle</string>
     <string name="lightning__spending_amount__title">Transfert \n&lt;accent&gt;Dépenses&lt;/accent&gt;</string>
+    <string name="lightning__spending_confirm__fee_est">est.</string>
+    <string name="lightning__spending_confirm__fee_max">max</string>
+    <string name="lightning__spending_confirm__normal_text">Prêt dans environ 30 minutes</string>
     <string name="lightning__transfer__nav_title">Transfert de fonds</string>
     <string name="lightning__transfer__confirm">Veuillez\n&lt;accent&gt;confirmer&lt;/accent&gt;</string>
     <string name="lightning__transfer__swipe">Glissez pour transférer</string>
+    <string name="lightning__transfer_from_savings_button">Transfert depuis l\'épargne</string>
+    <string name="lightning__transfer_hw__address">Adresse (confirmez sur l\'appareil)</string>
     <string name="lightning__transfer_hw__open_connect">Ouvrir Trezor Connect</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__error_max__title">Seuil Maximum Épargne</string>
@@ -225,13 +234,11 @@
     <string name="lightning__spending_confirm__network_fee">Frais de réseau</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit n\'a pas pu obtenir les frais actuels de ce transfert. Vérifiez votre connexion et réessayez.</string>
     <string name="lightning__spending_confirm__quote_error_title">Frais indisponibles</string>
-    <string name="lightning__spending_confirm__spending_fee">Frais de dépense</string>
     <string name="lightning__spending_confirm__lsp_fee">Frais de service</string>
     <string name="lightning__spending_confirm__amount">Vers Dépenses</string>
     <string name="lightning__spending_confirm__fees_changed_network">Les frais sont plus élevés de {amount}, car les taux de frais ou votre solde d\'épargne ont changé pendant que vous étiez sur cet écran. Glissez à nouveau pour confirmer.</string>
     <string name="lightning__spending_confirm__fees_changed_title">Frais modifiés</string>
     <string name="lightning__spending_confirm__instant_text">Prêt en quelques minutes</string>
-    <string name="lightning__spending_confirm__later_text">Après 3 confirmations, environ 30 minutes</string>
     <string name="lightning__spending_confirm__total">Total</string>
     <string name="lightning__spending_intro__button">Commencer</string>
     <string name="lightning__spending_intro__text">Transférez des fonds vers votre solde Dépenses pour profiter de transactions instantanées et moins chers avec vos amis, votre famille et les commerçants.</string>
@@ -251,6 +258,7 @@
     <string name="lightning__savings_interrupted__nav_title">Transfert \n&lt;accent&gt;interrompu&lt;/accent&gt;</string>
     <string name="lightning__savings_interrupted__title">Gardez Bitkit \n&lt;accent&gt;ouvert&lt;/accent&gt;</string>
     <string name="lightning__savings_interrupted__text">Les fonds n\'ont pas encore été transférés. Bitkit va essayer d\'initier le transfert au cours des &lt;accent&gt;30&lt;/accent&gt; prochaines &lt;accent&gt;minutes&lt;/accent&gt;. Veuillez garder votre application ouverte.</string>
+    <string name="lightning__transfer_intro__text_spark">Alimentez votre solde de dépenses pour profiter de paiements Lightning instantanés et peu coûteux.</string>
     <string name="lightning__transfer_success__nav_title">Transfert réussi</string>
     <string name="lightning__transfer_success__title_savings">Fonds transférés \n&lt;accent&gt;à l\'épargne&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__title_spending">Fonds transférés \n&lt;accent&gt;vers Dépenses&lt;/accent&gt;</string>
@@ -275,7 +283,6 @@
     <string name="lightning__spending_amount__error_balance__title">Épargne insuffisante</string>
     <string name="lightning__savings">Épargner</string>
     <string name="lightning__spending_label">Solde Dépenses</string>
-    <string name="lightning__spending_learn_more__text">Instantané paie le fournisseur pour ajouter votre transfert à votre solde de dépenses avant sa confirmation, généralement en quelques minutes.\n\nPlus tard attend 3 confirmations, environ 30 minutes, pour des frais moins élevés.</string>
     <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__receiving_label">Capacité de réception</string>
     <string name="lightning__rgs_snapshot_time">Heure de l\'instantané Rapid Gossip Sync</string>
@@ -289,7 +296,6 @@
     <string name="lightning__total_onchain">Total Onchain</string>
     <string name="lightning__transfer_in_progress">TRANSFERT EN COURS</string>
     <string name="lightning__transfer_intro__button">Commencer</string>
-    <string name="lightning__transfer_intro__text">Alimentez votre solde de dépenses pour profiter de transactions instantanées et bon marché avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__transfer_intro__title">Dépenses \n&lt;accent&gt;Solde&lt;/accent&gt;</string>
     <string name="lightning__wallet_balances">Soldes du portefeuille</string>
     <string name="lightning__node_info">Nœud Lightning</string>
