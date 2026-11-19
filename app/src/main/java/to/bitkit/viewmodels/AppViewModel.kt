@@ -6705,6 +6705,11 @@ class AppViewModel @Inject constructor(
         if (!state.initialSubscriptionPaymentAutoStartPending) return
         _sendUiState.update { it.copy(initialSubscriptionPaymentAutoStartPending = false) }
         if (!state.shouldAutomaticallyPay) return
+        // The automatic start covers the details, so a payment that needs the update waits for its fee to be seen.
+        if (state.needsSparkUpdate()) {
+            _sendUiState.update { it.copy(initialSubscriptionPaymentNeedsConfirmation = true) }
+            return
+        }
         val generation = sendStateGeneration
         viewModelScope.launch {
             val isFeeKnown = awaitAutomaticOnchainFee()
@@ -7907,10 +7912,7 @@ class AppViewModel @Inject constructor(
      */
     private suspend fun confirmSparkUpdateQuote(): Boolean {
         val state = _sendUiState.value
-        if (state.payMethod != SendMethod.LIGHTNING || state.routedPaykitRoute?.serviceLeg != null) return true
-        if (state.activePaykitSwapRoute != null) return true
-        val payAmount = state.decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: state.amount
-        if (!moveToSparkRepo.needsUpdateToSend(payAmount)) return true
+        if (!state.needsSparkUpdate()) return true
         val generation = sendStateGeneration
         val fresh = moveToSparkRepo.quote().getOrElse {
             val failure = it.toSendFailureDetails(context, state.currentLightningPaymentRequest())
@@ -7924,6 +7926,14 @@ class AppViewModel @Inject constructor(
         Logger.info("Stopped a payment to show the update fee '${fresh.feeSats}'", context = TAG)
         setSendEffect(SendEffect.ResetConfirm)
         return false
+    }
+
+    /** Whether this Lightning payment fits only once the spending balance update moves the channels to Spark. */
+    private fun SendUiState.needsSparkUpdate(): Boolean {
+        if (payMethod != SendMethod.LIGHTNING || routedPaykitRoute?.serviceLeg != null) return false
+        if (activePaykitSwapRoute != null) return false
+        val payAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
+        return moveToSparkRepo.needsUpdateToSend(payAmount)
     }
 
     private fun closeChannelsEmptiedBy(outcome: MoveToSparkOutcome, channelsBefore: List<ChannelDetails>) {

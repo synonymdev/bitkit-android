@@ -15460,6 +15460,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initial subscription payment that needs the update waits for manual confirmation`() = test {
+        whenever(moveToSparkRepo.needsUpdateToSend(1_000uL)).thenReturn(true)
+        setSendState(
+            SendUiState(
+                amount = 1_000u,
+                payMethod = SendMethod.LIGHTNING,
+                isAmountInputValid = true,
+                isInitialSubscriptionPayment = true,
+                initialSubscriptionPaymentAutoStartPending = true,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.initialSubscriptionPaymentNeedsConfirmation)
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay, "the update fee was paid without being seen")
+        verify(moveToSparkRepo, never()).quote(anyOrNull())
+    }
+
+    @Test
     fun `quoted initial subscription payment waits for amount review`() = test {
         setSendState(
             SendUiState(
@@ -20712,6 +20734,64 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
         verify(paykitAllowanceRepo).finishManualPayment("update-attempt", false, null)
+    }
+
+    @Test
+    fun `a payment request whose update fee rose by send time is prepared again for the next swipe`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1updaterequestfee"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            paykitPaymentProofRepo.prepare(
+                request,
+                MethodId.Bolt11.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Lightning
+            )
+        )
+            .doSuspendableAnswer {
+                setSendState(
+                    sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amount.atomic))
+                )
+                Result.success(Unit)
+            }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitAllowanceRepo.beginManualPayment(eq(request), any(), anyOrNull()))
+            .thenReturn(Result.success("update-attempt"))
+        val raised = UPDATE_QUOTE.copy(feeSats = UPDATE_QUOTE.feeSats + 1uL)
+        whenever(moveToSparkRepo.needsUpdateToSend(request.amount.atomic)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(UPDATE_QUOTE), Result.success(raised))
+        whenever(moveToSparkRepo.updateToSend(any(), any(), eq(request.amount.atomic), any()))
+            .thenReturn(Result.failure(MoveToSparkError.UpdateUnsettled()))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                sparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.ResetConfirm, awaitItem())
+
+            // The placeholder invoice fails the request's amount check, which a real one passes.
+            setSendState(sut.sendUiState.value.copy(decodedInvoice = null))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(paykitPaymentProofRepo, times(2))
+            .prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning)
+        verify(privatePaykitRepo, times(2)).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(moveToSparkRepo).updateToSend(eq(raised), any(), eq(request.amount.atomic), any())
     }
 
     @Test
