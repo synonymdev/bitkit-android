@@ -44,6 +44,7 @@ import to.bitkit.R
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.canSwitchUnit
+import to.bitkit.repositories.shownUnit
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
@@ -335,7 +336,7 @@ private fun SpeedItem(
         if (feeSats != null) {
             HorizontalSpacer(12.dp)
             Column(horizontalAlignment = Alignment.End) {
-                MoneyMSB(sats = feeSats, showSymbol = true)
+                MoneyMSB(sats = feeSats, unit = LocalCurrencies.current.shownUnit, showSymbol = true)
                 BodySSB(feeCaption, color = Colors.White64)
             }
         }

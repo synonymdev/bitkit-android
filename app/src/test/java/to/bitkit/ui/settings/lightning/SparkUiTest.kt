@@ -52,6 +52,8 @@ class SparkUiTest : BaseUnitTest() {
         assertFalse(ui.isReceiving, "an offline spark receives nothing")
         assertFalse(ui.isUsable, "an offline spark offered Transfer To Savings")
         assertTrue(assertNotNull(offline.copy(isReady = true).toUi(mock())).isUsable)
+        val noNetwork = assertNotNull(offline.copy(isReady = true).toUi(mock(), isOnline = false))
+        assertFalse(noNetwork.isUsable, "offered Transfer To Savings while the device is offline")
         val unread = SparkState(isReady = false, balanceSats = 10_000uL)
         assertNull(unread.toUi(mock()), "listed before Spark read anything")
     }

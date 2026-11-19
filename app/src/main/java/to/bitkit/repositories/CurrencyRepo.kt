@@ -194,8 +194,7 @@ class CurrencyRepo @Inject constructor(
 
     fun getCurrentRate(currency: String): FxRate {
         val rates = _currencyState.value.rates
-        // A price of zero or one that does not parse converts nothing, so it counts as no rate.
-        val rate = rates.firstOrNull { it.quote == currency && it.rate > 0.0 }
+        val rate = rates.firstOrNull { it.quote == currency }
 
         return checkNotNull(rate) {
             "Rate not found for currency: $currency in: ${rates.joinToString { it.quote }}"
@@ -280,9 +279,17 @@ data class CurrencyState(
     val isRefreshing: Boolean = false,
 )
 
-/** Switching to fiat needs a rate for the selected currency, or every fiat amount would be missing. */
+/** The selected currency has a rate that converts, so fiat amounts can show. */
+val CurrencyState.hasUsableRate: Boolean
+    get() = rates.any { it.quote == selectedCurrency && it.rate > 0.0 }
+
+/** Switching to fiat needs a usable rate, or every fiat amount would be missing. */
 val CurrencyState.canSwitchUnit: Boolean
-    get() = primaryDisplay == PrimaryDisplay.FIAT || rates.any { it.quote == selectedCurrency && it.rate > 0.0 }
+    get() = primaryDisplay == PrimaryDisplay.FIAT || hasUsableRate
+
+/** The unit amounts show in: bitcoin while fiat is selected without a usable rate, so they never go blank. */
+val CurrencyState.shownUnit: PrimaryDisplay
+    get() = if (primaryDisplay == PrimaryDisplay.FIAT && !hasUsableRate) PrimaryDisplay.BITCOIN else primaryDisplay
 
 val CurrencyState.paykitRate: PaykitExchangeRate?
     get() = rates.firstOrNull {

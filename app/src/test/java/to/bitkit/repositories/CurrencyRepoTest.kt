@@ -326,6 +326,20 @@ class CurrencyRepoTest : BaseUnitTest() {
         val zeroPrice = testRates.map { it.copy(lastPrice = "0") }.toImmutableList()
         assertFalse(rated.copy(rates = zeroPrice).canSwitchUnit, "switched to fiat with a zero rate")
     }
+
+    @Test
+    fun `amounts show in bitcoin while fiat is selected without a usable rate`() {
+        val fiat = CurrencyState(
+            rates = testRates.toImmutableList(),
+            selectedCurrency = "EUR",
+            primaryDisplay = PrimaryDisplay.FIAT
+        )
+        assertEquals(PrimaryDisplay.FIAT, fiat.shownUnit)
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(selectedCurrency = "JPY").shownUnit, "blank fiat with no rate")
+        val zeroPrice = testRates.map { it.copy(lastPrice = "0") }.toImmutableList()
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(rates = zeroPrice).shownUnit, "blank fiat with a zero rate")
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(primaryDisplay = PrimaryDisplay.BITCOIN).shownUnit)
+    }
 }
 
 private class CurrencyRepoTestError(message: String) : AppError(message)
