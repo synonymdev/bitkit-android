@@ -202,14 +202,18 @@ class CacheStore internal constructor(
 
     /**
      * Ends the doubt over a send Spark took and still runs, keeping its start time and earlier attempts' ids, with
-     * Spark's id of the payment it took, [paymentId], so its own failure is told apart after a restart.
+     * Spark's id of the payment it took, [paymentId], so its own failure is told apart after a restart. Only the
+     * attempt sent at [sentAt] that still has its entry changes it, so a send settled meanwhile is never kept again.
      */
-    suspend fun keepSparkSendAttempt(paymentHash: String, paymentId: String?) {
+    suspend fun keepSparkSendAttempt(paymentHash: String, paymentId: String?, sentAt: Long?) {
         val hash = paymentHash.lowercase()
         val data = store.data.first()
         val isIdKept = paymentId == null || data.sparkTakenSendIds[hash] == paymentId
         if (hash !in data.sparkUncertainSends && isIdKept) return
         store.updateData {
+            val isOwn = sentAt?.let { start -> it.sparkUncertainSendStarts[hash] == start }
+                ?: (hash in it.sparkUncertainSends)
+            if (!isOwn) return@updateData it
             it.copy(
                 sparkUncertainSends = it.sparkUncertainSends - hash,
                 sparkTakenSendIds = paymentId

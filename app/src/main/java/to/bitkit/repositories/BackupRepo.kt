@@ -1191,12 +1191,9 @@ class BackupRepo @Inject constructor(
                     val parsed = runCatching { json.decodeFromString<SparkExitBackupV1>(String(dataBytes)) }
                         .getOrElse {
                             // A layout this app can't read never becomes readable here, so it is kept for one that can,
-                            // and the restore reports the exit data as not restored.
-                            if (it !is IllegalArgumentException) throw it
-                            Logger.warn("Failed to read '${BackupCategory.SPARK_EXIT}' backup", it, context = TAG)
-                            setAsideRejectedExitBackup(dataBytes)
-                            failedCategories += BackupCategory.SPARK_EXIT
-                            return@performRestore currentTimeMillis()
+                            // and the restore reports the exit data as not restored, its backup status untouched.
+                            if (it is IllegalArgumentException) setAsideRejectedExitBackup(dataBytes)
+                            throw it
                         }
                     sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
                     parsed.createdAt
