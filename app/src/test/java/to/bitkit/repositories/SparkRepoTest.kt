@@ -3854,6 +3854,32 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a taken spark retry keeps its expiry after a restart whose list shows only an earlier failure`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val older = sentPayment(fees = 0).copy(id = "older", status = PaymentStatus.FAILED)
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(older))
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(retry)
+        val before = createSut(store)
+        before.start(0).getOrThrow()
+        assertEquals("hash", before.payInvoice("lnbc1", 100uL).getOrThrow())
+        runCurrent()
+        assertTrue("hash" in store.data.first().sparkSendExpiries)
+
+        // Spark's list after the relaunch doesn't show the retry yet, only its earlier failed attempt.
+        whenever(sparkService.events).thenReturn(MutableSharedFlow())
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+
+        val cache = store.data.first()
+        assertTrue("hash" in cache.sparkSendHashes, "the startup sync released a retry Spark took")
+        assertTrue("hash" in cache.sparkSendExpiries, "the startup sync dropped a taken retry's expiry")
+    }
+
+    @Test
     fun `a taken spark retry without earlier ids ends its row and send once its invoice expires`() = test {
         val sentAt = now.epochSeconds
         // Spark took the retry before a restart, while its earlier attempts' ids couldn't be read.
