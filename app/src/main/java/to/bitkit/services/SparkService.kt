@@ -43,6 +43,7 @@ import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.defaultConfig
+import breez_sdk_spark.parseSparkConfig
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -50,6 +51,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.BuildConfig
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
@@ -60,6 +62,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 import breez_sdk_spark.Network as SparkNetwork
@@ -179,10 +182,18 @@ class SparkService @Inject constructor(
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
-        val chainServiceUrl = Env.sparkChainServiceUrl(Env.network)
+        val localChainUrl = if (Env.isDebug && Env.isLocalE2eBackend && network == SparkNetwork.REGTEST) {
+            localSparkChainUrl(config)
+        } else {
+            null
+        }
+        val chainServiceUrl = localChainUrl ?: Env.sparkChainServiceUrl(Env.network)
         val connected = SdkBuilder(config, Seed.Mnemonic(mnemonic, passphrase)).use { builder ->
             builder.withDefaultStorage(storageDir)
-            chainServiceUrl?.let { builder.withRestChainService(it, ChainApiType.ESPLORA, null) }
+            chainServiceUrl?.let {
+                val apiType = if (localChainUrl != null) ChainApiType.MEMPOOL_SPACE else ChainApiType.ESPLORA
+                builder.withRestChainService(it, apiType, null)
+            }
             builder.build()
         }
         listenerId = connected.addEventListener(
@@ -196,6 +207,19 @@ class SparkService @Inject constructor(
         val chain = chainServiceUrl ?: "default"
         Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
         true
+    }
+
+    private fun localSparkChainUrl(config: Config): String? {
+        val encoded = BuildConfig.SPARK_LOCAL_CONFIG_B64
+        val chainUrl = BuildConfig.SPARK_LOCAL_CHAIN_URL
+        if (encoded.isBlank() && chainUrl.isBlank()) return null
+        require(encoded.isNotBlank() && chainUrl.isNotBlank()) {
+            "Local Spark requires SPARK_LOCAL_CONFIG_B64 and SPARK_LOCAL_CHAIN_URL"
+        }
+        config.sparkConfig = parseSparkConfig(Base64.getDecoder().decode(encoded).decodeToString())
+        // The pinned regtest operators require anchored refunds.
+        config.watchtowerFeeLadderEnabled = false
+        return chainUrl
     }
 
     suspend fun disconnect() = mutex.withLock {

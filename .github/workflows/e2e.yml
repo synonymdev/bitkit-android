@@ -3,6 +3,10 @@ name: E2E
 on:
   workflow_dispatch:
     inputs:
+      spark_only:
+        description: "Run only @spark_1 on pinned local Spark"
+        type: boolean
+        default: false
       e2e_branch:
         description: "Branch of synonymdev/bitkit-e2e-tests to use (main | default-feature-branch | custom branch name)"
         required: false
@@ -40,7 +44,7 @@ jobs:
 
   build-local:
     needs: detect-changes
-    if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
+    if: "!inputs.spark_only && github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'"
     runs-on: ubuntu-latest
 
     steps:
@@ -268,8 +272,97 @@ jobs:
         if: failure()
         uses: jwalton/gh-docker-logs@v2
 
+  e2e-spark:
+    if: inputs.spark_only
+    needs: e2e-branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      COMPOSE_PROJECT_NAME: bitkit-spark-e2e
+    steps:
+      - name: Reserve regtest host ports
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=39388,43782,60001
+
+      - uses: actions/checkout@v7
+        with:
+          path: bitkit-android
+          persist-credentials: false
+
+      - name: Resolve E2E tests ref
+        id: e2e-ref
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
+        with:
+          selected: ${{ needs.e2e-branch.outputs.branch }}
+          e2e_branch_input: ${{ inputs.e2e_branch }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          ref: ${{ steps.e2e-ref.outputs.ref }}
+          path: bitkit-e2e-tests
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bitkit-e2e-tests/package-lock.json
+
+      - name: Install Appium dependencies
+        working-directory: bitkit-e2e-tests
+        run: npm ci
+
+      - name: Start pinned Spark fixture
+        working-directory: bitkit-e2e-tests
+        run: |
+          ./scripts/local-backend spark-up
+          ./scripts/local-backend spark-env >> "$GITHUB_ENV"
+
+      - name: Build Android Spark app
+        working-directory: bitkit-e2e-tests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/build-android-apk.sh
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run @spark_1
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_6
+          api-level: 33
+          arch: x86_64
+          avd-name: Pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          script: cd bitkit-e2e-tests && ./scripts/run-spark-e2e.sh android
+
+      - name: Collect Spark logs
+        if: failure()
+        working-directory: bitkit-e2e-tests
+        run: |
+          mkdir -p artifacts
+          ./scripts/local-backend spark-logs --tail 200 > artifacts/spark-docker.log 2>&1 || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: spark-android-${{ github.run_number }}
+          path: bitkit-e2e-tests/artifacts/
+
   e2e-status:
-    if: always() && github.event.pull_request.draft == false
+    if: always() && !inputs.spark_only && github.event.pull_request.draft == false
     name: e2e-status
     runs-on: ubuntu-latest
     needs: [detect-changes, e2e-tests-local]
