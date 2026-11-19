@@ -382,6 +382,10 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         assertTrue(MoveToSparkMath.mayHoldTheMoveHtlc(held), "a peer-funded channel with capacity left")
         assertTrue(MoveToSparkMath.mayHoldTheMoveHtlc(held.copy(isOutbound = true, feerateSatPer1000Weight = 2_500u)))
         assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(legacy), "a legacy reserve gap")
+        // A legacy channel at 253 sat/kW reserves 540 sats above dust: 1 400 of capacity sends 860.
+        val small = legacy.copy(outboundCapacityMsat = 1_400_000uL, feerateSatPer1000Weight = 253u)
+        assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(small.copy(nextOutboundHtlcLimitMsat = 860_000uL)))
+        assertTrue(MoveToSparkMath.mayHoldTheMoveHtlc(small.copy(nextOutboundHtlcLimitMsat = 947_000uL)))
         assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(held.copy(outboundCapacityMsat = 999_000uL)))
     }
 

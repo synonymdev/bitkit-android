@@ -347,6 +347,8 @@ object MoveToSparkMath {
     private const val ANCHOR_COMMITMENT_WEIGHT = 1_124L
     private const val LEGACY_COMMITMENT_WEIGHT = 724L
     private const val HTLC_OUTPUT_WEIGHT = 172L
+    private const val HTLC_TIMEOUT_WEIGHT = 663L
+    private const val DUST_LIMIT_SATS = 354L
 
     /** The fee guessed for the first quote of a full move, as a share of the amount in parts per million. */
     private const val FIRST_FEE_GUESS_PPM = 5_000uL
@@ -433,21 +435,38 @@ object MoveToSparkMath {
     /**
      * Whether a channel's send limit may still be held under the minimum by the move's settled HTLC counting against
      * the peer's in-flight cap, which clears, rather than by what stays. ldk-node exposes neither the HTLCs nor the
-     * channel type, so it is ruled out only when the capacity itself is under the minimum, or when the gap between
-     * capacity and limit is exactly the commitment fee LDK keeps back for a channel we funded: an anchor commitment
-     * with two HTLCs, or a legacy one with one HTLC at twice the feerate, within a sat of rounding.
+     * channel type, so it is ruled out only when the capacity itself is under the minimum, or when the limit read is,
+     * within a sat, the one LDK leaves on a channel we funded once its HTLCs clear, for an anchor or a legacy
+     * commitment.
      */
     fun mayHoldTheMoveHtlc(channel: ChannelDetails): Boolean {
-        val capacitySats = msatFloorOf(channel.outboundCapacityMsat).toLong()
-        if (capacitySats < MIN_MOVE_SATS.toLong()) return false
+        if (msatFloorOf(channel.outboundCapacityMsat) < MIN_MOVE_SATS) return false
         if (!channel.isOutbound) return true
-        val gapSats = capacitySats - msatFloorOf(channel.nextOutboundHtlcLimitMsat).toLong()
-        val feerate = channel.feerateSatPer1000Weight.toLong()
-        val reserves = listOf(
-            feerate * (ANCHOR_COMMITMENT_WEIGHT + 2 * HTLC_OUTPUT_WEIGHT) / 1000,
-            2 * feerate * (LEGACY_COMMITMENT_WEIGHT + HTLC_OUTPUT_WEIGHT) / 1000,
-        )
-        return reserves.none { abs(gapSats - it) <= 1 }
+        val limitSats = msatFloorOf(channel.nextOutboundHtlcLimitMsat).toLong()
+        return listOf(false, true).none { isLegacy ->
+            val predictedSats = clearedLimitMsat(
+                capacityMsat = channel.outboundCapacityMsat.toLong(),
+                feerate = channel.feerateSatPer1000Weight.toLong(),
+                isLegacy = isLegacy,
+            ) / 1000
+            abs(limitSats - predictedSats) <= 1
+        }
+    }
+
+    /**
+     * The send limit LDK 0.2 leaves on a channel we funded with no HTLCs pending (`get_available_balances_for_scope`):
+     * capacity less the commitment fee for an above-dust HTLC and its fee spike buffer HTLC, doubled for a legacy
+     * commitment; under the dust limit it reserves one HTLC less and stays under the limit. The dust limit is LDK's
+     * default 354 sats, plus the HTLC timeout transaction's fee on a legacy commitment.
+     */
+    fun clearedLimitMsat(capacityMsat: Long, feerate: Long, isLegacy: Boolean): Long {
+        val baseWeight = if (isLegacy) LEGACY_COMMITMENT_WEIGHT else ANCHOR_COMMITMENT_WEIGHT
+        val multiplier = if (isLegacy) 2 else 1
+        fun feeMsat(htlcs: Long) = feerate * (baseWeight + htlcs * HTLC_OUTPUT_WEIGHT) / 1000 * 1000 * multiplier
+        val dustMsat = ((if (isLegacy) feerate * HTLC_TIMEOUT_WEIGHT / 1000 else 0L) + DUST_LIMIT_SATS) * 1000
+        val aboveDust = capacityMsat - feeMsat(2)
+        if (aboveDust >= dustMsat) return aboveDust
+        return maxOf(0L, minOf(capacityMsat - feeMsat(1), dustMsat - 1, capacityMsat))
     }
 
     /**
