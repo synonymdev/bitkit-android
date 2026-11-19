@@ -166,6 +166,16 @@ class CacheStore internal constructor(
         }
     }
 
+    /** Keeps [paymentId] as the payment that last wrote the Activity row of Spark's send of [paymentHash]. */
+    suspend fun keepSparkSendRowId(paymentHash: String, paymentId: String) {
+        val hash = paymentHash.lowercase()
+        if (store.data.first().sparkSendRowIds[hash] == paymentId) return
+        store.updateData {
+            val ids = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
+            it.copy(sparkSendRowIds = ids.associate { (key, id) -> key to id })
+        }
+    }
+
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendHashes) return
@@ -448,6 +458,11 @@ data class AppCacheData(
     val sparkTakenSendIds: Map<String, String> = mapOf(),
     /** A random id of the attempt each of those sends' entries belongs to, so a stale attempt never writes over it. */
     val sparkUncertainSendAttemptIds: Map<String, String> = mapOf(),
+    /**
+     * Spark's id of the payment that last wrote each Spark send's Activity row, the latest [MAX_SPARK_SEND_HASHES], so
+     * an earlier attempt's failure dated the same second as the row never writes over it.
+     */
+    val sparkSendRowIds: Map<String, String> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.

@@ -4120,6 +4120,7 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a failed spark send row takes its own attempt's fee correction`() = test {
+        cacheData.value = cacheData.value.copy(sparkSendRowIds = mapOf("hash" to "retry"))
         val corrected = sentPayment(fees = 3).copy(id = "retry", status = PaymentStatus.FAILED)
         assertEquals(128uL to 3uL, failedRowAfterListing(corrected).let { it.v1.value to it.v1.fee })
     }
@@ -4129,6 +4130,14 @@ class SparkRepoTest : BaseUnitTest() {
         val later = sentPayment(fees = 0)
             .copy(id = "later", status = PaymentStatus.FAILED, amount = 200.toBigInteger(), timestamp = 9uL)
         assertEquals(200uL, failedRowAfterListing(later).v1.value)
+    }
+
+    @Test
+    fun `a failed spark send row keeps its amount against an earlier attempt's failure from the same second`() = test {
+        // The retry started in the same second as the earlier attempt, and its failure last wrote the row.
+        cacheData.value = cacheData.value.copy(sparkSendRowIds = mapOf("hash" to "retry"))
+        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, amount = 999.toBigInteger())
+        assertEquals(128uL to 0uL, failedRowAfterListing(older).let { it.v1.value to it.v1.fee })
     }
 
     /** The row of a send that failed, after a launch lists [payment] of its invoice. */

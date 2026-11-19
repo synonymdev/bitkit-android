@@ -2083,6 +2083,11 @@ class SparkRepo @Inject constructor(
             .forEach { cacheStore.removeSparkSendHash(it) }
     }
 
+    /** Whether Spark dates this payment before the [row] of [paymentHash], or ties it as another payment. */
+    private suspend fun Payment.isEarlierThan(row: LightningActivity, paymentHash: String): Boolean =
+        timestamp < row.timestamp || timestamp == row.timestamp &&
+            cacheStore.data.first().sparkSendRowIds[paymentHash.lowercase()]?.let { it != id } == true
+
     private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
 
     /** Whether this failure is an earlier attempt's, of a retry in doubt or one sent after [records] was read. */
@@ -2253,9 +2258,11 @@ class SparkRepo @Inject constructor(
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
         // A failed send keeps its own attempt's amount, fee and time against an earlier attempt's failure, listed again
         // on a later launch once nothing holds the invoice; Spark dates an attempt at its start, so a failure dated
-        // before the row is that earlier attempt's, while the row's own or a later attempt's failure still writes it.
+        // before the row, or the same second by another payment than the one that wrote it, is that earlier attempt's,
+        // while the row's own or a later attempt's failure, and the held attempt's own, still write it.
         if (existing?.status == PaymentState.FAILED && existing.txType == PaymentType.SENT &&
-            payment.status == PaymentStatus.FAILED && payment.timestamp < existing.timestamp
+            payment.status == PaymentStatus.FAILED && payment.id != heldAttempt(id)?.ownId &&
+            payment.isEarlierThan(existing, id)
         ) {
             return true
         }
@@ -2290,6 +2297,7 @@ class SparkRepo @Inject constructor(
             return false
         }
         unsavedPayments.remove(payment.id)
+        if (payment.paymentType == SparkPaymentType.SEND) cacheStore.keepSparkSendRowId(id, payment.id)
         if (payment.paymentType == SparkPaymentType.SEND && payment.fees.toLong() == 0L) {
             sendsRecordedWithoutFee.add(payment.id)
         } else {
