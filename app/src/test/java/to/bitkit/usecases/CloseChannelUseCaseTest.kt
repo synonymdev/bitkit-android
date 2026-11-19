@@ -184,14 +184,20 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a move's close takes a channel whose limit stays under the minimum through the wait`() = test {
-        val reserved = channel("channel_1", 0uL).copy(outboundCapacityMsat = 5_002_000uL)
-        lightningState.value = LightningState(channels = persistentListOf(reserved))
+    fun `a move's close takes a channel whose limit sits at its reserve and leaves one that stays held`() = test {
+        val reserved = channel("channel_1", 862uL).copy(
+            outboundCapacityMsat = 5_342_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 2_500u,
+        )
+        val held = channel("channel_2", 0uL).copy(outboundCapacityMsat = 5_002_000uL)
+        lightningState.value = LightningState(channels = persistentListOf(reserved, held))
 
-        sut.closeEmptiedByMove(listOf(channel), emptyList())
+        sut.closeEmptiedByMove(listOf(channel, channel("channel_2", 50_000uL)), emptyList())
 
         verify(lightningRepo, times(16)).syncState()
         verify(lightningRepo).closeChannel(eq(reserved), any(), anyOrNull())
+        verify(lightningRepo, never()).closeChannel(eq(held), any(), anyOrNull())
     }
 
     @Test

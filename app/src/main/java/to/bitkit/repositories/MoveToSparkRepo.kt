@@ -38,6 +38,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -343,6 +344,9 @@ class MoveToSparkRepo internal constructor(
 object MoveToSparkMath {
     /** Below this a move is not offered: what is left is about the routing fee. */
     const val MIN_MOVE_SATS = 1_000uL
+    private const val ANCHOR_COMMITMENT_WEIGHT = 1_124L
+    private const val LEGACY_COMMITMENT_WEIGHT = 724L
+    private const val HTLC_OUTPUT_WEIGHT = 172L
 
     /** The fee guessed for the first quote of a full move, as a share of the amount in parts per million. */
     private const val FIRST_FEE_GUESS_PPM = 5_000uL
@@ -427,13 +431,24 @@ object MoveToSparkMath {
     }
 
     /**
-     * Whether an emptied channel still holds the move minimum in outbound capacity. Its send limit is then under the
-     * minimum for one of two reasons ldk-node does not tell apart: the commitment fee its funder keeps back, which
-     * stays, or the move's settled HTLC still counting against the peer's in-flight cap, which clears. Such a channel
-     * is read again before it closes.
+     * Whether a channel's send limit may still be held under the minimum by the move's settled HTLC counting against
+     * the peer's in-flight cap, which clears, rather than by what stays. ldk-node exposes neither the HTLCs nor the
+     * channel type, so it is ruled out only when the capacity itself is under the minimum, or when the gap between
+     * capacity and limit is exactly the commitment fee LDK keeps back for a channel we funded: an anchor commitment
+     * with two HTLCs, or a legacy one with one HTLC at twice the feerate, within a sat of rounding.
      */
-    fun mayHoldTheMoveHtlc(emptied: List<ChannelDetails>): Boolean =
-        emptied.any { msatFloorOf(it.outboundCapacityMsat) >= MIN_MOVE_SATS }
+    fun mayHoldTheMoveHtlc(channel: ChannelDetails): Boolean {
+        val capacitySats = msatFloorOf(channel.outboundCapacityMsat).toLong()
+        if (capacitySats < MIN_MOVE_SATS.toLong()) return false
+        if (!channel.isOutbound) return true
+        val gapSats = capacitySats - msatFloorOf(channel.nextOutboundHtlcLimitMsat).toLong()
+        val feerate = channel.feerateSatPer1000Weight.toLong()
+        val reserves = listOf(
+            feerate * (ANCHOR_COMMITMENT_WEIGHT + 2 * HTLC_OUTPUT_WEIGHT) / 1000,
+            2 * feerate * (LEGACY_COMMITMENT_WEIGHT + HTLC_OUTPUT_WEIGHT) / 1000,
+        )
+        return reserves.none { abs(gapSats - it) <= 1 }
+    }
 
     /**
      * The payments read before and after a read of the channels, or null when a read failed or an outbound Lightning

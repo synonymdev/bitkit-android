@@ -368,15 +368,21 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an emptied channel that still holds the minimum in capacity may hold the move's htlc`() {
-        val before = listOf(channel("held", 50_000uL))
+    fun `a channel with capacity left may hold the move's htlc unless its gap is the commitment fee`() {
         val held = channel("held", 0uL).copy(outboundCapacityMsat = 5_002_000uL)
+        // 2 500 sat/kW: a legacy commitment keeps back 4 480 sats, so 5 342 sats of capacity send only 862.
+        val legacy = channel("legacy", 862uL).copy(
+            outboundCapacityMsat = 5_342_000uL,
+            isOutbound = true,
+            feerateSatPer1000Weight = 2_500u,
+        )
 
-        val emptied = MoveToSparkMath.emptiedChannels(before, listOf(held))
-
+        val emptied = MoveToSparkMath.emptiedChannels(listOf(channel("held", 50_000uL)), listOf(held))
         assertEquals(listOf("held"), emptied.map { it.channelId })
-        assertTrue(MoveToSparkMath.mayHoldTheMoveHtlc(emptied))
-        assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(listOf(held.copy(outboundCapacityMsat = 999_000uL))))
+        assertTrue(MoveToSparkMath.mayHoldTheMoveHtlc(held), "a peer-funded channel with capacity left")
+        assertTrue(MoveToSparkMath.mayHoldTheMoveHtlc(held.copy(isOutbound = true, feerateSatPer1000Weight = 2_500u)))
+        assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(legacy), "a legacy reserve gap")
+        assertFalse(MoveToSparkMath.mayHoldTheMoveHtlc(held.copy(outboundCapacityMsat = 999_000uL)))
     }
 
     @Test
