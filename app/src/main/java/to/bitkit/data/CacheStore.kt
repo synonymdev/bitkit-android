@@ -168,19 +168,42 @@ class CacheStore internal constructor(
 
     /**
      * Keeps [paymentId] as the payment that last wrote the Activity row of Spark's send of [paymentHash], with the
-     * [stamp] of the row it wrote, in one write, so a row written over without its writer is told apart.
+     * [stamp] of the row it wrote, in one write, so a row written over without its writer is told apart. A writer
+     * kept [beforeRow] keeps the previous one beside it until [commitSparkSendRowId], so a stop before the row is
+     * written leaves the row to the writer whose stamp it still matches.
      */
-    suspend fun keepSparkSendRowId(paymentHash: String, paymentId: String, stamp: String? = null) {
+    suspend fun keepSparkSendRowId(
+        paymentHash: String,
+        paymentId: String,
+        stamp: String? = null,
+        beforeRow: Boolean = false,
+    ) {
         val hash = paymentHash.lowercase()
         val data = store.data.first()
-        if (data.sparkSendRowIds[hash] == paymentId && data.sparkSendRowStamps[hash] == stamp) return
+        val isKept = data.sparkSendRowIds[hash] == paymentId && data.sparkSendRowStamps[hash] == stamp
+        if (isKept && !beforeRow && hash !in data.sparkSendPreviousRowWriters) return
         store.updateData {
             val ids = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
             val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }
                 ?: (it.sparkSendRowStamps - hash)
+            val writer = it.sparkSendRowIds[hash]?.takeIf { beforeRow }
+                ?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
+            val previous = writer?.let { value -> it.sparkSendPreviousRowWriters + (hash to value) }
+                ?: (it.sparkSendPreviousRowWriters - hash)
             val kept = ids.associate { (key, id) -> key to id }
-            it.copy(sparkSendRowIds = kept, sparkSendRowStamps = stamps.filterKeys { key -> key in kept })
+            it.copy(
+                sparkSendRowIds = kept,
+                sparkSendRowStamps = stamps.filterKeys { key -> key in kept },
+                sparkSendPreviousRowWriters = previous.filterKeys { key -> key in kept },
+            )
         }
+    }
+
+    /** Ends the doubt over the writer of Spark's send row of [paymentHash], kept before its row, once it is saved. */
+    suspend fun commitSparkSendRowId(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash !in store.data.first().sparkSendPreviousRowWriters) return
+        store.updateData { it.copy(sparkSendPreviousRowWriters = it.sparkSendPreviousRowWriters - hash) }
     }
 
     /**
@@ -201,7 +224,11 @@ class CacheStore internal constructor(
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendRowIds) return
         store.updateData {
-            it.copy(sparkSendRowIds = it.sparkSendRowIds - hash, sparkSendRowStamps = it.sparkSendRowStamps - hash)
+            it.copy(
+                sparkSendRowIds = it.sparkSendRowIds - hash,
+                sparkSendRowStamps = it.sparkSendRowStamps - hash,
+                sparkSendPreviousRowWriters = it.sparkSendPreviousRowWriters - hash,
+            )
         }
     }
 
@@ -494,6 +521,11 @@ data class AppCacheData(
     val sparkSendRowIds: Map<String, String> = mapOf(),
     /** The time, amount and fee of each of those rows as its writer wrote it, so a row written over is told apart. */
     val sparkSendRowStamps: Map<String, String> = mapOf(),
+    /**
+     * The writer, and its row's stamp, each of those rows had before a new writer was kept ahead of its row write, so
+     * a stop before the row was written leaves the row to the writer whose stamp it still matches.
+     */
+    val sparkSendPreviousRowWriters: Map<String, List<String>> = mapOf(),
     /**
      * Spark's payment ids of each Spark send's earlier attempts, kept past its hold for the latest
      * [MAX_SPARK_SEND_HASHES], so a failure of one never writes over a later attempt's Activity row after a restart.

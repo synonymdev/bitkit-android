@@ -4333,6 +4333,41 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an earlier payment's row takes its final fee after a stop cut a retry's row write short`() = test {
+        var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 7uL))
+        val olderStamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}" }
+        // The retry's writer was kept ahead of its row, and the app stopped before the row was written.
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendRowIds = mapOf("hash" to "retry"),
+                    sparkSendRowStamps = mapOf("hash" to "9:128:0"),
+                    sparkSendPreviousRowWriters = mapOf("hash" to listOf("older", olderStamp)),
+                    sparkSendEarlierIds = mapOf("hash" to listOf("older")),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
+        val final = sentPayment(fees = 9)
+            .copy(id = "older", status = PaymentStatus.FAILED, timestamp = row.v1.timestamp)
+        whenever(sparkService.listPayments()).thenReturn(listOf(final))
+
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(9uL, row.v1.fee, "the earlier payment's final fee was dropped")
+        assertTrue("hash" !in store.data.first().sparkSendPreviousRowWriters, "the row's writer stayed in doubt")
+    }
+
+    @Test
     fun `a failed spark send row takes its own attempt's fee correction`() = test {
         cacheData.value = cacheData.value.copy(sparkSendRowIds = mapOf("hash" to "retry"))
         val corrected = sentPayment(fees = 3).copy(id = "retry", status = PaymentStatus.FAILED)

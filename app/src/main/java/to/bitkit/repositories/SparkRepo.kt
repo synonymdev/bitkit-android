@@ -48,6 +48,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.async.appScope
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.SparkPayoutChain
@@ -842,9 +843,9 @@ class SparkRepo @Inject constructor(
         // too, as this attempt's own read of them can have failed.
         val cache = cacheStore.data.first()
         val hash = paymentHash.lowercase()
-        val rowId = cache.sparkSendRowIds[hash]
+        val rowId = cache.sendRowWriter(hash, send)
         val earlierIds = attempt.earlierIds.orEmpty() + cache.sparkSendEarlierIds[hash].orEmpty()
-        val isWrittenOver = cache.sparkSendRowStamps[hash] != send.sendRowStamp()
+        val isWrittenOver = !cache.isRowStampKept(hash, send)
         when {
             attempt.ownId != null -> cacheStore.keepSparkSendRowId(paymentHash, attempt.ownId, send.sendRowStamp())
             rowId != null && rowId in earlierIds && isWrittenOver -> cacheStore.removeSparkSendRowId(paymentHash)
@@ -2154,7 +2155,7 @@ class SparkRepo @Inject constructor(
         val cache = cacheStore.data.first()
         val hash = paymentHash.lowercase()
         val earlierIds = heldAttempt(paymentHash)?.earlierIds.orEmpty() + cache.sparkSendEarlierIds[hash].orEmpty()
-        val rowId = cache.sparkSendRowIds[hash]
+        val rowId = cache.sendRowWriter(hash, row)
         // Spark's dates can put an earlier attempt's failure after the retry's row, while a retry Spark refused leaves
         // the row, and its fee corrections, to that attempt.
         if (id in earlierIds && rowId != id) return true
@@ -2164,6 +2165,21 @@ class SparkRepo @Inject constructor(
     }
 
     private fun LightningActivity.sendRowStamp() = "$timestamp:$value:$fee"
+
+    /**
+     * The payment that wrote [row] of [hash]: the kept writer, unless a stop cut its row write short, when the row
+     * still matches the stamp of the writer it had before.
+     */
+    private fun AppCacheData.sendRowWriter(hash: String, row: LightningActivity): String? {
+        val stamp = row.sendRowStamp()
+        val previous = sparkSendPreviousRowWriters[hash]?.takeIf { it.getOrNull(1) == stamp }
+        return if (sparkSendRowStamps[hash] != stamp && previous != null) previous.first() else sparkSendRowIds[hash]
+    }
+
+    private fun AppCacheData.isRowStampKept(hash: String, row: LightningActivity): Boolean {
+        val stamp = row.sendRowStamp()
+        return sparkSendRowStamps[hash] == stamp || sparkSendPreviousRowWriters[hash]?.getOrNull(1) == stamp
+    }
 
     /**
      * Writes [activity], the row of [payment], unless a retry recorded after [records] outran it, then null. A send
@@ -2176,9 +2192,10 @@ class SparkRepo @Inject constructor(
             val hash = activity.id.lowercase()
             val isSend = payment.paymentType == SparkPaymentType.SEND
             val previous = cacheStore.data.first().let { it.sparkSendRowIds[hash] to it.sparkSendRowStamps[hash] }
-            if (isSend) cacheStore.keepSparkSendRowId(hash, payment.id, activity.sendRowStamp())
+            if (isSend) cacheStore.keepSparkSendRowId(hash, payment.id, activity.sendRowStamp(), beforeRow = true)
             val isSaved = activityRepo.get().upsertActivity(Activity.Lightning(activity))
                 .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+            if (isSend && isSaved) cacheStore.commitSparkSendRowId(hash)
             if (isSend && !isSaved) {
                 val (previousId, previousStamp) = previous
                 previousId?.let { cacheStore.keepSparkSendRowId(hash, it, previousStamp) }

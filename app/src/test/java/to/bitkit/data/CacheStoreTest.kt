@@ -262,6 +262,17 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keepSparkSendRowId before a row keeps the previous writer until it is committed`() = test {
+        sut.keepSparkSendRowId("hash", "older", "1:2:3")
+        sut.keepSparkSendRowId("hash", "retry", "4:5:6", beforeRow = true)
+        assertEquals(listOf("older", "1:2:3"), sut.data.first().sparkSendPreviousRowWriters["hash"])
+
+        sut.commitSparkSendRowId("HASH")
+        assertFalse("hash" in sut.data.first().sparkSendPreviousRowWriters)
+        assertEquals("retry", sut.data.first().sparkSendRowIds["hash"])
+    }
+
+    @Test
     fun `keepSparkSendRowId keeps the latest row writers up to the limit`() = test {
         (0..MAX_SPARK_SEND_HASHES).forEach { sut.keepSparkSendRowId("hash$it", "id$it") }
         sut.keepSparkSendRowId("HASH1", "newer")

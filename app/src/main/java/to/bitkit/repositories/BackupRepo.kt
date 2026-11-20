@@ -1346,6 +1346,7 @@ class BackupRepo @Inject constructor(
             sparkUncertainSendAttemptIds = emptyMap(),
             sparkSendRowIds = emptyMap(),
             sparkSendRowStamps = emptyMap(),
+            sparkSendPreviousRowWriters = emptyMap(),
             sparkSendEarlierIds = emptyMap(),
         )
         Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)
