@@ -2276,10 +2276,12 @@ class SparkRepo @Inject constructor(
         attempt.ownId?.let { return id != it }
         attempt.earlierIds?.let { ids ->
             if (id in ids) return true
-            // Only a send in doubt has no id of its own, and the list read before it went out can lack an older
-            // attempt, so a failure that list doesn't name is earlier when Spark dates it clearly before the send.
+            // Only a send in doubt or still in Spark's send call has no id of its own, and the list read before it went
+            // out can lack an older attempt, so a failure that list doesn't name is earlier when Spark dates it clearly
+            // before the send.
+            val key = hash.lowercase()
             val sentAt = attempt.sentAt
-            return sentAt != null && uncertainSends.containsKey(hash.lowercase()) &&
+            return sentAt != null && (uncertainSends.containsKey(key) || inFlightAttempts.containsKey(key)) &&
                 timestamp + RAIL_CLOCK_SKEW_SECONDS <= sentAt
         }
         // A send kept before start times were stored can't tell its own failure from an earlier one, so it stays held

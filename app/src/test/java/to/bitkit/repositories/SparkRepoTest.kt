@@ -5488,6 +5488,40 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an older failure the pre-send list left out keeps a retry held while its send call runs`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        var listed = emptyList<Payment>()
+        whenever(sparkService.listPayments()).thenAnswer { listed }
+        // An older attempt Spark didn't list before the retry went out fails while the retry's call runs, which then
+        // times out.
+        val older = sentPayment(fees = 0)
+            .copy(id = "older", status = PaymentStatus.FAILED, timestamp = (now - 1.minutes).epochSeconds.toULong())
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            listed = listOf(older)
+            sparkEvents.emit(SdkEvent.PaymentFailed(older))
+            delay(1)
+            throw SdkException.Generic("timeout")
+        }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+
+        val result = sut.payInvoice("lnbc1", 100uL)
+        runCurrent()
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull(), "the older failure ended the retry's call")
+        assertTrue(events.none { it is Event.PaymentFailed }, "the older failure ended a retry Spark may finish")
+        assertTrue("hash" in store.data.first().sparkUncertainSends, "the older failure dropped the retry's hold")
+    }
+
+    @Test
     fun `a spark send whose success was handled before its call failed returns it and keeps no hold`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)
