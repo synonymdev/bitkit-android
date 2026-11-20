@@ -4442,6 +4442,41 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an older attempt a pre-send read left out never takes a later attempt's row by its kept order`() = test {
+        var row = Activity.Lightning(
+            pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 2uL, timestamp = 1_000uL),
+        )
+        val stamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }
+        // A read left the first attempt out, so it was kept after the second, which wrote the row.
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendRowIds = mapOf("hash" to "second"),
+                    sparkSendRowStamps = mapOf("hash" to stamp),
+                    sparkSendEarlierIds = mapOf("hash" to listOf("second", "first")),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
+        val first = sentPayment(fees = 1)
+            .copy(id = "first", status = PaymentStatus.FAILED, timestamp = row.v1.timestamp - 100uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(first))
+
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(2uL, row.v1.fee, "the older first attempt took the second one's row")
+    }
+
+    @Test
     fun `a later attempt's same-second failure keeps the row from an earlier one when a third send read both`() =
         test {
             var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 1uL))
