@@ -28,7 +28,9 @@ import to.bitkit.ext.bluetoothManager
 import to.bitkit.nearby.NearbyAdvertiser
 import to.bitkit.nearby.NearbyScanner
 import to.bitkit.nfc.nfcPaymentUri
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.LocalIsAppLocked
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.settingsViewModel
 
 /**
@@ -186,16 +188,30 @@ private fun startAdvertiser(advertiser: NearbyAdvertiser, uri: String) = adverti
 private fun stopAdvertiser(advertiser: NearbyAdvertiser) = advertiser.stop()
 
 /**
- * Offers the Receive request to nearby payers while the calling screen is resumed and the app is
- * unlocked: over NFC when the device can emulate a tag, and over Bluetooth when it is on and the
+ * Whether nearby payments pause: while the PIN screen covers the app, or while the connection issues screen
+ * covers the payment sheets, so nothing is offered or read that the user cannot see.
+ */
+@Composable
+fun isNearbyPaused(): Boolean {
+    val isLocked = LocalIsAppLocked.current
+    val connectivity = appViewModel?.isOnline?.collectAsStateWithLifecycle()?.value ?: ConnectivityState.CONNECTED
+    return isLocked || connectivity != ConnectivityState.CONNECTED
+}
+
+/** The URI offered to nearby payers for [request], or null while nearby payments are paused. */
+internal fun nearbyOfferUri(request: String?, isPaused: Boolean): String? =
+    nfcPaymentUri(request)?.takeUnless { isPaused }
+
+/**
+ * Offers the Receive request to nearby payers while the calling screen is resumed and nearby payments
+ * are not paused: over NFC when the device can emulate a tag, and over Bluetooth when it is on and the
  * nearby setting allows it. Returns whether either is active, which is when Receive says it can be tapped.
  * NFC stops counting as active once its tag service fails to register, and Bluetooth once its advertising
  * fails to start.
  */
 @Composable
 fun offerPaymentNearby(request: String?): Boolean {
-    val isLocked = LocalIsAppLocked.current
-    val uri = nfcPaymentUri(request)?.takeUnless { isLocked }
+    val uri = nearbyOfferUri(request, isPaused = isNearbyPaused())
     val canEmitNfc = rememberCanEmitNfc()
     // A failed registration is retried when the request or the NFC state changes.
     var emitFailed by remember(uri, canEmitNfc) { mutableStateOf(false) }

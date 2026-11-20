@@ -37,7 +37,6 @@ import to.bitkit.R
 import to.bitkit.ext.findActivity
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
-import to.bitkit.ui.LocalIsAppLocked
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.SecondaryButton
@@ -47,6 +46,7 @@ import to.bitkit.ui.shared.effects.NearbyRole
 import to.bitkit.ui.shared.effects.NearbyScanEffect
 import to.bitkit.ui.shared.effects.NfcReaderEffect
 import to.bitkit.ui.shared.effects.NfcState
+import to.bitkit.ui.shared.effects.isNearbyPaused
 import to.bitkit.ui.shared.effects.nearbyPermissions
 import to.bitkit.ui.shared.effects.openNfcSettings
 import to.bitkit.ui.shared.effects.rememberBluetoothState
@@ -76,8 +76,8 @@ data class NearbyScanSources(
 }
 
 /**
- * Listens for payment requests over NFC and Bluetooth while the scanner is resumed and the app is
- * unlocked. [onRead] receives the request and whether it came over Bluetooth.
+ * Listens for payment requests over NFC and Bluetooth while the scanner is resumed and nearby payments
+ * are not paused. [onRead] receives the request and whether it came over Bluetooth.
  */
 @Composable
 fun rememberNearbyScanSources(
@@ -88,7 +88,7 @@ fun rememberNearbyScanSources(
     val context = LocalContext.current
     val resources = LocalResources.current
     val app = appViewModel
-    val isLocked = LocalIsAppLocked.current
+    val isPaused = isNearbyPaused()
     var refreshKey by remember { mutableIntStateOf(0) }
     val nfcState = rememberNfcState()
     val bluetoothState = rememberBluetoothState(NearbyRole.SCAN, refreshKey)
@@ -101,7 +101,7 @@ fun rememberNearbyScanSources(
         ActivityResultContracts.StartActivityForResult()
     ) { refreshKey++ }
 
-    if (nfcState == NfcState.ON && !isLocked) {
+    if (nfcState == NfcState.ON && !isPaused) {
         NfcReaderEffect(
             onRead = { onRead(it, false) },
             onUnreadable = {
@@ -113,7 +113,7 @@ fun rememberNearbyScanSources(
             },
         )
     }
-    NearbyScanEffect(enabled = bluetoothState == BluetoothState.ON && !isLocked, onRead = { onRead(it, true) })
+    NearbyScanEffect(enabled = bluetoothState == BluetoothState.ON && !isPaused, onRead = { onRead(it, true) })
 
     return NearbyScanSources(
         nfcState = nfcState,
