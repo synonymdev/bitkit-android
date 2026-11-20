@@ -202,6 +202,24 @@ class CacheStore internal constructor(
         }
     }
 
+    /**
+     * Puts back the writer of Spark's send row of [paymentHash] as it was before a row write that failed: its [id],
+     * [stamp] and the [previous] writer a stop left beside it, each dropped when null.
+     */
+    suspend fun restoreSparkSendRowWriter(paymentHash: String, id: String?, stamp: String?, previous: List<String>?) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            val ids = id?.let { value -> it.sparkSendRowIds + (hash to value) } ?: (it.sparkSendRowIds - hash)
+            val stamps = stamp?.takeIf { id != null }
+                ?.let { value -> it.sparkSendRowStamps + (hash to value) }
+                ?: (it.sparkSendRowStamps - hash)
+            val writers = previous?.takeIf { id != null }
+                ?.let { value -> it.sparkSendPreviousRowWriters + (hash to value) }
+                ?: (it.sparkSendPreviousRowWriters - hash)
+            it.copy(sparkSendRowIds = ids, sparkSendRowStamps = stamps, sparkSendPreviousRowWriters = writers)
+        }
+    }
+
     /** Ends the doubt over the writer of Spark's send row of [paymentHash], kept before its row, once it is saved. */
     suspend fun commitSparkSendRowId(paymentHash: String) {
         val hash = paymentHash.lowercase()

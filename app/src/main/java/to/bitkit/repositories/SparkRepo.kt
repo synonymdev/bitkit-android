@@ -2198,17 +2198,21 @@ class SparkRepo @Inject constructor(
             if (payment.isOutrunByRetry(records)) return@withLock null
             val hash = activity.id.lowercase()
             val isSend = payment.paymentType == SparkPaymentType.SEND
-            val previous = cacheStore.data.first().let { it.sparkSendRowIds[hash] to it.sparkSendRowStamps[hash] }
+            val before = cacheStore.data.first()
             if (isSend) {
                 cacheStore.keepSparkSendRowId(hash, payment.id, activity.sendRowStamp(), beforeRow = true, rowStamp)
             }
             val isSaved = activityRepo.get().upsertActivity(Activity.Lightning(activity))
                 .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
             if (isSend && isSaved) cacheStore.commitSparkSendRowId(hash)
+            // Both writers a stop left are put back, so the row's own writer still takes its correction later.
             if (isSend && !isSaved) {
-                val (previousId, previousStamp) = previous
-                previousId?.let { cacheStore.keepSparkSendRowId(hash, it, previousStamp) }
-                    ?: cacheStore.removeSparkSendRowId(hash)
+                cacheStore.restoreSparkSendRowWriter(
+                    hash,
+                    before.sparkSendRowIds[hash],
+                    before.sparkSendRowStamps[hash],
+                    before.sparkSendPreviousRowWriters[hash],
+                )
             }
             isSaved
         }
