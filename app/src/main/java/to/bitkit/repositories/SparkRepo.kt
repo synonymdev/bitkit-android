@@ -572,54 +572,57 @@ class SparkRepo @Inject constructor(
             if (sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) != null) {
                 throw PaymentPendingException(paymentHash)
             }
-            val sent = try {
-                sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
-                cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
-                spending {
-                    // Kept until the call returns, so a send cut off by process death or cancellation stays held.
-                    cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
-                    // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
-                    // are checked last, before the send.
-                    runCatching {
-                        ensurePaymentDeadline(paymentDeadlineAt)
-                        ensureNotExiting()
-                    }.onFailure {
+            // Kept in flight until its result is handled, so a sync meanwhile never takes back its saved hold.
+            try {
+                val sent = run {
+                    sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
+                    cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
+                    spending {
+                        // Kept until the call returns, so a send cut off by process death or cancellation stays held.
+                        cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
+                        // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
+                        // are checked last, before the send.
+                        runCatching {
+                            ensurePaymentDeadline(paymentDeadlineAt)
+                            ensureNotExiting()
+                        }.onFailure {
+                            cacheStore.removeSparkUncertainSend(paymentHash)
+                            cacheStore.removeSparkSendHash(paymentHash)
+                            throw it
+                        }
+                        runSuspendCatching { sparkService.send(prepared) }
+                    }
+                }
+                val payment = sent.getOrElse {
+                    // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
+                    if (it.isInvoiceExpired()) {
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
-                        throw it
+                        throw SparkError.InvoiceExpired(it)
                     }
-                    runSuspendCatching { sparkService.send(prepared) }
+                    // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
+                    // nothing, for instance when an earlier send spent it after the balance was read.
+                    if (it is SdkException.InsufficientFunds) {
+                        cacheStore.removeSparkUncertainSend(paymentHash)
+                        cacheStore.removeSparkSendHash(paymentHash)
+                        throw SparkError.SendRefused("Spark balance can't cover the payment", it)
+                    }
+                    Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
+                    settleUncertainSend(paymentHash, expiresAt)
+                    throw PaymentPendingException(paymentHash)
                 }
+                // A send Spark took stays held until Spark settles it or its invoice expires, as Spark's list may not
+                // show it yet.
+                if (payment.status == PaymentStatus.PENDING) {
+                    settleUncertainSend(paymentHash, expiresAt)
+                } else {
+                    cacheStore.removeSparkUncertainSend(paymentHash)
+                }
+                Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
+                paymentHash
             } finally {
                 sendsInFlight.remove(paymentHash.lowercase())
             }
-            val payment = sent.getOrElse {
-                // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
-                if (it.isInvoiceExpired()) {
-                    cacheStore.removeSparkUncertainSend(paymentHash)
-                    cacheStore.removeSparkSendHash(paymentHash)
-                    throw SparkError.InvoiceExpired(it)
-                }
-                // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
-                // nothing, for instance when an earlier send spent it after the balance was read.
-                if (it is SdkException.InsufficientFunds) {
-                    cacheStore.removeSparkUncertainSend(paymentHash)
-                    cacheStore.removeSparkSendHash(paymentHash)
-                    throw SparkError.SendRefused("Spark balance can't cover the payment", it)
-                }
-                Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
-                settleUncertainSend(paymentHash, expiresAt)
-                throw PaymentPendingException(paymentHash)
-            }
-            // A send Spark took stays held until Spark settles it or its invoice expires, as Spark's list may not show
-            // it yet.
-            if (payment.status == PaymentStatus.PENDING) {
-                settleUncertainSend(paymentHash, expiresAt)
-            } else {
-                cacheStore.removeSparkUncertainSend(paymentHash)
-            }
-            Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
-            paymentHash
         }.onFailure {
             if (it is PaymentAbortedBeforeSend) {
                 Logger.debug("Aborted Spark invoice pay before send", context = TAG)

@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.datastore.core.DataStore
 import breez_sdk_spark.AutoOptimizationEvent
 import breez_sdk_spark.BitcoinAddressDetails
 import breez_sdk_spark.Bolt11InvoiceDetails
@@ -3904,6 +3905,43 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(activityRepo, never()).upsertActivity(argThat { this is Activity.Lightning && v1.fee == 7uL })
+    }
+
+    @Test
+    fun `a spark send refused for its balance stays in flight until its hold is cleared`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.InsufficientFunds(null) }
+        val backing = InMemoryDataStore(AppCacheData())
+        lateinit var sut: SparkRepo
+        val inFlightAtClear = mutableListOf<Boolean>()
+        // A sync's sweep skips a send in flight, so the saved hold must be cleared before the send leaves it.
+        val store = CacheStore(
+            object : DataStore<AppCacheData> {
+                override val data = backing.data
+
+                override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
+                    val wasHeld = "hash" in backing.data.first().sparkUncertainSends
+                    val updated = backing.updateData(transform)
+                    if (wasHeld && "hash" !in updated.sparkUncertainSends) {
+                        inFlightAtClear += sut.isSendInFlight("hash")
+                    }
+                    return updated
+                }
+            },
+            clock,
+        )
+        sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        assertTrue(inFlightAtClear.isNotEmpty() && inFlightAtClear.all { it }, "a sync could take back the hold")
+        assertFalse(sut.isSendInFlight("hash"))
+        assertNull(sut.earlierLightningSend("lnbc1", "hash"))
     }
 
     @Test
