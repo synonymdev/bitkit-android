@@ -719,9 +719,11 @@ class SparkRepo @Inject constructor(
                 cacheStore.removeSparkUncertainSend(paymentHash)
             }
             // A failure Spark reported during the call is this send's own once the call returns its payment, failed or
-            // still pending, so it settles now.
+            // still pending, so it settles now. A pending one is settled only while its attempt still holds it, taken
+            // off in one step, as the expiry sweep may have reported its outcome meanwhile.
             failures?.get(payment.id)
                 ?.takeIf { payment.status != PaymentStatus.COMPLETED }
+                ?.takeIf { payment.status == PaymentStatus.FAILED || releaseTakenAttempt(paymentHash, attemptId) }
                 ?.let { onPayment(it) }
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
             paymentHash
@@ -2375,6 +2377,13 @@ class SparkRepo @Inject constructor(
     }
 
     private suspend fun onPayment(payment: Payment) {
+        // A failure while a send call of its invoice runs waits for the call, which settles it once it returns that
+        // payment.
+        if (payment.keepFailureDuringCall()) {
+            payment.heldBackOutcome()
+            Logger.info("Kept Spark failure '${payment.id}' until its send call returns", context = TAG)
+            return
+        }
         // A retry of the invoice can start while this event is handled, so each step checks for one sent since now.
         val records = sendRecords.get()
         // The event carries its outcome, so a failed balance read never holds back its settlement.
@@ -2385,7 +2394,6 @@ class SparkRepo @Inject constructor(
         // trySettleUncertainSend.
         if (payment.isOutrunByRetry(records)) {
             payment.heldBackOutcome()
-            payment.keepFailureDuringCall()
             Logger.info("Kept uncertain Spark send '${payment.sendHash()}' held past an older failure", context = TAG)
             return
         }
@@ -2416,13 +2424,28 @@ class SparkRepo @Inject constructor(
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
-    /** Keeps a failure Spark reports while a send call of its invoice runs, kept with that call's attempt. */
-    private fun Payment.keepFailureDuringCall() {
-        val hash = sendHash(PaymentStatus.FAILED)?.lowercase() ?: return
+    /** Takes [attemptId]'s taken attempt of [paymentHash] off; false when another caller settled it. */
+    private fun releaseTakenAttempt(paymentHash: String, attemptId: String): Boolean {
+        val key = paymentHash.lowercase()
+        val attempt = takenAttempts[key]?.takeIf { it.attemptId == attemptId } ?: return false
+        return takenAttempts.remove(key, attempt)
+    }
+
+    /**
+     * Keeps a failure Spark reports while a send call of its invoice runs and isn't in doubt, with that call's attempt;
+     * checked and kept in one step with the call's end, so the call either finds it or the event goes on.
+     */
+    private fun Payment.keepFailureDuringCall(): Boolean {
+        val hash = sendHash(PaymentStatus.FAILED)?.lowercase() ?: return false
+        var isKept = false
         inFlightAttempts.computeIfPresent(hash) { _, attempt ->
-            attempt.attemptId?.let { failuresDuringCall.merge(it, mapOf(id to this)) { kept, new -> kept + new } }
+            attempt.attemptId?.takeUnless { uncertainSends.containsKey(hash) }?.let {
+                failuresDuringCall.merge(it, mapOf(id to this)) { kept, new -> kept + new }
+                isKept = true
+            }
             attempt
         }
+        return isKept
     }
 
     /**

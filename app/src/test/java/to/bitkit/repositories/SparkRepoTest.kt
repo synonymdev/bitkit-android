@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.datastore.core.DataStore
 import breez_sdk_spark.AutoOptimizationEvent
 import breez_sdk_spark.BitcoinAddressDetails
 import breez_sdk_spark.Bolt11InvoiceDetails
@@ -5059,6 +5060,61 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertNull(sut.earlierLightningSend("lnbc1", "hash"), "the failed send still held the invoice")
         assertTrue(store.data.first().sparkTakenSendIds.isEmpty(), "the failed send's attempt stayed journaled")
+    }
+
+    @Test
+    fun `a failure seen during a spark send call that the expiry sweep reports first is reported once`() = test {
+        val inner = InMemoryDataStore(AppCacheData())
+        val takenIdWritten = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        // The taken send's id write waits, so the expiry sweep runs while the send call hands its payment over.
+        val store = CacheStore(
+            object : DataStore<AppCacheData> {
+                override val data = inner.data
+
+                override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
+                    val before = inner.data.first()
+                    if ("hash" !in before.sparkTakenSendIds && "hash" in transform(before).sparkTakenSendIds) {
+                        takenIdWritten.complete(Unit)
+                        resume.await()
+                    }
+                    return inner.updateData(transform)
+                }
+            },
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        var listed = emptyList<Payment>()
+        whenever(sparkService.listPayments()).thenAnswer { listed }
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        val failed = taken.copy(status = PaymentStatus.FAILED, timestamp = now.epochSeconds.toULong())
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            listed = listOf(failed)
+            sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+            taken
+        }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        runCurrent()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+        val caller = backgroundScope.async { sut.payInvoice("lnbc1", 100uL) }
+        takenIdWritten.await()
+
+        // The invoice expires and Spark syncs, so the sweep reports the failure while the call still runs.
+        now += 2.hours
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+        resume.complete(Unit)
+        caller.await().getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(1, events.count { it is Event.PaymentFailed }, "the failure was reported twice")
     }
 
     @Test
