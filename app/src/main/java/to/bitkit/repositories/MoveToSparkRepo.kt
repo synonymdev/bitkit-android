@@ -247,10 +247,10 @@ class MoveToSparkRepo internal constructor(
 
             val invoice = sparkRepo.createInvoice(null, INVOICE_DESCRIPTION, INVOICE_EXPIRY_SECS).getOrThrow()
             val parts = mutableListOf<MoveToSparkQuote>()
-            var leftSats = limitSats
+            var leftSats = maxOf(limitSats, outboundMsat(usableOnly = true) / 1000uL)
             var wantedSats = limitSats
             while (parts.size < MAX_PARTS && MoveToSparkMath.hasMovableBalance(leftSats)) {
-                val part = probePart(invoice, wantedSats, leftSats) ?: break
+                val part = probePart(invoice, wantedSats, minOf(leftSats, limitSats)) ?: break
                 parts += part
                 leftSats = leftSats.safe() - (part.amountSats.safe() + part.feeSats.safe()).safe()
                 wantedSats = part.amountSats
@@ -324,12 +324,12 @@ class MoveToSparkRepo internal constructor(
                 null
             } ?: break
             next = null
-            if (MoveToSparkMath.feeCapMsat(quote.feeSats) > feeLeftMsat) throw MoveToSparkError.FeeRose(movedSats)
+            if (MoveToSparkMath.feeCapMsat(quote.feeSats) > feeLeftMsat) throw feeRoseError(movedSats, paidMsat)
             val outcome = runSuspendCatching { payPart(quote, feeCapMsat = feeLeftMsat) }.getOrElse {
                 lastError = it
                 if (it !is MoveToSparkError.TooLarge) break
                 partSats = MoveToSparkMath.smallerAmount(quote.amountSats) ?: run {
-                    if (feeRose(quote.amountSats, feeLeftMsat)) throw MoveToSparkError.FeeRose(movedSats)
+                    if (feeRose(quote.amountSats, feeLeftMsat)) throw feeRoseError(movedSats, paidMsat)
                     break
                 }
                 continue
@@ -353,10 +353,13 @@ class MoveToSparkRepo internal constructor(
         return MoveToSparkOutcome.Moved(movedSats, paidMsat / 1000uL, paidMsat)
     }
 
+    private fun feeRoseError(movedSats: ULong, paidMsat: ULong) = MoveToSparkError.FeeRose(movedSats, paidMsat / 1000uL)
+
     private suspend fun feeRose(amountSats: ULong, feeLeftMsat: ULong): Boolean =
         quote(amountSats).getOrNull()?.let { MoveToSparkMath.feeCapMsat(it.feeSats) > feeLeftMsat } ?: false
 
-    private fun outboundMsat(): ULong = lightningRepo.lightningState.value.channels
+    private fun outboundMsat(usableOnly: Boolean = false): ULong = lightningRepo.lightningState.value.channels
+        .filter { !usableOnly || it.isUsable }
         .fold(0uL) { total, channel -> total.safe() + channel.outboundCapacityMsat.safe() }
 
     private suspend fun nextPart(partSats: ULong): Result<MoveToSparkQuote>? {
@@ -727,7 +730,10 @@ sealed class MoveToSparkError(message: String, cause: Throwable? = null) : AppEr
     class UpdateFeeUnseen : MoveToSparkError("The update fee changed since the user saw it")
 
     /** The next part's fee would pass what the user saw for the move, after [movedSats] had moved. */
-    class FeeRose(val movedSats: ULong) : MoveToSparkError("The move's fee rose after '$movedSats' sats moved")
+    class FeeRose(
+        val movedSats: ULong,
+        val feeSats: ULong = 0uL,
+    ) : MoveToSparkError("The move's fee rose after '$movedSats' sats moved")
 
     /** The update moved the balance, but Spark cannot pay with it yet: the move or Spark's balance has not settled. */
     class UpdateUnsettled : MoveToSparkError("The update to Spark has not settled yet")

@@ -414,14 +414,15 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a part that leaves the send limit flat under the peer's htlc cap does not end the move`() = test {
+    fun `a peer's htlc cap prices and moves the whole balance in capped parts`() = test {
         channelsRouting(100_000uL, htlcCapSats = 30_000uL)
 
         val plan = sut.quoteAll().getOrThrow()
-        val error = sut.moveAll(plan).exceptionOrNull()
+        val outcome = sut.moveAll(plan).getOrThrow()
 
         assertEquals(29_988uL, plan.firstPart.amountSats)
-        assertEquals(29_988uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
+        assertEquals(MoveToSparkMath.quotedFeeSats(10uL) * 4uL, plan.feeSats)
+        assertEquals(MoveToSparkOutcome.Moved(99_958uL, feeSats = 40uL, feeMsat = 40_000uL), outcome)
     }
 
     @Test

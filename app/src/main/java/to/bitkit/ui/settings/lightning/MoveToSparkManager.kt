@@ -157,7 +157,7 @@ class MoveToSparkManager @Inject constructor(
                         if (error is MoveToSparkError.FeeRose) {
                             // As elsewhere when a fee rises, the modal shows the new fee for what is left.
                             val moved = error.movedSats.takeIf { it > 0uL }
-                                ?.let { MoveToSparkOutcome.Moved(it, feeSats = 0uL) }
+                                ?.let { MoveToSparkOutcome.Moved(it, error.feeSats) }
                             if (moved != null) closeEmptied(channelsBefore, paymentsBefore)
                             requote(moveGeneration, moved)
                         } else if (generation.get() == moveGeneration) {
