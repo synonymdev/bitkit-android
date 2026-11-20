@@ -12,6 +12,15 @@ class SparkChainServiceTest {
     private val local = LocalSparkSettings("encoded", "http://127.0.0.1:23090/api")
 
     @Test
+    fun `a supplied slash-only fixture URL cannot fall back to hosted regtest`() {
+        assertNull(LocalSparkSettings.fromInputs("", " "))
+        val incomplete = requireNotNull(LocalSparkSettings.fromInputs("", "/"))
+        assertFalse(incomplete.isComplete)
+        assertNull(Env.sparkRegtestEsploraUrl(incomplete))
+        assertEquals(local, LocalSparkSettings.fromInputs(local.configBase64, local.chainUrl + "/"))
+    }
+
+    @Test
     fun `spark reads the chain from bitkit electrs on mainnet`() {
         assertEquals("https://bitkit.to/electrs", Env.sparkChainServiceUrl(Network.BITCOIN))
     }

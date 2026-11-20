@@ -173,7 +173,7 @@ jobs:
         working-directory: bitkit-e2e-tests
         run: |
           mkdir -p artifacts
-          ./scripts/local-backend spark-logs --tail 200 > artifacts/spark-docker.log 2>&1 || true
+          ./scripts/local-backend spark-logs --timestamps > artifacts/spark-docker.log 2>&1 || true
 
       # Preserve logs and recordings from failed attempts even when a retry passes.
       - uses: actions/upload-artifact@v7

@@ -14,6 +14,13 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 internal data class LocalSparkSettings(val configBase64: String, val chainUrl: String) {
     val isComplete: Boolean get() = configBase64.isNotBlank() && chainUrl.isNotBlank()
+
+    companion object {
+        fun fromInputs(configBase64: String, chainUrl: String): LocalSparkSettings? {
+            if (configBase64.isBlank() && chainUrl.isBlank()) return null
+            return LocalSparkSettings(configBase64, chainUrl.trimEnd('/'))
+        }
+    }
 }
 
 @Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
@@ -56,8 +63,7 @@ internal object Env {
     val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
     val localSparkSettings = if (isDebug && isLocalE2eBackend && network == Network.REGTEST) {
-        LocalSparkSettings(BuildConfig.SPARK_LOCAL_CONFIG_B64, BuildConfig.SPARK_LOCAL_CHAIN_URL.trimEnd('/'))
-            .takeIf { it.configBase64.isNotBlank() || it.chainUrl.isNotBlank() }
+        LocalSparkSettings.fromInputs(BuildConfig.SPARK_LOCAL_CONFIG_B64, BuildConfig.SPARK_LOCAL_CHAIN_URL)
     } else {
         null
     }
