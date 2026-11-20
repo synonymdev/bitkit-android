@@ -189,13 +189,17 @@ private fun stopAdvertiser(advertiser: NearbyAdvertiser) = advertiser.stop()
  * Offers the Receive request to nearby payers while the calling screen is resumed and the app is
  * unlocked: over NFC when the device can emulate a tag, and over Bluetooth when it is on and the
  * nearby setting allows it. Returns whether either is active, which is when Receive says it can be tapped.
- * Bluetooth stops counting as active once its advertising fails to start.
+ * NFC stops counting as active once its tag service fails to register, and Bluetooth once its advertising
+ * fails to start.
  */
 @Composable
 fun offerPaymentNearby(request: String?): Boolean {
     val isLocked = LocalIsAppLocked.current
     val uri = nfcPaymentUri(request)?.takeUnless { isLocked }
     val canEmitNfc = rememberCanEmitNfc()
+    // A failed registration is retried when the request or the NFC state changes.
+    var emitFailed by remember(uri, canEmitNfc) { mutableStateOf(false) }
+    val emitsNfc = canEmitNfc && !emitFailed
     val bluetoothState = rememberBluetoothState(NearbyRole.ADVERTISE)
     val isNearbyEnabled by settingsViewModel?.isNearbyPaymentsEnabled?.collectAsStateWithLifecycle()
         ?: remember { mutableStateOf(false) }
@@ -203,7 +207,7 @@ fun offerPaymentNearby(request: String?): Boolean {
     var advertiseFailed by remember(uri, bluetoothState) { mutableStateOf(false) }
     val canAdvertise = isNearbyEnabled && bluetoothState == BluetoothState.ON && !advertiseFailed
 
-    NfcEmitterEffect(uri = uri.takeIf { canEmitNfc })
+    NfcEmitterEffect(uri = uri.takeIf { emitsNfc }, onFailed = { emitFailed = true })
     NearbyAdvertiseEffect(uri = uri.takeIf { canAdvertise }, onFailed = { advertiseFailed = true })
-    return uri != null && (canEmitNfc || canAdvertise)
+    return uri != null && (emitsNfc || canAdvertise)
 }

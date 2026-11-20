@@ -172,9 +172,10 @@ private fun readPaymentText(tag: Tag): String? {
  * does not answer instead.
  */
 @Composable
-fun NfcEmitterEffect(uri: String?) {
+fun NfcEmitterEffect(uri: String?, onFailed: () -> Unit = {}) {
     val activity = LocalActivity.current ?: return
     val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnFailed by rememberUpdatedState(onFailed)
 
     DisposableEffect(activity, lifecycleOwner, uri) {
         val cardEmulation = cardEmulation(activity)
@@ -184,11 +185,13 @@ fun NfcEmitterEffect(uri: String?) {
         var token: Long? = null
 
         fun start() {
-            token = NfcTagEmitter.publish(uri)
-            runCatching {
-                cardEmulation.registerAidsForService(service, CardEmulation.CATEGORY_OTHER, NDEF_AIDS)
-                cardEmulation.setPreferredService(activity, service)
-            }.onFailure { Logger.warn("Failed to register NFC tag service", it, context = TAG) }
+            val published = NfcTagEmitter.publish(uri)
+            token = published
+            if (registerTagService(cardEmulation, activity, service)) return
+            // Without the AID no reader reaches the service, so Receive must not say it can be tapped.
+            token = null
+            NfcTagEmitter.clear(published)
+            currentOnFailed()
         }
 
         fun stop() {
@@ -218,6 +221,16 @@ fun NfcEmitterEffect(uri: String?) {
         }
     }
 }
+
+/** Routes the NDEF tag AID to [service] and prefers it. Returns whether the AID was registered. */
+internal fun registerTagService(cardEmulation: CardEmulation, activity: Activity, service: ComponentName): Boolean =
+    runCatching {
+        val isRegistered = cardEmulation.registerAidsForService(service, CardEmulation.CATEGORY_OTHER, NDEF_AIDS)
+        if (isRegistered) cardEmulation.setPreferredService(activity, service)
+        isRegistered
+    }.onFailure { Logger.warn("Failed to register NFC tag service", it, context = TAG) }
+        .onSuccess { if (!it) Logger.warn("NFC tag service registration was refused", context = TAG) }
+        .getOrDefault(false)
 
 private fun cardEmulation(activity: Activity): CardEmulation? {
     if (!activity.supportsNfcCardEmulation()) return null
