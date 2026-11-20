@@ -119,7 +119,9 @@ class MoveToSparkManager @Inject constructor(
                     }
                 },
             )
-            if (generation.get() == quoteGeneration) _uiState.update { quoted }
+            if (generation.get() != quoteGeneration) return@launch
+            keepsOutcome = quoted is MoveToSparkUiState.Done
+            _uiState.update { quoted }
         }
     }
 

@@ -233,6 +233,20 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a rest that no longer routes keeps the balance updated for the next opening`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
+        val sut = createViewModel()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.TooLarge(50_000uL)))
+        sut.move()
+
+        sut.open()
+
+        assertEquals(MoveToSparkUiState.Done(moved), sut.uiState.value)
+        verify(moveToSparkRepo, times(2)).quoteAll()
+    }
+
+    @Test
     fun `a move whose fee rose shows the new fee and closes what it emptied`() = test {
         lightningState.value = LightningState(channels = persistentListOf(openChannel))
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.failure(MoveToSparkError.FeeRose(30_000uL)))
