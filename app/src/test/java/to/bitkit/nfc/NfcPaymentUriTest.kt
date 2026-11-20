@@ -45,7 +45,6 @@ class NfcPaymentUriTest {
         assertEquals("lightning:$invoice", scannedPaymentRequest(PosNfcFixtures.BIP321_URI))
         assertEquals("lightning:$invoice", scannedPaymentRequest("BITCOIN:?LIGHTNING=$invoice"))
         assertEquals("lightning:$invoice", scannedPaymentRequest("bitcoin:?amount=0.0000799&lightning=$invoice&creq=x"))
-        assertEquals("lightning:lno1qgsq", scannedPaymentRequest("bitcoin:?lno=lno1qgsq"))
     }
 
     @Test
@@ -55,6 +54,7 @@ class NfcPaymentUriTest {
         assertEquals(unified, scannedPaymentRequest(unified))
         assertEquals("bitcoin:?amount=0.001", scannedPaymentRequest("bitcoin:?amount=0.001"))
         assertEquals("bitcoin:?lightning=", scannedPaymentRequest("bitcoin:?lightning="))
+        assertEquals("bitcoin:?lno=lno1qgsq", scannedPaymentRequest("bitcoin:?lno=lno1qgsq"))
     }
 
     @Test

@@ -22,7 +22,6 @@ fun nfcPaymentUri(request: String?): String? {
 }
 
 private const val BITCOIN_WITHOUT_ADDRESS = "bitcoin:?"
-private val LIGHTNING_PARAMS = listOf("lightning", "lno")
 private const val REQUIRED_PARAM_PREFIX = "req-"
 
 /**
@@ -45,6 +44,7 @@ fun scannedPaymentRequest(text: String): String {
         val value = it.substringAfter('=', missingDelimiterValue = "")
         if (key.isEmpty() || value.isEmpty()) null else key.lowercase() to value
     }.toMap()
-    val request = LIGHTNING_PARAMS.firstNotNullOfOrNull { params[it] } ?: return trimmed
+    // A BOLT12 offer (`lno`) is left as is: the scanner cannot pay one yet.
+    val request = params["lightning"] ?: return trimmed
     return "lightning:$request"
 }
