@@ -169,14 +169,16 @@ class CacheStore internal constructor(
     /**
      * Keeps [paymentId] as the payment that last wrote the Activity row of Spark's send of [paymentHash], with the
      * [stamp] of the row it wrote, in one write, so a row written over without its writer is told apart. A writer
-     * kept [beforeRow] keeps the previous one beside it until [commitSparkSendRowId], so a stop before the row is
-     * written leaves the row to the writer whose stamp it still matches.
+     * kept [beforeRow] keeps the previous one beside it until [commitSparkSendRowId], or an empty id with the stamp of
+     * the row it replaces, [rowStamp], when it had none, so a stop before the row is written leaves the row to the
+     * writer whose stamp it still matches.
      */
     suspend fun keepSparkSendRowId(
         paymentHash: String,
         paymentId: String,
         stamp: String? = null,
         beforeRow: Boolean = false,
+        rowStamp: String? = null,
     ) {
         val hash = paymentHash.lowercase()
         val data = store.data.first()
@@ -186,8 +188,9 @@ class CacheStore internal constructor(
             val ids = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
             val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }
                 ?: (it.sparkSendRowStamps - hash)
-            val writer = it.sparkSendRowIds[hash]?.takeIf { beforeRow }
-                ?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
+            val writer = it.sparkSendRowIds[hash]?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
+                ?: rowStamp?.let { value -> listOf("", value) }
+                    ?.takeIf { beforeRow }
             val previous = writer?.let { value -> it.sparkSendPreviousRowWriters + (hash to value) }
                 ?: (it.sparkSendPreviousRowWriters - hash)
             val kept = ids.associate { (key, id) -> key to id }

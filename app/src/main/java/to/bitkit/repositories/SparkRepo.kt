@@ -2173,7 +2173,8 @@ class SparkRepo @Inject constructor(
     private fun AppCacheData.sendRowWriter(hash: String, row: LightningActivity): String? {
         val stamp = row.sendRowStamp()
         val previous = sparkSendPreviousRowWriters[hash]?.takeIf { it.getOrNull(1) == stamp }
-        return if (sparkSendRowStamps[hash] != stamp && previous != null) previous.first() else sparkSendRowIds[hash]
+        if (sparkSendRowStamps[hash] == stamp || previous == null) return sparkSendRowIds[hash]
+        return previous.first().ifEmpty { null }
     }
 
     private fun AppCacheData.isRowStampKept(hash: String, row: LightningActivity): Boolean {
@@ -2184,15 +2185,23 @@ class SparkRepo @Inject constructor(
     /**
      * Writes [activity], the row of [payment], unless a retry recorded after [records] outran it, then null. A send
      * row's writer is kept before the row, so a stop between the two never leaves a retry's row, alike in time, amount
-     * and fee, to an earlier writer; a failed write puts the previous one back.
+     * and fee, to an earlier writer, and the stamp of the row it replaces, [rowStamp], tells a write a stop cut short;
+     * a failed write puts the previous one back.
      */
-    private suspend fun saveLightningRow(payment: Payment, activity: LightningActivity, records: Long): Boolean? =
+    private suspend fun saveLightningRow(
+        payment: Payment,
+        activity: LightningActivity,
+        records: Long,
+        rowStamp: String?,
+    ): Boolean? =
         sendReleaseMutex.withLock {
             if (payment.isOutrunByRetry(records)) return@withLock null
             val hash = activity.id.lowercase()
             val isSend = payment.paymentType == SparkPaymentType.SEND
             val previous = cacheStore.data.first().let { it.sparkSendRowIds[hash] to it.sparkSendRowStamps[hash] }
-            if (isSend) cacheStore.keepSparkSendRowId(hash, payment.id, activity.sendRowStamp(), beforeRow = true)
+            if (isSend) {
+                cacheStore.keepSparkSendRowId(hash, payment.id, activity.sendRowStamp(), beforeRow = true, rowStamp)
+            }
             val isSaved = activityRepo.get().upsertActivity(Activity.Lightning(activity))
                 .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
             if (isSend && isSaved) cacheStore.commitSparkSendRowId(hash)
@@ -2405,7 +2414,7 @@ class SparkRepo @Inject constructor(
             seenAt = existing?.seenAt,
         )
         // The lookup above suspends, so a retry sent meanwhile is checked for again before the write.
-        val saved = saveLightningRow(payment, activity, records) ?: return true
+        val saved = saveLightningRow(payment, activity, records, existing?.sendRowStamp()) ?: return true
         if (!saved) {
             unsavedPayments.add(payment.id)
             return false
