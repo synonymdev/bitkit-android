@@ -4168,6 +4168,50 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a taken spark retry's row failed at expiry keeps its own writer against an older same-second failure`() =
+        test {
+            val sentAt = now.epochSeconds - 7_200
+            // The pre-send list missed the older attempt, so only the retry's own id, as the row's writer, protects it.
+            val store = CacheStore(
+                InMemoryDataStore(
+                    AppCacheData(
+                        sparkSendHashes = listOf("hash"),
+                        sparkSendExpiries = mapOf("hash" to now.epochSeconds - 3_600),
+                        sparkUncertainSendStarts = mapOf("hash" to sentAt),
+                        sparkTakenSendIds = mapOf("hash" to "retry"),
+                        sparkSendRowIds = mapOf("hash" to "retry"),
+                    )
+                ),
+                clock,
+            )
+            whenever(sparkService.isSupported).thenReturn(true)
+            whenever(sparkService.isConnected).thenReturn(true)
+            whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+            var row = Activity.Lightning(pendingSendRow().v1.copy(timestamp = sentAt.toULong()))
+            whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+            whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+                row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+                Result.success(Unit)
+            }
+            val older = sentPayment(fees = 7).copy(
+                id = "older",
+                status = PaymentStatus.FAILED,
+                amount = 999.toBigInteger(),
+                timestamp = sentAt.toULong(),
+            )
+            whenever(sparkService.listPayments()).thenReturn(listOf(older))
+            createSut(store).start(0).getOrThrow()
+            sparkEvents.emit(SdkEvent.Synced)
+            advanceUntilIdle()
+            assertEquals(PaymentState.FAILED, row.v1.status, "the expired retry's row stayed pending")
+
+            createSut(store).start(0).getOrThrow()
+            advanceUntilIdle()
+
+            assertEquals(128uL to 0uL, row.v1.value to row.v1.fee, "a relaunch wrote the older attempt over the row")
+        }
+
+    @Test
     fun `a failed spark send row takes its own attempt's fee correction`() = test {
         cacheData.value = cacheData.value.copy(sparkSendRowIds = mapOf("hash" to "retry"))
         val corrected = sentPayment(fees = 3).copy(id = "retry", status = PaymentStatus.FAILED)

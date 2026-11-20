@@ -758,11 +758,11 @@ class SparkRepo @Inject constructor(
         if (!isSettled) return false
         // A missing send's row is ended here, as no listed payment revisits it, so the hold stays until it is written.
         val holds = { uncertainSends[key] === uncertain }
-        if (send == SparkLightningSend.NotFound && !failHeldRow(paymentHash, holds)) return false
+        if (send == SparkLightningSend.NotFound && !failHeldRow(paymentHash, uncertain.attempt, holds)) return false
         // A listed failure may be an earlier attempt's, so the send's own row is failed in place instead of taking
         // that attempt's amount, fee and time.
         val isFailed = send is SparkLightningSend.Found && send.status == PaymentStatus.FAILED
-        if (isFailed && !failHeldRow(paymentHash, holds)) return false
+        if (isFailed && !failHeldRow(paymentHash, uncertain.attempt, holds)) return false
         // A send Spark now runs keeps its earlier attempts' ids until it settles, taken over before the doubt ends.
         val isTaken = send is SparkLightningSend.Found && send.status == PaymentStatus.PENDING
         // Only the caller that takes the hash off settles it, so its outcome is reported once. The hand-over shares the
@@ -820,10 +820,13 @@ class SparkRepo @Inject constructor(
     /**
      * Marks the pending send row of [paymentHash] failed, as Spark lists no send of it; true once nothing is pending.
      * Read and write share the lock Spark's own row writes take, so a settlement written meanwhile is not overwritten,
-     * and the write happens only while the caller still [holds] the send, so a newer retry's row is left alone.
+     * and the write happens only while the caller still [holds] the send, so a newer retry's row is left alone. The
+     * row is the held [attempt]'s from then on, so its writer becomes that attempt before the write, kept across a
+     * restart that cuts the two apart.
      */
     private suspend fun failHeldRow(
         paymentHash: String,
+        attempt: SendAttempt,
         holds: () -> Boolean,
     ): Boolean = sendReleaseMutex.withLock {
         // A hold that ended meanwhile is no longer the caller's to end, which its own removal then finds.
@@ -834,10 +837,14 @@ class SparkRepo @Inject constructor(
         }
         val send = (stored as? Activity.Lightning)?.v1
         if (send?.txType != PaymentType.SENT || send.status != PaymentState.PENDING) return@withLock true
+        // A writer the attempt read as earlier no longer owns the row, while the attempt's own one keeps protecting it.
+        val rowId = cacheStore.data.first().sparkSendRowIds[paymentHash.lowercase()]
+        when {
+            attempt.ownId != null -> cacheStore.keepSparkSendRowId(paymentHash, attempt.ownId)
+            rowId != null && attempt.earlierIds?.contains(rowId) == true -> cacheStore.removeSparkSendRowId(paymentHash)
+        }
         activityRepo.get().upsertActivity(Activity.Lightning(send.copy(status = PaymentState.FAILED)))
             .onFailure { Logger.warn("Failed to mark Spark send '$paymentHash' failed", it, context = TAG) }
-            // The row is the held attempt's now, so no earlier payment that wrote it before still owns it.
-            .onSuccess { cacheStore.removeSparkSendRowId(paymentHash) }
             .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
     }
 
@@ -910,13 +917,13 @@ class SparkRepo @Inject constructor(
             var listed = listedSend
             when (send) {
                 SparkLightningSend.Unavailable -> return@forEach
-                SparkLightningSend.NotFound -> if (!isPastGrace || !failHeldRow(hash, holds)) return@forEach
+                SparkLightningSend.NotFound -> if (!isPastGrace || !failHeldRow(hash, attempt, holds)) return@forEach
                 is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> return@forEach
                 // A failure with another id than the attempt's own is an earlier attempt's, listed before the attempt,
                 // so the retry's own row is failed instead of taking that attempt's amount, fee and time.
                 is SparkLightningSend.Found if send.status == PaymentStatus.FAILED && attempt.ownId != null &&
                     listed?.id != attempt.ownId -> {
-                    if (!isPastGrace || !failHeldRow(hash, holds)) return@forEach
+                    if (!isPastGrace || !failHeldRow(hash, attempt, holds)) return@forEach
                     listed = null
                 }
 
