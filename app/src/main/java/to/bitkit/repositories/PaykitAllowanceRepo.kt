@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -130,8 +131,12 @@ class PaykitAllowanceRepo @Inject constructor(
     /** Moves whenever [keepsOffPending] or [hasSentPayment] may answer differently for a request. */
     val pendingFilterVersion: StateFlow<Long> = _pendingFilterVersion.asStateFlow()
 
-    /** Requests an automatic payment is handling now, until it is handed to the node. */
-    val handlingRequestIds: StateFlow<Set<PaykitPaymentRequestId>> get() = executor.inFlightRequestIds
+    /** Requests of the automatic payment pass running now, including those still waiting their turn. */
+    private val passRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
+
+    /** Requests an automatic payment is handling now, until it is handed to the node, and the rest of its pass. */
+    val handlingRequestIds: Flow<Set<PaykitPaymentRequestId>>
+        get() = combine(executor.inFlightRequestIds, passRequestIds) { inFlight, pass -> inFlight + pass }
 
     /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
     val isUpdating: Boolean get() = updates.value > 0
@@ -704,19 +709,28 @@ class PaykitAllowanceRepo @Inject constructor(
         signature: Int,
     ): Boolean {
         var handledAny = false
-        for (request in covered) {
-            val result = executor.autoPay(request, _allowances.value, identity)
-            Logger.info("Decided '$result' for an incoming request covered by an allowance", context = TAG)
-            when (result) {
-                PaykitAllowanceAutoPayResult.STARTED -> handledAny = true
-                PaykitAllowanceAutoPayResult.MANUAL -> {
-                    manualRequestSignatures[request.id] = signature
-                    pendingFilterChanged()
+        // The whole pass is hidden from its start, so a request waiting its turn never shows while an earlier one
+        // is paid.
+        passRequestIds.value = covered.mapTo(mutableSetOf()) { it.id }
+        try {
+            for (request in covered) {
+                val result = executor.autoPay(request, _allowances.value, identity)
+                Logger.info("Decided '$result' for an incoming request covered by an allowance", context = TAG)
+                when (result) {
+                    PaykitAllowanceAutoPayResult.STARTED -> handledAny = true
+                    PaykitAllowanceAutoPayResult.MANUAL -> {
+                        manualRequestSignatures[request.id] = signature
+                        pendingFilterChanged()
+                    }
+                    PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
                 }
-                PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
+                if (result != PaykitAllowanceAutoPayResult.STARTED) passRequestIds.update { it - request.id }
             }
+            // Kept until the refresh has read the journal, which then keeps a started request off the pending views.
+            if (handledAny) refresh()
+        } finally {
+            passRequestIds.value = emptySet()
         }
-        if (handledAny) refresh()
         return handledAny
     }
 

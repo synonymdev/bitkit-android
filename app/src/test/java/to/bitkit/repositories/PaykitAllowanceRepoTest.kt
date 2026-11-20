@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.After
@@ -1031,6 +1032,27 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertFalse(sut.keepsOffPending(unpaid))
         assertTrue(sut.hasSentPayment(request))
         assertFalse(sut.hasSentPayment(unpaid))
+    }
+
+    @Test
+    fun `every request of a pass stays hidden from its start`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        val first = fixtures.paymentRequest()
+        val second = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        val hiddenWhilePaying = mutableListOf<Set<PaykitPaymentRequestId>>()
+        whenever(executor.autoPay(any(), any(), any())).doSuspendableAnswer {
+            hiddenWhilePaying += sut.handlingRequestIds.first()
+            PaykitAllowanceAutoPayResult.MANUAL
+        }
+        sut.activate(identity)
+
+        sut.processIncomingRequests(listOf(first, second))
+
+        assertEquals(setOf(first.id, second.id), hiddenWhilePaying.first())
+        assertEquals(setOf(second.id), hiddenWhilePaying.last())
+        assertEquals(emptySet(), sut.handlingRequestIds.first())
     }
 
     @Test
