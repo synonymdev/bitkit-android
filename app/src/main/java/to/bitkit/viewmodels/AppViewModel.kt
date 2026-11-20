@@ -6652,7 +6652,8 @@ class AppViewModel @Inject constructor(
         val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
         // QuickPay has no confirm screen to show the update fee, so a payment that needs the update is reviewed. While
         // the node starts or its channels reconnect their balance is unknown, so that is decided once they are usable.
-        if (!open && channelsAreSettling()) waitForUsableChannels(walletGeneration)
+        val isQuickPayOn = settingsStore.data.first().isQuickPayEnabled
+        if (!open && isQuickPayOn && channelsAreSettling()) waitForUsableChannels(walletGeneration)
         if (!open && moveToSparkRepo.needsUpdateToSend(amountSats)) return false
         val canApply = open || canApplyQuickPay(amountSats)
         requireCurrentPaymentPreparation(walletGeneration)

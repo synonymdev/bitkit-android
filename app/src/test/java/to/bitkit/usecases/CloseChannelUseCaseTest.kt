@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -110,6 +111,25 @@ class CloseChannelUseCaseTest : BaseUnitTest() {
         sut.closeEmptiedByMove(listOf(channel), emptyList())
 
         verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `a move's close takes an emptied channel while an on-chain send is unconfirmed`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(channel("channel_1", 0uL)))
+        val onchainSend = PaymentDetails(
+            id = "txid",
+            kind = PaymentKind.Onchain(txid = "txid", status = ConfirmationStatus.Unconfirmed),
+            amountMsat = 10_000_000uL,
+            feePaidMsat = null,
+            direction = PaymentDirection.OUTBOUND,
+            status = PaymentStatus.PENDING,
+            latestUpdateTimestamp = 0uL,
+        )
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(onchainSend))
+
+        sut.closeEmptiedByMove(listOf(channel), listOf(onchainSend))
+
+        verify(lightningRepo).closeChannel(eq(channel("channel_1", 0uL)), any(), anyOrNull())
     }
 
     @Test

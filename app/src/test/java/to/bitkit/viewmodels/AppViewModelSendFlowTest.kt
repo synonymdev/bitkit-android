@@ -77,6 +77,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
@@ -21663,6 +21664,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(lightningRepo, atLeastOnce()).waitForUsableChannels()
         assertNull(sut.quickPayData.value, "QuickPay paid a payment that needs the update")
+    }
+
+    @Test
+    fun `a fixed-amount scan with QuickPay off does not wait for channels whose peer is offline`() = test {
+        val bolt11 = "lnbcrt1quickpayoffpeeroffline"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.0002&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 20_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        val offlinePeerChannel = mock<ChannelDetails> { on { isUsable } doReturn false }
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(
+                LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                    channels = persistentListOf(offlinePeerChannel),
+                )
+            )
+        )
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        // The unified scan's own Lightning check waits once; QuickPay, off here, must not wait a second time.
+        verify(lightningRepo, times(1)).waitForUsableChannels()
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
     }
 
     @Test

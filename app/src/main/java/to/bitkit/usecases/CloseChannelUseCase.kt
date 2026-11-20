@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
@@ -100,7 +101,12 @@ class CloseChannelUseCase @Inject constructor(
             Logger.info("Kept the channels a move may have emptied open while its payments are unclear", context = TAG)
             return emptyList()
         }
-        if (payments.any { it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.PENDING }) {
+        val isInFlight = payments.any {
+            it.direction == PaymentDirection.OUTBOUND &&
+                it.status == PaymentStatus.PENDING &&
+                it.kind !is PaymentKind.Onchain
+        }
+        if (isInFlight) {
             Logger.info("Kept the channels a move may have emptied open while a payment is in flight", context = TAG)
             return emptyList()
         }
