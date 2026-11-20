@@ -4051,6 +4051,8 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `an uncertain spark retry fails its own row at expiry when only an earlier failure is listed`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        // The earlier attempt's failure wrote the invoice's row before the retry's replaced it.
+        store.keepSparkSendRowId("hash", "older")
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
@@ -4169,6 +4171,17 @@ class SparkRepoTest : BaseUnitTest() {
     fun `a failed spark send row takes its own attempt's fee correction`() = test {
         cacheData.value = cacheData.value.copy(sparkSendRowIds = mapOf("hash" to "retry"))
         val corrected = sentPayment(fees = 3).copy(id = "retry", status = PaymentStatus.FAILED)
+        assertEquals(128uL to 3uL, failedRowAfterListing(corrected).let { it.v1.value to it.v1.fee })
+    }
+
+    @Test
+    fun `a failed spark send row takes its own fee correction after spark refused a retry`() = test {
+        // A retry read the payment as earlier, then Spark refused it before it went out, so the payment keeps the row.
+        cacheData.value = cacheData.value.copy(
+            sparkSendRowIds = mapOf("hash" to "older"),
+            sparkSendEarlierIds = mapOf("hash" to listOf("older")),
+        )
+        val corrected = sentPayment(fees = 3).copy(id = "older", status = PaymentStatus.FAILED)
         assertEquals(128uL to 3uL, failedRowAfterListing(corrected).let { it.v1.value to it.v1.fee })
     }
 

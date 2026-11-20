@@ -190,6 +190,12 @@ class CacheStore internal constructor(
         }
     }
 
+    suspend fun removeSparkSendRowId(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash !in store.data.first().sparkSendRowIds) return
+        store.updateData { it.copy(sparkSendRowIds = it.sparkSendRowIds - hash) }
+    }
+
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendHashes) return

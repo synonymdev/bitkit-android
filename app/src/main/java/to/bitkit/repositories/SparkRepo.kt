@@ -836,6 +836,8 @@ class SparkRepo @Inject constructor(
         if (send?.txType != PaymentType.SENT || send.status != PaymentState.PENDING) return@withLock true
         activityRepo.get().upsertActivity(Activity.Lightning(send.copy(status = PaymentState.FAILED)))
             .onFailure { Logger.warn("Failed to mark Spark send '$paymentHash' failed", it, context = TAG) }
+            // The row is the held attempt's now, so no earlier payment that wrote it before still owns it.
+            .onSuccess { cacheStore.removeSparkSendRowId(paymentHash) }
             .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
     }
 
@@ -2132,17 +2134,19 @@ class SparkRepo @Inject constructor(
 
     /**
      * Whether this payment is of an attempt a later one read as earlier before it went out, kept past its hold and a
-     * restart, or Spark dates it before the [row] of [paymentHash] or ties it as another payment than the one that
-     * wrote the row, unless that one is such an earlier attempt.
+     * restart, while it no longer wrote the [row] of [paymentHash], or Spark dates it before the row or ties it as
+     * another payment than the one that wrote the row, unless that one is such an earlier attempt.
      */
     private suspend fun Payment.isEarlierThan(row: LightningActivity, paymentHash: String): Boolean {
         val cache = cacheStore.data.first()
         val hash = paymentHash.lowercase()
         val earlierIds = heldAttempt(paymentHash)?.earlierIds.orEmpty() + cache.sparkSendEarlierIds[hash].orEmpty()
-        // Spark's dates can put an earlier attempt's failure after the retry's row.
-        if (id in earlierIds) return true
+        val rowId = cache.sparkSendRowIds[hash]
+        // Spark's dates can put an earlier attempt's failure after the retry's row, while a retry Spark refused leaves
+        // the row, and its fee corrections, to that attempt.
+        if (id in earlierIds && rowId != id) return true
         if (timestamp != row.timestamp) return timestamp < row.timestamp
-        val rowId = cache.sparkSendRowIds[hash] ?: return false
+        rowId ?: return false
         return rowId != id && rowId !in earlierIds
     }
 
