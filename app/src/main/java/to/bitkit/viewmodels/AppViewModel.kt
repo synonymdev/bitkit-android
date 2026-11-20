@@ -8940,6 +8940,8 @@ class AppViewModel @Inject constructor(
             clearPaymentRequestPresentationRetry(it.request.id)
         }
         if (_currentSheet.value is Sheet.Send) {
+            // A nearby read still preparing belongs to this Send visit: it must not reopen a sheet or reach QuickPay.
+            cancelNearbyAddressScan()
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++

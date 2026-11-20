@@ -9857,6 +9857,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `nfc read still preparing does not reopen send after the sheet closes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { blocktankRepo.refreshInfo() }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Result.success(Unit)
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(input, isNearbyRead = true))
+        advanceUntilIdle()
+        assertTrue(entered.isCompleted)
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
     fun `hardware send sheet onchain address with payable amount estimates its fee and opens confirm`() = test {
         val input = stubOnchainAmountScan(amountSats = 10_000u)
         stubHardwareFunding()
