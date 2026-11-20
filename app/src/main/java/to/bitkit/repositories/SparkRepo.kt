@@ -838,10 +838,13 @@ class SparkRepo @Inject constructor(
         val send = (stored as? Activity.Lightning)?.v1
         if (send?.txType != PaymentType.SENT || send.status != PaymentState.PENDING) return@withLock true
         // A writer the attempt read as earlier no longer owns the row, while the attempt's own one keeps protecting it.
-        val rowId = cacheStore.data.first().sparkSendRowIds[paymentHash.lowercase()]
+        // The ids kept from earlier retries count too, as this attempt's own read of them can have failed.
+        val cache = cacheStore.data.first()
+        val rowId = cache.sparkSendRowIds[paymentHash.lowercase()]
+        val earlierIds = attempt.earlierIds.orEmpty() + cache.sparkSendEarlierIds[paymentHash.lowercase()].orEmpty()
         when {
             attempt.ownId != null -> cacheStore.keepSparkSendRowId(paymentHash, attempt.ownId)
-            rowId != null && attempt.earlierIds?.contains(rowId) == true -> cacheStore.removeSparkSendRowId(paymentHash)
+            rowId != null && rowId in earlierIds -> cacheStore.removeSparkSendRowId(paymentHash)
         }
         activityRepo.get().upsertActivity(Activity.Lightning(send.copy(status = PaymentState.FAILED)))
             .onFailure { Logger.warn("Failed to mark Spark send '$paymentHash' failed", it, context = TAG) }
