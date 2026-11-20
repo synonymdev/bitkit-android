@@ -3,12 +3,14 @@ package to.bitkit.fcm
 import android.content.Context
 import com.synonym.bitkitcore.WakeAckOutcome
 import com.synonym.bitkitcore.WakeEnvelope
+import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import to.bitkit.data.WakeStore
 import to.bitkit.data.WakeTopicText
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.WakeConfig
 import to.bitkit.services.WakeService
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
@@ -36,10 +38,16 @@ class WakeHandlers internal constructor(private val byTopic: Map<String, WakeHan
 
         /** The gateway's self-test, which it sends only to the device that asked for it. */
         const val TEST_TOPIC = "wake.test"
+
+        /** A Pubky Swaps provider's wake once a swap's lockup can be claimed, through a grant the swap handed it. */
+        const val SWAP_CLAIMABLE_TOPIC = "swap.claimable"
     }
 
     @Inject
-    constructor(alertHandler: WakeAlertHandler) : this(mapOf(TEST_TOPIC to alertHandler))
+    constructor(
+        alertHandler: WakeAlertHandler,
+        swapClaimableHandler: SwapClaimableWakeHandler,
+    ) : this(mapOf(TEST_TOPIC to alertHandler, SWAP_CLAIMABLE_TOPIC to swapClaimableHandler))
 
     /** Runs the handler of the wake's topic, and maps what became of it to the outcome to acknowledge. */
     suspend fun handle(wake: WakeEnvelope): WakeAckOutcome {
@@ -52,6 +60,16 @@ class WakeHandlers internal constructor(private val byTopic: Map<String, WakeHan
             },
         )
     }
+}
+
+/**
+ * Claims the swaps a `swap.claimable` wake is for. Resolves the swaps repository only for such a wake, so other wakes
+ * do not build the wallet graph.
+ */
+class SwapClaimableWakeHandler @Inject constructor(
+    private val pubkySwapsRouteRepo: Lazy<PubkySwapsRouteRepo>,
+) : WakeHandler {
+    override suspend fun handle(wake: WakeEnvelope) = pubkySwapsRouteRepo.get().claimAfterWake().getOrThrow()
 }
 
 /**

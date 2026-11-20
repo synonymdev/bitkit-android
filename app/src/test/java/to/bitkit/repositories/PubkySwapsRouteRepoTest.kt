@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.PubkySwapRouteStatus
 import com.synonym.bitkitcore.pubkySwapsAdvance
 import com.synonym.bitkitcore.pubkySwapsCommitRoute
 import com.synonym.bitkitcore.pubkySwapsRestore
+import com.synonym.bitkitcore.pubkySwapsSendWakeCapability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -28,6 +30,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import org.mockito.MockedStatic
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -46,6 +49,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
@@ -58,6 +62,11 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         private const val CLAIM_TXID = "claim"
         private const val CONFIRMED_CLAIM_TXID = "confirmed"
         private const val HOLD_HASH = "hold"
+        private const val GATEWAY_URL = "https://wake.bitkit.to"
+        private const val GRANT_ID = "grant"
+        private const val GRANT_TOKEN = "wkg_grant_token"
+        private const val GRANT_EXPIRES_AT = 1_790_172_800uL
+        private val GRANT = IssuedWakeGrant(GATEWAY_URL, GRANT_ID, GRANT_TOKEN, GRANT_EXPIRES_AT)
 
         /** The Kotlin facade holding bitkit-core's top-level functions, which Kotlin sources cannot name. */
         private val CORE: Class<*> = Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")
@@ -70,6 +79,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     private val lightningRepo = mock<LightningRepo> { on { nodeEvents } doReturn nodeEvents }
     private val cacheData = MutableStateFlow(AppCacheData())
     private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
+    private val wakeRepo = mock<WakeRepo>()
     private lateinit var sut: PubkySwapsRouteRepo
 
     @Before
@@ -85,6 +95,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             lightningRepo = lightningRepo,
             cacheStore = cacheStore,
+            wakeRepo = wakeRepo,
         )
     }
 
@@ -201,6 +212,156 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
         }
+    }
+
+    @Test
+    fun `commit hands a grant to a provider that takes a wake`() = test {
+        whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(GRANT))
+
+        committingWithWake(false) { core ->
+            core.verify {
+                runBlocking {
+                    pubkySwapsSendWakeCapability(
+                        eq(SWAP_ID),
+                        eq(GATEWAY_URL),
+                        eq(GRANT_TOKEN),
+                        eq(GRANT_EXPIRES_AT),
+                        any(),
+                        anyOrNull(),
+                    )
+                }
+            }
+        }
+
+        verify(wakeRepo).createGrant("swap.claimable", 2u)
+        assertEquals(mapOf(SWAP_ID to GRANT_ID), cacheData.value.pubkySwapWakeGrants)
+        verify(wakeRepo, never()).revokeGrant(any())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `commit hands no grant to a provider that takes no wake`() = test {
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsCommitRoute(any(), any(), any(), anyOrNull()) } }
+                .thenReturn(swapPayment(providerTakesWake = false))
+
+            sut.commit("quote").getOrThrow()
+            advanceUntilIdle()
+        }
+
+        verify(wakeRepo, never()).createGrant(any(), any())
+    }
+
+    @Test
+    fun `an install not registered for wakes sends no capability`() = test {
+        whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(null))
+
+        committingWithWake(false) { core ->
+            core.verify(
+                { runBlocking { pubkySwapsSendWakeCapability(any(), any(), any(), any(), any(), anyOrNull()) } },
+                never(),
+            )
+        }
+
+        assertEquals(emptyMap(), cacheData.value.pubkySwapWakeGrants)
+    }
+
+    @Test
+    fun `a capability the provider refuses has its grant revoked`() = test {
+        whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(GRANT))
+        whenever(wakeRepo.revokeGrant(any())).thenReturn(Result.success(Unit))
+
+        committingWithWake(PubkySwapException.Refused("invalid_request", "gateway not allowed"))
+
+        verify(wakeRepo).revokeGrant(GRANT_ID)
+        assertEquals(emptyMap(), cacheData.value.pubkySwapWakeGrants)
+        assertEquals(listOf(SWAP_ID), cacheData.value.unfinishedPubkySwaps, "The swap goes on without a wake")
+    }
+
+    @Test
+    fun `a swap already claimable is advanced now and its grant revoked`() = test {
+        whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(GRANT))
+        whenever(wakeRepo.revokeGrant(any())).thenReturn(Result.success(Unit))
+
+        committingWithWake(
+            true,
+            PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID),
+            PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID),
+        ) { core -> core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, atLeast(1)) }
+
+        verify(wakeRepo).revokeGrant(GRANT_ID)
+        assertEquals(emptyMap(), cacheData.value.pubkySwapWakeGrants)
+        assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps)
+    }
+
+    @Test
+    fun `a swap that ends has its grant revoked`() = test {
+        whenever(wakeRepo.revokeGrant(any())).thenReturn(Result.success(Unit))
+        cacheData.value = AppCacheData(
+            unfinishedPubkySwaps = listOf(SWAP_ID),
+            pubkySwapWakeGrants = mapOf(SWAP_ID to GRANT_ID),
+        )
+
+        sut.dropFailedSwap(SWAP_ID)
+
+        verify(wakeRepo).revokeGrant(GRANT_ID)
+        assertEquals(emptyMap(), cacheData.value.pubkySwapWakeGrants)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `a wake claims the unfinished swaps and leaves their claims to the background`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        val result = advancing(
+            PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u),
+            PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID),
+            PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID),
+        ) {
+            sut.claimAfterWake().also { advanceUntilIdle() }
+        }
+
+        assertTrue(result.isSuccess)
+        assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps, "The background advance saw the claim confirm")
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `a wake after which no claim went out fails`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+        var isWakeOver = false
+        mockStatic(CORE).use { core ->
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
+                when (isWakeOver) {
+                    false -> status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u))
+                    true -> status(PubkySwapRouteState.Claimed(CONFIRMED_CLAIM_TXID))
+                }
+            }
+
+            val result = sut.claimAfterWake()
+            isWakeOver = true
+            advanceUntilIdle()
+
+            assertIs<PubkySwapWakeUnclaimedException>(result.exceptionOrNull())
+            // Advanced every 3 s for 2 minutes.
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, atLeast(40))
+        }
+    }
+
+    @Test
+    fun `a wake with no unfinished swap is handled`() = test {
+        assertTrue(sut.claimAfterWake().isSuccess)
+    }
+
+    @Test
+    fun `a wake treats a swap that failed as ended`() = test {
+        cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
+
+        val result = advancing(PubkySwapRouteState.Failed("refunded")) {
+            sut.claimAfterWake().also { advanceUntilIdle() }
+        }
+
+        assertTrue(result.isSuccess)
+        assertFalse(SWAP_ID in cacheData.value.unfinishedPubkySwaps)
     }
 
     @Test
@@ -510,7 +671,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         }
     }
 
-    private fun swapPayment() = PubkySwapRoutePayment(
+    private fun swapPayment(providerTakesWake: Boolean = false) = PubkySwapRoutePayment(
         swapId = SWAP_ID,
         invoice = "invoice",
         debitSat = 20_100u,
@@ -518,7 +679,40 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
         destinationAddress = "address",
         htlcAddress = "htlc",
         timeoutBlockHeight = 0u,
+        providerTakesWake = providerTakesWake,
     )
+
+    /** Commits a swap whose provider takes a wake, answering the wake capability with [capability]. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun TestScope.committingWithWake(
+        capability: Any,
+        vararg advances: PubkySwapRouteState,
+        verifyCore: (MockedStatic<*>) -> Unit = {},
+    ) = mockStatic(CORE).use { core ->
+        core.`when`<Any> { runBlocking { pubkySwapsCommitRoute(any(), any(), any(), anyOrNull()) } }
+            .thenReturn(swapPayment(providerTakesWake = true))
+        val send = core.`when`<Any> {
+            runBlocking {
+                pubkySwapsSendWakeCapability(
+                    eq(SWAP_ID),
+                    eq(GATEWAY_URL),
+                    eq(GRANT_TOKEN),
+                    eq(GRANT_EXPIRES_AT),
+                    any(),
+                    anyOrNull(),
+                )
+            }
+        }
+        if (capability is Throwable) send.thenAnswer { throw capability } else send.thenReturn(capability)
+        if (advances.isNotEmpty()) {
+            core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
+                .thenReturn(status(advances.first()), *advances.drop(1).map(::status).toTypedArray())
+        }
+
+        sut.commit("quote").getOrThrow()
+        advanceUntilIdle()
+        verifyCore(core)
+    }
 
     private fun report(
         restored: List<String> = emptyList(),

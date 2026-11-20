@@ -4,6 +4,7 @@ import com.google.android.gms.tasks.Task
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.WakeEnvironment
 import com.synonym.bitkitcore.WakeException
+import com.synonym.bitkitcore.WakeGrant
 import com.synonym.bitkitcore.WakeIdentityProof
 import com.synonym.bitkitcore.WakePlatform
 import com.synonym.bitkitcore.WakeRegistration
@@ -39,6 +40,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -61,6 +63,10 @@ class WakeRepoTest : BaseUnitTest() {
         private const val PK_SIGNATURE = "pk-signature"
         private const val LN_IDENTITY = "ln:$NODE_ID"
         private const val PK_IDENTITY = "pk:$PUBKY_KEY"
+        private const val SWAP_TOPIC = "swap.claimable"
+        private const val GRANT_ID = "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+        private const val GRANT_TOKEN = "wkg_6f9619ff8b86d011b42d00c04fc964ff_token"
+        private const val GRANT_EXPIRES_AT = 1_790_172_800uL
 
         private val ACCEPTED = WakeRegistration(
             deviceId = "device-1",
@@ -365,6 +371,64 @@ class WakeRepoTest : BaseUnitTest() {
         assertTrue(sut.unregister().isSuccess)
         verify(wakeService).unregister(GATEWAY_URL, CREDENTIALS.deviceSecret)
     }
+
+    @Test
+    fun `a grant lets the pk identity of a registered install be woken`() = test {
+        whenever(pubkyRepo.wakeIdentity()).thenReturn(Result.success(PK_IDENTITY))
+        sut.syncRegistration().getOrThrow()
+        whenever { wakeService.createGrant(any(), any(), any(), any(), any()) }.thenReturn(grant(PK_IDENTITY))
+
+        val issued = assertNotNull(sut.createGrant(SWAP_TOPIC, 2u).getOrThrow())
+
+        verify(wakeService).createGrant(GATEWAY_URL, CREDENTIALS.deviceSecret, PK_IDENTITY, listOf(SWAP_TOPIC), 2u)
+        assertEquals(GATEWAY_URL, issued.gatewayUrl)
+        assertEquals(GRANT_ID, issued.id)
+        assertEquals(GRANT_TOKEN, issued.token)
+        assertEquals(GRANT_EXPIRES_AT, issued.expiresAt)
+        assertFalse(GRANT_TOKEN in issued.toString(), "The token stays out of logs")
+    }
+
+    @Test
+    fun `a grant goes to the ln identity of an install without a Pubky identity`() = test {
+        sut.syncRegistration().getOrThrow()
+        whenever { wakeService.createGrant(any(), any(), any(), any(), any()) }.thenReturn(grant(LN_IDENTITY))
+
+        sut.createGrant(SWAP_TOPIC, 2u).getOrThrow()
+
+        verify(wakeService).createGrant(GATEWAY_URL, CREDENTIALS.deviceSecret, LN_IDENTITY, listOf(SWAP_TOPIC), 2u)
+    }
+
+    @Test
+    fun `no grant is made without a registration or after an opt-out`() = test {
+        assertNull(sut.createGrant(SWAP_TOPIC, 2u).getOrThrow())
+
+        sut.syncRegistration().getOrThrow()
+        whenever(wakeConfig.isOptedIn()).thenReturn(false)
+        assertNull(sut.createGrant(SWAP_TOPIC, 2u).getOrThrow())
+
+        verify(wakeService, never()).createGrant(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `revokeGrant revokes the grant on the gateway`() = test {
+        sut.syncRegistration().getOrThrow()
+        whenever { wakeService.revokeGrant(any(), any(), any()) }.thenReturn(Unit)
+
+        assertTrue(sut.revokeGrant(GRANT_ID).isSuccess)
+
+        verify(wakeService).revokeGrant(GATEWAY_URL, CREDENTIALS.deviceSecret, GRANT_ID)
+    }
+
+    private fun grant(recipient: String) = WakeGrant(
+        id = GRANT_ID,
+        token = GRANT_TOKEN,
+        recipient = recipient,
+        topics = listOf(SWAP_TOPIC),
+        perHour = 6u,
+        perDay = 24u,
+        createdAt = NOW_SECS.toULong(),
+        expiresAt = GRANT_EXPIRES_AT,
+    )
 
     @Test
     fun `a sync that failed for a transient reason is retried until it succeeds`() = test {

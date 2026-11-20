@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.WakeDevice
 import com.synonym.bitkitcore.WakeEnvelope
 import com.synonym.bitkitcore.WakeEnvironment
 import com.synonym.bitkitcore.WakeException
+import com.synonym.bitkitcore.WakeGrant
 import com.synonym.bitkitcore.WakeIdentityProof
 import com.synonym.bitkitcore.WakePlatform
 import com.synonym.bitkitcore.WakeRegistration
@@ -13,6 +14,7 @@ import com.synonym.bitkitcore.WakeServerInfo
 import com.synonym.bitkitcore.WakeTopic
 import com.synonym.bitkitcore.wakeAck
 import com.synonym.bitkitcore.wakeClearPresence
+import com.synonym.bitkitcore.wakeCreateGrant
 import com.synonym.bitkitcore.wakeDecryptPush
 import com.synonym.bitkitcore.wakeGenerateDeviceSecret
 import com.synonym.bitkitcore.wakeGenerateInstallId
@@ -21,6 +23,7 @@ import com.synonym.bitkitcore.wakeGetDevice
 import com.synonym.bitkitcore.wakeListTopics
 import com.synonym.bitkitcore.wakePrepareRegistration
 import com.synonym.bitkitcore.wakeRegister
+import com.synonym.bitkitcore.wakeRevokeGrant
 import com.synonym.bitkitcore.wakeSendTest
 import com.synonym.bitkitcore.wakeServerInfo
 import com.synonym.bitkitcore.wakeSetPresence
@@ -128,6 +131,29 @@ class WakeService @Inject constructor() {
     suspend fun listTopics(gatewayUrl: String): List<WakeTopic> = ServiceQueue.CORE.background {
         wakeListTopics(gatewayUrl = gatewayUrl)
     }
+
+    suspend fun createGrant(
+        gatewayUrl: String,
+        deviceSecret: String,
+        recipient: String,
+        topics: List<String>,
+        expiresInDays: UInt,
+    ): WakeGrant = ServiceQueue.CORE.background {
+        wakeCreateGrant(
+            gatewayUrl = gatewayUrl,
+            deviceSecret = deviceSecret,
+            recipient = recipient,
+            topics = topics,
+            perHour = null,
+            perDay = null,
+            expiresInDays = expiresInDays,
+        )
+    }
+
+    suspend fun revokeGrant(gatewayUrl: String, deviceSecret: String, grantId: String) =
+        ServiceQueue.CORE.background {
+            wakeRevokeGrant(gatewayUrl = gatewayUrl, deviceSecret = deviceSecret, grantId = grantId)
+        }
 }
 
 /**
