@@ -4405,6 +4405,43 @@ class SparkRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `a later attempt's failure takes the row from an earlier one when a third send read both as earlier`() = test {
+        var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 1uL))
+        val stamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }
+        // The first attempt wrote the row, the second's row write failed, and a third send that never wrote one read
+        // both as earlier.
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendRowIds = mapOf("hash" to "first"),
+                    sparkSendRowStamps = mapOf("hash" to stamp),
+                    sparkSendEarlierIds = mapOf("hash" to listOf("first", "second")),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
+        val first = sentPayment(
+            fees = 1
+        ).copy(id = "first", status = PaymentStatus.FAILED, timestamp = row.v1.timestamp)
+        val second = sentPayment(fees = 2)
+            .copy(id = "second", status = PaymentStatus.FAILED, timestamp = row.v1.timestamp + 100uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(second, first))
+
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(2uL, row.v1.fee, "the first attempt's row stayed over the later second attempt's failure")
+    }
+
+    @Test
     fun `an earlier payment's failed row takes its final fee after a stop cut a retry's alike failed row`() = test {
         var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 7uL))
         val stamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }

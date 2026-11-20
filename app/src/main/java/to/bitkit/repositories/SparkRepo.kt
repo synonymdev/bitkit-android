@@ -2200,8 +2200,9 @@ class SparkRepo @Inject constructor(
 
     /**
      * Whether this payment is of an attempt a later one read as earlier before it went out, kept past its hold and a
-     * restart, while it no longer wrote the [row] of [paymentHash], or Spark dates it before the row or ties it as
-     * another payment than the one that wrote the row, unless that one is such an earlier attempt.
+     * restart, while it no longer wrote the [row] of [paymentHash] and the row's writer is no such attempt, or Spark
+     * dates it before the row or ties it as another payment than the one that wrote the row, unless that one is such an
+     * earlier attempt.
      */
     private suspend fun Payment.isEarlierThan(row: LightningActivity, paymentHash: String): Boolean {
         val cache = cacheStore.data.first()
@@ -2209,8 +2210,9 @@ class SparkRepo @Inject constructor(
         val earlierIds = heldAttempt(paymentHash)?.earlierIds.orEmpty() + cache.sparkSendEarlierIds[hash].orEmpty()
         val rowId = cache.sendRowWriter(hash, row)
         // Spark's dates can put an earlier attempt's failure after the retry's row, while a retry Spark refused leaves
-        // the row, and its fee corrections, to that attempt.
-        if (id in earlierIds && rowId != id) return true
+        // the row, and its fee corrections, to that attempt. Two attempts a later send both read as earlier aren't
+        // ordered by it, so their dates are.
+        if (id in earlierIds && rowId != id && rowId !in earlierIds) return true
         if (timestamp != row.timestamp) return timestamp < row.timestamp
         rowId ?: return false
         return rowId != id && rowId !in earlierIds
