@@ -8014,7 +8014,8 @@ class AppViewModel @Inject constructor(
         if (!pendingPaymentRepo.isPending(paymentHash)) return
         when (event) {
             is Event.PaymentSuccessful if event.paymentHash == paymentHash -> {
-                syncContactForActivity(paymentHash)
+                // The send screen may have moved on to another payment meanwhile, so only this send's contact counts.
+                syncContactForActivity(paymentHash, isPendingOnly = true)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash, amountWithFeeSats = null))
             }
 
@@ -9624,17 +9625,19 @@ class AppViewModel @Inject constructor(
     private fun syncContactForActivity(
         paymentHashOrTxId: String,
         walletId: String = WalletScope.default,
+        isPendingOnly: Boolean = false,
     ) {
         val contactContext = synchronized(contactPaymentContextLock) {
             val pendingContext = pendingContactPaymentContexts.remove(paymentHashOrTxId)
-            val context = pendingContext ?: activeContactPaymentContext
+            val context = pendingContext ?: activeContactPaymentContext.takeUnless { isPendingOnly }
             if (pendingContext == null && context != null) {
                 activeContactPaymentContext = null
             }
             if (preparedContactPaymentContext == context) preparedContactPaymentContext = null
             context
         }
-        isSubmittingPaymentRequest = false
+        // A pending send settling later leaves the send under way alone.
+        if (!isPendingOnly) isSubmittingPaymentRequest = false
         contactContext ?: return
 
         viewModelScope.launch {

@@ -4799,7 +4799,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a spark send cancelled after its failure was handled holds nothing`() = test {
+    fun `a spark send cancelled after spark reported a failure during its call stays held`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
@@ -4823,7 +4823,93 @@ class SparkRepoTest : BaseUnitTest() {
         caller.cancel()
         advanceUntilIdle()
 
-        assertNull(sut.earlierLightningSend("lnbc1", "hash"), "a handled failure still held the invoice")
+        // A failure reported during the call can't be told from an earlier attempt's, so the send stays in doubt.
+        assertEquals(
+            EarlierSend.Pending("hash"),
+            sut.earlierLightningSend("lnbc1", "hash"),
+            "a failure seen during the call ended the hold",
+        )
+    }
+
+    @Test
+    fun `a spark send whose call returns after a wipe holds nothing`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val returns = CompletableDeferred<Payment>()
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer { returns.await() }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        runCurrent()
+        backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
+        advanceUntilIdle()
+
+        // The wallet is wiped while Spark's send call runs, and the call then returns the payment it took.
+        sut.wipe(0).getOrThrow()
+        store.reset()
+        returns.complete(sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING))
+        advanceUntilIdle()
+
+        assertTrue(store.data.first().sparkTakenSendIds.isEmpty(), "the wiped wallet's send was journaled")
+        assertFalse(
+            "hash" in sut.attemptedLightningPaymentHashes().orEmpty(),
+            "the wiped wallet's send still held the invoice",
+        )
+    }
+
+    @Test
+    fun `a failure spark reports during a send call is no settled send event`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        var listed = emptyList<Payment>()
+        whenever(sparkService.listPayments()).thenAnswer { listed }
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED, timestamp = now.epochSeconds.toULong())
+        // An earlier attempt the pre-send list left out fails while the retry's send call runs.
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            listed = listOf(failed)
+            awaitCancellation()
+        }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        runCurrent()
+        backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
+        advanceUntilIdle()
+
+        assertNull(sut.settledSendEvent("hash"), "a failure seen during the call settled the send")
+    }
+
+    @Test
+    fun `a spark send whose call returns its failure after spark reported it reads as failed`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        var listed = emptyList<Payment>()
+        whenever(sparkService.listPayments()).thenAnswer { listed }
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED, timestamp = now.epochSeconds.toULong())
+        // Spark reports the failure while its send call runs, and the call then returns it.
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            listed = listOf(failed)
+            sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+            failed
+        }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        runCurrent()
+
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+        advanceUntilIdle()
+
+        assertIs<Event.PaymentFailed>(sut.settledSendEvent("hash"), "the returned failure wasn't reported")
+        assertNull(sut.earlierLightningSend("lnbc1", "hash"), "the failed send still held the invoice")
     }
 
     @Test

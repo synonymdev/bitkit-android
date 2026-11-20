@@ -335,9 +335,13 @@ class SparkRepo @Inject constructor(
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
         sendsInFlight.clear()
-        uncertainSends.clear()
-        takenAttempts.clear()
-        restoredTakenAttempts.clear()
+        // Under the lock a send call's hand-over takes, so a call that returns after the wipe holds nothing.
+        sendReleaseMutex.withLock {
+            inFlightAttempts.clear()
+            uncertainSends.clear()
+            takenAttempts.clear()
+            restoredTakenAttempts.clear()
+        }
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
         isLostForExit = false
@@ -1755,11 +1759,19 @@ class SparkRepo @Inject constructor(
      */
     suspend fun settledSendEvent(paymentHash: String): Event? = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext null
+        val hash = paymentHash.lowercase()
+        // A failure leaves a send in doubt or in Spark's send call pending, as the other lookups read it, also one
+        // that a sync hands from the one to the other meanwhile.
+        val isHeldBefore = hash in uncertainSendHashes() || inFlightAttempts.containsKey(hash)
         runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrNull()
             ?.latestSend(paymentHash)
             ?.takeUnless { it.isEarlierFailureOfUncertainSend() }
+            ?.takeUnless {
+                it.status == PaymentStatus.FAILED &&
+                    (isHeldBefore || hash in uncertainSendHashes() || inFlightAttempts.containsKey(hash))
+            }
             ?.toNodeEvent()
     }
 
@@ -2264,25 +2276,26 @@ class SparkRepo @Inject constructor(
         isEarlierFailureOfUncertainSend() || hasRecordedSendSince(records, sendHash(PaymentStatus.FAILED))
 
     /**
-     * Whether this failure is an earlier attempt's, of a retry still in Spark's send call or in doubt: one of the
-     * attempts Spark listed before the retry went out, or, with none listed, one Spark dates before the retry plus its
-     * clock skew, so a failure that may be either never ends the retry's hold. A retry in doubt also counts a failure
-     * that list doesn't name as earlier when Spark dates it before the retry minus that skew.
+     * Whether this failure may be an earlier attempt's, of a retry still in Spark's send call or in doubt, so it never
+     * ends the retry's hold: any failure while the call runs, one of the attempts Spark listed before the retry went
+     * out, or, with none listed, one Spark dates before the retry plus its clock skew. A retry in doubt also counts a
+     * failure that list doesn't name as earlier when Spark dates it before the retry minus that skew.
      */
     private fun Payment.isEarlierFailureOfUncertainSend(): Boolean {
         val hash = sendHash(PaymentStatus.FAILED) ?: return false
         val attempt = heldAttempt(hash) ?: return false
         // A payment Spark took fails with its own id, so a failure with another id is an earlier attempt's.
         attempt.ownId?.let { return id != it }
+        // The call's own result, or its move into doubt, settles a send still in Spark's send call.
+        val key = hash.lowercase()
+        if (!uncertainSends.containsKey(key) && inFlightAttempts.containsKey(key)) return true
         attempt.earlierIds?.let { ids ->
             if (id in ids) return true
-            // Only a send in doubt or still in Spark's send call has no id of its own, and the list read before it went
-            // out can lack an older attempt, so a failure that list doesn't name is earlier when Spark dates it clearly
-            // before the send.
-            val key = hash.lowercase()
+            // The list read before a send in doubt went out can lack an older attempt, so a failure that list doesn't
+            // name is earlier when Spark dates it clearly before the send, while its own failure, dated at its start,
+            // ends its hold.
             val sentAt = attempt.sentAt
-            return sentAt != null && (uncertainSends.containsKey(key) || inFlightAttempts.containsKey(key)) &&
-                timestamp + RAIL_CLOCK_SKEW_SECONDS <= sentAt
+            return sentAt != null && uncertainSends.containsKey(key) && timestamp + RAIL_CLOCK_SKEW_SECONDS <= sentAt
         }
         // A send kept before start times were stored can't tell its own failure from an earlier one, so it stays held
         // until its invoice expires, when the expiry rule settles it and its row.
