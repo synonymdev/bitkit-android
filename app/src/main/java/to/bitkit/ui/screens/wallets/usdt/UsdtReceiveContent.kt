@@ -46,9 +46,10 @@ internal fun ColumnScope.UsdtReceiveContent(
     onEdit: () -> Unit,
     onNetwork: () -> Unit,
     amount: String = "",
+    nearbyRequest: String? = null,
 ) {
     var showDetails by rememberSaveable { mutableStateOf(false) }
-    val canTapToPay = offerPaymentNearby(uri)
+    val canTapToPay = offerPaymentNearby(nearbyRequest)
     BackHandler(enabled = showDetails) { showDetails = false }
     val networkTitle = stringResource(R.string.usdt__receive_network, network)
     val copyMessage = stringResource(R.string.usdt__receive_copied)

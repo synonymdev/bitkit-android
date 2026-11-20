@@ -254,6 +254,7 @@ internal fun ColumnScope.UsdtDepositReceiveContent(
             UsdtReceiveContent(
                 address = state.address?.address ?: wallet.address,
                 uri = state.address?.uri ?: uri,
+                nearbyRequest = usdtNearbyRequest(depositUri = state.address?.uri, receiveUri = uri),
                 error = receiveError,
                 network = state.network?.label ?: "Arbitrum One",
                 amount = state.address?.let { usdtFormatAmount(it.amount) }
@@ -386,3 +387,10 @@ internal val UsdtDepositDetail.statusCode: String?
     get() = if (order != null) order?.code else deposit.code
 
 internal fun UsdtDepositDetail.statusResource(): Int = depositStatus(order?.status ?: deposit.status, statusCode)
+
+/**
+ * The request offered to nearby phones on USDT Receive. Nearby phones pay USDT on Arbitrum only, so a deposit
+ * address on another network is not offered.
+ */
+internal fun usdtNearbyRequest(depositUri: String?, receiveUri: String): String? =
+    receiveUri.takeIf { depositUri == null && it.isNotEmpty() }
