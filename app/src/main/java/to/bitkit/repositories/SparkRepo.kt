@@ -1945,10 +1945,11 @@ class SparkRepo @Inject constructor(
             trySettleUncertainSend(it, isFailureEvent = true)
             return
         }
-        // A failure of an earlier attempt settles nothing while Spark lists a later one pending or paid.
+        // A failure of an attempt that Spark's list shows another attempt deciding, as pending, paid or a later
+        // failure, settles nothing.
         payment.sendHash(PaymentStatus.FAILED)?.let { hash ->
             val deciding = runSuspendCatching { sparkService.listPayments() }.getOrNull()?.latestSend(hash)
-            if (deciding != null && deciding.id != payment.id && deciding.status != PaymentStatus.FAILED) return
+            if (deciding != null && deciding.id != payment.id) return
         }
         recordActivity(payment, settlesJournal = false)
         // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.

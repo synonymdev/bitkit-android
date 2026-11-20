@@ -3889,6 +3889,24 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an older failure event leaves the row of a later failed attempt`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val later = sentPayment(fees = 0).copy(id = "later", status = PaymentStatus.FAILED, timestamp = 20uL)
+        val older = sentPayment(fees = 7).copy(id = "older", status = PaymentStatus.FAILED, timestamp = 1uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(later, older))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        clearInvocations(activityRepo)
+
+        sparkEvents.emit(SdkEvent.PaymentFailed(older))
+        advanceUntilIdle()
+
+        verify(activityRepo, never()).upsertActivity(argThat { this is Activity.Lightning && v1.fee == 7uL })
+    }
+
+    @Test
     fun `a spark send in doubt ends at once on its own failure`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
