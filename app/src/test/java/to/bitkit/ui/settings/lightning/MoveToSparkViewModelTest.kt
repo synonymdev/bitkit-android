@@ -233,6 +233,18 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a rest whose quote fails for another reason after a move shows the balance updated`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
+        val sut = createViewModel()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.SparkUnavailable()))
+
+        sut.move()
+
+        assertEquals(MoveToSparkUiState.Done(moved), sut.uiState.value)
+    }
+
+    @Test
     fun `a rest that no longer routes keeps the balance updated for the next opening`() = test {
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
         whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)

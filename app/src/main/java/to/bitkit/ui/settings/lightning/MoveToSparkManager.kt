@@ -112,7 +112,7 @@ class MoveToSparkManager @Inject constructor(
             val quoted = moveToSparkRepo.quoteAll().fold(
                 onSuccess = { MoveToSparkUiState.Confirm(it) },
                 onFailure = {
-                    if (moved != null && it is MoveToSparkError.TooLarge) {
+                    if (moved != null) {
                         MoveToSparkUiState.Done(moved)
                     } else {
                         it.toUiState()

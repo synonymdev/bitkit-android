@@ -330,6 +330,7 @@ class MoveToSparkRepo internal constructor(
             val outcome = runSuspendCatching { payPart(quote, feeCapMsat = feeLeftMsat) }.getOrElse {
                 lastError = it
                 if (it !is MoveToSparkError.TooLarge) break
+                lightningRepo.syncState()
                 partSats = MoveToSparkMath.smallerAmount(quote.amountSats) ?: run {
                     if (feeRose(quote.amountSats, feeLeftMsat)) throw feeRoseError(movedSats, paidMsat)
                     break
