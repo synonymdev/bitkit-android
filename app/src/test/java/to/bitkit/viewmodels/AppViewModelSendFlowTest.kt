@@ -18212,6 +18212,39 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending spark send whose success was handled before it was tracked resolves as sent`() = test {
+        val bolt11 = "lnbcrt1sparkpending"
+        val paymentHash = "spark_hash"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        // Spark's success was handled after the send returned pending, before the send screen tracked it.
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = paymentHash,
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            ),
+        )
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).track(paymentHash)
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+    }
+
+    @Test
     fun `private lightning pending payment consumes private list`() = test {
         val bolt11 = "lnbcrt1pending"
         val paymentHash = "pending_hash"

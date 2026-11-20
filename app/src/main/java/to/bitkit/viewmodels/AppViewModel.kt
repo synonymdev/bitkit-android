@@ -7988,6 +7988,7 @@ class AppViewModel @Inject constructor(
                 if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
+                resolveSettledPendingSend(pendingHash)
                 return@onFailure
             }
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
@@ -8004,6 +8005,26 @@ class AppViewModel @Inject constructor(
                 else -> error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
             }
             setSendEffect(SendEffect.NavigateToError(failure))
+        }
+    }
+
+    /** Resolves a pending send whose outcome was handled before it was tracked, which no later event resolves. */
+    private suspend fun resolveSettledPendingSend(paymentHash: String) {
+        val event = lightningRepo.settledSparkSendEvent(paymentHash) ?: return
+        if (!pendingPaymentRepo.isPending(paymentHash)) return
+        when (event) {
+            is Event.PaymentSuccessful if event.paymentHash == paymentHash -> {
+                syncContactForActivity(paymentHash)
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash, amountWithFeeSats = null))
+            }
+
+            is Event.PaymentFailed if event.paymentHash == paymentHash -> {
+                releaseFailedSwapHold(paymentHash)
+                clearPendingContactPaymentContext(paymentHash)
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
+            }
+
+            else -> Unit
         }
     }
 
