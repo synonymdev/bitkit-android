@@ -4302,6 +4302,37 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send row's writer is kept before its row and put back when the write fails`() = test {
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendRowIds = mapOf("hash" to "older"),
+                    sparkSendRowStamps = mapOf("hash" to "0:128:0")
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        var writerAtWrite: String? = null
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            writerAtWrite = store.data.first().sparkSendRowIds["hash"]
+            Result.failure(IllegalStateException("write failed"))
+        }
+        // The retry's row is alike in time, amount and fee to the earlier attempt's.
+        val retry = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING, timestamp = 0uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(retry))
+
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals("retry", writerAtWrite, "the row was written before its writer was kept")
+        assertEquals("older", store.data.first().sparkSendRowIds["hash"], "a failed write kept its writer")
+        assertEquals("0:128:0", store.data.first().sparkSendRowStamps["hash"])
+    }
+
+    @Test
     fun `a failed spark send row takes its own attempt's fee correction`() = test {
         cacheData.value = cacheData.value.copy(sparkSendRowIds = mapOf("hash" to "retry"))
         val corrected = sentPayment(fees = 3).copy(id = "retry", status = PaymentStatus.FAILED)
