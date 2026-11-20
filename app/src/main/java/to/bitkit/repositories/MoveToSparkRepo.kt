@@ -338,6 +338,7 @@ class MoveToSparkRepo internal constructor(
                     movedSats = movedSats.safe() + outcome.amountSats.safe()
                     paidMsat = paidMsat.safe() + outcome.feeMsat.safe()
                     feeLeftMsat = feeLeftMsat.safe() - outcome.feeMsat.safe()
+                    partSats = outcome.amountSats
                     lightningRepo.syncState()
                     val nowMsat = outboundMsat()
                     if (nowMsat >= lastOutboundMsat) break
@@ -353,10 +354,9 @@ class MoveToSparkRepo internal constructor(
         .fold(0uL) { total, channel -> total.safe() + channel.outboundCapacityMsat.safe() }
 
     private suspend fun nextPart(partSats: ULong): Result<MoveToSparkQuote>? {
-        lightningRepo.syncState()
         var rechecks = 0
         while (!MoveToSparkMath.hasMovableBalance(movableSats()) && rechecks++ < HTLC_CLEAR_RECHECKS &&
-            lightningRepo.lightningState.value.channels.any { MoveToSparkMath.mayHoldTheMoveHtlc(it) }
+            lightningRepo.lightningState.value.channels.any { it.isUsable && MoveToSparkMath.mayHoldTheMoveHtlc(it) }
         ) {
             delay(HTLC_CLEAR_RECHECK)
             lightningRepo.syncState()

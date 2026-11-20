@@ -101,7 +101,9 @@ class MoveToSparkManager @Inject constructor(
     }
 
     /** Quotes moving everything the channels can send, in parts when one payment does not route. */
-    fun quote() {
+    fun quote() = quote(moved = null)
+
+    private fun quote(moved: MoveToSparkOutcome.Moved?) {
         val quoteGeneration = generation.incrementAndGet()
         keepsOutcome = false
         _uiState.update { MoveToSparkUiState.Quoting }
@@ -109,7 +111,13 @@ class MoveToSparkManager @Inject constructor(
         quoteJob = scope.launch {
             val quoted = moveToSparkRepo.quoteAll().fold(
                 onSuccess = { MoveToSparkUiState.Confirm(it) },
-                onFailure = { it.toUiState() },
+                onFailure = {
+                    if (moved != null && it is MoveToSparkError.TooLarge) {
+                        MoveToSparkUiState.Done(moved)
+                    } else {
+                        it.toUiState()
+                    }
+                },
             )
             if (generation.get() == quoteGeneration) _uiState.update { quoted }
         }
@@ -135,7 +143,7 @@ class MoveToSparkManager @Inject constructor(
                         }
                         val done = done(outcome)
                         if (done == null) {
-                            requote(moveGeneration)
+                            requote(moveGeneration, outcome as? MoveToSparkOutcome.Moved)
                         } else if (generation.get() == moveGeneration) {
                             _uiState.update { done }
                         }
@@ -148,8 +156,10 @@ class MoveToSparkManager @Inject constructor(
                     onFailure = { error ->
                         if (error is MoveToSparkError.FeeRose) {
                             // As elsewhere when a fee rises, the modal shows the new fee for what is left.
-                            if (error.movedSats > 0uL) closeEmptied(channelsBefore, paymentsBefore)
-                            requote(moveGeneration)
+                            val moved = error.movedSats.takeIf { it > 0uL }
+                                ?.let { MoveToSparkOutcome.Moved(it, feeSats = 0uL) }
+                            if (moved != null) closeEmptied(channelsBefore, paymentsBefore)
+                            requote(moveGeneration, moved)
                         } else if (generation.get() == moveGeneration) {
                             _uiState.update { error.toUiState() }
                         }
@@ -168,10 +178,10 @@ class MoveToSparkManager @Inject constructor(
         return if (hasRest) null else MoveToSparkUiState.Done(outcome)
     }
 
-    private fun requote(moveGeneration: Int) {
+    private fun requote(moveGeneration: Int, moved: MoveToSparkOutcome.Moved?) {
         if (generation.get() != moveGeneration) return
         isMoveInFlight = false
-        quote()
+        quote(moved)
     }
 
     private fun closeEmptied(channelsBefore: List<ChannelDetails>, paymentsBefore: List<PaymentDetails>?) {
@@ -184,18 +194,11 @@ class MoveToSparkManager @Inject constructor(
         moveGeneration: Int,
     ) {
         if (generation.get() != moveGeneration || !uiState.value.isInFlight()) return
-        val late = settled.fold(
-            onSuccess = { done(it) },
-            onFailure = {
-                if (earlierSats > 0uL) {
-                    done(MoveToSparkOutcome.Moved(earlierSats, feeSats = 0uL))
-                } else {
-                    MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN)
-                }
-            },
-        )
+        val moved = settled.getOrNull() ?: earlierSats.takeIf { it > 0uL }
+            ?.let { MoveToSparkOutcome.Moved(it, feeSats = 0uL) }
+        val late = if (moved == null) MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN) else done(moved)
         if (late == null) {
-            if (uiState.value.isInFlight()) requote(moveGeneration)
+            if (uiState.value.isInFlight()) requote(moveGeneration, moved)
             return
         }
         _uiState.update { if (generation.get() == moveGeneration && it.isInFlight()) late else it }
