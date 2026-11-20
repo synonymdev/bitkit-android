@@ -20,6 +20,6 @@
     <action>Keep required recovery unavailable and restart the app; verify the correction is retained and spending remains gated</action>
     <action>Allow restoration of the old SETTINGS backup; verify only the explicitly corrected endpoints override that backup and unrelated preferences restore normally</action>
     <action>Complete required WALLET and USDT recovery; verify ordinary wallet actions become available only after both acknowledgements</action>
-    <action>Repeat with only optional profile caching unavailable after required recovery; verify that error retains its optional recovery controls and is not classified as failed node startup</action>
+    <action>Repeat with only optional profile enrichment unavailable after required recovery; verify ordinary wallet actions remain available and no failed-node-startup or restore-retry screen appears</action>
   </actions>
 </journey>

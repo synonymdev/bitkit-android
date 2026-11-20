@@ -11,7 +11,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.repositories.SparkState
 import to.bitkit.ui.navigateTo
+import to.bitkit.viewmodels.SendMethod
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -19,6 +21,42 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class SendSheetNavigationTest {
+    @Test
+    fun `payment results stay visible after a stopped-node Spark payment reduces the balance`() {
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = SendRoute.Confirm) {
+                composable<SendRoute.Confirm> {}
+                composable<SendRoute.Pending> {}
+                composable<SendRoute.Success> {}
+                composable<SendRoute.Error> {}
+            }
+        }
+        var spark = SparkState(isSupported = true, isReady = true, balanceSats = 100_000uL)
+        fun waiting() = waitsForNode(
+            isNodeRunning = false,
+            hasAnyChannels = true,
+            hasUsableChannels = false,
+            sparkCanPay = sparkCanPayInvoice(SendMethod.LIGHTNING, 60_000uL, spark),
+            destination = navController.currentDestination,
+        )
+
+        assertFalse(waiting())
+        spark = spark.copy(balanceSats = 39_758uL)
+        assertTrue(waiting())
+        val results = listOf(
+            SendRoute.Pending(paymentHash = "payment", amount = 60_000, walletId = "wallet0"),
+            SendRoute.Success,
+            SendRoute.Error(),
+        )
+        for (result in results) {
+            navController.navigateTo(result)
+            assertFalse(waiting())
+            assertTrue(navController.popBackStack())
+            assertTrue(waiting())
+        }
+    }
+
     @Test
     fun `recovery pin holds review only until returning to pending`() {
         val pending = SendRoute.Pending(paymentHash = "payment", amount = 1000, walletId = "wallet0")

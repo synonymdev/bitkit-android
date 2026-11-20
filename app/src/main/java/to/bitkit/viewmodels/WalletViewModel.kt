@@ -492,7 +492,7 @@ class WalletViewModel @Inject constructor(
                         connectionSession = connectionSession,
                     )
                         .getOrThrow()
-                        .also { pubkyRepo.initialize() }
+                        .also { pubkyRepo.scheduleInitializationAfterRestore() }
                 } else {
                     restoreFromMostRecentBackup(connectionSession)
                 }
@@ -536,7 +536,7 @@ class WalletViewModel @Inject constructor(
                 .getOrThrow()
         }
 
-        pubkyRepo.initialize()
+        pubkyRepo.scheduleInitializationAfterRestore()
         return failedCategories
     }
 
@@ -896,7 +896,7 @@ class WalletViewModel @Inject constructor(
             boltzService.events.collect { event ->
                 if (event is BoltzSwapEvent.Claimed) {
                     Logger.info("Savings swap claimed: ${event.swapId}", context = TAG)
-                    walletRepo.syncBalances()
+                    coroutineScope { launch { walletRepo.syncBalances() } }
                 }
             }
         }

@@ -32,7 +32,7 @@ internal class PaykitSdkOperationLock {
     suspend fun <T> withLock(priority: Priority = Priority.Ordered, operation: suspend () -> T): T {
         if (ownsWipe()) return operation()
         val admittedGeneration = admit()
-        acquire(priority)
+        acquire(priority, admittedGeneration)
         return try {
             currentCoroutineContext().ensureActive()
             checkAdmitted(admittedGeneration)
@@ -75,8 +75,9 @@ internal class PaykitSdkOperationLock {
         }
     }
 
-    private suspend fun acquire(priority: Priority) {
+    private suspend fun acquire(priority: Priority, admittedGeneration: Long? = null) {
         val waiter = synchronized(stateLock) {
+            admittedGeneration?.let(::checkAdmitted)
             if (!isLocked) {
                 isLocked = true
                 return

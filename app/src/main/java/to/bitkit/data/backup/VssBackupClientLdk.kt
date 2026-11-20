@@ -3,29 +3,32 @@ package to.bitkit.data.backup
 import com.synonym.vssclient.KeyVersion
 import com.synonym.vssclient.LdkNamespace
 import com.synonym.vssclient.VssItem
+import com.synonym.vssclient.vssDeriveStoreId
 import com.synonym.vssclient.vssLdkDelete
 import com.synonym.vssclient.vssLdkGet
 import com.synonym.vssclient.vssLdkListKeys
 import com.synonym.vssclient.vssNewLdkClientWithLnurlAuth
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class VssBackupClientLdk @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-    private val vssStoreIdProvider: VssStoreIdProvider,
+    private val coordinator: VssClientCoordinator,
     private val keychain: Keychain,
 ) {
     companion object {
@@ -38,16 +41,9 @@ class VssBackupClientLdk @Inject constructor(
         )
     }
 
-    @Volatile
-    private var isSetup = CompletableDeferred<Unit>()
-    private val setupMutex = Mutex()
-
     suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
-        setupMutex.withLock {
-            val gate = isSetup
-            runCatching {
-                if (gate.isCompleted && !gate.isCancelled) return@runCatching
-
+        runCatching {
+            coordinator.setup(VssClientCoordinator.Domain.LDK) {
                 val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                     ?: throw MnemonicNotAvailableException()
 
@@ -58,38 +54,30 @@ class VssBackupClientLdk @Inject constructor(
                     val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
                     vssNewLdkClientWithLnurlAuth(
                         baseUrl = Env.vssServerUrl,
-                        storeId = vssStoreIdProvider.getVssStoreId(walletIndex),
+                        storeId = vssDeriveStoreId(Env.vssStoreIdPrefix, mnemonic, passphrase),
                         mnemonic = mnemonic,
                         passphrase = passphrase,
                         lnurlAuthServerUrl = Env.lnurlAuthServerUrl,
                     )
-                    gate.complete(Unit)
-                    Logger.info("VSS LDK client setup", context = TAG)
+                    Logger.info("VSS LDK client setup for wallet[$walletIndex]", context = TAG)
                 }
-            }.onFailure {
-                gate.completeExceptionally(it)
-                if (isSetup === gate) isSetup = CompletableDeferred()
-                Logger.error("VSS LDK client setup error", it, context = TAG)
             }
+        }.onFailure {
+            currentCoroutineContext().ensureActive()
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            Logger.error("VSS LDK client setup error", it, context = TAG)
         }
-    }
-
-    fun reset() {
-        synchronized(this) {
-            isSetup.cancel()
-            isSetup = CompletableDeferred()
-        }
-        Logger.debug("VSS LDK client reset", context = TAG)
     }
 
     suspend fun getObject(
         key: String,
         namespace: LdkNamespace = LdkNamespace.Default,
     ): Result<VssItem?> = withContext(ioDispatcher) {
-        isSetup.await()
         Logger.verbose("VSS LDK 'getObject' call for '$key'", context = TAG)
-        runCatching {
-            vssLdkGet(key = key, namespace = namespace)
+        runSuspendCatching {
+            coordinator.withClient(VssClientCoordinator.Domain.LDK) {
+                vssLdkGet(key = key, namespace = namespace)
+            }
         }.onSuccess {
             if (it == null) {
                 Logger.verbose("VSS LDK 'getObject' success null for '$key'", context = TAG)
@@ -105,10 +93,11 @@ class VssBackupClientLdk @Inject constructor(
         key: String,
         namespace: LdkNamespace = LdkNamespace.Default,
     ): Result<Boolean> = withContext(ioDispatcher) {
-        isSetup.await()
         Logger.verbose("VSS LDK 'deleteObject' call for '$key'", context = TAG)
-        runCatching {
-            vssLdkDelete(key = key, namespace = namespace)
+        runSuspendCatching {
+            coordinator.withClient(VssClientCoordinator.Domain.LDK) {
+                vssLdkDelete(key = key, namespace = namespace)
+            }
         }.onSuccess { wasDeleted ->
             if (wasDeleted) {
                 Logger.verbose("VSS LDK 'deleteObject' success for '$key' - key was deleted", context = TAG)
@@ -120,11 +109,23 @@ class VssBackupClientLdk @Inject constructor(
         }
     }
 
+    suspend fun deleteObjects(keys: List<String>, walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            coordinator.withWallet {
+                setup(walletIndex).getOrThrow()
+                coordinator.withClient(VssClientCoordinator.Domain.LDK) {
+                    keys.forEach { vssLdkDelete(key = it, namespace = LdkNamespace.Default) }
+                }
+            }
+        }
+    }
+
     suspend fun listAllKeysTagged(): Result<List<Pair<LdkNamespace, KeyVersion>>> = withContext(ioDispatcher) {
-        isSetup.await()
         Logger.verbose("VSS LDK 'listAllKeysTagged' call", context = TAG)
-        runCatching {
-            NAMESPACES.flatMap { ns -> vssLdkListKeys(namespace = ns).map { ns to it } }
+        runSuspendCatching {
+            coordinator.withClient(VssClientCoordinator.Domain.LDK) {
+                NAMESPACES.flatMap { ns -> vssLdkListKeys(namespace = ns).map { ns to it } }
+            }
         }.onSuccess {
             Logger.verbose("VSS LDK 'listAllKeysTagged' success - found ${it.size} key(s)", context = TAG)
         }.onFailure {

@@ -1,6 +1,7 @@
 package to.bitkit.data.backup
 
 import com.synonym.vssclient.VssItem
+import com.synonym.vssclient.vssDeriveStoreId
 import com.synonym.vssclient.vssStore
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -8,10 +9,9 @@ import org.junit.Test
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
-import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.env.Env
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -22,14 +22,13 @@ class VssBackupClientTest : BaseUnitTest() {
 
     private lateinit var sut: VssBackupClient
 
-    private val vssStoreIdProvider = mock<VssStoreIdProvider>()
     private val keychain = mock<Keychain>()
 
     @Before
     fun setUp() = runBlocking {
         sut = VssBackupClient(
             ioDispatcher = testDispatcher,
-            vssStoreIdProvider = vssStoreIdProvider,
+            coordinator = VssClientCoordinator(),
             keychain = keychain,
         )
     }
@@ -45,23 +44,31 @@ class VssBackupClientTest : BaseUnitTest() {
     }
 
     @Test
-    fun `setup does not call vssStoreIdProvider when mnemonic is not available`() = test {
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
-
-        sut.setup()
-
-        verify(vssStoreIdProvider, never()).getVssStoreId(any())
-    }
-
-    @Test
-    fun `setup checks mnemonic before proceeding with vss initialization`() = test {
+    fun `setup derives store id from the same captured credentials as the signer`() = test {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(TEST_MNEMONIC)
-        whenever(vssStoreIdProvider.getVssStoreId(any())).thenReturn("test-store-id")
-
-        // Setup will fail on native VSS calls, but we verify we passed the mnemonic check
-        runCatching { sut.setup() }
-
-        verify(vssStoreIdProvider).getVssStoreId(any())
+        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn("test-passphrase")
+        var setupArguments: List<Any?>? = null
+        var deriveArguments: List<Any?>? = null
+        mockStatic(Class.forName(VSS_FFI_CLASS)) { invocation ->
+            when (invocation.method.name) {
+                "vssDeriveStoreId" -> {
+                    deriveArguments = invocation.arguments.toList()
+                    "captured-store"
+                }
+                "vssNewClientWithLnurlAuth" -> {
+                    setupArguments = invocation.arguments.take(5)
+                    null
+                }
+                else -> null
+            }
+        }.use {
+            assertTrue(sut.setup().isSuccess)
+            assertEquals(listOf(Env.vssStoreIdPrefix, TEST_MNEMONIC, "test-passphrase"), deriveArguments)
+            assertEquals(
+                listOf(Env.vssServerUrl, "captured-store", TEST_MNEMONIC, "test-passphrase", Env.lnurlAuthServerUrl),
+                setupArguments,
+            )
+        }
     }
 
     @Test
@@ -80,9 +87,10 @@ class VssBackupClientTest : BaseUnitTest() {
         assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
 
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(TEST_MNEMONIC)
-        whenever(vssStoreIdProvider.getVssStoreId(any())).thenReturn("test-store-id")
 
         mockStatic(Class.forName(VSS_FFI_CLASS)).use {
+            whenever(vssDeriveStoreId(Env.vssStoreIdPrefix, TEST_MNEMONIC, null))
+                .thenReturn("captured-store")
             assertTrue(sut.setup().isSuccess)
 
             val result = sut.getObject("METADATA")
@@ -97,9 +105,10 @@ class VssBackupClientTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name))
             .thenReturn(null)
             .thenReturn(TEST_MNEMONIC)
-        whenever(vssStoreIdProvider.getVssStoreId(any())).thenReturn("test-store-id")
 
         mockStatic(Class.forName(VSS_FFI_CLASS)).use {
+            whenever(vssDeriveStoreId(Env.vssStoreIdPrefix, TEST_MNEMONIC, null))
+                .thenReturn("captured-store")
             assertTrue(sut.setupWithRetry(baseDelayMs = 0L) {}.isSuccess)
 
             val item = VssItem("METADATA", byteArrayOf(), 1L)
