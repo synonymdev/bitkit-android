@@ -1337,6 +1337,15 @@ private fun PaykitAllowanceLocalState.hasPaid(requestId: PaykitPaymentRequestId)
             PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
     }
 
+/** Whether the automatic payment of [requestId] failed and nothing else was sent for it, so it is the user's to pay. */
+internal fun PaykitAllowanceLocalState.hasFailedAutomaticPayment(requestId: PaykitPaymentRequestId): Boolean {
+    val entries = journal.filter {
+        it.requestId.paymentRequestId == requestId.paymentRequestId &&
+            PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
+    }
+    return entries.any { it.isAutomatic && it.stage == Stage.FAILED } && entries.all { it.stage == Stage.FAILED }
+}
+
 /** Whether an automatic payment of [requestId] has left the wallet and not settled yet. */
 internal fun PaykitAllowanceLocalState.isPayingAutomatically(requestId: PaykitPaymentRequestId) = journal.any {
     it.isAutomatic && it.stage in IN_FLIGHT_STAGES && it.requestId.paymentRequestId == requestId.paymentRequestId &&

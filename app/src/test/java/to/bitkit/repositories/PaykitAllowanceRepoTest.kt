@@ -11,12 +11,15 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -1055,6 +1058,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertEquals(emptySet(), sut.handlingRequestIds.first())
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `a started request is released with its record loaded, before the pass ends`() = test {
         nodeReady()
@@ -1076,11 +1080,34 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             }
         }
         sut.activate(identity)
+        // Each time the hidden set changes, the started request must already be hidden by its record once released.
+        val shownOnRelease = mutableListOf<Boolean>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            sut.handlingRequestIds.collect { ids ->
+                if (first.id !in ids) shownOnRelease += !sut.hasSentPayment(first)
+            }
+        }
 
         sut.processIncomingRequests(listOf(first, second))
 
         assertEquals(false to true, firstWhileSecondPays)
         assertTrue(sut.hasSentPayment(first))
+        assertFalse(true in shownOnRelease.drop(1), "The request never shows between its release and its record")
+    }
+
+    @Test
+    fun `a request whose automatic payment failed is the user's to pay`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        val request = fixtures.paymentRequest()
+        localState = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("failed", request, ALLOWANCE_ID, 1_000uL, Stage.FAILED)),
+        )
+        sut.activate(identity)
+
+        assertFalse(sut.isAutomaticallyHandling(request))
+        assertFalse(sut.processIncomingRequests(listOf(request)))
+        verify(executor, never()).autoPay(any(), any(), any())
     }
 
     @Test

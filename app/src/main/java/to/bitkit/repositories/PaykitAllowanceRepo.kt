@@ -649,7 +649,8 @@ class PaykitAllowanceRepo @Inject constructor(
         val identity = activeIdentity ?: return@withContext false
         val signature = allowancesSignature()
         val covered = requests.filter {
-            it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
+            it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature &&
+                !paidRecords.hasFailedAutomaticPayment(it.id)
         }
         if (covered.isEmpty()) return@withContext false
         val payable = payableNow(covered)
@@ -669,9 +670,11 @@ class PaykitAllowanceRepo @Inject constructor(
      */
     suspend fun isAutomaticallyHandling(request: PaykitPaymentRequest): Boolean {
         if (executor.isHandling(request.id)) return true
+        // A failed automatic payment hands the request to the user, as its acceptance did before it was deferred.
         return request.requiresAcceptance &&
             coversRequest(request) &&
-            manualRequestSignatures[request.id] != allowancesSignature()
+            manualRequestSignatures[request.id] != allowancesSignature() &&
+            !paidRecords.hasFailedAutomaticPayment(request.id)
     }
 
     /**
