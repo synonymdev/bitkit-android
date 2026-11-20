@@ -16,6 +16,16 @@ fun Throwable.isDefiniteHardwarePreBroadcastFailure(): Boolean = generateSequenc
     it is BroadcastException.InvalidHex || it is BroadcastException.InvalidTransaction
 }
 
+/** bitkit-core raises this text when it never reached a server, so no transaction bytes went out. */
+private const val ELECTRUM_CONNECT_FAILURE_PREFIX = "Failed to connect to Electrum:"
+
+private fun BroadcastException.ElectrumException.isConnectFailure(): Boolean =
+    errorDetails.startsWith(ELECTRUM_CONNECT_FAILURE_PREFIX, ignoreCase = true)
+
+fun Throwable.isHardwareBroadcastNotSubmitted(): Boolean = generateSequence(this) { it.cause }.any {
+    it is BroadcastException.ElectrumException && it.isConnectFailure()
+}
+
 // A recognized node refusal permits leaving the sheet, but never proves non-delivery.
 fun Throwable.isHardwareBroadcastRefusalForNavigation(): Boolean =
     isDefiniteHardwarePreBroadcastFailure() || generateSequence(this) { it.cause }.any {

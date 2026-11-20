@@ -48,6 +48,48 @@ class BroadcastExceptionExtTest {
     }
 
     @Test
+    fun `only a failed Electrum connection proves nothing was submitted`() {
+        val connectFailures = listOf(
+            "Failed to connect to Electrum: connection refused",
+            "failed to connect to electrum: timed out",
+        )
+        for (details in connectFailures) {
+            val failure = BroadcastException.ElectrumException(details)
+            assertTrue(failure.isHardwareBroadcastNotSubmitted())
+            assertTrue(AppError(AppError(failure)).isHardwareBroadcastNotSubmitted())
+            assertTrue(failure.isBroadcastConnectivityFailure())
+            assertFalse(failure.isHardwareBroadcastRefusalForNavigation())
+            assertFalse(failure.isDefiniteHardwarePreBroadcastFailure())
+        }
+
+        val possiblySubmitted = listOf(
+            "Failed to connect to Electrum",
+            "Broadcast failed: Failed to connect to Electrum: reset",
+            " Failed to connect to Electrum: reset",
+            "Broadcast failed: disconnected",
+            "broadcast failed: min relay fee not met",
+            "",
+        )
+        for (details in possiblySubmitted) {
+            assertFalse(BroadcastException.ElectrumException(details).isHardwareBroadcastNotSubmitted())
+        }
+    }
+
+    @Test
+    fun `other failures never prove nothing was submitted`() = runTest {
+        val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
+        val errors = listOf(
+            timeout,
+            BroadcastException.InvalidHex("Failed to connect to Electrum: bad hex"),
+            BroadcastException.InvalidTransaction("Failed to connect to Electrum: bad tx"),
+            AppError("Failed to connect to Electrum: not from the broadcast"),
+        )
+        for (error in errors) {
+            assertFalse(error.isHardwareBroadcastNotSubmitted())
+        }
+    }
+
+    @Test
     fun `recognized backend refusals allow navigation without proving no dispatch`() {
         val reasons = listOf(
             "min relay fee not met",

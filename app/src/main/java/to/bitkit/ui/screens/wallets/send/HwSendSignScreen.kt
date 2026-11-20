@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -73,6 +74,10 @@ fun HwSendSignScreen(
         paymentDeadlineAt = paymentDeadlineAt,
     )
 
+    val offersRetry by produceState(false, request, uiState.isSigning, uiState.hasPendingBroadcast) {
+        value = viewModel.offersRetry(request)
+    }
+
     val onBackRequest: () -> Unit = { if (uiState.canLeave) onBack() }
 
     LaunchedEffect(walletId) {
@@ -100,7 +105,7 @@ fun HwSendSignScreen(
         amountSats = sendUiState.amount,
         address = sendUiState.address,
         isSigning = uiState.isSigning,
-        hasPendingBroadcast = uiState.hasPendingBroadcast,
+        offersRetry = offersRetry,
         vendor = vendor,
         onBack = onBackRequest,
         onOpenConnect = signAndBroadcast,
@@ -126,7 +131,7 @@ private fun HwSendSignContent(
     amountSats: ULong,
     address: String,
     isSigning: Boolean,
-    hasPendingBroadcast: Boolean,
+    offersRetry: Boolean,
     modifier: Modifier = Modifier,
     vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     onBack: () -> Unit = {},
@@ -175,7 +180,7 @@ private fun HwSendSignContent(
                 FillHeight()
                 PrimaryButton(
                     text = stringResource(
-                        if (hasPendingBroadcast) R.string.common__retry else vendor.sendOpenConnectRes()
+                        if (offersRetry) R.string.common__retry else vendor.sendOpenConnectRes()
                     ),
                     enabled = !isSigning,
                     isLoading = isSigning,
@@ -197,7 +202,7 @@ private fun Preview() {
                 amountSats = 100_000u,
                 address = "bc1qexampleaddressforconfirmingonthedevice",
                 isSigning = false,
-                hasPendingBroadcast = false,
+                offersRetry = false,
                 modifier = Modifier.sheetHeight()
             )
         }
