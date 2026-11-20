@@ -23,7 +23,6 @@ fun nfcPaymentUri(request: String?): String? {
 
 private const val BITCOIN_WITHOUT_ADDRESS = "bitcoin:?"
 private const val REQUIRED_PARAM_PREFIX = "req-"
-private val SINGLE_PARAMS = setOf("amount", "label", "message", "lightning")
 
 /**
  * Turns a payment request read from a tag or a nearby device into one the scanner decodes.
@@ -32,8 +31,8 @@ private val SINGLE_PARAMS = setOf("amount", "label", "message", "lightning")
  * (`bitcoin:?lightning=<invoice>`, used by Numo and planned by Square). The scanner rejects a
  * `bitcoin:` URI without an address, so that form becomes `lightning:<invoice>`. A URI with a
  * required (`req-`) parameter is kept, since BIP 321 forbids paying it without handling that
- * parameter and the rewrite would drop it. So is a URI that repeats `amount`, `label`, `message` or
- * `lightning`, which BIP 321 makes invalid. Anything else is returned trimmed and unchanged.
+ * parameter and the rewrite would drop it. So is a URI that repeats a parameter, since the rewrite would have to
+ * pick one value. Anything else is returned trimmed and unchanged.
  */
 fun scannedPaymentRequest(text: String): String {
     val trimmed = text.trim()
@@ -41,7 +40,7 @@ fun scannedPaymentRequest(text: String): String {
     val pairs = trimmed.substring(BITCOIN_WITHOUT_ADDRESS.length).split('&')
     // Checked on every key, since BIP 321 allows a required key with an empty or no value.
     if (pairs.any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }) return trimmed
-    val keys = pairs.map { it.substringBefore('=').lowercase() }.filter { it in SINGLE_PARAMS }
+    val keys = pairs.map { it.substringBefore('=').lowercase() }.filter { it.isNotEmpty() }
     if (keys.size != keys.toSet().size) return trimmed
     val params = pairs.mapNotNull {
         val key = it.substringBefore('=', missingDelimiterValue = "")
