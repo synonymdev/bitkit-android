@@ -9,6 +9,10 @@ on:
         description: "Ref in synonymdev/bitkit-e2e-tests"
         type: string
         default: main
+      post_to_slack:
+        description: "Post Local E2E Nightly summary to Slack (#bitkit-staging-nightly)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,6 +30,17 @@ jobs:
   e2e-spark:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    outputs:
+      spark-case: >-
+        ${{ contains(steps.*.outputs.spark-case, 'passed') && 'passed' ||
+            contains(steps.*.outputs.spark-case, 'failed') && 'failed' ||
+            contains(steps.*.outputs.spark-case, 'started') && 'started' || '' }}
+      spark-app-setup: >-
+        ${{ contains(steps.*.outputs.spark-case, 'setup-failed') && 'failure' ||
+            contains(steps.*.outputs.spark-case, 'setup') && 'interrupted' || '' }}
+      spark-fixture: ${{ steps.spark.outcome }}
+      e2e-sha: ${{ steps.e2e-source.outputs.commit }}
+      app-build: ${{ steps.app-build.outcome }}
     env:
       COMPOSE_PROJECT_NAME: bitkit-spark-e2e
     steps:
@@ -38,6 +53,7 @@ jobs:
           persist-credentials: false
 
       - uses: actions/checkout@v7
+        id: e2e-source
         with:
           repository: synonymdev/bitkit-e2e-tests
           ref: ${{ inputs.e2e_branch || 'main' }}
@@ -68,6 +84,7 @@ jobs:
           key: spark-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bitkit-e2e-tests/BITKIT_DOCKER_REVISION') }}
 
       - name: Start pinned Spark fixture
+        id: spark
         working-directory: bitkit-e2e-tests
         env:
           SPARK_IMAGE_CACHE: ${{ runner.temp }}/bitkit-spark-images.tar
@@ -76,6 +93,7 @@ jobs:
           ./scripts/local-backend spark-env >> "$GITHUB_ENV"
 
       - name: Build Android Spark app
+        id: app-build
         working-directory: bitkit-e2e-tests
         env:
           GITHUB_ACTOR: ${{ github.actor }}
@@ -151,3 +169,36 @@ jobs:
           name: spark-android-${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
           retention-days: 7
+
+  slack-report:
+    if: >-
+      always() &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.post_to_slack == true))
+    needs: e2e-spark
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout shared Slack reporter
+        uses: actions/checkout@v7
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          ref: b7e445ad080827421f427fd26ae04b1782d8409c
+          persist-credentials: false
+
+      - name: Post Slack summary
+        run: python3 scripts/slack_summary.py e2e-local-nightly
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_STAGING }}
+          PLATFORM: android
+          LOCAL_NIGHTLY_RESULT: ${{ needs.e2e-spark.result }}
+          BUILD_RESULT: ${{ needs.e2e-spark.outputs.app-build }}
+          E2E_TESTS_REF: ${{ needs.e2e-spark.outputs.e2e-sha || inputs.e2e_branch || 'main' }}
+          SPARK_FIXTURE_RESULT: ${{ needs.e2e-spark.outputs.spark-fixture }}
+          SPARK_APP_SETUP_RESULT: ${{ needs.e2e-spark.outputs.spark-app-setup }}
+          E2E_TESTS_RESULT: ${{ needs.e2e-spark.result }}
+          SPARK_CASE_RESULT: ${{ needs.e2e-spark.outputs.spark-case }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
