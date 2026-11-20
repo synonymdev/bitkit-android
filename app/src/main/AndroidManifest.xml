@@ -19,6 +19,15 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- NFC payments: reading payment tags and offering the Receive request as a tag -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.nfc.hce"
+        android:required="false" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE"
@@ -32,6 +41,8 @@
 
     <!-- Bluetooth permissions for hardware wallets (Trezor Safe 7, Blockstream Jade) on Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Nearby payments: advertising the Receive request to nearby Bitkit wallets -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
@@ -70,6 +81,18 @@
             android:foregroundServiceType="dataSync"
             android:enabled="true"
             android:exported="false" />
+
+        <service
+            android:name=".androidServices.NdefTagService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/ndef_tag_service" />
+        </service>
 
         <service
             android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"

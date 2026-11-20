@@ -1041,6 +1041,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         backupSheet = backupSheet,
         notificationsSheet = mock { on { type } doReturn TimedSheetType.NOTIFICATIONS },
         quickPaySheet = mock { on { type } doReturn TimedSheetType.QUICK_PAY },
+        nfcSheet = mock { on { type } doReturn TimedSheetType.NFC },
         usdtSheet = usdtSheet,
 
         usdtPreferences = usdtPreferences,
@@ -4397,6 +4398,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `nfc tag launch rewrites a bip 321 request without an address`() = test {
+        val bolt11 = "lnbcrt1nfctap"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.handleDeeplinkIntent(nfcTagIntent("bitcoin:?lightning=$bolt11"))
+        advanceUntilIdle()
+
+        val decoded = argumentCaptor<String>()
+        verify(coreService, atLeastOnce()).decode(decoded.capture())
+        assertTrue(decoded.allValues.none { it.startsWith("bitcoin:?") }, decoded.allValues.toString())
+    }
+
+    @Test
     fun `Bitkit SamRock deeplink opens BTCPay connection sheet without core decode`() = test {
         sut.handleDeeplinkIntent(samRockIntent(samRockDeepLink(SAMROCK_SETUP_URL)))
         advanceUntilIdle()
@@ -5343,7 +5358,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showScannerSheet()
         advanceUntilIdle()
 
-        assertEquals(Sheet.QrScanner(showBackButton = true), sut.currentSheet.value)
+        assertEquals(Sheet.QrScanner(showBackButton = true, readsNearby = true), sut.currentSheet.value)
 
         sut.hideScannerSheet()
         advanceUntilIdle()
@@ -5352,11 +5367,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scanner sheet opened for a setting does not read nearby payments`() = test {
+        sut.showScannerSheet { }
+        advanceUntilIdle()
+        assertEquals(Sheet.QrScanner(readsNearby = false), sut.currentSheet.value)
+
+        sut.showScannerSheet(isPubkyScan = true) { }
+        advanceUntilIdle()
+        assertEquals(Sheet.QrScanner(isPubkyScan = true, readsNearby = false), sut.currentSheet.value)
+    }
+
+    @Test
     fun `scanner sheet can hide back button for tab bar entry`() = test {
         sut.showScannerSheet(showBackButton = false)
         advanceUntilIdle()
 
-        assertEquals(Sheet.QrScanner(showBackButton = false), sut.currentSheet.value)
+        assertEquals(Sheet.QrScanner(showBackButton = false, readsNearby = true), sut.currentSheet.value)
     }
 
     @Test
@@ -6461,7 +6487,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.showScannerSheet()
         advanceUntilIdle()
-        assertEquals(Sheet.QrScanner(), sut.currentSheet.value)
+        assertEquals(Sheet.QrScanner(readsNearby = true), sut.currentSheet.value)
 
         sut.onScannerSheetResult(authUrl)
         advanceUntilIdle()
@@ -9727,6 +9753,182 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `nearby read still decoding does not route after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `duplicate nearby read keeps the decoding read cancellable by enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `nfc read still decoding does not route after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input, isNearbyRead = true))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `nearby read still decoding does not route after contacts`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+        isPaykitEnabled.value = true
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.Contacts)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToContacts, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `nfc read still preparing does not reopen send after the sheet closes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { blocktankRepo.refreshInfo() }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Result.success(Unit)
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(input, isNearbyRead = true))
+        advanceUntilIdle()
+        assertTrue(entered.isCompleted)
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `bluetooth read does not replace a scanned request still preparing`() = test {
+        val scanned = stubOnchainAmountScan(amountSats = 10_000u)
+        val nearby = "bitcoin:$REGTEST_ADDRESS?amount=0.0002"
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(scanned)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(scanned))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.AddressContinue(nearby, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        verify(coreService, never()).decode(nearby)
+    }
+
+    @Test
     fun `hardware send sheet onchain address with payable amount estimates its fee and opens confirm`() = test {
         val input = stubOnchainAmountScan(amountSats = 10_000u)
         stubHardwareFunding()
@@ -10021,6 +10223,47 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(sheetBefore, sut.currentSheet.value)
         assertNull(sut.quickPayData.value)
         verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `lightning scan skips the channel wait when spark covers the amount and the node is stopped`() = test {
+        val input = "lnbcrt1sparkscan"
+        stubLightningScan(bolt11 = input, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels()
+    }
+
+    @Test
+    fun `lightning scan refreshes a running node's channels without waiting when spark covers the amount`() = test {
+        val input = "lnbcrt1runningscan"
+        stubLightningScan(bolt11 = input, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo).waitForUsableChannels(awaitUsable = false)
+    }
+
+    @Test
+    fun `lightning scan waits for channels when spark does not cover the amount`() = test {
+        val input = "lnbcrt1ldkscan"
+        stubLightningScan(bolt11 = input, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(false)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo).waitForUsableChannels()
     }
 
     @Test
@@ -20963,6 +21206,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         return mock {
             on { action }.thenReturn(Intent.ACTION_VIEW)
+            on { data }.thenReturn(uri)
+        }
+    }
+
+    private fun nfcTagIntent(value: String): Intent {
+        val uri = mock<Uri> {
+            on { toString() }.thenReturn(value)
+            on { scheme }.thenReturn(value.substringBefore(':'))
+        }
+        return mock {
+            on { action }.thenReturn(NfcAdapter.ACTION_NDEF_DISCOVERED)
             on { data }.thenReturn(uri)
         }
     }

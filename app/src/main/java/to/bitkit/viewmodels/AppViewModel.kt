@@ -174,6 +174,7 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
+import to.bitkit.nfc.scannedPaymentRequest
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -290,6 +291,7 @@ import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
 import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
 import to.bitkit.utils.timedsheets.sheets.MoveToSparkTimedSheet
+import to.bitkit.utils.timedsheets.sheets.NfcTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
@@ -359,6 +361,7 @@ class AppViewModel @Inject constructor(
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
     private val quickPaySheet: QuickPayTimedSheet,
+    private val nfcSheet: NfcTimedSheet,
     private val usdtSheet: UsdtTimedSheet,
     private val usdtPreferences: UsdtPreferencesRepo,
     private val highBalanceSheet: HighBalanceTimedSheet,
@@ -419,9 +422,19 @@ class AppViewModel @Inject constructor(
         if (canPresent()) _mainScreenEffect.emit(effect)
     }
 
-    private suspend fun waitForUsableChannels(walletGeneration: Long? = connectionRecovery.currentGeneration()) {
+    /**
+     * Waits for the node's channels before a Lightning send. When Spark covers [amountSats] there is no wait for a
+     * usable channel: a running node only publishes its current channels, which the send limit reads, and a node not
+     * running yet is skipped, so a payment opened right after launch does not wait for the node to start.
+     */
+    private suspend fun waitForUsableChannels(
+        walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        amountSats: ULong? = null,
+    ) {
         requireCurrentPaymentPreparation(walletGeneration)
-        lightningRepo.waitForUsableChannels()
+        val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
+        val sparkCovers = amountSats != null && lightningRepo.canSendWithSpark(amountSats)
+        if (isNodeRunning || !sparkCovers) lightningRepo.waitForUsableChannels(awaitUsable = !sparkCovers)
         requireCurrentPaymentPreparation(walletGeneration)
         walletRepo.refreshMaxSendLightning()
         requireCurrentPaymentPreparation(walletGeneration)
@@ -638,12 +651,20 @@ class AppViewModel @Inject constructor(
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
         registerSheet(notificationsSheet)
+        // Registered before QuickPay at the same priority: the NFC sheet includes the QuickPay toggle.
+        registerSheet(nfcSheet)
         registerSheet(quickPaySheet)
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
     private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
+
+    /** A request read from a nearby device on the recipient screen, cancelled when the user enters one manually. */
+    private var nearbyAddressScanJob: Job? = null
+
+    /** A request found over Bluetooth without a user gesture; any request the user chose takes priority over it. */
+    private var passiveNearbyScanJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
@@ -3326,7 +3347,7 @@ class AppViewModel @Inject constructor(
 
                         is SendEvent.AddressChange -> onAddressChange(it.value)
                         SendEvent.AddressReset -> resetAddressInput()
-                        is SendEvent.AddressContinue -> onAddressContinue(it.data)
+                        is SendEvent.AddressContinue -> onAddressContinue(it.data, it.suppressQuickPay, it.isNearbyRead)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
                         is SendEvent.AmountMax -> onAmountMax(it.amount)
@@ -3377,13 +3398,16 @@ class AppViewModel @Inject constructor(
                         SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                         SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                         SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
-                        SendEvent.Contacts -> setSendEffect(
-                            if (isPaykitEnabled.value) {
-                                SendEffect.NavigateToContacts
-                            } else {
-                                SendEffect.NavigateToComingSoon
-                            }
-                        )
+                        SendEvent.Contacts -> {
+                            cancelNearbyAddressScan()
+                            setSendEffect(
+                                if (isPaykitEnabled.value) {
+                                    SendEffect.NavigateToContacts
+                                } else {
+                                    SendEffect.NavigateToComingSoon
+                                },
+                            )
+                        }
                     }
                 } catch (_: CancellationException) {
                     currentCoroutineContext().ensureActive()
@@ -3397,7 +3421,14 @@ class AppViewModel @Inject constructor(
     private val activeHardwareWalletId: String?
         get() = (currentSheet.value as? Sheet.Send)?.hardwareWalletId
 
+    /** A nearby request still decoding must not route over the choice the user just made on the recipient screen. */
+    private fun cancelNearbyAddressScan() {
+        nearbyAddressScanJob?.cancel()
+        nearbyAddressScanJob = null
+    }
+
     private fun onEnterManuallyClick() {
+        cancelNearbyAddressScan()
         clearActiveContactPaymentContext()
         resetAddressInput()
         setSendEffect(SendEffect.NavigateToAddress)
@@ -3651,7 +3682,7 @@ class AppViewModel @Inject constructor(
                     )
                     return@takeIf false
                 }
-                waitForUsableChannels(walletGeneration)
+                waitForUsableChannels(walletGeneration, lnInv.amountSatoshis.coerceAtLeast(1u))
                 val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                 if (!canSend) {
                     val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
@@ -4065,9 +4096,26 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onAddressContinue(data: String) {
+    private fun onAddressContinue(data: String, suppressQuickPay: Boolean, isNearbyRead: Boolean) {
+        // Bluetooth reads suppress QuickPay; NFC reads come from a tap, like a QR scan or a paste.
+        val isPassiveRead = isNearbyRead && suppressQuickPay
+        val preparing = scheduledScan?.job?.takeIf { it.isActive }
+        if (isPassiveRead && preparing != null && preparing !== passiveNearbyScanJob) {
+            Logger.info("Ignoring nearby read while the request the user chose is preparing", context = TAG)
+            return
+        }
         clearActiveContactPaymentContext()
-        launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data, routePubkyKeys = true)
+        val job = launchScan(
+            source = ScanSource.ADDRESS_CONTINUE,
+            data = data,
+            routePubkyKeys = true,
+            suppressQuickPay = suppressQuickPay,
+        )
+        // A nearby read (NFC or Bluetooth) arrives on its own, so Enter Manually must be able to drop it.
+        // Its job ends once it routes, so cancelling it never stops a payment in progress.
+        // A duplicate read returns no job; keep the handle of the scan still running.
+        if (isNearbyRead) job?.let { nearbyAddressScanJob = it }
+        if (isPassiveRead) job?.let { passiveNearbyScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {
@@ -5392,6 +5440,7 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
         allowPubkyAuth: Boolean = isMainScanner,
+        suppressQuickPay: Boolean = false,
     ) {
         launchScan(
             source = ScanSource.SCAN_RESULT,
@@ -5400,6 +5449,7 @@ class AppViewModel @Inject constructor(
             routePubkyKeys = routePubkyKeys,
             contactPaymentContext = contactPaymentContext,
             allowPubkyAuth = allowPubkyAuth,
+            suppressQuickPay = suppressQuickPay,
         )
     }
 
@@ -6357,7 +6407,7 @@ class AppViewModel @Inject constructor(
         )
         if (quickPayHandled) return
 
-        waitForUsableChannels(walletGeneration)
+        waitForUsableChannels(walletGeneration, amount)
         if (!lightningRepo.canSend(amount)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = amount.safe() - maxSendLightning.safe()
@@ -6437,7 +6487,7 @@ class AppViewModel @Inject constructor(
         }
         val paymentAmount = incomingAmount ?: displaySats
 
-        waitForUsableChannels(walletGeneration)
+        waitForUsableChannels(walletGeneration, paymentAmount.coerceAtLeast(1u))
         if (!lightningRepo.canSend(paymentAmount.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,
@@ -6624,7 +6674,11 @@ class AppViewModel @Inject constructor(
     ): Boolean {
         requireCurrentPaymentPreparation(walletGeneration)
         if (suppressQuickPay) {
-            Logger.info("Skipping QuickPay for '$amountSats' sats deferred across the lock", context = TAG)
+            Logger.info(
+                "Skipping QuickPay for '$amountSats' sats: suppressed for this scan " +
+                    "(deferred across the lock, or read from a nearby device)",
+                context = TAG,
+            )
             return false
         }
         if (hasActiveContactPaymentContext()) return false
@@ -8936,11 +8990,13 @@ class AppViewModel @Inject constructor(
             Sheet.QrScanner(
                 isPubkyScan = isPubkyScan,
                 showBackButton = showBackButton,
+                // A caller with its own handler scans for a setting or a contact, not for a payment.
+                readsNearby = !isPubkyScan && onResult == null,
             )
         )
     }
 
-    fun onScannerSheetResult(data: String) {
+    fun onScannerSheetResult(data: String, suppressQuickPay: Boolean = false) {
         val handler = scanResultHandler
         val shouldHandleAsProtocol = SamRockSetupRequest.isProtocolUrl(data.removeLightningSchemes())
         scanResultHandler = null
@@ -8957,6 +9013,7 @@ class AppViewModel @Inject constructor(
                 data = data,
                 startDelay = SCREEN_TRANSITION_DELAY,
                 routePubkyKeys = true,
+                suppressQuickPay = suppressQuickPay,
             )
         }
     }
@@ -9078,6 +9135,8 @@ class AppViewModel @Inject constructor(
             clearPaymentRequestPresentationRetry(it.request.id)
         }
         if (_currentSheet.value is Sheet.Send) {
+            // A nearby read still preparing belongs to this Send visit: it must not reopen a sheet or reach QuickPay.
+            cancelNearbyAddressScan()
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++
@@ -10020,7 +10079,11 @@ class AppViewModel @Inject constructor(
         if (intent.action !in DEEPLINK_ACTIONS) return
         intent.data?.let { uri ->
             Logger.debug("Received deeplink '${uri.toString().sanitizedDeeplinkLogValue()}'", context = TAG)
-            processDeeplink(uri)
+            // A tapped tag goes through the same rewrite as a scanner read (BIP 321 without an address).
+            val value = uri.toString().let {
+                if (intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) scannedPaymentRequest(it) else it
+            }
+            processDeeplink(uri, value)
         }
     }
 
@@ -10103,9 +10166,9 @@ class AppViewModel @Inject constructor(
 
     private fun processDeeplink(
         uri: Uri,
+        value: String = uri.toString(),
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ) = viewModelScope.launch {
-        val value = uri.toString()
         val isContactLink = PubkyContactLink.matches(uri)
         if (SamRockSetupRequest.isProtocolUrl(value)) {
             if (!walletRepo.walletExists()) return@launch
@@ -10658,7 +10721,11 @@ sealed interface SendEvent {
 
     data object AddressReset : SendEvent
     data class AddressChange(val value: String) : SendEvent
-    data class AddressContinue(val data: String) : SendEvent
+    data class AddressContinue(
+        val data: String,
+        val suppressQuickPay: Boolean = false,
+        val isNearbyRead: Boolean = false,
+    ) : SendEvent
 
     data object AmountReset : SendEvent
     data object AmountContinue : SendEvent

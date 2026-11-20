@@ -1852,7 +1852,11 @@ class LightningRepo @Inject constructor(
         lightningService.listPayments()
     }
 
-    suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
+    /**
+     * Publishes current channels and, with [awaitUsable], waits for one to become usable. Without it the call returns
+     * once the channels are published, for a payment another rail (Spark) already covers.
+     */
+    suspend fun waitForUsableChannels(awaitUsable: Boolean = true) = withContext(bgDispatcher) {
         var state = _lightningState.value
         if (!state.nodeLifecycleState.canRun()) {
             delayNoUsableChannelsFeedback()
@@ -1867,6 +1871,7 @@ class LightningRepo @Inject constructor(
         // Usability can stay true while a payment changes the outbound HTLC limit.
         // Publish current channels before callers derive send capacity from them.
         refreshChannelsAndPeers()
+        if (!awaitUsable) return@withContext
         state = _lightningState.value
         if (!state.nodeLifecycleState.canRun()) {
             delayNoUsableChannelsFeedback()

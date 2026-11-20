@@ -1,0 +1,98 @@
+package to.bitkit.nfc
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class NfcPaymentUriTest {
+    @Test
+    fun `keeps requests that already have a payment scheme`() {
+        assertEquals("bitcoin:bc1q?lightning=lnbc1", nfcPaymentUri("bitcoin:bc1q?lightning=lnbc1"))
+        assertEquals("BITCOIN:BC1Q", nfcPaymentUri("BITCOIN:BC1Q"))
+        assertEquals("lightning:lnbc1", nfcPaymentUri("lightning:lnbc1"))
+        assertEquals("ethereum:0xabc@42161/transfer", nfcPaymentUri("ethereum:0xabc@42161/transfer"))
+        assertEquals("LIGHTNING:LNTBS1P", nfcPaymentUri("LIGHTNING:LNTBS1P"))
+    }
+
+    @Test
+    fun `adds lightning to bare lightning requests`() {
+        assertEquals("lightning:lnbc10u1p", nfcPaymentUri("lnbc10u1p"))
+        assertEquals("lightning:lnbcrt1p", nfcPaymentUri(" lnbcrt1p "))
+        assertEquals("lightning:LNURL1DP68", nfcPaymentUri("LNURL1DP68"))
+    }
+
+    @Test
+    fun `adds bitcoin to bare addresses`() {
+        assertEquals("bitcoin:bc1qxyz", nfcPaymentUri("bc1qxyz"))
+    }
+
+    @Test
+    fun `returns null for no request`() {
+        assertNull(nfcPaymentUri(null))
+        assertNull(nfcPaymentUri("  "))
+    }
+
+    @Test
+    fun `keeps a Square request for the scanner`() {
+        assertEquals(PosNfcFixtures.SQUARE_URI, scannedPaymentRequest(PosNfcFixtures.SQUARE_URI))
+        assertEquals("LIGHTNING:LNTBS1P", scannedPaymentRequest(" LIGHTNING:LNTBS1P\n"))
+    }
+
+    @Test
+    fun `turns a BIP 321 request without an address into its Lightning request`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+
+        assertEquals("lightning:$invoice", scannedPaymentRequest(PosNfcFixtures.BIP321_URI))
+        assertEquals("lightning:$invoice", scannedPaymentRequest("BITCOIN:?LIGHTNING=$invoice"))
+        assertEquals("lightning:$invoice", scannedPaymentRequest("bitcoin:?amount=0.0000799&lightning=$invoice&creq=x"))
+    }
+
+    @Test
+    fun `keeps other bitcoin requests unchanged`() {
+        val unified = "bitcoin:bc1qtest?lightning=lnbc1"
+
+        assertEquals(unified, scannedPaymentRequest(unified))
+        assertEquals("bitcoin:?amount=0.001", scannedPaymentRequest("bitcoin:?amount=0.001"))
+        assertEquals("bitcoin:?lightning=", scannedPaymentRequest("bitcoin:?lightning="))
+        assertEquals("bitcoin:?lno=lno1qgsq", scannedPaymentRequest("bitcoin:?lno=lno1qgsq"))
+    }
+
+    @Test
+    fun `request repeating a parameter is kept`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        for (repeated in listOf(
+            "bitcoin:?lightning=$invoice&amount=0.01&AMOUNT=0.02",
+            "bitcoin:?lightning=$invoice&lightning=lnbc1other",
+            "bitcoin:?lightning=$invoice&label=a&label=b",
+            "bitcoin:?lightning=$invoice&creq=a&CREQ=b",
+        )) {
+            assertEquals(repeated, scannedPaymentRequest(repeated))
+        }
+    }
+
+    @Test
+    fun `request whose amount the invoice does not carry is kept`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        assertEquals("lightning:$invoice", scannedPaymentRequest("bitcoin:?amount=0.0000799&lightning=$invoice"))
+        assertEquals("lightning:$invoice", scannedPaymentRequest("bitcoin:?amount=0.00007990&lightning=$invoice"))
+        for (kept in listOf(
+            "bitcoin:?amount=0.0001&lightning=$invoice",
+            "bitcoin:?amount=0.0001&lightning=lnbcrt1pamountless",
+            "bitcoin:?amount=abc&lightning=$invoice",
+        )) {
+            assertEquals(kept, scannedPaymentRequest(kept))
+        }
+    }
+
+    @Test
+    fun `request with a required parameter is kept`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        val required = "bitcoin:?lightning=$invoice&req-pop=callback%3a"
+        assertEquals(required, scannedPaymentRequest(required))
+        val uppercase = "BITCOIN:?REQ-FOO=bar&LIGHTNING=$invoice"
+        assertEquals(uppercase, scannedPaymentRequest(uppercase))
+        for (empty in listOf("bitcoin:?lightning=$invoice&req-foo=", "bitcoin:?lightning=$invoice&req-foo")) {
+            assertEquals(empty, scannedPaymentRequest(empty))
+        }
+    }
+}

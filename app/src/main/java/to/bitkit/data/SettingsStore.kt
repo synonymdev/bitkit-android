@@ -235,6 +235,8 @@ data class SettingsData(
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,
     val quickPayIntroSeen: Boolean = false,
+    val nfcIntroSeen: Boolean = false,
+    val isNearbyPaymentsEnabled: Boolean = true,
     val bgPaymentsIntroSeen: Boolean = false,
     val isQuickPayEnabled: Boolean = false,
     val quickPayAmount: Int = 5,
