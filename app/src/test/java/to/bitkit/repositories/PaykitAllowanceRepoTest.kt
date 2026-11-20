@@ -64,6 +64,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     private val executor = mock<PaykitAllowanceExecutor>()
     private val lightningRepo = mock<LightningRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val backupRepo = mock<BackupRepo>()
     private val executorEvents = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 8)
     private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val lightningState = MutableStateFlow(LightningState())
@@ -117,6 +118,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             activityRepo = activityRepo,
             clock = clock,
+            backupRepo = { backupRepo },
             allowanceTerms = { _, monthAnchor, endpoints ->
                 proposedTerms += monthAnchor to endpoints
                 terms
@@ -135,6 +137,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             activityRepo = activityRepo,
             clock = clock,
+            backupRepo = { backupRepo },
         )
         val activation = async(start = CoroutineStart.UNDISPATCHED) { queued.activate(identity) }
 
@@ -1008,6 +1011,49 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertFalse(sut.isAutomaticallyHandling(above))
         assertTrue(sut.isAutomaticallyHandling(within))
         verify(executor, never()).autoPay(any(), any(), any())
+    }
+
+    @Test
+    fun `a request this wallet already paid stays off the pending requests`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.MANUAL)
+        val request = fixtures.paymentRequest()
+        val unpaid = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        localState = PaykitAllowanceLocalState(autoPaidRequestIds = setOf(request.id))
+        sut.activate(identity)
+        sut.processIncomingRequests(listOf(request, unpaid))
+
+        assertFalse(sut.isAutomaticallyHandling(request))
+        assertTrue(sut.keepsOffPending(request))
+        assertFalse(sut.keepsOffPending(unpaid))
+        assertTrue(sut.hasSentPayment(request))
+        assertFalse(sut.hasSentPayment(unpaid))
+    }
+
+    @Test
+    fun `a request found manual moves the pending filter`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.MANUAL)
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        assertTrue(sut.keepsOffPending(request))
+        val version = sut.pendingFilterVersion.value
+
+        sut.processIncomingRequests(listOf(request))
+
+        assertTrue(sut.pendingFilterVersion.value > version)
+        assertFalse(sut.keepsOffPending(request))
+    }
+
+    @Test
+    fun `an automatic payment leaving the wallet is backed up at once`() = test {
+        whenever(backupRepo.persistWalletBackup()).thenReturn(Result.success(Unit))
+
+        executorEvents.emit(PaykitAllowanceEvent.PaymentLeaving)
+
+        verify(backupRepo).persistWalletBackup()
     }
 
     @Test

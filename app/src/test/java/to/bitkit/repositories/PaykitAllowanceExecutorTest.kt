@@ -297,6 +297,8 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         )
         order.verify(payer).payLightning(eq(INVOICE), isNull(), anyOrNull(), any())
         verify(sdk, never()).recordPaymentOutcome(any())
+        // The proof delivered after the payment sends the queued acceptance with it.
+        verify(sdk, never()).processOutboundPrivateMessages(any())
         assertEquals(listOf(PaykitAllowanceTime.format(fixtures.now)), evaluatedTrustedTimes)
         assertEquals(listOf(ALLOWANCE_ID), selections.map { it.allowanceId })
         assertEquals(listOf(fixtures.lightningIdentifier), acceptedChecks.map { it.paymentEndpointIdentifier })
@@ -312,6 +314,41 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PAYMENT_HASH, entry.paymentHash)
         assertEquals(fixtures.lightningIdentifier, entry.paymentEndpointIdentifier)
         assertFalse(sut.isHandling(request.id))
+    }
+
+    @Test
+    fun `a request kept manual after its acceptance sends the acceptance at once`() = test {
+        automaticReservation = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.ManualOnly)
+        val request = fixtures.paymentRequest()
+
+        val result = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk).processOutboundPrivateMessages(request.counterparty)
+    }
+
+    @Test
+    fun `an automatic payment asks for a backup before it leaves the wallet`() = test {
+        collectEvents()
+        whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            assertEquals(listOf<PaykitAllowanceEvent>(PaykitAllowanceEvent.PaymentLeaving), events.toList())
+            assertEquals(Stage.SENDING, sut.localState(identity).journal.single().stage)
+            Result.success(PAYMENT_HASH)
+        }
+
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        verify(payer).payLightning(any(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a request counts as paid only once its payment may have left`() = test {
+        val request = fixtures.paymentRequest()
+        for (stage in Stage.entries) {
+            seedJournal(journalEntry(MANUAL_ATTEMPT_ID, request, stage, PAYMENT_HASH))
+            val expected = stage in setOf(Stage.SENDING, Stage.SENT, Stage.UNKNOWN, Stage.SUCCEEDED)
+            assertEquals(expected, sut.localState(identity).hasSentPayment(request.id), "stage '$stage'")
+        }
     }
 
     @Test
@@ -713,6 +750,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(AUTOMATIC_ATTEMPT_ID, spend.attemptId)
         assertEquals(1_000uL, spend.amountSats)
         assertTrue(sut.localState(identity).automaticSpends.isEmpty())
+    }
+
+    @Test
+    fun `a failed automatic payment sends its acceptance once it settles`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+
+        sut.autoPay(request, listOf(fixtures.allowance()), identity)
+        verify(sdk, never()).processOutboundPrivateMessages(any())
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+
+        verify(sdk).processOutboundPrivateMessages(request.counterparty)
     }
 
     @Test
@@ -1870,6 +1919,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a manual payment of a request this wallet already paid fails while the ledger has no record of it`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        seedJournal(journalEntry(AUTOMATIC_ATTEMPT_ID, request, Stage.SUCCEEDED, PAYMENT_HASH))
+
+        val result = sut.beginManualPayment(request, fixtures.lightningIdentifier)
+
+        assertIs<PaykitAllowanceError.PaymentAlreadyRecorded>(result.exceptionOrNull())
+        verify(sdk, never()).reserveManualPayment(any(), any())
+    }
+
+    @Test
     fun `a manual payment is not reported to a ledger behind this wallet`() = test {
         sut.activate(identity)
         sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
@@ -1899,8 +1960,12 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PAYMENT_HASH, sut.localState(identity).journal.single().paymentHash)
         assertEquals(Stage.SENT, sut.localState(identity).journal.single().stage)
 
+        val sent = sut.beginManualPayment(request, fixtures.lightningIdentifier)
+        assertIs<PaykitAllowanceError.PaymentAlreadyRecorded>(sent.exceptionOrNull())
+
         manualReservation = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.ManualOnly)
-        assertNull(sut.beginManualPayment(request, fixtures.lightningIdentifier).getOrThrow())
+        val other = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        assertNull(sut.beginManualPayment(other, fixtures.lightningIdentifier).getOrThrow())
     }
 
     @Test
