@@ -351,8 +351,23 @@ class CacheStoreTest : BaseUnitTest() {
         assertEquals("original", data.sparkSendRowIds["retried"])
         assertEquals("1:2:3", data.sparkSendRowStamps["retried"])
         assertFalse("plain" in data.sparkSendRowIds)
-        assertFalse("later0" in data.sparkSendRowIds)
-        assertEquals(MAX_SPARK_SEND_HASHES, data.sparkSendRowIds.size)
+        assertEquals("id0", data.sparkSendRowIds["later0"])
+        assertEquals(MAX_SPARK_SEND_HASHES + 1, data.sparkSendRowIds.size)
+    }
+
+    @Test
+    fun `keepSparkSendRowId keeps a new writer beside the latest sends with earlier ids`() = test {
+        repeat(MAX_SPARK_SEND_HASHES) {
+            sut.keepSparkSendEarlierIds("retried$it", setOf("earlier$it"))
+            sut.keepSparkSendRowId("retried$it", "original$it", "1:2:3")
+        }
+
+        sut.keepSparkSendRowId("new", "id", "1:2:3")
+
+        val data = sut.data.first()
+        assertEquals("id", data.sparkSendRowIds["new"])
+        assertEquals("1:2:3", data.sparkSendRowStamps["new"])
+        assertEquals("original0", data.sparkSendRowIds["retried0"])
     }
 
     private class CountingDataStore<T>(private val inner: DataStore<T>) : DataStore<T> {
