@@ -1,104 +1,139 @@
-name: Local E2E Nightly (Android)
+name: E2E
 
 on:
-  schedule:
-    - cron: "35 5 * * *"
   workflow_dispatch:
     inputs:
       e2e_branch:
-        description: "Ref in synonymdev/bitkit-e2e-tests"
-        type: string
-        default: main
-      post_to_slack:
-        description: "Post Local E2E Nightly summary to Slack (#bitkit-staging-nightly)"
-        type: boolean
-        default: false
-
-permissions:
-  contents: read
-  packages: read
+        description: "Branch of synonymdev/bitkit-e2e-tests to use (main | default-feature-branch | custom branch name)"
+        required: false
+        default: "default-feature-branch"
+  pull_request:
+    types: [ opened, synchronize, reopened, ready_for_review ]
 
 env:
   TERM: xterm-256color
   FORCE_COLOR: 1
 
 concurrency:
-  group: bitkit-local-e2e-nightly-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  e2e-spark:
+  detect-changes:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 120
     outputs:
-      spark-case: >-
-        ${{ contains(steps.*.outputs.spark-case, 'passed') && 'passed' ||
-            contains(steps.*.outputs.spark-case, 'failed') && 'failed' ||
-            contains(steps.*.outputs.spark-case, 'started') && 'started' || '' }}
-      spark-app-setup: >-
-        ${{ contains(steps.*.outputs.spark-case, 'setup-failed') && 'failure' ||
-            contains(steps.*.outputs.spark-case, 'setup') && 'interrupted' || '' }}
-      spark-fixture: ${{ steps.spark.outcome }}
-      e2e-sha: ${{ steps.e2e-source.outputs.commit }}
-      app-build: ${{ steps.app-build.outcome }}
-    env:
-      COMPOSE_PROJECT_NAME: bitkit-spark-e2e
+      code: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.code == 'true' }}
     steps:
-      - name: Reserve regtest host ports
-        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=39388,43782,60001
-
       - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        if: github.event_name == 'pull_request'
+        id: filter
         with:
-          path: bitkit-android
-          persist-credentials: false
+          filters: |
+            code:
+              - 'app/**'
+              - 'gradle/**'
+              - '*.gradle.kts'
+              - 'gradle.properties'
+              - '.github/workflows/e2e.yml'
 
-      - uses: actions/checkout@v7
-        id: e2e-source
-        with:
-          repository: synonymdev/bitkit-e2e-tests
-          ref: ${{ inputs.e2e_branch || 'main' }}
-          path: bitkit-e2e-tests
-          persist-credentials: false
+  build-local:
+    needs: detect-changes
+    if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
 
-      - uses: actions/setup-java@v6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
         with:
           java-version: "17"
-          distribution: temurin
+          distribution: "temurin"
 
-      - uses: gradle/actions/setup-gradle@v6
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: bitkit-e2e-tests/package-lock.json
-
-      - name: Install Appium dependencies
-        working-directory: bitkit-e2e-tests
-        run: npm ci
-
-      - name: Cache pinned Spark images
-        uses: actions/cache@v6
-        with:
-          path: ${{ runner.temp }}/bitkit-spark-images.tar
-          key: spark-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bitkit-e2e-tests/BITKIT_DOCKER_REVISION') }}
-
-      - name: Start pinned Spark fixture
-        id: spark
-        working-directory: bitkit-e2e-tests
-        env:
-          SPARK_IMAGE_CACHE: ${{ runner.temp }}/bitkit-spark-images.tar
+      - name: Decode google-services.json
         run: |
-          ./scripts/local-backend spark-up
-          ./scripts/local-backend spark-env >> "$GITHUB_ENV"
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
+            echo "GOOGLE_SERVICES_JSON_BASE64 is empty; using checked-in placeholder."
+            exit 0
+          fi
+          mkdir -p app/src/debug
+          printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/src/debug/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
 
-      - name: Build Android Spark app
-        id: app-build
-        working-directory: bitkit-e2e-tests
+      - name: Build debug app (local)
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/build-android-apk.sh
+          CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
+          E2E: true
+        run: ./gradlew assembleDevDebug
+
+      - name: Rename APK
+        run: |
+          apk=$(find app/build/outputs/bitkit/devDebug -name 'bitkit-dev-debug-*-universal.apk')
+          mv "$apk" app/build/outputs/bitkit/devDebug/bitkit_e2e.apk
+
+      - name: Upload APK (local)
+        uses: actions/upload-artifact@v7
+        with:
+          name: bitkit-e2e-apk_${{ github.run_number }}
+          path: app/build/outputs/bitkit/devDebug/bitkit_e2e.apk
+
+  e2e-branch:
+    needs: detect-changes
+    if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
+    uses: synonymdev/bitkit-e2e-tests/.github/workflows/determine-e2e-branch.yml@main
+    with:
+      app_branch: ${{ github.head_ref || github.ref_name }}
+      e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
+
+  e2e-tests-local:
+    if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-local, e2e-branch]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - { name: onboarding_backup_numberpad, grep: "@onboarding|@backup|@numberpad" }
+          - { name: onchain_boost_receive_widgets, grep: "@onchain|@boost|@receive|@widgets" }
+          - { name: settings, grep: "@settings" }
+          - { name: send, grep: "@send" }
+          - { name: lightning_security, grep: "@lightning|@security" }
+          - { name: lnurl_transfer, grep: "@lnurl|@transfer_2" }
+          - { name: multi_address_local, grep: "@multi_address_1|@multi_address_3|@multi_address_4" }
+
+    name: e2e-tests-local - ${{ matrix.shard.name }}
+
+    steps:
+      # The regtest stack publishes 39388 (bitcoind P2P), 43782 (bitcoind RPC) and 60001 (electrs) on the host.
+      # They sit in Linux's ephemeral range, so an outbound connection made before `docker compose up`
+      # (npm ci, image pulls) can take one and fail the bind. Reserve them before any network step.
+      - name: Reserve regtest host ports
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=23009,23180,23735,39388,43782,60001
+
+      - name: Resolve E2E tests ref
+        id: e2e-ref
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
+        with:
+          selected: ${{ needs.e2e-branch.outputs.branch }}
+          e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
+
+      - name: Clone E2E tests
+        uses: actions/checkout@v7
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          path: bitkit-e2e-tests
+          ref: ${{ steps.e2e-ref.outputs.ref }}
 
       - name: Enable KVM
         run: |
@@ -106,7 +141,72 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run @spark_1 (attempt 1)
+      - name: AVD cache
+        uses: actions/cache@v6
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-33-x86_64-pixel_6
+
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_6
+          api-level: 33
+          arch: x86_64
+          avd-name: Pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+
+      - name: Download APK
+        uses: actions/download-artifact@v8
+        with:
+          name: bitkit-e2e-apk_${{ github.run_number }}
+          path: bitkit-e2e-tests/aut
+
+      - name: List APK directory contents
+        run: ls -l bitkit-e2e-tests/aut
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache npm cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('bitkit-e2e-tests/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        working-directory: bitkit-e2e-tests
+        run: npm ci
+
+      - name: Run regtest setup
+        working-directory: bitkit-e2e-tests
+        timeout-minutes: 10
+        run: |
+          if [[ -x ./scripts/local-backend ]]; then
+            ./scripts/local-backend up
+            ./scripts/local-backend github-env >> "$GITHUB_ENV"
+          else
+            # Older E2E refs still use their bundled Compose stack.
+            mkdir -p docker/lnd
+            chmod 777 docker/lnd
+            (cd docker && docker compose pull --quiet && docker compose up -d)
+            while ! nc -z '127.0.0.1' 60001; do sleep 1; done
+            sudo bash -c "while [ ! -f docker/lnd/data/chain/bitcoin/regtest/admin.macaroon ]; do sleep 1; done"
+            sudo chmod -R 777 docker/lnd
+          fi
+
+      - name: Run E2E Tests 1 (${{ matrix.shard.name }})
         continue-on-error: true
         id: test1
         uses: reactivecircus/android-emulator-runner@v2
@@ -117,12 +217,12 @@ jobs:
           avd-name: Pixel_6
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
-          script: cd bitkit-e2e-tests && ./scripts/run-spark-e2e.sh android
+          script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           RECORD_VIDEO: true
           ATTEMPT: 1
 
-      - name: Run @spark_1 (attempt 2)
+      - name: Run E2E Tests 2 (${{ matrix.shard.name }})
         continue-on-error: true
         id: test2
         if: steps.test1.outcome != 'success'
@@ -134,12 +234,12 @@ jobs:
           avd-name: Pixel_6
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
-          script: cd bitkit-e2e-tests && ./scripts/run-spark-e2e.sh android
+          script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           RECORD_VIDEO: true
           ATTEMPT: 2
 
-      - name: Run @spark_1 (attempt 3)
+      - name: Run E2E Tests 3 (${{ matrix.shard.name }})
         id: test3
         if: steps.test1.outcome != 'success' && steps.test2.outcome != 'success'
         uses: reactivecircus/android-emulator-runner@v2
@@ -150,55 +250,39 @@ jobs:
           avd-name: Pixel_6
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
-          script: cd bitkit-e2e-tests && ./scripts/run-spark-e2e.sh android
+          script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
           RECORD_VIDEO: true
           ATTEMPT: 3
 
-      - name: Collect Spark logs
-        if: failure()
-        working-directory: bitkit-e2e-tests
-        run: |
-          mkdir -p artifacts
-          ./scripts/local-backend spark-logs --tail 200 > artifacts/spark-docker.log 2>&1 || true
-
-      # Preserve logs and recordings from failed attempts even when a retry passes.
-      - uses: actions/upload-artifact@v7
+      - name: Upload E2E Artifacts (${{ matrix.shard.name }})
+        # Preserve failed-attempt evidence even when a retry passes.
         if: always()
+        uses: actions/upload-artifact@v7
         with:
-          name: spark-android-${{ github.run_number }}
+          name: e2e-artifacts_${{ matrix.shard.name }}_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
           retention-days: 7
 
-  slack-report:
-    if: >-
-      always() &&
-      (github.event_name == 'schedule' ||
-       (github.event_name == 'workflow_dispatch' && inputs.post_to_slack == true))
-    needs: e2e-spark
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout shared Slack reporter
-        uses: actions/checkout@v7
-        with:
-          repository: synonymdev/bitkit-e2e-tests
-          ref: b7e445ad080827421f427fd26ae04b1782d8409c
-          persist-credentials: false
+      - name: Dump docker logs on failure (${{ matrix.shard.name }})
+        if: failure()
+        uses: jwalton/gh-docker-logs@v2
 
-      - name: Post Slack summary
-        run: python3 scripts/slack_summary.py e2e-local-nightly
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_STAGING }}
-          PLATFORM: android
-          LOCAL_NIGHTLY_RESULT: ${{ needs.e2e-spark.result }}
-          BUILD_RESULT: ${{ needs.e2e-spark.outputs.app-build }}
-          E2E_TESTS_REF: ${{ needs.e2e-spark.outputs.e2e-sha || inputs.e2e_branch || 'main' }}
-          SPARK_FIXTURE_RESULT: ${{ needs.e2e-spark.outputs.spark-fixture }}
-          SPARK_APP_SETUP_RESULT: ${{ needs.e2e-spark.outputs.spark-app-setup }}
-          E2E_TESTS_RESULT: ${{ needs.e2e-spark.result }}
-          SPARK_CASE_RESULT: ${{ needs.e2e-spark.outputs.spark-case }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
+  e2e-status:
+    if: always() && github.event.pull_request.draft == false
+    name: e2e-status
+    runs-on: ubuntu-latest
+    needs: [detect-changes, e2e-tests-local]
+    steps:
+      - name: E2E skipped - no code changes
+        if: needs.detect-changes.outputs.code != 'true'
+        run: echo "✅ E2E skipped - no code changes"
+
+      - name: Verify all E2E shards succeeded
+        if: needs.detect-changes.outputs.code == 'true'
+        run: |
+          if [ "${{ needs.e2e-tests-local.result }}" != "success" ]; then
+            echo "❌ Some E2E shards failed."
+            exit 1
+          fi
+          echo "✅ All E2E shards passed!"
