@@ -183,7 +183,7 @@ class CacheStore internal constructor(
         val hash = paymentHash.lowercase()
         val data = store.data.first()
         val isKept = data.sparkSendRowIds[hash] == paymentId && data.sparkSendRowStamps[hash] == stamp
-        if (isKept && !beforeRow && hash !in data.sparkSendPreviousRowWriters) return
+        if (isKept && hash !in data.sparkSendPreviousRowWriters) return
         store.updateData {
             val ids = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
             val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }

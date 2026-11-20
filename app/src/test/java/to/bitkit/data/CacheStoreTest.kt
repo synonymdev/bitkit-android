@@ -2,6 +2,7 @@ package to.bitkit.data
 
 import android.app.Application
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -320,5 +321,28 @@ class CacheStoreTest : BaseUnitTest() {
         val data = sut.data.first()
         assertFalse("hash" in data.sparkTakenSendIds)
         assertTrue("hash" in data.sparkUncertainSends)
+    }
+
+    @Test
+    fun `keepSparkSendRowId before an unchanged row writes nothing`() = test {
+        val store = CountingDataStore(InMemoryDataStore(AppCacheData()))
+        val cache = CacheStore(store)
+        cache.keepSparkSendRowId("hash", "id", "1:2:3", beforeRow = true)
+        cache.commitSparkSendRowId("hash")
+        val writes = store.writes
+
+        cache.keepSparkSendRowId("hash", "id", "1:2:3", beforeRow = true, rowStamp = "1:2:3")
+        cache.commitSparkSendRowId("hash")
+
+        assertEquals(0, store.writes - writes)
+        assertEquals("id", cache.data.first().sparkSendRowIds["hash"])
+        assertFalse("hash" in cache.data.first().sparkSendPreviousRowWriters)
+    }
+
+    private class CountingDataStore<T>(private val inner: DataStore<T>) : DataStore<T> {
+        var writes = 0
+        override val data = inner.data
+        override suspend fun updateData(transform: suspend (t: T) -> T): T = inner.updateData(transform)
+            .also { writes++ }
     }
 }
