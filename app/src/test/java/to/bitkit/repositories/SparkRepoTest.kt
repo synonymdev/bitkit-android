@@ -5488,7 +5488,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a spark send whose success was handled before its call failed keeps no hold`() = test {
+    fun `a spark send whose success was handled before its call failed returns it and keeps no hold`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
@@ -5511,9 +5511,10 @@ class SparkRepoTest : BaseUnitTest() {
         backgroundScope.launch { sut.nodeEvents.collect { events += it } }
         runCurrent()
 
-        sut.payInvoice("lnbc1", 100uL)
+        val result = sut.payInvoice("lnbc1", 100uL)
         advanceUntilIdle()
 
+        assertEquals("hash", result.getOrNull(), "the failed call read a handled success as pending")
         assertEquals(1, events.count { it is Event.PaymentSuccessful }, "the failed call reported the success again")
         assertFalse("hash" in store.data.first().sparkUncertainSends, "the failed call held a settled send again")
     }

@@ -694,12 +694,14 @@ class SparkRepo @Inject constructor(
                     throw SparkError.SendRefused("Spark balance can't cover the payment", it)
                 }
                 Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
-                settleUncertainSend(
+                val isInDoubt = settleUncertainSend(
                     paymentHash,
                     SendAttempt(sentAt.toULong(), earlierIds, attemptId = attemptId),
                     expiresAt
                 )
-                throw PaymentPendingException(paymentHash)
+                // An outcome handled meanwhile is known, so the caller reads it as it does after a returned send.
+                if (isInDoubt) throw PaymentPendingException(paymentHash)
+                return@runSuspendCatching paymentHash
             }
             if (payment.status != PaymentStatus.PENDING) {
                 takenAttempts.remove(paymentHash.lowercase())
@@ -717,7 +719,10 @@ class SparkRepo @Inject constructor(
         }
     }
 
-    private suspend fun settleUncertainSend(paymentHash: String, attempt: SendAttempt, expiresAt: ULong) {
+    /**
+     * Holds [attempt]'s send in doubt and polls Spark for its outcome; false when that outcome was handled meanwhile.
+     */
+    private suspend fun settleUncertainSend(paymentHash: String, attempt: SendAttempt, expiresAt: ULong): Boolean {
         val key = paymentHash.lowercase()
         val failedAt = clock.now().epochSeconds
         // Only while this attempt still holds the send, as a sync or payment event that settled it meanwhile keeps it
@@ -734,7 +739,7 @@ class SparkRepo @Inject constructor(
             )
             true
         }
-        if (!isHeld) return
+        if (!isHeld) return false
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
@@ -749,6 +754,7 @@ class SparkRepo @Inject constructor(
             // Spark's next sync settles it, as a send it resumes then ends with its own payment event.
             Logger.warn("Stopped polling Spark send '$paymentHash' until Spark syncs again", context = TAG)
         }
+        return true
     }
 
     /** Settles an uncertain send once Spark shows its outcome; true once it is settled, also by another caller. */
