@@ -630,16 +630,18 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a channel we funded counts toward a plan at most what its send limit clears to`() {
+    fun `a channel we funded counts its cleared send limit toward a plan, also under a peer's htlc cap`() {
         val funded = createChannelDetails().copy(
             isOutbound = true,
             outboundCapacityMsat = 100_000_000uL,
             nextOutboundHtlcLimitMsat = 0uL,
             feerateSatPer1000Weight = 2_500u,
         )
-        val clearedMsat = listOf(false, true).minOf { MoveToSparkMath.clearedLimitMsat(100_000_000L, 2_500L, it) }
+        val anchorMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L, 2_500L, isLegacy = false)
+        val atReserve = funded.copy(nextOutboundHtlcLimitMsat = anchorMsat.toULong())
 
-        assertEquals((clearedMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(funded))
+        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(funded))
+        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(atReserve))
         assertEquals(100_000uL, MoveToSparkMath.plannedSats(funded.copy(isOutbound = false)))
     }
 
