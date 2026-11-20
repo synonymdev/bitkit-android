@@ -318,7 +318,7 @@ class MoveToSparkRepo internal constructor(
         var parts = 0
         var lastError: Throwable? = null
         var lastOutboundMsat = outboundMsat()
-        while (feeLeftMsat > 0uL && parts < MAX_PARTS) {
+        while (parts < MAX_PARTS) {
             val quote = next ?: nextPart(partSats)?.getOrElse {
                 lastError = it
                 null
@@ -328,7 +328,10 @@ class MoveToSparkRepo internal constructor(
             val outcome = runSuspendCatching { payPart(quote, feeCapMsat = feeLeftMsat) }.getOrElse {
                 lastError = it
                 if (it !is MoveToSparkError.TooLarge) break
-                partSats = MoveToSparkMath.smallerAmount(quote.amountSats) ?: throw MoveToSparkError.FeeRose(movedSats)
+                partSats = MoveToSparkMath.smallerAmount(quote.amountSats) ?: run {
+                    if (feeRose(quote.amountSats, feeLeftMsat)) throw MoveToSparkError.FeeRose(movedSats)
+                    break
+                }
                 continue
             }
             when (outcome) {
@@ -349,6 +352,9 @@ class MoveToSparkRepo internal constructor(
         if (movedSats == 0uL) throw lastError ?: MoveToSparkError.NothingToMove()
         return MoveToSparkOutcome.Moved(movedSats, paidMsat / 1000uL, paidMsat)
     }
+
+    private suspend fun feeRose(amountSats: ULong, feeLeftMsat: ULong): Boolean =
+        quote(amountSats).getOrNull()?.let { MoveToSparkMath.feeCapMsat(it.feeSats) > feeLeftMsat } ?: false
 
     private fun outboundMsat(): ULong = lightningRepo.lightningState.value.channels
         .fold(0uL) { total, channel -> total.safe() + channel.outboundCapacityMsat.safe() }

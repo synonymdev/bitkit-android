@@ -425,14 +425,25 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a part that stops routing at send with no half left asks for a new quote`() = test {
-        channelsRouting(1_800uL, maxPaySats = 1_000uL)
-
+    fun `a part whose fee rose at send with no half left asks for a new quote`() = test {
+        var feeMsat = 10_000uL
+        channelsRouting(1_800uL, feeMsatOf = { feeMsat })
         val plan = sut.quoteAll().getOrThrow()
+        feeMsat = 20_000uL
+
         val error = sut.moveAll(plan).exceptionOrNull()
 
         assertEquals(1_788uL, plan.firstPart.amountSats)
         assertEquals(0uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
+    }
+
+    @Test
+    fun `a part that keeps failing to route at its quoted fee with no half left fails the move`() = test {
+        channelsRouting(1_800uL, maxPaySats = 1_000uL)
+
+        val error = sut.moveAll(sut.quoteAll().getOrThrow()).exceptionOrNull()
+
+        assertIs<MoveToSparkError.TooLarge>(error)
     }
 
     @Test
