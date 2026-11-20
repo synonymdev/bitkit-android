@@ -639,10 +639,8 @@ class PaykitAllowanceRepo @Inject constructor(
         request.direction == PaykitPaymentRequestDirection.Incoming && request.billingPeriod == null &&
             paidRecords.hasSentPayment(request.id)
 
-    /** Whether this wallet's own records show the payment of [request] succeeded, not just that it left. */
-    fun hasSettledPayment(request: PaykitPaymentRequest): Boolean =
-        request.direction == PaykitPaymentRequestDirection.Incoming && request.billingPeriod == null &&
-            paidRecords.hasSettledPayment(request.id)
+    /** Whether an automatic payment of [request] has left the wallet and not settled yet. */
+    fun isPayingAutomatically(request: PaykitPaymentRequest): Boolean = paidRecords.isPayingAutomatically(request.id)
 
     private fun pendingFilterChanged() = _pendingFilterVersion.update { it + 1 }
 
@@ -716,7 +714,7 @@ class PaykitAllowanceRepo @Inject constructor(
         var handledAny = false
         // The whole pass is hidden from its start, so a request waiting its turn never shows while an earlier one
         // is paid.
-        passRequestIds.value = covered.mapTo(mutableSetOf()) { it.id }
+        passRequestIds.update { covered.mapTo(mutableSetOf()) { it.id } }
         try {
             for (request in covered) {
                 val result = executor.autoPay(request, _allowances.value, identity)
@@ -729,12 +727,15 @@ class PaykitAllowanceRepo @Inject constructor(
                     }
                     PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
                 }
-                if (result != PaykitAllowanceAutoPayResult.STARTED) passRequestIds.update { it - request.id }
+                // A started request is released only once the journal it left is loaded, which then keeps it hidden.
+                if (result == PaykitAllowanceAutoPayResult.STARTED) reloadLocalState()
+                passRequestIds.update { it - request.id }
             }
-            // Kept until the refresh has read the journal, which then keeps a started request off the pending views.
             if (handledAny) refresh()
         } finally {
-            passRequestIds.value = emptySet()
+            // A cancelled pass may have started a payment it did not get to reload for.
+            if (passRequestIds.value.isNotEmpty()) reloadLocalState()
+            passRequestIds.update { emptySet() }
         }
         return handledAny
     }

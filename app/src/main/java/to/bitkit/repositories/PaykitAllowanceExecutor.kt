@@ -1337,12 +1337,14 @@ private fun PaykitAllowanceLocalState.hasPaid(requestId: PaykitPaymentRequestId)
             PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
     }
 
-/** Whether this wallet's records show the payment of [requestId] succeeded, not just that it left. */
-internal fun PaykitAllowanceLocalState.hasSettledPayment(requestId: PaykitPaymentRequestId) = isAutoPaid(requestId) ||
-    journal.any {
-        it.stage == Stage.SUCCEEDED && it.requestId.paymentRequestId == requestId.paymentRequestId &&
-            PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
-    }
+/** Whether an automatic payment of [requestId] has left the wallet and not settled yet. */
+internal fun PaykitAllowanceLocalState.isPayingAutomatically(requestId: PaykitPaymentRequestId) = journal.any {
+    it.isAutomatic && it.stage in IN_FLIGHT_STAGES && it.requestId.paymentRequestId == requestId.paymentRequestId &&
+        PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
+}
+
+/** Stages of a payment that may have left the wallet and has not settled yet. */
+private val IN_FLIGHT_STAGES = setOf(Stage.SENDING, Stage.SENT, Stage.UNKNOWN)
 
 /** Stages after which the payment may have left the wallet. */
 private val MONEY_LEFT_STAGES = setOf(Stage.SENDING, Stage.SENT, Stage.UNKNOWN, Stage.SUCCEEDED)

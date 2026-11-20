@@ -1056,6 +1056,51 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a started request is released with its record loaded, before the pass ends`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        val first = fixtures.paymentRequest()
+        val second = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        var firstWhileSecondPays: Pair<Boolean, Boolean>? = null
+        whenever(executor.autoPay(any(), any(), any())).doSuspendableAnswer {
+            val request = it.getArgument<PaykitPaymentRequest>(0)
+            if (request.id == first.id) {
+                localState = localState.copy(
+                    journal = listOf(journalEntry("first", first, ALLOWANCE_ID, 1_000uL, Stage.SENT)),
+                )
+                PaykitAllowanceAutoPayResult.STARTED
+            } else {
+                firstWhileSecondPays = (first.id in sut.handlingRequestIds.first()) to sut.hasSentPayment(first)
+                PaykitAllowanceAutoPayResult.MANUAL
+            }
+        }
+        sut.activate(identity)
+
+        sut.processIncomingRequests(listOf(first, second))
+
+        assertEquals(false to true, firstWhileSecondPays)
+        assertTrue(sut.hasSentPayment(first))
+    }
+
+    @Test
+    fun `only an automatic payment still with the node reads as paying automatically`() = test {
+        val automatic = fixtures.paymentRequest()
+        val manual = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        localState = PaykitAllowanceLocalState(
+            journal = listOf(
+                journalEntry("automatic", automatic, ALLOWANCE_ID, 1_000uL, Stage.SENT),
+                journalEntry("manual", manual, null, 1_000uL, Stage.SENT, isAutomatic = false),
+            ),
+        )
+        sut.activate(identity)
+
+        assertTrue(sut.isPayingAutomatically(automatic))
+        assertFalse(sut.isPayingAutomatically(manual))
+        assertTrue(sut.hasSentPayment(manual))
+    }
+
+    @Test
     fun `a paid request stays hidden while allowances are off`() = test {
         val request = fixtures.paymentRequest()
         localState = PaykitAllowanceLocalState(autoPaidRequestIds = setOf(request.id))
