@@ -1,6 +1,7 @@
 package to.bitkit.nearby
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -11,6 +12,8 @@ import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import androidx.annotation.RequiresPermission
 import to.bitkit.ext.bluetoothManager
@@ -18,7 +21,8 @@ import to.bitkit.utils.Logger
 
 /**
  * Serves one payment request to nearby Bitkit wallets: a GATT server with the nearby service and a
- * connectable advertisement carrying only the service UUID. [start] and [stop] run on the main thread.
+ * connectable advertisement carrying only the service UUID. Advertising starts once Android confirms the
+ * service is registered, so a payer never finds a phone it cannot read. [start] and [stop] run on the main thread.
  */
 class NearbyAdvertiser(
     private val context: Context,
@@ -31,6 +35,11 @@ class NearbyAdvertiser(
     private var gattServer: BluetoothGattServer? = null
     private var advertiseCallback: AdvertiseCallback? = null
     private val isAdvertising get() = advertiseCallback != null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Counts opened servers, so a registration result for a closed server is ignored. */
+    private var serverGeneration = 0
+    private var isServiceRegistered = false
 
     /** A new callback per start, so a failure reported after [stop] or a later start is ignored. */
     private fun newAdvertiseCallback(): AdvertiseCallback = object : AdvertiseCallback() {
@@ -42,7 +51,11 @@ class NearbyAdvertiser(
         }
     }
 
-    private val serverCallback = object : BluetoothGattServerCallback() {
+    private fun newServerCallback(generation: Int) = object : BluetoothGattServerCallback() {
+        override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
+            mainHandler.post { onServiceRegistered(generation, status == BluetoothGatt.GATT_SUCCESS) }
+        }
+
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onCharacteristicReadRequest(
             device: BluetoothDevice,
@@ -66,7 +79,21 @@ class NearbyAdvertiser(
         val encoded = NearbyProtocol.encodeRequest(uri) ?: return stop()
         request = encoded
         if (gattServer == null) gattServer = openServer() ?: return onFailed()
-        if (!isAdvertising) startAdvertising()
+        if (isServiceRegistered && !isAdvertising) startAdvertising()
+    }
+
+    // start() holds both permissions, and this runs only for the server it opened.
+    @SuppressLint("MissingPermission")
+    private fun onServiceRegistered(generation: Int, isRegistered: Boolean) {
+        if (generation != serverGeneration || gattServer == null) return
+        if (!isRegistered) {
+            Logger.warn("Failed to register the nearby GATT service", context = TAG)
+            stop()
+            onFailed()
+            return
+        }
+        isServiceRegistered = true
+        if (request != null && !isAdvertising) startAdvertising()
     }
 
     @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE])
@@ -78,6 +105,8 @@ class NearbyAdvertiser(
         advertiseCallback = null
         runCatching { gattServer?.close() }
         gattServer = null
+        isServiceRegistered = false
+        serverGeneration++
     }
 
     private fun valueFor(characteristic: BluetoothGattCharacteristic): ByteArray? {
@@ -89,7 +118,8 @@ class NearbyAdvertiser(
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun openServer(): BluetoothGattServer? {
-        val server = runCatching { bluetoothManager.openGattServer(context, serverCallback) }
+        val generation = ++serverGeneration
+        val server = runCatching { bluetoothManager.openGattServer(context, newServerCallback(generation)) }
             .onFailure { Logger.warn("Failed to open nearby GATT server", it, context = TAG) }
             .getOrNull() ?: return null
         val service = BluetoothGattService(NearbyProtocol.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
@@ -102,7 +132,11 @@ class NearbyAdvertiser(
                 )
             )
         }
-        server.addService(service)
+        if (!runCatching { server.addService(service) }.getOrDefault(false)) {
+            Logger.warn("Failed to add the nearby GATT service", context = TAG)
+            runCatching { server.close() }
+            return null
+        }
         return server
     }
 
