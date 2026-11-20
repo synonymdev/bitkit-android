@@ -1340,11 +1340,6 @@ class BackupRepo @Inject constructor(
         val logged = parsed.cache.copy(
             cachedRates = emptyList(),
             moveToSparkHashes = emptyList(),
-            sparkUncertainSendStarts = emptyMap(),
-            sparkUncertainSendEarlierIds = emptyMap(),
-            sparkTakenSendIds = emptyMap(),
-            sparkUncertainSendAttemptIds = emptyMap(),
-            sparkSendRowIds = emptyMap(),
         )
         Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)
         onCacheRestored()

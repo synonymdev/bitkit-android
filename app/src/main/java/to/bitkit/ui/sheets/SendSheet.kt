@@ -799,6 +799,7 @@ fun SendSheet(
                             )
                         },
                         onPaymentSuccess = { paymentHash, amountWithFee ->
+                            // A success shown before the send went pending is the same payment, so it shows again.
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
@@ -806,6 +807,7 @@ fun SendSheet(
                                     paymentHashOrTxId = paymentHash,
                                     sats = amountWithFee,
                                 ),
+                                allowDuplicateHash = true,
                             )
                         },
                         onPaymentError = { failure ->
