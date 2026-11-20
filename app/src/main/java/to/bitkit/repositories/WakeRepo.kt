@@ -10,10 +10,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -107,13 +109,26 @@ class WakeRepo @Inject constructor(
     /** Asks the running presence loop to renew the lease now, after a registration changed what it covers. */
     private val presenceRenewal = Channel<Unit>(Channel.CONFLATED)
 
+    /** Counts the returns to the foreground, each of which has the registration observer sync again. */
+    private val foregroundReturns = MutableStateFlow(0)
+
+    /** Whether the registration observer's sync is still under way, its retry waits included. */
+    @Volatile
+    private var isRegistrationSyncing = false
+
     /**
-     * Keeps the registration in step with the node, the opt-in and the Pubky identity from now on, and holds a
-     * presence lease until [onAppBackground], so the gateway holds back fallback alerts while the app is open.
+     * Keeps the registration in step with the node, the opt-in and the Pubky identity from now on, checks again on
+     * each later return whether it reached [REGISTRATION_MAX_AGE], and holds a presence lease until [onAppBackground],
+     * so the gateway holds back fallback alerts while the app is open.
      */
     fun onAppForeground() {
         if (wakeConfig.gatewayUrl == null) return
-        if (registrationJob?.isActive != true) registrationJob = scope.launch { observeRegistration() }
+        if (registrationJob?.isActive == true) {
+            // A sync still under way checks the max age itself when it sends, and restarting it would cut its wait.
+            if (!isRegistrationSyncing) foregroundReturns.update { it + 1 }
+        } else {
+            registrationJob = scope.launch { observeRegistration() }
+        }
         if (presenceJob?.isActive != true) presenceJob = scope.launch { holdPresence() }
     }
 
@@ -256,14 +271,27 @@ class WakeRepo @Inject constructor(
         credentialStore.updateRegistrationState { it.copy(fingerprint = null, mayBeRegistered = false) }
     }
 
+    /**
+     * Syncs on each change of the inputs and on each return to the foreground while no sync is under way. A process
+     * the foreground service keeps alive can see no change for longer than [REGISTRATION_MAX_AGE], and a sync with
+     * nothing to send makes no request.
+     */
     private suspend fun observeRegistration() {
-        combine(
+        val inputs = combine(
             lightningRepo.lightningState.map { it.nodeLifecycleState.isRunning() },
             wakeConfig.optedIn,
             pubkyRepo.publicKey,
         ) { isNodeRunning, isOptedIn, publicKey -> Triple(isNodeRunning, isOptedIn, publicKey) }
             .distinctUntilChanged()
-            .collectLatest { syncUntilSettled() }
+        combine(inputs, foregroundReturns) { _, _ -> }
+            .collectLatest {
+                isRegistrationSyncing = true
+                try {
+                    syncUntilSettled()
+                } finally {
+                    isRegistrationSyncing = false
+                }
+            }
     }
 
     /**
