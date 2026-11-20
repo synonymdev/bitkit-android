@@ -13,14 +13,14 @@ import kotlin.io.path.Path
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 internal data class LocalSparkSettings(val configBase64: String, val chainUrl: String) {
-    val isComplete: Boolean get() = configBase64.isNotBlank() && chainUrl.isNotBlank()
-
     companion object {
         fun fromInputs(configBase64: String, chainUrl: String): LocalSparkSettings? {
             if (configBase64.isBlank() && chainUrl.isBlank()) return null
             return LocalSparkSettings(configBase64, chainUrl.trimEnd('/'))
         }
     }
+
+    val isComplete: Boolean get() = configBase64.isNotBlank() && chainUrl.isNotBlank()
 }
 
 @Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
