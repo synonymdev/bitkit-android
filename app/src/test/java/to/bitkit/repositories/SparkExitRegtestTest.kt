@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
+import to.bitkit.env.Env
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -13,7 +14,10 @@ import kotlin.test.assertTrue
  * `SPARK_EXIT_REGTEST=1` in the environment of `just test file SparkExitRegtestTest`.
  */
 class SparkExitRegtestTest : BaseUnitTest() {
-    private val chain = EsploraSparkExitChain(checkNotNull(EsploraSparkExitChain.defaultHosts("regtest")), HttpClient())
+    private val chain = EsploraSparkExitChain(
+        checkNotNull(EsploraSparkExitChain.defaultHosts("regtest", Env.sparkRegtestEsploraUrl(localSpark = null))),
+        HttpClient(),
+    )
 
     @Before
     fun requireOptIn() {

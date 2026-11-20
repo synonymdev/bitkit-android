@@ -51,6 +51,14 @@ jobs:
           path: bitkit-e2e-tests
           persist-credentials: false
 
+      - name: Check shared E2E branch for cache writes
+        id: cache-source
+        working-directory: bitkit-e2e-tests
+        run: |
+          if [[ "$(git symbolic-ref --quiet HEAD)" == refs/heads/main ]]; then
+            echo 'save-cache=true' >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-java@v6
         with:
           java-version: "17"
@@ -68,19 +76,35 @@ jobs:
         working-directory: bitkit-e2e-tests
         run: npm ci
 
-      - name: Cache pinned Spark images
-        uses: actions/cache@v6
+      - name: Restore pinned Spark images
+        id: spark-cache
+        uses: actions/cache/restore@v6
+        continue-on-error: true
         with:
           path: ${{ runner.temp }}/bitkit-spark-images.tar
           key: spark-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bitkit-e2e-tests/BITKIT_DOCKER_REVISION') }}
 
       - name: Start pinned Spark fixture
+        id: fixture
         working-directory: bitkit-e2e-tests
         env:
           SPARK_IMAGE_CACHE: ${{ runner.temp }}/bitkit-spark-images.tar
         run: |
           ./scripts/local-backend spark-up
           ./scripts/local-backend spark-env >> "$GITHUB_ENV"
+          if [[ -s "$SPARK_IMAGE_CACHE" ]]; then
+            echo 'cache-ready=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save pinned Spark images
+        if: >-
+          steps.cache-source.outputs.save-cache == 'true' && steps.fixture.outputs.cache-ready == 'true' &&
+          steps.spark-cache.outputs.cache-hit != 'true' && steps.spark-cache.outputs.cache-primary-key != ''
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/bitkit-spark-images.tar
+          key: ${{ steps.spark-cache.outputs.cache-primary-key }}
 
       - name: Build Android Spark app
         working-directory: bitkit-e2e-tests
@@ -145,7 +169,7 @@ jobs:
           ATTEMPT: 3
 
       - name: Collect Spark logs
-        if: failure()
+        if: failure() || steps.test1.outcome == 'failure' || steps.test2.outcome == 'failure'
         working-directory: bitkit-e2e-tests
         run: |
           mkdir -p artifacts

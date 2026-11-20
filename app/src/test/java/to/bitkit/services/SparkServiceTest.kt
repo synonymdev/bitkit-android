@@ -1,20 +1,27 @@
 package to.bitkit.services
 
+import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.Config
 import breez_sdk_spark.LeafOptimizationConfig
 import breez_sdk_spark.Network
 import breez_sdk_spark.SendPaymentOptions
+import breez_sdk_spark.SparkConfig
 import breez_sdk_spark.TokenOptimizationConfig
+import breez_sdk_spark.parseSparkConfig
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verifyNoInteractions
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.env.LocalSparkSettings
 import java.io.File
+import java.util.Base64
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -122,6 +129,35 @@ class SparkServiceTest {
             assertFalse(config.useDefaultExternalInputParsers, "$network")
             assertEquals("key", config.apiKey)
         }
+    }
+
+    @Test
+    fun `local spark selects the fixture operators and mempool API together`() {
+        val config = defaults(Network.REGTEST)
+        val json = """{"threshold":2}"""
+        val settings = LocalSparkSettings(Base64.getEncoder().encodeToString(json.toByteArray()), "http://fixture/api")
+        val operators = mock<SparkConfig>()
+
+        mockStatic(Class.forName("breez_sdk_spark.Breez_sdk_spark_jvmKt")).use { native ->
+            native.`when`<SparkConfig> { parseSparkConfig(json) }.thenReturn(operators)
+            assertEquals(ChainApiType.MEMPOOL_SPACE, SparkService.configureLocalSpark(config, settings))
+            assertEquals(operators, config.sparkConfig)
+            assertEquals(false, config.watchtowerFeeLadderEnabled)
+        }
+    }
+
+    @Test
+    fun `local spark requires both fixture values and leaves defaults untouched without a fixture`() {
+        val config = defaults(Network.REGTEST)
+        assertEquals(ChainApiType.ESPLORA, SparkService.configureLocalSpark(config, null))
+        for (settings in listOf(LocalSparkSettings("encoded", ""), LocalSparkSettings("", "http://fixture/api"))) {
+            assertFailsWith<IllegalArgumentException> { SparkService.configureLocalSpark(config, settings) }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SparkService.configureLocalSpark(config, LocalSparkSettings("invalid base64", "http://fixture/api"))
+        }
+        assertNull(config.sparkConfig)
+        assertNull(config.watchtowerFeeLadderEnabled)
     }
 
     @Test

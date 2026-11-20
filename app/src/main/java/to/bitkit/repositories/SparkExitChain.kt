@@ -171,7 +171,10 @@ class EsploraSparkExitChain(
          * The chain the Spark SDK reads per network. Mainnet reads Bitkit's own esplora alone, which takes a package
          * on `/txs/package` only, and broadcasts there first, then through the SDK's former default hosts.
          */
-        fun defaultHosts(sparkNetwork: String?): SparkExitHosts? = when (sparkNetwork) {
+        fun defaultHosts(
+            sparkNetwork: String?,
+            regtestUrl: String? = Env.sparkRegtestEsploraUrl(),
+        ): SparkExitHosts? = when (sparkNetwork) {
             "mainnet" -> SparkExitHosts(
                 reads = listOf(Env.bitkitEsploraUrl),
                 broadcasts = listOf(
@@ -180,7 +183,7 @@ class EsploraSparkExitChain(
                     SparkExitBroadcastHost("https://blockstream.info/api"),
                 ),
             )
-            "regtest" -> SparkExitHosts.of("https://regtest-mempool.us-west-2.sparkinfra.net/api")
+            "regtest" -> regtestUrl?.let { SparkExitHosts.of(it) }
             else -> null
         }
 

@@ -51,9 +51,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
-import to.bitkit.BuildConfig
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.env.LocalSparkSettings
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.safe
 import to.bitkit.repositories.SparkExitRecovering
@@ -98,6 +98,16 @@ class SparkService @Inject constructor(
                 proportionalPpm = null,
             )
             leafOptimizationConfig = leafOptimizationConfig.copy(autoEnabled = !isExiting)
+        }
+
+        /** Applies the pinned operator settings and selects the fixture's mempool.space REST API. */
+        internal fun configureLocalSpark(config: Config, settings: LocalSparkSettings?): ChainApiType {
+            if (settings == null) return ChainApiType.ESPLORA
+            require(settings.isComplete) { "Local Spark requires SPARK_LOCAL_CONFIG_B64 and SPARK_LOCAL_CHAIN_URL" }
+            config.sparkConfig = parseSparkConfig(Base64.getDecoder().decode(settings.configBase64).decodeToString())
+            // The pinned regtest operators require anchored refunds.
+            config.watchtowerFeeLadderEnabled = false
+            return ChainApiType.MEMPOOL_SPACE
         }
 
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
@@ -182,16 +192,11 @@ class SparkService @Inject constructor(
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
-        val localChainUrl = if (Env.isDebug && Env.isLocalE2eBackend && network == SparkNetwork.REGTEST) {
-            localSparkChainUrl(config)
-        } else {
-            null
-        }
-        val chainServiceUrl = localChainUrl ?: Env.sparkChainServiceUrl(Env.network)
+        val apiType = configureLocalSpark(config, Env.localSparkSettings)
+        val chainServiceUrl = Env.sparkChainServiceUrl(Env.network)
         val connected = SdkBuilder(config, Seed.Mnemonic(mnemonic, passphrase)).use { builder ->
             builder.withDefaultStorage(storageDir)
             chainServiceUrl?.let {
-                val apiType = if (localChainUrl != null) ChainApiType.MEMPOOL_SPACE else ChainApiType.ESPLORA
                 builder.withRestChainService(it, apiType, null)
             }
             builder.build()
@@ -207,19 +212,6 @@ class SparkService @Inject constructor(
         val chain = chainServiceUrl ?: "default"
         Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
         true
-    }
-
-    private fun localSparkChainUrl(config: Config): String? {
-        val encoded = BuildConfig.SPARK_LOCAL_CONFIG_B64
-        val chainUrl = BuildConfig.SPARK_LOCAL_CHAIN_URL
-        if (encoded.isBlank() && chainUrl.isBlank()) return null
-        require(encoded.isNotBlank() && chainUrl.isNotBlank()) {
-            "Local Spark requires SPARK_LOCAL_CONFIG_B64 and SPARK_LOCAL_CHAIN_URL"
-        }
-        config.sparkConfig = parseSparkConfig(Base64.getDecoder().decode(encoded).decodeToString())
-        // The pinned regtest operators require anchored refunds.
-        config.watchtowerFeeLadderEnabled = false
-        return chainUrl
     }
 
     suspend fun disconnect() = mutex.withLock {
