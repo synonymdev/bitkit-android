@@ -707,6 +707,8 @@ class SparkRepo @Inject constructor(
     private suspend fun restoreUncertainSends() {
         val cache = cacheStore.data.first()
         cache.sparkUncertainSends.forEach { (hash, failedAt) ->
+            // A send still in Spark's send call is settled by its result.
+            if (sendsInFlight.containsKey(hash)) return@forEach
             val expiresAt = cache.sparkSendExpiries[hash]?.toULong() ?: ULong.MAX_VALUE
             uncertainSends.putIfAbsent(hash, UncertainSend(failedAt.toULong(), failedAt.toULong(), expiresAt))
         }
@@ -1904,7 +1906,9 @@ class SparkRepo @Inject constructor(
                     if (hasSyncedSince(null)) _state.update { it.copy(hasSynced = true) }
                     seedRestoredSendHashes()
                     refresh()
-                    // A send whose outcome stayed unknown past its polling settles on a later sync.
+                    // A send whose outcome stayed unknown past its polling settles on a later sync, also one only
+                    // saved, as when its caller was cancelled inside Spark's send call.
+                    restoreUncertainSends()
                     uncertainSends.keys.toList().forEach { trySettleUncertainSend(it) }
                     // A journal left open past its grace period would block every later withdrawal until a restart.
                     // Spark emits Synced after a sync that never reached it too, so only one since the journal
