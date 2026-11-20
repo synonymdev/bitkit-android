@@ -209,6 +209,18 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a move that leaves a balance worth moving shows the fee for the rest`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
+        val sut = createViewModel()
+
+        sut.move()
+
+        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+        verify(moveToSparkRepo, times(2)).quoteAll()
+    }
+
+    @Test
     fun `a move whose fee rose shows the new fee and closes what it emptied`() = test {
         lightningState.value = LightningState(channels = persistentListOf(openChannel))
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.failure(MoveToSparkError.FeeRose(30_000uL)))
@@ -224,11 +236,24 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     @Test
     fun `a move whose last part fails late still closes what its earlier parts emptied`() = test {
         lightningState.value = LightningState(channels = persistentListOf(openChannel))
+        val lastPart = firstMove.copy(earlierSats = 30_000uL)
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(lastPart))
+        whenever { moveToSparkRepo.awaitSettled(eq(lastPart)) }.doSuspendableAnswer { firstSettled.await() }
         createViewModel().move()
 
         firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
 
         verify(closeChannelUseCase).closeEmptiedByMove(eq(listOf(openChannel)), anyOrNull())
+    }
+
+    @Test
+    fun `a move whose only part fails late closes nothing`() = test {
+        lightningState.value = LightningState(channels = persistentListOf(openChannel))
+        createViewModel().move()
+
+        firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
+
+        verify(closeChannelUseCase, never()).closeEmptiedByMove(any(), anyOrNull())
     }
 
     @Test

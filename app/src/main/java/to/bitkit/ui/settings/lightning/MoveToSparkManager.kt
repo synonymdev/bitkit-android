@@ -15,6 +15,7 @@ import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.MoveToSparkError
+import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.MoveToSparkOutcome
 import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.WalletRepo
@@ -133,22 +134,22 @@ class MoveToSparkManager @Inject constructor(
                             async(start = CoroutineStart.UNDISPATCHED) { moveToSparkRepo.awaitSettled(it) }
                         }
                         val done = done(outcome)
-                        if (generation.get() == moveGeneration) _uiState.update { done }
+                        if (done == null) {
+                            requote(moveGeneration)
+                        } else if (generation.get() == moveGeneration) {
+                            _uiState.update { done }
+                        }
                         if (outcome is MoveToSparkOutcome.Moved) closeEmptied(channelsBefore, paymentsBefore)
                         settled?.await()?.let {
                             showLateOutcome(it, inFlight.earlierSats, moveGeneration)
-                            // Earlier parts may have emptied channels even when this last one failed.
-                            closeEmptied(channelsBefore, paymentsBefore)
+                            if (it.isSuccess || inFlight.earlierSats > 0uL) closeEmptied(channelsBefore, paymentsBefore)
                         }
                     },
                     onFailure = { error ->
                         if (error is MoveToSparkError.FeeRose) {
                             // As elsewhere when a fee rises, the modal shows the new fee for what is left.
                             if (error.movedSats > 0uL) closeEmptied(channelsBefore, paymentsBefore)
-                            if (generation.get() == moveGeneration) {
-                                isMoveInFlight = false
-                                quote()
-                            }
+                            requote(moveGeneration)
                         } else if (generation.get() == moveGeneration) {
                             _uiState.update { error.toUiState() }
                         }
@@ -160,16 +161,23 @@ class MoveToSparkManager @Inject constructor(
         }
     }
 
-    private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done {
+    private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done? {
         walletRepo.syncNodeAndWallet()
-        return MoveToSparkUiState.Done(outcome)
+        val hasRest = outcome is MoveToSparkOutcome.Moved &&
+            MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
+        return if (hasRest) null else MoveToSparkUiState.Done(outcome)
+    }
+
+    private fun requote(moveGeneration: Int) {
+        if (generation.get() != moveGeneration) return
+        isMoveInFlight = false
+        quote()
     }
 
     private fun closeEmptied(channelsBefore: List<ChannelDetails>, paymentsBefore: List<PaymentDetails>?) {
         scope.launch { closeChannelUseCase.closeEmptiedByMove(channelsBefore, paymentsBefore) }
     }
 
-    /** Shows a late outcome; a last part that failed still shows the balance updated when earlier parts moved. */
     private suspend fun showLateOutcome(
         settled: Result<MoveToSparkOutcome.Moved>,
         earlierSats: ULong,
@@ -186,6 +194,10 @@ class MoveToSparkManager @Inject constructor(
                 }
             },
         )
+        if (late == null) {
+            if (uiState.value.isInFlight()) requote(moveGeneration)
+            return
+        }
         _uiState.update { if (generation.get() == moveGeneration && it.isInFlight()) late else it }
     }
 

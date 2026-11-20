@@ -63,8 +63,12 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     private fun createSut() = MoveToSparkRepo(testDispatcher, lightningRepo, sparkRepo, cacheStore) { "hash" }
 
-    private fun sendable(sats: ULong) {
-        val channel = createChannelDetails().copy(isUsable = true, nextOutboundHtlcLimitMsat = sats * 1000uL)
+    private fun sendable(sats: ULong, htlcCapSats: ULong = sats) {
+        val channel = createChannelDetails().copy(
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = minOf(sats, htlcCapSats) * 1000uL,
+            outboundCapacityMsat = sats * 1000uL,
+        )
         lightningState.value = LightningState(channels = persistentListOf(channel))
     }
 
@@ -247,39 +251,57 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     /**
      * Channels holding [limitSats] whose routes carry at most [maxRouteSats] per payment when quoted and [maxPaySats]
-     * when paid, each payment costing 10 sats in fees; the [settles] payments settle, the others stay in flight.
+     * when paid, each payment of an amount costing [feeMsatOf] it; the [settles] payments settle, the others stay in
+     * flight. A payment whose fee cap is below its fee does not route. After each settled payment, its HTLC holds the
+     * send limit under the minimum for [heldSyncs] syncs. The peer caps each HTLC at [htlcCapSats].
      */
     private suspend fun channelsRouting(
         limitSats: ULong,
         maxRouteSats: ULong = ULong.MAX_VALUE,
         maxPaySats: ULong = maxRouteSats,
+        feeMsatOf: (ULong) -> ULong = { 10_000uL },
+        heldSyncs: Int = 0,
+        htlcCapSats: ULong = ULong.MAX_VALUE,
         settles: (Int) -> Boolean = { true },
     ) {
-        sendable(limitSats)
+        sendable(limitSats, htlcCapSats)
         var limit = limitSats
         var payments = 0
+        var held = 0
+        whenever(lightningRepo.syncState()).thenAnswer {
+            if (held > 0 && --held == 0) sendable(limit, htlcCapSats)
+        }
         whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
         whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any())).doSuspendableAnswer {
             val sats = it.arguments[1].asULong()
             if (sats > maxRouteSats) {
-                Result.failure(
-                    LdkError(NodeException.RouteNotFound("no route"))
-                )
+                Result.failure(LdkError(NodeException.RouteNotFound("no route")))
             } else {
-                Result.success(10uL)
+                Result.success(feeMsatOf(sats) / 1000uL)
             }
         }
         whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
             val sats = it.arguments[2].asULong()
             val feeCapMsat = it.arguments[3].asULong()
+            val feeMsat = feeMsatOf(sats)
             payments++
             when {
-                sats > maxPaySats || feeCapMsat < 10_000uL ->
+                sats > maxPaySats || feeCapMsat < feeMsat ->
                     nodeEvents.emit(Event.PaymentFailed("id", "hash", PaymentFailureReason.ROUTE_NOT_FOUND))
                 settles(payments) -> {
-                    limit -= sats + 10uL
-                    sendable(limit)
-                    nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 10_000uL))
+                    limit -= sats + (feeMsat + 999uL) / 1000uL
+                    held = heldSyncs + 1
+                    if (heldSyncs == 0) {
+                        sendable(limit, htlcCapSats)
+                    } else {
+                        val holding = createChannelDetails().copy(
+                            isUsable = true,
+                            nextOutboundHtlcLimitMsat = 500_000uL,
+                            outboundCapacityMsat = limit * 1000uL,
+                        )
+                        lightningState.value = LightningState(channels = persistentListOf(holding))
+                    }
+                    nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, feeMsat))
                 }
             }
             Result.success("id")
@@ -356,6 +378,80 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val outcome = sut.moveAll(sut.quoteAll().getOrThrow()).getOrThrow()
 
         assertEquals(MoveToSparkOutcome.InFlight(24_874uL, "hash", "id", earlierSats = 24_874uL), outcome)
+    }
+
+    @Test
+    fun `a whole balance on a fee that grows with the amount is priced at the size it pays`() = test {
+        channelsRouting(1_000_000uL, feeMsatOf = { 1_000uL + it * 1_000uL / 1_000uL })
+
+        val plan = sut.quoteAll().getOrThrow()
+        val outcome = sut.moveAll(plan).getOrThrow()
+
+        assertEquals(MoveToSparkOutcome.Moved(plan.firstPart.amountSats, feeSats = 999uL, feeMsat = 999_999uL), outcome)
+        assertTrue(plan.firstPart.amountSats + plan.feeSats <= 1_000_000uL)
+        verify(lightningRepo, times(1)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a part grown past what the route carries keeps the size that routed`() = test {
+        channelsRouting(1_800uL, maxRouteSats = 1_790uL, feeMsatOf = { 0uL })
+
+        val plan = sut.quoteAll().getOrThrow()
+
+        assertEquals(1_788uL, plan.firstPart.amountSats)
+        assertEquals(MoveToSparkOutcome.Moved(1_788uL, feeSats = 0uL, feeMsat = 0uL), sut.moveAll(plan).getOrThrow())
+    }
+
+    @Test
+    fun `fees are counted in msat, so rounding lends no later part budget`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 30_000uL, feeMsatOf = { 12_500uL })
+
+        sut.moveAll(sut.quoteAll().getOrThrow())
+
+        listOf(56_000uL, 43_500uL, 31_000uL, 18_500uL).forEach { capMsat ->
+            verify(lightningRepo).payInvoiceOverLdk(any(), any(), anyOrNull(), eq(capMsat))
+        }
+    }
+
+    @Test
+    fun `a part that leaves the send limit flat under the peer's htlc cap does not end the move`() = test {
+        channelsRouting(100_000uL, htlcCapSats = 30_000uL)
+
+        val plan = sut.quoteAll().getOrThrow()
+        val error = sut.moveAll(plan).exceptionOrNull()
+
+        assertEquals(29_988uL, plan.firstPart.amountSats)
+        assertEquals(29_988uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
+    }
+
+    @Test
+    fun `a part that stops routing at send with no half left asks for a new quote`() = test {
+        channelsRouting(1_800uL, maxPaySats = 1_000uL)
+
+        val plan = sut.quoteAll().getOrThrow()
+        val error = sut.moveAll(plan).exceptionOrNull()
+
+        assertEquals(1_788uL, plan.firstPart.amountSats)
+        assertEquals(0uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
+    }
+
+    @Test
+    fun `a quote prices at most sixteen parts`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 2_000uL)
+
+        val plan = sut.quoteAll().getOrThrow()
+
+        assertEquals(1_554uL, plan.firstPart.amountSats)
+        assertEquals(MoveToSparkMath.quotedFeeSats(10uL) * 16uL, plan.feeSats)
+    }
+
+    @Test
+    fun `the next part waits for a settled part's htlc to leave the send limit`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 60_000uL, heldSyncs = 3)
+
+        val outcome = sut.moveAll(sut.quoteAll().getOrThrow()).getOrThrow()
+
+        assertEquals(MoveToSparkOutcome.Moved(99_498uL, feeSats = 20uL, feeMsat = 20_000uL), outcome)
     }
 
     @Test
