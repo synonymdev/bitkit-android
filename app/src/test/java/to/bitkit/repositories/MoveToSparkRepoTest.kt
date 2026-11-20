@@ -16,9 +16,11 @@ import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
@@ -241,6 +243,136 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val settled = async(start = CoroutineStart.UNDISPATCHED) { sut.awaitSettled(inFlight) }
 
         assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 7uL), settled.await().getOrThrow())
+    }
+
+    /**
+     * Channels holding [limitSats] whose routes carry at most [maxRouteSats] per payment when quoted and [maxPaySats]
+     * when paid, each payment costing 10 sats in fees; the [settles] payments settle, the others stay in flight.
+     */
+    private suspend fun channelsRouting(
+        limitSats: ULong,
+        maxRouteSats: ULong = ULong.MAX_VALUE,
+        maxPaySats: ULong = maxRouteSats,
+        settles: (Int) -> Boolean = { true },
+    ) {
+        sendable(limitSats)
+        var limit = limitSats
+        var payments = 0
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any())).doSuspendableAnswer {
+            val sats = it.arguments[1].asULong()
+            if (sats > maxRouteSats) {
+                Result.failure(
+                    LdkError(NodeException.RouteNotFound("no route"))
+                )
+            } else {
+                Result.success(10uL)
+            }
+        }
+        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            val sats = it.arguments[2].asULong()
+            val feeCapMsat = it.arguments[3].asULong()
+            payments++
+            when {
+                sats > maxPaySats || feeCapMsat < 10_000uL ->
+                    nodeEvents.emit(Event.PaymentFailed("id", "hash", PaymentFailureReason.ROUTE_NOT_FOUND))
+                settles(payments) -> {
+                    limit -= sats + 10uL
+                    sendable(limit)
+                    nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 10_000uL))
+                }
+            }
+            Result.success("id")
+        }
+    }
+
+    /** Mockito sees a ULong argument as a Long, or boxed when the parameter is nullable. */
+    private fun Any?.asULong(): ULong = (this as? ULong) ?: (this as Long).toULong()
+
+    @Test
+    fun `a whole balance that routes in one payment moves in one part at its quoted fee`() = test {
+        channelsRouting(100_000uL)
+
+        val plan = sut.quoteAll().getOrThrow()
+        val outcome = sut.moveAll(plan).getOrThrow()
+
+        assertEquals(MoveToSparkQuote(INVOICE, 99_988uL, MoveToSparkMath.quotedFeeSats(10uL)), plan.firstPart)
+        assertEquals(MoveToSparkMath.quotedFeeSats(10uL), plan.feeSats)
+        assertEquals(MoveToSparkOutcome.Moved(99_988uL, feeSats = 10uL), outcome)
+        verify(lightningRepo, times(1)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a balance too large for one payment is priced and moved in halved parts within the quoted fee`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 30_000uL)
+
+        val plan = sut.quoteAll().getOrThrow()
+        val outcome = assertIs<MoveToSparkOutcome.Moved>(sut.moveAll(plan).getOrThrow())
+
+        assertEquals(24_874uL, plan.firstPart.amountSats)
+        assertEquals(MoveToSparkMath.quotedFeeSats(10uL) * 4uL, plan.feeSats)
+        assertEquals(MoveToSparkOutcome.Moved(99_496uL, feeSats = 40uL), outcome)
+        assertTrue(outcome.feeSats <= plan.feeSats)
+        verify(lightningRepo, times(4)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `each part's fee is capped at what the quoted total leaves`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 30_000uL)
+
+        sut.moveAll(sut.quoteAll().getOrThrow())
+
+        listOf(48_000uL, 38_000uL, 28_000uL, 18_000uL).forEach { capMsat ->
+            verify(lightningRepo).payInvoiceOverLdk(any(), any(), anyOrNull(), eq(capMsat))
+        }
+    }
+
+    @Test
+    fun `a part that does not route at send halves and the move carries on`() = test {
+        channelsRouting(50_000uL, maxPaySats = 30_000uL)
+        val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
+
+        val outcome = sut.moveAll(plan).getOrThrow()
+
+        assertEquals(MoveToSparkOutcome.Moved(24_994uL + 24_984uL, feeSats = 20uL), outcome)
+    }
+
+    @Test
+    fun `a move stops when the next part's fee would pass the quoted total`() = test {
+        channelsRouting(50_000uL, maxPaySats = 30_000uL)
+        val plan = sut.quoteAll().getOrThrow()
+
+        val error = assertIs<MoveToSparkError.FeeRose>(sut.moveAll(plan).exceptionOrNull())
+
+        assertEquals(MoveToSparkMath.quotedFeeSats(10uL), plan.feeSats)
+        assertEquals(24_994uL, error.movedSats)
+        verify(lightningRepo, times(2)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a part still in flight ends the move in flight after what the earlier parts moved`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 30_000uL) { payment -> payment == 1 }
+
+        val outcome = sut.moveAll(sut.quoteAll().getOrThrow()).getOrThrow()
+
+        assertEquals(MoveToSparkOutcome.InFlight(24_874uL, "hash", "id", earlierSats = 24_874uL), outcome)
+    }
+
+    @Test
+    fun `a move fails when no part moves`() = test {
+        channelsRouting(100_000uL)
+        val plan = sut.quoteAll().getOrThrow()
+        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.failure(LdkError(NodeException.NotRunning("node stopped"))))
+
+        assertIs<LdkError>(sut.moveAll(plan).exceptionOrNull())
+    }
+
+    @Test
+    fun `a balance that routes in no part fails as too large`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 500uL)
+
+        assertIs<MoveToSparkError.TooLarge>(sut.quoteAll().exceptionOrNull())
     }
 
     @Test

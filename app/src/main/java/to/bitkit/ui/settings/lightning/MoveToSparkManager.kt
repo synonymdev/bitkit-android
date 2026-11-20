@@ -15,7 +15,6 @@ import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.MoveToSparkError
-import to.bitkit.repositories.MoveToSparkMath
 import to.bitkit.repositories.MoveToSparkOutcome
 import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.WalletRepo
@@ -100,14 +99,14 @@ class MoveToSparkManager @Inject constructor(
         _uiState.update { MoveToSparkUiState.Quoting }
     }
 
-    /** Quotes moving [targetSats], or everything the channels can send. */
-    fun quote(targetSats: ULong? = null) {
+    /** Quotes moving everything the channels can send, in parts when one payment does not route. */
+    fun quote() {
         val quoteGeneration = generation.incrementAndGet()
         keepsOutcome = false
         _uiState.update { MoveToSparkUiState.Quoting }
         quoteJob?.cancel()
         quoteJob = scope.launch {
-            val quoted = moveToSparkRepo.quote(targetSats).fold(
+            val quoted = moveToSparkRepo.quoteAll().fold(
                 onSuccess = { MoveToSparkUiState.Confirm(it) },
                 onFailure = { it.toUiState() },
             )
@@ -118,30 +117,41 @@ class MoveToSparkManager @Inject constructor(
     fun move() {
         val confirm = _uiState.value as? MoveToSparkUiState.Confirm ?: return
         if (confirm.isMoving) return
-        val quote = confirm.quote
+        val plan = confirm.plan
         val channelsBefore = lightningRepo.lightningState.value.channels.toList()
         val moveGeneration = generation.incrementAndGet()
         keepsOutcome = true
         isMoveInFlight = true
-        _uiState.update { MoveToSparkUiState.Confirm(quote, isMoving = true) }
+        _uiState.update { MoveToSparkUiState.Confirm(plan, isMoving = true) }
         moveJob = scope.launch {
             val paymentsBefore = lightningRepo.listPaymentsOrNull()
             try {
-                moveToSparkRepo.move(quote).fold(
+                moveToSparkRepo.moveAll(plan).fold(
                     onSuccess = { outcome ->
-                        val settled = (outcome as? MoveToSparkOutcome.InFlight)?.let {
+                        val inFlight = outcome as? MoveToSparkOutcome.InFlight
+                        val settled = inFlight?.let {
                             async(start = CoroutineStart.UNDISPATCHED) { moveToSparkRepo.awaitSettled(it) }
                         }
                         val done = done(outcome)
                         if (generation.get() == moveGeneration) _uiState.update { done }
                         if (outcome is MoveToSparkOutcome.Moved) closeEmptied(channelsBefore, paymentsBefore)
                         settled?.await()?.let {
-                            showLateOutcome(it, moveGeneration)
-                            if (it.isSuccess) closeEmptied(channelsBefore, paymentsBefore)
+                            showLateOutcome(it, inFlight.earlierSats, moveGeneration)
+                            // Earlier parts may have emptied channels even when this last one failed.
+                            closeEmptied(channelsBefore, paymentsBefore)
                         }
                     },
                     onFailure = { error ->
-                        if (generation.get() == moveGeneration) _uiState.update { error.toUiState() }
+                        if (error is MoveToSparkError.FeeRose) {
+                            // As elsewhere when a fee rises, the modal shows the new fee for what is left.
+                            if (error.movedSats > 0uL) closeEmptied(channelsBefore, paymentsBefore)
+                            if (generation.get() == moveGeneration) {
+                                isMoveInFlight = false
+                                quote()
+                            }
+                        } else if (generation.get() == moveGeneration) {
+                            _uiState.update { error.toUiState() }
+                        }
                     },
                 )
             } finally {
@@ -152,19 +162,29 @@ class MoveToSparkManager @Inject constructor(
 
     private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done {
         walletRepo.syncNodeAndWallet()
-        val hasRest = MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
-        return MoveToSparkUiState.Done(outcome, hasRest)
+        return MoveToSparkUiState.Done(outcome)
     }
 
     private fun closeEmptied(channelsBefore: List<ChannelDetails>, paymentsBefore: List<PaymentDetails>?) {
         scope.launch { closeChannelUseCase.closeEmptiedByMove(channelsBefore, paymentsBefore) }
     }
 
-    private suspend fun showLateOutcome(settled: Result<MoveToSparkOutcome.Moved>, moveGeneration: Int) {
+    /** Shows a late outcome; a last part that failed still shows the balance updated when earlier parts moved. */
+    private suspend fun showLateOutcome(
+        settled: Result<MoveToSparkOutcome.Moved>,
+        earlierSats: ULong,
+        moveGeneration: Int,
+    ) {
         if (generation.get() != moveGeneration || !uiState.value.isInFlight()) return
         val late = settled.fold(
             onSuccess = { done(it) },
-            onFailure = { MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN) },
+            onFailure = {
+                if (earlierSats > 0uL) {
+                    done(MoveToSparkOutcome.Moved(earlierSats, feeSats = 0uL))
+                } else {
+                    MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN)
+                }
+            },
         )
         _uiState.update { if (generation.get() == moveGeneration && it.isInFlight()) late else it }
     }
@@ -173,10 +193,6 @@ class MoveToSparkManager @Inject constructor(
         this is MoveToSparkUiState.Done && outcome is MoveToSparkOutcome.InFlight
 
     private fun Throwable.toUiState(): MoveToSparkUiState = when (this) {
-        is MoveToSparkError.TooLarge -> MoveToSparkUiState.TooLarge(
-            amountSats = amountSats,
-            smallerSats = MoveToSparkMath.smallerAmount(amountSats),
-        )
         is MoveToSparkError.NothingToMove -> MoveToSparkUiState.Failed(MoveToSparkFailure.NOTHING_TO_MOVE)
         is MoveToSparkError.SparkUnavailable -> MoveToSparkUiState.Failed(MoveToSparkFailure.SPARK_UNAVAILABLE)
         else -> MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN)

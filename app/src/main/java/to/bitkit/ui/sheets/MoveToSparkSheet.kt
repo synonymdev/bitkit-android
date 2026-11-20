@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.repositories.MoveToSparkOutcome
+import to.bitkit.repositories.MoveToSparkPlan
 import to.bitkit.repositories.MoveToSparkQuote
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
@@ -68,7 +69,7 @@ fun MoveToSparkSheet(
         uiState = uiState,
         onDismiss = onDismiss,
         onUpdate = viewModel::move,
-        onQuote = viewModel::quote,
+        onRetry = viewModel::quote,
         modifier = modifier,
     )
 }
@@ -79,14 +80,13 @@ private fun Content(
     modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
     onUpdate: () -> Unit = {},
-    onQuote: (ULong?) -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     when (uiState) {
         MoveToSparkUiState.Quoting -> Update(null, true, onDismiss, onUpdate, modifier)
-        is MoveToSparkUiState.Confirm -> Update(uiState.quote.feeSats, uiState.isMoving, onDismiss, onUpdate, modifier)
-        is MoveToSparkUiState.Done -> Done(uiState, onDismiss, onQuote, modifier)
-        is MoveToSparkUiState.TooLarge -> TooLarge(uiState, onDismiss, onQuote, modifier)
-        is MoveToSparkUiState.Failed -> Failed(uiState.failure, onDismiss, onQuote, modifier)
+        is MoveToSparkUiState.Confirm -> Update(uiState.plan.feeSats, uiState.isMoving, onDismiss, onUpdate, modifier)
+        is MoveToSparkUiState.Done -> Done(uiState, onDismiss, modifier)
+        is MoveToSparkUiState.Failed -> Failed(uiState.failure, onDismiss, onRetry, modifier)
     }
 }
 
@@ -128,7 +128,6 @@ private fun Update(
 private fun Done(
     uiState: MoveToSparkUiState.Done,
     onDismiss: () -> Unit,
-    onQuote: (ULong?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // While the payment is in flight its amount may still return to the channel, so nothing is closed yet.
@@ -145,28 +144,6 @@ private fun Done(
                 stringResource(R.string.common__ok),
                 onClick = onDismiss,
                 modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
-            )
-        }
-        return
-    }
-    if (uiState.hasRest) {
-        Modal(
-            navTitle = stringResource(R.string.lightning__move_to_spark__update_nav_title),
-            drawable = R.drawable.check,
-            title = stringResource(R.string.lightning__move_to_spark__done_title),
-            text = stringResource(R.string.lightning__move_to_spark__updated_rest_text),
-            testTag = "MoveToSparkPartlyMoved",
-            modifier = modifier,
-        ) {
-            SecondaryButton(
-                stringResource(R.string.common__later),
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
-            )
-            PrimaryButton(
-                stringResource(R.string.lightning__move_to_spark__move_rest),
-                onClick = { onQuote(null) },
-                modifier = Modifier.weight(1f).testTag("MoveToSparkMoveRest")
             )
         }
         return
@@ -188,55 +165,10 @@ private fun Done(
 }
 
 @Composable
-private fun TooLarge(
-    uiState: MoveToSparkUiState.TooLarge,
-    onDismiss: () -> Unit,
-    onQuote: (ULong?) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val amount = "<accent>${plainMoney(uiState.amountSats)}</accent>"
-    val smallerSats = uiState.smallerSats
-    val next = stringResource(
-        if (smallerSats == null) {
-            R.string.lightning__move_to_spark__too_large_none
-        } else {
-            R.string.lightning__move_to_spark__too_large_smaller
-        }
-    )
-    Modal(
-        navTitle = stringResource(R.string.lightning__move_to_spark__update_nav_title),
-        drawable = R.drawable.exclamation_mark,
-        title = stringResource(R.string.lightning__move_to_spark__too_large_title),
-        text = stringResource(R.string.lightning__move_to_spark__too_large_text, amount) + " " + next,
-        testTag = "MoveToSparkTooLarge",
-        modifier = modifier,
-    ) {
-        if (smallerSats == null) {
-            PrimaryButton(
-                stringResource(R.string.common__ok),
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
-            )
-            return@Modal
-        }
-        SecondaryButton(
-            stringResource(R.string.common__cancel),
-            onClick = onDismiss,
-            modifier = Modifier.weight(1f).testTag(DISMISS_TAG)
-        )
-        PrimaryButton(
-            stringResource(R.string.lightning__move_to_spark__move_half),
-            onClick = { onQuote(smallerSats) },
-            modifier = Modifier.weight(1f).testTag("MoveToSparkTrySmaller")
-        )
-    }
-}
-
-@Composable
 private fun Failed(
     failure: MoveToSparkFailure,
     onDismiss: () -> Unit,
-    onQuote: (ULong?) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Modal(
@@ -268,7 +200,7 @@ private fun Failed(
         )
         PrimaryButton(
             stringResource(R.string.common__try_again),
-            onClick = { onQuote(null) },
+            onClick = onRetry,
             modifier = Modifier.weight(1f).testTag("MoveToSparkRetry")
         )
     }
@@ -330,7 +262,6 @@ private fun Modal(
 private fun illustrationScale(@DrawableRes drawable: Int): Float = when (drawable) {
     R.drawable.check -> 1.25f
     R.drawable.cross -> 1.4f
-    R.drawable.exclamation_mark -> 1.1f
     else -> 1f
 }
 
@@ -339,7 +270,9 @@ private fun illustrationScale(@DrawableRes drawable: Int): Float = when (drawabl
 private fun PreviewUpdate() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(uiState = MoveToSparkUiState.Confirm(MoveToSparkQuote("lnbc", 98_500uL, 12uL)))
+            Content(
+                uiState = MoveToSparkUiState.Confirm(MoveToSparkPlan(MoveToSparkQuote("lnbc", 98_500uL, 12uL), 12uL))
+            )
         }
     }
 }
@@ -349,13 +282,5 @@ private fun PreviewUpdate() {
 private fun PreviewUpdated() {
     AppThemeSurface {
         BottomSheetPreview { Content(uiState = MoveToSparkUiState.Done(MoveToSparkOutcome.Moved(98_500uL, 9uL))) }
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun PreviewTooLarge() {
-    AppThemeSurface {
-        BottomSheetPreview { Content(uiState = MoveToSparkUiState.TooLarge(98_500uL, 49_250uL)) }
     }
 }
