@@ -143,6 +143,7 @@ private fun Content(
                 SectionRow(
                     name = stringResource(R.string.lightning__spending_label),
                     valueContent = { MoneyCaptionB(sats = spark.balanceSats.toLong(), symbol = true) },
+                    modifier = Modifier.testTag("SparkBalance")
                 )
 
                 if (spark.deposits.isNotEmpty()) {

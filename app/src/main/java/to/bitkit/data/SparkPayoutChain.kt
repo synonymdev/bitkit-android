@@ -26,13 +26,12 @@ class SparkPayoutChain @Inject constructor(
 ) {
     companion object {
         private const val TAG = "SparkPayoutChain"
-        private const val SPARK_REGTEST_ESPLORA_URL = "https://regtest-mempool.us-west-2.sparkinfra.net/api"
         private val json = Json { ignoreUnknownKeys = true }
 
         /** The Esplora to ask on [network]: the one Spark reads there, or null where the app knows none. */
-        fun esploraUrl(network: Network): String? = when (network) {
+        fun esploraUrl(network: Network, regtestUrl: String? = Env.sparkRegtestEsploraUrl()): String? = when (network) {
             Network.BITCOIN -> Env.bitkitEsploraUrl
-            Network.REGTEST -> SPARK_REGTEST_ESPLORA_URL
+            Network.REGTEST -> regtestUrl
             else -> null
         }
     }
