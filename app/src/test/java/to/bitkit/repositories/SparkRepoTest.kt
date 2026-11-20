@@ -3862,6 +3862,33 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send whose caller was cancelled inside the send call ends at its invoice's expiry`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { awaitCancellation() }
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val send = launch { sut.payInvoice("lnbc1", 100uL) }
+        runCurrent()
+        send.cancel()
+        advanceUntilIdle()
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+
+        // Spark never lists the send, and syncs after its invoice expired.
+        now += 2.hours
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertFalse("hash" in store.data.first().sparkUncertainSends, "a cancelled send stayed held past expiry")
+        assertNull(sut.earlierLightningSend("lnbc1", "hash"))
+    }
+
+    @Test
     fun `a spark send in doubt ends at once on its own failure`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
