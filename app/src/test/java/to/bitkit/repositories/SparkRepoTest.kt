@@ -5029,6 +5029,39 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send whose call returns pending after spark reported its failure reports it once`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        var listed = emptyList<Payment>()
+        whenever(sparkService.listPayments()).thenAnswer { listed }
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING)
+        val failed = taken.copy(status = PaymentStatus.FAILED, timestamp = now.epochSeconds.toULong())
+        // Spark reports the failure while its send call hands the payment it took over, before the call ends.
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            listed = listOf(failed)
+            sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+            taken
+        }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        runCurrent()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+        assertEquals(1, events.count { it is Event.PaymentFailed }, "the failure's event was dropped or doubled")
+        advanceUntilIdle()
+
+        assertNull(sut.earlierLightningSend("lnbc1", "hash"), "the failed send still held the invoice")
+        assertTrue(store.data.first().sparkTakenSendIds.isEmpty(), "the failed send's attempt stayed journaled")
+    }
+
+    @Test
     fun `a spark send whose caller is cancelled as spark takes it keeps its payment id`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         whenever(sparkService.isSupported).thenReturn(true)

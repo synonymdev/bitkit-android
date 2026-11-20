@@ -718,9 +718,10 @@ class SparkRepo @Inject constructor(
                 restoredTakenAttempts.remove(paymentHash.lowercase())
                 cacheStore.removeSparkUncertainSend(paymentHash)
             }
-            // A failure Spark reported during the call is this send's own once the call returns it, so it settles now.
+            // A failure Spark reported during the call is this send's own once the call returns its payment, failed or
+            // still pending, so it settles now.
             failures?.get(payment.id)
-                ?.takeIf { payment.status == PaymentStatus.FAILED }
+                ?.takeIf { payment.status != PaymentStatus.COMPLETED }
                 ?.let { onPayment(it) }
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
             paymentHash
