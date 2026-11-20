@@ -104,9 +104,12 @@ fun NfcReaderEffect(
         // Android may call a callback after reader mode is disabled, so each activation gets its own callback.
         fun callback(activation: Int) = NfcAdapter.ReaderCallback { tag ->
             val text = readPaymentText(tag)
-            // The tag stays in range after the read; hold reader mode so Android does not deliver it again.
-            if (text != null) NfcRepeatGuard.engage(activity, tag)
-            mainHandler.post { dispatcher.deliver(text, activation) }
+            mainHandler.post {
+                // The tag stays in range after the read; hold reader mode so Android does not deliver it again.
+                // A read from a closed activation leaves reader mode to whichever scanner owns it now.
+                if (text != null && dispatcher.isCurrent(activation)) NfcRepeatGuard.engage(activity, tag)
+                dispatcher.deliver(text, activation)
+            }
         }
 
         val owner = Any()

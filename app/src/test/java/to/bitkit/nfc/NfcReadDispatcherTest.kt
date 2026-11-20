@@ -1,6 +1,8 @@
 package to.bitkit.nfc
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NfcReadDispatcherTest {
@@ -59,5 +61,17 @@ class NfcReadDispatcherTest {
         sut.deliver("lightning:lnbcrt1", 0)
 
         assertEquals(emptyList<String>(), reads)
+    }
+
+    @Test
+    fun `only the open activation is current`() {
+        assertFalse(sut.isCurrent(0))
+        val first = sut.open()
+        assertTrue(sut.isCurrent(first))
+        sut.close()
+        assertFalse(sut.isCurrent(first))
+        val second = sut.open()
+        assertFalse(sut.isCurrent(first))
+        assertTrue(sut.isCurrent(second))
     }
 }

@@ -31,8 +31,11 @@ internal class NfcReadDispatcher(
         isOpen = false
     }
 
+    /** Whether a read from [readActivation] would be delivered: the reader is open and still on that activation. */
+    fun isCurrent(readActivation: Int): Boolean = isOpen && readActivation == activation
+
     fun deliver(text: String?, readActivation: Int) {
-        if (!isOpen || readActivation != activation) return
+        if (!isCurrent(readActivation)) return
         if (text == null) {
             onUnreadable()
             return
