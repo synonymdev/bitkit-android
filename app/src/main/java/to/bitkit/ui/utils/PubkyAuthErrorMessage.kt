@@ -6,7 +6,6 @@ import to.bitkit.R
 import to.bitkit.ext.isPaykitSignupCodeRejected
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.repositories.WatchOnlyAccountError
-import to.bitkit.services.PubkyRingAuthTimeoutError
 
 fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
     var current: Throwable? = this
@@ -21,7 +20,6 @@ fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
 }
 
 private fun Throwable.pubkyAuthMessageResource() = when (this) {
-    is PubkyRingAuthTimeoutError -> R.string.profile__auth_error_timeout
     is PubkyAuthRequestError.InvalidUrl -> R.string.profile__auth_error_invalid_url
     PubkyAuthRequestError.InvalidPaymentDetails -> R.string.profile__auth_approval_usdt_unavailable
     PubkyAuthRequestError.RequesterChanged -> R.string.profile__auth_error_invalid_url

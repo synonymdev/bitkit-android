@@ -12,7 +12,6 @@ import to.bitkit.repositories.MethodId
 import to.bitkit.utils.AppError
 import java.net.URI
 import java.net.URLDecoder
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 @Immutable
@@ -129,7 +128,6 @@ data class PubkyAuthRequest(
     val bitkitClaim: PubkyAuthClaim?,
     val homeserverPublicKey: String? = null,
     val signupToken: String? = null,
-    val authorizationUrl: String? = rawUrl,
 ) {
     val isSignup: Boolean
         get() = isSignupUrl(rawUrl)
@@ -147,7 +145,6 @@ data class PubkyAuthRequest(
             capabilities: String,
             homeserverPublicKey: String? = null,
             signupToken: String? = null,
-            authorizationUrl: String? = rawUrl,
         ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
             val permissions = parseCapabilities(capabilities)
             PubkyAuthRequest(
@@ -160,7 +157,6 @@ data class PubkyAuthRequest(
                 bitkitClaim = bitkitClaim,
                 homeserverPublicKey = homeserverPublicKey,
                 signupToken = signupToken,
-                authorizationUrl = authorizationUrl,
             )
         }
 
@@ -208,25 +204,16 @@ data class PubkyAuthRequest(
             val uri = URI(rawUrl)
             require(uri.isSignupRequest() && !isGrantSignupUrl(rawUrl)) { "Unsupported Pubky signup URL" }
             val query = parseQuery(uri)
+            require(!uri.authorizesApp(query)) { "Unsupported legacy Pubky signup authorization" }
             val homeserver = query.requiredSingle("hs")
-            val authorizesApp = uri.authorizesApp(query)
-            val relay = if (authorizesApp) query.requiredSingle("relay") else ""
-            val secret = if (authorizesApp) query.requiredSingle("secret") else ""
-            val capabilities = if (authorizesApp) query.requiredSingle("caps") else ""
-            val authorizationUrl = if (authorizesApp) {
-                ringAuthorizationUrl(relay, secret, capabilities)
-            } else {
-                null
-            }
 
             parse(
                 rawUrl = rawUrl,
                 clientId = "",
-                relay = relay,
-                capabilities = capabilities,
+                relay = "",
+                capabilities = "",
                 homeserverPublicKey = homeserver,
                 signupToken = query.optionalSingle("st"),
-                authorizationUrl = authorizationUrl,
             ).getOrThrow().also {
                 require(it.bitkitClaim == null) { "Pubky signup does not support Bitkit companion claims" }
             }
@@ -313,13 +300,6 @@ data class PubkyAuthRequest(
         }
 
         private fun decodeQueryComponent(value: String) = URLDecoder.decode(value, StandardCharsets.UTF_8.name())
-
-        private fun ringAuthorizationUrl(relay: String, secret: String, capabilities: String): String =
-            "pubkyauth:///?relay=${encodeQueryComponent(relay)}" +
-                "&secret=${encodeQueryComponent(secret)}&caps=${encodeQueryComponent(capabilities)}"
-
-        private fun encodeQueryComponent(value: String) =
-            URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
 
         private fun parseQuery(uri: URI): Map<String, List<String>> = uri.rawQuery.orEmpty()
             .split("&")
