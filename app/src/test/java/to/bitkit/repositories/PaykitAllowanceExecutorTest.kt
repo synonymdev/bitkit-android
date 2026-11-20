@@ -1474,6 +1474,20 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed automatic payment settled by reconciliation sends its acceptance`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("restored", PaymentExecutionStatus.FAILED)),
+        )
+        seedJournal(journalEntry("restored", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+
+        sut.recover(identity)
+
+        assertEquals(Stage.FAILED, sut.localState(identity).journal.single().stage)
+        verify(sdk).processOutboundPrivateMessages(request.counterparty)
+    }
+
+    @Test
     fun `a restored submitted attempt waits until the node can list payments`() = test {
         val request = fixtures.paymentRequest()
         accountingState = fixtures.accountingState(

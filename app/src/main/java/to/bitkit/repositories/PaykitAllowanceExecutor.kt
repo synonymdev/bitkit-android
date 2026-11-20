@@ -486,7 +486,10 @@ class PaykitAllowanceExecutor @Inject constructor(
             return
         }
         val before = applyJournalStage(attemptId, stage, identity) ?: return
-        if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before, identity)
+        if (stage == Stage.FAILED && before.isAutomatic) {
+            sendQueuedAcceptance(before)
+            releasePaymentList(before, identity)
+        }
     }
 
     /**
@@ -612,12 +615,17 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
         val before = applyJournalStage(attemptId, stage, identity)
         _events.tryEmit(PaykitAllowanceEvent.LedgerChanged)
-        // No proof follows a failed automatic payment, so its queued acceptance is sent now, without holding up
-        // the settlement or recovery that recorded it.
-        if (outcome == PaymentOutcome.FAILED && before?.isAutomatic == true) {
-            val counterparty = before.requestId.counterparty
-            scope.launch { sendQueuedMessages(counterparty) }
-        }
+        if (outcome == PaymentOutcome.FAILED) sendQueuedAcceptance(before)
+    }
+
+    /**
+     * No proof follows a failed automatic payment, so its queued acceptance is sent now, whichever path recorded the
+     * failure, without holding up the settlement or recovery that recorded it.
+     */
+    private fun sendQueuedAcceptance(entry: JournalEntry?) {
+        if (entry?.isAutomatic != true) return
+        val counterparty = entry.requestId.counterparty
+        scope.launch { sendQueuedMessages(counterparty) }
     }
 
     /**
