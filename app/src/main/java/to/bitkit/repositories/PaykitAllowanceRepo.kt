@@ -53,9 +53,6 @@ sealed interface PaykitAllowanceEvent {
     data class LimitReached(val counterparty: String, val amountSats: ULong) : PaykitAllowanceEvent
 
     data object LedgerChanged : PaykitAllowanceEvent
-
-    /** An automatic payment is about to leave the wallet; its spend is backed up at once. */
-    data object PaymentLeaving : PaykitAllowanceEvent
 }
 
 /** Why automatic payments wait for the user to resume them; every covered request asks for approval meanwhile. */
@@ -133,6 +130,9 @@ class PaykitAllowanceRepo @Inject constructor(
     /** Moves whenever [keepsOffPending] or [hasSentPayment] may answer differently for a request. */
     val pendingFilterVersion: StateFlow<Long> = _pendingFilterVersion.asStateFlow()
 
+    /** Requests an automatic payment is handling now, until it is handed to the node. */
+    val handlingRequestIds: StateFlow<Set<PaykitPaymentRequestId>> get() = executor.inFlightRequestIds
+
     /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
     val isUpdating: Boolean get() = updates.value > 0
 
@@ -141,6 +141,10 @@ class PaykitAllowanceRepo @Inject constructor(
     private val manualRequestSignatures = ConcurrentHashMap<PaykitPaymentRequestId, Int>()
     private val _allowances = MutableStateFlow<List<PaykitAllowance>>(emptyList())
     private val _localState = MutableStateFlow(PaykitAllowanceLocalState())
+
+    /** This wallet's own payment records, kept while allowances are off so paid requests stay hidden. */
+    @Volatile
+    private var paidRecords = PaykitAllowanceLocalState()
     private val _autoPaidRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     private var allowanceTerms: (PaykitAllowanceLimits, Instant, List<String>) -> AllowanceTerms =
         { limits, monthAnchor, endpoints -> limits.terms(monthAnchor, endpoints) }
@@ -198,6 +202,8 @@ class PaykitAllowanceRepo @Inject constructor(
 
     init {
         scope.launch { executor.events.collect { onAllowanceEvent(it) } }
+        // Apart from the events, so a slow event never delays backing up a spend.
+        scope.launch { executor.spendBackups.collect { backUpSpend() } }
         scope.launch { lightningRepo.nodeEvents.collect { onNodeEvent(it) } }
         scope.launch {
             lightningRepo.lightningState
@@ -250,6 +256,7 @@ class PaykitAllowanceRepo @Inject constructor(
             activationRevision = Any()
             executor.activate(null)
             clear()
+            paidRecords = PaykitAllowanceLocalState()
         }
     }
 
@@ -264,7 +271,10 @@ class PaykitAllowanceRepo @Inject constructor(
             clear()
         }
         val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return
-        withContext(ioDispatcher) { executor.pause(normalizedIdentity) }
+        withContext(ioDispatcher) {
+            executor.pause(normalizedIdentity)
+            reloadPaidRecords()
+        }
     }
 
     private fun clear() {
@@ -273,7 +283,7 @@ class PaykitAllowanceRepo @Inject constructor(
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()
         _automaticPaymentPause.update { null }
-        publish(emptyList(), PaykitAllowanceLocalState())
+        publish(emptyList(), PaykitAllowanceLocalState(), keepsPaidRecords = true)
     }
 
     suspend fun refresh(): Result<Unit> = withContext(ioDispatcher) {
@@ -622,7 +632,7 @@ class PaykitAllowanceRepo @Inject constructor(
     /** Whether this wallet's own records show it paid [request], also when the ledger read back no longer does. */
     fun hasSentPayment(request: PaykitPaymentRequest): Boolean =
         request.direction == PaykitPaymentRequestDirection.Incoming && request.billingPeriod == null &&
-            _localState.value.hasSentPayment(request.id)
+            paidRecords.hasSentPayment(request.id)
 
     private fun pendingFilterChanged() = _pendingFilterVersion.update { it + 1 }
 
@@ -771,17 +781,26 @@ class PaykitAllowanceRepo @Inject constructor(
             }
             PaykitAllowanceEvent.LedgerChanged -> reloadLocalState()
             is PaykitAllowanceEvent.LimitReached -> Unit
-            PaykitAllowanceEvent.PaymentLeaving -> scope.launch {
-                reloadLocalState()
-                backupRepo.get().persistWalletBackup()
-                    .onFailure { Logger.warn("Failed to back up an automatic allowance payment", it, context = TAG) }
-            }
         }
     }
 
+    /** Backs up a spend about to leave the wallet, so a wallet restored later still counts it. */
+    private suspend fun backUpSpend() {
+        reloadLocalState()
+        backupRepo.get().persistWalletBackup()
+            .onFailure { Logger.warn("Failed to back up an automatic allowance payment", it, context = TAG) }
+    }
+
     private fun reloadLocalState() {
-        val identity = activeIdentity ?: return
+        val identity = activeIdentity ?: return reloadPaidRecords()
         publish(_allowances.value, executor.localState(identity))
+    }
+
+    /** While allowances are off, payments already sent still settle; their records keep paid requests hidden. */
+    private fun reloadPaidRecords() {
+        val identity = executor.activeIdentity ?: return
+        paidRecords = executor.localState(identity)
+        pendingFilterChanged()
     }
 
     // endregion
@@ -789,6 +808,7 @@ class PaykitAllowanceRepo @Inject constructor(
     private fun publish(
         allowances: List<PaykitAllowance>,
         state: PaykitAllowanceLocalState,
+        keepsPaidRecords: Boolean = false,
     ) = synchronized(publishLock) {
         val entries = allowances
             .groupBy { state.group(containing = it.allowanceId, counterparty = it.counterparty)?.id ?: it.key }
@@ -802,6 +822,7 @@ class PaykitAllowanceRepo @Inject constructor(
         val paidByAllowance = state.autoPaidSatsByAllowance
         _allowances.update { allowances }
         _localState.update { state }
+        if (!keepsPaidRecords) paidRecords = state
         _autoPaidRequestIds.update { state.autoPaidRequestIds }
         _entries.update { entries }
         pendingFilterChanged()

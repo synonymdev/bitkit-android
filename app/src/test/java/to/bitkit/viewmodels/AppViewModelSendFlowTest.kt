@@ -889,6 +889,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.sparkWithdrawalReleases).thenReturn(sparkWithdrawalReleases)
         whenever(paykitAllowanceRepo.events).thenReturn(MutableSharedFlow())
         whenever(paykitAllowanceRepo.pendingFilterVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitAllowanceRepo.handlingRequestIds).thenReturn(MutableStateFlow(emptySet()))
         whenever(paykitAllowanceRepo.isUpdatingFlow).thenReturn(allowanceUpdating)
         whenever(paykitAllowanceRepo.offersToAnnounce).thenReturn(MutableStateFlow(emptyList()))
         whenever { paykitAllowanceRepo.refresh() }.thenReturn(Result.success(Unit))

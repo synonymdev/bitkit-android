@@ -474,11 +474,14 @@ class AppViewModel @Inject constructor(
     private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
     val transactionSheet = _transactionSheet.asStateFlow()
 
-    /** Pending requests, without those this wallet already paid. */
+    /** Pending requests, without those an allowance is paying now or this wallet already paid. */
     val pendingPaymentRequests: StateFlow<List<PaykitPaymentRequest>> = combine(
         paykitPaymentRequestRepo.pendingRequests,
         paykitAllowanceRepo.pendingFilterVersion,
-    ) { requests, _ -> requests.filterNot { paykitAllowanceRepo.hasSentPayment(it) } }
+        paykitAllowanceRepo.handlingRequestIds,
+    ) { requests, _, handling ->
+        requests.filterNot { it.id in handling || paykitAllowanceRepo.hasSentPayment(it) }
+    }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
@@ -1478,7 +1481,7 @@ class AppViewModel @Inject constructor(
                 )
             }
 
-            PaykitAllowanceEvent.LedgerChanged, PaykitAllowanceEvent.PaymentLeaving -> Unit
+            PaykitAllowanceEvent.LedgerChanged -> Unit
         }
     }
 
@@ -1913,12 +1916,19 @@ class AppViewModel @Inject constructor(
         val requestedId = requestedPaymentRequestId.value ?: return false
         val request = candidates.singleOrNull { it.id == requestedId } ?: return false
         if (!paykitAllowanceRepo.keepsOffPending(request)) return false
+        val isPaid = paykitAllowanceRepo.hasSentPayment(request)
         val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
         clearRequestedPaymentRequest()
         toast(
             type = Toast.ToastType.INFO,
-            title = context.getString(R.string.subscriptions__allowance_payment_in_progress),
-            testTag = "AllowancePaymentInProgressToast",
+            title = context.getString(
+                if (isPaid) {
+                    R.string.subscriptions__allowance_request_already_paid
+                } else {
+                    R.string.subscriptions__allowance_payment_in_progress
+                },
+            ),
+            testTag = if (isPaid) "AllowanceRequestPaidToast" else "AllowancePaymentInProgressToast",
         )
         if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
         return true

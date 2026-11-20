@@ -66,6 +66,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val backupRepo = mock<BackupRepo>()
     private val executorEvents = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 8)
+    private val spendBackups = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
     private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val lightningState = MutableStateFlow(LightningState())
     private val isSparkSynced = MutableStateFlow(false)
@@ -82,6 +83,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     @Before
     fun setUp() = test {
         whenever(executor.events).thenReturn(executorEvents)
+        whenever(executor.spendBackups).thenReturn(spendBackups)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.isLedgerBehind(any())).thenReturn(false)
         whenever(executor.isLedgerBehindOrThrow(any())).thenReturn(false)
@@ -1032,6 +1034,17 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a paid request stays hidden while allowances are off`() = test {
+        val request = fixtures.paymentRequest()
+        localState = PaykitAllowanceLocalState(autoPaidRequestIds = setOf(request.id))
+        sut.activate(identity)
+
+        sut.pause(identity)
+
+        assertTrue(sut.hasSentPayment(request))
+    }
+
+    @Test
     fun `a request found manual moves the pending filter`() = test {
         nodeReady()
         records = listOf(fixtures.record())
@@ -1051,9 +1064,25 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     fun `an automatic payment leaving the wallet is backed up at once`() = test {
         whenever(backupRepo.persistWalletBackup()).thenReturn(Result.success(Unit))
 
-        executorEvents.emit(PaykitAllowanceEvent.PaymentLeaving)
+        spendBackups.emit(Unit)
 
         verify(backupRepo).persistWalletBackup()
+    }
+
+    @Test
+    fun `a slow activity update does not delay a spend backup`() = test {
+        whenever(backupRepo.persistWalletBackup()).thenReturn(Result.success(Unit))
+        val activityUpdate = CompletableDeferred<Unit>()
+        whenever(activityRepo.setContact(any(), any(), any(), any())).doSuspendableAnswer {
+            activityUpdate.await()
+            Result.success(Unit)
+        }
+        executorEvents.emit(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID))
+
+        spendBackups.emit(Unit)
+
+        verify(backupRepo).persistWalletBackup()
+        activityUpdate.complete(Unit)
     }
 
     @Test

@@ -329,9 +329,10 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
     @Test
     fun `an automatic payment asks for a backup before it leaves the wallet`() = test {
-        collectEvents()
+        var backups = 0
+        backgroundScope.launch { sut.spendBackups.collect { backups++ } }
         whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
-            assertEquals(listOf<PaykitAllowanceEvent>(PaykitAllowanceEvent.PaymentLeaving), events.toList())
+            assertEquals(1, backups)
             assertEquals(Stage.SENDING, sut.localState(identity).journal.single().stage)
             Result.success(PAYMENT_HASH)
         }
@@ -1455,6 +1456,21 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(listOf(PaymentOutcome.SUCCEEDED), recordedOutcomes.map { it.outcome })
         assertEquals(Stage.SUCCEEDED, sut.localState(identity).journal.single().stage)
+    }
+
+    @Test
+    fun `a failed automatic payment found by recovery sends its acceptance`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("restored", PaymentExecutionStatus.SUBMITTED)),
+        )
+        seedJournal(journalEntry("restored", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.FAILED
+
+        sut.recover(identity)
+
+        assertEquals(listOf(PaymentOutcome.FAILED), recordedOutcomes.map { it.outcome })
+        verify(sdk).processOutboundPrivateMessages(request.counterparty)
     }
 
     @Test
