@@ -32,10 +32,10 @@ jobs:
     timeout-minutes: 120
     outputs:
       spark-case: >-
-        ${{ (steps.test1.outputs.spark-case == 'passed' || steps.test2.outputs.spark-case == 'passed' ||
-             steps.test3.outputs.spark-case == 'passed') && 'success' ||
-            (steps.test1.outputs.spark-case == 'started' || steps.test2.outputs.spark-case == 'started' ||
-             steps.test3.outputs.spark-case == 'started') && 'failure' || '' }}
+        ${{ contains(steps.*.outputs.spark-case, 'passed') && 'passed' ||
+            contains(steps.*.outputs.spark-case, 'failed') && 'failed' ||
+            contains(steps.*.outputs.spark-case, 'started') && 'started' ||
+            contains(steps.*.outputs.spark-case, 'setup') && 'setup' || '' }}
       spark-fixture: ${{ steps.spark.outcome }}
       e2e-sha: ${{ steps.e2e-source.outputs.commit }}
       app-build: ${{ steps.app-build.outcome }}
