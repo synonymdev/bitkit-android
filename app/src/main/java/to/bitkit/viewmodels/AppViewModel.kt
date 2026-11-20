@@ -473,7 +473,13 @@ class AppViewModel @Inject constructor(
     val currentSheet = _currentSheet.asStateFlow()
     private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
     val transactionSheet = _transactionSheet.asStateFlow()
-    val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
+
+    /** Pending requests, without those this wallet already paid. */
+    val pendingPaymentRequests: StateFlow<List<PaykitPaymentRequest>> = combine(
+        paykitPaymentRequestRepo.pendingRequests,
+        paykitAllowanceRepo.pendingFilterVersion,
+    ) { requests, _ -> requests.filterNot { paykitAllowanceRepo.hasSentPayment(it) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
@@ -1472,7 +1478,7 @@ class AppViewModel @Inject constructor(
                 )
             }
 
-            PaykitAllowanceEvent.LedgerChanged -> Unit
+            PaykitAllowanceEvent.LedgerChanged, PaykitAllowanceEvent.PaymentLeaving -> Unit
         }
     }
 
@@ -1740,7 +1746,7 @@ class AppViewModel @Inject constructor(
 
     private fun observeIncomingPaykitPaymentRequests() {
         viewModelScope.launch {
-            combine(paymentRequestPreparation, pubkyRepo.publicKey, pendingPaymentRequests) {
+            combine(paymentRequestPreparation, pubkyRepo.publicKey, paykitPaymentRequestRepo.pendingRequests) {
                     preparation, identity, pending ->
                 preparation?.takeUnless {
                     PubkyPublicKeyFormat.matches(it.identity, identity) && it.request in pending
@@ -1857,7 +1863,7 @@ class AppViewModel @Inject constructor(
         val candidates = paymentRequestsForPresentation(preparation) ?: return
         if (finishRequestedAutomaticPayment(candidates)) return
         val requests = candidates
-            .filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) || isAllowancePending(it) }
+            .filterNot { paykitAllowanceRepo.keepsOffPending(it) || isAllowancePending(it) }
             .takeIf { it.isNotEmpty() }
             ?: return
         val generation = paymentRequestPresentationGeneration
@@ -1884,7 +1890,7 @@ class AppViewModel @Inject constructor(
         if (
             stopped && generation != paymentRequestPresentationGeneration ||
             paymentRequestsForPresentation()
-                ?.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) || isAllowancePending(it) }
+                ?.filterNot { paykitAllowanceRepo.keepsOffPending(it) || isAllowancePending(it) }
                 ?.any { next -> requests.none { it.id == next.id } } == true
         ) {
             presentNextIncomingPaykitPaymentRequest()
@@ -1899,11 +1905,14 @@ class AppViewModel @Inject constructor(
     private fun isAutomaticAllowancePayment(paymentHash: String): Boolean =
         !pendingPaymentRepo.isPending(paymentHash) && paykitAllowanceRepo.isAutomaticPayment(paymentHash)
 
-    /** A request the user opened while an allowance pays it is released, so it never holds other requests back. */
+    /**
+     * A request the user opened while an allowance pays it, or that this wallet already paid, is released,
+     * so it never holds other requests back.
+     */
     private suspend fun finishRequestedAutomaticPayment(candidates: List<PaykitPaymentRequest>): Boolean {
         val requestedId = requestedPaymentRequestId.value ?: return false
         val request = candidates.singleOrNull { it.id == requestedId } ?: return false
-        if (!paykitAllowanceRepo.isAutomaticallyHandling(request)) return false
+        if (!paykitAllowanceRepo.keepsOffPending(request)) return false
         val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
         clearRequestedPaymentRequest()
         toast(

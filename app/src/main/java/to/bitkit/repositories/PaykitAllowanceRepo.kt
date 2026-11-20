@@ -37,6 +37,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -52,6 +53,9 @@ sealed interface PaykitAllowanceEvent {
     data class LimitReached(val counterparty: String, val amountSats: ULong) : PaykitAllowanceEvent
 
     data object LedgerChanged : PaykitAllowanceEvent
+
+    /** An automatic payment is about to leave the wallet; its spend is backed up at once. */
+    data object PaymentLeaving : PaykitAllowanceEvent
 }
 
 /** Why automatic payments wait for the user to resume them; every covered request asks for approval meanwhile. */
@@ -100,6 +104,7 @@ class PaykitAllowanceRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val activityRepo: ActivityRepo,
     private val clock: Clock,
+    private val backupRepo: Provider<BackupRepo>,
 ) {
     companion object {
         private const val TAG = "PaykitAllowanceRepo"
@@ -123,6 +128,10 @@ class PaykitAllowanceRepo @Inject constructor(
     private val isProcessingRequests = AtomicBoolean(false)
     private val isAcceptingOffers = AtomicBoolean(false)
     private val updates = MutableStateFlow(0)
+    private val _pendingFilterVersion = MutableStateFlow(0L)
+
+    /** Moves whenever [keepsOffPending] or [hasSentPayment] may answer differently for a request. */
+    val pendingFilterVersion: StateFlow<Long> = _pendingFilterVersion.asStateFlow()
 
     /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
     val isUpdating: Boolean get() = updates.value > 0
@@ -181,8 +190,9 @@ class PaykitAllowanceRepo @Inject constructor(
         lightningRepo: LightningRepo,
         activityRepo: ActivityRepo,
         clock: Clock,
+        backupRepo: Provider<BackupRepo>,
         allowanceTerms: (PaykitAllowanceLimits, Instant, List<String>) -> AllowanceTerms,
-    ) : this(ioDispatcher, paykitSdkService, executor, lightningRepo, activityRepo, clock) {
+    ) : this(ioDispatcher, paykitSdkService, executor, lightningRepo, activityRepo, clock, backupRepo) {
         this.allowanceTerms = allowanceTerms
     }
 
@@ -602,6 +612,20 @@ class PaykitAllowanceRepo @Inject constructor(
         }
     }
 
+    /**
+     * Whether [request] stays out of the pending requests and off the Send sheet: an allowance pays it now, or this
+     * wallet's own records show it paid it, also when the shared ledger read back no longer does.
+     */
+    suspend fun keepsOffPending(request: PaykitPaymentRequest): Boolean =
+        hasSentPayment(request) || isAutomaticallyHandling(request)
+
+    /** Whether this wallet's own records show it paid [request], also when the ledger read back no longer does. */
+    fun hasSentPayment(request: PaykitPaymentRequest): Boolean =
+        request.direction == PaykitPaymentRequestDirection.Incoming && request.billingPeriod == null &&
+            _localState.value.hasSentPayment(request.id)
+
+    private fun pendingFilterChanged() = _pendingFilterVersion.update { it + 1 }
+
     /** Pays covered incoming requests headlessly; returns true when any request was handled. */
     suspend fun processIncomingRequests(requests: List<PaykitPaymentRequest>): Boolean = withContext(ioDispatcher) {
         val identity = activeIdentity ?: return@withContext false
@@ -655,6 +679,7 @@ class PaykitAllowanceRepo @Inject constructor(
         for (request in covered) {
             if (!executor.classifyAboveLimit(request, _allowances.value, identity)) continue
             manualRequestSignatures[request.id] = signature
+            pendingFilterChanged()
             markedAny = true
         }
         return markedAny
@@ -674,7 +699,10 @@ class PaykitAllowanceRepo @Inject constructor(
             Logger.info("Decided '$result' for an incoming request covered by an allowance", context = TAG)
             when (result) {
                 PaykitAllowanceAutoPayResult.STARTED -> handledAny = true
-                PaykitAllowanceAutoPayResult.MANUAL -> manualRequestSignatures[request.id] = signature
+                PaykitAllowanceAutoPayResult.MANUAL -> {
+                    manualRequestSignatures[request.id] = signature
+                    pendingFilterChanged()
+                }
                 PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
             }
         }
@@ -743,6 +771,11 @@ class PaykitAllowanceRepo @Inject constructor(
             }
             PaykitAllowanceEvent.LedgerChanged -> reloadLocalState()
             is PaykitAllowanceEvent.LimitReached -> Unit
+            PaykitAllowanceEvent.PaymentLeaving -> scope.launch {
+                reloadLocalState()
+                backupRepo.get().persistWalletBackup()
+                    .onFailure { Logger.warn("Failed to back up an automatic allowance payment", it, context = TAG) }
+            }
         }
     }
 
@@ -771,6 +804,7 @@ class PaykitAllowanceRepo @Inject constructor(
         _localState.update { state }
         _autoPaidRequestIds.update { state.autoPaidRequestIds }
         _entries.update { entries }
+        pendingFilterChanged()
         _autoPaidSats.update {
             entries.associate { entry ->
                 entry.id to entry.allowances.fold(0uL) { total, allowance ->

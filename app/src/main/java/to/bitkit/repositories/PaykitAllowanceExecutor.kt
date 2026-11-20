@@ -5,6 +5,7 @@ import com.synonym.paykit.AllowanceAccountingBlock
 import com.synonym.paykit.AllowanceAccountingHistory
 import com.synonym.paykit.AllowanceAccountingReconciliation
 import com.synonym.paykit.AllowanceAccountingState
+import com.synonym.paykit.AllowanceAssociationRecord
 import com.synonym.paykit.AllowanceLifecycleState
 import com.synonym.paykit.AllowanceSelectionInput
 import com.synonym.paykit.PaymentAttemptDecision
@@ -772,9 +773,21 @@ class PaykitAllowanceExecutor @Inject constructor(
                 admit = { if (!admits(activation)) throw PaykitAllowanceError.Unavailable },
             )
         }.getOrThrow()
-        sendQueuedMessages(request)
+        // A paid request's proof delivery sends the queued acceptance with it, so only a request left unpaid sends now.
+        val result = runSuspendCatching { reserveAndPay(request, amountSats, payment, association, identity) }
+        if (result.getOrNull() != PaykitAllowanceAutoPayResult.STARTED) sendQueuedMessages(request.counterparty)
+        return result.getOrThrow()
+    }
 
-        val occurrence = PaymentOccurrence(scope, billingPeriod = null)
+    private suspend fun reserveAndPay(
+        request: PaykitPaymentRequest,
+        amountSats: ULong,
+        payment: PrivatePaykitAllowancePayment,
+        association: AllowanceAssociationRecord,
+        identity: String,
+    ): PaykitAllowanceAutoPayResult {
+        val endpointIdentifier = payment.endpoint.methodId.rawValue
+        val occurrence = PaymentOccurrence(request.scope(), billingPeriod = null)
         val reservation = paykitSdkService.reserveAutomaticPayment(
             occurrence = occurrence,
             expectedAssociationRevision = association.revisions.lastOrNull()?.revision ?: 1uL,
@@ -911,6 +924,8 @@ class PaykitAllowanceExecutor @Inject constructor(
             failUnsent(attemptId, identity)
             throw it
         }
+        // Back up the spend now, so a wallet restored later still counts it.
+        _events.tryEmit(PaykitAllowanceEvent.PaymentLeaving)
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
         // Routing fees fall outside the allowance's accounting, so they are capped at 1% of the requested amount.
         val maxRoutingFeeMsat = amountSats.safe() * MAX_ROUTING_FEE_MSAT_PER_SAT.safe()
@@ -938,8 +953,8 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /** Called for every settled outbound Lightning payment; only journaled ones are Allowance work. */
     suspend fun lightningPaymentSettled(paymentHash: String, succeeded: Boolean): Unit = withContext(ioDispatcher) {
-        settleMutex.withLock {
-            val identity = activeIdentity ?: return@withLock
+        val failedAutomatic = settleMutex.withLock {
+            val identity = activeIdentity ?: return@withLock emptyList()
             val entries = localState(identity).journal.filter {
                 it.paymentHash.equals(paymentHash, ignoreCase = true) && it.stage in SETTLEABLE_STAGES
             }
@@ -951,7 +966,10 @@ class PaykitAllowanceExecutor @Inject constructor(
                     if (!succeeded && entry.isAutomatic) releasePaymentList(entry, identity)
                 }.onFailure { Logger.warn("Failed to record an allowance payment outcome", it, context = TAG) }
             }
+            entries.filter { !succeeded && it.isAutomatic }
         }
+        // No proof follows a failed automatic payment, so its queued acceptance is sent now.
+        failedAutomatic.map { it.requestId.counterparty }.distinct().forEach { sendQueuedMessages(it) }
     }
 
     // endregion
@@ -960,8 +978,9 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /**
      * Reports a user-approved payment of an incoming request to the shared ledger before it leaves the wallet.
-     * Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] when another live attempt exists for the request, so
-     * the same request is never paid twice. Any other problem leaves the payment unreported and returns null.
+     * Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] when another live attempt exists for the request,
+     * or this wallet's records show it already paid the request, so the same request is never paid twice.
+     * Any other problem leaves the payment unreported and returns null.
      * A Lightning payment passes its [paymentHash], so a backup taken before the send still lets the node settle it.
      */
     suspend fun beginManualPayment(
@@ -978,6 +997,11 @@ class PaykitAllowanceExecutor @Inject constructor(
             request.direction != PaykitPaymentRequestDirection.Incoming
         ) {
             return@withContext Result.success(null)
+        }
+        // A ledger read back older than this wallet's records may offer the request again; it is never paid twice.
+        if (localState(identity).hasSentPayment(request.id)) {
+            Logger.info("Stopped a manual payment: this wallet already paid the request", context = TAG)
+            return@withContext Result.failure(PaykitAllowanceError.PaymentAlreadyRecorded)
         }
         val result = runSuspendCatching {
             reportManualPayment(
@@ -1151,9 +1175,9 @@ class PaykitAllowanceExecutor @Inject constructor(
         recurrenceEligible = true,
     )
 
-    private suspend fun sendQueuedMessages(request: PaykitPaymentRequest) {
+    private suspend fun sendQueuedMessages(counterparty: String) {
         runSuspendCatching {
-            paykitSdkService.processOutboundPrivateMessages(request.counterparty)
+            paykitSdkService.processOutboundPrivateMessages(counterparty)
         }.onFailure { Logger.warn("Failed to send the automatic acceptance right away", it, context = TAG) }
     }
 
@@ -1263,6 +1287,15 @@ private fun PaykitAllowanceLocalState.isAutoPaid(requestId: PaykitPaymentRequest
 private fun PaykitAllowanceLocalState.hasPaid(requestId: PaykitPaymentRequestId) = isAutoPaid(requestId) ||
     journal.any {
         it.stage != Stage.FAILED && it.requestId.paymentRequestId == requestId.paymentRequestId &&
+            PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
+    }
+
+/** Stages after which the payment may have left the wallet. */
+private val MONEY_LEFT_STAGES = setOf(Stage.SENDING, Stage.SENT, Stage.UNKNOWN, Stage.SUCCEEDED)
+
+internal fun PaykitAllowanceLocalState.hasSentPayment(requestId: PaykitPaymentRequestId) = isAutoPaid(requestId) ||
+    journal.any {
+        it.stage in MONEY_LEFT_STAGES && it.requestId.paymentRequestId == requestId.paymentRequestId &&
             PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
     }
 
