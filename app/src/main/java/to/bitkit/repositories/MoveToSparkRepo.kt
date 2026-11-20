@@ -625,23 +625,27 @@ object MoveToSparkMath {
     }
 
     /**
-     * What [channel] can send across a move's parts: its outbound capacity, less the commitment fee a channel we funded
-     * keeps back. Such a channel counts its send limit when the limit is what it clears to; when a peer's HTLC cap
-     * holds the limit lower, it counts the larger of the two commitment types' predictions, within the limit and
-     * capacity.
+     * What [channel] can send across a move's parts: its outbound capacity, less the commitment fee a channel we
+     * funded keeps back. Such a channel counts its send limit when the limit is what it clears to, plus what the rest
+     * clears to once that limit has moved, as LDK leaves a part under the dust limit. When a peer's HTLC cap holds the
+     * limit lower, it counts the larger of the two commitment types' predictions, within the limit and capacity.
      */
     fun plannedSats(channel: ChannelDetails): ULong {
         if (!channel.isOutbound) return msatFloorOf(channel.outboundCapacityMsat)
         val limitMsat = channel.nextOutboundHtlcLimitMsat
         val capacityMsat = channel.outboundCapacityMsat.toLong()
         val feerate = channel.feerateSatPer1000Weight.toLong()
-        val clearedMsat = listOf(false, true).map {
-            clearedLimitMsat(capacityMsat, feerate, isLegacy = it).coerceAtLeast(0L).toULong()
+        val types = listOf(false, true)
+        val clearedMsat = types.map { clearedLimitMsat(capacityMsat, feerate, isLegacy = it).coerceAtLeast(0L) }
+        val matched = types.filterIndexed { i, _ ->
+            msatFloorOf(clearedMsat[i].toULong()).toLong() - msatFloorOf(limitMsat).toLong() in -1L..1L
         }
-        if (clearedMsat.any { msatFloorOf(it).toLong() - msatFloorOf(limitMsat).toLong() in -1L..1L }) {
-            return msatFloorOf(limitMsat)
+        if (matched.isNotEmpty()) {
+            val restMsat = (capacityMsat - limitMsat.toLong()).coerceAtLeast(0L)
+            val leftMsat = matched.minOf { clearedLimitMsat(restMsat, feerate, isLegacy = it).coerceAtLeast(0L) }
+            return msatFloorOf(limitMsat.safe() + leftMsat.toULong().safe())
         }
-        return msatFloorOf(maxOf(limitMsat, minOf(channel.outboundCapacityMsat, clearedMsat.max())))
+        return msatFloorOf(maxOf(limitMsat, minOf(channel.outboundCapacityMsat, clearedMsat.max().toULong())))
     }
 
     /**

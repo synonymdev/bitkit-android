@@ -641,7 +641,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val atReserve = funded.copy(nextOutboundHtlcLimitMsat = anchorMsat.toULong())
 
         assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(funded))
-        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(atReserve))
+        val restMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L - anchorMsat, 2_500L, isLegacy = false)
+        assertEquals(((anchorMsat + restMsat) / 1000L).toULong(), MoveToSparkMath.plannedSats(atReserve))
         assertEquals(100_000uL, MoveToSparkMath.plannedSats(funded.copy(isOutbound = false)))
     }
 
