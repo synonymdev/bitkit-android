@@ -16,6 +16,7 @@ fun QrScanningSheet(
 ) {
     Content(
         isPubkyScan = sheet.isPubkyScan,
+        readsNearby = sheet.readsNearby,
         onBack = if (sheet.showBackButton) {
             { appViewModel.hideScannerSheet() }
         } else {
@@ -28,6 +29,7 @@ fun QrScanningSheet(
 @Composable
 private fun Content(
     isPubkyScan: Boolean,
+    readsNearby: Boolean,
     onBack: (() -> Unit)?,
     onScanSuccess: (String, Boolean) -> Unit,
 ) {
@@ -38,7 +40,7 @@ private fun Content(
     ) {
         QrScanningScreen(
             isPubkyScan = isPubkyScan,
-            readsNearby = !isPubkyScan,
+            readsNearby = readsNearby,
             onScanSuccess = { payload -> payload.text?.let { onScanSuccess(it, payload.isNearby) } },
             onBack = onBack,
         )

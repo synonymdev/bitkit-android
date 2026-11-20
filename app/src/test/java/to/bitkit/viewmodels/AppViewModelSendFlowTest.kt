@@ -5354,7 +5354,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showScannerSheet()
         advanceUntilIdle()
 
-        assertEquals(Sheet.QrScanner(showBackButton = true), sut.currentSheet.value)
+        assertEquals(Sheet.QrScanner(showBackButton = true, readsNearby = true), sut.currentSheet.value)
 
         sut.hideScannerSheet()
         advanceUntilIdle()
@@ -5363,11 +5363,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scanner sheet opened for a setting does not read nearby payments`() = test {
+        sut.showScannerSheet { }
+        advanceUntilIdle()
+        assertEquals(Sheet.QrScanner(readsNearby = false), sut.currentSheet.value)
+
+        sut.showScannerSheet(isPubkyScan = true) { }
+        advanceUntilIdle()
+        assertEquals(Sheet.QrScanner(isPubkyScan = true, readsNearby = false), sut.currentSheet.value)
+    }
+
+    @Test
     fun `scanner sheet can hide back button for tab bar entry`() = test {
         sut.showScannerSheet(showBackButton = false)
         advanceUntilIdle()
 
-        assertEquals(Sheet.QrScanner(showBackButton = false), sut.currentSheet.value)
+        assertEquals(Sheet.QrScanner(showBackButton = false, readsNearby = true), sut.currentSheet.value)
     }
 
     @Test
@@ -6472,7 +6483,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.showScannerSheet()
         advanceUntilIdle()
-        assertEquals(Sheet.QrScanner(), sut.currentSheet.value)
+        assertEquals(Sheet.QrScanner(readsNearby = true), sut.currentSheet.value)
 
         sut.onScannerSheetResult(authUrl)
         advanceUntilIdle()

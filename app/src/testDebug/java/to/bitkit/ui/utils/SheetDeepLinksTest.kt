@@ -90,7 +90,7 @@ class SheetDeepLinksTest : BaseUnitTest() {
         val qrScanner = SheetDeepLinks.sheetFor(Uri.parse("bitkit://screen/qr-scanner"))
 
         assertEquals(Sheet.ActivityTagSelector, tagSelector)
-        assertEquals(Sheet.QrScanner(), qrScanner)
+        assertEquals(Sheet.QrScanner(readsNearby = true), qrScanner)
     }
 
     @Test

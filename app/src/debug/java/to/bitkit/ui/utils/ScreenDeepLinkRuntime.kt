@@ -61,5 +61,5 @@ private val FAMILIES: List<SheetDeepLinkFamily> = listOf(
 private val STANDALONE: List<Sheet> = listOf(
     Sheet.ActivityDateRangeSelector,
     Sheet.ActivityTagSelector,
-    Sheet.QrScanner(),
+    Sheet.QrScanner(readsNearby = true),
 )

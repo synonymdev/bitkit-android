@@ -8808,6 +8808,8 @@ class AppViewModel @Inject constructor(
             Sheet.QrScanner(
                 isPubkyScan = isPubkyScan,
                 showBackButton = showBackButton,
+                // A caller with its own handler scans for a setting or a contact, not for a payment.
+                readsNearby = !isPubkyScan && onResult == null,
             )
         )
     }

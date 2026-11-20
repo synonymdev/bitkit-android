@@ -106,6 +106,8 @@ sealed interface Sheet {
     data class QrScanner(
         val isPubkyScan: Boolean = false,
         val showBackButton: Boolean = true,
+        /** Whether the scanner also takes payment requests over NFC and Bluetooth: only when it opens to pay. */
+        val readsNearby: Boolean = false,
     ) : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
 
