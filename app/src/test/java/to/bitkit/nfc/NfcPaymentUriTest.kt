@@ -58,6 +58,18 @@ class NfcPaymentUriTest {
     }
 
     @Test
+    fun `request repeating a single parameter is kept`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        for (repeated in listOf(
+            "bitcoin:?lightning=$invoice&amount=0.01&AMOUNT=0.02",
+            "bitcoin:?lightning=$invoice&lightning=lnbc1other",
+            "bitcoin:?lightning=$invoice&label=a&label=b",
+        )) {
+            assertEquals(repeated, scannedPaymentRequest(repeated))
+        }
+    }
+
+    @Test
     fun `request with a required parameter is kept`() {
         val invoice = PosNfcFixtures.SQUARE_INVOICE
         val required = "bitcoin:?lightning=$invoice&req-pop=callback%3a"
