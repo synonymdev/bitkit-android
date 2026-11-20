@@ -648,6 +648,9 @@ class AppViewModel @Inject constructor(
 
     /** A request read from a nearby device on the recipient screen, cancelled when the user enters one manually. */
     private var nearbyAddressScanJob: Job? = null
+
+    /** A request found over Bluetooth without a user gesture; any request the user chose takes priority over it. */
+    private var passiveNearbyScanJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
@@ -4068,6 +4071,13 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onAddressContinue(data: String, suppressQuickPay: Boolean, isNearbyRead: Boolean) {
+        // Bluetooth reads suppress QuickPay; NFC reads come from a tap, like a QR scan or a paste.
+        val isPassiveRead = isNearbyRead && suppressQuickPay
+        val preparing = scheduledScan?.job?.takeIf { it.isActive }
+        if (isPassiveRead && preparing != null && preparing !== passiveNearbyScanJob) {
+            Logger.info("Ignoring nearby read while the request the user chose is preparing", context = TAG)
+            return
+        }
         clearActiveContactPaymentContext()
         val job = launchScan(
             source = ScanSource.ADDRESS_CONTINUE,
@@ -4079,6 +4089,7 @@ class AppViewModel @Inject constructor(
         // Its job ends once it routes, so cancelling it never stops a payment in progress.
         // A duplicate read returns no job; keep the handle of the scan still running.
         if (isNearbyRead) job?.let { nearbyAddressScanJob = it }
+        if (isPassiveRead) job?.let { passiveNearbyScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {

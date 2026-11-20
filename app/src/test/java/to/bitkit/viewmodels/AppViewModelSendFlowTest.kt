@@ -9883,6 +9883,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `bluetooth read does not replace a scanned request still preparing`() = test {
+        val scanned = stubOnchainAmountScan(amountSats = 10_000u)
+        val nearby = "bitcoin:$REGTEST_ADDRESS?amount=0.0002"
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(scanned)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(scanned))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.AddressContinue(nearby, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        verify(coreService, never()).decode(nearby)
+    }
+
+    @Test
     fun `hardware send sheet onchain address with payable amount estimates its fee and opens confirm`() = test {
         val input = stubOnchainAmountScan(amountSats = 10_000u)
         stubHardwareFunding()
