@@ -4271,7 +4271,9 @@ class SparkRepoTest : BaseUnitTest() {
                     sparkUncertainSends = mapOf("hash" to sentAt),
                     sparkUncertainSendStarts = mapOf("hash" to sentAt),
                     sparkSendRowIds = mapOf("hash" to "older"),
-                    sparkSendRowStamps = mapOf("hash" to pending.v1.let { "${it.timestamp}:${it.value}:${it.fee}" }),
+                    sparkSendRowStamps = mapOf(
+                        "hash" to pending.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }
+                    ),
                     sparkSendEarlierIds = mapOf("hash" to listOf("older")),
                 )
             ),
@@ -4335,7 +4337,7 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `an earlier payment's row takes its final fee after a stop cut a retry's row write short`() = test {
         var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 7uL))
-        val olderStamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}" }
+        val olderStamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }
         // The retry's writer was kept ahead of its row, and the app stopped before the row was written.
         val store = CacheStore(
             InMemoryDataStore(
@@ -4368,9 +4370,44 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an earlier payment's failed row takes its final fee after a stop cut a retry alike in time amount and fee`() =
+        test {
+            var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 7uL))
+            val stamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}" }
+            // The pending retry's writer was kept ahead of its row, alike in all but status to the earlier failed one.
+            val store = CacheStore(
+                InMemoryDataStore(
+                    AppCacheData(
+                        sparkSendRowIds = mapOf("hash" to "retry"),
+                        sparkSendRowStamps = mapOf("hash" to "$stamp:${PaymentState.PENDING}"),
+                        sparkSendPreviousRowWriters = mapOf("hash" to listOf("older", "$stamp:${PaymentState.FAILED}")),
+                        sparkSendEarlierIds = mapOf("hash" to listOf("older")),
+                    )
+                ),
+                clock,
+            )
+            whenever(sparkService.isSupported).thenReturn(true)
+            whenever(sparkService.isConnected).thenReturn(true)
+            whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+            whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+            whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+                row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+                Result.success(Unit)
+            }
+            val final = sentPayment(fees = 9)
+                .copy(id = "older", status = PaymentStatus.FAILED, timestamp = row.v1.timestamp)
+            whenever(sparkService.listPayments()).thenReturn(listOf(final))
+
+            createSut(store).start(0).getOrThrow()
+            advanceUntilIdle()
+
+            assertEquals(9uL, row.v1.fee, "the earlier payment's final fee was dropped")
+        }
+
+    @Test
     fun `an earlier payment's fee correction survives a failed write after a cut retry row write`() = test {
         var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 7uL))
-        val olderStamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}" }
+        val olderStamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }
         val store = CacheStore(
             InMemoryDataStore(
                 AppCacheData(
@@ -4637,6 +4674,8 @@ class SparkRepoTest : BaseUnitTest() {
         sync()
         assertTrue(events.none { it is Event.PaymentFailed }, "the expiry ended a retry Spark may still list")
         assertTrue("hash" in store.data.first().sparkSendHashes)
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), sut.lightningSend("hash"))
+        assertEquals(PaymentStatus.PENDING, sut.lightningSendStatuses()?.get("hash"))
 
         // Past the grace, while Spark's latest sync was made before it ended.
         now += 10.minutes
@@ -4669,6 +4708,30 @@ class SparkRepoTest : BaseUnitTest() {
         // Later syncs list the same payments.
         sync()
         return row
+    }
+
+    @Test
+    fun `a taken spark retry kept from before a restart reads as pending within the grace past expiry`() = test {
+        val sentAt = now.epochSeconds
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to sentAt + 3_600),
+                    sparkUncertainSendStarts = mapOf("hash" to sentAt),
+                    sparkTakenSendIds = mapOf("hash" to "retry"),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        now += 65.minutes
+        val sut = createSut(store)
+
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), sut.lightningSend("hash"))
+        sut.lightningSendStatuses()?.let { assertEquals(PaymentStatus.PENDING, it["hash"]) }
     }
 
     @Test

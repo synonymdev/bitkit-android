@@ -846,11 +846,12 @@ class SparkRepo @Inject constructor(
         val rowId = cache.sendRowWriter(hash, send)
         val earlierIds = attempt.earlierIds.orEmpty() + cache.sparkSendEarlierIds[hash].orEmpty()
         val isWrittenOver = !cache.isRowStampKept(hash, send)
+        val failed = send.copy(status = PaymentState.FAILED)
         when {
-            attempt.ownId != null -> cacheStore.keepSparkSendRowId(paymentHash, attempt.ownId, send.sendRowStamp())
+            attempt.ownId != null -> cacheStore.keepSparkSendRowId(paymentHash, attempt.ownId, failed.sendRowStamp())
             rowId != null && rowId in earlierIds && isWrittenOver -> cacheStore.removeSparkSendRowId(paymentHash)
         }
-        activityRepo.get().upsertActivity(Activity.Lightning(send.copy(status = PaymentState.FAILED)))
+        activityRepo.get().upsertActivity(Activity.Lightning(failed))
             .onFailure { Logger.warn("Failed to mark Spark send '$paymentHash' failed", it, context = TAG) }
             .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
     }
@@ -955,6 +956,17 @@ class SparkRepo @Inject constructor(
                 ?: Event.PaymentFailed(hash, hash, PaymentFailureReason.UNEXPECTED_ERROR)
             _nodeEvents.emit(event)
         }
+    }
+
+    /**
+     * Sends Spark took whose attempts are kept past their invoice's expiry until [dropExpiredTakenAttempts] ends them,
+     * also ones kept from before a restart not yet taken back, so one Spark doesn't list yet still reads as pending.
+     */
+    private suspend fun retainedSendHashes(): Set<String> {
+        val cache = cacheStore.data.first()
+        val journaled = cache.sparkUncertainSendStarts.keys + cache.sparkUncertainSendEarlierIds.keys +
+            cache.sparkTakenSendIds.keys
+        return takenAttempts.keys + (journaled - cache.sparkUncertainSends.keys)
     }
 
     /** Sends whose outcome Spark didn't report, also ones kept from before a restart not yet taken back. */
@@ -1738,7 +1750,7 @@ class SparkRepo @Inject constructor(
     suspend fun lightningSendStatuses(): Map<String, PaymentStatus>? = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext emptyMap()
         if (!canListPayments()) return@withContext null
-        val unlisted = unexpiredStartedSends()
+        val unlisted = unexpiredStartedSends() + retainedSendHashes()
         val uncertain = uncertainSendHashes()
         val payments = runSuspendCatching { sparkService.listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
@@ -1769,7 +1781,7 @@ class SparkRepo @Inject constructor(
      */
     suspend fun lightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
         val hash = paymentHash.lowercase()
-        val isUnlistedHeld = hash in unexpiredStartedSends()
+        val isUnlistedHeld = hash in unexpiredStartedSends() || hash in retainedSendHashes()
         val (send, listed) = listedLightningSendPayment(paymentHash)
         val isUncertain = hash in uncertainSendHashes()
         val isHeld = when (send) {
@@ -2164,7 +2176,7 @@ class SparkRepo @Inject constructor(
         return rowId != id && rowId !in earlierIds
     }
 
-    private fun LightningActivity.sendRowStamp() = "$timestamp:$value:$fee"
+    private fun LightningActivity.sendRowStamp() = "$timestamp:$value:$fee:$status"
 
     /**
      * The payment that wrote [row] of [hash]: the kept writer, unless a stop cut its row write short, when the row

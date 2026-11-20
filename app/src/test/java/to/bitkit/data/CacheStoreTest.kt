@@ -370,6 +370,17 @@ class CacheStoreTest : BaseUnitTest() {
         assertEquals("original0", data.sparkSendRowIds["retried0"])
     }
 
+    @Test
+    fun `keepSparkSendRowId outside a row write keeps no previous writer`() = test {
+        sut.keepSparkSendRowId("hash", "older", "1:2:3")
+
+        sut.keepSparkSendRowId("hash", "retry", "4:5:6")
+
+        val data = sut.data.first()
+        assertEquals("retry", data.sparkSendRowIds["hash"])
+        assertFalse("hash" in data.sparkSendPreviousRowWriters)
+    }
+
     private class CountingDataStore<T>(private val inner: DataStore<T>) : DataStore<T> {
         var writes = 0
         override val data = inner.data

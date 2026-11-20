@@ -191,9 +191,10 @@ class CacheStore internal constructor(
             val ids = all.filter { (key) -> key !in dropped }
             val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }
                 ?: (it.sparkSendRowStamps - hash)
-            val writer = it.sparkSendRowIds[hash]?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
-                ?: rowStamp?.let { value -> listOf("", value) }
-                    ?.takeIf { beforeRow }
+            val writer = (
+                it.sparkSendRowIds[hash]?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
+                    ?: rowStamp?.let { value -> listOf("", value) }
+                ).takeIf { beforeRow }
             val previous = writer?.let { value -> it.sparkSendPreviousRowWriters + (hash to value) }
                 ?: (it.sparkSendPreviousRowWriters - hash)
             val kept = ids.associate { (key, id) -> key to id }
