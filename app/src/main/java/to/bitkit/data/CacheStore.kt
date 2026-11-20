@@ -191,8 +191,11 @@ class CacheStore internal constructor(
             val ids = all.filter { (key) -> key !in dropped }
             val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }
                 ?: (it.sparkSendRowStamps - hash)
+            // A writer a cut write left the row to stays its writer, as the row still matches its stamp.
+            val staged = it.sparkSendPreviousRowWriters[hash]?.takeIf { value -> value.getOrNull(1) == rowStamp }
             val writer = (
-                it.sparkSendRowIds[hash]?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
+                staged
+                    ?: it.sparkSendRowIds[hash]?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
                     ?: rowStamp?.let { value -> listOf("", value) }
                 ).takeIf { beforeRow }
             val previous = writer?.let { value -> it.sparkSendPreviousRowWriters + (hash to value) }

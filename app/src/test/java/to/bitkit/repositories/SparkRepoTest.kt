@@ -4405,6 +4405,40 @@ class SparkRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `an earlier payment's failed row takes its final fee after a stop cut a retry's alike failed row`() = test {
+        var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 7uL))
+        val stamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }
+        // The failed retry's writer was kept ahead of its row, alike in all to the earlier failed one.
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendRowIds = mapOf("hash" to "retry"),
+                    sparkSendRowStamps = mapOf("hash" to stamp),
+                    sparkSendPreviousRowWriters = mapOf("hash" to listOf("older", stamp)),
+                    sparkSendEarlierIds = mapOf("hash" to listOf("older")),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever { activityRepo.getActivity(eq("hash"), any()) }.doSuspendableAnswer { Result.success(row) }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            row = it.getArgument<Activity>(0) as? Activity.Lightning ?: row
+            Result.success(Unit)
+        }
+        val final = sentPayment(fees = 9)
+            .copy(id = "older", status = PaymentStatus.FAILED, timestamp = row.v1.timestamp)
+        whenever(sparkService.listPayments()).thenReturn(listOf(final))
+
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(9uL, row.v1.fee, "the earlier payment's final fee was dropped")
+    }
+
+    @Test
     fun `an earlier payment's fee correction survives a failed write after a cut retry row write`() = test {
         var row = Activity.Lightning(pendingSendRow().v1.copy(status = PaymentState.FAILED, fee = 7uL))
         val olderStamp = row.v1.let { "${it.timestamp}:${it.value}:${it.fee}:${it.status}" }
@@ -5407,6 +5441,81 @@ class SparkRepoTest : BaseUnitTest() {
             argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
         )
         assertTrue(events.any { it is Event.PaymentFailed }, "the send screen never learned the send failed")
+    }
+
+    @Test
+    fun `a spark send handed from its doubt to spark during a lookup's list read stays pending`() = test {
+        val sentAt = now.epochSeconds - 7_200
+        // A retry in doubt from before a restart, whose invoice expired before Spark's last sync.
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to sentAt + 3_600),
+                    sparkUncertainSends = mapOf("hash" to sentAt),
+                    sparkUncertainSendStarts = mapOf("hash" to sentAt),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = (sentAt + 60).toULong()))
+        val gate = CompletableDeferred<Unit>()
+        var isLookup = false
+        var listed = emptyList<Payment>()
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            if (!isLookup) return@doSuspendableAnswer listed
+            isLookup = false
+            gate.await()
+            emptyList<Payment>()
+        }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        // The lookup reads an empty list, and a sync hands the retry to Spark before the lookup goes on.
+        isLookup = true
+        val lookup = async { sut.lightningSend("hash") }
+        runCurrent()
+        listed = listOf(sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING))
+        sparkEvents.emit(SdkEvent.Synced)
+        runCurrent()
+        assertEquals("retry", store.data.first().sparkTakenSendIds["hash"], "the sync didn't hand the retry to Spark")
+        gate.complete(Unit)
+
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), lookup.await())
+    }
+
+    @Test
+    fun `a spark send whose success was handled before its call failed keeps no hold`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val completed = sentPayment(fees = 0).copy(status = PaymentStatus.COMPLETED)
+        var listed = emptyList<Payment>()
+        whenever(sparkService.listPayments()).thenAnswer { listed }
+        // Spark reports the send's success while its call runs, and the call then fails.
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            listed = listOf(completed)
+            sparkEvents.emit(SdkEvent.PaymentSucceeded(completed))
+            delay(1)
+            throw SdkException.Generic("timeout")
+        }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
+
+        sut.payInvoice("lnbc1", 100uL)
+        advanceUntilIdle()
+
+        assertEquals(1, events.count { it is Event.PaymentSuccessful }, "the failed call reported the success again")
+        assertFalse("hash" in store.data.first().sparkUncertainSends, "the failed call held a settled send again")
     }
 
     @Test

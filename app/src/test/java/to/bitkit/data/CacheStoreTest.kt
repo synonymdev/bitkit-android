@@ -381,6 +381,16 @@ class CacheStoreTest : BaseUnitTest() {
         assertFalse("hash" in data.sparkSendPreviousRowWriters)
     }
 
+    @Test
+    fun `keepSparkSendRowId keeps the writer a cut write left the row to across another cut write`() = test {
+        sut.keepSparkSendRowId("hash", "older", "1:2:3")
+        sut.keepSparkSendRowId("hash", "first", "4:5:6", beforeRow = true, rowStamp = "1:2:3")
+
+        sut.keepSparkSendRowId("hash", "second", "7:8:9", beforeRow = true, rowStamp = "1:2:3")
+
+        assertEquals(listOf("older", "1:2:3"), sut.data.first().sparkSendPreviousRowWriters["hash"])
+    }
+
     private class CountingDataStore<T>(private val inner: DataStore<T>) : DataStore<T> {
         var writes = 0
         override val data = inner.data
