@@ -249,6 +249,19 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keepSparkSendRowId keeps each writer's row stamp and drops it with the writer`() = test {
+        sut.keepSparkSendRowId("HASH", "id", "1:2:3")
+        assertEquals("1:2:3", sut.data.first().sparkSendRowStamps["hash"])
+
+        sut.keepSparkSendRowId("hash", "other")
+        assertFalse("hash" in sut.data.first().sparkSendRowStamps)
+
+        sut.keepSparkSendRowId("hash", "id", "1:2:3")
+        sut.removeSparkSendRowId("hash")
+        assertTrue(sut.data.first().sparkSendRowStamps.isEmpty())
+    }
+
+    @Test
     fun `keepSparkSendRowId keeps the latest row writers up to the limit`() = test {
         (0..MAX_SPARK_SEND_HASHES).forEach { sut.keepSparkSendRowId("hash$it", "id$it") }
         sut.keepSparkSendRowId("HASH1", "newer")

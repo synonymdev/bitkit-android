@@ -166,13 +166,20 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Keeps [paymentId] as the payment that last wrote the Activity row of Spark's send of [paymentHash]. */
-    suspend fun keepSparkSendRowId(paymentHash: String, paymentId: String) {
+    /**
+     * Keeps [paymentId] as the payment that last wrote the Activity row of Spark's send of [paymentHash], with the
+     * [stamp] of the row it wrote, in one write, so a row written over without its writer is told apart.
+     */
+    suspend fun keepSparkSendRowId(paymentHash: String, paymentId: String, stamp: String? = null) {
         val hash = paymentHash.lowercase()
-        if (store.data.first().sparkSendRowIds[hash] == paymentId) return
+        val data = store.data.first()
+        if (data.sparkSendRowIds[hash] == paymentId && data.sparkSendRowStamps[hash] == stamp) return
         store.updateData {
             val ids = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
-            it.copy(sparkSendRowIds = ids.associate { (key, id) -> key to id })
+            val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }
+                ?: (it.sparkSendRowStamps - hash)
+            val kept = ids.associate { (key, id) -> key to id }
+            it.copy(sparkSendRowIds = kept, sparkSendRowStamps = stamps.filterKeys { key -> key in kept })
         }
     }
 
@@ -193,7 +200,9 @@ class CacheStore internal constructor(
     suspend fun removeSparkSendRowId(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendRowIds) return
-        store.updateData { it.copy(sparkSendRowIds = it.sparkSendRowIds - hash) }
+        store.updateData {
+            it.copy(sparkSendRowIds = it.sparkSendRowIds - hash, sparkSendRowStamps = it.sparkSendRowStamps - hash)
+        }
     }
 
     suspend fun removeSparkSendHash(paymentHash: String) {
@@ -483,6 +492,8 @@ data class AppCacheData(
      * an earlier attempt's failure dated the same second as the row never writes over it.
      */
     val sparkSendRowIds: Map<String, String> = mapOf(),
+    /** The time, amount and fee of each of those rows as its writer wrote it, so a row written over is told apart. */
+    val sparkSendRowStamps: Map<String, String> = mapOf(),
     /**
      * Spark's payment ids of each Spark send's earlier attempts, kept past its hold for the latest
      * [MAX_SPARK_SEND_HASHES], so a failure of one never writes over a later attempt's Activity row after a restart.

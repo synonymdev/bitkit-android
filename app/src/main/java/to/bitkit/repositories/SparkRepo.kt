@@ -837,14 +837,17 @@ class SparkRepo @Inject constructor(
         }
         val send = (stored as? Activity.Lightning)?.v1
         if (send?.txType != PaymentType.SENT || send.status != PaymentState.PENDING) return@withLock true
-        // A writer the attempt read as earlier no longer owns the row, while the attempt's own one keeps protecting it.
-        // The ids kept from earlier retries count too, as this attempt's own read of them can have failed.
+        // A writer the attempt read as earlier no longer owns the row once the row differs from what it wrote, as a
+        // retry wrote over it, while the attempt's own one keeps protecting it. The ids kept from earlier retries count
+        // too, as this attempt's own read of them can have failed.
         val cache = cacheStore.data.first()
-        val rowId = cache.sparkSendRowIds[paymentHash.lowercase()]
-        val earlierIds = attempt.earlierIds.orEmpty() + cache.sparkSendEarlierIds[paymentHash.lowercase()].orEmpty()
+        val hash = paymentHash.lowercase()
+        val rowId = cache.sparkSendRowIds[hash]
+        val earlierIds = attempt.earlierIds.orEmpty() + cache.sparkSendEarlierIds[hash].orEmpty()
+        val isWrittenOver = cache.sparkSendRowStamps[hash] != send.sendRowStamp()
         when {
-            attempt.ownId != null -> cacheStore.keepSparkSendRowId(paymentHash, attempt.ownId)
-            rowId != null && rowId in earlierIds -> cacheStore.removeSparkSendRowId(paymentHash)
+            attempt.ownId != null -> cacheStore.keepSparkSendRowId(paymentHash, attempt.ownId, send.sendRowStamp())
+            rowId != null && rowId in earlierIds && isWrittenOver -> cacheStore.removeSparkSendRowId(paymentHash)
         }
         activityRepo.get().upsertActivity(Activity.Lightning(send.copy(status = PaymentState.FAILED)))
             .onFailure { Logger.warn("Failed to mark Spark send '$paymentHash' failed", it, context = TAG) }
@@ -2160,6 +2163,8 @@ class SparkRepo @Inject constructor(
         return rowId != id && rowId !in earlierIds
     }
 
+    private fun LightningActivity.sendRowStamp() = "$timestamp:$value:$fee"
+
     private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
 
     /** Whether this failure is an earlier attempt's, of a retry in doubt or one sent after [records] was read. */
@@ -2370,7 +2375,9 @@ class SparkRepo @Inject constructor(
             return false
         }
         unsavedPayments.remove(payment.id)
-        if (payment.paymentType == SparkPaymentType.SEND) cacheStore.keepSparkSendRowId(id, payment.id)
+        if (payment.paymentType == SparkPaymentType.SEND) {
+            cacheStore.keepSparkSendRowId(id, payment.id, activity.sendRowStamp())
+        }
         if (payment.paymentType == SparkPaymentType.SEND && payment.fees.toLong() == 0L) {
             sendsRecordedWithoutFee.add(payment.id)
         } else {
