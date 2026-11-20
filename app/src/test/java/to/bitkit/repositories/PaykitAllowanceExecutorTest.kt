@@ -1014,6 +1014,17 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment that fails inside autoPay sends its acceptance once`() = test {
+        whenever(payer.prepareProof(any(), any(), any(), anyOrNull()))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+        val request = fixtures.paymentRequest()
+
+        sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        verify(sdk, times(1)).processOutboundPrivateMessages(request.counterparty)
+    }
+
+    @Test
     fun `failed proof preparation releases the attempt before any payment`() = test {
         whenever(payer.prepareProof(any(), any(), any(), anyOrNull()))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))

@@ -1916,7 +1916,8 @@ class AppViewModel @Inject constructor(
         val requestedId = requestedPaymentRequestId.value ?: return false
         val request = candidates.singleOrNull { it.id == requestedId } ?: return false
         if (!paykitAllowanceRepo.keepsOffPending(request)) return false
-        val isPaid = paykitAllowanceRepo.hasSentPayment(request)
+        // A payment the node may still fail reads as in progress; only a settled one is "already paid".
+        val isPaid = paykitAllowanceRepo.hasSettledPayment(request)
         val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
         clearRequestedPaymentRequest()
         toast(

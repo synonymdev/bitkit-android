@@ -639,6 +639,11 @@ class PaykitAllowanceRepo @Inject constructor(
         request.direction == PaykitPaymentRequestDirection.Incoming && request.billingPeriod == null &&
             paidRecords.hasSentPayment(request.id)
 
+    /** Whether this wallet's own records show the payment of [request] succeeded, not just that it left. */
+    fun hasSettledPayment(request: PaykitPaymentRequest): Boolean =
+        request.direction == PaykitPaymentRequestDirection.Incoming && request.billingPeriod == null &&
+            paidRecords.hasSettledPayment(request.id)
+
     private fun pendingFilterChanged() = _pendingFilterVersion.update { it + 1 }
 
     /** Pays covered incoming requests headlessly; returns true when any request was handled. */

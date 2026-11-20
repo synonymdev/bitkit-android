@@ -217,6 +217,9 @@ class PaykitAllowanceExecutor @Inject constructor(
     /** Requests an automatic payment is handling now, from its first check until it is handed to the node. */
     val inFlightRequestIds: StateFlow<Set<PaykitPaymentRequestId>> = _inFlightRequestIds.asStateFlow()
     private val liveAttemptIds = ConcurrentHashMap.newKeySet<String>()
+
+    /** Requests whose live attempt already sent its acceptance on failure, so autoPay does not send it again. */
+    private val acceptanceSentRequestIds = ConcurrentHashMap.newKeySet<PaykitPaymentRequestId>()
     private val _events = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<PaykitAllowanceEvent> = _events.asSharedFlow()
     private val _spendBackups = Channel<Unit>(Channel.CONFLATED)
@@ -615,7 +618,10 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
         val before = applyJournalStage(attemptId, stage, identity)
         _events.tryEmit(PaykitAllowanceEvent.LedgerChanged)
-        if (outcome == PaymentOutcome.FAILED) sendQueuedAcceptance(before)
+        if (outcome == PaymentOutcome.FAILED && before?.isAutomatic == true) {
+            sendQueuedAcceptance(before)
+            if (attemptId in liveAttemptIds) acceptanceSentRequestIds.add(before.requestId)
+        }
     }
 
     /**
@@ -816,7 +822,10 @@ class PaykitAllowanceExecutor @Inject constructor(
         }.getOrThrow()
         // A paid request's proof delivery sends the queued acceptance with it, so only a request left unpaid sends now.
         val result = runSuspendCatching { reserveAndPay(request, amountSats, payment, association, identity) }
-        if (result.getOrNull() != PaykitAllowanceAutoPayResult.STARTED) sendQueuedMessages(request.counterparty)
+        val isAcceptanceSent = acceptanceSentRequestIds.remove(request.id)
+        if (result.getOrNull() != PaykitAllowanceAutoPayResult.STARTED && !isAcceptanceSent) {
+            sendQueuedMessages(request.counterparty)
+        }
         return result.getOrThrow()
     }
 
@@ -1325,6 +1334,13 @@ private fun PaykitAllowanceLocalState.isAutoPaid(requestId: PaykitPaymentRequest
 private fun PaykitAllowanceLocalState.hasPaid(requestId: PaykitPaymentRequestId) = isAutoPaid(requestId) ||
     journal.any {
         it.stage != Stage.FAILED && it.requestId.paymentRequestId == requestId.paymentRequestId &&
+            PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
+    }
+
+/** Whether this wallet's records show the payment of [requestId] succeeded, not just that it left. */
+internal fun PaykitAllowanceLocalState.hasSettledPayment(requestId: PaykitPaymentRequestId) = isAutoPaid(requestId) ||
+    journal.any {
+        it.stage == Stage.SUCCEEDED && it.requestId.paymentRequestId == requestId.paymentRequestId &&
             PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
     }
 
