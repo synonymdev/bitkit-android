@@ -628,8 +628,9 @@ object MoveToSparkMath {
     /**
      * What [channel] can send across a move's parts: its outbound capacity, less the commitment fee a channel we
      * funded keeps back. Such a channel counts its send limit when the limit is what it clears to, plus what the rest
-     * clears to once that limit has moved, as LDK leaves a part under the dust limit. When a peer's HTLC cap holds the
-     * limit lower, it counts the larger of the two commitment types' predictions, within the limit and capacity.
+     * clears to once that limit has moved, as LDK leaves a part under the dust limit, when that rest can be a part.
+     * When a peer's HTLC cap holds the limit lower, it counts the larger of the two commitment types' predictions,
+     * within the limit and capacity.
      */
     fun plannedSats(channel: ChannelDetails): ULong {
         if (!channel.isOutbound) return msatFloorOf(channel.outboundCapacityMsat)
@@ -643,8 +644,11 @@ object MoveToSparkMath {
         }
         if (matched.isNotEmpty()) {
             val restMsat = (capacityMsat - limitMsat.toLong()).coerceAtLeast(0L)
-            val leftMsat = matched.minOf { clearedLimitMsat(restMsat, feerate, isLegacy = it).coerceAtLeast(0L) }
-            return msatFloorOf(limitMsat.safe() + leftMsat.toULong().safe())
+            val leftMsat = matched.minOf { clearedLimitMsat(restMsat, feerate, isLegacy = it) }
+                .coerceAtLeast(0L)
+                .toULong()
+            val partMinMsat = maxOf(MIN_MOVE_SATS * 1000uL, channel.nextOutboundHtlcMinimumMsat)
+            return msatFloorOf(if (leftMsat < partMinMsat) limitMsat else limitMsat.safe() + leftMsat.safe())
         }
         return msatFloorOf(maxOf(limitMsat, minOf(channel.outboundCapacityMsat, clearedMsat.max().toULong())))
     }

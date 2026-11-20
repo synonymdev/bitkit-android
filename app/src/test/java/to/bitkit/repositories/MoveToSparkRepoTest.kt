@@ -641,8 +641,14 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val atReserve = funded.copy(nextOutboundHtlcLimitMsat = anchorMsat.toULong())
 
         assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(funded))
-        val restMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L - anchorMsat, 2_500L, isLegacy = false)
-        assertEquals(((anchorMsat + restMsat) / 1000L).toULong(), MoveToSparkMath.plannedSats(atReserve))
+        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(atReserve))
+        val legacyMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L, 4_000L, isLegacy = true)
+        val legacy = funded.copy(feerateSatPer1000Weight = 4_000u, nextOutboundHtlcLimitMsat = legacyMsat.toULong())
+        val restMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L - legacyMsat, 4_000L, isLegacy = true)
+        assertTrue(restMsat >= 1_000_000L)
+        assertEquals(((legacyMsat + restMsat) / 1000L).toULong(), MoveToSparkMath.plannedSats(legacy))
+        val peerMin = legacy.copy(nextOutboundHtlcMinimumMsat = restMsat.toULong() + 1uL)
+        assertEquals((legacyMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(peerMin))
         assertEquals(100_000uL, MoveToSparkMath.plannedSats(funded.copy(isOutbound = false)))
     }
 
