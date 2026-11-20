@@ -630,6 +630,20 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a channel we funded counts toward a plan at most what its send limit clears to`() {
+        val funded = createChannelDetails().copy(
+            isOutbound = true,
+            outboundCapacityMsat = 100_000_000uL,
+            nextOutboundHtlcLimitMsat = 0uL,
+            feerateSatPer1000Weight = 2_500u,
+        )
+        val clearedMsat = listOf(false, true).minOf { MoveToSparkMath.clearedLimitMsat(100_000_000L, 2_500L, it) }
+
+        assertEquals((clearedMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(funded))
+        assertEquals(100_000uL, MoveToSparkMath.plannedSats(funded.copy(isOutbound = false)))
+    }
+
+    @Test
     fun `a channel with capacity left is emptied for good only on two unchanged reads at its reserve`() {
         // 4 000 sat/kW: a peer-capped 2-sat limit on 7 170 sats matches the 7 168-sat legacy reserve by chance.
         val capped = channel("capped", 2uL).copy(

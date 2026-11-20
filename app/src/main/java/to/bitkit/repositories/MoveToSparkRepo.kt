@@ -247,7 +247,9 @@ class MoveToSparkRepo internal constructor(
 
             val invoice = sparkRepo.createInvoice(null, INVOICE_DESCRIPTION, INVOICE_EXPIRY_SECS).getOrThrow()
             val parts = mutableListOf<MoveToSparkQuote>()
-            var leftSats = maxOf(limitSats, outboundMsat(usableOnly = true) / 1000uL)
+            val plannedSats = lightningRepo.lightningState.value.channels.filter { it.isUsable }
+                .fold(0uL) { total, channel -> total.safe() + MoveToSparkMath.plannedSats(channel).safe() }
+            var leftSats = maxOf(limitSats, plannedSats)
             var wantedSats = limitSats
             while (parts.size < MAX_PARTS && MoveToSparkMath.hasMovableBalance(leftSats)) {
                 val part = probePart(invoice, wantedSats, minOf(leftSats, limitSats)) ?: break
@@ -358,8 +360,7 @@ class MoveToSparkRepo internal constructor(
     private suspend fun feeRose(amountSats: ULong, feeLeftMsat: ULong): Boolean =
         quote(amountSats).getOrNull()?.let { MoveToSparkMath.feeCapMsat(it.feeSats) > feeLeftMsat } ?: false
 
-    private fun outboundMsat(usableOnly: Boolean = false): ULong = lightningRepo.lightningState.value.channels
-        .filter { !usableOnly || it.isUsable }
+    private fun outboundMsat(): ULong = lightningRepo.lightningState.value.channels
         .fold(0uL) { total, channel -> total.safe() + channel.outboundCapacityMsat.safe() }
 
     private suspend fun nextPart(partSats: ULong): Result<MoveToSparkQuote>? {
@@ -629,6 +630,19 @@ object MoveToSparkMath {
      * commitment; under the dust limit it reserves one HTLC less and stays under the limit. The dust limit is LDK's
      * default 354 sats, plus the HTLC timeout transaction's fee on a legacy commitment.
      */
+    /**
+     * What [channel] can send across a move's parts: its outbound capacity, less the commitment fee a channel we funded
+     * keeps back, so at most what its send limit clears to.
+     */
+    fun plannedSats(channel: ChannelDetails): ULong {
+        if (!channel.isOutbound) return msatFloorOf(channel.outboundCapacityMsat)
+        val clearedMsat = listOf(false, true).minOf { isLegacy ->
+            clearedLimitMsat(channel.outboundCapacityMsat.toLong(), channel.feerateSatPer1000Weight.toLong(), isLegacy)
+        }.coerceAtLeast(0L).toULong()
+        val sendableMsat = maxOf(channel.nextOutboundHtlcLimitMsat, clearedMsat)
+        return msatFloorOf(minOf(channel.outboundCapacityMsat, sendableMsat))
+    }
+
     fun clearedLimitMsat(capacityMsat: Long, feerate: Long, isLegacy: Boolean): Long {
         val baseWeight = if (isLegacy) LEGACY_COMMITMENT_WEIGHT else ANCHOR_COMMITMENT_WEIGHT
         val multiplier = if (isLegacy) 2 else 1
