@@ -4,6 +4,7 @@ import android.content.Context
 import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -104,6 +105,17 @@ class SettingsViewModelTest : BaseUnitTest() {
         }
 
         sut = createViewModel()
+    }
+
+    @Test
+    fun `nearby payments stay off until the saved setting loads`() = test {
+        whenever(settingsStore.data).thenReturn(MutableSharedFlow())
+        val viewModel = createViewModel()
+
+        viewModel.isNearbyPaymentsEnabled.test {
+            assertFalse(awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test
