@@ -166,102 +166,6 @@ class CacheStore internal constructor(
         }
     }
 
-    /**
-     * Keeps [paymentId] as the payment that last wrote the Activity row of Spark's send of [paymentHash], with the
-     * [stamp] of the row it wrote, in one write, so a row written over without its writer is told apart. A writer
-     * kept [beforeRow] keeps the previous one beside it until [commitSparkSendRowId], or an empty id with the stamp of
-     * the row it replaces, [rowStamp], when it had none, so a stop before the row is written leaves the row to the
-     * writer whose stamp it still matches.
-     */
-    suspend fun keepSparkSendRowId(
-        paymentHash: String,
-        paymentId: String,
-        stamp: String? = null,
-        beforeRow: Boolean = false,
-        rowStamp: String? = null,
-    ) {
-        val hash = paymentHash.lowercase()
-        val data = store.data.first()
-        val isKept = data.sparkSendRowIds[hash] == paymentId && data.sparkSendRowStamps[hash] == stamp
-        if (isKept && hash !in data.sparkSendPreviousRowWriters) return
-        store.updateData {
-            val all = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList()
-            val unprotected = all.map { (key) -> key }.filter { key -> key !in it.sparkSendEarlierIds }
-            val dropped = unprotected.take((unprotected.size - MAX_SPARK_SEND_HASHES).coerceAtLeast(0)).toSet()
-            val ids = all.filter { (key) -> key !in dropped }
-            val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }
-                ?: (it.sparkSendRowStamps - hash)
-            // A writer a cut write left the row to stays its writer, as the row still matches its stamp.
-            val staged = it.sparkSendPreviousRowWriters[hash]?.takeIf { value -> value.getOrNull(1) == rowStamp }
-            val writer = (
-                staged
-                    ?: it.sparkSendRowIds[hash]?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
-                    ?: rowStamp?.let { value -> listOf("", value) }
-                ).takeIf { beforeRow }
-            val previous = writer?.let { value -> it.sparkSendPreviousRowWriters + (hash to value) }
-                ?: (it.sparkSendPreviousRowWriters - hash)
-            val kept = ids.associate { (key, id) -> key to id }
-            it.copy(
-                sparkSendRowIds = kept,
-                sparkSendRowStamps = stamps.filterKeys { key -> key in kept },
-                sparkSendPreviousRowWriters = previous.filterKeys { key -> key in kept },
-            )
-        }
-    }
-
-    /**
-     * Puts back the writer of Spark's send row of [paymentHash] as it was before a row write that failed: its [id],
-     * [stamp] and the [previous] writer a stop left beside it, each dropped when null.
-     */
-    suspend fun restoreSparkSendRowWriter(paymentHash: String, id: String?, stamp: String?, previous: List<String>?) {
-        val hash = paymentHash.lowercase()
-        store.updateData {
-            val ids = id?.let { value -> it.sparkSendRowIds + (hash to value) } ?: (it.sparkSendRowIds - hash)
-            val stamps = stamp?.takeIf { id != null }
-                ?.let { value -> it.sparkSendRowStamps + (hash to value) }
-                ?: (it.sparkSendRowStamps - hash)
-            val writers = previous?.takeIf { id != null }
-                ?.let { value -> it.sparkSendPreviousRowWriters + (hash to value) }
-                ?: (it.sparkSendPreviousRowWriters - hash)
-            it.copy(sparkSendRowIds = ids, sparkSendRowStamps = stamps, sparkSendPreviousRowWriters = writers)
-        }
-    }
-
-    /** Ends the doubt over the writer of Spark's send row of [paymentHash], kept before its row, once it is saved. */
-    suspend fun commitSparkSendRowId(paymentHash: String) {
-        val hash = paymentHash.lowercase()
-        if (hash !in store.data.first().sparkSendPreviousRowWriters) return
-        store.updateData { it.copy(sparkSendPreviousRowWriters = it.sparkSendPreviousRowWriters - hash) }
-    }
-
-    /**
-     * Keeps Spark's ids of the earlier attempts of the send of [paymentHash], [ids], with those kept before, past its
-     * hold and for the latest [MAX_SPARK_SEND_HASHES] sends, so their failures never write over a later attempt's row.
-     */
-    suspend fun keepSparkSendEarlierIds(paymentHash: String, ids: Set<String>) {
-        val hash = paymentHash.lowercase()
-        if (store.data.first().sparkSendEarlierIds[hash].orEmpty().containsAll(ids)) return
-        store.updateData {
-            // In send order: a send's earlier attempts go after those an earlier send of the invoice kept.
-            val earlier = it.sparkSendEarlierIds[hash].orEmpty()
-            val kept = earlier + ids.filterNot { id -> id in earlier }.sorted()
-            val all = (it.sparkSendEarlierIds - hash + (hash to kept)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
-            it.copy(sparkSendEarlierIds = all.associate { (key, value) -> key to value })
-        }
-    }
-
-    suspend fun removeSparkSendRowId(paymentHash: String) {
-        val hash = paymentHash.lowercase()
-        if (hash !in store.data.first().sparkSendRowIds) return
-        store.updateData {
-            it.copy(
-                sparkSendRowIds = it.sparkSendRowIds - hash,
-                sparkSendRowStamps = it.sparkSendRowStamps - hash,
-                sparkSendPreviousRowWriters = it.sparkSendPreviousRowWriters - hash,
-            )
-        }
-    }
-
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendHashes) return
@@ -270,75 +174,16 @@ class CacheStore internal constructor(
         }
     }
 
-    /**
-     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds,
-     * with when it was sent, [sentAt], and Spark's ids of the invoice's earlier attempts, [earlierIds], once known;
-     * either left out drops an older attempt's.
-     */
-    suspend fun addSparkUncertainSend(
-        paymentHash: String,
-        failedAt: Long,
-        sentAt: Long? = null,
-        earlierIds: Set<String>? = null,
-        attemptId: String? = null,
-    ) {
+    /** Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds. */
+    suspend fun addSparkUncertainSend(paymentHash: String, failedAt: Long) {
         val hash = paymentHash.lowercase()
-        store.updateData {
-            it.copy(
-                sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt),
-                // Each write is one attempt's, so a value it lacks drops an older attempt's.
-                sparkUncertainSendStarts = sentAt?.let { start -> it.sparkUncertainSendStarts + (hash to start) }
-                    ?: (it.sparkUncertainSendStarts - hash),
-                sparkUncertainSendEarlierIds = earlierIds
-                    ?.let { ids -> it.sparkUncertainSendEarlierIds + (hash to ids.sorted()) }
-                    ?: (it.sparkUncertainSendEarlierIds - hash),
-                sparkUncertainSendAttemptIds = attemptId?.let { id -> it.sparkUncertainSendAttemptIds + (hash to id) }
-                    ?: (it.sparkUncertainSendAttemptIds - hash),
-                sparkTakenSendIds = it.sparkTakenSendIds - hash,
-            )
-        }
-    }
-
-    /**
-     * Ends the doubt over a send Spark took and still runs, keeping its start time and earlier attempts' ids, with
-     * Spark's id of the payment it took, [paymentId], so its own failure is told apart after a restart. Only the
-     * attempt [attemptId] that still has its entry changes it, so a send settled meanwhile is never kept again.
-     */
-    suspend fun keepSparkSendAttempt(paymentHash: String, paymentId: String?, attemptId: String?) {
-        val hash = paymentHash.lowercase()
-        val data = store.data.first()
-        val isIdKept = paymentId == null || data.sparkTakenSendIds[hash] == paymentId
-        if (hash !in data.sparkUncertainSends && isIdKept) return
-        store.updateData {
-            // An entry kept before attempts had ids is one only an attempt without an id still owns.
-            val isOwn = attemptId?.let { id -> it.sparkUncertainSendAttemptIds[hash] == id }
-                ?: (hash in it.sparkUncertainSends && hash !in it.sparkUncertainSendAttemptIds)
-            if (!isOwn) return@updateData it
-            it.copy(
-                sparkUncertainSends = it.sparkUncertainSends - hash,
-                sparkTakenSendIds = paymentId
-                    ?.let { id -> it.sparkTakenSendIds + (hash to id) }
-                    ?: it.sparkTakenSendIds,
-            )
-        }
+        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt)) }
     }
 
     suspend fun removeSparkUncertainSend(paymentHash: String) {
         val hash = paymentHash.lowercase()
-        val data = store.data.first()
-        val isKept = hash in data.sparkUncertainSends || hash in data.sparkUncertainSendStarts ||
-            hash in data.sparkUncertainSendEarlierIds || hash in data.sparkTakenSendIds ||
-            hash in data.sparkUncertainSendAttemptIds
-        if (!isKept) return
-        store.updateData {
-            it.copy(
-                sparkUncertainSends = it.sparkUncertainSends - hash,
-                sparkUncertainSendStarts = it.sparkUncertainSendStarts - hash,
-                sparkUncertainSendEarlierIds = it.sparkUncertainSendEarlierIds - hash,
-                sparkUncertainSendAttemptIds = it.sparkUncertainSendAttemptIds - hash,
-                sparkTakenSendIds = it.sparkTakenSendIds - hash,
-            )
-        }
+        if (hash !in store.data.first().sparkUncertainSends) return
+        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
     }
 
     suspend fun addMoveToSparkHash(paymentHash: String) {
@@ -530,38 +375,6 @@ data class AppCacheData(
      * never reads a retry's earlier failed attempt as its outcome.
      */
     val sparkUncertainSends: Map<String, Long> = mapOf(),
-    /**
-     * When each of those sends went out, in epoch seconds, so a failure Spark dates before it still reads as an earlier
-     * attempt's after a restart. Sends kept before this was have none.
-     */
-    val sparkUncertainSendStarts: Map<String, Long> = mapOf(),
-    /**
-     * Spark's payment ids of each of those sends' earlier attempts, read before it went out, so only those attempts'
-     * failures read as earlier ones. Absent where Spark couldn't list them.
-     */
-    val sparkUncertainSendEarlierIds: Map<String, List<String>> = mapOf(),
-    /** Spark's id of the payment each send Spark took is, so its own failure never reads as an earlier attempt's. */
-    val sparkTakenSendIds: Map<String, String> = mapOf(),
-    /** A random id of the attempt each of those sends' entries belongs to, so a stale attempt never writes over it. */
-    val sparkUncertainSendAttemptIds: Map<String, String> = mapOf(),
-    /**
-     * Spark's id of the payment that last wrote each Spark send's Activity row, those of sends with
-     * [sparkSendEarlierIds] and the latest [MAX_SPARK_SEND_HASHES] of the others, so an earlier attempt's failure dated
-     * the same second as the row never writes over it.
-     */
-    val sparkSendRowIds: Map<String, String> = mapOf(),
-    /** The time, amount and fee of each of those rows as its writer wrote it, so a row written over is told apart. */
-    val sparkSendRowStamps: Map<String, String> = mapOf(),
-    /**
-     * The writer, and its row's stamp, each of those rows had before a new writer was kept ahead of its row write, so
-     * a stop before the row was written leaves the row to the writer whose stamp it still matches.
-     */
-    val sparkSendPreviousRowWriters: Map<String, List<String>> = mapOf(),
-    /**
-     * Spark's payment ids of each Spark send's earlier attempts, in send order, kept past its hold for the latest
-     * [MAX_SPARK_SEND_HASHES], so a failure of one never writes over a later attempt's Activity row after a restart.
-     */
-    val sparkSendEarlierIds: Map<String, List<String>> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.
