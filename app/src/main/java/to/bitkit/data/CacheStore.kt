@@ -185,7 +185,12 @@ class CacheStore internal constructor(
         val isKept = data.sparkSendRowIds[hash] == paymentId && data.sparkSendRowStamps[hash] == stamp
         if (isKept && hash !in data.sparkSendPreviousRowWriters) return
         store.updateData {
-            val ids = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
+            val all = (it.sparkSendRowIds - hash + (hash to paymentId)).entries.toList()
+            val dropped = all.map { (key) -> key }
+                .filter { key -> key !in it.sparkSendEarlierIds }
+                .take((all.size - MAX_SPARK_SEND_HASHES).coerceAtLeast(0))
+                .toSet()
+            val ids = all.filter { (key) -> key !in dropped }
             val stamps = stamp?.let { value -> it.sparkSendRowStamps + (hash to value) }
                 ?: (it.sparkSendRowStamps - hash)
             val writer = it.sparkSendRowIds[hash]?.let { id -> listOfNotNull(id, it.sparkSendRowStamps[hash]) }
@@ -536,8 +541,9 @@ data class AppCacheData(
     /** A random id of the attempt each of those sends' entries belongs to, so a stale attempt never writes over it. */
     val sparkUncertainSendAttemptIds: Map<String, String> = mapOf(),
     /**
-     * Spark's id of the payment that last wrote each Spark send's Activity row, the latest [MAX_SPARK_SEND_HASHES], so
-     * an earlier attempt's failure dated the same second as the row never writes over it.
+     * Spark's id of the payment that last wrote each Spark send's Activity row, the latest [MAX_SPARK_SEND_HASHES] and
+     * those of sends with [sparkSendEarlierIds], so an earlier attempt's failure dated the same second as the row never
+     * writes over it.
      */
     val sparkSendRowIds: Map<String, String> = mapOf(),
     /** The time, amount and fee of each of those rows as its writer wrote it, so a row written over is told apart. */
