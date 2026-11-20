@@ -1,5 +1,7 @@
 package to.bitkit.nfc
 
+import java.math.BigDecimal
+
 private val URI_SCHEMES = listOf("bitcoin:", "lightning:", "ethereum:", "lnurlp:", "lnurlw:", "lnurlc:")
 private val LIGHTNING_PREFIXES = listOf("lnbc", "lntb", "lntbs", "lnbcrt", "lnsb", "lno1", "lnurl")
 
@@ -32,7 +34,8 @@ private const val REQUIRED_PARAM_PREFIX = "req-"
  * `bitcoin:` URI without an address, so that form becomes `lightning:<invoice>`. A URI with a
  * required (`req-`) parameter is kept, since BIP 321 forbids paying it without handling that
  * parameter and the rewrite would drop it. So is a URI that repeats a parameter, since the rewrite would have to
- * pick one value. Anything else is returned trimmed and unchanged.
+ * pick one value, and one whose `amount` the invoice does not carry: the invoice alone could not ask for it.
+ * Anything else is returned trimmed and unchanged.
  */
 fun scannedPaymentRequest(text: String): String {
     val trimmed = text.trim()
@@ -49,5 +52,26 @@ fun scannedPaymentRequest(text: String): String {
     }.toMap()
     // A BOLT12 offer (`lno`) is left as is: the scanner cannot pay one yet.
     val request = params["lightning"] ?: return trimmed
+    val amount = params["amount"]
+    if (amount != null && !isBolt11Amount(request, amount)) return trimmed
     return "lightning:$request"
+}
+
+private val BOLT11_HRP = Regex("^ln[a-z]+?(\\d+)([munp]?)$")
+private val BTC_PER_UNIT = mapOf(
+    "" to BigDecimal.ONE,
+    "m" to BigDecimal("0.001"),
+    "u" to BigDecimal("0.000001"),
+    "n" to BigDecimal("0.000000001"),
+    "p" to BigDecimal("0.000000000001"),
+)
+
+/** Whether [invoice] is a BOLT11 invoice for exactly [amountBtc], read from its human-readable part. */
+private fun isBolt11Amount(invoice: String, amountBtc: String): Boolean {
+    val hrp = invoice.lowercase().substringBeforeLast('1', missingDelimiterValue = "")
+    val match = BOLT11_HRP.matchEntire(hrp) ?: return false
+    val (digits, unit) = match.destructured
+    val invoiceBtc = BigDecimal(digits).multiply(BTC_PER_UNIT.getValue(unit))
+    val requested = amountBtc.toBigDecimalOrNull() ?: return false
+    return invoiceBtc.compareTo(requested) == 0
 }
