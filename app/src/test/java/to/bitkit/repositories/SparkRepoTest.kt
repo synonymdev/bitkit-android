@@ -4923,7 +4923,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a spark send whose call returns its failure after spark reported it reads as failed`() = test {
+    fun `a spark send whose call returns its failure after spark reported it reports it once`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
@@ -4941,8 +4941,13 @@ class SparkRepoTest : BaseUnitTest() {
         val sut = createSut()
         sut.start(0).getOrThrow()
         runCurrent()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        runCurrent()
 
         assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+        // A watcher that started before the send, as a swap's hold payment does, learns the failure by its event.
+        assertEquals(1, events.count { it is Event.PaymentFailed }, "the failure's event was dropped or doubled")
         advanceUntilIdle()
 
         assertIs<Event.PaymentFailed>(sut.settledSendEvent("hash"), "the returned failure wasn't reported")

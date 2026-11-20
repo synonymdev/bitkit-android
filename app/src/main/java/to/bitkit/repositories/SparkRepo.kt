@@ -198,6 +198,9 @@ class SparkRepo @Inject constructor(
     /** Each send still inside Spark's send call, by lowercase payment hash. */
     private val inFlightAttempts = ConcurrentHashMap<String, SendAttempt>()
 
+    /** Failures Spark reported while a send call ran, by attempt and payment id, settled once the call returns one. */
+    private val failuresDuringCall = ConcurrentHashMap<String, Map<String, Payment>>()
+
     /** Counts sends recorded, so a listing drops a failed hash only when it was recorded before the listing. */
     private val sendRecords = AtomicLong()
     private val sendRecordedAt = ConcurrentHashMap<String, Long>()
@@ -341,6 +344,7 @@ class SparkRepo @Inject constructor(
             uncertainSends.clear()
             takenAttempts.clear()
             restoredTakenAttempts.clear()
+            failuresDuringCall.clear()
         }
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
@@ -603,6 +607,7 @@ class SparkRepo @Inject constructor(
             val attemptId = UUID.randomUUID().toString()
             var isDispatched = false
             var hasReturned = false
+            var failures: Map<String, Payment>? = null
             val sent = try {
                 inFlightAttempts[paymentHash.lowercase()] =
                     SendAttempt(sentAt.toULong(), earlierIds, attemptId = attemptId)
@@ -679,6 +684,7 @@ class SparkRepo @Inject constructor(
                     }
                 }
                 inFlightAttempts.remove(paymentHash.lowercase())
+                failures = failuresDuringCall.remove(attemptId)
                 sendsInFlight.remove(paymentHash.lowercase())
             }
             val payment = sent.getOrElse {
@@ -712,6 +718,10 @@ class SparkRepo @Inject constructor(
                 restoredTakenAttempts.remove(paymentHash.lowercase())
                 cacheStore.removeSparkUncertainSend(paymentHash)
             }
+            // A failure Spark reported during the call is this send's own once the call returns it, so it settles now.
+            failures?.get(payment.id)
+                ?.takeIf { payment.status == PaymentStatus.FAILED }
+                ?.let { onPayment(it) }
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
             paymentHash
         }.onFailure {
@@ -2370,6 +2380,7 @@ class SparkRepo @Inject constructor(
         // trySettleUncertainSend.
         if (payment.isOutrunByRetry(records)) {
             payment.heldBackOutcome()
+            payment.keepFailureDuringCall()
             Logger.info("Kept uncertain Spark send '${payment.sendHash()}' held past an older failure", context = TAG)
             return
         }
@@ -2398,6 +2409,15 @@ class SparkRepo @Inject constructor(
             return
         }
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+    }
+
+    /** Keeps a failure Spark reports while a send call of its invoice runs, kept with that call's attempt. */
+    private fun Payment.keepFailureDuringCall() {
+        val hash = sendHash(PaymentStatus.FAILED)?.lowercase() ?: return
+        inFlightAttempts.computeIfPresent(hash) { _, attempt ->
+            attempt.attemptId?.let { failuresDuringCall.merge(it, mapOf(id to this)) { kept, new -> kept + new } }
+            attempt
+        }
     }
 
     /**
