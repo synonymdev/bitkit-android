@@ -3898,7 +3898,7 @@ class BackupRepoTest : BaseUnitTest() {
     private fun mergeFlagFollowsDiscard(hasMerged: Boolean) {
         var merged = hasMerged
         whenever(sparkRepo.hasMergedRemoteExitState).thenAnswer { merged }
-        whenever(sparkRepo.discardStagedExitState(any())).thenAnswer { merged = false }
+        whenever { sparkRepo.discardStagedExitState(any()) }.doSuspendableAnswer { merged = false }
         whenever { sparkRepo.mergeRemoteExitBackup(anyOrNull()) }.thenAnswer {
             merged = true
             Result.success(Unit)
