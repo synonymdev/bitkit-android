@@ -3837,6 +3837,31 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a retry spark took stays held while spark lists only an earlier attempt's failure`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING, timestamp = 5uL)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(taken)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        sut.payInvoice("lnbc1", 100uL)
+        advanceUntilIdle()
+
+        // Spark's list doesn't show the send it took yet, only the invoice's earlier failed attempt.
+        val earlier = sentPayment(fees = 0).copy(id = "earlier", status = PaymentStatus.FAILED, timestamp = 1uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(earlier))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        verify(sparkService, times(1)).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `a spark send in doubt ends at once on its own failure`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)

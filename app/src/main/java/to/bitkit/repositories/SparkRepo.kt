@@ -611,7 +611,13 @@ class SparkRepo @Inject constructor(
                 settleUncertainSend(paymentHash, expiresAt)
                 throw PaymentPendingException(paymentHash)
             }
-            cacheStore.removeSparkUncertainSend(paymentHash)
+            // A send Spark took stays held until Spark settles it or its invoice expires, as Spark's list may not show
+            // it yet.
+            if (payment.status == PaymentStatus.PENDING) {
+                settleUncertainSend(paymentHash, expiresAt)
+            } else {
+                cacheStore.removeSparkUncertainSend(paymentHash)
+            }
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
             paymentHash
         }.onFailure {
@@ -663,7 +669,10 @@ class SparkRepo @Inject constructor(
             SparkLightningSend.NotFound -> isFinal
             // A failure dated before the send started is an earlier attempt's, so it is final only when a missing
             // send would be.
-            is SparkLightningSend.Found -> send.status != PaymentStatus.FAILED || isFinal || hasOwnFailure(paymentHash)
+            is SparkLightningSend.Found if send.status == PaymentStatus.COMPLETED -> true
+            // A pending send ends with its own payment event, or at its invoice's expiry.
+            is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> isFinal
+            is SparkLightningSend.Found -> isFinal || hasOwnFailure(paymentHash)
             SparkLightningSend.Unavailable -> false
         }
         // Only the caller that takes the hash off settles it, so its outcome is reported once.
@@ -674,7 +683,7 @@ class SparkRepo @Inject constructor(
                 cacheStore.removeSparkSendHash(paymentHash)
                 _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR))
             }
-            // A pending send ends with its own payment event.
+            // Spark still runs a pending send past its invoice's expiry, so its own payment event reports it.
             is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> Unit
             is SparkLightningSend.Found -> {
                 if (send.status == PaymentStatus.FAILED) {
