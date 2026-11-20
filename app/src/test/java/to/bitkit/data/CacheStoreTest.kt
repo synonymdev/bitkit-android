@@ -340,6 +340,14 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keepSparkSendEarlierIds keeps a send's earlier attempts in send order`() = test {
+        sut.keepSparkSendEarlierIds("hash", setOf("zfirst"))
+        sut.keepSparkSendEarlierIds("hash", setOf("zfirst", "asecond"))
+
+        assertEquals(listOf("zfirst", "asecond"), sut.data.first().sparkSendEarlierIds["hash"])
+    }
+
+    @Test
     fun `keepSparkSendRowId keeps the writer of a send with earlier ids past the latest sends`() = test {
         sut.keepSparkSendEarlierIds("retried", setOf("earlier"))
         sut.keepSparkSendRowId("retried", "original", "1:2:3")

@@ -242,7 +242,9 @@ class CacheStore internal constructor(
         val hash = paymentHash.lowercase()
         if (store.data.first().sparkSendEarlierIds[hash].orEmpty().containsAll(ids)) return
         store.updateData {
-            val kept = (it.sparkSendEarlierIds[hash].orEmpty() + ids).distinct().sorted()
+            // In send order: a send's earlier attempts go after those an earlier send of the invoice kept.
+            val earlier = it.sparkSendEarlierIds[hash].orEmpty()
+            val kept = earlier + ids.filterNot { id -> id in earlier }.sorted()
             val all = (it.sparkSendEarlierIds - hash + (hash to kept)).entries.toList().takeLast(MAX_SPARK_SEND_HASHES)
             it.copy(sparkSendEarlierIds = all.associate { (key, value) -> key to value })
         }
@@ -556,7 +558,7 @@ data class AppCacheData(
      */
     val sparkSendPreviousRowWriters: Map<String, List<String>> = mapOf(),
     /**
-     * Spark's payment ids of each Spark send's earlier attempts, kept past its hold for the latest
+     * Spark's payment ids of each Spark send's earlier attempts, in send order, kept past its hold for the latest
      * [MAX_SPARK_SEND_HASHES], so a failure of one never writes over a later attempt's Activity row after a restart.
      */
     val sparkSendEarlierIds: Map<String, List<String>> = mapOf(),
