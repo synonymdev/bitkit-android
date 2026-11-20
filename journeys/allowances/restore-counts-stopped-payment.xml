@@ -1,0 +1,25 @@
+<journey name="Restore Counts Stopped Payment">
+  <description>
+    A payer stopped right after an automatic payment leaves the wallet, then wiped and restored from its
+    recovery phrase, still counts that payment. The app asks for a wallet backup as soon as it hands the
+    payment to the node, so the backup holds the spend even though the app never ran again before the
+    wipe. Unlike restore-keeps-history.xml, this journey does not wait for a backup after the payment.
+    Requires the Active allowance from set-and-accept.xml. The journey wipes the payer, so do not run it
+    against a wallet whose funds matter.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with the $5 a payment, $50 a month allowance from set-and-accept.xml Active</action>
+    <action>On the payer instance, open the menu, navigate to Settings, then the "Security" tab (testTag "Tab-security"), then tap "Back Up Your Money" (testTag "BackupWallet"), continue past the intro (testTag "BackupIntroViewContinue"), tap to reveal the phrase (testTag "TapToReveal") and record the phrase from the word grid (testTag "SeedContainer")</action>
+    <action>On the payer instance, open the drawer menu, tap Subscriptions and tap the Allowances tab (testTag "Tab-allowances"), then tap the payee's row (testTag "AllowanceRow-&lt;entryId&gt;") and record PAID AUTOMATICALLY (testTag "AllowancePaidSoFar")</action>
+    <action>On the payer instance, start tailing the app log for "Handed an allowance payment to the node" so the stop can follow it</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for 1000 sats with the note "Stopped"</action>
+    <action>1.5 seconds after the log line appears on the payer, run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Without relaunching it, wipe the payer's app data with `adb shell pm clear to.bitkit.dev`</action>
+    <action>Relaunch the payer with `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`, tap "Restore" (testTag "RestoreWallet") on the onboarding screen, enter the recorded words into the word inputs (testTag "Word-0" onwards) and tap Restore (testTag "RestoreButton")</action>
+    <action>Wait for the restore to finish and tap "Get Started" (testTag "GetStartedButton")</action>
+    <action>Open the drawer menu, tap Subscriptions and tap the Allowances tab; verify the "Automatic payments paused" notice with Resume (testTag "AllowancesResume") is shown</action>
+    <action>Tap the payee's row and verify PAID AUTOMATICALLY (testTag "AllowancePaidSoFar") shows the total recorded before plus the "Stopped" payment, converted at the current rate</action>
+    <action>On the payee instance, verify exactly one payment arrived for "Stopped"</action>
+    <action>On the payer, close the sheet, tap Resume (testTag "AllowancesResume") and verify the notice is gone</action>
+  </actions>
+</journey>

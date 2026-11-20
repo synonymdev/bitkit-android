@@ -1594,6 +1594,7 @@
     <string name="subscriptions__allowance_payment_limit">Όριο πληρωμής</string>
     <string name="subscriptions__allowance_per_payment">Ανά πληρωμή</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} ανά πληρωμή</string>
+    <string name="subscriptions__allowance_request_already_paid">Αυτό το αίτημα έχει ήδη πληρωθεί.</string>
     <string name="subscriptions__allowance_request_explanation">Το πορτοφόλι σου θα πληρώνει τα αιτήματα της επαφής {name} εντός αυτών των ορίων χωρίς να σε ρωτά κάθε φορά. Οποιοσδήποτε από τους δύο μπορεί να τον τερματίσει.</string>
     <string name="subscriptions__allowance_request_headline">{name} ζητά\n&lt;accent&gt;έναν προϋπολογισμό&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Αποθήκευση προϋπολογισμού</string>

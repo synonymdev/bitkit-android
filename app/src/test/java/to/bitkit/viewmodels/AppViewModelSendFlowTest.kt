@@ -888,6 +888,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.onchainPaymentResolutions).thenReturn(onchainPaymentResolutions)
         whenever(paykitPaymentProofRepo.sparkWithdrawalReleases).thenReturn(sparkWithdrawalReleases)
         whenever(paykitAllowanceRepo.events).thenReturn(MutableSharedFlow())
+        whenever(paykitAllowanceRepo.pendingFilterVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitAllowanceRepo.handlingRequestIds).thenReturn(MutableStateFlow(emptySet()))
         whenever(paykitAllowanceRepo.isUpdatingFlow).thenReturn(allowanceUpdating)
         whenever(paykitAllowanceRepo.offersToAnnounce).thenReturn(MutableStateFlow(emptyList()))
         whenever { paykitAllowanceRepo.refresh() }.thenReturn(Result.success(Unit))
@@ -895,6 +897,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { paykitAllowanceRepo.acceptOffersFromAllowers(any(), any()) }.thenReturn(emptyList())
         whenever { paykitAllowanceRepo.processIncomingRequests(any()) }.thenReturn(false)
         whenever { paykitAllowanceRepo.isAutomaticallyHandling(any()) }.thenReturn(false)
+        whenever { paykitAllowanceRepo.keepsOffPending(any()) }.thenReturn(false)
         whenever(paykitAllowanceRepo.isUpdating).thenReturn(false)
         doReturn(noCoverageRelease).whenever(paykitAllowanceRepo).beginCoverageUpdate()
         whenever { paykitPaymentProofRepo.captureOriginalOnchainPayer(any()) }
@@ -8171,6 +8174,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             billingPeriod = PaykitBillingPeriod(Clock.System.now(), Clock.System.now() + 60.seconds),
         )
         whenever { paykitAllowanceRepo.isAutomaticallyHandling(covered) }.thenReturn(true)
+        whenever { paykitAllowanceRepo.keepsOffPending(covered) }.thenReturn(true)
         whenever(privatePaykitRepo.beginPaymentRequest(manual))
             .thenReturn(Result.success(PublicPaykitPaymentResult.PrivateLinkPending))
 
@@ -8287,6 +8291,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         val request = paymentRequest()
         whenever { paykitAllowanceRepo.isAutomaticallyHandling(request) }.thenReturn(true)
+        whenever { paykitAllowanceRepo.keepsOffPending(request) }.thenReturn(true)
         pendingPaykitPaymentRequests.value = listOf(request)
         runCurrent()
         sut.showSheet(Sheet.PaymentRequests)

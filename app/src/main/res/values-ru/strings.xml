@@ -1617,6 +1617,7 @@
     <string name="subscriptions__allowance_payment_limit">Лимит платежа</string>
     <string name="subscriptions__allowance_per_payment">За платёж</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} за платёж</string>
+    <string name="subscriptions__allowance_request_already_paid">Этот запрос уже оплачен.</string>
     <string name="subscriptions__allowance_request_explanation">Ваш кошелёк будет оплачивать запросы {name} в пределах этих лимитов, не спрашивая вас каждый раз. Любая из сторон может его завершить.</string>
     <string name="subscriptions__allowance_request_headline">{name} просит\n&lt;accent&gt;бюджет&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Сохранить Бюджет</string>

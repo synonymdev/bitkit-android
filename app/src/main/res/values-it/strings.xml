@@ -1602,6 +1602,7 @@
     <string name="subscriptions__allowance_payment_limit">Limite di pagamento</string>
     <string name="subscriptions__allowance_per_payment">Per pagamento</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} a pagamento</string>
+    <string name="subscriptions__allowance_request_already_paid">Questa richiesta è già pagata.</string>
     <string name="subscriptions__allowance_request_explanation">Il tuo wallet pagherà le richieste di {name} entro questi limiti senza chiederti ogni volta. Ognuno di voi può terminarlo.</string>
     <string name="subscriptions__allowance_request_headline">{name} chiede\n&lt;accent&gt;un budget&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Salva Budget</string>
