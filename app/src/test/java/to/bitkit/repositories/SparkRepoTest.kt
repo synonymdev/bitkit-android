@@ -4349,6 +4349,59 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send is refused before it goes out while spark can't list its payments`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        whenever(sparkService.listPayments()).thenAnswer { throw SdkException.Generic("storage") }
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertFalse("hash" in store.data.first().sparkUncertainSends)
+        assertFalse("hash" in store.data.first().sparkSendHashes)
+    }
+
+    @Test
+    fun `a spark send held while a sync writes its list is not settled from that list`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        // The sync's list has no send of the invoice; Spark lists the send as pending once it went out.
+        var listed = listOf(receivedPayment())
+        whenever(sparkService.listPayments()).thenAnswer { listed }
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            listed = listed + sentPayment(fees = 0).copy(status = PaymentStatus.PENDING)
+            throw SdkException.Generic("timeout")
+        }
+        val sut = createSut(store)
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        var isArmed = true
+        // The send starts while the sync writes its list, and its invoice expires before the sync settles holds.
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            if (isArmed) {
+                isArmed = false
+                assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+                now += 2.hours
+            }
+            Result.success(Unit)
+        }
+
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertFalse(isArmed)
+        assertTrue(events.none { it is Event.PaymentFailed }, "A sync's older list failed a send Spark is paying")
+    }
+
+    @Test
     fun `a spark send that failed lets a retry of its invoice send again`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
