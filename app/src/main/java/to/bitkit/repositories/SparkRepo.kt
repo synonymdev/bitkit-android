@@ -697,7 +697,12 @@ class SparkRepo @Inject constructor(
         when (send) {
             SparkLightningSend.NotFound -> {
                 cacheStore.removeSparkSendHash(paymentHash)
-                _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR))
+                // A retry that entered Spark's send call since the hold was taken reports its own outcome.
+                if (!sendsInFlight.containsKey(key)) {
+                    _nodeEvents.emit(
+                        Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR)
+                    )
+                }
             }
             // Spark still runs a pending send past its invoice's expiry, so its own payment event reports it.
             is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> Unit
@@ -714,6 +719,8 @@ class SparkRepo @Inject constructor(
                     listed == null -> settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
                     // A retry started after the hold was taken reads as pending, and its own event reports it.
                     listed.status == PaymentStatus.PENDING -> Unit
+                    // A retry that entered Spark's send call since the hold was taken reports its own outcome.
+                    listed.status == PaymentStatus.FAILED && isHeldFrom(listed) -> Unit
                     // The send's own outcome is claimed, so Spark's event for the same payment reports nothing more.
                     isOwn -> if (reportedSendIds.add(listed.id)) listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
                     // An earlier attempt's failure ends the send at its expiry, so it claims no payment.
