@@ -530,9 +530,10 @@ class SparkRepo @Inject constructor(
     /**
      * Pays [bolt11] and returns its payment hash, the id ldk-node payments use, so the send flow can match it.
      * Fails with [SparkError.SendRefused] when nothing left the wallet: Spark was not connected, could not prepare the
-     * payment, or its fee was over [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a [SparkError.SendRefused],
-     * when Spark refuses an expired invoice at prepare or send; and with [ServiceError.PaymentDeadlineExpired] past
-     * [paymentDeadlineAt]. A failure inside the send is a [PaymentPendingException], as the payment may have been
+     * payment or list its payments, or its fee was over [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a
+     * [SparkError.SendRefused], when Spark refuses an expired invoice at prepare or send; and with
+     * [ServiceError.PaymentDeadlineExpired] past [paymentDeadlineAt]. A failure inside the send is a
+     * [PaymentPendingException], as the payment may have been
      * dispatched, and its event decides it. An invoice this wallet already sends is not sent again: one in flight or
      * pending fails with [PaymentPendingException], and one Spark completed returns its hash. After a restore, a
      * still-valid invoice created before it that the Spark operators can't show unsent fails with
@@ -673,15 +674,17 @@ class SparkRepo @Inject constructor(
     /**
      * Settles an uncertain send once Spark shows its outcome; true once it is settled, also by another caller. A
      * failure event for it [isFailureEvent] shows Spark reached the send, as a sync since would. A [listing] just
-     * read from Spark is used instead of reading it again.
+     * read from Spark is used instead of reading it again, and then only for the hold [held] taken before it was read.
      */
     private suspend fun trySettleUncertainSend(
         paymentHash: String,
         isFailureEvent: Boolean = false,
         listing: List<Payment>? = null,
+        held: UncertainSend? = null,
     ): Boolean {
         val key = paymentHash.lowercase()
         val uncertain = uncertainSends[key] ?: return true
+        if (held != null && uncertain !== held) return false
         // Spark finishes an interrupted send only on a later sync, and a sync that never reached it still returns.
         val isSynced = hasSyncedSince(uncertain.failedAt)
         if (isSynced) _state.update { it.copy(hasSynced = true) }
@@ -1867,6 +1870,8 @@ class SparkRepo @Inject constructor(
         // A list read while a withdrawal was in flight, or before one ended, may lack it, so it settles no journal.
         val sendsEndedBefore = withdrawalSendsEnded.get()
         val wasWithdrawing = isWithdrawing
+        // A send held after the list was read may be missing from it, so only the holds before it settle from it.
+        val heldBefore = uncertainSends.toMap()
         // Read before the list, as one read before Spark's first sync can lack its restored sends.
         val isSynced = canListPayments()
         val payments = listPayments()
@@ -1874,7 +1879,15 @@ class SparkRepo @Inject constructor(
         val isSaved = payments.decidingRows().map { recordActivity(it) }.all { it }
         // A held send that this list shows settled, as by its own failure, ends here, so its hold never waits on
         // another read of Spark's list.
-        if (isSynced) uncertainSends.keys.toList().forEach { trySettleUncertainSend(it, listing = payments) }
+        if (isSynced) {
+            heldBefore.forEach { (hash, held) ->
+                trySettleUncertainSend(
+                    hash,
+                    listing = payments,
+                    held = held
+                )
+            }
+        }
         releaseFailedSends(payments, recordsBefore, inFlightBefore)
         if (!settleJournal || wasWithdrawing || isWithdrawing || withdrawalSendsEnded.get() != sendsEndedBefore) {
             return isSaved
@@ -1967,16 +1980,15 @@ class SparkRepo @Inject constructor(
 
     /**
      * When a send of [paymentHash] starting now counts as started: past every failure Spark dated for it by more than
-     * [OWN_FAILURE_CLOCK_MARGIN_SECS], so an earlier attempt's failure never reads as this send's own. Past now too
-     * when Spark's list can't be read, as a failure unknown to this process may be dated up to now.
+     * [OWN_FAILURE_CLOCK_MARGIN_SECS], so an earlier attempt's failure never reads as this send's own. Refused when
+     * Spark's list can't be read, as it may hold a failure unknown to this process; nothing has gone out yet.
      */
     private suspend fun sendStartedAt(paymentHash: String): Long {
+        runSuspendCatching { listPayments() }.onFailure {
+            throw SparkError.SendRefused("Spark could not list its payments to date the send", it)
+        }
         val now = clock.now().epochSeconds.toULong()
-        val isListed = runSuspendCatching { listPayments() }
-            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
-            .isSuccess
-        val known = sendFailedAt[paymentHash.lowercase()]
-        val failedAt = (if (isListed) known else maxOf(now, known ?: 0uL)) ?: return now.toLong()
+        val failedAt = sendFailedAt[paymentHash.lowercase()] ?: return now.toLong()
         return maxOf(now, failedAt.safe() + (OWN_FAILURE_CLOCK_MARGIN_SECS + 1uL).safe()).toLong()
     }
 

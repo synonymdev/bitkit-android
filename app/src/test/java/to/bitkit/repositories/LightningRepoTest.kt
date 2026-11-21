@@ -1986,6 +1986,7 @@ class LightningRepoTest : BaseUnitTest() {
             feePolicy = FeePolicy.FEES_EXCLUDED,
         )
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
         val sending = CompletableDeferred<Payment>()
         whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { sending.await() }
         val spark = SparkRepo(
