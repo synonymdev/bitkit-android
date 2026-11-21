@@ -51,6 +51,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -4080,6 +4081,47 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(events.any { it is Event.PaymentSuccessful }, "the retry's success was never reported")
+    }
+
+    @Test
+    fun `a retry that enters spark's send call as the poll settles a send keeps its screen off the failure`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val retrySending = CompletableDeferred<Payment>()
+        var sends = 0
+        whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+            if (++sends == 1) throw SdkException.Generic("timeout")
+            retrySending.await()
+        }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        var isArmed = false
+        // The retry enters Spark's send call right after the poll takes the hold.
+        whenever { cacheStore.removeSparkUncertainSend(any()) }.doSuspendableAnswer {
+            if (isArmed) {
+                isArmed = false
+                backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
+                while (!sut.isSendInFlight("hash")) yield()
+            }
+        }
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        val own = sentPayment(fees = 0).copy(
+            id = "own",
+            status = PaymentStatus.FAILED,
+            timestamp = now.epochSeconds.toULong(),
+        )
+        // Spark lists only the earlier send's failure while the retry runs.
+        whenever(sparkService.listPayments()).thenReturn(listOf(own))
+        isArmed = true
+        advanceUntilIdle()
+
+        assertTrue(sut.isSendInFlight("hash"), "the retry never entered Spark's send call")
+        assertTrue(events.none { it is Event.PaymentFailed }, "the earlier send's failure reached the retry's screen")
     }
 
     @Test
