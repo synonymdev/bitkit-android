@@ -572,11 +572,13 @@ class SparkRepo @Inject constructor(
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.PENDING ->
                     throw PaymentPendingException(paymentHash)
                 // Spark's list, synced or unreadable, can lack a send it made before the restore, as on the node's
-                // path, so the operators decide.
+                // path, so the operators decide. Before Spark syncs, its list can't date an earlier attempt they show
+                // failed, which a send must start past, so that one is refused too.
                 else -> refuseUnverifiedRestoredInvoice(
                     bolt11,
                     invoice.timestamp.toEpochSeconds(),
                     expiresAt.toEpochSeconds(),
+                    isFailedUnsent = canListPayments(),
                 )
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
@@ -1714,12 +1716,13 @@ class SparkRepo @Inject constructor(
         bolt11: String,
         invoiceCreatedAt: Long?,
         invoiceExpiresAt: Long?,
+        isFailedUnsent: Boolean = true,
     ) {
         val restoredAt = cacheStore.data.first().sparkRestoredAt ?: return
         val isHeld = sparkService.isSupported &&
             (invoiceCreatedAt ?: 0L) < restoredAt &&
             (invoiceExpiresAt == null || clock.now().epochSeconds < invoiceExpiresAt)
-        if (!isHeld || isUnsentPerOperators(bolt11)) return
+        if (!isHeld || isUnsentPerOperators(bolt11, isFailedUnsent)) return
         Logger.warn("Refused a send of a pre-restore invoice the Spark operators can't show unsent", context = TAG)
         throw SparkError.RestoredInvoiceUnverified()
     }
@@ -1727,14 +1730,15 @@ class SparkRepo @Inject constructor(
     /**
      * Whether the Spark operators confirm this wallet never sent [bolt11] over Lightning, and it can't have been paid
      * by a direct Spark transfer, which they don't see: false when they show a send completed or pending, or can't be
-     * asked. A failed one counts as unsent, as they show it failed only once every attempt at the hash was returned.
+     * asked. A failed one counts as unsent when [isFailedUnsent], as they show it failed only once every attempt at the
+     * hash was returned.
      */
-    private suspend fun isUnsentPerOperators(bolt11: String): Boolean {
+    private suspend fun isUnsentPerOperators(bolt11: String, isFailedUnsent: Boolean = true): Boolean {
         if (!sparkService.isConnected) return false
         val status = runSuspendCatching { sparkService.lightningSendStatus(bolt11) }
             .onFailure { Logger.warn("Failed to fetch Spark's send status", it, context = TAG) }
             .getOrElse { return false }
-        if (status != null && status != PaymentStatus.FAILED) {
+        if (status != null && (status != PaymentStatus.FAILED || !isFailedUnsent)) {
             Logger.info("Found a '$status' Spark operator send of the pre-restore invoice", context = TAG)
             return false
         }

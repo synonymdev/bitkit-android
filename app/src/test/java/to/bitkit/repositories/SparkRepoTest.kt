@@ -434,6 +434,39 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an unsynced spark refuses a pre-restore invoice the operators show failed`() = test {
+        assertUnsyncedRestoredSend(operatorStatus = PaymentStatus.FAILED, isSent = false)
+    }
+
+    @Test
+    fun `an unsynced spark sends a pre-restore invoice the operators show no send of`() = test {
+        assertUnsyncedRestoredSend(operatorStatus = null, isSent = true)
+    }
+
+    private suspend fun TestScope.assertUnsyncedRestoredSend(operatorStatus: PaymentStatus?, isSent: Boolean) {
+        val restored = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds, sparkRestoredAt = now.epochSeconds)
+        val store = CacheStore(InMemoryDataStore(restored), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL).copy(lastSyncedAt = null))
+        val prepared = prepared(feeSats = 0uL, createdAt = (now.epochSeconds - 600).toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
+        sendStatus = { operatorStatus }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        if (isSent) {
+            assertTrue(result.isSuccess)
+            verify(sparkService).send(any(), anyOrNull())
+        } else {
+            assertIs<SparkError.RestoredInvoiceUnverified>(result.exceptionOrNull())
+            verify(sparkService, never()).send(any(), anyOrNull())
+        }
+    }
+
+    @Test
     fun `a synced spark refuses a pre-restore invoice its list lacks while operators can't be asked`() = test {
         val restoredAt = now.epochSeconds - 60
         val cache = AppCacheData(sparkHistoryUnseededSince = restoredAt, sparkRestoredAt = restoredAt)
