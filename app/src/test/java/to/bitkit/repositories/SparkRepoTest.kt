@@ -38,6 +38,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -3942,6 +3943,52 @@ class SparkRepoTest : BaseUnitTest() {
         assertTrue(inFlightAtClear.isNotEmpty() && inFlightAtClear.all { it }, "a sync could take back the hold")
         assertFalse(sut.isSendInFlight("hash"))
         assertNull(sut.earlierLightningSend("lnbc1", "hash"))
+    }
+
+    @Test
+    fun `a sync while the poll settles a spark send in doubt reports its failure once`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.Generic("timeout") }
+        val own = sentPayment(fees = 0).copy(
+            id = "own",
+            status = PaymentStatus.FAILED,
+            timestamp = now.epochSeconds.toULong(),
+        )
+        whenever(sparkService.listPayments()).thenReturn(listOf(own))
+        val backing = InMemoryDataStore(AppCacheData())
+        var isArmed = false
+        // Spark syncs while the poll clears the saved hold.
+        val store = CacheStore(
+            object : DataStore<AppCacheData> {
+                override val data = backing.data
+
+                override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
+                    val isClearing = "hash" in backing.data.first().sparkUncertainSends &&
+                        "hash" !in transform(backing.data.first()).sparkUncertainSends
+                    if (isArmed && isClearing) {
+                        isArmed = false
+                        sparkEvents.emit(SdkEvent.Synced)
+                        delay(1.seconds)
+                    }
+                    return backing.updateData(transform)
+                }
+            },
+            clock,
+        )
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        isArmed = true
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        assertEquals(1, events.count { it is Event.PaymentFailed }, "the failure was reported twice")
     }
 
     @Test

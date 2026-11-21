@@ -685,8 +685,12 @@ class SparkRepo @Inject constructor(
             SparkLightningSend.Unavailable -> false
         }
         // Only the caller that takes the hash off settles it, so its outcome is reported once.
-        if (!isSettled || !uncertainSends.remove(key, uncertain)) return isSettled
-        cacheStore.removeSparkUncertainSend(paymentHash)
+        if (!isSettled) return false
+        // Both copies go under the restore lock, so a sync never takes back a hold settled here.
+        val isTaken = holdRestoreMutex.withLock {
+            uncertainSends.remove(key, uncertain).also { if (it) cacheStore.removeSparkUncertainSend(paymentHash) }
+        }
+        if (!isTaken) return true
         when (send) {
             SparkLightningSend.NotFound -> {
                 cacheStore.removeSparkSendHash(paymentHash)
@@ -1963,8 +1967,10 @@ class SparkRepo @Inject constructor(
         recordActivity(payment, settlesJournal = false)
         // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
         payment.sendHash()?.let {
-            uncertainSends.remove(it.lowercase())
-            cacheStore.removeSparkUncertainSend(it)
+            holdRestoreMutex.withLock {
+                uncertainSends.remove(it.lowercase())
+                cacheStore.removeSparkUncertainSend(it)
+            }
         }
         payment.sendHash(PaymentStatus.FAILED)?.let { hash ->
             val latest = listedLightningSend(hash)
