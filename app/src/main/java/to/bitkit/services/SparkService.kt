@@ -360,6 +360,9 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     class WipeInProgress : SparkError("Spark wallet cannot connect while the wallet is wiped")
     class WipeFailed(path: String) : SparkError("Failed to delete Spark storage at '$path'")
 
+    /** Stored exit data Spark can never import: an exit state version it doesn't support, or one it can't read. */
+    class ExitStateUnimportable(cause: Throwable? = null) : SparkError("Spark can't import the exit data", cause)
+
     /** What the withdrawal leaves after its fee is below the on-chain dust limit. */
     class WithdrawalTooSmall : SparkError("Spark balance is too small to withdraw after its fee")
 

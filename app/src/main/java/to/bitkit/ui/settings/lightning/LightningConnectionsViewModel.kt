@@ -65,6 +65,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val sparkRepo: SparkRepo,
     private val sparkExitRepo: SparkExitRepo,
+    private val moveToSparkManager: MoveToSparkManager,
     private val healthRepo: HealthRepo,
 ) : ViewModel() {
 
@@ -113,9 +114,13 @@ class LightningConnectionsViewModel @Inject constructor(
                 lightningRepo.lastKnownChannels,
                 sparkRepo.state,
                 sparkExitRepo.state,
-                healthRepo.healthState.map { it.internet == HealthState.READY }.distinctUntilChanged(),
-            ) { lightningState, channels, sparkState, exitState, isOnline ->
-                ConnectionsSnapshot(lightningState, channels, sparkState, exitState, isOnline)
+                combine(
+                    moveToSparkManager.hasRetainedMove,
+                    healthRepo.healthState.map { it.internet == HealthState.READY }.distinctUntilChanged(),
+                    ::Pair,
+                ),
+            ) { lightningState, channels, sparkState, exitState, (hasRetainedMove, isOnline) ->
+                ConnectionsSnapshot(lightningState, channels, sparkState, exitState, hasRetainedMove, isOnline)
             }.collect { snapshot ->
                 val (lightningState, channels, sparkState) = snapshot
                 val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
@@ -133,7 +138,9 @@ class LightningConnectionsViewModel @Inject constructor(
                         localBalance = calculateLocalBalance(channels).safe() + sparkState.shownSpendingSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
                         // The cached channels outlive a stopped node; the move reads the live ones.
-                        canMoveToSpark = MoveToSparkMath.canMove(lightningState.channels, sparkState),
+                        // A move left while it ran keeps its way back to its result, also once nothing is left to move.
+                        canMoveToSpark = snapshot.hasRetainedMove ||
+                            MoveToSparkMath.canMove(lightningState.channels, sparkState),
                         spark = sparkState.toUi(
                             lightningRepo,
                             snapshot.exitState.showsResult,
@@ -330,6 +337,7 @@ private data class ConnectionsSnapshot(
     val channels: List<ChannelDetails>,
     val sparkState: SparkState,
     val exitState: SparkExitState,
+    val hasRetainedMove: Boolean,
     val isOnline: Boolean,
 )
 

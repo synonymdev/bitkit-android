@@ -323,7 +323,9 @@ class SparkFundingViewModel @Inject constructor(
             }
             val walletId = shown.hwWalletId
             if (walletId == null) {
-                send(quote)
+                // A max transfer can reach spending with a higher Instant claim fee than the one swiped, so the early
+                // claim approves at most the fee shown, and asks first for more.
+                send(quote.copy(instantFeeSats = minOf(quote.instantFeeSats, shownQuote.instantFeeSats)))
                 return@launch
             }
             _uiState.update { it.copy(isSending = false) }

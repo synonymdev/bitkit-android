@@ -316,6 +316,33 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swipe on a max transfer approves no higher instant claim fee than the one shown`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Accepted("txid", 99_700uL)))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(sut.uiState.value.maxSats)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        // The network fee fell more than the claim fee rose, so more reaches spending and the swipe sends.
+        whenever { lightningRepo.estimateSendAllFee(any(), any(), any()) }.thenReturn(Result.success(300uL))
+        whenever { sparkRepo.estimateDepositClaimFeeSats(any()) }.thenReturn(Result.success(1_400uL))
+
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 1_350uL)
+    }
+
+    @Test
     fun `swipe refuses with real copy when savings no longer cover the transfer`() = test {
         val sut = createSut()
         advanceUntilIdle()

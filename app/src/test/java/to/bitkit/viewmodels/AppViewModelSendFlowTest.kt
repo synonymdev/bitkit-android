@@ -1049,7 +1049,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             on { type } doReturn TimedSheetType.MOVE_TO_SPARK
             onBlocking { shouldShow() } doReturn false
         },
-        moveToSparkRepo = mock { on { canMove } doReturn emptyFlow() },
+        moveToSparkRepo = mock {
+            on { canMove } doReturn emptyFlow()
+            onBlocking { isMovePayment(any()) } doReturn false
+        },
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         wakeRepo = wakeRepo,
@@ -18206,6 +18209,80 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(pendingPaymentRepo, never()).track(paymentHash)
+    }
+
+    @Test
+    fun `pending spark send whose success was handled before it was tracked resolves as sent`() = test {
+        val bolt11 = "lnbcrt1sparkpending"
+        val paymentHash = "spark_hash"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        // Spark's success was handled after the send returned pending, before the send screen tracked it.
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = paymentHash,
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            ),
+        )
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).track(paymentHash)
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+    }
+
+    @Test
+    fun `pending spark send resolved as sent leaves the next send's contact alone`() = test {
+        val bolt11 = "lnbcrt1sparkpending"
+        val paymentHash = "spark_hash"
+        val nextContactKey = "pubkynext"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        // The send screen moved on to a payment to a contact before the pending send's success was read.
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenAnswer {
+            setActiveContactPaymentContext(nextContactKey)
+            Event.PaymentSuccessful(
+                paymentId = paymentHash,
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        }
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+        assertEquals(nextContactKey, activeContactPaymentContext()?.publicKey)
+        verify(activityRepo, never()).setContact(
+            contactPublicKey = eq(nextContactKey),
+            forPaymentId = eq(paymentHash),
+            syncLdkPayments = any(),
+            walletId = any(),
+        )
     }
 
     @Test

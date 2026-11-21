@@ -20,6 +20,20 @@ import kotlin.test.assertNull
 class BackupJsonTest {
 
     @Test
+    fun `reads move to spark hashes and treats an unreadable value as none`() {
+        val base = """{"version":1,"createdAt":1,"tagMetadata":[],"cache":{}"""
+
+        val readable = decodeBackup<MetadataBackupV1>("""$base,"moveToSparkPaymentHashes":["aa","bb"]}""")
+        val unreadable = decodeBackup<MetadataBackupV1>("""$base,"moveToSparkPaymentHashes":{"aa":1}}""")
+        val mixed = decodeBackup<MetadataBackupV1>("""$base,"moveToSparkPaymentHashes":["aa",1]}""")
+
+        assertEquals(listOf("aa", "bb"), readable.moveToSparkPaymentHashes)
+        assertEquals(emptyList(), unreadable.moveToSparkPaymentHashes)
+        assertEquals(emptyList(), mixed.moveToSparkPaymentHashes)
+        assertNull(decodeBackup<MetadataBackupV1>("$base}").moveToSparkPaymentHashes)
+    }
+
+    @Test
     fun `decodes iOS metadata with omitted optionals`() {
         val backup = decodeBackup<MetadataBackupV1>(iosFixture("metadata"))
 

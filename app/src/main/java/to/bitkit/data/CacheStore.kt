@@ -186,6 +186,12 @@ class CacheStore internal constructor(
         store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
     }
 
+    suspend fun addMoveToSparkHash(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash in store.data.first().moveToSparkHashes) return
+        store.updateData { it.copy(moveToSparkHashes = it.moveToSparkHashes + hash) }
+    }
+
     /** Keeps [paymentHash] with its invoice's expiry in epoch seconds, [expiresAt], when known. */
     suspend fun addLdkSendHash(paymentHash: String, expiresAt: Long? = null) {
         val hash = paymentHash.lowercase()
@@ -369,6 +375,11 @@ data class AppCacheData(
      * never reads a retry's earlier failed attempt as its outcome.
      */
     val sparkUncertainSends: Map<String, Long> = mapOf(),
+    /**
+     * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
+     * Activity shows the move as one.
+     */
+    val moveToSparkHashes: List<String> = listOf(),
     /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
     val ldkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [ldkSendHashes] that know it. */
