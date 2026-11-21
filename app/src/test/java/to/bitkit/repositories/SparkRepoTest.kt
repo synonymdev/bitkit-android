@@ -3992,6 +3992,34 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send's own failure the poll settled first is reported once`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.Generic("timeout") }
+        val own = sentPayment(fees = 0).copy(
+            id = "own",
+            status = PaymentStatus.FAILED,
+            timestamp = now.epochSeconds.toULong(),
+        )
+        whenever(sparkService.listPayments()).thenReturn(listOf(own))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        // Spark's callback for the same payment arrives after the poll settled it.
+        sparkEvents.emit(SdkEvent.PaymentFailed(own))
+        advanceUntilIdle()
+
+        assertEquals(1, events.count { it is Event.PaymentFailed }, "the failure was reported twice")
+    }
+
+    @Test
     fun `a spark send in doubt ends at once on its own failure`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
