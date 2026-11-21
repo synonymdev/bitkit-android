@@ -576,9 +576,10 @@ class SparkRepo @Inject constructor(
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
             if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-            if (sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) != null) {
-                throw PaymentPendingException(paymentHash)
+            val isEntered = holdRestoreMutex.withLock {
+                sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) == null
             }
+            if (!isEntered) throw PaymentPendingException(paymentHash)
             // Kept in flight until its result is handled, so a sync meanwhile never takes back its saved hold.
             try {
                 val sent = run {
@@ -689,14 +690,9 @@ class SparkRepo @Inject constructor(
         }
         // Only the caller that takes the hash off settles it, so its outcome is reported once.
         if (!isSettled) return false
-        // Both copies go under the restore lock, so a sync never takes back a hold settled here.
-        val isTaken = holdRestoreMutex.withLock {
-            uncertainSends.remove(key, uncertain).also { if (it) cacheStore.removeSparkUncertainSend(paymentHash) }
-        }
-        if (!isTaken) return true
+        if (!takeUncertainSend(paymentHash, uncertain, send)) return true
         when (send) {
             SparkLightningSend.NotFound -> {
-                cacheStore.removeSparkSendHash(paymentHash)
                 // A retry that entered Spark's send call since the hold was taken reports its own outcome.
                 if (!sendsInFlight.containsKey(key)) {
                     _nodeEvents.emit(
@@ -709,7 +705,6 @@ class SparkRepo @Inject constructor(
             is SparkLightningSend.Found -> {
                 val listed = runSuspendCatching { sparkService.listPayments() }.getOrNull()?.latestSend(paymentHash)
                 if (send.status == PaymentStatus.FAILED) {
-                    cacheStore.removeSparkSendHash(paymentHash)
                     // Its row stayed pending while held, so it takes the failure now.
                     listed?.let { recordActivity(it) }
                 }
@@ -730,6 +725,25 @@ class SparkRepo @Inject constructor(
             SparkLightningSend.Unavailable -> Unit
         }
         return true
+    }
+
+    private suspend fun takeUncertainSend(
+        paymentHash: String,
+        uncertain: UncertainSend,
+        send: SparkLightningSend,
+    ): Boolean {
+        val key = paymentHash.lowercase()
+        val isFailed = send == SparkLightningSend.NotFound ||
+            send is SparkLightningSend.Found && send.status == PaymentStatus.FAILED
+        // Both copies go under the restore lock, so a sync never takes back a hold settled here. A send enters Spark's
+        // send call under the same lock, so a retry's saved send is never dropped here.
+        return holdRestoreMutex.withLock {
+            uncertainSends.remove(key, uncertain).also {
+                if (!it) return@also
+                cacheStore.removeSparkUncertainSend(paymentHash)
+                if (isFailed && !sendsInFlight.containsKey(key)) cacheStore.removeSparkSendHash(paymentHash)
+            }
+        }
     }
 
     /** A send whose outcome Spark didn't report: when it failed, and when its invoice expires, in epoch seconds. */
