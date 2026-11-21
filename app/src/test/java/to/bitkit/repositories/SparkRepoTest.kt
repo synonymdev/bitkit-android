@@ -4020,6 +4020,69 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry spark never lists reports its failure at expiry past a reported earlier failure`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.Generic("timeout") }
+        val earlier = sentPayment(fees = 0).copy(id = "earlier", status = PaymentStatus.FAILED, timestamp = 1uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(earlier))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sparkEvents.emit(SdkEvent.PaymentFailed(earlier))
+        advanceUntilIdle()
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+
+        now += 2.hours
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertEquals(2, events.count { it is Event.PaymentFailed }, "the retry's failure was never reported")
+    }
+
+    @Test
+    fun `a retry read as pending while the poll settles a send keeps its own success event`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.Generic("timeout") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        val own = sentPayment(fees = 0).copy(
+            id = "own",
+            status = PaymentStatus.FAILED,
+            timestamp = now.epochSeconds.toULong(),
+        )
+        val retry = sentPayment(fees = 0).copy(
+            id = "retry",
+            status = PaymentStatus.PENDING,
+            timestamp = now.epochSeconds.toULong() + 1uL,
+        )
+        // The poll reads the send's own failure, then a retry started meanwhile.
+        val reads = ArrayDeque(listOf(listOf(own), listOf(own)))
+        whenever(sparkService.listPayments()).thenAnswer { reads.removeFirstOrNull() ?: listOf(own, retry) }
+        advanceUntilIdle()
+
+        val paid = retry.copy(status = PaymentStatus.COMPLETED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(own, paid))
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(paid))
+        advanceUntilIdle()
+
+        assertTrue(events.any { it is Event.PaymentSuccessful }, "the retry's success was never reported")
+    }
+
+    @Test
     fun `a spark send in doubt ends at once on its own failure`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)

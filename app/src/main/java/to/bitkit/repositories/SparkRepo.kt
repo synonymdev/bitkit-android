@@ -708,8 +708,16 @@ class SparkRepo @Inject constructor(
                     // Its row stayed pending while held, so it takes the failure now.
                     listed?.let { recordActivity(it) }
                 }
-                if (listed?.let { reportedSendIds.add(it.id) } != false) {
-                    settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                val isOwn = listed != null &&
+                    listed.timestamp.safe() + OWN_FAILURE_CLOCK_MARGIN_SECS.safe() >= uncertain.startedAt
+                when {
+                    listed == null -> settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                    // A retry started after the hold was taken reads as pending, and its own event reports it.
+                    listed.status == PaymentStatus.PENDING -> Unit
+                    // The send's own outcome is claimed, so Spark's event for the same payment reports nothing more.
+                    isOwn -> if (reportedSendIds.add(listed.id)) listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                    // An earlier attempt's failure ends the send at its expiry, so it claims no payment.
+                    else -> listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
                 }
             }
             SparkLightningSend.Unavailable -> Unit
