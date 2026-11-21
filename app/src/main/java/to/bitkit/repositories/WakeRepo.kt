@@ -185,6 +185,44 @@ class WakeRepo @Inject constructor(
         }
     }
 
+    /**
+     * Lets a peer wake this install on [topic] for [expiresInDays], as its `pk:` identity, else its `ln:` one. Null
+     * while wakes are off, the user has not opted in or the gateway holds no registration of this install.
+     */
+    suspend fun createGrant(topic: String, expiresInDays: UInt): Result<IssuedWakeGrant?> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val gatewayUrl = wakeConfig.gatewayUrl ?: return@runSuspendCatching null
+                if (!wakeConfig.isRegistrationEnabled || !wakeConfig.isOptedIn()) return@runSuspendCatching null
+                if (credentialStore.registrationState().fingerprint == null) return@runSuspendCatching null
+                val credentials = credentialStore.load() ?: return@runSuspendCatching null
+                val recipient = pubkyRepo.wakeIdentity().getOrNull()
+                    ?: lightningRepo.getNodeId()?.let(::lightningWakeIdentity)
+                    ?: return@runSuspendCatching null
+                val grant = wakeService.createGrant(
+                    gatewayUrl = gatewayUrl,
+                    deviceSecret = credentials.deviceSecret,
+                    recipient = recipient,
+                    topics = listOf(topic),
+                    expiresInDays = expiresInDays,
+                )
+                IssuedWakeGrant(
+                    gatewayUrl = gatewayUrl,
+                    id = grant.id,
+                    token = grant.token,
+                    expiresAt = grant.expiresAt,
+                )
+            }
+        }
+
+    /** Revokes a grant [createGrant] made. Repeating it is harmless. */
+    suspend fun revokeGrant(grantId: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val device = requireDevice()
+            wakeService.revokeGrant(device.gatewayUrl, device.credentials.deviceSecret, grantId)
+        }
+    }
+
     private suspend fun sync(pushToken: String?, force: Boolean): WakeSync {
         val gatewayUrl = wakeConfig.gatewayUrl
         if (gatewayUrl == null || !wakeConfig.isRegistrationEnabled) return WakeSync.Off
@@ -374,6 +412,11 @@ class WakeRepo @Inject constructor(
 
         fun fingerprint(): String = wakeRegistrationFingerprint(gatewayUrl, pushToken, credentials, identities, TOPICS)
     }
+}
+
+/** A grant this install made and the gateway it holds on. [toString] leaves the bearer [token] out. */
+class IssuedWakeGrant(val gatewayUrl: String, val id: String, val token: String, val expiresAt: ULong) {
+    override fun toString(): String = "IssuedWakeGrant(id='$id')"
 }
 
 /** What [WakeRepo.syncRegistration] did. */
