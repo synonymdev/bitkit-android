@@ -113,6 +113,9 @@ import com.synonym.bitkitcore.PaymentType as ActivityPaymentType
 class SparkRepoTest : BaseUnitTest() {
     private companion object {
         const val ADDRESS = "bcrt1qsavings"
+
+        /** How many turns a Spark list read yields to a retry starting its send. */
+        const val RETRY_TURNS = 100
     }
 
     private val sparkService = mock<SparkService>()
@@ -4085,6 +4088,22 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a retry that enters spark's send call as the poll settles a send keeps its screen off the failure`() = test {
+        val events = settleWithRetryEntering(mutableListOf())
+
+        assertTrue(events.none { it is Event.PaymentFailed }, "the earlier send's failure reached the retry's screen")
+    }
+
+    @Test
+    fun `a retry that enters spark's send call as the poll settles a send keeps its saved expiry`() = test {
+        val records = mutableListOf<String>()
+
+        settleWithRetryEntering(records)
+
+        assertEquals("add", records.last(), "the poll dropped the retry's saved send: $records")
+    }
+
+    /** Settles a send in doubt on its own failure while a retry starts right after the poll takes the hold. */
+    private suspend fun TestScope.settleWithRetryEntering(records: MutableList<String>): List<Event> {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
@@ -4096,18 +4115,19 @@ class SparkRepoTest : BaseUnitTest() {
             if (++sends == 1) throw SdkException.Generic("timeout")
             retrySending.await()
         }
+        whenever { cacheStore.addSparkSendHash(any(), anyOrNull()) }.doSuspendableAnswer { records += "add" }
+        whenever { cacheStore.removeSparkSendHash(any()) }.doSuspendableAnswer { records += "remove" }
         val sut = createSut()
         sut.start(0).getOrThrow()
         val events = mutableListOf<Event>()
         backgroundScope.launch { sut.nodeEvents.collect { events += it } }
         var isArmed = false
-        // The retry enters Spark's send call right after the poll takes the hold.
+        var isRetrying = false
         whenever { cacheStore.removeSparkUncertainSend(any()) }.doSuspendableAnswer {
-            if (isArmed) {
-                isArmed = false
-                backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
-                while (!sut.isSendInFlight("hash")) yield()
-            }
+            if (!isArmed) return@doSuspendableAnswer
+            isArmed = false
+            isRetrying = true
+            backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
         }
         assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
         val own = sentPayment(fees = 0).copy(
@@ -4115,13 +4135,21 @@ class SparkRepoTest : BaseUnitTest() {
             status = PaymentStatus.FAILED,
             timestamp = now.epochSeconds.toULong(),
         )
-        // Spark lists only the earlier send's failure while the retry runs.
-        whenever(sparkService.listPayments()).thenReturn(listOf(own))
+        // Spark lists only the earlier send's failure while the retry runs, and the poll's read after the take gives
+        // the retry the first chance to enter Spark's send call.
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            if (isRetrying) {
+                isRetrying = false
+                var turns = 0
+                while (!sut.isSendInFlight("hash") && turns++ < RETRY_TURNS) yield()
+            }
+            listOf(own)
+        }
         isArmed = true
         advanceUntilIdle()
 
         assertTrue(sut.isSendInFlight("hash"), "the retry never entered Spark's send call")
-        assertTrue(events.none { it is Event.PaymentFailed }, "the earlier send's failure reached the retry's screen")
+        return events
     }
 
     @Test
