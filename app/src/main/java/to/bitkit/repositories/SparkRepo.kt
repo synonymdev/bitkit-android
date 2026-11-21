@@ -1998,21 +1998,23 @@ class SparkRepo @Inject constructor(
             if (deciding != null && deciding.id != payment.id) return
         }
         recordActivity(payment, settlesJournal = false)
-        payment.sendHash()?.let { hash ->
+        val isRetried = payment.sendHash()?.let { hash ->
             val isFailed = payment.status == PaymentStatus.FAILED
             val isReleased = isFailed && listedLightningSend(hash).let {
                 it == SparkLightningSend.NotFound || (it as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
             }
             // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held. A send
             // enters Spark's send call under the same lock, so a retry started since the checks above keeps its hold
-            // and saved send.
+            // and saved send, and reports its own outcome.
             holdRestoreMutex.withLock {
-                if (isFailed && isHeldFrom(payment)) return@withLock
+                if (isFailed && isHeldFrom(payment)) return@withLock true
                 uncertainSends.remove(hash.lowercase())
                 cacheStore.removeSparkUncertainSend(hash)
                 if (isReleased) cacheStore.removeSparkSendHash(hash)
+                false
             }
-        }
+        } ?: false
+        if (isRetried) return
         // The poll may have reported this payment's outcome already.
         if (payment.sendHash() != null && !reportedSendIds.add(payment.id)) return
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
