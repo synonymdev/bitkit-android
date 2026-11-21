@@ -5,13 +5,13 @@
     Connections show a "Move To Spark" button (testTag "MoveToSpark") that opens the same modal while the channel can
     still send. The modal quotes the routing fee over the channel only and shows it as "Update fee: " in the primary
     currency (testTag "UpdateSpendingBalanceUpdate" is the Update button, loading while it quotes and moves). Update
-    pays the amount to a new invoice of the user's own Spark wallet and shows "Spending Balance Updated" (testTag
-    "SpendingBalanceUpdated"); once the move settles, the app closes the emptied channel cooperatively in the
-    background, which writes a transfer to Savings. A wallet without such a channel never gets the modal or the button.
+    pays the whole balance to new invoices of the user's own Spark wallet, splitting it into parts by itself when one
+    payment does not route, and shows "Spending Balance Updated" (testTag "SpendingBalanceUpdated"). Once the move
+    settles, the app closes the emptied channel cooperatively in the background, which writes a transfer to
+    Savings. A wallet without such a channel never gets the modal or the button.
 
-    The "too large to route" state (testTag "MoveToSparkTrySmaller") needs a route that cannot carry the balance; on a
-    direct channel to the Spark service provider every amount routes, so it is covered by the quote's unit tests and the
-    PR's manual test rather than here.
+    A split needs a route that cannot carry the balance in one payment; on a direct channel to the Spark service
+    provider every amount routes, so the split is covered by the repository's unit tests rather than here.
 
     Precondition: dev build pointed at a local Spark regtest (spark-sdk regtest/local), and a wallet with an open
     channel to that stack's SSP Lightning node that holds most of its capacity on the wallet's side (open it from
