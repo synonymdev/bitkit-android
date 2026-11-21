@@ -185,6 +185,9 @@ class SparkRepo @Inject constructor(
     /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
     private val sendsInFlight = ConcurrentHashMap<String, String>()
 
+    /** Spark payment ids of the sends whose outcome was reported, so the poll and Spark's event report it once. */
+    private val reportedSendIds = ConcurrentHashMap.newKeySet<String>()
+
     /** Counts sends recorded, so a listing drops a failed hash only when it was recorded before the listing. */
     private val sendRecords = AtomicLong()
     private val sendRecordedAt = ConcurrentHashMap<String, Long>()
@@ -699,14 +702,15 @@ class SparkRepo @Inject constructor(
             // Spark still runs a pending send past its invoice's expiry, so its own payment event reports it.
             is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> Unit
             is SparkLightningSend.Found -> {
+                val listed = runSuspendCatching { sparkService.listPayments() }.getOrNull()?.latestSend(paymentHash)
                 if (send.status == PaymentStatus.FAILED) {
                     cacheStore.removeSparkSendHash(paymentHash)
                     // Its row stayed pending while held, so it takes the failure now.
-                    runSuspendCatching { sparkService.listPayments() }.getOrNull()
-                        ?.latestSend(paymentHash)
-                        ?.let { recordActivity(it) }
+                    listed?.let { recordActivity(it) }
                 }
-                settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                if (listed?.let { reportedSendIds.add(it.id) } != false) {
+                    settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                }
             }
             SparkLightningSend.Unavailable -> Unit
         }
@@ -1978,6 +1982,8 @@ class SparkRepo @Inject constructor(
                 (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
             if (isReleased) cacheStore.removeSparkSendHash(hash)
         }
+        // The poll may have reported this payment's outcome already.
+        if (payment.sendHash() != null && !reportedSendIds.add(payment.id)) return
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
