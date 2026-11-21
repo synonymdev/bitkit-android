@@ -4102,6 +4102,54 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals("add", records.last(), "the poll dropped the retry's saved send: $records")
     }
 
+    @Test
+    fun `a retry that enters spark's send call while a failure event is handled keeps its hold and saved send`() =
+        test {
+            whenever(sparkService.isSupported).thenReturn(true)
+            whenever(sparkService.isConnected).thenReturn(true)
+            whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+            val prepared = unexpiredPrepared()
+            whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+            val failed = sentPayment(fees = 0).copy(
+                id = "failed",
+                status = PaymentStatus.FAILED,
+                timestamp = now.epochSeconds.toULong(),
+            )
+            val retrySending = CompletableDeferred<Payment>()
+            var sends = 0
+            whenever { sparkService.send(any(), anyOrNull()) }.doSuspendableAnswer {
+                if (++sends == 1) failed else retrySending.await()
+            }
+            whenever(sparkService.listPayments()).thenReturn(listOf(failed))
+            val records = mutableListOf<String>()
+            whenever { cacheStore.addSparkSendHash(any(), anyOrNull()) }.doSuspendableAnswer { records += "add" }
+            whenever { cacheStore.removeSparkSendHash(any()) }.doSuspendableAnswer { records += "remove" }
+            whenever { cacheStore.addSparkUncertainSend(any(), any()) }.doSuspendableAnswer { records += "hold" }
+            whenever { cacheStore.removeSparkUncertainSend(any()) }.doSuspendableAnswer { records += "unhold" }
+            val sut = createSut()
+            sut.start(0).getOrThrow()
+            sut.payInvoice("lnbc1", 100uL)
+            advanceUntilIdle()
+            var isArmed = true
+            // The retry enters Spark's send call while the failure event writes its row.
+            whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+                if (isArmed) {
+                    isArmed = false
+                    backgroundScope.launch { sut.payInvoice("lnbc1", 100uL) }
+                    var turns = 0
+                    while (!sut.isSendInFlight("hash") && turns++ < RETRY_TURNS) yield()
+                }
+                Result.success(Unit)
+            }
+            records.clear()
+
+            sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+            advanceUntilIdle()
+
+            assertTrue(sut.isSendInFlight("hash"), "the retry never entered Spark's send call")
+            assertEquals(listOf("add", "hold"), records, "the failure event dropped the retry's hold or saved send")
+        }
+
     /** Settles a send in doubt on its own failure while a retry starts right after the poll takes the hold. */
     private suspend fun TestScope.settleWithRetryEntering(records: MutableList<String>): List<Event> {
         whenever(sparkService.isSupported).thenReturn(true)
