@@ -4103,7 +4103,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a retry that enters spark's send call while a failure event is handled keeps its hold and saved send`() =
+    fun `a retry entering spark's send call during a failure event keeps its hold and its screen`() =
         test {
             whenever(sparkService.isSupported).thenReturn(true)
             whenever(sparkService.isConnected).thenReturn(true)
@@ -4142,12 +4142,15 @@ class SparkRepoTest : BaseUnitTest() {
                 Result.success(Unit)
             }
             records.clear()
+            val events = mutableListOf<Event>()
+            backgroundScope.launch { sut.nodeEvents.collect { events += it } }
 
             sparkEvents.emit(SdkEvent.PaymentFailed(failed))
             advanceUntilIdle()
 
             assertTrue(sut.isSendInFlight("hash"), "the retry never entered Spark's send call")
             assertEquals(listOf("add", "hold"), records, "the failure event dropped the retry's hold or saved send")
+            assertTrue(events.none { it is Event.PaymentFailed }, "the earlier failure reached the retry's screen")
         }
 
     /** Settles a send in doubt on its own failure while a retry starts right after the poll takes the hold. */
