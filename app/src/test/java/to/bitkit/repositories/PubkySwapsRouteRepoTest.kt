@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.Event
@@ -100,7 +101,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `awaitClaim finishes once the claim is broadcast`() = test {
+    fun `awaitClaim finishes once the claim is broadcast`() = swapTest {
         val txid = advancing(
             PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u),
             PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID),
@@ -111,7 +112,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `awaitClaim keeps polling after a failed advance`() = test {
+    fun `awaitClaim keeps polling after a failed advance`() = swapTest {
         val txid = advancing(
             AppError("electrum unreachable"),
             PubkySwapRouteState.ClaimBroadcast(CLAIM_TXID),
@@ -123,7 +124,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `awaitClaim running out leaves the swap open and keeps advancing it`() = test {
+    fun `awaitClaim running out leaves the swap open and keeps advancing it`() = swapTest {
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
                 .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
@@ -139,7 +140,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `awaitClaim keeps advancing the swap after its caller is cancelled`() = test {
+    fun `awaitClaim keeps advancing the swap after its caller is cancelled`() = swapTest {
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
                 .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
@@ -157,7 +158,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `awaitClaim stops advancing the swap once its hold payment fails`() = test {
+    fun `awaitClaim stops advancing the swap once its hold payment fails`() = swapTest {
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
                 .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
@@ -178,7 +179,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `awaitClaim keeps advancing the swap when its hold payment watch is cancelled`() = test {
+    fun `awaitClaim keeps advancing the swap when its hold payment watch is cancelled`() = swapTest {
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
                 .thenReturn(status(PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u)))
@@ -197,7 +198,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `commit keeps the swap to resume until its claim confirms`() = test {
+    fun `commit keeps the swap to resume until its claim confirms`() = swapTest {
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsCommitRoute(any(), any(), any(), anyOrNull()) } }
                 .thenReturn(swapPayment())
@@ -215,7 +216,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `commit hands a grant to a provider that takes a wake`() = test {
+    fun `commit hands a grant to a provider that takes a wake`() = swapTest {
         whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(GRANT))
 
         committingWithWake(false) { core ->
@@ -240,7 +241,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `commit hands no grant to a provider that takes no wake`() = test {
+    fun `commit hands no grant to a provider that takes no wake`() = swapTest {
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsCommitRoute(any(), any(), any(), anyOrNull()) } }
                 .thenReturn(swapPayment(providerTakesWake = false))
@@ -253,7 +254,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an install not registered for wakes sends no capability`() = test {
+    fun `an install not registered for wakes sends no capability`() = swapTest {
         whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(null))
 
         committingWithWake(false) { core ->
@@ -267,7 +268,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a capability the provider refuses has its grant revoked`() = test {
+    fun `a capability the provider refuses has its grant revoked`() = swapTest {
         whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(GRANT))
         whenever(wakeRepo.revokeGrant(any())).thenReturn(Result.success(Unit))
 
@@ -279,7 +280,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a swap already claimable is advanced now and its grant revoked`() = test {
+    fun `a swap already claimable is advanced now and its grant revoked`() = swapTest {
         whenever(wakeRepo.createGrant(any(), any())).thenReturn(Result.success(GRANT))
         whenever(wakeRepo.revokeGrant(any())).thenReturn(Result.success(Unit))
 
@@ -295,7 +296,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a swap that ends has its grant revoked`() = test {
+    fun `a swap that ends has its grant revoked`() = swapTest {
         whenever(wakeRepo.revokeGrant(any())).thenReturn(Result.success(Unit))
         cacheData.value = AppCacheData(
             unfinishedPubkySwaps = listOf(SWAP_ID),
@@ -310,7 +311,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `a wake claims the unfinished swaps and leaves their claims to the background`() = test {
+    fun `a wake claims the unfinished swaps and leaves their claims to the background`() = swapTest {
         cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
         val result = advancing(
             PubkySwapRouteState.AwaitingLockup(confirmations = 0u, required = 1u),
@@ -326,7 +327,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `a wake after which no claim went out fails`() = test {
+    fun `a wake after which no claim went out fails`() = swapTest {
         cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
         var isWakeOver = false
         mockStatic(CORE).use { core ->
@@ -339,21 +340,26 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
             val result = sut.claimAfterWake()
             isWakeOver = true
+            // The wake's timeout resumes on the unconfined event loop, which starts the background advance only once
+            // the test yields.
+            yield()
             advanceUntilIdle()
 
             assertIs<PubkySwapWakeUnclaimedException>(result.exceptionOrNull())
-            // Advanced every 3 s for 2 minutes.
-            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, atLeast(40))
+            // Advanced every 3 s for 2 minutes, then once in the background.
+            core.verify({ runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }, times(41))
+            assertEquals(emptyList(), cacheData.value.unfinishedPubkySwaps, "The background advance took the swap over")
         }
     }
 
     @Test
-    fun `a wake with no unfinished swap is handled`() = test {
+    fun `a wake with no unfinished swap is handled`() = swapTest {
         assertTrue(sut.claimAfterWake().isSuccess)
     }
 
     @Test
-    fun `a wake treats a swap that failed as ended`() = test {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `a wake treats a swap that failed as ended`() = swapTest {
         cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
 
         val result = advancing(PubkySwapRouteState.Failed("refunded")) {
@@ -366,7 +372,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `resumeUnfinishedSwaps advances a stored swap past an hour until its claim confirms`() = test {
+    fun `resumeUnfinishedSwaps advances a stored swap past an hour until its claim confirms`() = swapTest {
         cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
         mockStatic(CORE).use { core ->
             var calls = 0
@@ -389,7 +395,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `resumeUnfinishedSwaps drops a swap that failed`() = test {
+    fun `resumeUnfinishedSwaps drops a swap that failed`() = swapTest {
         cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
@@ -404,7 +410,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `resumeUnfinishedSwaps drops a swap bitkit-core has no record of`() = test {
+    fun `resumeUnfinishedSwaps drops a swap bitkit-core has no record of`() = swapTest {
         cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
         mockStatic(CORE).use { core ->
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }
@@ -419,7 +425,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restoredSwaps asks again only the providers it read in part`() = test {
+    fun `restoredSwaps asks again only the providers it read in part`() = swapTest {
         contacts.value = listOf(PubkyProfile.placeholder("provider-a"), PubkyProfile.placeholder("provider-b"))
         val asked = mutableListOf<List<String>>()
         val swaps = restoring(
@@ -434,7 +440,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `restoredSwaps asks the providers past bitkit-core's limit in another call`() = test {
+    fun `restoredSwaps asks the providers past bitkit-core's limit in another call`() = swapTest {
         val keys = (1..31).map { "provider-$it" }
         contacts.value = keys.map(PubkyProfile::placeholder)
         val asked = mutableListOf<List<String>>()
@@ -449,7 +455,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `restoredSwaps restores again for contacts that load later`() = test {
+    fun `restoredSwaps restores again for contacts that load later`() = swapTest {
         val asked = mutableListOf<List<String>>()
         restoring(asked, report()) {
             backgroundScope.launch { sut.restoredSwaps().collect {} }
@@ -463,7 +469,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `dropFailedSwap stops advancing a swap after its claim wait ran out`() = test {
+    fun `dropFailedSwap stops advancing a swap after its claim wait ran out`() = swapTest {
         cacheData.value = AppCacheData(unfinishedPubkySwaps = listOf(SWAP_ID))
         mockStatic(CORE).use { core ->
             var calls = 0
@@ -485,7 +491,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `restoredSwaps reveals one payout address for all its restores`() = test {
+    fun `restoredSwaps reveals one payout address for all its restores`() = swapTest {
         contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
         val asked = mutableListOf<List<String>>()
         restoring(asked, report(incomplete = listOf("provider-a"))) {
@@ -501,7 +507,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `restoredSwaps after a wipe asks again the providers the wiped wallet read`() = test {
+    fun `restoredSwaps after a wipe asks again the providers the wiped wallet read`() = swapTest {
         contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
         val asked = mutableListOf<List<String>>()
         restoring(asked, report()) {
@@ -520,7 +526,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `resumeUnfinishedSwaps drops a swap whose hold payment failed while the app was closed`() = test {
+    fun `resumeUnfinishedSwaps drops a swap whose hold payment failed while the app was closed`() = swapTest {
         cacheData.value = AppCacheData(
             unfinishedPubkySwaps = listOf(SWAP_ID),
             pubkySwapHoldHashes = mapOf(SWAP_ID to HOLD_HASH),
@@ -539,7 +545,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `resumeUnfinishedSwaps drops a swap whose hold payment failed over spark`() = test {
+    fun `resumeUnfinishedSwaps drops a swap whose hold payment failed over spark`() = swapTest {
         cacheData.value = AppCacheData(
             unfinishedPubkySwaps = listOf(SWAP_ID),
             pubkySwapHoldHashes = mapOf(SWAP_ID to HOLD_HASH),
@@ -558,7 +564,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `a hold payment failing stops its resumed swap`() = test {
+    fun `a hold payment failing stops its resumed swap`() = swapTest {
         cacheData.value = AppCacheData(
             unfinishedPubkySwaps = listOf(SWAP_ID),
             pubkySwapHoldHashes = mapOf(SWAP_ID to HOLD_HASH),
@@ -587,7 +593,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `dropFailedSwap stops a running claim wait`() = test {
+    fun `dropFailedSwap stops a running claim wait`() = swapTest {
         mockStatic(CORE).use { core ->
             var calls = 0
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
@@ -612,7 +618,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `resetForWipe stops a running claim wait`() = test {
+    fun `resetForWipe stops a running claim wait`() = swapTest {
         mockStatic(CORE).use { core ->
             var calls = 0
             core.`when`<Any> { runBlocking { pubkySwapsAdvance(any(), any(), anyOrNull()) } }.thenAnswer {
@@ -635,7 +641,7 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `restoredSwaps leaves a swap dropped this session alone`() = test {
+    fun `restoredSwaps leaves a swap dropped this session alone`() = swapTest {
         contacts.value = listOf(PubkyProfile.placeholder("provider-a"))
         sut.dropFailedSwap(SWAP_ID)
         val asked = mutableListOf<List<String>>()
@@ -668,6 +674,18 @@ class PubkySwapsRouteRepoTest : BaseUnitTest() {
                 reports[minOf(call++, reports.lastIndex)]
             }
             block()
+        }
+    }
+
+    /**
+     * Runs [block] as a test, then stops the swaps the repo advances in the background. Their loops run on the test
+     * scheduler outside the test scope, so one left running would keep the test from ever finishing.
+     */
+    private fun swapTest(block: suspend TestScope.() -> Unit) = test {
+        try {
+            block()
+        } finally {
+            sut.resetForWipe()
         }
     }
 
