@@ -4346,6 +4346,44 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a held spark send whose own failure a restart's sync lists frees its invoice without another read`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer { throw SdkException.Generic("timeout") }
+        whenever { sparkService.listPayments() }.thenReturn(emptyList())
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncError = SyncError.Network("operators unreachable"))
+        )
+        val before = createSut(store)
+        before.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(before.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        runCurrent()
+        assertTrue("hash" in store.data.first().sparkUncertainSends)
+
+        whenever { sparkService.getInfo() }.thenReturn(
+            info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1uL)
+        )
+        // Spark lists the send's own failure to the restart's sync, and every read after it fails.
+        val failed = sentPayment(fees = 0).copy(status = PaymentStatus.FAILED, timestamp = now.epochSeconds.toULong())
+        var isListed = true
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            if (isListed) listOf(failed) else throw SdkException.Generic("offline")
+        }
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            isListed = false
+            Result.success(Unit)
+        }
+        val after = createSut(store)
+        after.start(0).getOrThrow()
+
+        val cache = store.data.first()
+        assertFalse("hash" in cache.sparkUncertainSends, "A restart kept the hold of a send Spark listed as failed")
+        assertFalse("hash" in cache.sparkSendHashes, "A restart kept a failed send's invoice from the node")
+    }
+
+    @Test
     fun `a spark retry cut off by process death stays held after a restart while spark lists only its older failure`() =
         test {
             val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
