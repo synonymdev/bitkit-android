@@ -27,6 +27,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -193,6 +194,9 @@ class SparkRepo @Inject constructor(
 
     /** Serialises the imports of staged exit data, so a restore and Spark's start never import it at once. */
     private val exitImportMutex = Mutex()
+
+    /** Held while saved holds are taken back and while a send leaves flight, so neither reads the other halfway. */
+    private val holdRestoreMutex = Mutex()
 
     @Volatile
     private var hasSyncedActivities = false
@@ -621,7 +625,9 @@ class SparkRepo @Inject constructor(
                 Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
                 paymentHash
             } finally {
-                sendsInFlight.remove(paymentHash.lowercase())
+                withContext(NonCancellable) {
+                    holdRestoreMutex.withLock { sendsInFlight.remove(paymentHash.lowercase()) }
+                }
             }
         }.onFailure {
             if (it is PaymentAbortedBeforeSend) {
@@ -707,7 +713,7 @@ class SparkRepo @Inject constructor(
     private data class UncertainSend(val startedAt: ULong, val failedAt: ULong, val expiresAt: ULong)
 
     /** Takes back the sends whose outcome Spark didn't report before a restart, so a sync can still settle them. */
-    private suspend fun restoreUncertainSends() {
+    private suspend fun restoreUncertainSends() = holdRestoreMutex.withLock {
         val cache = cacheStore.data.first()
         cache.sparkUncertainSends.forEach { (hash, failedAt) ->
             // A send still in Spark's send call is settled by its result.
