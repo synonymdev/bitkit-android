@@ -330,6 +330,10 @@ fun SendSheet(
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
                         is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
+                        is SendEffect.ResetConfirm ->
+                            navController.currentBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
                         is SendEffect.NavigateToUsdtReview -> navController.navigateTo(SendRoute.UsdtReview)
                         is SendEffect.ShowPaykitConfirmation -> {
                             // Replace the other asset's confirmation, so Back never returns to its stale terms.

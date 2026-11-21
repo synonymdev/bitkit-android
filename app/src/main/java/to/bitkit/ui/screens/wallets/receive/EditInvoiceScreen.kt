@@ -21,11 +21,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,16 +33,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
-import to.bitkit.models.ReceiveAdditionalLiquidityAction
-import to.bitkit.models.ReceiveLiquiditySource
-import to.bitkit.models.ReceiveLiquiditySource.AUTO
-import to.bitkit.models.ReceiveLiquiditySource.SAVINGS
-import to.bitkit.models.ReceiveLiquiditySource.SPENDING
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
@@ -75,7 +67,6 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 fun EditInvoiceScreen(
     amountInputViewModel: AmountInputViewModel,
     walletUiState: WalletState,
-    sourceTab: ReceiveTab,
     updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
@@ -85,32 +76,10 @@ fun EditInvoiceScreen(
     onBack: () -> Unit,
     onchainOnly: Boolean = false,
     updateOnchainInvoice: (ULong?) -> Unit = {},
-    navigateTransferUnavailable: () -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
-    editInvoiceVM: EditInvoiceVM = hiltViewModel(),
 ) {
     var keyboardVisible by remember { mutableStateOf(false) }
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    val currentReceiveSats by rememberUpdatedState(amountInputUiState.sats.toULong())
-    val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
-
-    LaunchedEffect(onchainOnly) {
-        if (onchainOnly) return@LaunchedEffect
-        editInvoiceVM.editInvoiceEffect.collect { effect ->
-            val receiveSats = currentReceiveSats
-            when (effect) {
-                is EditInvoiceVM.EditInvoiceScreenEffects.ApplyReceiveLiquidityAction -> {
-                    when (val action = effect.action) {
-                        ReceiveAdditionalLiquidityAction.None -> {
-                            updateInvoice(receiveSats)
-                            onBack()
-                        }
-                        ReceiveAdditionalLiquidityAction.TransferUnavailable -> navigateTransferUnavailable()
-                    }
-                }
-            }
-        }
-    }
 
     EditInvoiceContent(
         amountInputViewModel = amountInputViewModel,
@@ -129,16 +98,13 @@ fun EditInvoiceScreen(
         },
         onContinueKeyboard = { keyboardVisible = false },
         onContinueGeneral = {
-            editInvoiceVM.onClickContinue(
-                source = sourceTab.toReceiveLiquiditySource(),
-                amountSats = amountInputUiState.sats.toULong(),
-            )
+            updateInvoice(amountInputUiState.sats.toULong())
+            onBack()
         },
         onContinueOnchain = { amountSats ->
             updateOnchainInvoice(amountSats)
             onBack()
         },
-        isLoading = isLoading,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
         showPaymentRequestButton = showPaymentRequestButton,
@@ -147,15 +113,6 @@ fun EditInvoiceScreen(
         },
         onchainOnly = onchainOnly,
     )
-}
-
-private fun ReceiveTab.toReceiveLiquiditySource(): ReceiveLiquiditySource {
-    return when (this) {
-        ReceiveTab.SAVINGS -> SAVINGS
-        ReceiveTab.AUTO -> AUTO
-        ReceiveTab.SPENDING -> SPENDING
-        ReceiveTab.HARDWARE, ReceiveTab.USDT -> SAVINGS
-    }
 }
 
 @Suppress("ViewModelForwarding")

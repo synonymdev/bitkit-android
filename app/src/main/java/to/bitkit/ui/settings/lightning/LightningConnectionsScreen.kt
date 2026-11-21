@@ -86,6 +86,7 @@ object LightningConnectionsTestTags {
 fun LightningConnectionsScreen(
     navController: NavController,
     viewModel: LightningConnectionsViewModel,
+    onClickMoveToSpark: () -> Unit,
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -105,7 +106,7 @@ fun LightningConnectionsScreen(
             navController.navigateTo(Routes.ChannelDetail(channelUi.details.channelId))
         },
         onClickSpark = { navController.navigateTo(Routes.SparkDetail) },
-        onClickMoveToSpark = { navController.navigateTo(Routes.MoveToSpark) },
+        onClickMoveToSpark = onClickMoveToSpark,
         onRefresh = {
             viewModel.onPullToRefresh()
         },

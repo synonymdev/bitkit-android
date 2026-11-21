@@ -29,7 +29,6 @@
         <ignore path="src/main/res/drawable/qr_placeholder.xml" />
     </issue>
     <issue id="VectorPath">
-        <ignore path="src/main/res/drawable/arrow.xml" />
         <ignore path="src/main/res/drawable/ic_synonym_logo.xml" />
         <ignore path="src/main/res/drawable/ic_timer_alt_yellow.xml" />
     </issue>
