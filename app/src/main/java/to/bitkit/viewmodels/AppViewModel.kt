@@ -652,9 +652,6 @@ class AppViewModel @Inject constructor(
      */
     private var sendVisitScanJob: Job? = null
 
-    /** A request found over Bluetooth without a user gesture; any request the user chose takes priority over it. */
-    private var passiveNearbyScanJob: Job? = null
-
     /** Bumped each time the wallet locks, so a scan that was already preparing can tell it crossed a lock. */
     private var lockGeneration = 0L
 
@@ -4086,9 +4083,10 @@ class AppViewModel @Inject constructor(
     private fun onAddressContinue(data: String, suppressQuickPay: Boolean, isNearbyRead: Boolean) {
         // Bluetooth reads suppress QuickPay; NFC reads come from a tap, like a QR scan or a paste.
         val isPassiveRead = isNearbyRead && suppressQuickPay
-        val preparing = scheduledScan?.job?.takeIf { it.isActive }
-        if (isPassiveRead && preparing != null && preparing !== passiveNearbyScanJob) {
-            Logger.info("Ignoring nearby read while the request the user chose is preparing", context = TAG)
+        // A Bluetooth read never replaces a request still preparing: one the user chose, or the strongest receiver
+        // the scanner read first. A QR, paste or NFC request still replaces a Bluetooth one.
+        if (isPassiveRead && scheduledScan?.job?.isActive == true) {
+            Logger.info("Ignoring nearby read while another request is preparing", context = TAG)
             return
         }
         clearActiveContactPaymentContext()
@@ -4102,7 +4100,6 @@ class AppViewModel @Inject constructor(
         // Its job ends once it routes, so cancelling it never stops a payment in progress.
         // A duplicate read returns no job; keep the handle of the scan still running.
         if (isNearbyRead) job?.let { sendVisitScanJob = it }
-        if (isPassiveRead) job?.let { passiveNearbyScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {

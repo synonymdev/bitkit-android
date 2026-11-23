@@ -9923,6 +9923,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `second bluetooth read does not replace the first one still preparing`() = test {
+        val first = stubOnchainAmountScan(amountSats = 10_000u)
+        val second = "bitcoin:$REGTEST_ADDRESS?amount=0.0002"
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(first)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(first, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.AddressContinue(second, suppressQuickPay = true, isNearbyRead = true))
+            advanceUntilIdle()
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+        verify(coreService, never()).decode(second)
+    }
+
+    @Test
     fun `bluetooth read does not replace a scanned request still preparing`() = test {
         val scanned = stubOnchainAmountScan(amountSats = 10_000u)
         val nearby = "bitcoin:$REGTEST_ADDRESS?amount=0.0002"
