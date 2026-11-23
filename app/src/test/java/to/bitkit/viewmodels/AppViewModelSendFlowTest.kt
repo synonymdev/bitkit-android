@@ -11017,6 +11017,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scan still decoding when the app locks on background does not use QuickPay after the PIN`() = test {
+        val bolt11 = "lnbcrt1backgroundlock"
+        enableQuickPay()
+        settingsData.value = settingsData.value.copy(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { coreService.decode(bolt11) }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.Lightning(lightningInvoice(bolt11, 500u))
+        }
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+        assertTrue(entered.isCompleted)
+        // The real lock: the app moves to the background, then the PIN screen unlocks it.
+        sut.lockOnBackground()
+        assertFalse(sut.isAuthenticated.value)
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
     fun `lockOnBackground requires auth when PIN is enabled`() = test {
         settingsData.value = SettingsData(isPinEnabled = true)
         advanceUntilIdle()

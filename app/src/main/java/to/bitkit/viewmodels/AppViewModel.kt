@@ -659,7 +659,10 @@ class AppViewModel @Inject constructor(
      */
     private val isRunningScan = ThreadLocal<Boolean>()
 
-    /** Bumped each time the wallet locks, so a scan that was already preparing can tell it crossed a lock. */
+    /**
+     * Bumped each time the wallet locks (the background lock, a PIN reset or the setter), so a scan that was
+     * already preparing can tell it crossed a lock.
+     */
     private var lockGeneration = 0L
 
     /** [lockGeneration] when the scan now holding [scanMutex] started, or null outside a scan. */
@@ -9078,6 +9081,7 @@ class AppViewModel @Inject constructor(
     private suspend fun resetIsAuthenticatedStateInternal() {
         val settings = settingsStore.data.first()
         val needsAuth = settings.isPinEnabled
+        if (needsAuth) lockGeneration++
         _isAuthenticated.value = !needsAuth
         if (!needsAuth) flushDeferredScan()
     }
@@ -9097,6 +9101,7 @@ class AppViewModel @Inject constructor(
         if (!isPinEnabled.value) return
         if (!walletRepo.walletExists()) return
         if (lightningRepo.isRecoveryMode.value) return
+        lockGeneration++
         _isAuthenticated.update { false }
         Logger.debug("Locked app on background", context = TAG)
     }
