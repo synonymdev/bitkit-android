@@ -259,7 +259,6 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
-import to.bitkit.ui.screens.paymentrequests.paymentRequestLifecycleStatusRes
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
@@ -8287,9 +8286,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `a request kept off pending never lists as unavailable in history and keeps its details`() = test {
         val request = paymentRequest()
+        val settled = request.copy(paymentRequestId = "settled-id")
         whenever(paykitAllowanceRepo.hasSentPayment(request)).thenReturn(true)
         pendingPaykitPaymentRequests.value = listOf(request)
-        paykitPaymentRequestHistory.value = listOf(request)
+        paykitPaymentRequestHistory.value = listOf(request, settled)
         runCurrent()
 
         val pending = sut.pendingPaymentRequests.value
@@ -8299,14 +8299,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         // As IncomingPaymentRequestDetailsScreen looks the request up, so open details stay readable.
         val detail = pending.firstOrNull { it.id == request.id }
             ?: sut.paymentRequestHistory.value.firstOrNull { it.id == request.id }
+        val listed = sut.listedPaymentRequestHistory.value
         sut.viewModelScope.cancel()
         assertTrue(pending.none { it.id == request.id })
         assertEquals(request, detail)
-        val status = row?.let { paymentRequestLifecycleStatusRes(it, isPending = false) }
-        assertTrue(
-            status != R.string.wallet__payment_request_status_unavailable,
-            "A paid request hidden from pending lists in History as $row",
-        )
+        assertEquals(listOf(settled), listed, "History keeps the requests pending does not hide")
+        assertNull(row, "A paid request hidden from pending lists in History as $row")
     }
 
     @Test
