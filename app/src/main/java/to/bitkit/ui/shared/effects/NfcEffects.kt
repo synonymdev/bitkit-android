@@ -32,7 +32,7 @@ import to.bitkit.nfc.NfcTagEmitter
 import to.bitkit.nfc.READER_FLAGS
 import to.bitkit.nfc.ReaderModeOwner
 import to.bitkit.nfc.Type4TagEmulator
-import to.bitkit.nfc.scannedPaymentRequest
+import to.bitkit.nfc.nfcPaymentRequest
 import to.bitkit.utils.Logger
 
 private const val TAG = "NfcEffects"
@@ -165,7 +165,7 @@ private fun readPaymentText(tag: Tag): String? {
     }.onFailure {
         Logger.warn("Failed to read NFC tag", it, context = TAG)
     }.getOrNull() ?: return null
-    return NdefCodec.payableText(NdefCodec.decodeTexts(message.toByteArray()))?.let(::scannedPaymentRequest)
+    return NdefCodec.payableText(NdefCodec.decodeTexts(message.toByteArray()))?.let(::nfcPaymentRequest)
 }
 
 /**

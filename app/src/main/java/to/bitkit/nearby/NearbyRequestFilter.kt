@@ -1,5 +1,6 @@
 package to.bitkit.nearby
 
+import to.bitkit.nfc.hasRequiredParam
 import to.bitkit.nfc.scannedPaymentRequest
 
 /**
@@ -22,6 +23,8 @@ private val BOLT11_INVOICE = Regex("^ln(bc|tb)[a-z0-9]*1[qpzry9x8gf2tvdw0s3jn54k
 fun isNearbyPaymentRequest(request: String): Boolean {
     val lowercase = request.trim().lowercase()
     return when {
+        // No Bitkit flow fulfils a required (`req-`) parameter, and the decoder ignores one next to an address.
+        hasRequiredParam(lowercase) -> false
         lowercase.startsWith("bitcoin:?") -> false
         // The app decodes a unified URI's Lightning request, and decoding an LNURL contacts its server.
         // Every Lightning value is checked, since the decoder keeps the last one.

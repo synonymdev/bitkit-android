@@ -67,6 +67,17 @@ fun scannedPaymentRequest(text: String): String {
 }
 
 /** BIP 321 amount syntax: decimal BTC, with no sign, exponent or unit. */
+/**
+ * Whether [uri] carries a required (`req-`) BIP 321 parameter. No Bitkit flow fulfils one, and the shipped scanner
+ * ignores it on a URI with an address, so a request read from a nearby device or a tag with one is refused.
+ */
+fun hasRequiredParam(uri: String): Boolean = uri.substringAfter('?', missingDelimiterValue = "")
+    .split('&')
+    .any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }
+
+/** The request to hand to the scanner for [text] read from an NFC tag, or null when it is refused. */
+fun nfcPaymentRequest(text: String): String? = scannedPaymentRequest(text).takeUnless(::hasRequiredParam)
+
 private val BIP321_AMOUNT = Regex("^(\\d+(\\.\\d*)?|\\.\\d+)$")
 private val BOLT11_HRP = Regex("^ln[a-z]+?(\\d+)([munp]?)$")
 private val BTC_PER_UNIT = mapOf(

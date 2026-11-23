@@ -52,6 +52,14 @@ class NearbyRequestFilterTest {
     }
 
     @Test
+    fun `refuses a request with a required parameter`() {
+        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&req-pop=callback%3a"))
+        assertFalse(isNearbyPaymentRequest("BITCOIN:BCRT1QTEST?REQ-FOO=bar"))
+        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=lnbcrt1p&req-x"))
+        assertTrue(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&pop=callback%3a"))
+    }
+
+    @Test
     fun `checks every lightning value of a unified uri`() {
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=lnbcrt1p&lightning=LNURL1DP68GURN8GHJ7"))
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=LNURL1DP68GURN8GHJ7&LIGHTNING=lnbcrt1p"))

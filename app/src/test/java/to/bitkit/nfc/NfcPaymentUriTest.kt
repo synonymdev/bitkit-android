@@ -100,6 +100,15 @@ class NfcPaymentUriTest {
     }
 
     @Test
+    fun `nfc read with a required parameter is refused`() {
+        assertNull(nfcPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&req-pop=callback%3a"))
+        assertNull(nfcPaymentRequest("BITCOIN:BCRT1QTEST?REQ-FOO=bar"))
+        assertEquals("bitcoin:bcrt1qtest?amount=0.001", nfcPaymentRequest(" bitcoin:bcrt1qtest?amount=0.001 "))
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        assertEquals("lightning:$invoice", nfcPaymentRequest("bitcoin:?lightning=$invoice"))
+    }
+
+    @Test
     fun `request with a required parameter is kept`() {
         val invoice = PosNfcFixtures.SQUARE_INVOICE
         val required = "bitcoin:?lightning=$invoice&req-pop=callback%3a"

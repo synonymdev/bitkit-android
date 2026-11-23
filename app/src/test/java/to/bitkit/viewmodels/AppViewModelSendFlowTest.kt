@@ -4408,6 +4408,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `nfc tag launch with a required parameter shows the nfc error without decoding`() = test {
+        sut.setIsAuthenticated(true)
+
+        sut.handleDeeplinkIntent(nfcTagIntent("bitcoin:$REGTEST_ADDRESS?amount=0.001&req-pop=callback%3a"))
+        advanceUntilIdle()
+
+        verify(coreService, never()).decode(any())
+        verify(toastManager).enqueue(check { assertEquals(Toast.ToastType.ERROR, it.type) })
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
     fun `Bitkit SamRock deeplink opens BTCPay connection sheet without core decode`() = test {
         sut.handleDeeplinkIntent(samRockIntent(samRockDeepLink(SAMROCK_SETUP_URL)))
         advanceUntilIdle()

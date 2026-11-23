@@ -171,7 +171,7 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
-import to.bitkit.nfc.scannedPaymentRequest
+import to.bitkit.nfc.nfcPaymentRequest
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -9921,13 +9921,21 @@ class AppViewModel @Inject constructor(
         if (intent.action !in DEEPLINK_ACTIONS) return
         intent.data?.let { uri ->
             Logger.debug("Received deeplink '${uri.toString().sanitizedDeeplinkLogValue()}'", context = TAG)
-            // A tapped tag goes through the same rewrite as a scanner read (BIP 321 without an address).
-            val value = uri.toString().let {
-                if (intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) scannedPaymentRequest(it) else it
+            // A tapped tag goes through the same rewrite and refusal as a scanner read.
+            val value = if (intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
+                nfcPaymentRequest(uri.toString()) ?: return showNfcReadError()
+            } else {
+                uri.toString()
             }
             processDeeplink(uri, value)
         }
     }
+
+    private fun showNfcReadError() = toast(
+        type = Toast.ToastType.ERROR,
+        title = context.getString(R.string.other__nfc_read_error_title),
+        description = context.getString(R.string.other__nfc_read_error_text),
+    )
 
     fun onUsbDeviceAttached(
         deviceId: String? = null,
