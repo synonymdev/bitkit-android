@@ -225,12 +225,17 @@ fun NfcEmitterEffect(uri: String?, onFailed: () -> Unit = {}) {
     }
 }
 
-/** Routes the NDEF tag AID to [service] and prefers it. Returns whether the AID was registered. */
+/**
+ * Routes the NDEF tag AID to [service] and prefers it. Returns whether both succeeded: without the preference,
+ * another service holding the same AID can answer the tap, so the AID is released again.
+ */
 internal fun registerTagService(cardEmulation: CardEmulation, activity: Activity, service: ComponentName): Boolean =
     runCatching {
         val isRegistered = cardEmulation.registerAidsForService(service, CardEmulation.CATEGORY_OTHER, NDEF_AIDS)
-        if (isRegistered) cardEmulation.setPreferredService(activity, service)
-        isRegistered
+        if (!isRegistered) return@runCatching false
+        if (cardEmulation.setPreferredService(activity, service)) return@runCatching true
+        cardEmulation.removeAidsForService(service, CardEmulation.CATEGORY_OTHER)
+        false
     }.onFailure { Logger.warn("Failed to register NFC tag service", it, context = TAG) }
         .onSuccess { if (!it) Logger.warn("NFC tag service registration was refused", context = TAG) }
         .getOrDefault(false)

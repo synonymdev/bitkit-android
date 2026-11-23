@@ -21,9 +21,20 @@ class NfcTagServiceRegistrationTest {
     @Test
     fun `registered service is preferred and reported`() {
         whenever(cardEmulation.registerAidsForService(any(), any(), any())).thenReturn(true)
+        whenever(cardEmulation.setPreferredService(activity, service)).thenReturn(true)
 
         assertTrue(registerTagService(cardEmulation, activity, service))
         verify(cardEmulation).setPreferredService(activity, service)
+        verify(cardEmulation, never()).removeAidsForService(anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `refused preference releases the aid and is reported`() {
+        whenever(cardEmulation.registerAidsForService(any(), any(), any())).thenReturn(true)
+        whenever(cardEmulation.setPreferredService(activity, service)).thenReturn(false)
+
+        assertFalse(registerTagService(cardEmulation, activity, service))
+        verify(cardEmulation).removeAidsForService(service, CardEmulation.CATEGORY_OTHER)
     }
 
     @Test
