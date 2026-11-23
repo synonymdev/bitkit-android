@@ -107,6 +107,12 @@ class NfcPaymentUriTest {
         assertNull(nfcPaymentRequest("lightning:bitcoin:bcrt1qtest?amount=0.001&req-pop=callback%3a"))
         val wrappedInvoice = "LIGHTNING:bitcoin:?lightning=${PosNfcFixtures.SQUARE_INVOICE}&req-pop=callback%3a"
         assertNull(nfcPaymentRequest(wrappedInvoice))
+        val required = "bitcoin:bcrt1qtest?amount=0.001&req-pop=callback"
+        for (wrapper in listOf("bitkit://", "bitkit://lightning:", "lightning:lightning:", "lnurl:lightning:")) {
+            assertNull(nfcPaymentRequest("$wrapper$required"))
+        }
+        val wrappedPlain = "bitkit://bitcoin:bcrt1qtest?amount=0.001"
+        assertEquals(wrappedPlain, nfcPaymentRequest(wrappedPlain))
         val lnurlPay = "https://pay.example.com/lnurlp?req-x=1&lightning=LNURL1DP68GURN8GHJ7"
         assertEquals(lnurlPay, nfcPaymentRequest(lnurlPay))
         assertEquals("bitcoin:bcrt1qtest?amount=0.001", nfcPaymentRequest(" bitcoin:bcrt1qtest?amount=0.001 "))
