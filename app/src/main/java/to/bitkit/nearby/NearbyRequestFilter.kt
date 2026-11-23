@@ -19,23 +19,20 @@ fun isNearbyPaymentRequest(request: String): Boolean {
     return when {
         lowercase.startsWith("bitcoin:?") -> false
         // The app decodes a unified URI's Lightning request, and decoding an LNURL contacts its server.
-        lowercase.startsWith("bitcoin:") -> lightningParam(lowercase)
-            ?.let { invoice -> LIGHTNING_INVOICE_PREFIXES.any { invoice.startsWith(it) } } ?: true
+        // Every Lightning value is checked, since the decoder keeps the last one.
+        lowercase.startsWith("bitcoin:") -> lightningParams(lowercase).all(::isBolt11)
 
         lowercase.startsWith("ethereum:") -> true
-        lowercase.startsWith("lightning:") -> {
-            val invoice = lowercase.removePrefix("lightning:")
-            LIGHTNING_INVOICE_PREFIXES.any { invoice.startsWith(it) }
-        }
+        lowercase.startsWith("lightning:") -> isBolt11(lowercase.removePrefix("lightning:"))
 
         else -> false
     }
 }
 
-private fun lightningParam(uri: String): String? = uri.substringAfter('?', missingDelimiterValue = "")
+private fun lightningParams(uri: String): List<String> = uri.substringAfter('?', missingDelimiterValue = "")
     .split('&')
-    .firstOrNull { it.startsWith("lightning=") }
-    ?.substringAfter('=')
+    .filter { it.startsWith("lightning=") }
+    .map { it.substringAfter('=') }
 
 /**
  * The payment request to hand to the scanner for [request] read over Bluetooth, or null when it is refused.
@@ -44,3 +41,5 @@ private fun lightningParam(uri: String): String? = uri.substringAfter('?', missi
  */
 fun nearbyPaymentRequest(request: String): String? =
     scannedPaymentRequest(request).takeIf(::isNearbyPaymentRequest)
+
+private fun isBolt11(invoice: String) = LIGHTNING_INVOICE_PREFIXES.any { invoice.startsWith(it) }
