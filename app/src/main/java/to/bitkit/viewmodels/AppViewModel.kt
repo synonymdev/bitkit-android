@@ -6708,7 +6708,11 @@ class AppViewModel @Inject constructor(
         }
 
         _quickPayData.update {
-            QuickPayRequest(id = quickPayRequestIds.incrementAndGet(), data = quickPayData)
+            QuickPayRequest(
+                id = quickPayRequestIds.incrementAndGet(),
+                data = quickPayData,
+                lockGeneration = scanLockGeneration ?: lockGeneration,
+            )
         }
 
         if (lnurlPay != null) {
@@ -8340,6 +8344,13 @@ class AppViewModel @Inject constructor(
     }
 
     fun resetQuickPay() = _quickPayData.update { null }
+
+    /**
+     * Whether the QuickPay screen may start paying [request] now: the wallet is unlocked and has not locked since
+     * the scan that made the request. Otherwise whoever unlocked did not choose the payment, so it goes to review.
+     */
+    fun canStartQuickPay(request: QuickPayRequest): Boolean =
+        _isAuthenticated.value && request.lockGeneration == lockGeneration
 
     fun navigateToUsdtDeposits() {
         viewModelScope.launch {
@@ -10640,6 +10651,8 @@ sealed interface QuickPayData {
 data class QuickPayRequest(
     val id: Long,
     val data: QuickPayData,
+    /** The wallet's lock count when the scan behind this request started. */
+    val lockGeneration: Long,
 )
 // endregion
 

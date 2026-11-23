@@ -11083,6 +11083,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `QuickPay published before the app locks on background does not start after the PIN`() = test {
+        val bolt11 = "lnbcrt1lockafterpublish"
+        enableQuickPay()
+        settingsData.value = settingsData.value.copy(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+        val request = assertNotNull(sut.quickPayData.value)
+        assertTrue(sut.canStartQuickPay(request))
+
+        // The QuickPay screen is still waiting (navigation, funds) when the app locks; the PIN then unlocks it.
+        sut.lockOnBackground()
+        assertFalse(sut.canStartQuickPay(request))
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertFalse(sut.canStartQuickPay(request))
+    }
+
+    @Test
     fun `lockOnBackground requires auth when PIN is enabled`() = test {
         settingsData.value = SettingsData(isPinEnabled = true)
         advanceUntilIdle()

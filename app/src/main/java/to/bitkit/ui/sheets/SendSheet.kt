@@ -721,6 +721,7 @@ fun SendSheet(
                             quickPayData = request.data,
                             isRequestActive = quickPayRequest?.id == request.id,
                             canPayWithoutNode = sparkCanPayQuickPay(request.data, sparkState),
+                            canStart = { appViewModel.canStartQuickPay(request) },
                             onPaymentComplete = { paymentHash, amountWithFee ->
                                 appViewModel.onSendSuccess(
                                     NewTransactionSheetDetails(
