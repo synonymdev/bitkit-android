@@ -171,6 +171,7 @@
     <string name="fee__slow__duration">±1 hour</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Slow</string>
+    <string name="hardware__bluetooth_enable_error">Could not turn on Bluetooth. Turn it on in your device settings, then try again.</string>
     <string name="hardware__bluetooth_permission_settings">Open Settings</string>
     <string name="hardware__bluetooth_permission_text">Bitkit needs the nearby-devices (Bluetooth) permission to find your hardware wallet. Enable it in Settings, then try again.</string>
     <string name="hardware__bluetooth_permission_title">Bluetooth access needed</string>

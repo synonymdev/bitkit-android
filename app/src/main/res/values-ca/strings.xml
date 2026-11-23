@@ -1318,6 +1318,7 @@
     <string name="contacts__scanner_status">ESCANEJANT QR I NFC</string>
     <string name="fee__instant__description">±1-5 segons</string>
     <string name="fee__instant__shortDescription">Instant</string>
+    <string name="hardware__bluetooth_enable_error">No s\'ha pogut activar el Bluetooth. Activa\'l a la configuració del dispositiu i torna-ho a provar.</string>
     <string name="hardware__bluetooth_permission_settings">Obrir Configuració</string>
     <string name="hardware__bluetooth_permission_text">Bitkit necessita el permís de dispositius propers (Bluetooth) per trobar la teva cartera de maquinari. Activa\'l a Configuració i torna-ho a provar.</string>
     <string name="hardware__bluetooth_permission_title">Cal accés al Bluetooth</string>

@@ -1293,6 +1293,7 @@
     <string name="contacts__scanner_paste">لصق رمز QR أو رابط</string>
     <string name="contacts__scanner_status">جارٍ مسح QR و NFC</string>
     <string name="fee__instant__description">±1-5 ثوانٍ</string>
+    <string name="hardware__bluetooth_enable_error">تعذّر تشغيل البلوتوث. شغّله من إعدادات جهازك، ثم حاول مرة أخرى.</string>
     <string name="hardware__bluetooth_permission_settings">فتح الإعدادات</string>
     <string name="hardware__bluetooth_permission_text">يحتاج Bitkit إلى إذن الأجهزة القريبة (Bluetooth) للعثور على محفظة الأجهزة الخاصة بك. فعّله في الإعدادات، ثم حاول مرة أخرى.</string>
     <string name="hardware__bluetooth_permission_title">مطلوب الوصول إلى Bluetooth</string>

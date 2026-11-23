@@ -1340,6 +1340,7 @@
     <string name="contacts__scanner_paste">Вставить QR или Ссылку</string>
     <string name="contacts__scanner_status">СКАНИРОВАНИЕ QR И NFC</string>
     <string name="fee__instant__description">±1-5 секунд</string>
+    <string name="hardware__bluetooth_enable_error">Не удалось включить Bluetooth. Включите его в настройках устройства и повторите попытку.</string>
     <string name="hardware__bluetooth_permission_settings">Открыть Настройки</string>
     <string name="hardware__bluetooth_permission_text">Bitkit нужно разрешение «Устройства поблизости» (Bluetooth), чтобы найти ваш аппаратный кошелёк. Включите его в Настройках и попробуйте снова.</string>
     <string name="hardware__bluetooth_permission_title">Нужен доступ к Bluetooth</string>

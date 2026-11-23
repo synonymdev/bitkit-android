@@ -1316,6 +1316,7 @@
     <string name="contacts__scanner_paste">Pegar QR o enlace</string>
     <string name="contacts__scanner_status">ESCANEANDO QR Y NFC</string>
     <string name="fee__instant__description">±1-5 segundos</string>
+    <string name="hardware__bluetooth_enable_error">No se ha podido activar el Bluetooth. Actívalo en los ajustes del dispositivo e inténtalo de nuevo.</string>
     <string name="hardware__bluetooth_permission_settings">Abrir Ajustes</string>
     <string name="hardware__bluetooth_permission_text">Bitkit necesita el permiso de dispositivos cercanos (Bluetooth) para encontrar tu monedero de hardware. Actívalo en Ajustes e inténtalo de nuevo.</string>
     <string name="hardware__bluetooth_permission_title">Se necesita acceso a Bluetooth</string>

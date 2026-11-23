@@ -1322,6 +1322,7 @@
     <string name="contacts__scanner_paste">Wklej kod QR lub link</string>
     <string name="contacts__scanner_status">SKANOWANIE QR I NFC</string>
     <string name="fee__instant__description">±1-5 sekund</string>
+    <string name="hardware__bluetooth_enable_error">Nie udało się włączyć Bluetooth. Włącz go w ustawieniach urządzenia i spróbuj ponownie.</string>
     <string name="hardware__bluetooth_permission_settings">Otwórz Ustawienia</string>
     <string name="hardware__bluetooth_permission_text">Bitkit potrzebuje uprawnienia do urządzeń w pobliżu (Bluetooth), aby znaleźć Twój portfel sprzętowy. Włącz je w Ustawieniach, a następnie spróbuj ponownie.</string>
     <string name="hardware__bluetooth_permission_title">Wymagany dostęp do Bluetooth</string>

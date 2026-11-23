@@ -1320,6 +1320,7 @@
     <string name="contacts__scanner_paste">QR-Code oder Link einfügen</string>
     <string name="contacts__scanner_status">SCANNE QR &amp; NFC</string>
     <string name="fee__instant__description">±1-5 Sekunden</string>
+    <string name="hardware__bluetooth_enable_error">Bluetooth konnte nicht eingeschaltet werden. Schalte es in den Geräteeinstellungen ein und versuche es erneut.</string>
     <string name="hardware__bluetooth_permission_settings">Einstellungen öffnen</string>
     <string name="hardware__bluetooth_permission_text">Bitkit benötigt die Berechtigung „Geräte in der Nähe“ (Bluetooth), um dein Hardware-Wallet zu finden. Aktiviere sie in den Einstellungen und versuche es dann erneut.</string>
     <string name="hardware__bluetooth_permission_title">Bluetooth-Zugriff erforderlich</string>
