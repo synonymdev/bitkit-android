@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.net.Uri
 import android.os.Build
-import android.view.View.LAYER_TYPE_HARDWARE
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -331,7 +330,7 @@ private fun Content(
                 modifier = Modifier
                     .fillMaxSize()
                     .clipToBounds(),
-                factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
+                factory = { previewView }
             )
 
             IconButton(
