@@ -484,6 +484,9 @@ class AppViewModel @Inject constructor(
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    /** Every pending request, those [pendingPaymentRequests] hides included, for a request's status line. */
+    val allPendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
+
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
 
     /**
