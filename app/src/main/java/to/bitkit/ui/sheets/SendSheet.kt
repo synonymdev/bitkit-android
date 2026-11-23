@@ -469,6 +469,7 @@ fun SendSheet(
                                     data = it,
                                     routePubkyKeys = true,
                                     suppressQuickPay = payload.isNearby,
+                                    fromSendScanner = true,
                                 )
                             }
                         },

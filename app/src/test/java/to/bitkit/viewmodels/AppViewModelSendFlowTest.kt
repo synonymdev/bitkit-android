@@ -9894,6 +9894,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `read from the send scanner still preparing does not reopen send after the sheet closes`() = test {
+        val bolt11 = "lnbcrt1nestedscanner"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { blocktankRepo.refreshInfo() }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Result.success(Unit)
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onScanResult(bolt11, routePubkyKeys = true, fromSendScanner = true)
+        advanceUntilIdle()
+        assertTrue(entered.isCompleted)
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        assertNull(sut.quickPayData.value)
+        verify(coreService, never()).decode(bolt11)
+    }
+
+    @Test
     fun `bluetooth read does not replace a scanned request still preparing`() = test {
         val scanned = stubOnchainAmountScan(amountSats = 10_000u)
         val nearby = "bitcoin:$REGTEST_ADDRESS?amount=0.0002"

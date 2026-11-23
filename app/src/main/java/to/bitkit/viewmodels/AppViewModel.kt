@@ -646,8 +646,11 @@ class AppViewModel @Inject constructor(
     private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
 
-    /** A request read from a nearby device on the recipient screen, cancelled when the user enters one manually. */
-    private var nearbyAddressScanJob: Job? = null
+    /**
+     * A request read during this Send visit (a nearby read on the recipient screen, or a read from Send's own scanner).
+     * It is cancelled when Send closes or the user enters a request manually.
+     */
+    private var sendVisitScanJob: Job? = null
 
     /** A request found over Bluetooth without a user gesture; any request the user chose takes priority over it. */
     private var passiveNearbyScanJob: Job? = null
@@ -3373,7 +3376,7 @@ class AppViewModel @Inject constructor(
                         SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                         SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
                         SendEvent.Contacts -> {
-                            cancelNearbyAddressScan()
+                            cancelSendVisitScan()
                             setSendEffect(
                                 if (isPaykitEnabled.value) {
                                     SendEffect.NavigateToContacts
@@ -3395,14 +3398,14 @@ class AppViewModel @Inject constructor(
     private val activeHardwareWalletId: String?
         get() = (currentSheet.value as? Sheet.Send)?.hardwareWalletId
 
-    /** A nearby request still decoding must not route over the choice the user just made on the recipient screen. */
-    private fun cancelNearbyAddressScan() {
-        nearbyAddressScanJob?.cancel()
-        nearbyAddressScanJob = null
+    /** A request still decoding must not route over the choice the user just made, or after Send closed. */
+    private fun cancelSendVisitScan() {
+        sendVisitScanJob?.cancel()
+        sendVisitScanJob = null
     }
 
     private fun onEnterManuallyClick() {
-        cancelNearbyAddressScan()
+        cancelSendVisitScan()
         clearActiveContactPaymentContext()
         resetAddressInput()
         setSendEffect(SendEffect.NavigateToAddress)
@@ -4088,7 +4091,7 @@ class AppViewModel @Inject constructor(
         // A nearby read (NFC or Bluetooth) arrives on its own, so Enter Manually must be able to drop it.
         // Its job ends once it routes, so cancelling it never stops a payment in progress.
         // A duplicate read returns no job; keep the handle of the scan still running.
-        if (isNearbyRead) job?.let { nearbyAddressScanJob = it }
+        if (isNearbyRead) job?.let { sendVisitScanJob = it }
         if (isPassiveRead) job?.let { passiveNearbyScanJob = it }
     }
 
@@ -5415,8 +5418,9 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext? = null,
         allowPubkyAuth: Boolean = isMainScanner,
         suppressQuickPay: Boolean = false,
+        fromSendScanner: Boolean = false,
     ) {
-        launchScan(
+        val job = launchScan(
             source = ScanSource.SCAN_RESULT,
             data = data,
             startDelay = startDelay,
@@ -5425,6 +5429,8 @@ class AppViewModel @Inject constructor(
             allowPubkyAuth = allowPubkyAuth,
             suppressQuickPay = suppressQuickPay,
         )
+        // A read from Send's own scanner (camera, NFC or Bluetooth) belongs to this Send visit.
+        if (fromSendScanner) job?.let { sendVisitScanJob = it }
     }
 
     fun openContactPayment(
@@ -8953,8 +8959,8 @@ class AppViewModel @Inject constructor(
             clearPaymentRequestPresentationRetry(it.request.id)
         }
         if (_currentSheet.value is Sheet.Send) {
-            // A nearby read still preparing belongs to this Send visit: it must not reopen a sheet or reach QuickPay.
-            cancelNearbyAddressScan()
+            // A read still preparing belongs to this Send visit: it must not reopen a sheet or reach QuickPay.
+            cancelSendVisitScan()
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++
