@@ -64,10 +64,21 @@ class NfcPaymentUriTest {
             "bitcoin:?lightning=$invoice&amount=0.01&AMOUNT=0.02",
             "bitcoin:?lightning=$invoice&lightning=lnbc1other",
             "bitcoin:?lightning=$invoice&label=a&label=b",
-            "bitcoin:?lightning=$invoice&creq=a&CREQ=b",
+            "bitcoin:?lightning=$invoice&message=a&message=b",
+            "bitcoin:?lightning=$invoice&amount=0.0000799&amount=0.0000799",
+            "bitcoin:?lightning=$invoice&pop=a%3a&POP=b%3a",
         )) {
             assertEquals(repeated, scannedPaymentRequest(repeated))
         }
+    }
+
+    @Test
+    fun `request repeating an optional extension is unwrapped`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        assertEquals(
+            "lightning:$invoice",
+            scannedPaymentRequest("bitcoin:?lightning=$invoice&x-shop=a&X-SHOP=b&creq=c&creq=d&lno=lno1a&lno=lno1b"),
+        )
     }
 
     @Test

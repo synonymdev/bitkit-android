@@ -27,14 +27,21 @@ private const val BITCOIN_WITHOUT_ADDRESS = "bitcoin:?"
 private const val REQUIRED_PARAM_PREFIX = "req-"
 
 /**
+ * Keys BIP 321 ("Query Keys", "Invalid URIs") forbids repeating; `pop` and `req-pop` count as the same key.
+ * Unknown optional keys and payment instructions may repeat.
+ */
+private val SINGLETON_KEYS = setOf("amount", "label", "message", "pop")
+
+/**
  * Turns a payment request read from a tag or a nearby device into one the scanner decodes.
  *
  * A BIP 321 URI may leave the address out and carry only a Lightning request
  * (`bitcoin:?lightning=<invoice>`, used by Numo and planned by Square). The scanner rejects a
  * `bitcoin:` URI without an address, so that form becomes `lightning:<invoice>`. A URI with a
  * required (`req-`) parameter is kept, since BIP 321 forbids paying it without handling that
- * parameter and the rewrite would drop it. So is a URI that repeats a parameter, since the rewrite would have to
- * pick one value, and one whose `amount` the invoice does not carry: the invoice alone could not ask for it.
+ * parameter and the rewrite would drop it. So is a URI that repeats one of [SINGLETON_KEYS], which BIP 321
+ * makes invalid; one with more than one `lightning` value, which Bitkit does not support, since the rewrite would
+ * have to pick one; and one whose `amount` the invoice does not carry: the invoice alone could not ask for it.
  * Anything else is returned trimmed and unchanged.
  */
 fun scannedPaymentRequest(text: String): String {
@@ -43,8 +50,10 @@ fun scannedPaymentRequest(text: String): String {
     val pairs = trimmed.substring(BITCOIN_WITHOUT_ADDRESS.length).split('&')
     // Checked on every key, since BIP 321 allows a required key with an empty or no value.
     if (pairs.any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }) return trimmed
-    val keys = pairs.map { it.substringBefore('=').lowercase() }.filter { it.isNotEmpty() }
-    if (keys.size != keys.toSet().size) return trimmed
+    val keys = pairs.map { it.substringBefore('=').lowercase().removePrefix(REQUIRED_PARAM_PREFIX) }
+    val singletons = keys.filter { it in SINGLETON_KEYS }
+    if (singletons.size != singletons.toSet().size) return trimmed
+    if (keys.count { it == "lightning" } > 1) return trimmed
     val params = pairs.mapNotNull {
         val key = it.substringBefore('=', missingDelimiterValue = "")
         val value = it.substringAfter('=', missingDelimiterValue = "")
