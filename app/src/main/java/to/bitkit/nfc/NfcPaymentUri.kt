@@ -75,13 +75,15 @@ fun scannedPaymentRequest(text: String): String {
  * refused. Other schemes, such as an LNURL-pay URL, keep their own query untouched.
  */
 fun hasRequiredParam(uri: String): Boolean {
-    // The decoder deletes every `bitkit://` in a deep link, which can turn a key into `req-`, and strips the other
-    // wrappers from the front, repeatedly. Do the same and check the `bitcoin:` request the decoder would receive.
-    var decoded = uri.replace(DEEPLINK_SCHEME, "", ignoreCase = true).trim()
-    while (true) {
-        val wrapper = DECODER_WRAPPERS.firstOrNull { decoded.startsWith(it, ignoreCase = true) } ?: break
-        decoded = decoded.substring(wrapper.length).trim()
-    }
+    // The decoder deletes every `bitkit://` in a deep link, and again after each wrapper it strips, which can turn a
+    // key into `req-`. Repeat both until nothing changes and check the `bitcoin:` request the decoder would receive.
+    var decoded = uri.trim()
+    do {
+        val previous = decoded
+        decoded = decoded.replace(DEEPLINK_SCHEME, "", ignoreCase = true).trim()
+        DECODER_WRAPPERS.firstOrNull { decoded.startsWith(it, ignoreCase = true) }
+            ?.let { decoded = decoded.substring(it.length).trim() }
+    } while (decoded != previous)
     if (!decoded.startsWith(BITCOIN_SCHEME, ignoreCase = true)) return false
     return decoded.substringAfter('?', missingDelimiterValue = "")
         .split('&')

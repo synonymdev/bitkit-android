@@ -127,6 +127,10 @@ class NfcPaymentUriTest {
         assertNull(nfcPaymentRequest("$address&bitkit://req-pop=callback"))
         assertNull(nfcPaymentRequest("$address&rebitkit://q-pop=callback"))
         assertNull(nfcPaymentRequest("bitkit://bitkit://bitcoin:bcrt1qtest?REBITKIT://Q-POP=callback"))
+        // The decoder deletes them again while the text starts with `bitkit://`, so a nested one is removed too.
+        val required = "bitcoin:bcrt1qtest?amount=0.001&req-pop=x"
+        assertNull(nfcPaymentRequest("bitkit://bitbitkit://kit://$required"))
+        assertNull(nfcPaymentRequest("bitkit://lightning:bitbitkit://kit://$required"))
     }
 
     @Test
