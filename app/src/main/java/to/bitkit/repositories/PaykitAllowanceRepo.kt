@@ -661,10 +661,11 @@ class PaykitAllowanceRepo @Inject constructor(
             it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature &&
                 !paidRecords.hasFailedAutomaticPayment(it.id)
         }
-        val coveredIds = covered.mapTo(mutableSetOf()) { it.id }
-        deferredRequestIds.update { it intersect coveredIds }
-        if (covered.isEmpty()) return@withContext false
         val payable = payableNow(covered)
+        // A deferral stays hidden only while the request is payable now; one waiting for the node or handed back shows.
+        val payableIds = payable.mapTo(mutableSetOf()) { it.id }
+        deferredRequestIds.update { it intersect payableIds }
+        if (covered.isEmpty()) return@withContext false
         if (payable.isEmpty()) return@withContext markAboveLimitManual(covered, identity, signature)
         if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
@@ -726,6 +727,7 @@ class PaykitAllowanceRepo @Inject constructor(
         signature: Int,
     ): Boolean {
         var handledAny = false
+        val passActivation = activation
         // The whole pass is hidden from its start, so a request waiting its turn never shows while an earlier one
         // is paid.
         passRequestIds.update { covered.mapTo(mutableSetOf()) { it.id } }
@@ -741,9 +743,9 @@ class PaykitAllowanceRepo @Inject constructor(
                     }
                     PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
                 }
-                deferredRequestIds.update {
-                    if (result == PaykitAllowanceAutoPayResult.DEFERRED) it + request.id else it - request.id
-                }
+                // A pass that outlived its activation, as when allowances were turned off, keeps no deferral.
+                val isDeferred = result == PaykitAllowanceAutoPayResult.DEFERRED && activation === passActivation
+                deferredRequestIds.update { if (isDeferred) it + request.id else it - request.id }
                 // A started request is released only once the journal it left is loaded, which then keeps it hidden.
                 if (result == PaykitAllowanceAutoPayResult.STARTED) reloadLocalState()
                 passRequestIds.update { it - request.id }

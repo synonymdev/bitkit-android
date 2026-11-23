@@ -484,8 +484,13 @@ class AppViewModel @Inject constructor(
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    /** Request history, without the pending requests [pendingPaymentRequests] hides, so none lists as unavailable. */
-    val paymentRequestHistory: StateFlow<List<PaykitPaymentRequest>> = combine(
+    val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
+
+    /**
+     * History rows for the requests list, without the pending requests [pendingPaymentRequests] hides, so none lists as
+     * unavailable. Details still look a request up in [paymentRequestHistory].
+     */
+    val listedPaymentRequestHistory: StateFlow<List<PaykitPaymentRequest>> = combine(
         paykitPaymentRequestRepo.paymentRequestHistory,
         paykitPaymentRequestRepo.pendingRequests,
         pendingPaymentRequests,

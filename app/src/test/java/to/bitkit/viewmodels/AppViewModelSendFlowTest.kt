@@ -8285,7 +8285,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a request kept off pending never lists as unavailable in history`() = test {
+    fun `a request kept off pending never lists as unavailable in history and keeps its details`() = test {
         val request = paymentRequest()
         whenever(paykitAllowanceRepo.hasSentPayment(request)).thenReturn(true)
         pendingPaykitPaymentRequests.value = listOf(request)
@@ -8294,9 +8294,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         val pending = sut.pendingPaymentRequests.value
         // As PaymentRequestsScreen.kt builds its rows.
-        val row = (pending + sut.paymentRequestHistory.value).distinctBy { it.id }.firstOrNull { it.id == request.id }
+        val row = (pending + sut.listedPaymentRequestHistory.value).distinctBy { it.id }
+            .firstOrNull { it.id == request.id }
+        // As IncomingPaymentRequestDetailsScreen looks the request up, so open details stay readable.
+        val detail = pending.firstOrNull { it.id == request.id }
+            ?: sut.paymentRequestHistory.value.firstOrNull { it.id == request.id }
         sut.viewModelScope.cancel()
         assertTrue(pending.none { it.id == request.id })
+        assertEquals(request, detail)
         val status = row?.let { paymentRequestLifecycleStatusRes(it, isPending = false) }
         assertTrue(
             status != R.string.wallet__payment_request_status_unavailable,

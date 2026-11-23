@@ -1117,6 +1117,47 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a request deferred by a pass allowances were turned off during shows again`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        val resolving = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(executor.autoPay(any(), any(), any())).doSuspendableAnswer {
+            resolving.complete(Unit)
+            release.await()
+            PaykitAllowanceAutoPayResult.DEFERRED
+        }
+        val request = fixtures.paymentRequest()
+        sut.activate(identity)
+        val pass = async { sut.processIncomingRequests(listOf(request)) }
+        resolving.await()
+
+        sut.pause(identity)
+        release.complete(Unit)
+        pass.await()
+
+        assertFalse(request.id in sut.handlingRequestIds.first(), "The unpaid request shows while allowances are off")
+    }
+
+    @Test
+    fun `a deferred request shows again while it waits for the node`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.DEFERRED)
+        val request = fixtures.paymentRequest()
+        sut.activate(identity)
+        sut.processIncomingRequests(listOf(request))
+        assertTrue(request.id in sut.handlingRequestIds.first())
+
+        lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+        sut.processIncomingRequests(listOf(request))
+
+        assertFalse(request.id in sut.handlingRequestIds.first(), "A request waiting for the node stays in the bell")
+    }
+
+    @Test
     fun `a request whose automatic payment failed is the user's to pay`() = test {
         nodeReady()
         records = listOf(fixtures.record())
