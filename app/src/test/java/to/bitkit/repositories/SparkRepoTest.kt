@@ -104,6 +104,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -3901,6 +3902,54 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry whose success ends its hold while spark's list is read stays pending`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING, timestamp = 5uL)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(taken)
+        val earlier = sentPayment(fees = 0).copy(id = "earlier", status = PaymentStatus.FAILED, timestamp = 1uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(earlier))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        sut.payInvoice("lnbc1", 100uL)
+        advanceUntilIdle()
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), sut.lightningSend("hash"))
+
+        // The retry's success event ends its hold while the list is read, and the list lists only the earlier failure.
+        stubListEndingHoldWithSuccess(taken.copy(status = PaymentStatus.COMPLETED), earlier)
+
+        val send = sut.lightningSend("hash")
+
+        assertEquals(SparkLightningSend.Found(PaymentStatus.PENDING, null), send, "a paid retry read as failed")
+    }
+
+    @Test
+    fun `a spark retry whose success ends its hold while spark's list is read settles no send screen`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val taken = sentPayment(fees = 0).copy(id = "retry", status = PaymentStatus.PENDING, timestamp = 5uL)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(taken)
+        val earlier = sentPayment(fees = 0).copy(id = "earlier", status = PaymentStatus.FAILED, timestamp = 1uL)
+        whenever(sparkService.listPayments()).thenReturn(listOf(earlier))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        sut.payInvoice("lnbc1", 100uL)
+        advanceUntilIdle()
+        assertNull(sut.settledSendEvent("hash"))
+
+        // The retry's success event ends its hold while the list is read, and the list lists only the earlier failure.
+        stubListEndingHoldWithSuccess(taken.copy(status = PaymentStatus.COMPLETED), earlier)
+
+        assertNull(sut.settledSendEvent("hash"), "a paid retry settled the send screen as failed")
+    }
+
+    @Test
     fun `a spark send whose caller was cancelled inside the send call ends at its invoice's expiry`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
@@ -4628,6 +4677,18 @@ class SparkRepoTest : BaseUnitTest() {
             "hash" in sut.attemptedLightningPaymentHashes().orEmpty(),
             "Paykit reads an uncertain retry as never attempted",
         )
+    }
+
+    private fun stubListEndingHoldWithSuccess(completed: Payment, earlier: Payment) {
+        var isEnded = false
+        whenever { sparkService.listPayments() }.doSuspendableAnswer {
+            if (!isEnded) {
+                isEnded = true
+                sparkEvents.emit(SdkEvent.PaymentSucceeded(completed))
+                delay(1.milliseconds)
+            }
+            listOf(earlier)
+        }
     }
 
     private fun unexpiredPrepared(): PrepareSendPaymentResponse {

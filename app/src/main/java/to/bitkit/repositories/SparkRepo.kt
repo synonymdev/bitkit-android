@@ -1534,13 +1534,15 @@ class SparkRepo @Inject constructor(
      */
     suspend fun settledSendEvent(paymentHash: String): Event? = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext null
+        // Read before the list, so a hold its success event ends while the list is read still keeps it pending.
+        val heldStart = sendHoldStart(paymentHash.lowercase())
         runSuspendCatching { listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrNull()
             ?.latestSend(paymentHash)
             // A send in doubt or in Spark's send call is pending until Spark settles it, so a listed failure, which
             // may be an earlier attempt's, settles nothing yet.
-            ?.takeUnless { it.status == PaymentStatus.FAILED && isHeldFrom(it) }
+            ?.takeUnless { it.status == PaymentStatus.FAILED && isHeldFrom(it, heldStart) }
             ?.toNodeEvent()
     }
 
@@ -1549,12 +1551,10 @@ class SparkRepo @Inject constructor(
      * and Spark dates the failure more than [OWN_FAILURE_CLOCK_MARGIN_SECS] before the send started, as an earlier
      * attempt's.
      */
-    private suspend fun isHeldFrom(failure: Payment): Boolean {
+    private suspend fun isHeldFrom(failure: Payment, heldStart: ULong? = null): Boolean {
         val hash = failure.sendHash()?.lowercase() ?: return false
         if (sendsInFlight.containsKey(hash)) return true
-        val startedAt = uncertainSends[hash]?.startedAt
-            ?: cacheStore.data.first().sparkUncertainSends[hash]?.toULong()
-            ?: return false
+        val startedAt = listOfNotNull(heldStart, sendHoldStart(hash)).maxOrNull() ?: return false
         return failure.timestamp.safe() + OWN_FAILURE_CLOCK_MARGIN_SECS.safe() < startedAt
     }
 
@@ -1610,14 +1610,19 @@ class SparkRepo @Inject constructor(
     suspend fun lightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
         val hash = paymentHash.lowercase()
         val isUnlistedHeld = hash in unexpiredStartedSends()
+        // Read before the list, so a hold its success event ends while the list is read still keeps it pending.
+        val wasUncertain = sendHoldStart(hash) != null
         val send = listedLightningSend(paymentHash)
-        val isUncertain = hash in uncertainSendHashes()
+        val isUncertain = wasUncertain || sendHoldStart(hash) != null
         val isHeld = when (send) {
             SparkLightningSend.NotFound, SparkLightningSend.Unavailable -> isUncertain || isUnlistedHeld
             is SparkLightningSend.Found -> isUncertain && send.status == PaymentStatus.FAILED
         }
         if (isHeld) SparkLightningSend.Found(PaymentStatus.PENDING, null) else send
     }
+
+    private suspend fun sendHoldStart(hash: String): ULong? =
+        uncertainSends[hash]?.startedAt ?: cacheStore.data.first().sparkUncertainSends[hash]?.toULong()
 
     /** Spark's listed record of the Lightning send with [paymentHash], as [lightningSend] reads it before its holds. */
     private suspend fun listedLightningSend(
