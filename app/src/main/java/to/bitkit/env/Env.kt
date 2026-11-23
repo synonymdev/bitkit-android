@@ -12,6 +12,17 @@ import java.io.File
 import kotlin.io.path.Path
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
+internal data class LocalSparkSettings(val configBase64: String, val chainUrl: String) {
+    companion object {
+        fun fromInputs(configBase64: String, chainUrl: String): LocalSparkSettings? {
+            if (configBase64.isBlank() && chainUrl.isBlank()) return null
+            return LocalSparkSettings(configBase64, chainUrl.trimEnd('/'))
+        }
+    }
+
+    val isComplete: Boolean get() = configBase64.isNotBlank() && chainUrl.isNotBlank()
+}
+
 @Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
 internal object Env {
     val isUsdtEnabled: Boolean get() = (network == Network.BITCOIN || isDebug) &&
@@ -51,6 +62,11 @@ internal object Env {
     const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
+    val localSparkSettings = if (isDebug && isLocalE2eBackend && network == Network.REGTEST) {
+        LocalSparkSettings.fromInputs(BuildConfig.SPARK_LOCAL_CONFIG_B64, BuildConfig.SPARK_LOCAL_CHAIN_URL)
+    } else {
+        null
+    }
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
     const val walletSyncTimeoutSecs = 10_uL
@@ -145,19 +161,31 @@ internal object Env {
 
     /**
      * Whether the node's chain is the one Spark watches, so an on-chain funding of Spark from Savings or a hardware
-     * wallet reaches it. On regtest Spark runs on Lightspark's own chain, which the node joins only through the
-     * Spark regtest Esplora proxy.
+     * wallet reaches it. Hosted regtest supports the node's Spark Esplora proxy. The local fixture config selects
+     * Spark's chain only; the node and hardware wallet can use independently configured Electrum servers.
      */
-    fun sparkSharesNodeChain(network: Network, regtestEsploraUrl: String?): Boolean =
-        network != Network.REGTEST || regtestEsploraUrl != null
+    fun sparkSharesNodeChain(network: Network, regtestEsploraUrl: String?, localSpark: LocalSparkSettings?): Boolean =
+        network != Network.REGTEST || (localSpark == null && regtestEsploraUrl != null)
 
-    val sparkSharesNodeChain: Boolean get() = sparkSharesNodeChain(network, regtestEsploraUrl)
+    val sparkSharesNodeChain: Boolean get() = sparkSharesNodeChain(network, regtestEsploraUrl, localSparkSettings)
 
-    /** Esplora REST that Spark reads the chain from; null keeps the SDK's default, on staging and regtest. */
-    fun sparkChainServiceUrl(network: Network): String? = when (network) {
+    /** REST endpoint for the Spark SDK. An unconfigured regtest uses the SDK's hosted default. */
+    fun sparkChainServiceUrl(
+        network: Network,
+        localSpark: LocalSparkSettings? = localSparkSettings,
+    ): String? = when (network) {
         Network.BITCOIN -> bitkitEsploraUrl
+        Network.REGTEST -> localSpark?.takeIf { it.isComplete }?.chainUrl
         else -> null
     }
+
+    /** Regtest endpoint for app-side payout reads and emergency-exit reads and broadcasts. */
+    fun sparkRegtestEsploraUrl(localSpark: LocalSparkSettings? = localSparkSettings): String? =
+        if (localSpark == null) {
+            "https://regtest-mempool.us-west-2.sparkinfra.net/api"
+        } else {
+            sparkChainServiceUrl(Network.REGTEST, localSpark)
+        }
 
     val blocktankBaseUrl
         get() = when (network) {
