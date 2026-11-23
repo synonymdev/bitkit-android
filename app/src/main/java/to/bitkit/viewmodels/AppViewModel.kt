@@ -6658,6 +6658,10 @@ class AppViewModel @Inject constructor(
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
     }
 
+    /** Whether the wallet is locked, or locked since the running scan started: whoever unlocked did not confirm it. */
+    private fun scanCrossedLock(): Boolean =
+        !_isAuthenticated.value || scanLockGeneration.let { it != null && it != lockGeneration }
+
     private suspend fun handleQuickPayIfApplicable(
         amountSats: ULong,
         fromMainScanner: Boolean,
@@ -6667,9 +6671,7 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long?,
     ): Boolean {
         requireCurrentPaymentPreparation(walletGeneration)
-        // A scan that was preparing when the wallet locked was not confirmed by whoever unlocked it.
-        val crossedLock = !_isAuthenticated.value || scanLockGeneration.let { it != null && it != lockGeneration }
-        if (suppressQuickPay || crossedLock) {
+        if (suppressQuickPay || scanCrossedLock()) {
             Logger.info(
                 "Skipping QuickPay for '$amountSats' sats: suppressed for this scan " +
                     "(deferred across the lock, or read from a nearby device)",
@@ -6683,6 +6685,8 @@ class AppViewModel @Inject constructor(
         val canApply = open || canApplyQuickPay(amountSats)
         requireCurrentPaymentPreparation(walletGeneration)
         if (!canApply) return false
+        // Checked again: the wallet can lock while the QuickPay checks above suspend.
+        if (scanCrossedLock()) return false
 
         Logger.info("Using QuickPay for '$amountSats' sats", context = TAG)
 
