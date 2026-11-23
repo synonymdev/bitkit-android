@@ -54,6 +54,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -651,6 +652,12 @@ class AppViewModel @Inject constructor(
      * It is cancelled when Send closes or the user enters a request manually.
      */
     private var sendVisitScanJob: Job? = null
+
+    /**
+     * True on the main thread while a scan job runs, so a scan that closes Send itself (to open LNURL auth,
+     * withdraw or another sheet) does not cancel itself. Only a dismissal from outside the scan cancels it.
+     */
+    private val isRunningScan = ThreadLocal<Boolean>()
 
     /** Bumped each time the wallet locks, so a scan that was already preparing can tell it crossed a lock. */
     private var lockGeneration = 0L
@@ -3802,7 +3809,7 @@ class AppViewModel @Inject constructor(
 
         val previousJob = scheduled?.job
         val lockAtStart = lockGeneration
-        val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+        val nextJob = viewModelScope.launch(isRunningScan.asContextElement(true), start = CoroutineStart.LAZY) {
             if (!admission.await() || !canPrepareSend(walletGeneration)) return@launch
             clearPaymentRequestPreparation(previousPreparation)
             scanMutex.withLock {
@@ -8969,7 +8976,7 @@ class AppViewModel @Inject constructor(
         }
         if (_currentSheet.value is Sheet.Send) {
             // A read still preparing belongs to this Send visit: it must not reopen a sheet or reach QuickPay.
-            cancelSendVisitScan()
+            if (isRunningScan.get() != true) cancelSendVisitScan()
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++

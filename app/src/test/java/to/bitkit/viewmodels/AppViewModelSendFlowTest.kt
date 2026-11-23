@@ -9923,6 +9923,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `login request from the send scanner opens its sheet`() = test {
+        val lnurl = "lnurl1sendscannerauth"
+        val data = com.synonym.bitkitcore.LnurlAuthData(uri = lnurl, tag = "login", k1 = "k1", domain = "example.com")
+        // Decoding suspends, as it does on device, so the scan is still running once its handle is kept.
+        val decoded = CompletableDeferred<Unit>()
+        whenever { coreService.decode(lnurl) }.doSuspendableAnswer {
+            decoded.await()
+            Scanner.LnurlAuth(data)
+        }
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onScanResult(lnurl, routePubkyKeys = true, fromSendScanner = true)
+        advanceUntilIdle()
+        decoded.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.LnurlAuth(domain = "example.com", lnurl = lnurl, k1 = "k1"), sut.currentSheet.value)
+    }
+
+    @Test
     fun `second bluetooth read does not replace the first one still preparing`() = test {
         val first = stubOnchainAmountScan(amountSats = 10_000u)
         val second = "bitcoin:$REGTEST_ADDRESS?amount=0.0002"
