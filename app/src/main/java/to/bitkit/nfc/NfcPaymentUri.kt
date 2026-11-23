@@ -25,6 +25,7 @@ fun nfcPaymentUri(request: String?): String? {
 
 private const val BITCOIN_WITHOUT_ADDRESS = "bitcoin:?"
 private const val REQUIRED_PARAM_PREFIX = "req-"
+private const val BITCOIN_SCHEME = "bitcoin:"
 
 /**
  * Keys BIP 321 ("Query Keys", "Invalid URIs") forbids repeating; `pop` and `req-pop` count as the same key.
@@ -67,12 +68,17 @@ fun scannedPaymentRequest(text: String): String {
 }
 
 /**
- * Whether [uri] carries a required (`req-`) BIP 321 parameter. No Bitkit flow fulfils one, and the shipped scanner
- * ignores it on a URI with an address, so a request read from a nearby device or a tag with one is refused.
+ * Whether [uri] is a `bitcoin:` URI with a required (`req-`) BIP 321 parameter. No Bitkit flow fulfils one, and the
+ * shipped scanner ignores it on a URI with an address, so a request read from a nearby device or a tag with one is
+ * refused. Other schemes, such as an LNURL-pay URL, keep their own query untouched.
  */
-fun hasRequiredParam(uri: String): Boolean = uri.substringAfter('?', missingDelimiterValue = "")
-    .split('&')
-    .any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }
+fun hasRequiredParam(uri: String): Boolean {
+    val trimmed = uri.trim()
+    if (!trimmed.startsWith(BITCOIN_SCHEME, ignoreCase = true)) return false
+    return trimmed.substringAfter('?', missingDelimiterValue = "")
+        .split('&')
+        .any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }
+}
 
 /** The request to hand to the scanner for [text] read from an NFC tag, or null when it is refused. */
 fun nfcPaymentRequest(text: String): String? = scannedPaymentRequest(text).takeUnless(::hasRequiredParam)
