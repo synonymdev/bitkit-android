@@ -26,6 +26,7 @@ fun nfcPaymentUri(request: String?): String? {
 private const val BITCOIN_WITHOUT_ADDRESS = "bitcoin:?"
 private const val REQUIRED_PARAM_PREFIX = "req-"
 private const val BITCOIN_SCHEME = "bitcoin:"
+private val DECODER_STRIPPED_SCHEMES = listOf("lightning:", "lnurl:", "lnurlw:", "lnurlc:", "lnurlp:")
 
 /**
  * Keys BIP 321 ("Query Keys", "Invalid URIs") forbids repeating; `pop` and `req-pop` count as the same key.
@@ -73,9 +74,12 @@ fun scannedPaymentRequest(text: String): String {
  * refused. Other schemes, such as an LNURL-pay URL, keep their own query untouched.
  */
 fun hasRequiredParam(uri: String): Boolean {
-    val trimmed = uri.trim()
-    if (!trimmed.startsWith(BITCOIN_SCHEME, ignoreCase = true)) return false
-    return trimmed.substringAfter('?', missingDelimiterValue = "")
+    // The scanner strips these schemes before decoding, so `lightning:bitcoin:…` reaches the decoder as `bitcoin:…`.
+    val decoded = DECODER_STRIPPED_SCHEMES.fold(uri.trim()) { value, scheme ->
+        if (value.startsWith(scheme, ignoreCase = true)) value.substring(scheme.length) else value
+    }
+    if (!decoded.startsWith(BITCOIN_SCHEME, ignoreCase = true)) return false
+    return decoded.substringAfter('?', missingDelimiterValue = "")
         .split('&')
         .any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }
 }

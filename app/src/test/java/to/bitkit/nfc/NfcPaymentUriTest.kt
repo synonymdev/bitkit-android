@@ -103,6 +103,10 @@ class NfcPaymentUriTest {
     fun `nfc read with a required parameter is refused`() {
         assertNull(nfcPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&req-pop=callback%3a"))
         assertNull(nfcPaymentRequest("BITCOIN:BCRT1QTEST?REQ-FOO=bar"))
+        // The scanner strips `lightning:` before decoding, so a wrapped Bitcoin request is checked as one.
+        assertNull(nfcPaymentRequest("lightning:bitcoin:bcrt1qtest?amount=0.001&req-pop=callback%3a"))
+        val wrappedInvoice = "LIGHTNING:bitcoin:?lightning=${PosNfcFixtures.SQUARE_INVOICE}&req-pop=callback%3a"
+        assertNull(nfcPaymentRequest(wrappedInvoice))
         val lnurlPay = "https://pay.example.com/lnurlp?req-x=1&lightning=LNURL1DP68GURN8GHJ7"
         assertEquals(lnurlPay, nfcPaymentRequest(lnurlPay))
         assertEquals("bitcoin:bcrt1qtest?amount=0.001", nfcPaymentRequest(" bitcoin:bcrt1qtest?amount=0.001 "))
