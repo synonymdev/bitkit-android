@@ -2,7 +2,12 @@ package to.bitkit.nearby
 
 import to.bitkit.nfc.scannedPaymentRequest
 
-private val LIGHTNING_INVOICE_PREFIXES = listOf("lnbc", "lntb", "lnbcrt", "lnsb")
+/**
+ * A BOLT11 invoice by its bech32 shape: a mainnet, testnet, signet or regtest prefix the decoder reads as BOLT11
+ * (`lnbc`, `lntb`, `lntbs`, `lnbcrt`), then the `1` separator and bech32 data. A Lightning address or LNURL never
+ * matches, since `@`, `.` and `:` are not bech32 characters and `lnurl` is not one of the prefixes.
+ */
+private val BOLT11_INVOICE = Regex("^ln(bc|tb)[a-z0-9]*1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$")
 
 /**
  * Whether [request], read from a nearby device over Bluetooth, is a payment request Bitkit serves:
@@ -20,10 +25,10 @@ fun isNearbyPaymentRequest(request: String): Boolean {
         lowercase.startsWith("bitcoin:?") -> false
         // The app decodes a unified URI's Lightning request, and decoding an LNURL contacts its server.
         // Every Lightning value is checked, since the decoder keeps the last one.
-        lowercase.startsWith("bitcoin:") -> lightningParams(lowercase).all(::isBolt11)
+        lowercase.startsWith("bitcoin:") -> lightningParams(lowercase).all(BOLT11_INVOICE::matches)
 
         lowercase.startsWith("ethereum:") -> true
-        lowercase.startsWith("lightning:") -> isBolt11(lowercase.removePrefix("lightning:"))
+        lowercase.startsWith("lightning:") -> BOLT11_INVOICE.matches(lowercase.removePrefix("lightning:"))
 
         else -> false
     }
@@ -41,5 +46,3 @@ private fun lightningParams(uri: String): List<String> = uri.substringAfter('?',
  */
 fun nearbyPaymentRequest(request: String): String? =
     scannedPaymentRequest(request).takeIf(::isNearbyPaymentRequest)
-
-private fun isBolt11(invoice: String) = LIGHTNING_INVOICE_PREFIXES.any { invoice.startsWith(it) }

@@ -44,6 +44,14 @@ class NearbyRequestFilterTest {
     }
 
     @Test
+    fun `refuses a lightning address that starts like an invoice`() {
+        assertFalse(isNearbyPaymentRequest("lightning:lnsb@example.com"))
+        assertFalse(isNearbyPaymentRequest("lightning:lnbc1@example.com"))
+        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=lnsb@example.com"))
+        assertNull(nearbyPaymentRequest("bitcoin:?lightning=lnsb@example.com"))
+    }
+
+    @Test
     fun `checks every lightning value of a unified uri`() {
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=lnbcrt1p&lightning=LNURL1DP68GURN8GHJ7"))
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=LNURL1DP68GURN8GHJ7&LIGHTNING=lnbcrt1p"))
