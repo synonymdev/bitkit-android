@@ -90,6 +90,10 @@ class NfcPaymentUriTest {
             "bitcoin:?amount=0.0001&lightning=$invoice",
             "bitcoin:?amount=0.0001&lightning=lnbcrt1pamountless",
             "bitcoin:?amount=abc&lightning=$invoice",
+            "bitcoin:?amount=0.0000799,50&lightning=$invoice",
+            "bitcoin:?amount=0.0000799BTC&lightning=$invoice",
+            "bitcoin:?amount=7.99E-5&lightning=$invoice",
+            "bitcoin:?amount=+0.0000799&lightning=$invoice",
         )) {
             assertEquals(kept, scannedPaymentRequest(kept))
         }

@@ -66,6 +66,8 @@ fun scannedPaymentRequest(text: String): String {
     return "lightning:$request"
 }
 
+/** BIP 321 amount syntax: decimal BTC, with no sign, exponent or unit. */
+private val BIP321_AMOUNT = Regex("^(\\d+(\\.\\d*)?|\\.\\d+)$")
 private val BOLT11_HRP = Regex("^ln[a-z]+?(\\d+)([munp]?)$")
 private val BTC_PER_UNIT = mapOf(
     "" to BigDecimal.ONE,
@@ -81,6 +83,7 @@ private fun isBolt11Amount(invoice: String, amountBtc: String): Boolean {
     val match = BOLT11_HRP.matchEntire(hrp) ?: return false
     val (digits, unit) = match.destructured
     val invoiceBtc = BigDecimal(digits).multiply(BTC_PER_UNIT.getValue(unit))
-    val requested = amountBtc.toBigDecimalOrNull() ?: return false
+    if (!BIP321_AMOUNT.matches(amountBtc)) return false
+    val requested = amountBtc.toBigDecimal()
     return invoiceBtc.compareTo(requested) == 0
 }
