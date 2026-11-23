@@ -1323,6 +1323,7 @@
     <string name="contacts__scanner_paste">Vložit QR nebo odkaz</string>
     <string name="contacts__scanner_status">SKENOVÁNÍ QR A NFC</string>
     <string name="fee__instant__description">+/- 1-5 sekund</string>
+    <string name="hardware__bluetooth_enable_error">Bluetooth se nepodařilo zapnout. Zapněte ho v nastavení zařízení a zkuste to znovu.</string>
     <string name="hardware__bluetooth_permission_settings">Otevřít Nastavení</string>
     <string name="hardware__bluetooth_permission_text">Bitkit potřebuje oprávnění Zařízení v okolí (Bluetooth), aby našel vaši hardwarovou peněženku. Povolte ho v Nastavení a zkuste to znovu.</string>
     <string name="hardware__bluetooth_permission_title">Je potřeba přístup k Bluetooth</string>

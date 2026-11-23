@@ -1299,6 +1299,7 @@
     <string name="contacts__scanner_paste">Επικόλληση QR ή συνδέσμου</string>
     <string name="contacts__scanner_status">ΣΑΡΩΣΗ QR ΚΑΙ NFC</string>
     <string name="fee__instant__description">±1-5 δευτερόλεπτα</string>
+    <string name="hardware__bluetooth_enable_error">Δεν ήταν δυνατή η ενεργοποίηση του Bluetooth. Ενεργοποιήστε το από τις ρυθμίσεις της συσκευής σας και δοκιμάστε ξανά.</string>
     <string name="hardware__bluetooth_permission_settings">Άνοιγμα ρυθμίσεων</string>
     <string name="hardware__bluetooth_permission_text">Το Bitkit χρειάζεται την άδεια συσκευών κοντά (Bluetooth) για να βρει το πορτοφόλι υλικού σου. Ενεργοποίησέ την στις Ρυθμίσεις και δοκίμασε ξανά.</string>
     <string name="hardware__bluetooth_permission_title">Απαιτείται πρόσβαση Bluetooth</string>

@@ -1316,6 +1316,7 @@
     <string name="contacts__scanner_paste">QR of link plakken</string>
     <string name="contacts__scanner_status">QR &amp; NFC SCANNEN</string>
     <string name="fee__instant__description">±1-5 seconden</string>
+    <string name="hardware__bluetooth_enable_error">Kon Bluetooth niet inschakelen. Schakel het in via de instellingen van uw apparaat en probeer het opnieuw.</string>
     <string name="hardware__bluetooth_permission_settings">Instellingen openen</string>
     <string name="hardware__bluetooth_permission_text">Bitkit heeft de toestemming voor apparaten in de buurt (Bluetooth) nodig om uw hardwarewallet te vinden. Schakel deze in via Instellingen en probeer het opnieuw.</string>
     <string name="hardware__bluetooth_permission_title">Bluetooth-toegang nodig</string>

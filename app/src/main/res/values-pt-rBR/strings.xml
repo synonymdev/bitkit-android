@@ -1324,6 +1324,7 @@
     <string name="contacts__scanner_paste">Colar QR ou Link</string>
     <string name="contacts__scanner_status">ESCANEANDO QR E NFC</string>
     <string name="fee__instant__description">±1-5 segundos</string>
+    <string name="hardware__bluetooth_enable_error">Não foi possível ativar o Bluetooth. Ative-o nas configurações do dispositivo e tente novamente.</string>
     <string name="hardware__bluetooth_permission_settings">Abrir Configurações</string>
     <string name="hardware__bluetooth_permission_text">A Bitkit precisa da permissão de dispositivos próximos (Bluetooth) para encontrar sua carteira de hardware. Ative-a nas Configurações e tente novamente.</string>
     <string name="hardware__bluetooth_permission_title">Acesso ao Bluetooth necessário</string>
