@@ -259,6 +259,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
+import to.bitkit.ui.screens.paymentrequests.paymentRequestLifecycleStatusRes
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
@@ -8281,6 +8282,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(toastManager, never()).enqueue(argThat { testTag == "AllowanceLimitToast" })
+    }
+
+    @Test
+    fun `a request kept off pending never lists as unavailable in history`() = test {
+        val request = paymentRequest()
+        whenever(paykitAllowanceRepo.hasSentPayment(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        paykitPaymentRequestHistory.value = listOf(request)
+        runCurrent()
+
+        val pending = sut.pendingPaymentRequests.value
+        // As PaymentRequestsScreen.kt builds its rows.
+        val row = (pending + sut.paymentRequestHistory.value).distinctBy { it.id }.firstOrNull { it.id == request.id }
+        sut.viewModelScope.cancel()
+        assertTrue(pending.none { it.id == request.id })
+        val status = row?.let { paymentRequestLifecycleStatusRes(it, isPending = false) }
+        assertTrue(
+            status != R.string.wallet__payment_request_status_unavailable,
+            "A paid request hidden from pending lists in History as $row",
+        )
     }
 
     @Test

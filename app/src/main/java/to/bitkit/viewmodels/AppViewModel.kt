@@ -483,7 +483,17 @@ class AppViewModel @Inject constructor(
         requests.filterNot { it.id in handling || paykitAllowanceRepo.hasSentPayment(it) }
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
+
+    /** Request history, without the pending requests [pendingPaymentRequests] hides, so none lists as unavailable. */
+    val paymentRequestHistory: StateFlow<List<PaykitPaymentRequest>> = combine(
+        paykitPaymentRequestRepo.paymentRequestHistory,
+        paykitPaymentRequestRepo.pendingRequests,
+        pendingPaymentRequests,
+    ) { history, pending, shown ->
+        val hiddenIds = pending.mapTo(mutableSetOf()) { it.id } - shown.mapTo(mutableSetOf()) { it.id }
+        history.filterNot { it.id in hiddenIds }
+    }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
     private val _rejectingPaymentRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())

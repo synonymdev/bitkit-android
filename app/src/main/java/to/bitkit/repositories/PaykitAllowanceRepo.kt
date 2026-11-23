@@ -134,9 +134,17 @@ class PaykitAllowanceRepo @Inject constructor(
     /** Requests of the automatic payment pass running now, including those still waiting their turn. */
     private val passRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
 
-    /** Requests an automatic payment is handling now, until it is handed to the node, and the rest of its pass. */
+    /** Covered requests the last pass deferred, kept hidden between passes so they don't blink on every poll. */
+    private val deferredRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
+
+    /**
+     * Requests an automatic payment is handling now, until it is handed to the node, the rest of its pass and those
+     * it deferred.
+     */
     val handlingRequestIds: Flow<Set<PaykitPaymentRequestId>>
-        get() = combine(executor.inFlightRequestIds, passRequestIds) { inFlight, pass -> inFlight + pass }
+        get() = combine(executor.inFlightRequestIds, passRequestIds, deferredRequestIds) { inFlight, pass, deferred ->
+            inFlight + pass + deferred
+        }
 
     /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
     val isUpdating: Boolean get() = updates.value > 0
@@ -288,6 +296,7 @@ class PaykitAllowanceRepo @Inject constructor(
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()
         _automaticPaymentPause.update { null }
+        deferredRequestIds.update { emptySet() }
         publish(emptyList(), PaykitAllowanceLocalState(), keepsPaidRecords = true)
     }
 
@@ -652,6 +661,8 @@ class PaykitAllowanceRepo @Inject constructor(
             it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature &&
                 !paidRecords.hasFailedAutomaticPayment(it.id)
         }
+        val coveredIds = covered.mapTo(mutableSetOf()) { it.id }
+        deferredRequestIds.update { it intersect coveredIds }
         if (covered.isEmpty()) return@withContext false
         val payable = payableNow(covered)
         if (payable.isEmpty()) return@withContext markAboveLimitManual(covered, identity, signature)
@@ -729,6 +740,9 @@ class PaykitAllowanceRepo @Inject constructor(
                         pendingFilterChanged()
                     }
                     PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
+                }
+                deferredRequestIds.update {
+                    if (result == PaykitAllowanceAutoPayResult.DEFERRED) it + request.id else it - request.id
                 }
                 // A started request is released only once the journal it left is loaded, which then keeps it hidden.
                 if (result == PaykitAllowanceAutoPayResult.STARTED) reloadLocalState()

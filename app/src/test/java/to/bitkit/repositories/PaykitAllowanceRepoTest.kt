@@ -1095,6 +1095,27 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertFalse(true in shownOnRelease.drop(1), "The request never shows between its release and its record")
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a request the allowance waits on stays shown or hidden across polls`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.DEFERRED)
+        val request = fixtures.paymentRequest()
+        sut.activate(identity)
+        sut.processIncomingRequests(listOf(request))
+        // Mirrors the bell filter in AppViewModel.pendingPaymentRequests.
+        val hidden = mutableListOf<Boolean>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            sut.handlingRequestIds.collect { hidden += it.contains(request.id) || sut.hasSentPayment(request) }
+        }
+
+        sut.processIncomingRequests(listOf(request))
+
+        assertEquals(1, hidden.distinct().size, "Hidden state of a deferred request across the next poll: $hidden")
+    }
+
     @Test
     fun `a request whose automatic payment failed is the user's to pay`() = test {
         nodeReady()
