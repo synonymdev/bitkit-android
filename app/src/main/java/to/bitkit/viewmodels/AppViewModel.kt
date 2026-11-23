@@ -654,6 +654,12 @@ class AppViewModel @Inject constructor(
 
     /** A request found over Bluetooth without a user gesture; any request the user chose takes priority over it. */
     private var passiveNearbyScanJob: Job? = null
+
+    /** Bumped each time the wallet locks, so a scan that was already preparing can tell it crossed a lock. */
+    private var lockGeneration = 0L
+
+    /** [lockGeneration] when the scan now holding [scanMutex] started, or null outside a scan. */
+    private var scanLockGeneration: Long? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
@@ -666,6 +672,7 @@ class AppViewModel @Inject constructor(
     fun setIsAuthenticated(value: Boolean) {
         _isAuthenticated.value = value
         if (!value) {
+            lockGeneration++
             clearPaymentRequestPreparation()
             return
         }
@@ -3797,6 +3804,7 @@ class AppViewModel @Inject constructor(
         }
 
         val previousJob = scheduled?.job
+        val lockAtStart = lockGeneration
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             if (!admission.await() || !canPrepareSend(walletGeneration)) return@launch
             clearPaymentRequestPreparation(previousPreparation)
@@ -3808,6 +3816,7 @@ class AppViewModel @Inject constructor(
                     if (deferLockedScan(deferrable)) return@withLock
                     prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
                     if (startDelay > Duration.ZERO) delay(startDelay)
+                    scanLockGeneration = lockAtStart
                     handleScan(
                         data,
                         routePubkyKeys,
@@ -3817,6 +3826,7 @@ class AppViewModel @Inject constructor(
                         walletGeneration
                     )
                 } finally {
+                    scanLockGeneration = null
                     hidePubkyAuthWaitToast()
                 }
             }
@@ -6653,7 +6663,9 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long?,
     ): Boolean {
         requireCurrentPaymentPreparation(walletGeneration)
-        if (suppressQuickPay) {
+        // A scan that was preparing when the wallet locked was not confirmed by whoever unlocked it.
+        val crossedLock = !_isAuthenticated.value || scanLockGeneration.let { it != null && it != lockGeneration }
+        if (suppressQuickPay || crossedLock) {
             Logger.info(
                 "Skipping QuickPay for '$amountSats' sats: suppressed for this scan " +
                     "(deferred across the lock, or read from a nearby device)",

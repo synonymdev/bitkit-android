@@ -10885,6 +10885,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scan still decoding when the wallet locks does not use QuickPay after unlocking`() = test {
+        val bolt11 = "lnbcrt1lockedmidscan"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { coreService.decode(bolt11) }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.Lightning(lightningInvoice(bolt11, 500u))
+        }
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+        assertTrue(entered.isCompleted)
+        sut.setIsAuthenticated(false)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
     fun `payment deeplink is queued until authenticated when PIN is enabled`() = test {
         val bolt11 = "lnbcrt1lockeddeeplink"
         settingsData.value = SettingsData(isPinEnabled = true)
