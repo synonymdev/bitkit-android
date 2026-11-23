@@ -53,16 +53,20 @@ import to.bitkit.ui.shared.effects.rememberBluetoothState
 import to.bitkit.ui.shared.effects.rememberNfcState
 import to.bitkit.ui.theme.Colors
 
-/** NFC and Bluetooth availability on a payment scanner, with the actions that turn each one on. */
+/**
+ * NFC and Bluetooth availability on a payment scanner, with the actions that turn each one on.
+ * While [isPaused], neither source reads, so neither counts as active.
+ */
 @Stable
 data class NearbyScanSources(
     val nfcState: NfcState,
     val bluetoothState: BluetoothState,
     val onEnableNfc: () -> Unit,
     val onEnableBluetooth: () -> Unit,
+    val isPaused: Boolean = false,
 ) {
-    val isNfcActive get() = nfcState == NfcState.ON
-    val isBluetoothActive get() = bluetoothState == BluetoothState.ON
+    val isNfcActive get() = nfcState == NfcState.ON && !isPaused
+    val isBluetoothActive get() = bluetoothState == BluetoothState.ON && !isPaused
     val canEnableNfc get() = nfcState == NfcState.OFF
     val canEnableBluetooth
         get() = bluetoothState in ENABLEABLE_BLUETOOTH_STATES
@@ -118,6 +122,7 @@ fun rememberNearbyScanSources(
     return NearbyScanSources(
         nfcState = nfcState,
         bluetoothState = bluetoothState,
+        isPaused = isPaused,
         onEnableNfc = { context.openNfcSettings() },
         onEnableBluetooth = {
             when (bluetoothState) {
