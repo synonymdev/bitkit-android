@@ -646,7 +646,7 @@ class LightningServiceTest : BaseUnitTest() {
         assertNull(sut.node)
     }
 
-    // Regression #1536: releasing the node shuts down its runtime under the detached tasks, which abort the app
+    // #1536: in the background, a node with detached work is not released, so its work cannot overlap a rebuilt node
     @Test
     fun `stop exits the process instead of releasing a node with detached work in background`() = test {
         isAppInBackground = true
