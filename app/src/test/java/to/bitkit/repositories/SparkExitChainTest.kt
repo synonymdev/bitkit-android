@@ -14,6 +14,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.utils.io.errors.IOException
 import org.junit.Test
+import to.bitkit.env.Env
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -429,10 +430,15 @@ class SparkExitChainTest : BaseUnitTest() {
     }
 
     @Test
-    fun `regtest reads and broadcasts on the sdk host`() {
-        val regtest = "https://regtest-mempool.us-west-2.sparkinfra.net/api"
-
-        assertEquals(SparkExitHosts.of(regtest), EsploraSparkExitChain.defaultHosts("regtest"))
+    fun `regtest reads and broadcasts on the selected spark chain`() {
+        val fixture = "http://127.0.0.1:23090/api"
+        assertEquals(SparkExitHosts.of(fixture), EsploraSparkExitChain.defaultHosts("regtest", fixture))
+        val hosted = "https://regtest-mempool.us-west-2.sparkinfra.net/api"
+        assertEquals(
+            SparkExitHosts.of(hosted),
+            EsploraSparkExitChain.defaultHosts("regtest", Env.sparkRegtestEsploraUrl(null)),
+        )
+        assertEquals(null, EsploraSparkExitChain.defaultHosts("regtest", regtestUrl = null))
         assertEquals(null, EsploraSparkExitChain.defaultHosts("signet"))
     }
 }

@@ -64,7 +64,7 @@ fun SavingsProgressScreen(
     fun toastSparkFailure(movesChannels: Boolean) {
         app.toast(
             type = Toast.ToastType.ERROR,
-            title = resources.getString(R.string.common__error),
+            title = resources.getString(R.string.lightning__savings_spark_failed_toast),
             description = resources.getString(
                 if (movesChannels) {
                     R.string.lightning__savings_spark_failed_channels
@@ -276,7 +276,12 @@ internal fun SavingsProgressContent(
 
             if (!inProgress) {
                 PrimaryButton(
-                    text = stringResource(R.string.common__ok),
+                    text = stringResource(
+                        when (progressState) {
+                            SavingsProgressState.SUCCESS -> R.string.common__continue
+                            else -> R.string.common__ok
+                        }
+                    ),
                     onClick = onContinueClick,
                     modifier = Modifier.testTag(
                         if (isSparkFailed) "SavingsSparkFailed-button" else "TransferSuccess-button"

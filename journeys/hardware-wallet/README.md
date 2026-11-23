@@ -135,11 +135,11 @@ The activity journeys use a mixed fixture with two confirmed hardware receives c
 distinct amounts and one hardware Transfer To Spending transaction. This proves
 ordering, tab filtering, tags, inputs/outputs, transfer metadata, and row uniqueness together.
 
-For transfer-to-spending QA, explicitly cover the LSP cap boundary: the hardware wallet
-balance can be much larger than the displayed AVAILABLE amount because MAX is capped by
-Blocktank channel headroom. After signing, decode the funding transaction and compare the
-activity DB row: the on-chain activity fee should be the composed mining fee, while the
-funding output should equal the final Blocktank `order.feeSat`.
+For transfer-to-spending QA: a hardware wallet transfer is a deposit to the wallet's Spark
+deposit address (`SparkFundingViewModel.onHwBroadcast`), not a Blocktank order. After signing,
+decode the funding transaction and compare the activity DB row: the on-chain activity fee
+should be the composed mining fee, and the output to the Spark deposit address should equal
+the amount entered.
 
 ## Blockstream Jade
 

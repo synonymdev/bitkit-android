@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
-import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -58,10 +57,10 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.PaymentAuthentication
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.UsdtAmountHeader
@@ -73,7 +72,6 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.activityGroupTitleResource
 import to.bitkit.ui.screens.wallets.receive.ReceiveTab
-import to.bitkit.ui.screens.wallets.send.SendPinCheckScreen
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -81,7 +79,6 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -248,13 +245,12 @@ fun UsdtWalletScreen(
                     .padding(bottom = 16.dp)
             ) {
                 when {
-                    state.authenticationRequired -> Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        UsdtAuthentication(
-                            useBiometrics = settings.isBiometricEnabled,
-                            onCancel = viewModel::cancelAuthentication,
-                            onVerified = viewModel::authenticationVerified,
-                        )
-                    }
+                    state.authenticationRequired -> PaymentAuthentication(
+                        useBiometrics = settings.isBiometricEnabled,
+                        onCancel = viewModel::cancelAuthentication,
+                        onVerify = viewModel::authenticationVerified,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
 
                     else -> UsdtPaymentContent(
                         wallet = wallet, state = state, page = page, recipient = recipient, amount = amount,
@@ -507,22 +503,6 @@ internal fun UsdtRefreshEffect(
                 delay(if (isReceiving || isPending) 10.seconds else 30.seconds)
             }
         }
-    }
-}
-
-@Composable
-internal fun UsdtAuthentication(
-    useBiometrics: Boolean,
-    onCancel: () -> Unit,
-    onVerified: () -> Unit,
-    @StringRes pinDescriptionRes: Int = R.string.security__pin_send,
-) {
-    val supported = rememberBiometricAuthSupported()
-    var fallbackToPin by remember { mutableStateOf(false) }
-    if (useBiometrics && supported && !fallbackToPin) {
-        BiometricsView(onSuccess = onVerified, onFailure = { fallbackToPin = true })
-    } else {
-        SendPinCheckScreen(onBack = onCancel, onSuccess = onVerified, descriptionRes = pinDescriptionRes)
     }
 }
 

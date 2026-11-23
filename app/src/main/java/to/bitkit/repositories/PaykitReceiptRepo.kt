@@ -27,6 +27,7 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Instant
@@ -81,6 +82,12 @@ class PaykitReceiptRepo @Inject constructor(
     /** Set while a pass waits for the lock; calls meanwhile join it, since it reads the latest state when it runs. */
     private val isPassQueued = AtomicBoolean(false)
 
+    /** Bumped by [resetForWipe]; a pass that started before the wipe writes nothing after it. */
+    private val wipeGeneration = AtomicLong(0)
+
+    /** Orders a pass's sent-id write against the wipe's reset; it never waits on the SDK lock, unlike [mutex]. */
+    private val deliveryStoreMutex = Mutex()
+
     suspend fun reconcile(): Result<Unit> = withContext(ioDispatcher) {
         if (!isPassQueued.compareAndSet(false, true)) return@withContext Result.success(Unit)
         var started = false
@@ -102,12 +109,15 @@ class PaykitReceiptRepo @Inject constructor(
     suspend fun retry(statusKey: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             mutex.withLock {
+                val generation = wipeGeneration.get()
                 val key = statusKey.lowercase()
                 val receipts = checkNotNull(candidates[key]) { "No receipt for this payment" }
                 val expectedIdentity = checkNotNull(identity) { "No Paykit identity" }
                 _statuses.update { it + (key to PaykitReceiptStatus.Sending) }
                 receipts.forEach { issue(it, expectedIdentity) }
-                check(publish(candidates.values.flatten(), expectedIdentity)) { "Could not read issued receipts" }
+                check(publish(candidates.values.flatten(), expectedIdentity, generation)) {
+                    "Could not read issued receipts"
+                }
             }
         }.onFailure {
             Logger.warn("Failed to retry a Paykit receipt", it, context = TAG)
@@ -124,8 +134,9 @@ class PaykitReceiptRepo @Inject constructor(
      * Once the wipe closes the SDK, a pending reconcile finds no identity and resets again.
      */
     suspend fun resetForWipe() {
+        wipeGeneration.incrementAndGet()
         reset()
-        outboundDeliveryStore.reset()
+        deliveryStoreMutex.withLock { outboundDeliveryStore.reset() }
     }
 
     private fun reset() {
@@ -137,6 +148,7 @@ class PaykitReceiptRepo @Inject constructor(
     }
 
     private suspend fun reconcileLocked() {
+        val generation = wipeGeneration.get()
         val status = paykitSdkService.identityStatus(Priority.Background)
         val currentIdentity = status?.publicKey
             ?.takeIf { status.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE }
@@ -169,13 +181,13 @@ class PaykitReceiptRepo @Inject constructor(
 
         val issued = issuedViews()
         found
-            .filter { issued[it.receiptId]?.status != ReceiptIssuanceStatus.ACCESS_QUEUED }
+            .filter { issued[it.receiptId]?.status.needsIssuing() }
             .filter { it.receiptId !in attemptedReceiptIds }
             .forEach {
                 issue(it, currentIdentity)
                 attemptedReceiptIds += it.receiptId
             }
-        publish(found, currentIdentity)
+        publish(found, currentIdentity, generation)
     }
 
     private suspend fun issue(candidate: PaykitReceiptCandidate, expectedIdentity: String) {
@@ -189,64 +201,65 @@ class PaykitReceiptRepo @Inject constructor(
     }
 
     /** Returns false when it could not read the issued receipts and left the statuses as they were. */
-    private suspend fun publish(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String): Boolean {
+    private suspend fun publish(
+        found: Collection<PaykitReceiptCandidate>,
+        expectedIdentity: String,
+        generation: Long,
+    ): Boolean {
         var views = readIssuedViews() ?: return false
-        val undelivered = found.filter { deliveryOf(it, views, expectedIdentity) != true }
+        val queued = found.filter {
+            views[it.receiptId]?.status == ReceiptIssuanceStatus.ACCESS_QUEUED &&
+                !isSent(it, views, expectedIdentity, generation)
+        }
         var unreachable = emptyList<String>()
-        if (undelivered.isNotEmpty()) {
-            unreachable = drain(undelivered, views, expectedIdentity)
+        if (queued.isNotEmpty()) {
+            unreachable = drain(queued, expectedIdentity)
             views = readIssuedViews() ?: return false
         }
         val updated = mutableMapOf<String, PaykitReceiptStatus>()
         found.forEach { candidate ->
-            val sent = deliveryOf(candidate, views, expectedIdentity)
             val reachable = unreachable.none { PubkyPublicKeyFormat.matches(it, candidate.counterparty) }
+            val view = views[candidate.receiptId]
             val status = when {
-                sent == true -> PaykitReceiptStatus.Sent
-                views[candidate.receiptId]?.status != ReceiptIssuanceStatus.ACCESS_QUEUED -> PaykitReceiptStatus.Failed
-                sent == false -> PaykitReceiptStatus.Failed
-                !reachable -> PaykitReceiptStatus.Failed
+                isSent(candidate, views, expectedIdentity, generation) -> PaykitReceiptStatus.Sent
+                view?.status != ReceiptIssuanceStatus.ACCESS_QUEUED -> PaykitReceiptStatus.Failed
+                view.lastError != null || !reachable -> PaykitReceiptStatus.Failed
                 else -> PaykitReceiptStatus.Sending
             }
             val key = candidate.receive.statusKey.lowercase()
             updated[key] = PaykitReceiptStatus.combined(updated[key], status)
         }
-        _statuses.update { updated.toMap() }
+        _statuses.update { if (generation == wipeGeneration.get()) updated.toMap() else it }
         return true
     }
 
-    private suspend fun deliveryOf(
+    private suspend fun isSent(
         candidate: PaykitReceiptCandidate,
         views: Map<String, ReceiptIssuanceView>,
         identity: String,
-    ): Boolean? = outboundDeliveryStore.deliveryOf(
-        identity = identity,
-        receiptId = candidate.receiptId,
-        messageId = views[candidate.receiptId]?.outboundMessageId,
-    )
+        generation: Long,
+    ): Boolean {
+        if (views[candidate.receiptId]?.status == ReceiptIssuanceStatus.ACCESS_SENT) {
+            deliveryStoreMutex.withLock {
+                if (generation == wipeGeneration.get()) outboundDeliveryStore.markSent(identity, candidate.receiptId)
+            }
+            return true
+        }
+        return outboundDeliveryStore.isSent(identity, candidate.receiptId)
+    }
 
-    /**
-     * Drains each counterparty's queue and marks its receipts sent right after, before a later drain can prune the
-     * evidence. Returns the counterparties that could not be reached.
-     */
-    private suspend fun drain(
-        found: Collection<PaykitReceiptCandidate>,
-        views: Map<String, ReceiptIssuanceView>,
-        expectedIdentity: String,
-    ): List<String> {
+    /** Drains each counterparty's queue. Returns the counterparties that could not be reached. */
+    private suspend fun drain(found: Collection<PaykitReceiptCandidate>, expectedIdentity: String): List<String> {
         val counterparties = found.map { it.counterparty }
             .fold(emptyList<String>()) { acc, key ->
                 if (acc.any { PubkyPublicKeyFormat.matches(it, key) }) acc else acc + key
             }
         return counterparties.filter { counterparty ->
-            val failed = runSuspendCatching {
+            runSuspendCatching {
                 paykitSdkService.processOutboundPrivateMessages(counterparty, Priority.Background, expectedIdentity)
             }.onFailure {
                 Logger.warn("Failed to send Paykit receipt access", it, context = TAG)
             }.isFailure
-            found.filter { PubkyPublicKeyFormat.matches(it.counterparty, counterparty) }
-                .forEach { deliveryOf(it, views, expectedIdentity) }
-            failed
         }
     }
 
@@ -325,4 +338,14 @@ class PaykitReceiptRepo @Inject constructor(
         usdtPayments.get().receipts.value
             .filter { it.verified && !it.beforeRequest && PubkyPublicKeyFormat.matches(it.identity, currentIdentity) }
             .map { PaykitVerifiedUsdtReceive(it.requestId, it.proofEventId, it.transferId, it.amount) }
+}
+
+/** Not yet stored or queued, or that attempt failed: issuing again resumes the same issuance. */
+private fun ReceiptIssuanceStatus?.needsIssuing(): Boolean = when (this) {
+    null, ReceiptIssuanceStatus.PENDING_STORAGE, ReceiptIssuanceStatus.STORED, ReceiptIssuanceStatus.FAILED -> true
+    ReceiptIssuanceStatus.ACCESS_QUEUED,
+    ReceiptIssuanceStatus.ACCESS_SENT,
+    ReceiptIssuanceStatus.ACCESS_FAILED,
+    ReceiptIssuanceStatus.UNKNOWN,
+    -> false
 }

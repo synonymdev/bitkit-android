@@ -17,3 +17,11 @@ fun PendingSweepBalance.latestSpendingTxid(): String? {
         is PendingSweepBalance.AwaitingThresholdConfirmations -> this.latestSpendingTxid
     }
 }
+
+fun PendingSweepBalance.amountSats(): ULong {
+    return when (this) {
+        is PendingSweepBalance.PendingBroadcast -> this.amountSatoshis
+        is PendingSweepBalance.BroadcastAwaitingConfirmation -> this.amountSatoshis
+        is PendingSweepBalance.AwaitingThresholdConfirmations -> this.amountSatoshis
+    }
+}

@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -196,6 +198,9 @@ class LightningRepo @Inject constructor(
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
     private val ordinaryFollowupRetryJob = AtomicReference<Job?>(null)
+
+    // The prepared send held while its higher mining fee is reviewed, released before its node stops.
+    private val reviewedPreparedSend = AtomicReference<PreparedOnchainSend?>(null)
     private val pendingStopJob = AtomicReference<Job?>(null)
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
@@ -332,6 +337,8 @@ class LightningRepo @Inject constructor(
         if (it is CancellationException) throw it
         if (it is PaymentAbortedBeforeSend) {
             Logger.debug("Aborted '$operationName' before dispatch", context = TAG)
+        } else if (it.cause is OnchainSendReviewEndedError) {
+            Logger.info("Ended '$operationName' unsent at its fee review", context = TAG)
         } else {
             Logger.error("Error executing '$operationName'", it, context = TAG)
         }
@@ -765,6 +772,9 @@ class LightningRepo @Inject constructor(
 
         return runCatching {
             withContext(NonCancellable) {
+                // Its native handle cancels the unsent transaction through the wallet of the node about to stop,
+                // so it is dropped before the state change that ends its review.
+                reviewedPreparedSend.getAndSet(null)?.release()
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
                 lightningService.stop()
                 clearProbeOutcomes()
@@ -1123,7 +1133,14 @@ class LightningRepo @Inject constructor(
         if (!isChangingAddressType.compareAndSet(false, true)) {
             return@withContext Result.failure(AppError("Address type change already in progress"))
         }
+        try {
+            changeAddressType(selectedType, monitoredTypes)
+        } finally {
+            isChangingAddressType.set(false)
+        }
+    }
 
+    private suspend fun changeAddressType(selectedType: String, monitoredTypes: List<String>): Result<Unit> {
         val previousSettings = settingsStore.data.first()
         val oldSelected = previousSettings.selectedAddressType
         val oldMonitored = previousSettings.addressTypesToMonitor
@@ -1133,7 +1150,7 @@ class LightningRepo @Inject constructor(
         suspend fun rollback() =
             settingsStore.update { it.copy(selectedAddressType = oldSelected, addressTypesToMonitor = oldMonitored) }
 
-        runCatching {
+        return runCatching {
             settingsStore.update {
                 it.copy(selectedAddressType = selectedType, addressTypesToMonitor = requiredMonitoredTypes)
             }
@@ -1144,8 +1161,6 @@ class LightningRepo @Inject constructor(
         }.onFailure {
             rollback()
             Logger.error("updateAddressType failed", it, context = TAG)
-        }.also {
-            isChangingAddressType.set(false)
         }
     }
 
@@ -1153,16 +1168,20 @@ class LightningRepo @Inject constructor(
         if (!isChangingAddressType.compareAndSet(false, true)) {
             return@withContext Result.failure(AppError("Address type change already in progress"))
         }
+        try {
+            changeMonitoring(addressType, enabled)
+        } finally {
+            isChangingAddressType.set(false)
+        }
+    }
 
+    private suspend fun changeMonitoring(addressType: AddressType, enabled: Boolean): Result<Unit> {
         val previousSettings = settingsStore.data.first()
         val oldMonitored = previousSettings.addressTypesToMonitor.toList()
 
         if (!enabled) {
             val validationError = validateDisableMonitoring(addressType, previousSettings, oldMonitored)
-            if (validationError != null) {
-                isChangingAddressType.set(false)
-                return@withContext Result.failure(validationError)
-            }
+            if (validationError != null) return Result.failure(validationError)
         }
 
         val typeStr = addressType.toSettingsString()
@@ -1170,7 +1189,7 @@ class LightningRepo @Inject constructor(
 
         suspend fun rollback() = settingsStore.update { it.copy(addressTypesToMonitor = oldMonitored) }
 
-        runCatching {
+        return runCatching {
             settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
             if (enabled) {
                 lightningService.addAddressTypeToMonitor(addressType)
@@ -1182,8 +1201,6 @@ class LightningRepo @Inject constructor(
         }.onFailure {
             rollback()
             Logger.error("setMonitoring failed", it, context = TAG)
-        }.also {
-            isChangingAddressType.set(false)
         }
     }
 
@@ -1925,6 +1942,7 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant? = null,
         contactPublicKey: String? = null,
         approvedMiningFeeSats: ULong? = null,
+        reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
@@ -2002,12 +2020,7 @@ class LightningRepo @Inject constructor(
                     .also { prepared ->
                         checkPreparedSpend(prepared.receipt, sats, isDrain, isTransfer, utxosForSend)
                         if (approvedMiningFeeSats != null) {
-                            val miningFee = prepared.receipt.miningFeeSats
-                            if (prepared.receipt.amountSats != sats || miningFee == null ||
-                                miningFee > approvedMiningFeeSats
-                            ) {
-                                throw OnchainSendChangedError(miningFee)
-                            }
+                            checkApprovedSpend(prepared, sats, satsPerVByte, approvedMiningFeeSats, reviewHigherFee)
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(
                             attempt.attemptId,
@@ -2123,6 +2136,43 @@ class LightningRepo @Inject constructor(
         val fee = lightningService.estimateSendAllFee(address, satsPerVByte)
         spendableSats.safe() - fee.safe()
     }.getOrNull()
+
+    private suspend fun checkApprovedSpend(
+        prepared: PreparedOnchainSend,
+        sats: ULong,
+        satsPerVByte: ULong,
+        approvedMiningFeeSats: ULong,
+        reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)?,
+    ) {
+        val receipt = prepared.receipt.copy(feeRateSatsPerVByte = satsPerVByte)
+        val miningFee = receipt.miningFeeSats
+        if (receipt.amountSats != sats || miningFee == null) throw OnchainSendChangedError(miningFee)
+        if (miningFee <= approvedMiningFeeSats) return
+        reviewHigherFee ?: throw OnchainSendChangedError(miningFee)
+        reviewedPreparedSend.set(prepared)
+        var isKept = false
+        try {
+            // Returns once this exact prepared send is approved again, throws to send nothing. A node that stops
+            // meanwhile can no longer submit it, so the review ends there.
+            val isApproved = coroutineScope {
+                val review = async { reviewHigherFee(receipt) }
+                val stop = async { _lightningState.first { !it.nodeLifecycleState.isRunning() } }
+                select {
+                    review.onAwait { true }
+                    stop.onAwait { false }
+                }.also {
+                    review.cancel()
+                    stop.cancel()
+                }
+            }
+            // Nothing of a send its node cannot submit is persisted.
+            if (!isApproved || !prepared.isUsable) throw OnchainSendReviewInterruptedError()
+            isKept = true
+        } finally {
+            // An unapproved send frees its inputs and change now, not when its handle is collected.
+            if (reviewedPreparedSend.compareAndSet(prepared, null) && !isKept) prepared.release()
+        }
+    }
 
     private fun checkPreparedSpend(
         receipt: OnchainPreparedReceipt,

@@ -1035,7 +1035,11 @@ class LightningService internal constructor(
             prepared.recipientAmountSats(),
             miningFeeSats = prepared.miningFeeSats(),
         )
-        PreparedOnchainSend(receipt) { beforeDispatch ->
+        PreparedOnchainSend(
+            receipt,
+            isCurrent = { currentWalletIndex == walletIndex && node === originalNode },
+            discard = prepared::destroy,
+        ) { beforeDispatch ->
             callOnchainSend {
                 // Dispatch only through the handle that signed the original receipt.
                 if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()

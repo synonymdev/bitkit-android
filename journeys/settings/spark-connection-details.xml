@@ -1,0 +1,32 @@
+<journey name="spark connection details">
+  <description>
+    Lightning Connections lists Spark last under OPEN CONNECTIONS, after any open channel, as "Spark via Breez"
+    with a channel bar whose receiving side reads "no limit". Its detail screen shows the same bar, then STATUS
+    ("Connection open" in green while Spark is connected, "Connecting..." in yellow, "Offline..." in red),
+    PROVIDER (Spark operators, the regtest deposit address, the trust paragraph), BALANCE (receiving capacity
+    "no limit", spending balance) and DEPOSITS, one group per deposit: its transaction (first and last 8
+    characters), the amount sent on-chain, which stays the same once claimed, and the claim fee once claimed or
+    the confirmations until then. The footer holds "Transfer To Savings" and, while Spark holds funds or a force
+    transfer runs, "Force Transfer To Savings".
+    Spark's row shows once Spark is connected, so "Connecting..." and "Offline..." are covered by unit tests and
+    the PR's screenshots, not here. On Spark's regtest the app's block explorer is the staging one, which does
+    not know Spark's chain, so the deposit's page keeps waiting for the transaction; the journey checks only
+    that the explorer opens at the deposit's txid.
+
+    Precondition: dev build on regtest with Spark connected on its regtest (journeys/README.md capabilities),
+    no Lightning channel, and a claimed Spark deposit: send from Lightspark's regtest faucet (https://app.lightspark.com/regtest-faucet)
+    to the deposit address the Spark connection screen shows (testTag "SparkDepositAddress") and wait for 3
+    confirmations. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the menu button (testTag "HeaderMenu"), Settings (testTag "DrawerSettings"), the Advanced tab (testTag "Tab-advanced") and Lightning Connections (testTag "Channels")</action>
+    <action>Verify the header's receiving reads "no limit" and OPEN CONNECTIONS lists "Spark via Breez" (testTag "SparkConnection") with its bar's receiving side reading "no limit", and no separate SPARK section</action>
+    <action>Tap "Spark via Breez" and verify the title "Spark via Breez" and the same bar at the top</action>
+    <action>Verify STATUS shows "Connection open" in green (testTag "SparkStatus")</action>
+    <action>Verify PROVIDER shows "Spark" with "Lightspark, Breez and Flashnet", the deposit address (testTag "SparkDepositAddress") and the paragraph starting "Your spending balance uses Spark"</action>
+    <action>Verify BALANCE shows "Receiving capacity" with "no limit" and "Spending balance" with the Spark balance</action>
+    <action>Verify DEPOSITS shows "Deposit tx" with the transaction id's first and last 8 characters (testTag "SparkDeposit"), "Deposit" with the amount sent from the faucet and "Claim fee"</action>
+    <action>Verify the footer shows "Transfer To Savings" (testTag "SparkTransferToSavings") enabled and "Force Transfer To Savings" (testTag "SparkEmergencyExit") with a warning icon inside the button, left of its text</action>
+    <action>Tap "Deposit tx" and verify the browser opens the block explorer at a URL ending in the deposit's txid</action>
+  </actions>
+</journey>

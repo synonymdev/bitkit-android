@@ -28,6 +28,7 @@ class HealthRepo @Inject constructor(
     private val connectivityRepo: ConnectivityRepo,
     private val lightningRepo: LightningRepo,
     private val sparkRepo: SparkRepo,
+    private val sparkExitRepo: SparkExitRepo,
     private val cacheStore: CacheStore,
     private val clock: Clock,
 ) {
@@ -53,8 +54,9 @@ class HealthRepo @Inject constructor(
                 internetHealthState,
                 lightningRepo.lightningState,
                 sparkRepo.state,
-            ) { internetHealth, lightningState, sparkState ->
-                computeHealthState(internetHealth, lightningState, sparkState)
+                sparkExitRepo.state.map { it.record?.isActive == true },
+            ) { internetHealth, lightningState, sparkState, isSparkExiting ->
+                computeHealthState(internetHealth, lightningState, sparkState).copy(isSparkExiting = isSparkExiting)
             }.collect { newHealthState ->
                 updateState {
                     it.copy(
@@ -64,6 +66,7 @@ class HealthRepo @Inject constructor(
                         channels = newHealthState.channels,
                         isLightningViaSpark = newHealthState.isLightningViaSpark,
                         spark = newHealthState.spark,
+                        isSparkExiting = newHealthState.isSparkExiting,
                     )
                 }
             }
@@ -169,21 +172,7 @@ class HealthRepo @Inject constructor(
         _healthState.update { currentState ->
             val updatedState = update(currentState)
 
-            // Compute app health status from all individual states
-            val states = listOf(
-                updatedState.internet,
-                updatedState.electrum,
-                updatedState.node,
-                updatedState.backups,
-            )
-
-            val appStatus = when {
-                HealthState.ERROR in states -> HealthState.ERROR
-                HealthState.PENDING in states -> HealthState.PENDING
-                else -> HealthState.READY
-            }
-
-            updatedState.copy(app = appStatus)
+            updatedState.copy(app = updatedState.computeApp())
         }
     }
 }
@@ -198,7 +187,20 @@ data class AppHealthState(
     /** Null where Spark is unsupported. */
     val spark: HealthState? = null,
     val backups: HealthState = HealthState.READY,
+    /** A force transfer to savings runs, which App Status shows on Spark's row. */
+    val isSparkExiting: Boolean = false,
     val app: HealthState = HealthState.READY,
 ) {
     fun isOnline() = internet == HealthState.READY
+
+    /** The menu's status: red when any part fails, else yellow while any is pending; Spark counts where supported. */
+    internal fun computeApp(): HealthState {
+        val sparkState = spark?.let { if (isSparkExiting) HealthState.PENDING else it }
+        val states = listOfNotNull(internet, electrum, node, backups, sparkState)
+        return when {
+            HealthState.ERROR in states -> HealthState.ERROR
+            HealthState.PENDING in states -> HealthState.PENDING
+            else -> HealthState.READY
+        }
+    }
 }

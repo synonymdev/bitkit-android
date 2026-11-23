@@ -2734,12 +2734,55 @@ class SparkRepoTest : BaseUnitTest() {
         sut.refreshState().getOrThrow()
         sut.holdForExit()
         // The exit's reconnect disconnected Spark, then failed to connect it.
-        whenever(sparkService.isConnected).thenReturn(false)
-        whenever { sparkService.connect(any(), any()) }.thenReturn(true)
+        var isConnected = false
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.connect(any(), any()) }
+            .thenThrow(RuntimeException("operators unreachable"))
+            .thenAnswer {
+                isConnected = true
+                true
+            }
+        sut.setExiting(true, reconnect = true)
+        assertFalse(sut.state.value.isReady, "Spark read as ready without a connection")
+        assertTrue(sut.state.value.hasStartFailed, "the failed reconnect read as connecting")
 
         sut.reconnectForExit()
 
-        verify(sparkService).connect(0, true)
+        verify(sparkService, times(2)).connect(0, true)
+        assertTrue(sut.state.value.isReady, "Spark read as not ready once it connected again")
+    }
+
+    @Test
+    fun `a refresh of a disconnected spark leaves it not ready`() = test {
+        var isConnected = true
+        whenever(sparkService.isConnected).thenAnswer { isConnected }
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        whenever { sparkService.connect(any(), any()) }.thenThrow(RuntimeException("operators unreachable"))
+        whenever { sparkService.disconnect() }.thenAnswer { isConnected = false }
+        sut.setExiting(false, reconnect = true)
+        // A refresh that read the SDK before it was disconnected publishes after the reset.
+        whenever(sparkService.isConnected).thenReturn(true, false)
+
+        sut.refreshState().getOrThrow()
+
+        assertFalse(sut.state.value.isReady, "a stale refresh marked Spark ready without a connection")
+        assertTrue(sut.state.value.hasReadState, "a lost connection hid the state Spark read")
+        assertEquals(10_000uL, sut.state.value.balanceSats)
+    }
+
+    @Test
+    fun `an exit's tick leaves a connected spark alone`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL))
+        val sut = createSut()
+        sut.refreshState().getOrThrow()
+        whenever(sparkService.isConnected).thenReturn(false)
+
+        sut.reconnectForExit()
+
+        verify(sparkService, never()).connect(any(), any())
     }
 
     @Test
