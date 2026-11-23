@@ -121,6 +121,15 @@ class NfcPaymentUriTest {
     }
 
     @Test
+    fun `nfc read with a required parameter behind an inner bitkit scheme is refused`() {
+        // The decoder deletes every `bitkit://` in a deep link, which can turn a key into `req-`.
+        val address = "bitkit://bitcoin:bcrt1qtest?amount=0.001"
+        assertNull(nfcPaymentRequest("$address&bitkit://req-pop=callback"))
+        assertNull(nfcPaymentRequest("$address&rebitkit://q-pop=callback"))
+        assertNull(nfcPaymentRequest("bitkit://bitkit://bitcoin:bcrt1qtest?REBITKIT://Q-POP=callback"))
+    }
+
+    @Test
     fun `request with a required parameter is kept`() {
         val invoice = PosNfcFixtures.SQUARE_INVOICE
         val required = "bitcoin:?lightning=$invoice&req-pop=callback%3a"
