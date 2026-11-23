@@ -9946,6 +9946,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `existing contact scanned from the send scanner still refreshes its Paykit receivers`() = test {
+        enablePaykitUi()
+        pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+        var refreshedWhileActive = false
+        whenever { refreshContactPaykitLink(any()) }.doSuspendableAnswer {
+            refreshedWhileActive = kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true
+            Result.success(Unit)
+        }
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        // The delay stands in for the suspension before routing, so the scan's handle is kept as on device.
+        sut.onScanResult(testPublicKey, startDelay = 1.seconds, routePubkyKeys = true, fromSendScanner = true)
+        advanceUntilIdle()
+
+        assertTrue(refreshedWhileActive)
+    }
+
+    @Test
     fun `second bluetooth read does not replace the first one still preparing`() = test {
         val first = stubOnchainAmountScan(amountSats = 10_000u)
         val second = "bitcoin:$REGTEST_ADDRESS?amount=0.0002"
