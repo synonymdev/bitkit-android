@@ -41,7 +41,10 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
+
+private const val TAG = "HardwareSheet"
 
 /** Runtime nearby-devices permissions needed to BLE-scan: SCAN + CONNECT on Android 12+, else fine location. */
 private val bluetoothPermissions: List<String>
@@ -88,7 +91,11 @@ fun HardwareSheet(
         if (context.isBluetoothEnabled) {
             viewModel.setBluetoothScanningEnabled()
         } else {
-            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            runCatching { enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
+                .onFailure {
+                    Logger.warn("Failed to request enabling Bluetooth", it, context = TAG)
+                    showBlePermissionDialog = true
+                }
         }
     }
     val blePermissions = rememberMultiplePermissionsState(bluetoothPermissions) { results ->
