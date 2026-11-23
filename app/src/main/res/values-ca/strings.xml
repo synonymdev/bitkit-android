@@ -1601,6 +1601,7 @@
     <string name="subscriptions__allowance_payment_limit">Límit de pagament</string>
     <string name="subscriptions__allowance_per_payment">Per pagament</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} per pagament</string>
+    <string name="subscriptions__allowance_request_already_paid">Aquesta sol·licitud ja està pagada.</string>
     <string name="subscriptions__allowance_request_explanation">La teva cartera pagarà les sol·licituds de {name} dins d\'aquests límits sense preguntar-te cada vegada. Qualsevol de vosaltres hi pot posar fi.</string>
     <string name="subscriptions__allowance_request_headline">{name} demana\n&lt;accent&gt;una assignació&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Desar assignació</string>

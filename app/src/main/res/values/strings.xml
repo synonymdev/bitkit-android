@@ -1262,6 +1262,7 @@
     <string name="subscriptions__allowance_payment_limit">Payment limit</string>
     <string name="subscriptions__allowance_per_payment">Per payment</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} a payment</string>
+    <string name="subscriptions__allowance_request_already_paid">This request is already paid.</string>
     <string name="subscriptions__allowance_request_explanation">Your wallet will pay {name}\'s requests within these limits without asking you each time. Either of you can end it.</string>
     <string name="subscriptions__allowance_request_headline"><![CDATA[{name} asks for\n<accent>an allowance</accent>]]></string>
     <string name="subscriptions__allowance_save">Save Allowance</string>

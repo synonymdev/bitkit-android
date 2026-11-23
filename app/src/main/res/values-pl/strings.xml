@@ -1602,6 +1602,7 @@
     <string name="subscriptions__allowance_payment_limit">Limit płatności</string>
     <string name="subscriptions__allowance_per_payment">Na płatność</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} na płatność</string>
+    <string name="subscriptions__allowance_request_already_paid">To żądanie jest już opłacone.</string>
     <string name="subscriptions__allowance_request_explanation">Twój portfel będzie opłacać żądania {name} w ramach tych limitów bez pytania Cię za każdym razem. Każda ze stron może go zakończyć.</string>
     <string name="subscriptions__allowance_request_headline">{name} prosi o\n&lt;accent&gt;budżet&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Zapisz budżet</string>

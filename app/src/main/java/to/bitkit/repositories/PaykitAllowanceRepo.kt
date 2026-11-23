@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -37,6 +38,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -100,6 +102,7 @@ class PaykitAllowanceRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val activityRepo: ActivityRepo,
     private val clock: Clock,
+    private val backupRepo: Provider<BackupRepo>,
 ) {
     companion object {
         private const val TAG = "PaykitAllowanceRepo"
@@ -123,6 +126,25 @@ class PaykitAllowanceRepo @Inject constructor(
     private val isProcessingRequests = AtomicBoolean(false)
     private val isAcceptingOffers = AtomicBoolean(false)
     private val updates = MutableStateFlow(0)
+    private val _pendingFilterVersion = MutableStateFlow(0L)
+
+    /** Moves whenever [keepsOffPending] or [hasSentPayment] may answer differently for a request. */
+    val pendingFilterVersion: StateFlow<Long> = _pendingFilterVersion.asStateFlow()
+
+    /** Requests of the automatic payment pass running now, including those still waiting their turn. */
+    private val passRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
+
+    /** Covered requests the last pass deferred, kept hidden between passes so they don't blink on every poll. */
+    private val deferredRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
+
+    /**
+     * Requests an automatic payment is handling now, until it is handed to the node, the rest of its pass and those
+     * it deferred.
+     */
+    val handlingRequestIds: Flow<Set<PaykitPaymentRequestId>>
+        get() = combine(executor.inFlightRequestIds, passRequestIds, deferredRequestIds) { inFlight, pass, deferred ->
+            inFlight + pass + deferred
+        }
 
     /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
     val isUpdating: Boolean get() = updates.value > 0
@@ -132,6 +154,10 @@ class PaykitAllowanceRepo @Inject constructor(
     private val manualRequestSignatures = ConcurrentHashMap<PaykitPaymentRequestId, Int>()
     private val _allowances = MutableStateFlow<List<PaykitAllowance>>(emptyList())
     private val _localState = MutableStateFlow(PaykitAllowanceLocalState())
+
+    /** This wallet's own payment records, kept while allowances are off so paid requests stay hidden. */
+    @Volatile
+    private var paidRecords = PaykitAllowanceLocalState()
     private val _autoPaidRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     private var allowanceTerms: (PaykitAllowanceLimits, Instant, List<String>) -> AllowanceTerms =
         { limits, monthAnchor, endpoints -> limits.terms(monthAnchor, endpoints) }
@@ -181,13 +207,16 @@ class PaykitAllowanceRepo @Inject constructor(
         lightningRepo: LightningRepo,
         activityRepo: ActivityRepo,
         clock: Clock,
+        backupRepo: Provider<BackupRepo>,
         allowanceTerms: (PaykitAllowanceLimits, Instant, List<String>) -> AllowanceTerms,
-    ) : this(ioDispatcher, paykitSdkService, executor, lightningRepo, activityRepo, clock) {
+    ) : this(ioDispatcher, paykitSdkService, executor, lightningRepo, activityRepo, clock, backupRepo) {
         this.allowanceTerms = allowanceTerms
     }
 
     init {
         scope.launch { executor.events.collect { onAllowanceEvent(it) } }
+        // Apart from the events, so a slow event never delays backing up a spend.
+        scope.launch { executor.spendBackups.collect { backUpSpend() } }
         scope.launch { lightningRepo.nodeEvents.collect { onNodeEvent(it) } }
         scope.launch {
             lightningRepo.lightningState
@@ -240,6 +269,7 @@ class PaykitAllowanceRepo @Inject constructor(
             activationRevision = Any()
             executor.activate(null)
             clear()
+            paidRecords = PaykitAllowanceLocalState()
         }
     }
 
@@ -254,7 +284,10 @@ class PaykitAllowanceRepo @Inject constructor(
             clear()
         }
         val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return
-        withContext(ioDispatcher) { executor.pause(normalizedIdentity) }
+        withContext(ioDispatcher) {
+            executor.pause(normalizedIdentity)
+            reloadPaidRecords()
+        }
     }
 
     private fun clear() {
@@ -263,7 +296,8 @@ class PaykitAllowanceRepo @Inject constructor(
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()
         _automaticPaymentPause.update { null }
-        publish(emptyList(), PaykitAllowanceLocalState())
+        deferredRequestIds.update { emptySet() }
+        publish(emptyList(), PaykitAllowanceLocalState(), keepsPaidRecords = true)
     }
 
     suspend fun refresh(): Result<Unit> = withContext(ioDispatcher) {
@@ -602,15 +636,36 @@ class PaykitAllowanceRepo @Inject constructor(
         }
     }
 
+    /**
+     * Whether [request] stays out of the pending requests and off the Send sheet: an allowance pays it now, or this
+     * wallet's own records show it paid it, also when the shared ledger read back no longer does.
+     */
+    suspend fun keepsOffPending(request: PaykitPaymentRequest): Boolean =
+        hasSentPayment(request) || isAutomaticallyHandling(request)
+
+    /** Whether this wallet's own records show it paid [request], also when the ledger read back no longer does. */
+    fun hasSentPayment(request: PaykitPaymentRequest): Boolean =
+        request.direction == PaykitPaymentRequestDirection.Incoming && request.billingPeriod == null &&
+            paidRecords.hasSentPayment(request.id)
+
+    /** Whether an automatic payment of [request] has left the wallet and not settled yet. */
+    fun isPayingAutomatically(request: PaykitPaymentRequest): Boolean = paidRecords.isPayingAutomatically(request.id)
+
+    private fun pendingFilterChanged() = _pendingFilterVersion.update { it + 1 }
+
     /** Pays covered incoming requests headlessly; returns true when any request was handled. */
     suspend fun processIncomingRequests(requests: List<PaykitPaymentRequest>): Boolean = withContext(ioDispatcher) {
         val identity = activeIdentity ?: return@withContext false
         val signature = allowancesSignature()
         val covered = requests.filter {
-            it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
+            it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature &&
+                !paidRecords.hasFailedAutomaticPayment(it.id)
         }
-        if (covered.isEmpty()) return@withContext false
         val payable = payableNow(covered)
+        // A deferral stays hidden only while the request is payable now; one waiting for the node or handed back shows.
+        val payableIds = payable.mapTo(mutableSetOf()) { it.id }
+        deferredRequestIds.update { it intersect payableIds }
+        if (covered.isEmpty()) return@withContext false
         if (payable.isEmpty()) return@withContext markAboveLimitManual(covered, identity, signature)
         if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
@@ -627,9 +682,11 @@ class PaykitAllowanceRepo @Inject constructor(
      */
     suspend fun isAutomaticallyHandling(request: PaykitPaymentRequest): Boolean {
         if (executor.isHandling(request.id)) return true
+        // A failed automatic payment hands the request to the user, as its acceptance did before it was deferred.
         return request.requiresAcceptance &&
             coversRequest(request) &&
-            manualRequestSignatures[request.id] != allowancesSignature()
+            manualRequestSignatures[request.id] != allowancesSignature() &&
+            !paidRecords.hasFailedAutomaticPayment(request.id)
     }
 
     /**
@@ -655,6 +712,7 @@ class PaykitAllowanceRepo @Inject constructor(
         for (request in covered) {
             if (!executor.classifyAboveLimit(request, _allowances.value, identity)) continue
             manualRequestSignatures[request.id] = signature
+            pendingFilterChanged()
             markedAny = true
         }
         return markedAny
@@ -669,16 +727,35 @@ class PaykitAllowanceRepo @Inject constructor(
         signature: Int,
     ): Boolean {
         var handledAny = false
-        for (request in covered) {
-            val result = executor.autoPay(request, _allowances.value, identity)
-            Logger.info("Decided '$result' for an incoming request covered by an allowance", context = TAG)
-            when (result) {
-                PaykitAllowanceAutoPayResult.STARTED -> handledAny = true
-                PaykitAllowanceAutoPayResult.MANUAL -> manualRequestSignatures[request.id] = signature
-                PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
+        val passActivation = activation
+        // The whole pass is hidden from its start, so a request waiting its turn never shows while an earlier one
+        // is paid.
+        passRequestIds.update { covered.mapTo(mutableSetOf()) { it.id } }
+        try {
+            for (request in covered) {
+                val result = executor.autoPay(request, _allowances.value, identity)
+                Logger.info("Decided '$result' for an incoming request covered by an allowance", context = TAG)
+                when (result) {
+                    PaykitAllowanceAutoPayResult.STARTED -> handledAny = true
+                    PaykitAllowanceAutoPayResult.MANUAL -> {
+                        manualRequestSignatures[request.id] = signature
+                        pendingFilterChanged()
+                    }
+                    PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
+                }
+                // A pass that outlived its activation, as when allowances were turned off, keeps no deferral.
+                val isDeferred = result == PaykitAllowanceAutoPayResult.DEFERRED && activation === passActivation
+                deferredRequestIds.update { if (isDeferred) it + request.id else it - request.id }
+                // A started request is released only once the journal it left is loaded, which then keeps it hidden.
+                if (result == PaykitAllowanceAutoPayResult.STARTED) reloadLocalState()
+                passRequestIds.update { it - request.id }
             }
+            if (handledAny) refresh()
+        } finally {
+            // A cancelled pass may have started a payment it did not get to reload for.
+            if (passRequestIds.value.isNotEmpty()) reloadLocalState()
+            passRequestIds.update { emptySet() }
         }
-        if (handledAny) refresh()
         return handledAny
     }
 
@@ -746,9 +823,23 @@ class PaykitAllowanceRepo @Inject constructor(
         }
     }
 
+    /** Backs up a spend about to leave the wallet, so a wallet restored later still counts it. */
+    private suspend fun backUpSpend() {
+        reloadLocalState()
+        backupRepo.get().persistWalletBackup()
+            .onFailure { Logger.warn("Failed to back up an automatic allowance payment", it, context = TAG) }
+    }
+
     private fun reloadLocalState() {
-        val identity = activeIdentity ?: return
+        val identity = activeIdentity ?: return reloadPaidRecords()
         publish(_allowances.value, executor.localState(identity))
+    }
+
+    /** While allowances are off, payments already sent still settle; their records keep paid requests hidden. */
+    private fun reloadPaidRecords() {
+        val identity = executor.activeIdentity ?: return
+        paidRecords = executor.localState(identity)
+        pendingFilterChanged()
     }
 
     // endregion
@@ -756,6 +847,7 @@ class PaykitAllowanceRepo @Inject constructor(
     private fun publish(
         allowances: List<PaykitAllowance>,
         state: PaykitAllowanceLocalState,
+        keepsPaidRecords: Boolean = false,
     ) = synchronized(publishLock) {
         val entries = allowances
             .groupBy { state.group(containing = it.allowanceId, counterparty = it.counterparty)?.id ?: it.key }
@@ -769,8 +861,10 @@ class PaykitAllowanceRepo @Inject constructor(
         val paidByAllowance = state.autoPaidSatsByAllowance
         _allowances.update { allowances }
         _localState.update { state }
+        if (!keepsPaidRecords) paidRecords = state
         _autoPaidRequestIds.update { state.autoPaidRequestIds }
         _entries.update { entries }
+        pendingFilterChanged()
         _autoPaidSats.update {
             entries.associate { entry ->
                 entry.id to entry.allowances.fold(0uL) { total, allowance ->

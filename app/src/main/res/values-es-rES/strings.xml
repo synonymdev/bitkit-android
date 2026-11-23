@@ -1599,6 +1599,7 @@
     <string name="subscriptions__allowance_payment_limit">Límite de pago</string>
     <string name="subscriptions__allowance_per_payment">Por pago</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} por pago</string>
+    <string name="subscriptions__allowance_request_already_paid">Esta solicitud ya está pagada.</string>
     <string name="subscriptions__allowance_request_explanation">Tu monedero pagará las solicitudes de {name} dentro de estos límites sin preguntarte cada vez. Cualquiera de los dos puede finalizarla.</string>
     <string name="subscriptions__allowance_request_headline">{name} solicita\n&lt;accent&gt;una asignación&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Guardar asignación</string>

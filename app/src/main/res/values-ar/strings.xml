@@ -1589,6 +1589,7 @@
     <string name="subscriptions__allowance_payment_limit">حد الدفعة</string>
     <string name="subscriptions__allowance_per_payment">لكل دفعة</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} لكل دفعة</string>
+    <string name="subscriptions__allowance_request_already_paid">تم دفع هذا الطلب بالفعل.</string>
     <string name="subscriptions__allowance_request_explanation">ستدفع محفظتك طلبات {name} ضمن هذه الحدود دون سؤالك في كل مرة. يمكن لأي منكما إنهاؤها.</string>
     <string name="subscriptions__allowance_request_headline">{name} يطلب\n&lt;accent&gt;ميزانية&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">حفظ الميزانية</string>

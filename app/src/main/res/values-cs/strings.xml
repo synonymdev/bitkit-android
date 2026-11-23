@@ -1603,6 +1603,7 @@
     <string name="subscriptions__allowance_payment_limit">Limit platby</string>
     <string name="subscriptions__allowance_per_payment">Na platbu</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} za platbu</string>
+    <string name="subscriptions__allowance_request_already_paid">Tato žádost je již zaplacena.</string>
     <string name="subscriptions__allowance_request_explanation">Vaše peněženka bude platit žádosti uživatele {name} v rámci těchto limitů, aniž by se vás pokaždé ptala. Kterákoli strana jej může ukončit.</string>
     <string name="subscriptions__allowance_request_headline">{name} žádá o\n&lt;accent&gt;rozpočet&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Uložit rozpočet</string>

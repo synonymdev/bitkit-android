@@ -1601,6 +1601,7 @@
     <string name="subscriptions__allowance_payment_limit">Betalingslimiet</string>
     <string name="subscriptions__allowance_per_payment">Per betaling</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} per betaling</string>
+    <string name="subscriptions__allowance_request_already_paid">Dit verzoek is al betaald.</string>
     <string name="subscriptions__allowance_request_explanation">Uw wallet betaalt de verzoeken van {name} binnen deze limieten zonder u elke keer te vragen. Beide partijen kunnen de toelage beëindigen.</string>
     <string name="subscriptions__allowance_request_headline">{name} vraagt om\n&lt;accent&gt;een toelage&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Toelage opslaan</string>

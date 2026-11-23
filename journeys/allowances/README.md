@@ -7,6 +7,8 @@ pins the one rule that must never break: a payment interrupted mid-flight is nev
 The restore journey checks that a payer restored from its recovery phrase keeps its allowance history.
 `allowance-paused-after-restore.xml` checks that a restored payer's automatic payments stay paused,
 also across a relaunch, until the payer taps Resume on the Allowances tab.
+`restore-counts-stopped-payment.xml` checks that a payer stopped right after an automatic payment
+leaves the wallet, then wiped and restored, still counts that payment.
 
 A wallet restore leaves automatic payments paused until Resume. Journeys that restore, such as `restore-keeps-history.xml`, end with automatic payments paused, so tap Resume in Allowances before running an automatic payment journey on the same instance.
 

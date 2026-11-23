@@ -102,6 +102,28 @@ class PaymentRequestsScreenTest {
     }
 
     @Test
+    fun detailsOfARequestAnAllowanceHandlesShowItWaitingWithoutActions() {
+        val request = request()
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                IncomingPaymentRequestDetailsContent(
+                    request = request,
+                    contact = PubkyProfile.placeholder(request.counterparty),
+                    isPending = false,
+                    isStatusPending = true,
+                    isPreparing = false,
+                    onBack = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsStatus").assertTextEquals("Waiting for payment")
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsPay").assertDoesNotExist()
+    }
+
+    @Test
     fun queueShowsIncomingRequestAndSeeAllAction() {
         val request = request(id = "incoming")
 

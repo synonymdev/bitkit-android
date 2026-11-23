@@ -1603,6 +1603,7 @@
     <string name="subscriptions__allowance_payment_limit">Limite de pagamento</string>
     <string name="subscriptions__allowance_per_payment">Por pagamento</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} por pagamento</string>
+    <string name="subscriptions__allowance_request_already_paid">Esta solicitação já foi paga.</string>
     <string name="subscriptions__allowance_request_explanation">Sua carteira pagará as solicitações de {name} dentro destes limites sem perguntar a você a cada vez. Qualquer um de vocês pode encerrá-la.</string>
     <string name="subscriptions__allowance_request_headline">{name} pede\n&lt;accent&gt;uma mesada&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Salvar Mesada</string>

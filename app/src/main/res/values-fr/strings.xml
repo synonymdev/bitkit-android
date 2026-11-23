@@ -1600,6 +1600,7 @@
     <string name="subscriptions__allowance_payment_limit">Limite de paiement</string>
     <string name="subscriptions__allowance_per_payment">Par paiement</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} par paiement</string>
+    <string name="subscriptions__allowance_request_already_paid">Cette demande est déjà payée.</string>
     <string name="subscriptions__allowance_request_explanation">Votre portefeuille paiera les demandes de {name} dans ces limites sans vous demander à chaque fois. Chacun de vous peut y mettre fin.</string>
     <string name="subscriptions__allowance_request_headline">{name} demande\n&lt;accent&gt;une allocation&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_save">Enregistrer l\'allocation</string>
