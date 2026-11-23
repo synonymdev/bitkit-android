@@ -363,6 +363,21 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `parseAuthUrl accepts plain signup links`() = test {
+        listOf(
+            "pubkyauth://direct_signup?hs=homeserver&st=invite",
+            "pubkyauth://signup?hs=homeserver&st=invite",
+        ).forEach { url ->
+            val request = sut.parseAuthUrl(url).getOrThrow()
+
+            assertEquals("homeserver", request.homeserverPublicKey, url)
+            assertEquals("invite", request.signupToken, url)
+        }
+        verifyBlocking(pubkyService, times(2)) { validateSignupRequest("homeserver") }
+        verifyBlocking(pubkyService, never()) { parseAuthUrl(any()) }
+    }
+
+    @Test
     fun `grant signup parsing retains SDK validation and homeserver details`() = test {
         val url = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
         val details = mock<PubkyAuthDetails>()
