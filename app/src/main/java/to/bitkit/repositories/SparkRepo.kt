@@ -132,6 +132,11 @@ class SparkRepo @Inject constructor(
 
         private val SETTLE_RETRY_INTERVAL = 30.seconds
 
+        /** Sends again under the same key while Spark can't select the leaves, as after a move to Spark lands. */
+        private const val LEAF_SELECTION_RETRIES = 3
+
+        private val LEAF_SELECTION_RETRY_DELAY = 2.seconds
+
         /** Seconds a withdrawal quote must still hold to be reused, so it can't expire mid-send. */
         private const val QUOTE_EXPIRY_MARGIN_SECS = 30uL
     }
@@ -642,7 +647,7 @@ class SparkRepo @Inject constructor(
                             cacheStore.removeSparkSendHash(paymentHash)
                             throw it
                         }
-                        runSuspendCatching { sparkService.send(prepared, attemptId) }
+                        sendRetryingLeafSelection(prepared, attemptId, paymentDeadlineAt)
                     }
                 }
                 val payment = sent.getOrElse {
@@ -652,10 +657,11 @@ class SparkRepo @Inject constructor(
                         cacheStore.removeSparkSendHash(paymentHash)
                         throw SparkError.InvoiceExpired(it)
                     }
-                    // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
-                    // nothing, for instance when an earlier send spent it after the balance was read. Under a key an
-                    // earlier attempt used, it can hide the transfer that attempt committed, so that send stays held.
-                    if (it is SdkException.InsufficientFunds && !isReusedKey) {
+                    // Spark selects the leaves to spend before anything goes to the operators, so a short balance or
+                    // leaves it can't select left nothing, for instance when an earlier send spent the balance after
+                    // it was read. Under a key an earlier attempt used, it can hide the transfer that attempt
+                    // committed, so that send stays held.
+                    if ((it is SdkException.InsufficientFunds || it.isLeafSelectionFailure()) && !isReusedKey) {
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
                         throw SparkError.SendRefused("Spark balance can't cover the payment", it)
@@ -690,6 +696,26 @@ class SparkRepo @Inject constructor(
                 Logger.error("Failed to pay invoice with Spark", it, context = TAG)
             }
         }
+    }
+
+    private suspend fun sendRetryingLeafSelection(
+        prepared: PrepareSendPaymentResponse,
+        attemptId: String,
+        paymentDeadlineAt: Instant?,
+    ): Result<Payment> {
+        var result = runSuspendCatching { sparkService.send(prepared, attemptId) }
+        repeat(LEAF_SELECTION_RETRIES) {
+            if (result.exceptionOrNull()?.isLeafSelectionFailure() != true) return result
+            Logger.info("Retrying Spark send '$attemptId' as Spark could not select its leaves", context = TAG)
+            delay(LEAF_SELECTION_RETRY_DELAY)
+            val canRetry = runCatching {
+                ensurePaymentDeadline(paymentDeadlineAt)
+                ensureNotExiting()
+            }.isSuccess
+            if (!canRetry) return result
+            result = runSuspendCatching { sparkService.send(prepared, attemptId) }
+        }
+        return result
     }
 
     private suspend fun nextSendAttempt(paymentHash: String, listing: List<Payment>?): Int {
@@ -2685,6 +2711,14 @@ internal fun SdkException.InvalidInput.isBelowMinimum(): Boolean =
  */
 internal fun Throwable.isWithdrawalFeeRise(): Boolean =
     this is SdkException.InvalidInput && v1.contains("onchain fee rose to", ignoreCase = true)
+
+/**
+ * Spark fails a send with this error when it holds the balance but can't select leaves to spend, for instance right
+ * after a move to Spark lands, before anything reaches the operators (`select_leaves_with_retry` in the 0.28.3 SDK's
+ * `spark-wallet/src/wallet.rs`).
+ */
+internal fun Throwable.isLeafSelectionFailure(): Boolean =
+    this is SdkException.SparkException && v1.contains("Failed to select leaves after all retries", ignoreCase = true)
 
 /** Spark refuses an expired Lightning invoice with this input error, at prepare and again at send. */
 internal fun Throwable.isInvoiceExpired(): Boolean =

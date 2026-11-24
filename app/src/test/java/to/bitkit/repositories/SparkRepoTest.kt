@@ -5208,6 +5208,62 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send retries under its key while spark can't select its leaves`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sent = sentPayment(fees = 0)
+        var sends = 0
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            if (++sends == 1) throw leafSelectionFailure() else sent
+        }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+
+        val keys = argumentCaptor<String>().apply { verify(sparkService, times(2)).send(any(), capture()) }.allValues
+        assertEquals(listOf("hash-0", "hash-0"), keys)
+    }
+
+    @Test
+    fun `a spark send whose leaves spark can't select is refused under a new key`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verify(sparkService, times(4)).send(any(), anyOrNull())
+        assertFalse("hash" in store.data.first().sparkSendHashes)
+        assertFalse("hash" in store.data.first().sparkUncertainSends)
+    }
+
+    @Test
+    fun `leaves spark can't select under a reused spark key keep the send held`() = test {
+        val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(0, now.epochSeconds + 3_600)))
+        val store = CacheStore(InMemoryDataStore(kept), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        assertTrue("hash" in store.data.first().sparkSendHashes, "the node could pay the invoice again")
+        assertTrue("hash" in store.data.first().sparkUncertainSends)
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.
@@ -5600,6 +5656,9 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     /** The idempotency key of the latest Spark send, which Spark keeps as that attempt's payment id. */
+    private fun leafSelectionFailure() =
+        SdkException.SparkException("Tree service error: generic error: Failed to select leaves after all retries")
+
     private suspend fun sentKey(): String =
         argumentCaptor<String>().apply { verify(sparkService, atLeastOnce()).send(any(), capture()) }.lastValue
 
