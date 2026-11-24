@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
@@ -1935,12 +1936,21 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `a node send recorded while a spark check releases the invoice keeps its hash`() = test {
+        assertNodeSendRecordedDuringReleaseKeepsHash(listed = emptyList())
+    }
+
+    @Test
+    fun `a node send recorded while the listing trims its failed attempt keeps its hash`() = test {
+        assertNodeSendRecordedDuringReleaseKeepsHash(listed = listOf(nodeSend("h", PaymentStatus.FAILED)))
+    }
+
+    /** The node sends the invoice again once a Spark send's check decided to release the node's [listed] attempt. */
+    private suspend fun TestScope.assertNodeSendRecordedDuringReleaseKeepsHash(listed: List<PaymentDetails>) {
         val inner = InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("h")))
         val entered = CompletableDeferred<Unit>()
         val queued = CompletableDeferred<String>()
         var isArmed = true
         var node: Job? = null
-        // The node starts another send of the invoice once the Spark path decided to release its earlier one.
         val store = CacheStore(
             object : DataStore<AppCacheData> by inner {
                 override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
@@ -1957,7 +1967,7 @@ class LightningRepoTest : BaseUnitTest() {
         sut = repoWith(store)
         startNodeForTesting()
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
-        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.listPayments()).thenReturn(listed)
         whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
             entered.complete(Unit)
             queued.await()
