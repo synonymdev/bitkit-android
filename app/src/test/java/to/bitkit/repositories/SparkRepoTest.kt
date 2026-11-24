@@ -5142,6 +5142,42 @@ class SparkRepoTest : BaseUnitTest() {
         )
     }
 
+    @Test
+    fun `a cancelled spark send restored by a foreground restart reports its failure at expiry`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { awaitCancellation() }
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sut.start(0).getOrThrow()
+        val send = launch { sut.payInvoice("lnbc1", 100uL) }
+        runCurrent()
+        send.cancel()
+        advanceUntilIdle()
+
+        // The node restarts in the foreground in the same process, which starts Spark again while it stays connected.
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        // Spark never lists the send, and syncs after its invoice expired.
+        now += 2.hours
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertFalse("hash" in store.data.first().sparkUncertainSends, "a cancelled send stayed held past expiry")
+        assertEquals(
+            1,
+            events.count { it is Event.PaymentFailed },
+            "a send cancelled in this process was taken as settled while the app was closed",
+        )
+    }
+
     /** The idempotency key of the latest Spark send, which Spark keeps as that attempt's payment id. */
     private suspend fun sentKey(): String =
         argumentCaptor<String>().apply { verify(sparkService, atLeastOnce()).send(any(), capture()) }.lastValue

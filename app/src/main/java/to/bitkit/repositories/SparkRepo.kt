@@ -185,6 +185,9 @@ class SparkRepo @Inject constructor(
     /** Sends taken back at start, whose outcome Spark settled while the app was closed, so none is reported again. */
     private val restoredAtStart = ConcurrentHashMap.newKeySet<String>()
 
+    @Volatile
+    private var hasRestoredAtStart = false
+
     /** Spark payment ids of the sends whose outcome was reported, so the poll and Spark's event report it once. */
     private val reportedSendIds = ConcurrentHashMap.newKeySet<String>()
 
@@ -278,7 +281,9 @@ class SparkRepo @Inject constructor(
         _state.update { it.copy(hasStartFailed = false) }
         runSuspendCatching {
             collectEvents()
-            restoreUncertainSends(atStart = true)
+            // Only the first start of the process takes back holds that settled while the app was closed.
+            restoreUncertainSends(atStart = !hasRestoredAtStart)
+            hasRestoredAtStart = true
             val isExiting = exitStore(walletIndex).isActive()
             _state.update { it.copy(isExiting = isExiting) }
             val connected = sparkService.connect(walletIndex, isExiting)
@@ -325,6 +330,7 @@ class SparkRepo @Inject constructor(
         sendsInFlight.clear()
         uncertainSends.clear()
         restoredAtStart.clear()
+        hasRestoredAtStart = false
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
         isLostForExit = false
