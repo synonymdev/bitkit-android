@@ -6795,18 +6795,22 @@ class AppViewModel @Inject constructor(
 
     private suspend fun whileSendSwipeRuns(block: suspend () -> Unit) {
         val session = sendSession
-        sendSwipeRuns[session] = (sendSwipeRuns[session] ?: 0) + 1
+        synchronized(sendSwipeRuns) { sendSwipeRuns[session] = (sendSwipeRuns[session] ?: 0) + 1 }
         refreshSendSwipeRunning()
         try {
             block()
         } finally {
-            val runs = (sendSwipeRuns[session] ?: 1) - 1
-            if (runs > 0) sendSwipeRuns[session] = runs else sendSwipeRuns.remove(session)
+            synchronized(sendSwipeRuns) {
+                val runs = (sendSwipeRuns[session] ?: 1) - 1
+                if (runs > 0) sendSwipeRuns[session] = runs else sendSwipeRuns.remove(session)
+            }
             refreshSendSwipeRunning()
         }
     }
 
-    private fun refreshSendSwipeRunning() = _isSendSwipeRunning.update { sendSwipeRuns.containsKey(sendSession) }
+    private fun refreshSendSwipeRunning() = synchronized(sendSwipeRuns) {
+        _isSendSwipeRunning.update { sendSwipeRuns.containsKey(sendSession) }
+    }
 
     private fun onStartInitialSubscriptionPayment() {
         val state = _sendUiState.value
