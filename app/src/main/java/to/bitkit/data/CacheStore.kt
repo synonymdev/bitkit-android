@@ -200,6 +200,16 @@ class CacheStore internal constructor(
         }
     }
 
+    suspend fun addSparkUnsavedOwnFailure(paymentId: String) {
+        if (paymentId in store.data.first().sparkUnsavedOwnFailures) return
+        store.updateData { it.copy(sparkUnsavedOwnFailures = it.sparkUnsavedOwnFailures + paymentId) }
+    }
+
+    suspend fun removeSparkUnsavedOwnFailure(paymentId: String) {
+        if (paymentId !in store.data.first().sparkUnsavedOwnFailures) return
+        store.updateData { it.copy(sparkUnsavedOwnFailures = it.sparkUnsavedOwnFailures - paymentId) }
+    }
+
     suspend fun addMoveToSparkHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash in store.data.first().moveToSparkHashes) return
@@ -394,6 +404,11 @@ data class AppCacheData(
      * only its own outcome settles it. A hold without one waits for a paid attempt or its invoice's expiry.
      */
     val sparkSendAttemptIds: Map<String, String> = mapOf(),
+    /**
+     * Payment ids of Spark send attempts whose own failure a failed Activity write still has to save over an earlier
+     * attempt's row, kept across a restart until it saves.
+     */
+    val sparkUnsavedOwnFailures: Set<String> = setOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.

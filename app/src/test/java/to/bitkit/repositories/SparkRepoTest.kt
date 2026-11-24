@@ -5077,6 +5077,24 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send is refused before spark's first sync while its list can't be read`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        // No wallet sync has succeeded yet, and Spark's local list can't be read either.
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        whenever(sparkService.listPayments()).thenAnswer { throw SdkException.Generic("storage") }
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.
@@ -5110,6 +5128,89 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a held spark send restored at launch reports its outcome once the node path asks for it again`() = test {
+        val sentAt = now.epochSeconds
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to sentAt + 3_600),
+                    sparkUncertainSends = mapOf("hash" to sentAt),
+                    sparkSendAttemptIds = mapOf("hash" to "attempt"),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val pending = sentPayment(fees = 0).copy(id = "attempt", status = PaymentStatus.PENDING)
+        whenever(sparkService.listPayments()).thenReturn(listOf(pending))
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val sut = createSut(store)
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        // After the relaunch the channels can pay, so the node path asks for the invoice and waits on Spark's send.
+        assertIs<EarlierSend.Pending>(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+        whenever(sparkService.listPayments()).thenReturn(listOf(pending.copy(status = PaymentStatus.COMPLETED)))
+        now += 1.minutes
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertEquals("hash", assertIs<Event.PaymentSuccessful>(events.single()).paymentHash)
+    }
+
+    @Test
+    fun `spark's callback during the row write of a send settled while closed reports nothing`() = test {
+        val sentAt = now.epochSeconds
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to sentAt + 3_600),
+                    sparkUncertainSends = mapOf("hash" to sentAt),
+                    sparkSendAttemptIds = mapOf("hash" to "attempt"),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        now += 1.minutes
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val failed = sentPayment(fees = 0).copy(id = "attempt", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(failed))
+        // The write of the settled row is still in progress when Spark's callback comes.
+        val rowWrite = CompletableDeferred<Unit>()
+        var writes = 0
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            if (writes++ == 1) rowWrite.await()
+            Result.success(Unit)
+        }
+        val sut = createSut(store)
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        val starting = launch { sut.start(0) }
+        runCurrent()
+        assertEquals(2, writes, "the settled row's write never started")
+
+        sparkEvents.emit(SdkEvent.PaymentFailed(failed))
+        runCurrent()
+        rowWrite.complete(Unit)
+        starting.join()
+        advanceUntilIdle()
+
+        assertEquals(
+            emptyList(),
+            events.filter { it is Event.PaymentSuccessful || it is Event.PaymentFailed },
+            "a payment settled while the app was closed was reported at launch",
+        )
+    }
+
+    @Test
     fun `a spark retry's own failure keeps its details through a failed activity write`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
@@ -5119,7 +5220,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.Generic("timeout") }
         whenever { activityRepo.getActivity(eq("hash"), any()) }
             .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.FAILED))))
-        val sut = createSut()
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
         sut.start(0).getOrThrow()
         assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
         advanceUntilIdle()
@@ -5128,8 +5229,11 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.listPayments()).thenReturn(listOf(own))
         // The first write of the retry's failure fails.
         var writes = 0
+        val saved = mutableListOf<LightningActivity>()
         whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
-            if (writes++ == 0) Result.failure(SdkException.Generic("storage")) else Result.success(Unit)
+            if (writes++ == 0) return@doSuspendableAnswer Result.failure(SdkException.Generic("storage"))
+            (it.arguments[0] as? Activity.Lightning)?.let { row -> saved += row.v1 }
+            Result.success(Unit)
         }
         sparkEvents.emit(SdkEvent.PaymentFailed(own))
         advanceUntilIdle()
@@ -5137,13 +5241,52 @@ class SparkRepoTest : BaseUnitTest() {
         sparkEvents.emit(SdkEvent.Synced)
         advanceUntilIdle()
 
-        verify(activityRepo, atLeastOnce()).upsertActivity(
-            argThat { this is Activity.Lightning && v1.fee == 3uL && v1.timestamp == retryAt }
-        )
+        val row = saved.last { it.id == "hash" }
+        assertEquals(PaymentState.FAILED, row.status)
+        assertEquals(3uL, row.fee)
+        assertEquals(retryAt, row.timestamp)
     }
 
     @Test
-    fun `a cancelled spark send restored by a foreground restart reports its failure at expiry`() = test {
+    fun `a spark retry's own failure keeps its details through a failed write and a restart`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.Generic("timeout") }
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.FAILED))))
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+        val retryAt = now.epochSeconds.toULong()
+        val own = sentPayment(fees = 3).copy(id = sentKey(), status = PaymentStatus.FAILED, timestamp = retryAt)
+        whenever(sparkService.listPayments()).thenReturn(listOf(own))
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(SdkException.Generic("storage")))
+        sparkEvents.emit(SdkEvent.PaymentFailed(own))
+        advanceUntilIdle()
+
+        // The app restarts before another refresh, so only the stored state knows whose failure it is.
+        val saved = mutableListOf<LightningActivity>()
+        whenever { activityRepo.upsertActivity(any()) }.doSuspendableAnswer {
+            (it.arguments[0] as? Activity.Lightning)?.let { row -> saved += row.v1 }
+            Result.success(Unit)
+        }
+        createSut(store).start(0).getOrThrow()
+        advanceUntilIdle()
+
+        val row = saved.last { it.id == "hash" }
+        assertEquals(PaymentState.FAILED, row.status)
+        assertEquals(3uL, row.fee)
+        assertEquals(retryAt, row.timestamp)
+        assertTrue(store.data.first().sparkUnsavedOwnFailures.isEmpty())
+    }
+
+    @Test
+    fun `a cancelled spark send restored by a foreground restart reports its listed failure`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
@@ -5164,13 +5307,15 @@ class SparkRepoTest : BaseUnitTest() {
         sut.start(0).getOrThrow()
         advanceUntilIdle()
 
-        // Spark never lists the send, and syncs after its invoice expired.
-        now += 2.hours
+        // Spark lists the send's own failure before its invoice expires, which only a muted restore would hide.
+        val own = sentPayment(fees = 0).copy(id = sentKey(), status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(own))
+        now += 1.minutes
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
         sparkEvents.emit(SdkEvent.Synced)
         advanceUntilIdle()
 
-        assertFalse("hash" in store.data.first().sparkUncertainSends, "a cancelled send stayed held past expiry")
+        assertFalse("hash" in store.data.first().sparkUncertainSends, "a cancelled send stayed held")
         assertEquals(
             1,
             events.count { it is Event.PaymentFailed },
