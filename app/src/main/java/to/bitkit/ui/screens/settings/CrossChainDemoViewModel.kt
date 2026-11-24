@@ -195,7 +195,7 @@ class CrossChainDemoViewModel @Inject constructor(
 private fun CrossChainRoutePair.describe(): String {
     val btc = acceptedAssets.firstOrNull { it.asset is SparkAsset.Bitcoin }?.limits
     val limits = btc?.let {
-        " min=${it.minAmount} sat ($${cents(it.minUsdCents)}) max=${it.maxAmount} sat ($${cents(it.maxUsdCents)})"
+        " min=${it.minAmount} sat ($${cents(it.minUsdCents)}) max=${it.maxAmount ?: "-"} sat ($${cents(it.maxUsdCents)})"
     } ?: " (no BTC source)"
     return "$provider $chain/$asset chainId=$chainId contract=$contractAddress$limits"
 }
@@ -212,11 +212,14 @@ private fun PrepareSendPaymentResponse.toQuote(route: CrossChainRoutePair): Cros
         payeeGets = method?.let { "~${it.estimatedOut.scaled(decimals)} ${route.asset}" } ?: "?",
         amountIn = method?.let { "${it.amountIn} sat" } ?: "$amount",
         fee = method?.let { "${it.feeAmount.scaled(decimals)} ${route.asset}" } ?: "?",
-        serviceFee = method?.let { "${it.serviceFeeAmount} ${it.serviceFeeAsset ?: "sat"} (base units)" } ?: "?",
+        serviceFee = method?.let { m ->
+            m.serviceFeeAssetDecimals?.let { "${m.serviceFeeAmount.scaled(it.toInt())} ${m.serviceFeeAsset}" }
+                ?: "${m.serviceFeeAmount} ${m.serviceFeeAsset ?: "sat"}"
+        } ?: "?",
         transferFee = method?.let { "${it.sourceTransferFeeSats} sat" } ?: "?",
         feeMode = method?.feeMode?.name ?: "?",
         limits = btc?.let {
-            "${it.minAmount}–${it.maxAmount} sat ($${cents(it.minUsdCents)}–$${cents(it.maxUsdCents)})"
+            "${it.minAmount}–${it.maxAmount ?: "-"} sat ($${cents(it.minUsdCents)}–$${cents(it.maxUsdCents)})"
         } ?: "?",
         expiresAt = method?.expiresAt ?: "?",
         recipient = method?.recipientAddress ?: "?",
