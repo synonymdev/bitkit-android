@@ -17,6 +17,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.delay
+import to.bitkit.ext.nowMillis
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -38,6 +41,10 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun CrossChainDemoScreen(
@@ -260,7 +267,7 @@ private fun QuoteSection(quote: CrossChainQuote, uiState: CrossChainDemoUiState,
     DetailPair("Fee", quote.fee, "Service fee", quote.serviceFee)
     DetailPair("Spark transfer fee", quote.transferFee, "Fee mode", quote.feeMode)
     DetailRow("Min / max", quote.limits)
-    DetailRow("Quote expires", quote.expiresAt)
+    DetailRow("Quote expires", expiryText(quote.expiresAtMillis), valueColor = expiryColor(quote.expiresAtMillis))
     DetailRow("Recipient", quote.recipient)
     VerticalSpacer(16.dp)
     PrimaryButton(
@@ -269,6 +276,32 @@ private fun QuoteSection(quote: CrossChainQuote, uiState: CrossChainDemoUiState,
         enabled = !uiState.isBusy && uiState.paymentId == null,
     )
 }
+
+@Composable
+private fun rememberNow(): Long {
+    val now by produceState(nowMillis()) {
+        while (true) {
+            delay(1.seconds)
+            value = nowMillis()
+        }
+    }
+    return now
+}
+
+@Composable
+private fun expiryText(expiresAtMillis: Long?): String {
+    if (expiresAtMillis == null) return "?"
+    val left = (expiresAtMillis - rememberNow()) / 1000
+    val local = remember(expiresAtMillis) {
+        DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
+            .format(Instant.ofEpochMilli(expiresAtMillis))
+    }
+    return if (left > 0) "$local (in ${left / 60}:${"%02d".format(left % 60)})" else "$local (expired, prepare again)"
+}
+
+@Composable
+private fun expiryColor(expiresAtMillis: Long?): Color =
+    if (expiresAtMillis != null && expiresAtMillis <= rememberNow()) Colors.Red else Colors.White
 
 @Composable
 private fun Section(title: String) {

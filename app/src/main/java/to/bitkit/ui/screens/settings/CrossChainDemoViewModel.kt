@@ -43,9 +43,11 @@ import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.services.SparkService
 import to.bitkit.services.UsdtService
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
 import java.math.BigInteger
+import java.time.Instant
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
@@ -180,7 +182,12 @@ class CrossChainDemoViewModel @Inject constructor(
                 _uiState.update { s -> s.copy(isBusy = false, error = it.message ?: it.javaClass.simpleName) }
                 return@launch
             }
-            val miningFee = lightningRepo.calculateTotalFee(amount, depositAddress, allowFallback = false)
+            val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats
+            val miningFee = if (spendable != null && spendable < amount) {
+                Result.failure(SavingsShortError(spendable))
+            } else {
+                lightningRepo.calculateTotalFee(amount, depositAddress, allowFallback = false)
+            }
             val claimFee = sparkRepo.estimateMatureClaimFeeSats()
             val instantCeiling = sparkRepo.estimateDepositClaimFeeSats(amount)
             val sparkSats = claimFee.getOrNull()?.let { amount.safe() - it.safe() } ?: amount
@@ -189,7 +196,10 @@ class CrossChainDemoViewModel @Inject constructor(
             val direct = runSuspendCatching { directEstimate(route, amount) }
             val estimate = SavingsEstimate(
                 depositAddress = depositAddress,
-                miningFee = miningFee.fold({ "$it sat" }, { "unavailable: ${it.message ?: it.javaClass.simpleName}" }),
+                miningFee = miningFee.fold(
+                    { "$it sat" },
+                    { (it as? SavingsShortError)?.message ?: "unavailable: ${it.message ?: it.javaClass.simpleName}" },
+                ),
                 miningFeeSats = miningFee.getOrNull(),
                 claimFee = claimFee.fold({ "$it sat at 3 confirmations" }, { "unavailable: ${it.message}" }),
                 instantClaimCeiling = instantCeiling.fold({ "up to $it sat" }, { "unavailable: ${it.message}" }),
@@ -370,6 +380,9 @@ class CrossChainDemoViewModel @Inject constructor(
     }
 }
 
+private class SavingsShortError(spendable: ULong) :
+    AppError("needs savings balance (spendable $spendable sat)")
+
 private data class DirectEstimate(val payeeGets: String, val fee: String, val route: String)
 
 private fun CrossChainRoutePair.btcLimits() = acceptedAssets.firstOrNull { it.asset is SparkAsset.Bitcoin }?.limits
@@ -404,7 +417,7 @@ private fun PrepareSendPaymentResponse.toQuote(route: CrossChainRoutePair): Cros
         limits = route.btcLimits()?.let {
             "${it.minAmount} sat ($${cents(it.minUsdCents)}) – ${it.maxAmount ?: "no sat max"} ($${cents(it.maxUsdCents)})"
         } ?: "?",
-        expiresAt = method?.expiresAt ?: "?",
+        expiresAtMillis = method?.expiresAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() },
         recipient = method?.recipientAddress ?: "?",
     )
 }
@@ -421,7 +434,7 @@ data class CrossChainQuote(
     val transferFee: String,
     val feeMode: String,
     val limits: String,
-    val expiresAt: String,
+    val expiresAtMillis: Long?,
     val recipient: String,
 )
 
