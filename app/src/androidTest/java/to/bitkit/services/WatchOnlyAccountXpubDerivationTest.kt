@@ -18,7 +18,7 @@ import kotlin.test.assertEquals
 class WatchOnlyAccountXpubDerivationTest : BaseAndroidTest() {
     @Test
     fun coreDerivationMatchesTheMainnetAccountXpub() {
-        assertEquals(BIP84_ACCOUNT_0_XPUB, coreAccountXpub(Network.BITCOIN, 0))
+        assertEquals(MAINNET_ACCOUNT_1_XPUB, coreAccountXpub(Network.BITCOIN, 1))
     }
 
     @Test
@@ -41,10 +41,10 @@ class WatchOnlyAccountXpubDerivationTest : BaseAndroidTest() {
         const val TEST_MNEMONIC =
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
-        // BIP84 test vector, m/84'/0'/0' with xpub version bytes.
-        const val BIP84_ACCOUNT_0_XPUB =
-            "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3Xyuv" +
-                "PEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V"
+        // m/84'/0'/1'; ldk-node only accepts watch-only accounts from index 1. Derived independently of bitkit-core.
+        const val MAINNET_ACCOUNT_1_XPUB =
+            "xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyic" +
+                "JgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn"
 
         // m/84'/1'/1' with tpub version bytes, as ldk-node exports it on regtest; derived independently of bitkit-core.
         const val REGTEST_ACCOUNT_1_TPUB =

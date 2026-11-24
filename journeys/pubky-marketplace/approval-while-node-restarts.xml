@@ -15,5 +15,6 @@
     <action>Verify the Shop dialog or the fixture reports the setup as complete</action>
     <action>Wait for the wallet to finish syncing, then open the watch-only accounts list in Settings</action>
     <action>Verify exactly one new account was added, named after the requesting service, with tracking on</action>
+    <action>Verify the app log shows the node loaded that account index ("Registered derived on-chain wallet account" or "Loaded configured wallet for OnchainWalletAccount" with its account_index) and no "Provided xpub does not match the node's master seed" error</action>
   </actions>
 </journey>
