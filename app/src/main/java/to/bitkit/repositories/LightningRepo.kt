@@ -206,6 +206,9 @@ class LightningRepo @Inject constructor(
     // The prepared send held while its higher mining fee is reviewed, released before its node stops.
     private val reviewedPreparedSend = AtomicReference<PreparedOnchainSend?>(null)
     private val pendingStopJob = AtomicReference<Job?>(null)
+
+    /** Counts [stop] calls, so a start can tell a stop ran since its caller checked. */
+    private val stopRequestCount = AtomicLong(0)
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
 
@@ -214,7 +217,8 @@ class LightningRepo @Inject constructor(
      * recovery a failed change launches. [lifecycleMutex] is taken separately by `stop()` and
      * `start()`, so without this a detached recovery can restart the previous config between a
      * request's stop and start, leaving the request to report and persist a config that never
-     * started. Recovery is cheap to wait on: it skips the release gate, so it is a plain rebuild.
+     * started. Recovery skips the release gate, but while the stopped node's VSS writes keep the
+     * store busy it can take up to [RECOVERY_START_ATTEMPTS] builds of up to 60 s each.
      */
     private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
@@ -398,12 +402,14 @@ class LightningRepo @Inject constructor(
         shouldValidateGraph: Boolean = true,
         shouldRetryYieldToStop: Boolean = false,
         shouldCancelPendingStop: Boolean = true,
+        stopRequestsSeen: Long? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
         }
 
         if (shouldCancelPendingStop) cancelPendingStop()
+        val stopRequestsAtStart = stopRequestsSeen ?: stopRequestCount.get()
 
         // Spark needs no node, so it starts alongside it and stays up while the node stops in background.
         if (!isWiping) scope.launch { sparkRepo.start(walletIndex) }
@@ -417,6 +423,11 @@ class LightningRepo @Inject constructor(
 
         val result = lifecycleMutex.withLock {
             if (isWiping) return@withLock Result.failure(WipeInProgressError())
+            // A stop that ran since the caller checked wins, including one that found the node already stopped.
+            if (stopRequestsSeen != null && stopRequestCount.get() != stopRequestsSeen) {
+                Logger.info("Skipped start because a stop was requested", context = TAG)
+                return@withLock Result.failure(NodeStartYieldedToStopError(null))
+            }
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(
@@ -536,7 +547,7 @@ class LightningRepo @Inject constructor(
 
         // Restart after graph reset OUTSIDE the mutex to avoid deadlock
         if (shouldRestartForGraphReset) {
-            return@withContext start(
+            return@withContext startNode(
                 walletIndex = walletIndex,
                 timeout = timeout,
                 shouldRetry = shouldRetry,
@@ -545,6 +556,8 @@ class LightningRepo @Inject constructor(
                 eventHandler = eventHandler,
                 channelMigration = channelMigration,
                 shouldValidateGraph = false, // Prevent infinite loop
+                shouldCancelPendingStop = shouldCancelPendingStop,
+                stopRequestsSeen = stopRequestsAtStart,
             )
         }
 
@@ -765,6 +778,7 @@ class LightningRepo @Inject constructor(
     fun cancelPendingStop() = synchronized(pendingStopLock) { pendingStopJob.getAndSet(null)?.cancel() }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
+        stopRequestCount.incrementAndGet()
         lifecycleMutex.withLock { stopLocked() }
     }
 
@@ -1300,6 +1314,7 @@ class LightningRepo @Inject constructor(
             }
 
             Logger.debug("Starting node with previous config for recovery", context = TAG)
+            val stopRequests = stopRequestCount.get()
 
             var result: Result<Unit>
             var attempt = 0
@@ -1314,7 +1329,12 @@ class LightningRepo @Inject constructor(
                 if (attempt > 1) {
                     Logger.warn("Retrying recovery start '$attempt/$RECOVERY_START_ATTEMPTS'", context = TAG)
                 }
-                result = startNode(shouldRetry = false, shouldCancelPendingStop = false)
+                // A direct stop since recovery's own stop wins over every attempt.
+                result = startNode(
+                    shouldRetry = false,
+                    shouldCancelPendingStop = false,
+                    stopRequestsSeen = stopRequests,
+                )
             } while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < RECOVERY_START_ATTEMPTS)
             result.onSuccess {
                 Logger.debug("Successfully started node with previous config", context = TAG)
