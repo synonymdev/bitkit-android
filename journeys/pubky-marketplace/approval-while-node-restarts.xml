@@ -12,6 +12,7 @@
     <action>Open the fixture setup auth URL in the wallet with adb</action>
     <action>Without waiting for the wallet to finish syncing, tap Approve on the receiving-details introduction, then Authorize, and complete PIN or biometrics if asked</action>
     <action>Verify the success screen appears and no "The wallet must be running before an account can be created" toast is shown</action>
+    <action>Right after the success screen appears, verify the app log has no "LDK node setup" line after the latest "Building node…" line, so the approval completed while the node was still null. If the node finished first, the run is inconclusive: repeat it from the background step</action>
     <action>Verify the Shop dialog or the fixture reports the setup as complete</action>
     <action>Wait for the wallet to finish syncing, then open the watch-only accounts list in Settings</action>
     <action>Verify exactly one new account was added, named after the requesting service, with tracking on</action>
