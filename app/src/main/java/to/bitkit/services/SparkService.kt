@@ -303,6 +303,7 @@ class SparkService @Inject constructor(
         address: String,
         route: CrossChainRoutePair,
         amountSats: ULong,
+        feePolicy: FeePolicy? = null,
     ): PrepareSendPaymentResponse =
         requireSdk().prepareSendPayment(
             PrepareSendPaymentRequest(
@@ -310,7 +311,7 @@ class SparkService @Inject constructor(
                 amount = BigInteger.valueOf(amountSats.toLong()),
                 tokenIdentifier = null,
                 conversionOptions = null,
-                feePolicy = null,
+                feePolicy = feePolicy,
             ),
         )
 
