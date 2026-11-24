@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -90,7 +91,6 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
@@ -106,6 +106,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import com.synonym.bitkitcore.AddressType as BitkitAddressType
 import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
@@ -1281,21 +1282,35 @@ class LightningServiceTest : BaseUnitTest() {
         verify(node, times(1)).syncWallets()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `wallet sync reports a transient account failure after syncing so it is retried`() = test {
+    fun `wallet sync succeeds and retries a transient account failure on its own`() = test {
         val account = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        val status = mock<NodeStatus>()
+        whenever(status.isRunning).thenReturn(true)
+        whenever(node.status()).thenReturn(status)
         whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
             WatchOnlyAccountReconciliationState(listOf(account), emptyList()),
         )
         whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
         whenever(node.onchainPayment()).thenReturn(mock<OnchainPayment>())
-        doThrow(NodeException.PersistenceFailed("vss write failed"))
+        var failAdd = true
+        doAnswer { if (failAdd) throw NodeException.PersistenceFailed("vss write failed") }
             .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
 
-        val error = assertFailsWith<AppError> { sut.sync() }
-
-        assertTrue(error.cause is NodeException.PersistenceFailed)
+        sut.sync()
         verify(node, times(1)).syncWallets()
+
+        failAdd = false
+        advanceTimeBy(16.seconds)
+        runCurrent()
+
+        verify(node, times(2)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+        verify(node, times(2)).syncWallets()
+
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        verify(node, times(2)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
     }
 
     private fun buildConfig(accounts: List<OnchainWalletAccountConfig>) = Config(
