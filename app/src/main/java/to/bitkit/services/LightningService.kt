@@ -1169,6 +1169,19 @@ class LightningService internal constructor(
         sats: ULong? = null,
         paymentDeadlineAt: Instant? = null,
         maxTotalRoutingFeeMsat: ULong? = null,
+    ): PaymentId = send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, isAuthorizedAtSubmission = { true })
+
+    /**
+     * Like [send], checking [isAuthorizedAtSubmission] on the node's queue right before the payment is submitted,
+     * after any wait behind other node work such as a wallet sync. Throws
+     * [ServiceError.PaymentStoppedAtSubmission] when false.
+     */
+    suspend fun send(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong?,
+        isAuthorizedAtSubmission: () -> Boolean,
     ): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -1180,6 +1193,7 @@ class LightningService internal constructor(
         return ServiceQueue.LDK.background(ldkQueue) {
             keychain.requireWalletRestoreComplete()
             ensurePaymentDeadline(paymentDeadlineAt)
+            if (!isAuthorizedAtSubmission()) throw ServiceError.PaymentStoppedAtSubmission()
             runCatching {
                 val routeParameters = maxTotalRoutingFeeMsat?.let(::routeParametersWithFeeCap)
                 when (sats != null) {

@@ -49,6 +49,7 @@ import to.bitkit.models.safe
 import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.asNodeException
 import java.math.BigDecimal
 import java.util.UUID
@@ -433,31 +434,35 @@ class QuickPayRepo @Inject constructor(
 
     private suspend fun dispatchBolt11(invoice: ResolvedInvoice, invoiceHash: String, canDispatch: () -> Boolean) {
         var isAuthorizationLapsed = false
-        lightningRepo.payInvoice(bolt11 = invoice.bolt11, sats = null) {
+        lightningRepo.payInvoiceAuthorizedAtSubmission(invoice.bolt11, sats = null, canDispatch) {
             isAuthorizationLapsed = !canDispatch()
             !isAuthorizationLapsed && tryMarkDispatched(invoiceHash)
         }.fold(
             onSuccess = { onInvoiceAccepted(invoiceHash, it) },
             onFailure = {
-                if (isAuthorizationLapsed) {
-                    fallBackBeforeDispatch(invoiceHash)
-                } else {
-                    onInvoiceRejected(invoiceHash, invoice.bolt11, it)
+                when {
+                    isAuthorizationLapsed -> fallBackBeforeDispatch(invoiceHash)
+                    // Stopped on the node's queue, after it was marked dispatched but before anything was submitted.
+                    it.isStoppedAtSubmission() -> fallBackBeforeDispatch(invoiceHash, isMarkedDispatched = true)
+                    else -> onInvoiceRejected(invoiceHash, invoice.bolt11, it)
                 }
             },
         )
     }
 
     /** Releases a payment that was never submitted and sends its session to the swipe review. */
-    private suspend fun fallBackBeforeDispatch(invoiceHash: String) {
+    private suspend fun fallBackBeforeDispatch(invoiceHash: String, isMarkedDispatched: Boolean = false) {
         mutex.withLock {
             val current = opsByKey[invoiceHash]
-            if (current == null || current.dispatched) return@withLock
+            if (current == null || current.dispatched != isMarkedDispatched) return@withLock
             spend.release(invoiceHash)
             removeOpLocked(current)
             emitToSession(current.sessionId, QuickPaySessionEvent.FallBackToConfirm)
         }
     }
+
+    private fun Throwable.isStoppedAtSubmission(): Boolean =
+        generateSequence(this) { it.cause }.any { it is ServiceError.PaymentStoppedAtSubmission }
 
     private suspend fun tryMarkDispatched(invoiceHash: String): Boolean {
         val settings = readSettings()

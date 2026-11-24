@@ -1242,6 +1242,18 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send checks its authorization again where it is submitted`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).thenReturn("hash")
+        val isAuthorizedAtSubmission = { false }
+
+        sut.payInvoiceAuthorizedAtSubmission("bolt11", 1_000uL, isAuthorizedAtSubmission) { true }
+
+        verify(lightningService).send(eq("bolt11"), eq(1_000uL), anyOrNull(), anyOrNull(), eq(isAuthorizedAtSubmission))
+    }
+
+    @Test
     fun `a node-only payment fails instead of falling back to spark`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
