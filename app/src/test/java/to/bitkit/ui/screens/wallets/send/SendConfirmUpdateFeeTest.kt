@@ -1,6 +1,9 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
@@ -21,6 +24,9 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
 class SendConfirmUpdateFeeTest {
@@ -88,6 +94,31 @@ class SendConfirmUpdateFeeTest {
 
         assertEquals(emptyList(), events)
         assertEquals(emptyList(), backs)
+    }
+
+    @Config(sdk = [34])
+    @Test
+    fun `a swipe with nothing running for it frees the confirm after a second`() {
+        var isSwipeRunning by mutableStateOf(true)
+        var isLocked = false
+        composeRule.setContent {
+            isLocked = rememberConfirmLock(isLoading = true, isSwipeRunning = isSwipeRunning, uiState = SendUiState())
+        }
+        advanceBy(SWIPE_IDLE_RELEASE * 2)
+        assertTrue(isLocked)
+
+        composeRule.runOnUiThread { isSwipeRunning = false }
+        advanceBy(SWIPE_IDLE_RELEASE / 2)
+        assertTrue(isLocked)
+        advanceBy(SWIPE_IDLE_RELEASE)
+
+        assertFalse(isLocked)
+    }
+
+    private fun advanceBy(duration: Duration) {
+        composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(duration.inWholeMilliseconds)
+        composeRule.waitForIdle()
     }
 
     private companion object {

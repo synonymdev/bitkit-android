@@ -113,7 +113,7 @@ import kotlin.time.Duration.Companion.seconds
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 
 /** How long the confirm stays locked after a swipe once nothing runs for it, before it frees the screen. */
-private val SWIPE_IDLE_RELEASE = 1.seconds
+internal val SWIPE_IDLE_RELEASE = 1.seconds
 
 /** Characters of a swap provider's pubky shown on the confirm screen. */
 private const val PROVIDER_KEY_LENGTH = 12
@@ -206,16 +206,7 @@ fun SendConfirmScreen(
         if (uiState.isPreparedFeeReview) isLoading = false
     }
 
-    // A swipe with nothing running for it any more, such as one stopped before paying, no longer holds the screen
-    var isSwipeIdle by remember { mutableStateOf(false) }
-    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay) {
-        isSwipeIdle = false
-        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay) return@LaunchedEffect
-        delay(SWIPE_IDLE_RELEASE)
-        isSwipeIdle = true
-    }
-    val isLocked = isLoading && !isSwipeIdle && !uiState.isPreparedFeeReview &&
-        uiState.showSanityWarningDialog == null
+    val isLocked = rememberConfirmLock(isLoading, isSwipeRunning, uiState)
 
     // A running swipe holds the sheet too, until it moves on or returns here
     DisposableEffect(isLocked) {
@@ -256,6 +247,23 @@ fun SendConfirmScreen(
             onNavigateToPin()
         },
     )
+}
+
+/**
+ * Whether the confirm screen is locked: from the swipe until it moves on or returns here. A swipe with nothing
+ * running for it for [SWIPE_IDLE_RELEASE], such as one stopped before paying, no longer holds it, and neither does
+ * the review of a prepared fee or the amount warning, which the user answers.
+ */
+@Composable
+internal fun rememberConfirmLock(isLoading: Boolean, isSwipeRunning: Boolean, uiState: SendUiState): Boolean {
+    var isSwipeIdle by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay) {
+        isSwipeIdle = false
+        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay) return@LaunchedEffect
+        delay(SWIPE_IDLE_RELEASE)
+        isSwipeIdle = true
+    }
+    return isLoading && !isSwipeIdle && !uiState.isPreparedFeeReview && uiState.showSanityWarningDialog == null
 }
 
 @Composable
