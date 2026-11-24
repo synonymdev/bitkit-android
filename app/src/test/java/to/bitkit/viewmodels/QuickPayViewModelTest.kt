@@ -9,6 +9,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -93,11 +94,13 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.attach(session)
         val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
 
-        sut.pay(session, data)
+        val canDispatch = { true }
+        sut.pay(session, data, canDispatch)
 
         verify(quickPayRepo).pay(
-            session,
-            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+            eq(session),
+            eq(QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u)),
+            eq(canDispatch),
         )
         verify(quickPayRepo, never()).signalCompletion(any(), any(), any(), any(), any())
     }
@@ -112,7 +115,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
         sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
 
-        verify(quickPayRepo, never()).pay(any(), any())
+        verify(quickPayRepo, never()).pay(any(), any(), any())
     }
 
     @Test
@@ -125,8 +128,9 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.pay(session, data)
 
         verify(quickPayRepo, times(1)).pay(
-            session,
-            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+            eq(session),
+            eq(QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u)),
+            any(),
         )
     }
 
@@ -141,12 +145,14 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.pay(second, data)
 
         verify(quickPayRepo, times(1)).pay(
-            first,
-            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+            eq(first),
+            eq(QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u)),
+            any(),
         )
         verify(quickPayRepo, times(1)).pay(
-            second,
-            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+            eq(second),
+            eq(QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u)),
+            any(),
         )
     }
 
@@ -178,8 +184,9 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.pay(second, data)
 
         verify(quickPayRepo, times(1)).pay(
-            second,
-            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+            eq(second),
+            eq(QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u)),
+            any(),
         )
     }
 
