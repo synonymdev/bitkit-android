@@ -172,6 +172,7 @@ fun SendSheet(
     startDestination: SendRoute = SendRoute.Recipient,
     hardwareWalletId: String? = null,
     preparingRequest: PaykitPaymentRequest? = null,
+    onConfirmLockChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
@@ -531,6 +532,7 @@ fun SendSheet(
                     }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+                    val isConfirmLocked by appViewModel.isSendConfirmLocked.collectAsStateWithLifecycle()
                     val initialSubscriptionId = uiState.incomingPaymentRequestId
                         ?.takeIf { uiState.isInitialSubscriptionPayment }
                         ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
@@ -565,6 +567,8 @@ fun SendSheet(
                         },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
+                        isLocked = isConfirmLocked,
+                        onLockChange = onConfirmLockChange,
                         autoPayContent = initialSubscription?.let { subscription ->
                             {
                                 SubscriptionFirstPaymentProgress(

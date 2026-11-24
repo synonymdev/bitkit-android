@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -138,6 +140,8 @@ fun SendConfirmScreen(
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onNavigateToPin: () -> Unit,
+    isLocked: Boolean = false,
+    onLockChange: (Boolean) -> Unit = {},
     syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
 ) {
@@ -199,12 +203,20 @@ fun SendConfirmScreen(
         if (uiState.isPreparedFeeReview) isLoading = false
     }
 
+    // A running swipe holds the sheet too, until it moves on or returns here
+    DisposableEffect(isLocked) {
+        onLockChange(isLocked)
+        onDispose { onLockChange(false) }
+    }
+    BackHandler(enabled = isLocked) {}
+
     SendConfirmContent(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
         isLoading = isLoading,
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
+        isLocked = isLocked,
         syncNodeVariant = syncNodeVariant,
         initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
         autoPayContent = autoPayContent,
@@ -257,6 +269,7 @@ internal fun SendConfirmContent(
     preparingRequest: PaykitPaymentRequest? = null,
     preparingContact: PubkyProfile? = null,
     canGoBack: Boolean = true,
+    isLocked: Boolean = false,
     initialShowDetails: Boolean = false,
     syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
@@ -300,7 +313,7 @@ internal fun SendConfirmContent(
                     else -> stringResource(R.string.wallet__send_review)
                 },
                 contact = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
-                onBack = onBack.takeIf { canGoBack },
+                onBack = onBack.takeIf { canGoBack && !isLocked },
             )
 
             Spacer(Modifier.height(16.dp))
@@ -316,9 +329,10 @@ internal fun SendConfirmContent(
                     preparingRequest = preparingRequest,
                     preparingContact = preparingContact,
                     initialShowDetails = initialShowDetails,
-                    onEvent = onEvent,
-                    onClickAddTag = onClickAddTag,
-                    onClickTag = onClickTag,
+                    // The payment's inputs stay as swiped while the swipe runs
+                    onEvent = { if (!isLocked) onEvent(it) },
+                    onClickAddTag = { if (!isLocked) onClickAddTag() },
+                    onClickTag = { if (!isLocked) onClickTag(it) },
                     onSwipeToConfirm = onSwipeToConfirm,
                 )
             } else {

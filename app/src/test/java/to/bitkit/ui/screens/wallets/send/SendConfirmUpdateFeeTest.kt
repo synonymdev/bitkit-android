@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import org.junit.Rule
@@ -16,8 +17,10 @@ import org.robolectric.annotation.Config
 import to.bitkit.repositories.MoveToSparkQuote
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
+import kotlin.test.assertEquals
 
 @RunWith(RobolectricTestRunner::class)
 class SendConfirmUpdateFeeTest {
@@ -50,6 +53,41 @@ class SendConfirmUpdateFeeTest {
         }
 
         composeRule.onNodeWithTag("ReviewUpdateFee").assertIsDisplayed()
+    }
+
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp")
+    @Test
+    fun `a running swipe hides back and keeps the amount as swiped`() {
+        val events = mutableListOf<SendEvent>()
+        val backs = mutableListOf<Unit>()
+        composeRule.setContent {
+            CompositionLocalProvider(LocalInspectionMode provides true) {
+                AppThemeSurface {
+                    SendConfirmContent(
+                        uiState = SendUiState(
+                            amount = 50_000u,
+                            isAmountInputValid = true,
+                            payMethod = SendMethod.LIGHTNING,
+                            decodedInvoice = INVOICE.copy(amountSatoshis = 0u),
+                            sparkUpdateQuote = MoveToSparkQuote("lnbcrt1spark", amountSats = 29_967uL, feeSats = 2uL),
+                        ),
+                        isNodeRunning = true,
+                        isLoading = true,
+                        showBiometrics = false,
+                        isLocked = true,
+                        onBack = { backs += Unit },
+                        onEvent = { events += it },
+                        modifier = Modifier.sheetHeight()
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeRule.onNodeWithTag("ReviewAmount").performClick()
+
+        assertEquals(emptyList(), events)
+        assertEquals(emptyList(), backs)
     }
 
     private companion object {

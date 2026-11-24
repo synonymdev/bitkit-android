@@ -21754,6 +21754,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the confirm stays locked while the swipe quotes the update again`() = test {
+        val bolt11 = "lnbcrt1lockedrequote"
+        val quoted = CompletableDeferred<Result<MoveToSparkQuote>>()
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { quoted.await() }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertTrue(sut.isSendConfirmLocked.value)
+
+            quoted.complete(Result.success(UPDATE_QUOTE))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.ResetConfirm, awaitItem())
+        }
+        assertFalse(sut.isSendConfirmLocked.value)
+    }
+
+    @Test
     fun `a scan while the node starts decides on QuickPay once the channels are usable`() = test {
         val bolt11 = "lnbcrt1quickpaystarting"
         enableQuickPay()

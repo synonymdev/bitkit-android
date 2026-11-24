@@ -446,6 +446,13 @@ class AppViewModel @Inject constructor(
     /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
     private var sendSession = 0L
 
+    /** Swipes and payments still running from the confirm screen; see [isSendConfirmLocked]. */
+    private var sendConfirmLocks = 0
+    private val _isSendConfirmLocked = MutableStateFlow(false)
+
+    /** True from the confirm swipe until it moves on to the payment or returns to confirm; the screen can't be left. */
+    val isSendConfirmLocked = _isSendConfirmLocked.asStateFlow()
+
     fun setSendEvent(event: SendEvent) {
         if ((currentSheet.value as? Sheet.Send)?.preparingRequest != null) return
         if (preparedFeeReview != null && event.changesReviewedSend()) return
@@ -6770,16 +6777,30 @@ class AppViewModel @Inject constructor(
         if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
         _sendUiState.update { it.copy(approvedSparkUpdateQuote = it.sparkUpdateQuote) }
         viewModelScope.launch {
-            val review = preparedFeeReview
-            if (review == null && !prepareCoinSelection()) return@launch
-            val amount = _sendUiState.value.amount
+            withSendConfirmLocked {
+                val review = preparedFeeReview
+                if (review == null && !prepareCoinSelection()) return@withSendConfirmLocked
+                val amount = _sendUiState.value.amount
 
-            handleSanityChecks(amount, preparedFeeSats = review?.feeSats)
-            if (_sendUiState.value.showSanityWarningDialog != null) return@launch // await for dialog UI interaction
+                handleSanityChecks(amount, preparedFeeSats = review?.feeSats)
+                // await for dialog UI interaction
+                if (_sendUiState.value.showSanityWarningDialog != null) return@withSendConfirmLocked
 
-            if (preparedFeeReview !== review) return@launch
-            review?.isSwiped = true
-            _sendUiState.update { it.copy(shouldConfirmPay = true) }
+                if (preparedFeeReview !== review) return@withSendConfirmLocked
+                review?.isSwiped = true
+                _sendUiState.update { it.copy(shouldConfirmPay = true) }
+            }
+        }
+    }
+
+    private suspend fun withSendConfirmLocked(block: suspend () -> Unit) {
+        sendConfirmLocks++
+        _isSendConfirmLocked.update { true }
+        try {
+            block()
+        } finally {
+            sendConfirmLocks--
+            _isSendConfirmLocked.update { sendConfirmLocks > 0 }
         }
     }
 
@@ -8134,12 +8155,14 @@ class AppViewModel @Inject constructor(
         val state = _sendUiState.value
         if (!state.needsSparkUpdate()) return true
         val generation = sendStateGeneration
-        val fresh = moveToSparkRepo.quote().getOrElse {
+        val result = moveToSparkRepo.quote()
+        // A swipe from a send the user left neither pays nor shows its failure.
+        if (generation != sendStateGeneration) return false
+        val fresh = result.getOrElse {
             val failure = it.toSendFailureDetails(context, state.currentLightningPaymentRequest())
             setSendEffect(SendEffect.NavigateToError(failure))
             return false
         }
-        if (generation != sendStateGeneration) return false
         val shown = state.approvedSparkUpdateQuote
         _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
         if (shown != null && fresh.feeSats <= shown.feeSats) return true
@@ -9547,7 +9570,7 @@ class AppViewModel @Inject constructor(
             val finishSubmission = beginPaymentSubmission()
             try {
                 _sendUiState.update { it.copy(shouldConfirmPay = false) }
-                proceedWithPayment(contactPaymentContext)
+                withSendConfirmLocked { proceedWithPayment(contactPaymentContext) }
             } finally {
                 finishSubmission()
                 if (confirmedPaymentSubmission === submission) releaseConfirmedPaymentSubmission()
