@@ -4547,13 +4547,14 @@ class LightningRepoTest : BaseUnitTest() {
         val badUrl = "ssl://10.0.2.2:60001"
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()))
-            .thenThrow(AppError(LdkError(BuildException.KvStoreSetupFailed("in flight"))))
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
         var recoveryAttempts = 0
         whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 recoveryAttempts++
-                if (recoveryAttempts < 3) throw AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+                if (recoveryAttempts < 3) throw busy
             }
 
         assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
