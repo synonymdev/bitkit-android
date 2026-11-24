@@ -8,12 +8,14 @@ import org.junit.Test
 import to.bitkit.nfc.PosNfcFixtures
 
 class NearbyRequestFilterTest {
+    private val invoice = PosNfcFixtures.SQUARE_INVOICE
+
     @Test
     fun `accepts the payment requests Bitkit serves`() {
-        assertTrue(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&lightning=lnbcrt1p"))
+        assertTrue(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&lightning=$invoice"))
         assertTrue(isNearbyPaymentRequest("BITCOIN:BC1QTEST"))
-        assertTrue(isNearbyPaymentRequest("lightning:lnbc10u1p"))
-        assertTrue(isNearbyPaymentRequest("lightning:LNBCRT1P"))
+        assertTrue(isNearbyPaymentRequest("lightning:$invoice"))
+        assertTrue(isNearbyPaymentRequest("lightning:${invoice.uppercase()}"))
         assertTrue(isNearbyPaymentRequest(" ethereum:0xabc@42161/transfer?address=0xdef "))
         assertTrue(isNearbyPaymentRequest(PosNfcFixtures.SQUARE_URI))
     }
@@ -40,7 +42,7 @@ class NearbyRequestFilterTest {
     fun `refuses a unified uri whose lightning request would be fetched`() {
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=LNURL1DP68GURN8GHJ7"))
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&lightning=lnurl1dp68gurn8ghj7"))
-        assertTrue(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&lightning=lnbcrt1p"))
+        assertTrue(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&lightning=$invoice"))
     }
 
     @Test
@@ -55,14 +57,14 @@ class NearbyRequestFilterTest {
     fun `refuses a request with a required parameter`() {
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&req-pop=callback%3a"))
         assertFalse(isNearbyPaymentRequest("BITCOIN:BCRT1QTEST?REQ-FOO=bar"))
-        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=lnbcrt1p&req-x"))
+        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=$invoice&req-x"))
         assertTrue(isNearbyPaymentRequest("bitcoin:bcrt1qtest?amount=0.001&pop=callback%3a"))
     }
 
     @Test
     fun `checks every lightning value of a unified uri`() {
-        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=lnbcrt1p&lightning=LNURL1DP68GURN8GHJ7"))
-        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=LNURL1DP68GURN8GHJ7&LIGHTNING=lnbcrt1p"))
+        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=$invoice&lightning=LNURL1DP68GURN8GHJ7"))
+        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=LNURL1DP68GURN8GHJ7&LIGHTNING=$invoice"))
     }
 
     @Test
@@ -73,8 +75,16 @@ class NearbyRequestFilterTest {
     }
 
     @Test
+    fun `refuses an invoice whose checksum fails`() {
+        val corrupted = invoice.dropLast(1) + if (invoice.last() == 'q') 'p' else 'q'
+        assertFalse(isNearbyPaymentRequest("lightning:$corrupted"))
+        assertFalse(isNearbyPaymentRequest("lightning:lnbc10u1p"))
+        assertFalse(isNearbyPaymentRequest("lightning:lnbc1" + "q".repeat(60)))
+        assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest?lightning=$corrupted"))
+    }
+
+    @Test
     fun `hands over the rewritten payment request`() {
-        val invoice = PosNfcFixtures.SQUARE_INVOICE
         assertEquals("lightning:$invoice", nearbyPaymentRequest(PosNfcFixtures.BIP321_URI))
         assertEquals("bitcoin:bcrt1qtest", nearbyPaymentRequest(" bitcoin:bcrt1qtest "))
     }

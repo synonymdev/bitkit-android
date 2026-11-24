@@ -3,12 +3,39 @@ package to.bitkit.nearby
 import to.bitkit.nfc.hasRequiredParam
 import to.bitkit.nfc.scannedPaymentRequest
 
+private const val BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+private val BECH32_GENERATOR = intArrayOf(0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3)
+private const val BECH32_CHECKSUM_LENGTH = 6
+private val BOLT11_NETWORKS = listOf("lnbcrt", "lntbs", "lnbc", "lntb")
+
 /**
- * A BOLT11 invoice by its bech32 shape: a mainnet, testnet, signet or regtest prefix the decoder reads as BOLT11
- * (`lnbc`, `lntb`, `lntbs`, `lnbcrt`), then the `1` separator and bech32 data. A Lightning address or LNURL never
- * matches, since `@`, `.` and `:` are not bech32 characters and `lnurl` is not one of the prefixes.
+ * Whether [value] is a BOLT11 invoice: a mainnet, testnet, signet or regtest prefix the decoder reads as BOLT11, an
+ * optional amount, the `1` separator and bech32 data whose checksum holds. A Lightning address or LNURL never
+ * matches, and neither does a string that only looks like an invoice, which would fail to decode.
  */
-private val BOLT11_INVOICE = Regex("^ln(bc|tb)[a-z0-9]*1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$")
+internal fun isBolt11Invoice(value: String): Boolean {
+    val lowercase = value.lowercase()
+    val separator = lowercase.lastIndexOf('1')
+    if (separator < 0) return false
+    val hrp = lowercase.substring(0, separator)
+    val network = BOLT11_NETWORKS.firstOrNull { hrp.startsWith(it) } ?: return false
+    val amountAndUnit = hrp.removePrefix(network)
+    val hasUnit = amountAndUnit.isNotEmpty() && amountAndUnit.last() in "munp"
+    val amount = if (hasUnit) amountAndUnit.dropLast(1) else amountAndUnit
+    if (!amount.all { it in '0'..'9' }) return false
+    val data = lowercase.substring(separator + 1).map { BECH32_CHARSET.indexOf(it) }
+    if (data.size < BECH32_CHECKSUM_LENGTH || data.any { it < 0 }) return false
+    val values = hrp.map { it.code shr 5 } + 0 + hrp.map { it.code and 31 } + data
+    var checksum = 1
+    for (value5 in values) {
+        val top = checksum ushr 25
+        checksum = (checksum and 0x1FFFFFF) shl 5 xor value5
+        BECH32_GENERATOR.forEachIndexed { bit, generator ->
+            if ((top shr bit) and 1 == 1) checksum = checksum xor generator
+        }
+    }
+    return checksum == 1
+}
 
 /**
  * Whether [request], read from a nearby device over Bluetooth, is a payment request Bitkit serves:
@@ -28,10 +55,10 @@ fun isNearbyPaymentRequest(request: String): Boolean {
         lowercase.startsWith("bitcoin:?") -> false
         // The app decodes a unified URI's Lightning request, and decoding an LNURL contacts its server.
         // Every Lightning value is checked, since the decoder keeps the last one.
-        lowercase.startsWith("bitcoin:") -> lightningParams(lowercase).all(BOLT11_INVOICE::matches)
+        lowercase.startsWith("bitcoin:") -> lightningParams(lowercase).all(::isBolt11Invoice)
 
         lowercase.startsWith("ethereum:") -> true
-        lowercase.startsWith("lightning:") -> BOLT11_INVOICE.matches(lowercase.removePrefix("lightning:"))
+        lowercase.startsWith("lightning:") -> isBolt11Invoice(lowercase.removePrefix("lightning:"))
 
         else -> false
     }
