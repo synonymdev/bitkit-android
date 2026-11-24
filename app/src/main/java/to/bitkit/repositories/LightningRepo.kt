@@ -1836,8 +1836,13 @@ class LightningRepo @Inject constructor(
         val paid = hashes(PaymentStatus.SUCCEEDED)
         val failed = hashes(PaymentStatus.FAILED) - paid - live
         val listed = outbound.mapNotNullTo(mutableSetOf()) { (it.kind as? PaymentKind.Bolt11)?.hash?.lowercase() }
-        cacheStore.trimLdkSendHashes(paid = paid - live, failed = failed, listed = listed, live = live)
-        failed.forEach { ldkSendRecordedAt.remove(it) }
+        // A send recorded while the listing was read or trimmed keeps its hash and its record.
+        cacheStore.trimLdkSendHashes(paid = paid - live, failed = failed, listed = listed, live = live) {
+            ldkSendsInFlight.containsKey(it) || (ldkSendRecordedAt[it] ?: 0L) > recordsBefore
+        }
+        failed.forEach { hash ->
+            ldkSendRecordedAt.computeIfPresent(hash) { _, at -> at.takeIf { at > recordsBefore } }
+        }
     }
 
     /** When [bolt11] expires, in epoch seconds, or null when it can't be parsed. */

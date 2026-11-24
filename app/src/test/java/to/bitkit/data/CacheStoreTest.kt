@@ -114,6 +114,17 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send listed failed stays kept when it is recorded again before the trim writes`() = test {
+        sut.addLdkSendHash("h")
+
+        sut.trimLdkSendHashes(paid = emptySet(), failed = setOf("h"), listed = setOf("h"), live = emptySet()) {
+            it == "h"
+        }
+
+        assertEquals(listOf("h"), sut.data.first().ldkSendHashes)
+    }
+
+    @Test
     fun `a node send still pending behind the cap of later sends stays kept`() = test {
         sut.addLdkSendHash("pending")
         settledHashes().forEach { sut.addLdkSendHash(it) }

@@ -19,10 +19,10 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
@@ -2049,10 +2049,11 @@ class LightningRepoTest : BaseUnitTest() {
 
         verifyBlocking(cacheStore) {
             trimLdkSendHashes(
-                paid = setOf("paid"),
-                failed = setOf("failed"),
-                listed = setOf("pending", "paid", "failed"),
-                live = setOf("pending"),
+                paid = eq(setOf("paid")),
+                failed = eq(setOf("failed")),
+                listed = eq(setOf("pending", "paid", "failed")),
+                live = eq(setOf("pending")),
+                isLive = any(),
             )
         }
     }
