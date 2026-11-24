@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import to.bitkit.repositories.MoveToSparkOutcome
-import to.bitkit.repositories.MoveToSparkQuote
+import to.bitkit.repositories.MoveToSparkPlan
 import javax.inject.Inject
 
 /**
@@ -31,8 +31,8 @@ class MoveToSparkViewModel @Inject constructor(
         screen = null
     }
 
-    /** Quotes moving [targetSats], or everything the channels can send. */
-    fun quote(targetSats: ULong? = null) = manager.quote(targetSats)
+    /** Quotes moving everything the channels can send. */
+    fun quote() = manager.quote()
 
     fun move() = manager.move()
 
@@ -43,13 +43,9 @@ class MoveToSparkViewModel @Inject constructor(
 sealed interface MoveToSparkUiState {
     data object Quoting : MoveToSparkUiState
 
-    data class Confirm(val quote: MoveToSparkQuote, val isMoving: Boolean = false) : MoveToSparkUiState
+    data class Confirm(val plan: MoveToSparkPlan, val isMoving: Boolean = false) : MoveToSparkUiState
 
-    /** [hasRest]: the channels can still send enough to move again, as after a smaller amount. */
-    data class Done(val outcome: MoveToSparkOutcome, val hasRest: Boolean = false) : MoveToSparkUiState
-
-    /** [amountSats] did not route in one payment; [smallerSats] is the next amount to try, if any is left. */
-    data class TooLarge(val amountSats: ULong, val smallerSats: ULong?) : MoveToSparkUiState
+    data class Done(val outcome: MoveToSparkOutcome) : MoveToSparkUiState
 
     data class Failed(val failure: MoveToSparkFailure) : MoveToSparkUiState
 }
