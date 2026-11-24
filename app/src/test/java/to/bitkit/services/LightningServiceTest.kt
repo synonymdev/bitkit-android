@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.AddressInfo
 import org.lightningdevkit.ldknode.AddressType
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BalanceSource
+import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Event
@@ -40,6 +41,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainPayment
 import org.lightningdevkit.ldknode.OnchainSendResult
 import org.lightningdevkit.ldknode.OnchainWalletAccount
+import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -53,6 +55,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -87,6 +90,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.LdkError
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import java.io.File
@@ -97,6 +101,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -1188,6 +1193,110 @@ class LightningServiceTest : BaseUnitTest() {
         assertEquals(listOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u)), trackedAccounts)
         verify(watchOnlyAccountStore).completeReconciliation(walletIndex = 0)
     }
+
+    @Test
+    fun `build without paykit server accounts when the node rejects one`() = test {
+        val account = OnchainWalletAccountConfig(AddressType.NATIVE_SEGWIT, 1u, "xpub-1")
+        val built = mock<Node>()
+        val attempts = mutableListOf<List<OnchainWalletAccountConfig>>()
+
+        val result = buildAcceptingPaykitServerAccounts(buildConfig(listOf(account))) {
+            attempts += it.onchainWalletAccounts
+            if (it.onchainWalletAccounts.isNotEmpty()) throw BuildException.InvalidSeedBytes("xpub mismatch")
+            built
+        }
+
+        assertSame(built, result)
+        assertEquals(listOf(listOf(account), emptyList()), attempts)
+    }
+
+    @Test
+    fun `build fails without retry when no paykit server account is configured`() = test {
+        var attempts = 0
+
+        val error = assertFailsWith<LdkError> {
+            buildAcceptingPaykitServerAccounts(buildConfig(emptyList())) {
+                attempts++
+                throw BuildException.InvalidSeedBytes("bad seed")
+            }
+        }
+
+        assertEquals(1, attempts)
+        assertEquals("InvalidSeedBytes", error.compactType)
+    }
+
+    @Test
+    fun `build fails without retry on other build errors`() = test {
+        var attempts = 0
+
+        assertFailsWith<LdkError> {
+            buildAcceptingPaykitServerAccounts(
+                buildConfig(listOf(OnchainWalletAccountConfig(AddressType.NATIVE_SEGWIT, 1u, "xpub-1"))),
+            ) {
+                attempts++
+                throw BuildException.WalletSetupFailed("wallet")
+            }
+        }
+
+        assertEquals(1, attempts)
+    }
+
+    @Test
+    fun `reconciliation loads the other accounts when the node rejects one`() = test {
+        val rejected = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        val accepted = watchOnlyAccount(accountIndex = 2, walletIndex = 0, enabled = true)
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(rejected, accepted), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        doThrow(NodeException.InvalidSeedBytes("xpub mismatch"))
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, rejected.xpub)
+
+        assertTrue(runCatching { sut.reconcileWatchOnlyAccounts(syncAfterReconcile = false) }.isFailure)
+
+        verify(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u, accepted.xpub)
+        verify(onchainPayment).revealReceiveAddressesToAccount(
+            AddressType.NATIVE_SEGWIT,
+            2u,
+            WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+        )
+    }
+
+    @Test
+    fun `wallet sync runs when reconciliation fails`() = test {
+        val rejected = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(rejected), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(mock<OnchainPayment>())
+        doThrow(NodeException.InvalidSeedBytes("xpub mismatch"))
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, rejected.xpub)
+
+        sut.sync()
+
+        verify(node, times(1)).syncWallets()
+    }
+
+    private fun buildConfig(accounts: List<OnchainWalletAccountConfig>) = Config(
+        storageDirPath = "",
+        network = Network.REGTEST,
+        listeningAddresses = null,
+        announcementAddresses = null,
+        nodeAlias = null,
+        trustedPeers0conf = emptyList(),
+        probingLiquidityLimitMultiplier = 1uL,
+        anchorChannelsConfig = null,
+        routeParameters = null,
+        scoringFeeParams = null,
+        scoringDecayParams = null,
+        includeUntrustedPendingInSpendable = false,
+        addressType = AddressType.NATIVE_SEGWIT,
+        addressTypesToMonitor = emptyList(),
+        onchainWalletAccounts = accounts,
+    )
 
     private fun watchOnlyAccount(accountIndex: Int, walletIndex: Int, enabled: Boolean) = WatchOnlyAccountRecord(
         id = "account-$accountIndex",

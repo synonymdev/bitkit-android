@@ -176,6 +176,30 @@ internal fun enabledOnchainWalletAccountConfigs(
         )
     }
 
+/**
+ * Builds with [config], and when ldk-node rejects a configured Paykit Server account (its xpub does not match the
+ * seed, which fails the whole build) builds again without those accounts, so the wallet still starts. The reconcile on
+ * start then adds each account the node accepts.
+ */
+internal suspend fun buildAcceptingPaykitServerAccounts(config: Config, build: suspend (Config) -> Node): Node =
+    try {
+        build(config)
+    } catch (e: BuildException.InvalidSeedBytes) {
+        if (config.onchainWalletAccounts.isEmpty()) throw LdkError(e)
+        Logger.error(
+            "Node rejected Paykit Server accounts at build, building without them",
+            e,
+            context = "LightningService",
+        )
+        try {
+            build(config.copy(onchainWalletAccounts = emptyList()))
+        } catch (retryError: BuildException) {
+            throw LdkError(retryError)
+        }
+    } catch (e: BuildException) {
+        throw LdkError(e)
+    }
+
 internal fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
     LdkAddressType.LEGACY -> AddressType.P2PKH
     LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
@@ -343,6 +367,20 @@ class LightningService internal constructor(
         runtimeMonitor: NodeRuntimeMonitor,
         channelMigration: ChannelDataMigration? = null,
     ): Node = ServiceQueue.LDK.background(ldkQueue) {
+        buildAcceptingPaykitServerAccounts(config) {
+            buildNode(walletIndex, customServerUrl, customRgsServerUrl, it, runtimeMonitor, channelMigration)
+        }
+    }
+
+    @Suppress("ForbiddenComment")
+    private suspend fun buildNode(
+        walletIndex: Int,
+        customServerUrl: String?,
+        customRgsServerUrl: String?,
+        config: Config,
+        runtimeMonitor: NodeRuntimeMonitor,
+        channelMigration: ChannelDataMigration?,
+    ): Node {
         val storedSettings = settingsStore.data.first()
         val settings = storedSettings.withRequiredNativeSegwitMonitoring()
         if (settings != storedSettings) {
@@ -393,9 +431,7 @@ class LightningService internal constructor(
                 throw ServiceError.VssAuthRequired()
             }
 
-            builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
-        } catch (e: BuildException) {
-            throw LdkError(e)
+            return builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
         } finally {
             // TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values
         }
@@ -525,19 +561,26 @@ class LightningService internal constructor(
                     }
                 }
 
-                desiredConfigs.forEach { config ->
-                    val isTracked = trackedAccounts.any {
-                        it.addressType == config.addressType && it.accountIndex == config.accountIndex
+                // One account the node rejects must not keep the others from loading; the first failure is
+                // rethrown below so the reconciliation is retried.
+                val failures = desiredConfigs.mapNotNull { config ->
+                    runSuspendCatching {
+                        val isTracked = trackedAccounts.any {
+                            it.addressType == config.addressType && it.accountIndex == config.accountIndex
+                        }
+                        if (!isTracked) {
+                            node.addOnchainWalletAccount(config.addressType, config.accountIndex, config.xpub)
+                        }
+                        node.onchainPayment().revealReceiveAddressesToAccount(
+                            config.addressType,
+                            config.accountIndex,
+                            WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+                        )
+                    }.exceptionOrNull()?.also {
+                        Logger.error("Failed to load Paykit Server account ${config.accountIndex}", it, context = TAG)
                     }
-                    if (!isTracked) {
-                        node.addOnchainWalletAccount(config.addressType, config.accountIndex, config.xpub)
-                    }
-                    node.onchainPayment().revealReceiveAddressesToAccount(
-                        config.addressType,
-                        config.accountIndex,
-                        WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
-                    )
                 }
+                failures.firstOrNull()?.let { throw it }
 
                 if (syncAfterReconcile && desiredConfigs.isNotEmpty() && node.status().isRunning) {
                     node.syncWallets()
@@ -703,7 +746,9 @@ class LightningService internal constructor(
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        reconcileWatchOnlyAccounts(syncAfterReconcile = false)
+        // A Paykit Server account the node rejects must not stop the wallet from syncing; the next sync retries it.
+        runSuspendCatching { reconcileWatchOnlyAccounts(syncAfterReconcile = false) }
+            .onFailure { Logger.error("Failed to reconcile Paykit Server accounts before sync", it, context = TAG) }
 
         Logger.verbose("Syncing LDK…", context = TAG)
         ServiceQueue.LDK.background(ldkQueue) {
