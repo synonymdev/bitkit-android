@@ -1,8 +1,11 @@
 package to.bitkit.nearby
 
 import com.synonym.bitkitcore.validateBitcoinAddress
+import to.bitkit.env.Env
+import to.bitkit.models.toLdkNetwork
 import to.bitkit.nfc.hasRequiredParam
 import to.bitkit.nfc.scannedPaymentRequest
+import to.bitkit.utils.NetworkValidationHelper
 
 private const val BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 private val BECH32_GENERATOR = intArrayOf(0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3)
@@ -38,13 +41,20 @@ internal fun isBolt11Invoice(value: String): Boolean {
     return checksum == 1
 }
 
+private val BECH32_ADDRESS_PREFIXES = listOf("bc1", "tb1", "bcrt1")
+
 /**
- * Whether a `bitcoin:` URI names a valid address, checked with the decoder's own validation, so the scanner can
- * decode it instead of resetting Send and closing on an error. [uri] keeps its case, as base58 addresses need it.
+ * Whether a `bitcoin:` URI names a valid address for this wallet's network, checked as the scanner does, so it can
+ * decode the request instead of resetting Send and closing on an error. Like the decoder, a bech32 address is
+ * validated in lowercase and a base58 one in its own case, so [uri] keeps its case.
  */
-private fun hasValidAddress(uri: String): Boolean {
+private fun hasPayableAddress(uri: String): Boolean {
     val address = uri.substringAfter(':').substringBefore('?')
-    return address.isNotEmpty() && runCatching { validateBitcoinAddress(address) }.isSuccess
+    if (address.isEmpty()) return false
+    val lowercase = address.lowercase()
+    val normalized = if (BECH32_ADDRESS_PREFIXES.any(lowercase::startsWith)) lowercase else address
+    val network = runCatching { validateBitcoinAddress(normalized).network }.getOrNull() ?: return false
+    return !NetworkValidationHelper.isNetworkMismatch(network.toLdkNetwork(), Env.network)
 }
 
 /**
@@ -66,7 +76,7 @@ fun isNearbyPaymentRequest(request: String): Boolean {
         // The app decodes a unified URI's Lightning request, and decoding an LNURL contacts its server.
         // Every Lightning value is checked, since the decoder keeps the last one.
         lowercase.startsWith("bitcoin:") ->
-            hasValidAddress(trimmed) && lightningParams(lowercase).all(::isBolt11Invoice)
+            hasPayableAddress(trimmed) && lightningParams(lowercase).all(::isBolt11Invoice)
 
         lowercase.startsWith("ethereum:") -> true
         lowercase.startsWith("lightning:") -> isBolt11Invoice(lowercase.removePrefix("lightning:"))

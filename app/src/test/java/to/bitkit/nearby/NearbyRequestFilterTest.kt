@@ -18,7 +18,7 @@ import to.bitkit.nfc.PosNfcFixtures
 class NearbyRequestFilterTest {
     private val invoice = PosNfcFixtures.SQUARE_INVOICE
     private val address = "bcrt1q60d6qvf8lufpxpw6pvdnzsplxx4edspe04nyqz"
-    private val mainnetAddress = "BC1QAR0SRRR7XFKVY5L643LYDNW9RE59GTZZWF5MDQ"
+    private val mainnetAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
     private val corruptedAddress = address.dropLast(1) + if (address.last() == 'q') 'p' else 'q'
     private lateinit var native: MockedStatic<*>
 
@@ -26,12 +26,14 @@ class NearbyRequestFilterTest {
     @Before
     fun setUp() {
         native = mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt"))
-        for (valid in listOf(address, address.uppercase(), mainnetAddress)) {
+        for (valid in listOf(address, mainnetAddress)) {
             val network = if (valid == mainnetAddress) NetworkType.BITCOIN else NetworkType.REGTEST
             native.`when`<ValidationResult> { validateBitcoinAddress(valid) }
                 .thenReturn(ValidationResult(valid, network, AddressType.UNKNOWN))
         }
-        for (invalid in listOf("bcrt1qtest", corruptedAddress, "not-an-address")) {
+        // Like bitkit-core, which reads a bech32 network prefix in lowercase only.
+        val uppercase = listOf(address.uppercase(), mainnetAddress.uppercase())
+        for (invalid in listOf("bcrt1qtest", corruptedAddress, "not-an-address") + uppercase) {
             native.`when`<ValidationResult> { validateBitcoinAddress(invalid) }
                 .thenThrow(IllegalArgumentException("Invalid address"))
         }
@@ -43,7 +45,7 @@ class NearbyRequestFilterTest {
     @Test
     fun `accepts the payment requests Bitkit serves`() {
         assertTrue(isNearbyPaymentRequest("bitcoin:$address?amount=0.001&lightning=$invoice"))
-        assertTrue(isNearbyPaymentRequest("BITCOIN:$mainnetAddress"))
+        assertTrue(isNearbyPaymentRequest("BITCOIN:${address.uppercase()}"))
         assertTrue(isNearbyPaymentRequest("lightning:$invoice"))
         assertTrue(isNearbyPaymentRequest("lightning:${invoice.uppercase()}"))
         assertTrue(isNearbyPaymentRequest(" ethereum:0xabc@42161/transfer?address=0xdef "))
@@ -122,6 +124,13 @@ class NearbyRequestFilterTest {
         assertFalse(isNearbyPaymentRequest("bitcoin:bcrt1qtest"))
         assertFalse(isNearbyPaymentRequest("bitcoin:$corruptedAddress?amount=0.001"))
         assertNull(nearbyPaymentRequest("bitcoin:"))
+    }
+
+    @Test
+    fun `refuses an address for another network`() {
+        // Tests run the dev build, a regtest wallet.
+        assertFalse(isNearbyPaymentRequest("bitcoin:$mainnetAddress"))
+        assertFalse(isNearbyPaymentRequest("BITCOIN:${mainnetAddress.uppercase()}?amount=0.001"))
     }
 
     @Test
