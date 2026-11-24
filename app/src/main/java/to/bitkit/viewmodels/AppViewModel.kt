@@ -8026,6 +8026,7 @@ class AppViewModel @Inject constructor(
                 if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
+                resolveSettledPendingSend(pendingHash)
                 return@onFailure
             }
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
@@ -8042,6 +8043,27 @@ class AppViewModel @Inject constructor(
                 else -> error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
             }
             setSendEffect(SendEffect.NavigateToError(failure))
+        }
+    }
+
+    /** Resolves a pending send whose outcome was handled before it was tracked, which no later event resolves. */
+    private suspend fun resolveSettledPendingSend(paymentHash: String) {
+        val event = lightningRepo.settledSparkSendEvent(paymentHash) ?: return
+        if (!pendingPaymentRepo.isPending(paymentHash)) return
+        when (event) {
+            is Event.PaymentSuccessful if event.paymentHash == paymentHash -> {
+                // The send screen may have moved on to another payment meanwhile, so only this send's contact counts.
+                syncContactForActivity(paymentHash, isPendingOnly = true)
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash, amountWithFeeSats = null))
+            }
+
+            is Event.PaymentFailed if event.paymentHash == paymentHash -> {
+                releaseFailedSwapHold(paymentHash)
+                clearPendingContactPaymentContext(paymentHash)
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
+            }
+
+            else -> Unit
         }
     }
 
@@ -8944,6 +8966,8 @@ class AppViewModel @Inject constructor(
     /** Receipt status by the payment's hash, txid or USDT transfer id, lowercase. */
     val paykitReceiptStatuses get() = paykitReceiptRepo.statuses
 
+    val moveToSparkHashes get() = moveToSparkRepo.moveHashes
+
     fun retryPaykitReceipt(paymentId: String) = viewModelScope.launch(bgDispatcher) {
         paykitReceiptRepo.retry(paymentId)
     }
@@ -9639,17 +9663,19 @@ class AppViewModel @Inject constructor(
     private fun syncContactForActivity(
         paymentHashOrTxId: String,
         walletId: String = WalletScope.default,
+        isPendingOnly: Boolean = false,
     ) {
         val contactContext = synchronized(contactPaymentContextLock) {
             val pendingContext = pendingContactPaymentContexts.remove(paymentHashOrTxId)
-            val context = pendingContext ?: activeContactPaymentContext
+            val context = pendingContext ?: activeContactPaymentContext.takeUnless { isPendingOnly }
             if (pendingContext == null && context != null) {
                 activeContactPaymentContext = null
             }
             if (preparedContactPaymentContext == context) preparedContactPaymentContext = null
             context
         }
-        isSubmittingPaymentRequest = false
+        // A pending send settling later leaves the send under way alone.
+        if (!isPendingOnly) isSubmittingPaymentRequest = false
         contactContext ?: return
 
         viewModelScope.launch {

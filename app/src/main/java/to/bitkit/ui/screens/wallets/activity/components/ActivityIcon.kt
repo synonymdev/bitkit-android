@@ -42,6 +42,7 @@ fun ActivityIcon(
     size: Dp = 32.dp,
     isCpfpChild: Boolean = false,
     isHardware: Boolean = false,
+    isMoveToSpark: Boolean = false,
     contact: PubkyProfile? = null,
 ) {
     val isLightning = activity is Activity.Lightning
@@ -60,6 +61,14 @@ fun ActivityIcon(
                 modifier = modifier.testTag("BoostingIcon"),
             )
         }
+
+        isMoveToSpark && status == PaymentState.SUCCEEDED -> CircularIcon(
+            icon = painterResource(R.drawable.ic_transfer),
+            iconColor = Colors.Purple,
+            backgroundColor = Colors.Purple16,
+            size = size,
+            modifier = modifier.testTag("MoveToSparkIcon"),
+        )
 
         contact != null -> PubkyContactAvatar(
             profile = contact,

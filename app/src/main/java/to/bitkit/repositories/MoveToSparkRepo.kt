@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
@@ -16,6 +17,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -29,16 +31,19 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Moves the balance of the user's Lightning channels to their own Spark wallet, paying a Spark invoice over the
  * channels only. Blocktank is closing its channels, and this is the cheapest way to keep the balance in Spending.
  */
 @Singleton
-class MoveToSparkRepo @Inject constructor(
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+class MoveToSparkRepo internal constructor(
+    private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val sparkRepo: SparkRepo,
+    private val cacheStore: CacheStore,
+    private val paymentHashOf: (bolt11: String) -> String,
 ) {
     companion object {
         private const val TAG = "MoveToSparkRepo"
@@ -49,17 +54,31 @@ class MoveToSparkRepo @Inject constructor(
         /** How long the move waits for the payment to settle before it reports it as still in flight. */
         private val PAYMENT_TIMEOUT = 2.minutes
 
+        /** How often a move waiting past its timeout reads the node's stored payment again, as the node may be down. */
+        private val STORED_PAYMENT_RECHECK = 30.seconds
+
         /** The failures that mean no route carried the amount, so a smaller one may route. */
         private val NO_ROUTE_REASONS =
             setOf(PaymentFailureReason.ROUTE_NOT_FOUND, PaymentFailureReason.RETRIES_EXHAUSTED)
     }
 
-    private val ownPaymentHashes = ConcurrentHashMap.newKeySet<String>()
+    @Inject
+    constructor(
+        @BgDispatcher bgDispatcher: CoroutineDispatcher,
+        lightningRepo: LightningRepo,
+        sparkRepo: SparkRepo,
+        cacheStore: CacheStore,
+    ) : this(bgDispatcher, lightningRepo, sparkRepo, cacheStore, { Bolt11Invoice.fromStr(it).paymentHash() })
+
     private val watchedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
     private val reportedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
-    /** Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments. */
-    fun isMovePayment(paymentHash: String): Boolean = paymentHash in ownPaymentHashes
+    /**
+     * Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments; also one
+     * from before a restart.
+     */
+    suspend fun isMovePayment(paymentHash: String): Boolean =
+        paymentHash.lowercase() in cacheStore.data.first().moveToSparkHashes
 
     /**
      * Whether the move screen waits on [paymentHash] or already reported its outcome, so the app raises no failure
@@ -67,6 +86,9 @@ class MoveToSparkRepo @Inject constructor(
      */
     fun isWatchedMovePayment(paymentHash: String): Boolean =
         paymentHash in watchedPaymentHashes || paymentHash in reportedPaymentHashes
+
+    /** The payment hashes of the moves to Spark, so Activity shows each as a move rather than a payment. */
+    val moveHashes: Flow<Set<String>> = cacheStore.data.map { it.moveToSparkHashes.toSet() }.distinctUntilChanged()
 
     /** Whether the channels hold a balance worth moving to a usable Spark wallet. */
     val canMove: Flow<Boolean> = combine(lightningRepo.lightningState, sparkRepo.state) { lightning, spark ->
@@ -116,8 +138,8 @@ class MoveToSparkRepo @Inject constructor(
     /** Pays [quote] over the channels and waits for it to settle in Spark. */
     suspend fun move(quote: MoveToSparkQuote): Result<MoveToSparkOutcome> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val paymentHash = Bolt11Invoice.fromStr(quote.invoice).paymentHash()
-            ownPaymentHashes += paymentHash
+            val paymentHash = paymentHashOf(quote.invoice)
+            cacheStore.addMoveToSparkHash(paymentHash)
             watchedPaymentHashes += paymentHash
             try {
                 payAndWait(quote, paymentHash)
@@ -171,7 +193,8 @@ class MoveToSparkRepo @Inject constructor(
 
     /**
      * Waits for the payment of a move still [inFlight] to settle after the move stopped waiting. It listens first, then
-     * reads the node's stored payment, so an outcome that arrived after the move stopped listening is not missed.
+     * reads the node's stored payment, so an outcome that arrived after the move stopped listening is not missed, and
+     * reads it again while it waits, as the node may be down for a read.
      */
     suspend fun awaitSettled(inFlight: MoveToSparkOutcome.InFlight): Result<MoveToSparkOutcome.Moved> =
         withContext(bgDispatcher) {
@@ -180,21 +203,21 @@ class MoveToSparkRepo @Inject constructor(
                     val settled = async(start = CoroutineStart.UNDISPATCHED) {
                         lightningRepo.nodeEvents.first { it.settles(inFlight.paymentHash, inFlight.paymentId) }
                     }
-                    val stored = lightningRepo.listPaymentsOrNull()?.firstOrNull { it.id == inFlight.paymentId }
-                    when (stored?.status) {
-                        PaymentStatus.SUCCEEDED -> {
-                            settled.cancel()
-                            MoveToSparkOutcome.Moved(inFlight.amountSats, (stored.feePaidMsat ?: 0uL) / 1000uL)
-                        }
-                        PaymentStatus.FAILED -> {
-                            settled.cancel()
-                            throw MoveToSparkError.PaymentFailed(null)
-                        }
-                        else -> when (val event = settled.await()) {
-                            is Event.PaymentSuccessful -> event.moved(inFlight.amountSats)
-                            else -> throw MoveToSparkError.PaymentFailed((event as? Event.PaymentFailed)?.reason)
+                    var moved: MoveToSparkOutcome.Moved? = null
+                    while (moved == null) {
+                        val stored = lightningRepo.listPaymentsOrNull()?.firstOrNull { it.id == inFlight.paymentId }
+                        moved = when (stored?.status) {
+                            PaymentStatus.SUCCEEDED ->
+                                MoveToSparkOutcome.Moved(inFlight.amountSats, (stored.feePaidMsat ?: 0uL) / 1000uL)
+                            PaymentStatus.FAILED -> throw MoveToSparkError.PaymentFailed(null)
+                            else -> withTimeoutOrNull(STORED_PAYMENT_RECHECK) { settled.await() }?.let {
+                                (it as? Event.PaymentSuccessful)?.moved(inFlight.amountSats)
+                                    ?: throw MoveToSparkError.PaymentFailed((it as? Event.PaymentFailed)?.reason)
+                            }
                         }
                     }
+                    settled.cancel()
+                    moved
                 }
             }.onFailure {
                 Logger.warn("Failed to move '${inFlight.amountSats}' sats to Spark after the wait", it, context = TAG)

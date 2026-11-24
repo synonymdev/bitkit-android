@@ -40,6 +40,7 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
     private val logsRepo = mock<LogsRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val sparkRepo = mock<SparkRepo>()
+    private val hasRetainedMove = MutableStateFlow(false)
 
     private val lightningState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
     private val lastKnownChannels = MutableStateFlow(
@@ -76,6 +77,15 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
         assertEquals("channel_1", sut.uiState.value.openChannels.single().details.channelId)
     }
 
+    @Test
+    fun `a move kept for its result keeps move to spark offered once nothing is left to move`() = test {
+        hasRetainedMove.value = true
+        val sut = createViewModel()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.canMoveToSpark)
+    }
+
     private fun createViewModel() = LightningConnectionsViewModel(
         context = context,
         bgDispatcher = testDispatcher,
@@ -85,6 +95,7 @@ class LightningConnectionsViewModelTest : BaseUnitTest() {
         activityRepo = activityRepo,
         sparkRepo = sparkRepo,
         sparkExitRepo = mock<SparkExitRepo> { on { state } doReturn MutableStateFlow(SparkExitState()) },
+        moveToSparkManager = mock<MoveToSparkManager> { on { hasRetainedMove } doReturn hasRetainedMove },
         healthRepo = mock<HealthRepo> { on { healthState } doReturn MutableStateFlow(AppHealthState()) },
     )
 }

@@ -24,8 +24,10 @@ import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -121,6 +124,12 @@ class SparkRepo @Inject constructor(
         /** Tries to learn the outcome of a send whose result was lost while Spark cannot list its payments. */
         private const val SETTLE_ATTEMPTS = 10
 
+        /**
+         * How far before a send's start Spark may date its own failure, as Spark's clock can differ from the phone's.
+         * Shared with bitkit-ios.
+         */
+        private const val OWN_FAILURE_CLOCK_MARGIN_SECS = 10uL
+
         /** How long a journaled withdrawal Spark doesn't list stays open before a sync closes it as never sent. */
         private val UNLISTED_WITHDRAWAL_GRACE = 10.minutes
 
@@ -169,11 +178,18 @@ class SparkRepo @Inject constructor(
     private val unsavedPayments = ConcurrentHashMap.newKeySet<String>()
 
     private val isCollectingEvents = AtomicBoolean(false)
+    private val eventsSubscribed = CompletableDeferred<Unit>()
 
     private val refreshMutex = Mutex()
 
     /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
     private val sendsInFlight = ConcurrentHashMap<String, String>()
+
+    /** The latest failure Spark dated for each send seen this process, by payment hash, in epoch seconds. */
+    private val sendFailedAt = ConcurrentHashMap<String, ULong>()
+
+    /** Spark payment ids of the sends whose outcome was reported, so the poll and Spark's event report it once. */
+    private val reportedSendIds = ConcurrentHashMap.newKeySet<String>()
 
     /** Counts sends recorded, so a listing drops a failed hash only when it was recorded before the listing. */
     private val sendRecords = AtomicLong()
@@ -181,6 +197,12 @@ class SparkRepo @Inject constructor(
 
     /** Sends whose outcome Spark didn't report, by payment hash. */
     private val uncertainSends = ConcurrentHashMap<String, UncertainSend>()
+
+    /** Serialises the imports of staged exit data, so a restore and Spark's start never import it at once. */
+    private val exitImportMutex = Mutex()
+
+    /** Held while saved holds are taken back and while a send leaves flight, so neither reads the other halfway. */
+    private val holdRestoreMutex = Mutex()
 
     @Volatile
     private var hasSyncedActivities = false
@@ -258,9 +280,7 @@ class SparkRepo @Inject constructor(
         // A retry reads as connecting until it fails again.
         _state.update { it.copy(hasStartFailed = false) }
         runSuspendCatching {
-            if (isCollectingEvents.compareAndSet(false, true)) {
-                scope.launch { sparkService.events.collect { onSdkEvent(it) } }
-            }
+            collectEvents()
             restoreUncertainSends()
             val isExiting = exitStore(walletIndex).isActive()
             _state.update { it.copy(isExiting = isExiting) }
@@ -306,6 +326,7 @@ class SparkRepo @Inject constructor(
         unsavedPayments.clear()
         sendsInFlight.clear()
         uncertainSends.clear()
+        sendFailedAt.clear()
         hasSyncedActivities = false
         hasMergedRemoteExitState = false
         isLostForExit = false
@@ -509,9 +530,10 @@ class SparkRepo @Inject constructor(
     /**
      * Pays [bolt11] and returns its payment hash, the id ldk-node payments use, so the send flow can match it.
      * Fails with [SparkError.SendRefused] when nothing left the wallet: Spark was not connected, could not prepare the
-     * payment, or its fee was over [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a [SparkError.SendRefused],
-     * when Spark refuses an expired invoice at prepare or send; and with [ServiceError.PaymentDeadlineExpired] past
-     * [paymentDeadlineAt]. A failure inside the send is a [PaymentPendingException], as the payment may have been
+     * payment or list its payments, or its fee was over [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a
+     * [SparkError.SendRefused], when Spark refuses an expired invoice at prepare or send; and with
+     * [ServiceError.PaymentDeadlineExpired] past [paymentDeadlineAt]. A failure inside the send is a
+     * [PaymentPendingException], as the payment may have been
      * dispatched, and its event decides it. An invoice this wallet already sends is not sent again: one in flight or
      * pending fails with [PaymentPendingException], and one Spark completed returns its hash. After a restore, a
      * still-valid invoice created before it that the Spark operators can't show unsent fails with
@@ -550,60 +572,76 @@ class SparkRepo @Inject constructor(
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.PENDING ->
                     throw PaymentPendingException(paymentHash)
                 // Spark's list, synced or unreadable, can lack a send it made before the restore, as on the node's
-                // path, so the operators decide.
+                // path, so the operators decide. Before Spark syncs, its list can't date an earlier attempt they show
+                // failed, which a send must start past, so that one is refused too.
                 else -> refuseUnverifiedRestoredInvoice(
                     bolt11,
                     invoice.timestamp.toEpochSeconds(),
                     expiresAt.toEpochSeconds(),
+                    isFailedUnsent = canListPayments(),
                 )
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
             if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
-            if (sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) != null) {
-                throw PaymentPendingException(paymentHash)
+            val isEntered = holdRestoreMutex.withLock {
+                sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) == null
             }
-            val sent = try {
-                sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
-                cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
-                spending {
-                    // Kept until the call returns, so a send cut off by process death or cancellation stays held.
-                    cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds)
-                    // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
-                    // are checked last, before the send.
-                    runCatching {
-                        ensurePaymentDeadline(paymentDeadlineAt)
-                        ensureNotExiting()
-                    }.onFailure {
+            if (!isEntered) throw PaymentPendingException(paymentHash)
+            // Kept in flight until its result is handled, so a sync meanwhile never takes back its saved hold.
+            try {
+                val startedAt = sendStartedAt(paymentHash)
+                val sent = run {
+                    sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
+                    cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
+                    spending {
+                        // Kept until the call returns, so a send cut off by process death or cancellation stays held.
+                        cacheStore.addSparkUncertainSend(paymentHash, startedAt)
+                        // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
+                        // are checked last, before the send.
+                        runCatching {
+                            ensurePaymentDeadline(paymentDeadlineAt)
+                            ensureNotExiting()
+                        }.onFailure {
+                            cacheStore.removeSparkUncertainSend(paymentHash)
+                            cacheStore.removeSparkSendHash(paymentHash)
+                            throw it
+                        }
+                        runSuspendCatching { sparkService.send(prepared) }
+                    }
+                }
+                sent.onSuccess { noteFailure(it) }
+                val payment = sent.getOrElse {
+                    // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
+                    if (it.isInvoiceExpired()) {
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
-                        throw it
+                        throw SparkError.InvoiceExpired(it)
                     }
-                    runSuspendCatching { sparkService.send(prepared) }
+                    // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
+                    // nothing, for instance when an earlier send spent it after the balance was read.
+                    if (it is SdkException.InsufficientFunds) {
+                        cacheStore.removeSparkUncertainSend(paymentHash)
+                        cacheStore.removeSparkSendHash(paymentHash)
+                        throw SparkError.SendRefused("Spark balance can't cover the payment", it)
+                    }
+                    Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
+                    settleUncertainSend(paymentHash, expiresAt)
+                    throw PaymentPendingException(paymentHash)
                 }
+                // A send Spark took stays held until Spark settles it or its invoice expires, as Spark's list may not
+                // show it yet.
+                if (payment.status == PaymentStatus.PENDING) {
+                    settleUncertainSend(paymentHash, expiresAt)
+                } else {
+                    cacheStore.removeSparkUncertainSend(paymentHash)
+                }
+                Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
+                paymentHash
             } finally {
-                sendsInFlight.remove(paymentHash.lowercase())
-            }
-            val payment = sent.getOrElse {
-                // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
-                if (it.isInvoiceExpired()) {
-                    cacheStore.removeSparkUncertainSend(paymentHash)
-                    cacheStore.removeSparkSendHash(paymentHash)
-                    throw SparkError.InvoiceExpired(it)
+                withContext(NonCancellable) {
+                    holdRestoreMutex.withLock { sendsInFlight.remove(paymentHash.lowercase()) }
                 }
-                // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
-                // nothing, for instance when an earlier send spent it after the balance was read.
-                if (it is SdkException.InsufficientFunds) {
-                    cacheStore.removeSparkUncertainSend(paymentHash)
-                    cacheStore.removeSparkSendHash(paymentHash)
-                    throw SparkError.SendRefused("Spark balance can't cover the payment", it)
-                }
-                Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
-                settleUncertainSend(paymentHash, expiresAt)
-                throw PaymentPendingException(paymentHash)
             }
-            cacheStore.removeSparkUncertainSend(paymentHash)
-            Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
-            paymentHash
         }.onFailure {
             if (it is PaymentAbortedBeforeSend) {
                 Logger.debug("Aborted Spark invoice pay before send", context = TAG)
@@ -615,8 +653,10 @@ class SparkRepo @Inject constructor(
 
     private suspend fun settleUncertainSend(paymentHash: String, expiresAt: ULong) {
         val failedAt = clock.now().epochSeconds
-        uncertainSends[paymentHash.lowercase()] = UncertainSend(failedAt.toULong(), expiresAt)
-        cacheStore.addSparkUncertainSend(paymentHash, failedAt)
+        // The time kept before the send went out stays its start, which tells its own failure from earlier ones.
+        val startedAt = cacheStore.data.first().sparkUncertainSends[paymentHash.lowercase()] ?: failedAt
+        uncertainSends[paymentHash.lowercase()] = UncertainSend(startedAt.toULong(), failedAt.toULong(), expiresAt)
+        cacheStore.addSparkUncertainSend(paymentHash, startedAt)
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
@@ -633,51 +673,107 @@ class SparkRepo @Inject constructor(
         }
     }
 
-    /** Settles an uncertain send once Spark shows its outcome; true once it is settled, also by another caller. */
-    private suspend fun trySettleUncertainSend(paymentHash: String): Boolean {
+    /**
+     * Settles an uncertain send once Spark shows its outcome; true once it is settled, also by another caller. A
+     * failure event for it [isFailureEvent] shows Spark reached the send, as a sync since would. A [listing] just
+     * read from Spark is used instead of reading it again, and then only for the hold [held] taken before it was read.
+     */
+    private suspend fun trySettleUncertainSend(
+        paymentHash: String,
+        isFailureEvent: Boolean = false,
+        listing: List<Payment>? = null,
+        held: UncertainSend? = null,
+    ): Boolean {
         val key = paymentHash.lowercase()
         val uncertain = uncertainSends[key] ?: return true
+        if (held != null && uncertain !== held) return false
         // Spark finishes an interrupted send only on a later sync, and a sync that never reached it still returns.
         val isSynced = hasSyncedSince(uncertain.failedAt)
         if (isSynced) _state.update { it.copy(hasSynced = true) }
         // Spark keeps a send it committed but didn't finish in a cache no call exposes, and a sync that reached Spark
         // can still fail to resume it, so only an expired invoice shows a missing send will never go out.
-        val isFinal = isSynced && clock.now().epochSeconds.toULong() >= uncertain.expiresAt
-        val send = listedLightningSend(paymentHash)
+        val isFinal = (isSynced || isFailureEvent) && clock.now().epochSeconds.toULong() >= uncertain.expiresAt
+        val send = listedLightningSend(paymentHash, listing)
         val isSettled = when (send) {
             SparkLightningSend.NotFound -> isFinal
-            // A failed row may be an earlier attempt's, so it is final only when a missing one would be.
-            is SparkLightningSend.Found -> send.status != PaymentStatus.FAILED || isFinal
+            // A failure dated before the send started is an earlier attempt's, so it is final only when a missing
+            // send would be.
+            is SparkLightningSend.Found if send.status == PaymentStatus.COMPLETED -> true
+            // A pending send ends with its own payment event, or at its invoice's expiry.
+            is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> isFinal
+            is SparkLightningSend.Found -> isFinal || hasOwnFailure(paymentHash, listing)
             SparkLightningSend.Unavailable -> false
         }
         // Only the caller that takes the hash off settles it, so its outcome is reported once.
-        if (!isSettled || !uncertainSends.remove(key, uncertain)) return isSettled
-        cacheStore.removeSparkUncertainSend(paymentHash)
+        if (!isSettled) return false
+        if (!takeUncertainSend(paymentHash, uncertain, send)) return true
         when (send) {
             SparkLightningSend.NotFound -> {
-                cacheStore.removeSparkSendHash(paymentHash)
-                _nodeEvents.emit(Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR))
+                // A retry that entered Spark's send call since the hold was taken reports its own outcome.
+                if (!sendsInFlight.containsKey(key)) {
+                    _nodeEvents.emit(
+                        Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR)
+                    )
+                }
             }
-            // A pending send ends with its own payment event.
+            // Spark still runs a pending send past its invoice's expiry, so its own payment event reports it.
             is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> Unit
             is SparkLightningSend.Found -> {
-                if (send.status == PaymentStatus.FAILED) cacheStore.removeSparkSendHash(paymentHash)
-                settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                val listed = (listing ?: runSuspendCatching { listPayments() }.getOrNull())
+                    ?.latestSend(paymentHash)
+                val isOwn = listed != null &&
+                    listed.timestamp.safe() + OWN_FAILURE_CLOCK_MARGIN_SECS.safe() >= uncertain.startedAt
+                if (send.status == PaymentStatus.FAILED) {
+                    // Its row stayed pending while held, so it takes the failure now.
+                    listed?.let { recordActivity(it) }
+                }
+                when {
+                    listed == null -> settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+                    // A retry started after the hold was taken reads as pending, and its own event reports it.
+                    listed.status == PaymentStatus.PENDING -> Unit
+                    // A retry that entered Spark's send call since the hold was taken reports its own outcome.
+                    listed.status == PaymentStatus.FAILED && isHeldFrom(listed) -> Unit
+                    // The send's own outcome is claimed, so Spark's event for the same payment reports nothing more.
+                    isOwn -> if (reportedSendIds.add(listed.id)) listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                    // An earlier attempt's failure ends the send at its expiry, so it claims no payment.
+                    else -> listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                }
             }
             SparkLightningSend.Unavailable -> Unit
         }
         return true
     }
 
+    private suspend fun takeUncertainSend(
+        paymentHash: String,
+        uncertain: UncertainSend,
+        send: SparkLightningSend,
+    ): Boolean {
+        val key = paymentHash.lowercase()
+        val isFailed = send == SparkLightningSend.NotFound ||
+            send is SparkLightningSend.Found && send.status == PaymentStatus.FAILED
+        // Both copies go under the restore lock, so a sync never takes back a hold settled here. A send enters Spark's
+        // send call under the same lock, so a retry's saved send is never dropped here.
+        return holdRestoreMutex.withLock {
+            uncertainSends.remove(key, uncertain).also {
+                if (!it) return@also
+                cacheStore.removeSparkUncertainSend(paymentHash)
+                if (isFailed && !sendsInFlight.containsKey(key)) cacheStore.removeSparkSendHash(paymentHash)
+            }
+        }
+    }
+
     /** A send whose outcome Spark didn't report: when it failed, and when its invoice expires, in epoch seconds. */
-    private data class UncertainSend(val failedAt: ULong, val expiresAt: ULong)
+    private data class UncertainSend(val startedAt: ULong, val failedAt: ULong, val expiresAt: ULong)
 
     /** Takes back the sends whose outcome Spark didn't report before a restart, so a sync can still settle them. */
-    private suspend fun restoreUncertainSends() {
+    private suspend fun restoreUncertainSends() = holdRestoreMutex.withLock {
         val cache = cacheStore.data.first()
         cache.sparkUncertainSends.forEach { (hash, failedAt) ->
+            // A send still in Spark's send call is settled by its result.
+            if (sendsInFlight.containsKey(hash)) return@forEach
             val expiresAt = cache.sparkSendExpiries[hash]?.toULong() ?: ULong.MAX_VALUE
-            uncertainSends.putIfAbsent(hash, UncertainSend(failedAt.toULong(), expiresAt))
+            uncertainSends.putIfAbsent(hash, UncertainSend(failedAt.toULong(), failedAt.toULong(), expiresAt))
         }
     }
 
@@ -745,6 +841,10 @@ class SparkRepo @Inject constructor(
         }
         claimJobs.remove(txid)?.cancel()
         setDepositClaim(txid, SparkDepositClaim.Later)
+        releaseEarlyClaimCap(txid)
+    }
+
+    private fun releaseEarlyClaimCap(txid: String) {
         val vout = earlyClaimVouts.remove(txid) ?: return
         // Tried again while another claim of the deposit, such as Spark's own sync, leaves the cap in place.
         scope.launch {
@@ -761,6 +861,10 @@ class SparkRepo @Inject constructor(
 
     private suspend fun claimInstantly(txid: String, ceilingSats: ULong) {
         var isSeen = false
+        // Once Spark waits for the early claim, the user's ceiling stays on the deposit as its cap and Spark claims it
+        // by itself when the provider offers it within the cap, so the poll only watches for the claim and asks the
+        // provider nothing more; an offer above the cap is never charged and the deposit is claimed at maturity.
+        var isWaiting = false
         repeat(CLAIM_POLL_ATTEMPTS) {
             runSuspendCatching { refresh() }
                 .onFailure { Logger.warn("Failed to refresh Spark state", it, context = TAG) }
@@ -768,7 +872,9 @@ class SparkRepo @Inject constructor(
                 setDepositClaim(txid, SparkDepositClaim.Claimed)
                 return
             }
-            if (_depositClaims.value[txid] != SparkDepositClaim.Adding) {
+            if (isWaiting && _depositClaims.value[txid] != SparkDepositClaim.Adding) {
+                if (isClaimStarted(txid)) setDepositClaim(txid, SparkDepositClaim.Adding)
+            } else if (_depositClaims.value[txid] != SparkDepositClaim.Adding) {
                 val offer = depositClaimOffer(txid)
                     .onFailure { Logger.warn("Failed to quote Spark deposit '$txid'", it, context = TAG) }
                     .getOrNull()
@@ -778,7 +884,9 @@ class SparkRepo @Inject constructor(
                     SparkClaimStep.Adding -> SparkDepositClaim.Adding
                     SparkClaimStep.Unavailable -> SparkDepositClaim.Unavailable
                     is SparkClaimStep.Ask -> SparkDepositClaim.Repriced(step.offer)
-                    is SparkClaimStep.ClaimEarly -> claimEarly(step.offer).getOrNull()?.toDepositClaim(step.offer)
+                    is SparkClaimStep.ClaimEarly -> claimEarly(step.offer, ceilingSats).getOrNull()
+                        ?.also { isWaiting = it == SparkEarlyClaim.Waiting }
+                        ?.toDepositClaim(step.offer)
                 }
                 if (claim != null) setDepositClaim(txid, claim)
                 if (claim?.isFinal == true) return
@@ -787,6 +895,8 @@ class SparkRepo @Inject constructor(
         }
         if (_depositClaims.value[txid] == SparkDepositClaim.Adding) return
         Logger.warn("Stopped looking for the Instant claim of Spark deposit '$txid'", context = TAG)
+        // Shown at the normal speed from here, so Spark no longer claims it early within the user's ceiling.
+        releaseEarlyClaimCap(txid)
         setDepositClaim(txid, if (isSeen) SparkDepositClaim.Unavailable else SparkDepositClaim.NotSeen)
     }
 
@@ -797,6 +907,11 @@ class SparkRepo @Inject constructor(
     fun followShownDeposit(txid: String) {
         _depositClaims.update { if (txid in it) it else it + (txid to SparkDepositClaim.Later) }
     }
+
+    /** Whether Spark no longer lists the deposit in [txid] as unclaimed, so its claim is under way. */
+    private suspend fun isClaimStarted(txid: String): Boolean = runSuspendCatching {
+        sparkService.listUnclaimedDeposits().none { it.txid.equals(txid, ignoreCase = true) }
+    }.onFailure { Logger.warn("Failed to list unclaimed Spark deposits", it, context = TAG) }.getOrDefault(false)
 
     private fun isClaimed(txid: String): Boolean =
         _state.value.deposits.any { it.isClaimed && it.txid.equals(txid, ignoreCase = true) }
@@ -815,10 +930,16 @@ class SparkRepo @Inject constructor(
         }
     }
 
-    /** Accepts the early claim of [offer] at its quoted fee. */
-    suspend fun claimEarly(offer: SparkClaimOffer.Choice): Result<SparkEarlyClaim> = withContext(bgDispatcher) {
+    /**
+     * Accepts the early claim of [offer] for at most [maxFeeSats], the fee the user accepted. Spark keeps it as the cap
+     * when it waits, so a later offer within it is claimed too.
+     */
+    suspend fun claimEarly(
+        offer: SparkClaimOffer.Choice,
+        maxFeeSats: ULong = offer.earlyFeeSats,
+    ): Result<SparkEarlyClaim> = withContext(bgDispatcher) {
         earlyClaimVouts[offer.txid] = offer.vout
-        runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, offer.earlyFeeSats) }
+        runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, maxFeeSats) }
             .map { SparkEarlyClaim.from(it) }
             .recoverCatching { if (it is SdkException.DepositClaimInProgress) SparkEarlyClaim.Claimed else throw it }
             .onSuccess {
@@ -931,7 +1052,7 @@ class SparkRepo @Inject constructor(
      * its own withdrawal apart, also while Spark's list lacks one after a restart.
      */
     suspend fun withdrawalTxidsTo(address: String): Set<String> = withContext(bgDispatcher) {
-        val listed = sparkService.listPayments().mapNotNull { payment ->
+        val listed = listPayments().mapNotNull { payment ->
             (payment.details as? PaymentDetails.Withdraw)?.takeIf { it.destinationAddress == address }?.txId
         }
         val recorded = cacheStore.data.first().sentSparkWithdrawals.filter { it.address == address }.map { it.txid }
@@ -946,7 +1067,7 @@ class SparkRepo @Inject constructor(
         if (!isSent) return@withContext false
         if (cacheStore.data.first().sentSparkWithdrawals.any { it.txid == txid }) return@withContext true
         if (!_state.value.isReady) return@withContext false
-        runSuspendCatching { sparkService.listPayments() }
+        runSuspendCatching { listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments for '$txid'", it, context = TAG) }
             .getOrDefault(emptyList())
             .any { (it.details as? PaymentDetails.Withdraw)?.txId == txid }
@@ -967,7 +1088,7 @@ class SparkRepo @Inject constructor(
             it.address == address && it.amountSats == amountSats && it.txid !in earlierTxids
         }?.let { return@withContext SparkWithdrawalOutcome.Sent(it.txid) }
         if (!_state.value.hasSynced || isWithdrawing) return@withContext SparkWithdrawalOutcome.Unknown
-        val attempts = sparkService.listPayments().filter { payment ->
+        val attempts = listPayments().filter { payment ->
             val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@filter false
             withdraw.destinationAddress == address && payment.amount.toLong().toULong() == amountSats &&
                 withdraw.txId !in earlierTxids
@@ -1145,7 +1266,10 @@ class SparkRepo @Inject constructor(
     suspend fun mergeRemoteExitBackup(remote: SparkExitBackupV1?): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             if (remote != null && remote.network == sparkService.networkName) {
-                val merged = sparkService.importExitState(remote.exitState)
+                val merged = runSuspendCatching { sparkService.importExitState(remote.exitState) }.getOrElse {
+                    // Spark checks the version and parses the payload without the operators, so this one never passes.
+                    throw if (it is SdkException.InvalidInput) SparkError.ExitStateUnimportable(it) else it
+                }
                 Logger.info("Merged stored Spark exit data: '${merged.importedLeaves}' leaves", context = TAG)
             }
             hasMergedRemoteExitState = true
@@ -1153,8 +1277,53 @@ class SparkRepo @Inject constructor(
     }
 
     /**
+     * Stops merging stored exit data Spark can never import, which the caller kept apart, so the next upload replaces
+     * it. A staged restore is dropped only when it holds that same [exitState]; other staged data still imports.
+     */
+    suspend fun skipUnimportableRemoteExitState(exitState: String?) {
+        if (exitState != null) deleteStagedExitState(exitState)
+        hasMergedRemoteExitState = true
+    }
+
+    /** Tries the import of restored exit data again while connected, and says what became of it. */
+    suspend fun importStagedExitState(): StagedExitImport = withContext(bgDispatcher) {
+        val file = File(Env.sparkExitRestorePath(walletIndex))
+        if (!file.exists()) return@withContext StagedExitImport.NothingStaged
+        val network = sparkService.networkName
+        if (!sparkService.isConnected || network == null) return@withContext StagedExitImport.Pending
+        val staged = file.readText()
+        importRestoredExitState(walletIndex).fold(
+            onSuccess = { StagedExitImport.Imported },
+            onFailure = {
+                if (it is SdkException.InvalidInput) {
+                    StagedExitImport.Rejected(staged, network)
+                } else {
+                    StagedExitImport.Pending
+                }
+            },
+        )
+    }
+
+    /**
+     * Drops restored exit data Spark rejected, once the backup set a copy of it aside, unless newer data came. The
+     * stored backup is merged again before the next upload, as that copy may be older than it.
+     */
+    suspend fun discardStagedExitState(exitState: String) {
+        hasMergedRemoteExitState = false
+        deleteStagedExitState(exitState)
+    }
+
+    /** Deletes staged exit data that still holds [exitState], under the lock staging and import take. */
+    private suspend fun deleteStagedExitState(exitState: String) = exitImportMutex.withLock {
+        val staged = File(Env.sparkExitRestorePath(walletIndex))
+        if (staged.exists() && staged.readText() == exitState) staged.delete()
+    }
+
+    /**
      * Puts a restored exit data backup back: at once while Spark is connected, otherwise right after it connects,
-     * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable.
+     * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable. The
+     * wallet's start waits for the restore, so the restore connects Spark itself and fails when Spark can't import the
+     * data; one that can't connect keeps the data staged for Spark's start.
      */
     suspend fun restoreExitBackup(backup: SparkExitBackupV1, walletIndex: Int): Result<Unit> =
         withContext(bgDispatcher) {
@@ -1163,15 +1332,36 @@ class SparkRepo @Inject constructor(
                     Logger.warn("Skipped Spark exit data from network '${backup.network}'", context = TAG)
                     return@runSuspendCatching
                 }
-                File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState)
+                exitImportMutex.withLock { File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState) }
+                if (sparkService.isSupported && !sparkService.isConnected) connectForRestore(walletIndex)
                 if (sparkService.isConnected) importRestoredExitState(walletIndex).getOrThrow()
             }
         }
 
-    private suspend fun importRestoredExitState(walletIndex: Int): Result<Unit> {
+    /** Collects Spark's events once and returns once subscribed, so no event of a connect made after it is lost. */
+    private suspend fun collectEvents() {
+        if (isCollectingEvents.compareAndSet(false, true)) {
+            scope.launch {
+                sparkService.events.onSubscription { eventsSubscribed.complete(Unit) }.collect { onSdkEvent(it) }
+            }
+        }
+        eventsSubscribed.await()
+    }
+
+    private suspend fun connectForRestore(walletIndex: Int) {
+        // Spark's listener drops events no one collects, and the wallet's start collects them only after the restore.
+        // The sends held before the restore are taken back first, so its events settle them.
+        restoreUncertainSends()
+        collectEvents()
+        runSuspendCatching { sparkService.connect(walletIndex, exitStore(walletIndex).isActive()) }
+            .onSuccess { if (it) _exitStateGeneration.update { generation -> generation + 1 } }
+            .onFailure { Logger.warn("Failed to connect Spark to import restored exit data", it, context = TAG) }
+    }
+
+    private suspend fun importRestoredExitState(walletIndex: Int): Result<Unit> = exitImportMutex.withLock {
         val file = File(Env.sparkExitRestorePath(walletIndex))
-        if (!file.exists()) return Result.success(Unit)
-        return runSuspendCatching { sparkService.importExitState(file.readText()) }
+        if (!file.exists()) return@withLock Result.success(Unit)
+        runSuspendCatching { sparkService.importExitState(file.readText()) }
             .onSuccess {
                 file.delete()
                 Logger.info(
@@ -1193,7 +1383,7 @@ class SparkRepo @Inject constructor(
         val info = sparkService.getInfo()
         info.lastSyncError?.let { Logger.warn("Failed to sync Spark, balances may be stale: '$it'", context = TAG) }
         val unclaimed = sparkService.listUnclaimedDeposits()
-        val payments = sparkService.listPayments()
+        val payments = listPayments()
         val claimedPayments = payments
             .filter { it.method == PaymentMethod.DEPOSIT && it.status == PaymentStatus.COMPLETED }
         val claimed = claimedPayments
@@ -1245,7 +1435,7 @@ class SparkRepo @Inject constructor(
             ).withBroadcastDeposits()
         }
         markClaimedDeposits(claimed)
-        payments
+        payments.decidingRows()
             .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
             .forEach { recordActivity(it) }
         // Off the refresh, so a slow Electrum server never holds a send that waits for it.
@@ -1344,11 +1534,35 @@ class SparkRepo @Inject constructor(
      */
     suspend fun settledSendEvent(paymentHash: String): Event? = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext null
-        runSuspendCatching { sparkService.listPayments() }
+        // Read before the list, so a hold its success event ends while the list is read still keeps it pending.
+        val heldStart = sendHoldStart(paymentHash.lowercase())
+        runSuspendCatching { listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrNull()
             ?.latestSend(paymentHash)
+            // A send in doubt or in Spark's send call is pending until Spark settles it, so a listed failure, which
+            // may be an earlier attempt's, settles nothing yet.
+            ?.takeUnless { it.status == PaymentStatus.FAILED && isHeldFrom(it, heldStart) }
             ?.toNodeEvent()
+    }
+
+    /**
+     * Whether [failure] leaves its send pending: while it is in Spark's send call, whose result settles it, or in doubt
+     * and Spark dates the failure more than [OWN_FAILURE_CLOCK_MARGIN_SECS] before the send started, as an earlier
+     * attempt's.
+     */
+    private suspend fun isHeldFrom(failure: Payment, heldStart: ULong? = null): Boolean {
+        val hash = failure.sendHash()?.lowercase() ?: return false
+        if (sendsInFlight.containsKey(hash)) return true
+        val startedAt = listOfNotNull(heldStart, sendHoldStart(hash)).maxOrNull() ?: return false
+        return failure.timestamp.safe() + OWN_FAILURE_CLOCK_MARGIN_SECS.safe() < startedAt
+    }
+
+    private suspend fun hasOwnFailure(paymentHash: String, listing: List<Payment>? = null): Boolean {
+        val failure = (listing ?: runSuspendCatching { listPayments() }.getOrNull())
+            ?.latestSend(paymentHash)
+            ?.takeIf { it.status == PaymentStatus.FAILED } ?: return false
+        return !isHeldFrom(failure)
     }
 
     /**
@@ -1367,7 +1581,7 @@ class SparkRepo @Inject constructor(
         if (!canListPayments()) return@withContext null
         val unlisted = unexpiredStartedSends()
         val uncertain = uncertainSendHashes()
-        val payments = runSuspendCatching { sparkService.listPayments() }
+        val payments = runSuspendCatching { listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrElse { return@withContext null }
         val listed = payments
@@ -1396,8 +1610,10 @@ class SparkRepo @Inject constructor(
     suspend fun lightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
         val hash = paymentHash.lowercase()
         val isUnlistedHeld = hash in unexpiredStartedSends()
+        // Read before the list, so a hold its success event ends while the list is read still keeps it pending.
+        val wasUncertain = sendHoldStart(hash) != null
         val send = listedLightningSend(paymentHash)
-        val isUncertain = hash in uncertainSendHashes()
+        val isUncertain = wasUncertain || sendHoldStart(hash) != null
         val isHeld = when (send) {
             SparkLightningSend.NotFound, SparkLightningSend.Unavailable -> isUncertain || isUnlistedHeld
             is SparkLightningSend.Found -> isUncertain && send.status == PaymentStatus.FAILED
@@ -1405,11 +1621,17 @@ class SparkRepo @Inject constructor(
         if (isHeld) SparkLightningSend.Found(PaymentStatus.PENDING, null) else send
     }
 
+    private suspend fun sendHoldStart(hash: String): ULong? =
+        uncertainSends[hash]?.startedAt ?: cacheStore.data.first().sparkUncertainSends[hash]?.toULong()
+
     /** Spark's listed record of the Lightning send with [paymentHash], as [lightningSend] reads it before its holds. */
-    private suspend fun listedLightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
+    private suspend fun listedLightningSend(
+        paymentHash: String,
+        listing: List<Payment>? = null,
+    ): SparkLightningSend = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext SparkLightningSend.NotFound
         if (!canListPayments()) return@withContext SparkLightningSend.Unavailable
-        val payments = runSuspendCatching { sparkService.listPayments() }
+        val payments = listing ?: runSuspendCatching { listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrElse { return@withContext SparkLightningSend.Unavailable }
         payments.latestSend(paymentHash)
@@ -1450,7 +1672,7 @@ class SparkRepo @Inject constructor(
             val unlisted = unexpiredStartedSends()
             // Before Spark's first sync its local list can be empty although a restored send is live.
             val payments = if (sparkService.isSupported && canListPayments()) {
-                runSuspendCatching { sparkService.listPayments() }
+                runSuspendCatching { listPayments() }
                     .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
                     .getOrNull()
             } else {
@@ -1499,12 +1721,13 @@ class SparkRepo @Inject constructor(
         bolt11: String,
         invoiceCreatedAt: Long?,
         invoiceExpiresAt: Long?,
+        isFailedUnsent: Boolean = true,
     ) {
         val restoredAt = cacheStore.data.first().sparkRestoredAt ?: return
         val isHeld = sparkService.isSupported &&
             (invoiceCreatedAt ?: 0L) < restoredAt &&
             (invoiceExpiresAt == null || clock.now().epochSeconds < invoiceExpiresAt)
-        if (!isHeld || isUnsentPerOperators(bolt11)) return
+        if (!isHeld || isUnsentPerOperators(bolt11, isFailedUnsent)) return
         Logger.warn("Refused a send of a pre-restore invoice the Spark operators can't show unsent", context = TAG)
         throw SparkError.RestoredInvoiceUnverified()
     }
@@ -1512,14 +1735,15 @@ class SparkRepo @Inject constructor(
     /**
      * Whether the Spark operators confirm this wallet never sent [bolt11] over Lightning, and it can't have been paid
      * by a direct Spark transfer, which they don't see: false when they show a send completed or pending, or can't be
-     * asked. A failed one counts as unsent, as they show it failed only once every attempt at the hash was returned.
+     * asked. A failed one counts as unsent when [isFailedUnsent], as they show it failed only once every attempt at the
+     * hash was returned.
      */
-    private suspend fun isUnsentPerOperators(bolt11: String): Boolean {
+    private suspend fun isUnsentPerOperators(bolt11: String, isFailedUnsent: Boolean = true): Boolean {
         if (!sparkService.isConnected) return false
         val status = runSuspendCatching { sparkService.lightningSendStatus(bolt11) }
             .onFailure { Logger.warn("Failed to fetch Spark's send status", it, context = TAG) }
             .getOrElse { return false }
-        if (status != null && status != PaymentStatus.FAILED) {
+        if (status != null && (status != PaymentStatus.FAILED || !isFailedUnsent)) {
             Logger.info("Found a '$status' Spark operator send of the pre-restore invoice", context = TAG)
             return false
         }
@@ -1564,8 +1788,14 @@ class SparkRepo @Inject constructor(
         val details = it.details as? PaymentDetails.Lightning
         it.paymentType == SparkPaymentType.SEND && details != null && matches(details)
     }
-        // A retry of a failed send shares its hash, so the outcome that settles it wins.
-        .minByOrNull { SEND_STATUS_PRIORITY.indexOf(it.status) }
+        // A retry of a failed send shares its hash, so the outcome that settles it wins, then the latest attempt.
+        .minWithOrNull(compareBy({ SEND_STATUS_PRIORITY.indexOf(it.status) }, { -it.timestamp.toLong() }))
+
+    /** Drops each send another attempt on its invoice decides, so one Activity row shows the deciding outcome. */
+    private fun List<Payment>.decidingRows(): List<Payment> = filter {
+        val hash = (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash
+        it.paymentType != SparkPaymentType.SEND || hash == null || latestSend(hash)?.id == it.id
+    }
 
     /** Payment hashes of the Lightning payments Spark received. */
     suspend fun receivedLightningPaymentHashes(): Set<String> =
@@ -1589,7 +1819,7 @@ class SparkRepo @Inject constructor(
     private suspend fun lightningPaymentStatuses(filter: (Payment) -> Boolean): Map<String, Set<PaymentStatus>>? =
         withContext(bgDispatcher) {
             if (!sparkService.isConnected) return@withContext null
-            runSuspendCatching { sparkService.listPayments() }
+            runSuspendCatching { listPayments() }
                 .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
                 .getOrNull()
                 ?.filter(filter)
@@ -1603,7 +1833,7 @@ class SparkRepo @Inject constructor(
 
     private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String>? = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext null
-        runSuspendCatching { sparkService.listPayments() }
+        runSuspendCatching { listPayments() }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
             .getOrNull()
             ?.filter(filter)
@@ -1617,7 +1847,7 @@ class SparkRepo @Inject constructor(
      */
     private suspend fun seedRestoredSendHashes() {
         if (cacheStore.data.first().sparkHistoryUnseededSince == null || !canListPayments()) return
-        runSuspendCatching { sparkService.listPayments() }
+        runSuspendCatching { listPayments() }
             .onSuccess { seedSendHashes(it) }
             .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
     }
@@ -1649,11 +1879,24 @@ class SparkRepo @Inject constructor(
         // A list read while a withdrawal was in flight, or before one ended, may lack it, so it settles no journal.
         val sendsEndedBefore = withdrawalSendsEnded.get()
         val wasWithdrawing = isWithdrawing
+        // A send held after the list was read may be missing from it, so only the holds before it settle from it.
+        val heldBefore = uncertainSends.toMap()
         // Read before the list, as one read before Spark's first sync can lack its restored sends.
         val isSynced = canListPayments()
-        val payments = sparkService.listPayments()
+        val payments = listPayments()
         if (isSynced) seedSendHashes(payments)
-        val isSaved = payments.map { recordActivity(it) }.all { it }
+        val isSaved = payments.decidingRows().map { recordActivity(it) }.all { it }
+        // A held send that this list shows settled, as by its own failure, ends here, so its hold never waits on
+        // another read of Spark's list.
+        if (isSynced) {
+            heldBefore.forEach { (hash, held) ->
+                trySettleUncertainSend(
+                    hash,
+                    listing = payments,
+                    held = held
+                )
+            }
+        }
         releaseFailedSends(payments, recordsBefore, inFlightBefore)
         if (!settleJournal || wasWithdrawing || isWithdrawing || withdrawalSendsEnded.get() != sendsEndedBefore) {
             return isSaved
@@ -1726,7 +1969,7 @@ class SparkRepo @Inject constructor(
         // A retry can start while the list is recorded, so the release reads Spark's sends again first.
         val recordsBeforeCurrent = sendRecords.get()
         val inFlightBeforeCurrent = sendsInFlight.keys.toSet()
-        val current = runSuspendCatching { sparkService.listPayments() }.getOrNull() ?: return
+        val current = runSuspendCatching { listPayments() }.getOrNull() ?: return
         val liveCurrent = sendsInFlight.keys + inFlightBeforeCurrent + recordedSince(recordsBeforeCurrent) +
             uncertainSendHashes()
         failed
@@ -1736,6 +1979,27 @@ class SparkRepo @Inject constructor(
     }
 
     private fun recordedSince(records: Long): Set<String> = sendRecordedAt.filterValues { it > records }.keys
+
+    private suspend fun listPayments(): List<Payment> = sparkService.listPayments().onEach { noteFailure(it) }
+
+    private fun noteFailure(payment: Payment) {
+        val hash = payment.sendHash(PaymentStatus.FAILED)?.lowercase() ?: return
+        sendFailedAt.merge(hash, payment.timestamp) { old, new -> maxOf(old, new) }
+    }
+
+    /**
+     * When a send of [paymentHash] starting now counts as started: past every failure Spark dated for it by more than
+     * [OWN_FAILURE_CLOCK_MARGIN_SECS], so an earlier attempt's failure never reads as this send's own. Refused when
+     * Spark's list can't be read, as it may hold a failure unknown to this process; nothing has gone out yet.
+     */
+    private suspend fun sendStartedAt(paymentHash: String): Long {
+        runSuspendCatching { listPayments() }.onFailure {
+            throw SparkError.SendRefused("Spark could not list its payments to date the send", it)
+        }
+        val now = clock.now().epochSeconds.toULong()
+        val failedAt = sendFailedAt[paymentHash.lowercase()] ?: return now.toLong()
+        return maxOf(now, failedAt.safe() + (OWN_FAILURE_CLOCK_MARGIN_SECS + 1uL).safe()).toLong()
+    }
 
     /** The payment hash of this send, at [status] when given. */
     private fun Payment.sendHash(status: PaymentStatus? = null): String? = (details as? PaymentDetails.Lightning)
@@ -1750,7 +2014,9 @@ class SparkRepo @Inject constructor(
                     if (hasSyncedSince(null)) _state.update { it.copy(hasSynced = true) }
                     seedRestoredSendHashes()
                     refresh()
-                    // A send whose outcome stayed unknown past its polling settles on a later sync.
+                    // A send whose outcome stayed unknown past its polling settles on a later sync, also one only
+                    // saved, as when its caller was cancelled inside Spark's send call.
+                    restoreUncertainSends()
                     uncertainSends.keys.toList().forEach { trySettleUncertainSend(it) }
                     // A journal left open past its grace period would block every later withdrawal until a restart.
                     // Spark emits Synced after a sync that never reached it too, so only one since the journal
@@ -1778,21 +2044,42 @@ class SparkRepo @Inject constructor(
     }
 
     private suspend fun onPayment(payment: Payment) {
+        noteFailure(payment)
         // The event carries its outcome, so a failed balance read never holds back its settlement.
         runSuspendCatching { refresh() }
             .onFailure { Logger.warn("Failed to refresh Spark after payment '${payment.id}'", it, context = TAG) }
-        recordActivity(payment, settlesJournal = false)
-        // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held.
-        payment.sendHash()?.let {
-            uncertainSends.remove(it.lowercase())
-            cacheStore.removeSparkUncertainSend(it)
+        // An earlier attempt's failure, or one during Spark's send call, leaves the send pending until its own outcome,
+        // its call's result or its invoice's expiry settles it.
+        payment.sendHash(PaymentStatus.FAILED)?.takeIf { isHeldFrom(payment) }?.let {
+            trySettleUncertainSend(it, isFailureEvent = true)
+            return
         }
+        // A failure of an attempt that Spark's list shows another attempt deciding, as pending, paid or a later
+        // failure, settles nothing.
         payment.sendHash(PaymentStatus.FAILED)?.let { hash ->
-            val latest = listedLightningSend(hash)
-            val isReleased = latest == SparkLightningSend.NotFound ||
-                (latest as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
-            if (isReleased) cacheStore.removeSparkSendHash(hash)
+            val deciding = runSuspendCatching { listPayments() }.getOrNull()?.latestSend(hash)
+            if (deciding != null && deciding.id != payment.id) return
         }
+        recordActivity(payment, settlesJournal = false)
+        val isRetried = payment.sendHash()?.let { hash ->
+            val isFailed = payment.status == PaymentStatus.FAILED
+            val isReleased = isFailed && listedLightningSend(hash).let {
+                it == SparkLightningSend.NotFound || (it as? SparkLightningSend.Found)?.status == PaymentStatus.FAILED
+            }
+            // The event settles a send whose outcome was unknown, so retries of its invoice are no longer held. A send
+            // enters Spark's send call under the same lock, so a retry started since the checks above keeps its hold
+            // and saved send, and reports its own outcome.
+            holdRestoreMutex.withLock {
+                if (isFailed && isHeldFrom(payment)) return@withLock true
+                uncertainSends.remove(hash.lowercase())
+                cacheStore.removeSparkUncertainSend(hash)
+                if (isReleased) cacheStore.removeSparkSendHash(hash)
+                false
+            }
+        } ?: false
+        if (isRetried) return
+        // The poll may have reported this payment's outcome already.
+        if (payment.sendHash() != null && !reportedSendIds.add(payment.id)) return
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
     }
 
@@ -1808,6 +2095,11 @@ class SparkRepo @Inject constructor(
             return true
         }
         val id = lightning.htlcDetails.paymentHash
+        // A send in doubt or in Spark's send call shows as pending until Spark settles it, whatever an earlier attempt
+        // on its invoice failed with.
+        if (payment.status == PaymentStatus.FAILED && isHeldFrom(payment)) {
+            return true
+        }
         // A failed read would drop the stored note, contact and seen time, so the write waits for the next refresh.
         val stored = activityRepo.get().getActivity(id).getOrElse {
             unsavedPayments.add(payment.id)
@@ -1830,7 +2122,10 @@ class SparkRepo @Inject constructor(
         }
         // Another attempt of the same invoice, on either rail, already paid it.
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
-        val activity = LightningActivity.create(
+        // A failure, possibly an earlier attempt's, only fails the send's row, which keeps its own details.
+        val failedRow = existing?.takeIf { payment.status == PaymentStatus.FAILED && it.txType == PaymentType.SENT }
+        if (failedRow?.status == PaymentState.FAILED) return true
+        val activity = failedRow?.copy(status = PaymentState.FAILED) ?: LightningActivity.create(
             id = id,
             txType = when (payment.paymentType) {
                 SparkPaymentType.SEND -> PaymentType.SENT
@@ -2278,4 +2573,16 @@ fun SparkEarlyClaim.toDepositClaim(offer: SparkClaimOffer.Choice): SparkDepositC
     SparkEarlyClaim.Waiting -> SparkDepositClaim.Looking
     is SparkEarlyClaim.Repriced -> SparkDepositClaim.Repriced(offer.copy(earlyFeeSats = requiredFeeSats))
     SparkEarlyClaim.Declined -> SparkDepositClaim.Unavailable
+}
+
+/** What became of restored exit data waiting for Spark to import it. */
+sealed interface StagedExitImport {
+    data object NothingStaged : StagedExitImport
+    data object Imported : StagedExitImport
+
+    /** Spark is not connected, or the import failed for a reason that may pass. */
+    data object Pending : StagedExitImport
+
+    /** Spark can never import [exitState], restored for [network]. */
+    data class Rejected(val exitState: String, val network: String) : StagedExitImport
 }

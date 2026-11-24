@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.isFromHardwareWallet
+import to.bitkit.ext.isMoveToSpark
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
@@ -40,6 +42,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
@@ -49,6 +52,7 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
+    private val moveToSparkRepo: MoveToSparkRepo,
     private val hwWalletRepo: HwWalletRepo,
     pubkyRepo: PubkyRepo,
     settingsStore: SettingsStore,
@@ -226,9 +230,12 @@ class ActivityListViewModel @Inject constructor(
             return null
         }
 
+        val moveHashes = moveToSparkRepo.moveHashes.first()
         val filteredByTab = when (filters.tab) {
-            ActivityTab.OTHER -> activities.filter { it.isTransfer() }
-            ActivityTab.SENT, ActivityTab.RECEIVED -> activities.filterNot { it.isTransfer() }
+            ActivityTab.OTHER -> activities.filter { it.isTransfer() || it.isMoveToSpark(moveHashes) }
+            ActivityTab.SENT, ActivityTab.RECEIVED -> activities.filterNot {
+                it.isTransfer() || it.isMoveToSpark(moveHashes)
+            }
             else -> activities
         }
 

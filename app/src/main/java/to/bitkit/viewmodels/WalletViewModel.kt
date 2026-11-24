@@ -58,6 +58,7 @@ import to.bitkit.repositories.WipeInProgressError
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
+import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -84,6 +85,7 @@ class WalletViewModel @Inject constructor(
     private val connectionRecovery: WalletConnectionRecovery,
     private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
     sparkRepo: SparkRepo,
+    moveToSparkManager: MoveToSparkManager,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -104,6 +106,7 @@ class WalletViewModel @Inject constructor(
 
     val lightningState = lightningRepo.lightningState
     val sparkState = sparkRepo.state
+    val hasRetainedMove = moveToSparkManager.hasRetainedMove
     val walletState = walletRepo.walletState
     val balanceState = walletRepo.balanceState
 
