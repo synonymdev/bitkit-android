@@ -44,6 +44,8 @@ Read the named docs and script headers for details. The steps below are what is 
      directly, or fund Savings to test Transfer to Spending.
 4. Lightspark mines about once a minute. Spark claims a deposit after 3 confirmations unless an Instant transfer claims
    it early.
+5. Two-device payment: fund the payer's Spark balance, copy the invoice from Receive › Spending on the other dev build,
+   and pay it from the payer. It goes over Lightning through Lightspark's provider.
 
 ## Local `./spark` stack
 
