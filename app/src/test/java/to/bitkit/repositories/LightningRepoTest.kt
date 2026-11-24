@@ -4756,6 +4756,65 @@ class LightningRepoTest : BaseUnitTest() {
         assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
+    @Test
+    fun `restartWithElectrumServer recovery graph reset keeps a debounced stop that fires mid-build`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
+        whenever(vssBackupClientLdk.deleteObject(any(), any())).thenReturn(Result.success(true))
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts == 1) {
+                    whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(false, true)
+                    sut.stopDebounced()
+                    delay(6.seconds)
+                }
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithElectrumServer recovery graph reset keeps a direct stop made mid-build`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
+        whenever(vssBackupClientLdk.deleteObject(any(), any())).thenReturn(Result.success(true))
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        val testScope = this
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts == 1) {
+                    whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(false, true)
+                    testScope.launch { sut.stop() }
+                    delay(1.seconds)
+                }
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
     // Regression: a server that cannot work is rejected by the probe before the node is touched.
     // Tearing the node down for one is what leaves its electrum tasks wedged, so that a later
     // free_node blocks for tens of seconds instead of milliseconds.
