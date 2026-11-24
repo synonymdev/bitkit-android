@@ -25,6 +25,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.WatchOnlyAccountLifecycleCoordinator
 import to.bitkit.services.WatchOnlyAccountXpubDeriver
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.ByteBuffer
@@ -240,15 +241,21 @@ class WatchOnlyAccountRepo @Inject constructor(
         account: WatchOnlyAccountRecord,
         enabled: Boolean,
     ) {
-        if (lightningService.node == null) return
+        if (lightningService.node == null) return logTrackingWithoutNode(account)
         applyAccountTracking(account, enabled)
     }
+
+    // Journeys read this line to prove an approval finished before the node was built.
+    private fun logTrackingWithoutNode(account: WatchOnlyAccountRecord) = Logger.info(
+        "Paykit Server account ${account.accountIndex} tracking stored without a node; it loads when the node starts",
+        context = TAG,
+    )
 
     private suspend fun applyAccountTracking(
         account: WatchOnlyAccountRecord,
         enabled: Boolean,
     ) = ServiceQueue.LDK.background {
-        val node = lightningService.node ?: return@background
+        val node = lightningService.node ?: return@background logTrackingWithoutNode(account)
         val addressType = when (account.addressType) {
             WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE -> AddressType.NATIVE_SEGWIT
             else -> throw WatchOnlyAccountError.InvalidExtendedPublicKey()
@@ -327,6 +334,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "WatchOnlyAccountRepo"
         private const val MAX_NAME_LENGTH = 64
     }
 }
