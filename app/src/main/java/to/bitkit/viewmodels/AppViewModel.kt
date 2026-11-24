@@ -8698,15 +8698,14 @@ class AppViewModel @Inject constructor(
     fun resetQuickPay() = _quickPayData.update { null }
 
     /**
-     * Leaves QuickPay for the swipe review. QuickPay takes a fixed invoice before the scan validates its amount, so the
-     * amount is checked here, as the normal scan path does, or Swipe to Pay would stay disabled.
+     * Leaves QuickPay for the swipe review. QuickPay takes a fixed invoice before the scan marks its amount
+     * valid, so it is marked here as the fixed LNURL-pay path does: the request sets the amount, and paying
+     * checks the funds. A check against the spending limit here could run before the node publishes it and
+     * keep Swipe to Pay disabled.
      */
     fun fallBackFromQuickPay() {
         resetQuickPay()
-        viewModelScope.launch {
-            val isValid = validateAmount(_sendUiState.value.amount)
-            _sendUiState.update { it.copy(isAmountInputValid = isValid) }
-        }
+        _sendUiState.update { it.copy(isAmountInputValid = it.isAmountInputValid || it.amount > 0uL) }
     }
 
     /**

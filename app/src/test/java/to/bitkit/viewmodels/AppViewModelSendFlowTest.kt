@@ -11165,7 +11165,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val bolt11 = "lnbcrt1fallbacktoreview"
         enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
-        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        // The spending limit may not be published yet when QuickPay falls back.
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         advanceUntilIdle()
 
         sut.showScannerSheet()
