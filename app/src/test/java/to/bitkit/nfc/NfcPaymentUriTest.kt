@@ -131,6 +131,10 @@ class NfcPaymentUriTest {
         val required = "bitcoin:bcrt1qtest?amount=0.001&req-pop=x"
         assertNull(nfcPaymentRequest("bitkit://bitbitkit://kit://$required"))
         assertNull(nfcPaymentRequest("bitkit://lightning:bitbitkit://kit://$required"))
+        // Once the text starts with `bitcoin:` the decoder deletes nothing more, so this key is not `req-`.
+        val payable = "bitcoin:bcrt1qtest?amount=0.001&bitbitkit://kit://req-pop=x"
+        assertEquals(payable, nfcPaymentRequest(payable))
+        assertEquals("bitkit://$payable", nfcPaymentRequest("bitkit://$payable"))
     }
 
     @Test
