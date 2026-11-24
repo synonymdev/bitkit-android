@@ -3422,6 +3422,24 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `later restores of the same identity do not repeat the update prompt`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).thenAnswer {
+            throw AppError(PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4"))
+        }
+        val repo = createSut()
+        repo.awaitInitialization()
+        assertTrue(repo.sessionRestorationNeedsUpdate.value)
+        repo.clearSessionRestorationNeedsUpdate()
+
+        repo.restoreSessionIfNeeded()
+
+        verify(pubkyService, times(2)).importSession("saved_session")
+        assertFalse(repo.sessionRestorationNeedsUpdate.value)
+        assertFalse(repo.sessionRestorationFailed.value)
+    }
+
+    @Test
     fun `initialize should not flag session restoration failure on identity error without saved session`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
         whenever(pubkyService.initialize()).thenAnswer {

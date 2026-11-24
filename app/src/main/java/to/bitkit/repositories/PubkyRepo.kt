@@ -273,6 +273,9 @@ class PubkyRepo @Inject constructor(
     private var restoreBase: RestoreBase? = null
     private val signInGeneration = AtomicLong(0L)
     private val storedIdentityRevision = AtomicLong(0L)
+
+    @Volatile
+    private var updatePromptIdentityRevision: Long? = null
     private val readOnlyProfileGeneration = AtomicLong(0L)
     private val readOnlyProfileLock = Any()
     private var isServiceInitialized = false
@@ -545,7 +548,7 @@ class PubkyRepo @Inject constructor(
                 if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
                     _sessionRestorationFailed.update { true }
                 }
-                if (it.isPaykitStateFromNewerVersion()) _sessionRestorationNeedsUpdate.update { true }
+                if (it.isPaykitStateFromNewerVersion()) askForUpdateOnce()
             }.getOrElse { return false }
 
             if (notifyFailure) _sessionRestorationFailed.update { false }
@@ -570,6 +573,7 @@ class PubkyRepo @Inject constructor(
                 is InitResult.Restored -> {
                     _sessionRestorationFailed.update { false }
                     _sessionRestorationNeedsUpdate.update { false }
+                    updatePromptIdentityRevision = null
                     continueSignIn(result.publicKey)
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                 }
@@ -580,7 +584,7 @@ class PubkyRepo @Inject constructor(
                         preserveStoredIdentity = true,
                     )
                     if (notifyFailure) _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
-                    if (result == InitResult.RestorationNeedsUpdate) _sessionRestorationNeedsUpdate.update { true }
+                    if (result == InitResult.RestorationNeedsUpdate) askForUpdateOnce()
                 }
             }
             deferredRestoreGeneration = signInGeneration.get().takeIf { result == InitResult.RestorationDeferred }
@@ -673,6 +677,13 @@ class PubkyRepo @Inject constructor(
 
     fun clearSessionRestorationFailed() {
         _sessionRestorationFailed.update { false }
+    }
+
+    private fun askForUpdateOnce() {
+        val revision = storedIdentityRevision.get()
+        if (updatePromptIdentityRevision == revision) return
+        updatePromptIdentityRevision = revision
+        _sessionRestorationNeedsUpdate.update { true }
     }
 
     fun clearSessionRestorationNeedsUpdate() {
