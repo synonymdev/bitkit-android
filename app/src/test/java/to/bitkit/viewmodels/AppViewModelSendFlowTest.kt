@@ -1119,6 +1119,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `app resume shows a pending paykit update prompt`() = test {
+        val needsUpdate = MutableStateFlow(true)
+        whenever(pubkyRepo.sessionRestorationNeedsUpdate).thenReturn(needsUpdate)
+        whenever(pubkyRepo.clearSessionRestorationNeedsUpdate()).thenAnswer { needsUpdate.value = false }
+        whenever(context.getString(R.string.profile__update_required)).thenReturn("Update Bitkit")
+        clearInvocations(toastManager)
+
+        sut.onAppResumed()
+        runCurrent()
+
+        verify(toastManager).enqueue(check { assertEquals("Update Bitkit", it.description) })
+        assertFalse(needsUpdate.value)
+    }
+
+    @Test
     fun `foreground refreshes contacts once and repeats only after resume or reconnect`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey

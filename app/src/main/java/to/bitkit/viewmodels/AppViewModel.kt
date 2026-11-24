@@ -861,15 +861,8 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            pubkyRepo.sessionRestorationNeedsUpdate.collect { needsUpdate ->
-                if (needsUpdate) {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = context.getString(R.string.profile__update_required),
-                    )
-                    pubkyRepo.clearSessionRestorationNeedsUpdate()
-                }
+            pubkyRepo.sessionRestorationNeedsUpdate.collect {
+                if (it && App.currentActivity?.hasStartedActivity == true) showPaykitUpdatePrompt()
             }
         }
         viewModelScope.launch {
@@ -10514,8 +10507,18 @@ class AppViewModel @Inject constructor(
 
     fun onAppResumed() {
         viewModelScope.launch {
+            if (pubkyRepo.sessionRestorationNeedsUpdate.value) showPaykitUpdatePrompt()
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.restoreSessionIfNeeded()
         }
+    }
+
+    private suspend fun showPaykitUpdatePrompt() {
+        pubkyRepo.clearSessionRestorationNeedsUpdate()
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.common__error),
+            description = context.getString(R.string.profile__update_required),
+        )
     }
 
     fun onHomeResumed() {
