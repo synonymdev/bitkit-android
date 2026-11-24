@@ -214,7 +214,8 @@ class LightningRepo @Inject constructor(
      * recovery a failed change launches. [lifecycleMutex] is taken separately by `stop()` and
      * `start()`, so without this a detached recovery can restart the previous config between a
      * request's stop and start, leaving the request to report and persist a config that never
-     * started. Recovery is cheap to wait on: it skips the release gate, so it is a plain rebuild.
+     * started. Recovery skips the release gate, but while the stopped node's VSS writes keep the
+     * store busy it can take up to [RECOVERY_START_ATTEMPTS] builds of up to 60 s each.
      */
     private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
@@ -536,7 +537,7 @@ class LightningRepo @Inject constructor(
 
         // Restart after graph reset OUTSIDE the mutex to avoid deadlock
         if (shouldRestartForGraphReset) {
-            return@withContext start(
+            return@withContext startNode(
                 walletIndex = walletIndex,
                 timeout = timeout,
                 shouldRetry = shouldRetry,
@@ -545,6 +546,7 @@ class LightningRepo @Inject constructor(
                 eventHandler = eventHandler,
                 channelMigration = channelMigration,
                 shouldValidateGraph = false, // Prevent infinite loop
+                shouldCancelPendingStop = shouldCancelPendingStop,
             )
         }
 
@@ -1309,6 +1311,14 @@ class LightningRepo @Inject constructor(
                 if (pendingStopJob.get() != null) {
                     Logger.info("Skipped recovery start because a stop was requested", context = TAG)
                     return@withContext Result.failure(NodeStartYieldedToStopError(null))
+                }
+                if (attempt > 0) {
+                    // A direct stop queued behind the failed build runs first and wins.
+                    lifecycleMutex.withLock { }
+                    if (_lightningState.value.nodeLifecycleState is NodeLifecycleState.Stopped) {
+                        Logger.info("Skipped recovery start because the node was stopped", context = TAG)
+                        return@withContext Result.failure(NodeStartYieldedToStopError(null))
+                    }
                 }
                 attempt++
                 if (attempt > 1) {
