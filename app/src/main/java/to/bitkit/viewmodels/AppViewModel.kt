@@ -446,11 +446,11 @@ class AppViewModel @Inject constructor(
     /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
     private var sendSession = 0L
 
-    /** Swipes and payments still running from the confirm screen; see [isSendSwipeRunning]. */
-    private var sendSwipeRuns = 0
+    /** Swipes and payments still running from the confirm screen, by [sendSession]; see [isSendSwipeRunning]. */
+    private val sendSwipeRuns = mutableMapOf<Long, Int>()
     private val _isSendSwipeRunning = MutableStateFlow(false)
 
-    /** True while a confirm swipe, or the payment it confirmed, still runs; the confirm stays locked meanwhile. */
+    /** True while a swipe of the current send, or the payment it confirmed, runs; the confirm stays locked. */
     val isSendSwipeRunning = _isSendSwipeRunning.asStateFlow()
 
     fun setSendEvent(event: SendEvent) {
@@ -6794,15 +6794,19 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun whileSendSwipeRuns(block: suspend () -> Unit) {
-        sendSwipeRuns++
-        _isSendSwipeRunning.update { true }
+        val session = sendSession
+        sendSwipeRuns[session] = (sendSwipeRuns[session] ?: 0) + 1
+        refreshSendSwipeRunning()
         try {
             block()
         } finally {
-            sendSwipeRuns--
-            _isSendSwipeRunning.update { sendSwipeRuns > 0 }
+            val runs = (sendSwipeRuns[session] ?: 1) - 1
+            if (runs > 0) sendSwipeRuns[session] = runs else sendSwipeRuns.remove(session)
+            refreshSendSwipeRunning()
         }
     }
+
+    private fun refreshSendSwipeRunning() = _isSendSwipeRunning.update { sendSwipeRuns.containsKey(sendSession) }
 
     private fun onStartInitialSubscriptionPayment() {
         val state = _sendUiState.value
@@ -9052,6 +9056,7 @@ class AppViewModel @Inject constructor(
         if (!canPrepareSend(walletGeneration)) return false
         sendStateGeneration++
         sendSession++
+        refreshSendSwipeRunning()
         cancelPreparedFeeReview()
         addressValidationJob?.cancel()
         paykitReviewedAmount = null
@@ -9327,6 +9332,7 @@ class AppViewModel @Inject constructor(
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++
+            refreshSendSwipeRunning()
             cancelPreparedFeeReview()
             // A payment still running for the dismissed send, like a slow swap commit, must not block the next.
             if (confirmedPaymentSubmission != null) releaseConfirmedPaymentSubmission()

@@ -21782,7 +21782,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an update quote failing after the send closed shows no error`() = test {
+    fun `a swipe of a closed send holds nothing and its failing update quote shows no error`() = test {
         val bolt11 = "lnbcrt1closedrequote"
         val quoted = CompletableDeferred<Result<MoveToSparkQuote>>()
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
@@ -21804,7 +21804,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
+        assertTrue(sut.isSendSwipeRunning.value)
         sut.hideSheet()
+        // A payment still finishing for the closed send holds no later send's confirm
+        assertFalse(sut.isSendSwipeRunning.value)
         quoted.complete(Result.failure(MoveToSparkError.NothingToMove()))
         advanceUntilIdle()
 
