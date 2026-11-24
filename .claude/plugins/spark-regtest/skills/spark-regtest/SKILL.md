@@ -63,7 +63,8 @@ for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$p
 - `E2E=true` also points Savings at Electrum on `E2E_LOCAL_HOST:60001` (default `10.0.2.2`), bitkit-docker's chain.
   `ESPLORA_URL=` blanks a hosted proxy URL saved in another source, which Savings would otherwise use instead.
 - An existing dev install keeps the Electrum server saved in its settings, which includes the old default. Uninstall
-  first (backups are off, so nothing comes back), or use Settings › Advanced › Electrum Server › Reset To Default.
+  first (backups are off, so nothing comes back), or use Settings › Advanced › Electrum Server › Reset To Default, then
+  Connect To Host (Reset only fills the form).
 - On Android the local stack turns off Transfer to Spending and exit fees paid from Savings
   (`Env.sparkSharesNodeChain`). Fund Spark with `./spark send <deposit address> <sats>` or
   `./spark pay <Spending invoice> [sats]`, and pay exit funding with `./spark send`. iOS allows both when its URLs match the fixture.
