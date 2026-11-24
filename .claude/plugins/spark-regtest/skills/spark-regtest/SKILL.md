@@ -52,12 +52,13 @@ local-E2E build (`Env.localSparkSettings`), so the build needs `E2E=true` (`E2E_
 it, the build silently stays on the hosted regtest.
 
 ```bash
-E2E=true SPARK_LOCAL_CONFIG_B64="$(../bitkit-docker/spark config --base64)" \
+ESPLORA_URL= E2E=true E2E_BACKEND=local SPARK_LOCAL_CONFIG_B64="$(../bitkit-docker/spark config --base64)" \
 SPARK_LOCAL_CHAIN_URL=http://127.0.0.1:23090/api ./gradlew assembleDevDebug
 for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$port; done
 ```
 
 - `E2E=true` also points Savings at Electrum on `E2E_LOCAL_HOST:60001` (default `10.0.2.2`), bitkit-docker's chain.
+  `ESPLORA_URL=` blanks a hosted proxy URL saved in another source, which Savings would otherwise use instead.
 - On Android the local stack turns off Transfer to Spending and exit fees paid from Savings
   (`Env.sparkSharesNodeChain`). Fund Spark with `./spark pay` or `./spark send` to its deposit address, and pay exit
   funding with `./spark send`. iOS allows both when its URLs match the fixture.
